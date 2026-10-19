@@ -228,6 +228,12 @@ def mode_profiles_payload() -> dict[str, object]:
 
     # gbdraw.auto_sizes takes DiagramMode from this module.
     from gbdraw.auto_sizes import linear_label_size_records
+    from gbdraw.labels.label_style import (
+        DEFAULT_LABEL_LINE,
+        DEFAULT_LABEL_PROTECTION,
+        LABEL_LINES,
+        LABEL_PROTECTIONS,
+    )
 
     packaged = load_config_toml("gbdraw.data", "config.toml")
     length_threshold = packaged["labels"]["length_threshold"]
@@ -254,6 +260,8 @@ def mode_profiles_payload() -> dict[str, object]:
             for name, domain in COMPARISON_THRESHOLD_DOMAINS.items()
         },
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
+        # The values of labels.<mode>.line and .protection.
+        "labelStyleChoices": {"line": list(LABEL_LINES), "protection": list(LABEL_PROTECTIONS)},
         "modes": {
             mode: {
                 "comparison": {
@@ -268,6 +276,8 @@ def mode_profiles_payload() -> dict[str, object]:
                 },
                 "linearAxisColor": profile.linear_axis_color,
                 "linearRulerAxisColor": profile.linear_ruler_axis_color,
+                # The packaged feature label style of the mode (labels.<mode>.line, .protection).
+                "labelStyle": {"line": DEFAULT_LABEL_LINE[mode], "protection": DEFAULT_LABEL_PROTECTION[mode]},
             }
             for mode, profile in MODE_PROFILES.items()
         },

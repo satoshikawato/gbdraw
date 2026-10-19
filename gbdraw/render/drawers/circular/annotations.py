@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TypeAlias
+from typing import NamedTuple, TypeAlias
 
 from svgwrite.base import BaseElement
 
@@ -230,6 +230,14 @@ def _label_radius(
     return max(radius, 0.0)
 
 
+class LeaderSegment(NamedTuple):
+    """One straight part of a feature label's leader, with half the width it is drawn at (its label's own)."""
+
+    start: Point
+    end: Point
+    half_width: float
+
+
 @dataclass(frozen=True)
 class CircularLabelObstacles:
     """What Circular annotation labels keep clear of, around the circle centre (OV-1173).
@@ -237,14 +245,13 @@ class CircularLabelObstacles:
     ``shapes`` are labels, each as its convex parts (the feature labels as
     the fit count sees them, and annotation labels placed before); a label
     met counts once, whichever of its parts the letters meet. ``segments`` are
-    leader lines. Letters keep ``clearance`` from a shape and
-    ``segment_clearance`` (half the leader stroke included) from a segment.
+    leader lines. Letters keep ``clearance`` from a shape, and ``clearance``
+    plus the segment's half width from a segment.
     """
 
     shapes: tuple[tuple[Polygon, ...], ...] = ()
-    segments: tuple[tuple[Point, Point], ...] = ()
+    segments: tuple[LeaderSegment, ...] = ()
     clearance: float = 0.0
-    segment_clearance: float = 0.0
 
     def with_labels(self, labels: Sequence[CircularAnnotationLabel]) -> CircularLabelObstacles:
         return replace(self, shapes=(*self.shapes, *(label.parts for label in labels)))
@@ -264,7 +271,10 @@ class _ObstacleIndex:
             (_box([point for part in shape for point in part]), [(_box(part), part) for part in shape])
             for shape in obstacles.shapes
         ]
-        self._segments = [(_box(segment), segment) for segment in obstacles.segments]
+        self._segments = [
+            (_box((segment.start, segment.end)), (segment.start, segment.end), obstacles.clearance + segment.half_width)
+            for segment in obstacles.segments
+        ]
 
     def conflicts(self, label: CircularAnnotationLabel) -> int:
         near = [(_box(part), part) for part in (grown_convex_polygon(part, self._obstacles.clearance) for part in label.parts)]
@@ -277,16 +287,17 @@ class _ObstacleIndex:
                 for obstacle_box, obstacle in parts
             )
         )
-        line_near = [
-            (_box(part), part)
-            for part in (grown_convex_polygon(part, self._obstacles.segment_clearance) for part in label.parts)
-        ]
+        # The letters grown by each distinct segment clearance (one per leader width), made once per call.
+        line_near = {
+            distance: [(_box(part), part) for part in (grown_convex_polygon(part, distance) for part in label.parts)]
+            for distance in {item[2] for item in self._segments}
+        }
         return count + sum(
             1
-            for box, segment in self._segments
+            for box, segment, distance in self._segments
             if any(
                 part_box.intersects(box) and segment_intersects_polygon(segment, part, touching=False)
-                for part_box, part in line_near
+                for part_box, part in line_near[distance]
             )
         )
 
@@ -845,6 +856,7 @@ __all__ = [
     "CircularAnnotationLabel",
     "CircularLabelArc",
     "CircularLabelObstacles",
+    "LeaderSegment",
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",

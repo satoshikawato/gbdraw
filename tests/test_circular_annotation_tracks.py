@@ -1097,7 +1097,8 @@ def _annotation_label_crossings(drawing) -> dict[str, int]:
         ((float(line.attrib["x1"]), float(line.attrib["y1"])), (float(line.attrib["x2"]), float(line.attrib["y2"])))
         for line in groups["label_leaders"]
     ]
-    feature_labels = [_feature_label_corners(text) for text in groups["label_text"]]
+    # The letters, not their halos.
+    feature_labels = [_feature_label_corners(text) for text in groups["label_text"] if text.tag.endswith("}text")]
     crossings: dict[str, int] = {}
     for element in root.iter():
         label = element.attrib.get("data-gbdraw-annotation-label")
@@ -1146,6 +1147,71 @@ def test_circular_annotation_labels_move_along_their_region_off_feature_leaders(
             position = (angle % 360.0) / 360.0 * 16569
             start, end = {"rRNA genes": (648, 3229), "ND1 region": (3307, 4262), "COX block": (5904, 9207)}[label]
             assert start - 1 <= position <= end + 1, label
+
+
+def _feature_label_drawings(root) -> list[tuple[str, str, tuple[tuple[float, float], ...]]]:
+    """What the label style draws with each feature label's letters, in the frame of the annotation labels: its
+    white box (a rect bound to the label) and its underline (a horizontal line bound to it, with its stroke and
+    caps)."""
+
+    (text_layer,) = [element for element in root.iter() if element.attrib.get("id") == "label_text"]
+    drawn = []
+    for element in text_layer:
+        feature = element.attrib.get("data-label-feature-id")
+        if feature and element.tag.endswith("}rect"):
+            assert "transform" not in element.attrib
+            x, y, w, h = (float(element.attrib[key]) for key in ("x", "y", "width", "height"))
+            drawn.append(("box", feature, ((x, y), (x + w, y), (x + w, y + h), (x, y + h))))
+        elif feature and element.tag.endswith("}line") and element.attrib["y1"] == element.attrib["y2"]:
+            x1, x2, y = float(element.attrib["x1"]), float(element.attrib["x2"]), float(element.attrib["y1"])
+            half = 0.5 * float(element.attrib["stroke-width"])
+            cap = half if element.attrib.get("stroke-linecap") in ("round", "square") else 0.0
+            left, right = min(x1, x2) - cap, max(x1, x2) + cap
+            if x1 != x2:
+                drawn.append(("underline", feature, ((left, y - half), (right, y - half), (right, y + half), (left, y + half))))
+    return drawn
+
+
+@pytest.mark.parametrize(("line", "protection"), [("under", "box"), ("none", "box"), ("under", "halo"), ("none", "halo")])
+def test_circular_annotation_labels_keep_off_what_the_feature_label_style_draws(
+    line: str, protection: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1358: what an annotation label keeps off is everything drawn for a feature label, its letters and, by
+    its style, its underline and its white box (the Linear rule, OV-1357): each drawn underline and box is one of
+    the obstacle parts (a halo, the default, adds none)."""
+
+    from Bio import SeqIO
+
+    import gbdraw.diagrams.circular.assemble as circular_assemble
+
+    seen = []
+    original = circular_assemble._feature_label_obstacles
+
+    def spy(*args):
+        seen.append(original(*args))
+        return seen[-1]
+
+    monkeypatch.setattr(circular_assemble, "_feature_label_obstacles", spy)
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk", "genbank")
+    region = RegionAnnotation("r0", CoordinateSpan(None, 8900, 9800), label="Control region", mark="bracket")
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+            config_overrides={
+                "labels.circular.scope": "outer", "labels.circular.line": line, "labels.circular.protection": protection,
+            },
+        ),
+    )
+    drawn = _feature_label_drawings(ElementTree.fromstring(drawing.tostring()))
+    expected = ({"box"} if protection == "box" else set()) | ({"underline"} if line == "under" else set())
+    assert {kind for kind, _feature, _polygon in drawn} == expected
+    (obstacles,) = seen
+    parts = [part for shape in obstacles.shapes for part in shape]
+    for kind, feature, polygon in drawn:
+        assert any(
+            len(part) == 4 and all(math.dist(a, b) < 1e-6 for a, b in zip(sorted(part), sorted(polygon))) for part in parts
+        ), (kind, feature)
 
 
 def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_conflicts() -> None:

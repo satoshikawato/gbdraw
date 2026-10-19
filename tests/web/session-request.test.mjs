@@ -777,6 +777,39 @@ assert.equal(
   ),
   false
 );
+// The feature label style of each mode (LP-D102): Save leaves the mode's packaged style (the generated mode
+// profile) unstated, as a request written before the setting does, and states another one; Load projects a stated
+// style into the drawing's settings, and a request without one into no field, so the drawing keeps its mode's
+// default (`createDefaultAdv`). Checked here for Circular and below for Linear.
+const { LABEL_STYLE_CHOICES, labelStyleForMode } = await import(pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js')));
+/** @param {() => { renderRequest: { diagramOptions: { configOverrides: Record<string, unknown> } } }} build */
+const assertLabelStyleRoundTrip = (build) => {
+  const mode = state.mode.value;
+  const defaults = labelStyleForMode(mode);
+  const paths = { label_line: `labels.${mode}.line`, label_protection: `labels.${mode}.protection` };
+  Object.assign(state.adv, defaults);
+  const plain = build();
+  for (const path of Object.values(paths)) {
+    assert.equal(Object.hasOwn(plain.renderRequest.diagramOptions.configOverrides, path), false, `${mode} ${path}`);
+  }
+  const plainAdv = projectCanonicalSessionRequest(plain).config.adv;
+  assert.deepEqual([Object.hasOwn(plainAdv, 'label_line'), Object.hasOwn(plainAdv, 'label_protection')], [false, false], mode);
+  const other = {
+    label_line: LABEL_STYLE_CHOICES.line.find((value) => value !== defaults.label_line),
+    label_protection: LABEL_STYLE_CHOICES.protection.find((value) => value !== defaults.label_protection)
+  };
+  Object.assign(state.adv, other);
+  const styled = build();
+  for (const [field, path] of Object.entries(paths)) {
+    assert.equal(styled.renderRequest.diagramOptions.configOverrides[path], other[field], `${mode} ${path}`);
+  }
+  const styledAdv = projectCanonicalSessionRequest(styled).config.adv;
+  assert.deepEqual({ label_line: styledAdv.label_line, label_protection: styledAdv.label_protection }, other, mode);
+  delete state.adv.label_line;
+  delete state.adv.label_protection;
+};
+assert.equal(state.mode.value, 'circular');
+assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({ state, filesData }));
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
@@ -2202,6 +2235,9 @@ assert.deepEqual(
   materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
   ['multi-source::record-1', 'multi-source::record-2']
 );
+assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
+  state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
+}));
 
 const oneSourceFilesData = {
   linearSeqs: [{

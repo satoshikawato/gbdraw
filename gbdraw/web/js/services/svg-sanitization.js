@@ -168,7 +168,8 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'dominant-baseline',
     'writing-mode',
     'letter-spacing',
-    'display'
+    'display',
+    'pointer-events'
   ],
   FORBID_TAGS: [
     'style',

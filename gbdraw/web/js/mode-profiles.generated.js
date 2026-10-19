@@ -61,6 +61,17 @@ export const MODE_PROFILE_DATA = deepFreeze({
     "misc_RNA",
     "repeat_region"
   ],
+  "labelStyleChoices": {
+    "line": [
+      "none",
+      "under"
+    ],
+    "protection": [
+      "none",
+      "halo",
+      "box"
+    ]
+  },
   "modes": {
     "circular": {
       "comparison": {
@@ -68,6 +79,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "bitscore": 50.0,
         "evalue": 1e-05,
         "identity": 70.0
+      },
+      "labelStyle": {
+        "line": "none",
+        "protection": "halo"
       },
       "linearAxisColor": null,
       "linearRulerAxisColor": null,
@@ -82,6 +97,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "bitscore": 50.0,
         "evalue": 0.01,
         "identity": 0.0
+      },
+      "labelStyle": {
+        "line": "under",
+        "protection": "box"
       },
       "linearAxisColor": "lightgray",
       "linearRulerAxisColor": "dimgray",

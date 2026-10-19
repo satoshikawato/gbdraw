@@ -134,9 +134,9 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "definition_content": frozenset(),
     "circular_definition_content": frozenset(),
     "annotation_content": frozenset(),
-    # Linear: the record group draws the axis, the ruler, features and labels.
+    # Linear: the record group draws the axis, the ruler, features and labels (with their style).
     "record_content": frozenset(
-        {"labels.stroke_color", "labels.stroke_width", "objects.axis", "objects.scale", "objects.text"}
+        {"labels.linear", "labels.stroke_color", "objects.axis", "objects.scale", "objects.text"}
     ),
     # Circular: the record group sizes features and embedded labels (the label
     # drawer reads the preset track factors).
@@ -145,8 +145,6 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
             "canvas.circular",
             "labels.font_size",
             "labels.length_threshold",
-            "labels.stroke_color",
-            "labels.stroke_width",
             "objects.text",
         }
     ),
@@ -171,8 +169,11 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "conservation_sources": frozenset(),
     "conservation_tracks": frozenset(),
     "conservation_content": frozenset({"objects.conservation"}),
-    "label_leaders_content": frozenset({"labels.stroke_color", "labels.stroke_width"}),
-    "label_text_content": frozenset({"labels.font_size", "labels.length_threshold", "objects.text"}),
+    # The leaders end on their underlines, which the text layer draws with the leader's stroke.
+    "label_leaders_content": frozenset({"labels.circular", "labels.stroke_color"}),
+    "label_text_content": frozenset(
+        {"labels.circular", "labels.font_size", "labels.length_threshold", "labels.stroke_color", "objects.text"}
+    ),
     "record_merge": frozenset(),
     "record_gc_percent": frozenset(),
 }

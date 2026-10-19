@@ -418,6 +418,18 @@ export const normalizeTextBaselinesForPdf = (svg) => {
   });
 };
 
+// svg2pdf draws a `<use>` of a text as a filled copy of its letters, whatever
+// the `<use>` paints: a label's halo (a white stroke of its text) would print
+// each label twice, in black. The PDF draws labels without halos (LP-D102).
+/** @param {ParentNode} svg */
+const dropTextUsesForPdf = (svg) => {
+  svg.querySelectorAll('use').forEach((use) => {
+    const href = use.getAttribute('href') || use.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
+    const target = href.startsWith('#') ? svg.querySelector(`[id="${CSS.escape(href.slice(1))}"]`) : null;
+    if (target?.tagName.toLowerCase() === 'text') use.remove();
+  });
+};
+
 /** @param {SVGSVGElement | null} svg */
 const prepareSvgForPdf = (svg) => {
   if (!svg) {
@@ -442,6 +454,7 @@ const prepareSvgForPdf = (svg) => {
 
   try {
     moveGradientsToDefs(clone);
+    dropTextUsesForPdf(clone);
     flattenTextPathsForPdf(clone);
     normalizeTextBaselinesForPdf(clone);
   } catch (error) {

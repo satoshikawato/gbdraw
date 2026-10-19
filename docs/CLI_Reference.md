@@ -158,6 +158,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--track_type {tuckin,middle,spreadout}] [--resolve_overlaps]
               [--labels [{none,out,both}]]
               [--label_rendering {auto,embedded_only,external_only}]
+              [--label_line {none,under}] [--label_protection {none,halo,box}]
               [--label_placement {horizontal,radial}]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -455,6 +456,14 @@ options:
                         and routes others externally; "embedded_only" drops
                         external labels; "external_only" forces labels outside
                         feature bodies. Default: "auto".
+  --label_line {none,under}
+                        Line under each feature label with a leader: "under"
+                        draws one that continues the leader; "none" draws
+                        none. Default: "none".
+  --label_protection {none,halo,box}
+                        What keeps a leader passing behind a feature label off
+                        its letters: "halo" (a white outline of the letters),
+                        "box" (a white box), or "none". Default: "halo".
   --label_placement {horizontal,radial}
                         External circular label placement: "horizontal" or
                         "radial". Default: "horizontal".
@@ -1037,6 +1046,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--label_font_size LABEL_FONT_SIZE]
               [--label_placement {auto,above_feature}]
               [--label_rendering {auto,embedded_only,external_only}]
+              [--label_line {none,under}] [--label_protection {none,halo,box}]
               [--label_rotation LABEL_ROTATION]
               [--linear_label_spacing LINEAR_LABEL_SPACING]
               [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
@@ -1383,6 +1393,14 @@ options:
                         feature bodies. Cannot be combined with
                         --label_placement above_feature except as "auto".
                         Default: "auto".
+  --label_line {none,under}
+                        Line under each feature label with a leader: "under"
+                        draws one that continues the leader; "none" draws
+                        none. Default: "under".
+  --label_protection {none,halo,box}
+                        What keeps a leader passing behind a feature label off
+                        its letters: "halo" (a white outline of the letters),
+                        "box" (a white box), or "none". Default: "box".
   --label_rotation LABEL_ROTATION
                         Linear label rotation in degrees (optional; float;
                         default: 0). In above_feature mode, rotated labels

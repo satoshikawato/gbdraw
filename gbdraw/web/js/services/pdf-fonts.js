@@ -12,6 +12,7 @@
  * @property {(filename: string, base64: string) => void} addFileToVFS
  * @property {(filename: string, family: string, style: PdfFontStyle) => void} addFont
  * @property {(family: string, style: PdfFontStyle) => PdfFont} getFont
+ * @property {(text: string, options: { font: PdfFont, fontSize: number }) => number} getStringUnitWidth
  */
 
 /**
@@ -59,6 +60,51 @@ const fontStyle = (style) => {
   return /** @type {PdfFontStyle} */ (`${bold ? 'bold' : ''}${italic ? 'italic' : ''}` || 'normal');
 };
 
+// The attributes that place part of a text on its own: such a text keeps its
+// anchor for svg2pdf to resolve.
+const RUN_LAYOUT_ATTRIBUTES = ['x', 'dx', 'rotate', 'textLength', 'letter-spacing', 'word-spacing'];
+/** @type {Readonly<Record<string, number | undefined>>} */
+const ANCHOR_SHIFT = Object.freeze({ middle: 0.5, end: 1 });
+
+/**
+ * Draw each middle- or end-anchored `<text>` from its start, at the x its
+ * anchor gives with the advances of the faces the PDF draws it with.
+ * svg2pdf would measure the anchor with the browser, which knows the jsPDF
+ * family under no name (or with other advances), and shift the text (OV-1303).
+ * A text that places a part on its own keeps its anchor.
+ * @param {PdfFontDocument} doc
+ * @param {Element} svg
+ * @param {Map<Node, { font: PdfFont, size: number }>} drawnWith The face and font size (px) of each text node.
+ */
+const anchorTextsAtStart = (doc, svg, drawnWith) => {
+  svg.querySelectorAll('text').forEach((text) => {
+    const shift = ANCHOR_SHIFT[getComputedStyle(text).textAnchor];
+    const x = Number(text.getAttribute('x') ?? 0);
+    const parts = [...text.querySelectorAll('*')];
+    if (shift === undefined || !Number.isFinite(x) || parts.some((part) => RUN_LAYOUT_ATTRIBUTES.some((name) => part.hasAttribute(name)))) return;
+    let width = 0;
+    let afterSpace = true;
+    /** @type {{ text: string, font: PdfFont, size: number }[]} */
+    const runs = [];
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const drawn = drawnWith.get(walker.currentNode);
+      // Spaces collapse across runs, as in the SVG.
+      let characters = (walker.currentNode.textContent ?? '').replace(/\s+/g, ' ');
+      if (afterSpace) characters = characters.replace(/^ /, '');
+      if (!drawn || !characters) continue;
+      afterSpace = characters.endsWith(' ');
+      runs.push({ text: characters, ...drawn });
+    }
+    if (runs.length === 0) return;
+    // A trailing space does not count toward the anchored width.
+    runs[runs.length - 1].text = runs[runs.length - 1].text.replace(/ $/, '');
+    for (const run of runs) width += doc.getStringUnitWidth(run.text, { font: run.font, fontSize: run.size }) * run.size;
+    text.setAttribute('x', String(x - shift * width));
+    text.setAttribute('text-anchor', 'start');
+  });
+};
+
 /**
  * @param {PdfFontSubstitution} substitution
  * @returns {string}
@@ -88,7 +134,7 @@ export const preparePdfFonts = async (doc, svg, resolveFonts) => {
   // Capture computed styles before replacing inherited font families.
   const runs = nodes.map((node) => {
     const style = getComputedStyle(node.parentElement);
-    return { node, fontFamily: style.fontFamily, style: fontStyle(style) };
+    return { node, fontFamily: style.fontFamily, style: fontStyle(style), size: parseFloat(style.fontSize) };
   });
   /** @type {Map<string, number>} */
   const runIndex = new Map();
@@ -116,6 +162,8 @@ export const preparePdfFonts = async (doc, svg, resolveFonts) => {
   const files = new Set();
   /** @type {Map<string, PdfFont>} */
   const fonts = new Map();
+  /** @type {Map<Node, { font: PdfFont, size: number }>} */
+  const drawnWith = new Map();
   /**
    * @param {{ family: string, file: string }} face
    * @param {PdfFontStyle} style
@@ -134,9 +182,10 @@ export const preparePdfFonts = async (doc, svg, resolveFonts) => {
     // The key was set above when it was missing.
     return /** @type {PdfFont} */ (fonts.get(key));
   };
-  for (const { node, fontFamily, style } of runs) {
+  for (const { node, fontFamily, style, size } of runs) {
     const face = reply.faces[/** @type {number} */ (runIndex.get(`${style}\n${fontFamily}`))];
     const primary = register(face, style);
+    drawnWith.set(node, { font: primary, size });
     for (const character of node.textContent) {
       // Iterating a string yields characters that each hold a code point.
       if (!/\s/.test(character) && !primary.metadata.characterToGlyph(/** @type {number} */ (character.codePointAt(0)))) {
@@ -146,5 +195,6 @@ export const preparePdfFonts = async (doc, svg, resolveFonts) => {
     // The parent controls anchor and metrics even when its content has tspans.
     node.parentElement.setAttribute('font-family', face.family);
   }
+  anchorTextsAtStart(doc, svg, drawnWith);
   return reply.substitutions.map(substitutionWarning);
 };

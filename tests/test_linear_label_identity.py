@@ -70,10 +70,11 @@ def test_external_labels_bind_text_and_leaders_to_duplicate_multirecord_instance
     assert len(set(identities)) == 4
     assert ["".join(label.itertext()) for label in labels] == ["same label"] * 4
     for identity in identities:
+        # Its leader in two parts (up to its underline's casing, then its tail), the casing and the underline.
         assert sum(
             leader.get("data-label-feature-id") == identity
             for leader in leaders
-        ) == 1
+        ) == 4
         assert any(
             (
                 part.get("data-gbdraw-rendered-feature-id")

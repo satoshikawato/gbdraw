@@ -57,12 +57,15 @@ from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
+from ...labels.label_ink import circular_label_ink
+from ...labels.label_style import label_leader_width_px
+from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
     CircularLabelProbeStopped,
     assign_leader_start_points,
     circular_label_fits,
     circular_label_font_size,
-    circular_label_shapes,
+    circular_label_shape,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
@@ -127,6 +130,7 @@ from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
     CircularLabelObstacles,
+    LeaderSegment,
     circular_annotation_label_room,
     circular_annotation_labels,
     circular_annotation_track_content,
@@ -621,13 +625,9 @@ def _external_label_bounds_on_canvas(
     return min_x, min_y, max_x, max_y
 
 
-def _external_label_paint_bounds_local(
-    label: CircularLabel,
-    total_length: int,
-    *,
-    leader_half_stroke_px: float,
-) -> Aabb:
-    """Return exact text plus leader paint bounds in circle-local coordinates."""
+def _external_label_paint_bounds_local(label: CircularLabel, total_length: int) -> Aabb:
+    """Return exact text plus leader paint bounds (the leader at its label's own width) in circle-local
+    coordinates."""
     measured_label = label.copy()
     if measured_label.get("aabb_local") is None:
         text_width, text_height = calculate_svg_bbox_dimensions(
@@ -664,7 +664,7 @@ def _external_label_paint_bounds_local(
         min(point[1] for point in leader_points),
         max(point[0] for point in leader_points),
         max(point[1] for point in leader_points),
-    ).expanded(float(leader_half_stroke_px))
+    ).expanded(0.5 * label_leader_width_px(label))
     combined = union_aabbs((text_bounds, leader_bounds))
     if combined is None:  # pragma: no cover - both inputs are present
         raise RuntimeError("external label paint bounds unexpectedly empty")
@@ -677,17 +677,10 @@ def _external_label_obstacles_on_canvas(
     canvas_config: CircularCanvasConfigurator,
 ) -> tuple[Aabb, ...]:
     """Return authoritative per-label overlay obstacles in plot coordinates."""
-    half_stroke = 0.5 * float(
-        canvas_config.profile.config.labels.stroke_width.for_length_param(
-            canvas_config.length_param
-        )
-    )
     return tuple(
-        _external_label_paint_bounds_local(
-            label,
-            total_length,
-            leader_half_stroke_px=half_stroke,
-        ).translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
+        _external_label_paint_bounds_local(label, total_length).translated(
+            float(canvas_config.offset_x), float(canvas_config.offset_y)
+        )
         for label in labels
         if not label.get("is_embedded")
     )
@@ -735,18 +728,29 @@ def _feature_label_obstacles(
     labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
 ) -> CircularLabelObstacles:
     """The record's drawn feature labels and their leaders, as the fit count sees them, for annotation labels to
-    keep the label spacing from (OV-1173)."""
+    keep the label spacing from (OV-1173). A label with a leader also covers what its style draws with its letters,
+    its underline and its white box (OV-1358, the Linear rule of OV-1357)."""
 
-    shapes = circular_label_shapes(labels, total_length)
-    spacing = float(canvas_config.profile.config.labels.spacing.circular)
-    half_stroke = 0.5 * float(
-        canvas_config.profile.config.labels.stroke_width.for_length_param(canvas_config.length_param)
-    )
+    style = canvas_config.profile.label_style
+    shapes = [
+        (
+            label,
+            shape,
+            ()
+            if label.get("is_embedded")
+            else feature_label_drawn_parts(circular_label_ink(label, total_length, underline=style.underline), style),
+        )
+        for label in labels
+        if (shape := circular_label_shape(label, total_length)).parts
+    ]
     return CircularLabelObstacles(
-        shapes=tuple(shape.parts for shape in shapes),
-        segments=tuple(segment for shape in shapes for segment in zip(shape.leader, shape.leader[1:])),
-        clearance=spacing,
-        segment_clearance=spacing + half_stroke,
+        shapes=tuple((*shape.parts, *drawn) for _label, shape, drawn in shapes),
+        segments=tuple(
+            LeaderSegment(start, end, 0.5 * label_leader_width_px(label))
+            for label, shape, _drawn in shapes
+            for start, end in zip(shape.leader, shape.leader[1:])
+        ),
+        clearance=float(canvas_config.profile.config.labels.spacing.circular),
     )
 
 

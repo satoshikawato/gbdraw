@@ -1,5 +1,6 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
+import { LABEL_STYLE_CHOICES, labelStyleForMode } from '../mode-profiles.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
@@ -544,9 +545,17 @@ const readFeatureShapes = (value) => {
 // A stored visibility the merge installs names a mode (`requireCurrentConfigFields`).
 const readLinearLabelVisibility = textChoice(LINEAR_LABEL_VISIBILITY_MODES, 'auto');
 
-/** `adv`, in the order the rows depend on each other. @type {readonly FieldRow[]} */
-const ADV_ROWS = Object.freeze([
+/**
+ * `adv` of a drawing of `mode`, in the order the rows depend on each other.
+ * @param {'circular' | 'linear'} mode
+ * @returns {readonly FieldRow[]}
+ */
+const advRows = (mode) => Object.freeze([
   row('label_rendering', normalizeLabelRendering),
+  // A value of no style reads as the mode's packaged style (the generated mode profile), and is reported
+  // (labels.<mode>.line, .protection).
+  row('label_line', textChoice(LABEL_STYLE_CHOICES.line, labelStyleForMode(mode).label_line)),
+  row('label_protection', textChoice(LABEL_STYLE_CHOICES.protection, labelStyleForMode(mode).label_protection)),
   row('label_placement', textChoice(LINEAR_LABEL_PLACEMENTS, 'auto', { aliases: LINEAR_LABEL_PLACEMENT_ALIASES })),
   row('multi_record_size_mode', textChoice(CIRCULAR_MULTI_RECORD_SIZE_MODES, 'auto', { aliases: CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES })),
   row('circular_label_placement', textChoice(['radial', 'horizontal'], 'horizontal')),
@@ -826,18 +835,24 @@ export const readHitLimitsByMode = (value) => {
   return { value: limits, lost: notObject || leaves.length > 0, ...(leaves.length && !notObject ? { leaves } : {}) };
 };
 
-/** The containers the merge reads first, then their rows (`installStoredSettings`). @type {readonly FieldTable[]} */
-const CONTAINER_TABLES = Object.freeze([
+/**
+ * The containers the merge reads first, then their rows (`installStoredSettings`), of a drawing of `mode`.
+ * @param {'circular' | 'linear'} mode
+ * @returns {readonly FieldTable[]}
+ */
+const containerTables = (mode) => Object.freeze([
   { at: 'form', rows: [
     row('linear_track_layout', textChoice(LINEAR_TRACK_LAYOUTS, 'middle', { aliases: LINEAR_TRACK_LAYOUT_ALIASES })),
     // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
     // the target's value for one of another kind, with its row.
     row('keep_definition_left_aligned', onlyTrue)
   ] },
-  { at: 'adv', rows: ADV_ROWS },
+  { at: 'adv', rows: advRows(mode) },
   { at: 'losat.blastp', rows: LOSAT_SEARCH_ROWS },
   { at: 'circularConservation', rows: CONSERVATION_ROWS }
 ]);
+/** @type {Readonly<Record<'circular' | 'linear', readonly FieldTable[]>>} */
+const CONTAINER_TABLES = Object.freeze({ circular: containerTables('circular'), linear: containerTables('linear') });
 /** The containers `installStoredSettings` merges. */
 const MERGED_CONTAINERS = Object.freeze(['form', 'adv', 'losat', 'circularConservation']);
 /**
@@ -1216,7 +1231,7 @@ export const installStoredSettings = (targets, stored, mode, { captured = false 
     ...merged('losat'),
     ...merged('circularConservation')
   ].filter(({ at }) => !RAW_FIELDS.includes(at) && !at.startsWith('losat.blastp.hitLimitsByMode.'));
-  CONTAINER_TABLES.forEach(({ at, rows }) => {
+  CONTAINER_TABLES[mode].forEach(({ at, rows }) => {
     const container = at === 'losat.blastp' ? targets.losat.blastp
       : /** @type {Record<string, unknown>} */ (targets[/** @type {'form' | 'adv' | 'circularConservation'} */ (at)]);
     losses.push(...readRows(container, captured ? rows.filter(({ fileOnly }) => !fileOnly) : rows, at, containerAt(config, at)));

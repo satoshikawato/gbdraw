@@ -32,6 +32,7 @@ from gbdraw.diagrams.linear.orthogroup_alignment import (
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
+from gbdraw.labels.label_style import ROW_LABEL_GAP_EM
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
@@ -1103,12 +1104,11 @@ def test_linear_external_label_spacing_override_increases_track_gap() -> None:
 
 @pytest.mark.linear
 def test_linear_external_label_track_index_matches_legacy_scan() -> None:
+    # At 10 px each label keeps 1.25 px free on each side: the last one, 1 px after its neighbour,
+    # takes another row.
     labels = [
-        {"start": 0.0, "end": 50.0},
-        {"start": 20.0, "end": 70.0},
-        {"start": 80.0, "end": 110.0},
-        {"start": 45.0, "end": 90.0},
-        {"start": 112.0, "end": 140.0},
+        {"start": start, "end": end, "font_size": 10.0}
+        for start, end in ((0.0, 50.0), (20.0, 70.0), (80.0, 110.0), (45.0, 90.0), (112.0, 140.0), (141.0, 160.0))
     ]
     legacy_tracks: dict[str, list[dict]] = {}
     indexed_tracks: dict[str, list[dict]] = {}
@@ -1141,6 +1141,30 @@ def test_linear_external_label_track_index_matches_legacy_scan() -> None:
         )
 
     assert indexed_assignments == legacy_assignments
+    assert indexed_assignments[-1] != indexed_assignments[-2]
+
+
+@pytest.mark.linear
+def test_linear_labels_in_one_row_keep_a_quarter_em_between_them() -> None:
+    """Neighbouring labels in one label row keep at least ``ROW_LABEL_GAP_EM`` of their font size apart,
+    so two names never read as one word (HmmtDNA at 24 pt drew "tRNA-Ser" 0.31 px from "tRNA-Lys")."""
+
+    labels = _prepare_linear_labels(
+        label_placement="auto", label_font_size=24.0, separate_strands=True, track_layout="above",
+        input_filename="HmmtDNA.gbk",
+    )
+    rows: dict[float, list[dict]] = {}
+    for label in labels:
+        if not label["is_embedded"]:
+            rows.setdefault(round(float(label["middle_y"]), 6), []).append(label)
+    close = []
+    for row in rows.values():
+        row.sort(key=lambda label: float(label["start"]))
+        for left, right in zip(row, row[1:]):
+            if float(right["start"]) - float(left["end"]) < ROW_LABEL_GAP_EM * 24.0 - 1e-6:
+                close.append((left["label_text"], right["label_text"]))
+
+    assert len(rows) > 1 and close == []
 
 
 @pytest.mark.linear
@@ -1257,6 +1281,7 @@ def _row_label(start: float, width: float, *, middle_y: float = -30.0) -> dict:
         "end": start + width,
         "width_px": width,
         "height_px": 10.0,
+        "font_size": 10.0,
         "is_embedded": False,
         "feature_middle_y": 0.0,
         "rotation_deg": 0.0,

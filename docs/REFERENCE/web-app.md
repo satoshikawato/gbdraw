@@ -336,6 +336,19 @@ format contains and the export notices, and
 [Session fonts](session-and-request-compatibility.md#fonts) for loading a
 Session whose font is not available.
 
+### Label Line and Label Protection
+
+**Label Line** (**None**, **Underline**) and **Label Protection** (**None**,
+**Halo**, **Box**) follow **Label Rendering** under **Labels**. They set how a
+feature label with a leader line is drawn, as `--label_line` and
+`--label_protection` do on the
+[command line](command-line.md#tracks-annotations-and-presentation). Circular
+and Linear each have their own pair (Linear **Underline** and **Box**, Circular
+**None** and **Halo** by default), which applies on Generate and is saved in
+Sessions. **Box** is a white box at 80 % opacity behind the letters. The PDF
+export draws labels without their halos; SVG, Interactive SVG and PNG keep
+them. A box is drawn in every format.
+
 ### Numeric settings
 
 Generate sends every numeric setting as you typed it. An empty field means Auto

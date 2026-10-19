@@ -20,6 +20,7 @@ from gbdraw.api import (
     RegionAnnotation,
     RegionAnnotationStyle,
     LinearMultiRecordOptions,
+    LinearOutputOptions,
     parse_record_selector,
 )
 from gbdraw.api.config import apply_config_overrides
@@ -1301,6 +1302,27 @@ def test_linear_span_label_ink_keeps_label_offset_clear_of_its_mark(
     assert _ink_gap_to_mark(label) == pytest.approx(4.0, abs=1e-6)
 
 
+def _product_drawing(
+    records: list[SeqRecord],
+    overrides: dict[str, object],
+    regions: tuple[RegionAnnotation, ...],
+    layout: LinearMultiRecordOptions | None = None,
+):
+    """CDS-only records with their region annotations, assembled as the CLI and the Web assemble them
+    (``build_linear_diagram``: once more when a region label asks a feature label for a new row)."""
+
+    return build_linear_diagram(
+        records,
+        options=LinearDiagramOptions(
+            config_overrides=overrides,
+            selected_features_set=["CDS"],
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            output=LinearOutputOptions(legend="none"),
+        ),
+        layout=layout,
+    )
+
+
 def _leader_zone_drawing(*, feature_names: tuple[str, ...], track_layout: str = "above"):
     """A tint over features whose labels sit in rows above the lanes, with leaders under the tint label."""
 
@@ -1320,15 +1342,7 @@ def _leader_zone_drawing(*, feature_names: tuple[str, ...], track_layout: str = 
         mark="highlight",
         style=_SCENARIO_LABEL_STYLE,
     )
-    return assemble_linear_diagram_from_records(
-        [record],
-        cfg=apply_config_overrides(
-            None, {"labels.linear.scope": "all", "canvas.linear.track_layout": track_layout}
-        ),
-        legend="none",
-        selected_features_set=["CDS"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)),
-    )
+    return _product_drawing([record], {"labels.linear.scope": "all", "canvas.linear.track_layout": track_layout}, (tint,))
 
 
 def test_linear_span_label_moves_along_its_span_off_feature_leaders_and_labels() -> None:
@@ -1590,18 +1604,16 @@ def test_linear_span_label_place_ignores_the_overlays_own_height(mark: str) -> N
     assert _slot_paint(tall, "skew") == pytest.approx(_slot_paint(plain, "skew"), abs=1e-6)
 
 
-def _six_kb_drawing(region: RegionAnnotation, features: tuple[tuple[int, int, str], ...]):
+def _six_kb_drawing(
+    region: RegionAnnotation, features: tuple[tuple[int, int, str], ...], overrides: dict[str, object] | None = None
+):
     record = SeqRecord(Seq("ACGT" * 1500), id="rec1", name="rec1", annotations={"topology": "circular"})
     record.features = [
         SeqFeature(FeatureLocation(start, end, strand=1), type="CDS", qualifiers={"product": [name]})
         for start, end, name in features
     ]
-    return assemble_linear_diagram_from_records(
-        [record],
-        cfg=apply_config_overrides(None, {"labels.linear.scope": "all", "canvas.linear.track_layout": "above"}),
-        legend="none",
-        selected_features_set=["CDS"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+    return _product_drawing(
+        [record], {"labels.linear.scope": "all", "canvas.linear.track_layout": "above", **(overrides or {})}, (region,)
     )
 
 
@@ -1652,7 +1664,27 @@ def test_linear_label_wider_than_its_region_moves_off_a_leader() -> None:
     assert label["span"][0] <= centre <= label["span"][1]
 
 
-def test_linear_label_without_a_clear_place_keeps_its_default_place_off_the_name() -> None:
+def _leader_rise(svg: str, text: str) -> float:
+    """How far the leader of the feature label ``text`` reaches from its feature (its lines' y extent)."""
+
+    root = ElementTree.fromstring(svg)
+    feature = next(item.attrib["data-label-feature-id"] for item in root.iter() if item.tag.endswith("text") and item.text == text)
+    ys = [
+        float(line.attrib[key])
+        for line in root.iter()
+        if line.tag.endswith("line") and line.attrib.get("data-label-feature-id") == feature
+        and line.attrib["y1"] != line.attrib["y2"]
+        for key in ("y1", "y2")
+    ]
+    return max(ys) - min(ys)
+
+
+def test_linear_label_without_a_clear_place_moves_the_feature_label_off_it_and_comes_in_front() -> None:
+    """The only places clear of the tRNA-Leu leader put the letters on the record name (OV-1157). At the
+    default place they meet the tRNA-Leu underline, which belongs to its letters and which no backing may
+    cover: tRNA-Leu moves to a new row (LP-D82 (b)), and the label, then over its leader only, is drawn above
+    the record's leader lines on a white rounded box at 70 % opacity, where the leader behind it is no conflict."""
+
     region = RegionAnnotation(
         "control",
         CoordinateSpan(None, 1, 300),
@@ -1661,20 +1693,34 @@ def test_linear_label_without_a_clear_place_keeps_its_default_place_off_the_name
         style=_SCENARIO_LABEL_STYLE,
     )
     drawing = _six_kb_drawing(region, ((190, 210, "tRNA-Leu"),))
-    (label,) = _span_label_marks(drawing)
-    root = ElementTree.fromstring(drawing.tostring())
+    svg = drawing.tostring()
+    root = ElementTree.fromstring(svg)
     parents = {child: parent for parent in root.iter() for child in parent}
     name = _text_ink_box(next(text for text in root.iter() if text.tag.endswith("text") and text.text == "rec1"), parents)
-    left, top, right, bottom = label["ink"]
 
-    # The only places clear of the leader put its letters on the record name, an obstacle (Owner
-    # decision on OV-1157): the label keeps its default place (OV-1155; its letters start before the
-    # bar there). (the ink centre is within half a pixel of the text anchor)
-    assert 0.5 * (left + right) == pytest.approx(0.5 * sum(label["span"]), abs=0.5)
+    assert not drawing._gbdraw_linear_label_fit.records and _region_label_crossings(svg) == []
+    ((target, rect, text),) = _front_labels(svg)
+    left, top, right, bottom = _text_ink_box(text, parents)
+    assert text.text == "Mitochondrial control region" and text.attrib["font-size"] == "10.0"
     assert right <= name[0] or left >= name[2] or bottom <= name[1] or top >= name[3]
-    # LP-D68: the conflict that remains is counted (the tRNA-Leu leader through the letters).
-    label_fit = drawing._gbdraw_linear_label_fit
-    assert [(record.label_kind, record.fit.region_overlaps) for record in label_fit.records] == [("linear_region", 1)]
+    # Without an underline or a box (OV-1357) the label keeps its default place and its counted conflict, and
+    # tRNA-Leu its row.
+    plain = _six_kb_drawing(
+        region, ((190, 210, "tRNA-Leu"),), {"labels.linear.line": "none", "labels.linear.protection": "halo"}
+    )
+    assert [record.fit.region_overlaps for record in plain._gbdraw_linear_label_fit.records] == [1]
+    assert _leader_rise(svg, "tRNA-Leu") > _leader_rise(plain.tostring(), "tRNA-Leu")
+    assert (rect.attrib["fill"], rect.attrib["fill-opacity"]) == ("#ffffff", "0.7")
+    assert float(rect.attrib["rx"]) == pytest.approx(0.18 * 10.0)
+    # The annotation's own group keeps its box and draws no second copy of the letters.
+    (item,) = [group for group in root.iter() if group.attrib.get("id") == target]
+    assert item.attrib["data-gbdraw-annotation-label"] == "Mitochondrial control region"
+    assert not [child for child in item.iter() if child.tag.endswith("text")]
+    # The front layer comes after every leader line of the record.
+    order = list(root.iter())
+    front = next(element for element in order if element.attrib.get("data-gbdraw-region-label-for"))
+    leaders = [element for element in order if element.tag.endswith("line") and element.attrib.get("data-label-feature-id")]
+    assert leaders and all(order.index(line) < order.index(front) for line in leaders)
 
 
 _REGION_STYLE = RegionAnnotationStyle(stroke="#7b68b5", stroke_width=0.6, fill="#7b68b5", fill_opacity=0.2)
@@ -1692,7 +1738,7 @@ _REGION_CASES = {
 }
 
 
-def _region_case(name: str):
+def _region_case(name: str, overrides: dict[str, object] | None = None):
     import warnings
 
     features, regions, font = _REGION_CASES[name]
@@ -1707,7 +1753,7 @@ def _region_case(name: str):
         for index, (start, end, label) in enumerate(regions)
     )
     options = LinearDiagramOptions(
-        config_overrides={"labels.linear.scope": "all", "canvas.linear.track_layout": "above"},
+        config_overrides={"labels.linear.scope": "all", "canvas.linear.track_layout": "above", **(overrides or {})},
         annotations=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
     )
     with warnings.catch_warnings(record=True) as caught:
@@ -1740,30 +1786,23 @@ def _front_labels(svg: str) -> list[tuple[str, ElementTree.Element, ElementTree.
     return found
 
 
-def test_a_region_label_over_leader_lines_only_is_drawn_in_front_on_a_backing() -> None:
-    """LP-D82 (e'): the left_end label meets only the tRNA-Leu leader; it is drawn above the
-    record's leader lines on a white rounded box at 70 % opacity, and the leader behind it is no conflict."""
+def test_a_region_label_whose_backing_would_cover_an_underline_keeps_its_place_and_warns() -> None:
+    """The left_end label meets only the tRNA-Leu leader, but a backing there would cover the tRNA-Leu
+    underline, which belongs to its letters (only leader lines may be behind a backing): the label keeps its
+    place, and the leader through its letters is counted and warned about. Without an underline it is drawn
+    in front on its backing (LP-D82 (e'))."""
 
     from gbdraw.api.diagram import label_fit_report
 
     drawing, messages = _region_case("left_end")
-    svg = drawing.tostring()
-    root = ElementTree.fromstring(svg)
+    report = label_fit_report(drawing)
 
-    assert messages == [] and label_fit_report(drawing) is None
-    ((target, rect, text),) = _front_labels(svg)
-    assert text.text == "Mitochondrial control region" and text.attrib["font-size"] == "10.0"
-    assert (rect.attrib["fill"], rect.attrib["fill-opacity"]) == ("#ffffff", "0.7")
-    assert float(rect.attrib["rx"]) == pytest.approx(0.18 * 10.0)
-    # The annotation's own group keeps its box and draws no second copy of the letters.
-    (item,) = [group for group in root.iter() if group.attrib.get("id") == target]
-    assert item.attrib["data-gbdraw-annotation-label"] == "Mitochondrial control region"
-    assert not [child for child in item.iter() if child.tag.endswith("text")]
-    # The front layer comes after every leader line of the record.
-    order = list(root.iter())
-    front = next(element for element in order if element.attrib.get("data-gbdraw-region-label-for"))
-    leaders = [element for element in order if element.tag.endswith("line") and element.attrib.get("data-label-feature-id")]
-    assert leaders and all(order.index(line) < order.index(front) for line in leaders)
+    assert messages == ["1 region label does not fit at 10 pt (1 region label overlap). Drawn anyway."]
+    assert report is not None and report.region_overlaps == 1
+    assert _front_labels(drawing.tostring()) == [] and _region_label_crossings(drawing.tostring()) == []
+    plain, messages = _region_case("left_end", {"labels.linear.line": "none"})
+    assert messages == [] and label_fit_report(plain) is None
+    assert [text.text for _target, _rect, text in _front_labels(plain.tostring())] == ["Mitochondrial control region"]
 
 
 def test_feature_labels_that_a_region_label_meets_move_to_another_row_and_both_ways_combine() -> None:
@@ -1821,6 +1860,8 @@ def test_cli_moves_the_hmmtdna_trna_pro_label_off_the_control_region_label(
     svg, err = render("moved")
     assert "WARNING" not in err and _front_labels(svg) == []
     assert _label_candidates(svg) == {"rRNA genes": "inside", "Control region": "normal"}
+    # With no warning, no region label lies over a feature label's letters or underline (none over tRNA-Val).
+    assert _region_label_crossings(svg) == []
 
     # Without the move, the label keeps its overlap and warns, with no fix offered (LP-D77).
     monkeypatch.setattr(annotation_labels, "_make_way", lambda *args, **kwargs: None)
@@ -1841,11 +1882,52 @@ def test_cli_draws_the_hmmtdna_control_region_label_in_front_at_the_default_regi
     svg, err = _hmmtdna_render(tmp_path, monkeypatch, capsys, "")("default")
     ys = _feature_label_ys(svg)
 
-    assert "WARNING" not in err
+    assert "WARNING" not in err and _region_label_crossings(svg) == []
     assert [(text.text, text.attrib["font-size"]) for _target, _rect, text in _front_labels(svg)] == [
         ("Control region", "24.0")
     ]
     assert ys["tRNA-Pro"] < ys["NADH dehydrogenase subunit 6"] < ys["cytochrome b"] < ys["tRNA-Thr"]
+
+
+@pytest.mark.parametrize("font", ["", "20"], ids=["front-region-label", "region-labels-behind"])
+def test_the_default_feature_label_boxes_lie_under_every_label(
+    font: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default Linear feature label box (LP-D106) is drawn after the leaders and under every feature
+    label's casing, underline and letters, and under every region label drawn in front (backing and letters).
+    A region label drawn behind the record keeps its letters off every box."""
+
+    svg, _err = _hmmtdna_render(tmp_path, monkeypatch, capsys, font)("boxes")
+    root = ElementTree.fromstring(svg)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    order = {id(element): index for index, element in enumerate(root.iter())}
+
+    def tag(element) -> str:
+        return element.tag.rsplit("}", 1)[-1]
+
+    bound = [element for element in root.iter() if element.attrib.get("data-label-feature-id")]
+    boxes = [element for element in bound if tag(element) == "rect"]
+    texts = [element for element in bound if tag(element) == "text"]
+    flat = [element for element in bound if tag(element) == "line" and element.attrib["y1"] == element.attrib["y2"]]
+    assert boxes and texts and flat
+    top_box = max(order[id(box)] for box in boxes)
+    assert top_box < min(order[id(element)] for element in texts + flat)
+    front = [group for group in root.iter() if group.attrib.get("data-gbdraw-region-label-for")]
+    assert bool(front) == (font == "")
+    assert all(top_box < order[id(group)] for group in front)
+    behind = [
+        element
+        for group in root.iter()
+        if group.attrib.get("data-gbdraw-annotation-label")
+        for element in group
+        if tag(element) == "text"
+    ]
+    assert behind
+    for box in boxes:
+        dx, dy = _translation(box, parents)
+        x, y = dx + float(box.attrib["x"]), dy + float(box.attrib["y"])
+        area = (x, y, x + float(box.attrib["width"]), y + float(box.attrib["height"]))
+        assert not [text.text for text in behind if _boxes_overlap(_text_ink_box(text, parents), area)]
 
 
 def test_a_backing_stops_at_its_own_marks_edge() -> None:
@@ -1884,6 +1966,110 @@ def test_a_region_label_whose_overlap_no_way_clears_warns_with_no_fix() -> None:
     assert report is not None and report.drawn and report.region_overlaps == 1 and report.rows == ()
     assert messages == ["2 region labels do not fit at 10 pt (1 region label overlap). Drawn anyway."]
     assert _front_labels(drawing.tostring()) == []
+
+
+def _region_label_crossings(svg: str) -> list[tuple[str, str]]:
+    """Each (region label, feature id) whose drawn letters, or backing when it is drawn in front, meet that
+    feature label's letters, its underline (a horizontal line bound to the label, with its stroke) or its white
+    box (a rect bound to the label, OV-1357)."""
+
+    root = ElementTree.fromstring(svg)
+    parents = {child: parent for parent in root.iter() for child in parent}
+
+    def tag(element) -> str:
+        return element.tag.rsplit("}", 1)[-1]
+
+    features: list[tuple[str, tuple[float, float, float, float]]] = []
+    for element in root.iter():
+        feature = element.attrib.get("data-label-feature-id")
+        if feature and tag(element) == "text":
+            features.append((feature, _text_ink_box(element, parents)))
+        elif feature and tag(element) == "rect":
+            dx, dy = _translation(element, parents)
+            x, y = dx + float(element.attrib["x"]), dy + float(element.attrib["y"])
+            features.append((feature, (x, y, x + float(element.attrib["width"]), y + float(element.attrib["height"]))))
+        elif (
+            feature and tag(element) == "line" and element.attrib["y1"] == element.attrib["y2"]
+            # Not an underline's white casing, which only cuts leaders and is drawn behind every region label.
+            and element.attrib["stroke"] != "#ffffff"
+        ):
+            dx, dy = _translation(element, parents)
+            x1, x2, y = float(element.attrib["x1"]), float(element.attrib["x2"]), float(element.attrib["y1"])
+            half = 0.5 * float(element.attrib["stroke-width"])
+            if x1 != x2:
+                features.append((feature, (dx + min(x1, x2), dy + y - half, dx + max(x1, x2), dy + y + half)))
+    regions: list[tuple[str, tuple[float, float, float, float]]] = []
+    for group in root.iter():
+        if not (group.attrib.get("data-gbdraw-annotation-label") or group.attrib.get("data-gbdraw-region-label-for")):
+            continue
+        for element in group:
+            if tag(element) == "text":
+                regions.append((element.text or "", _text_ink_box(element, parents)))
+            elif tag(element) == "rect" and group.attrib.get("data-gbdraw-region-label-for"):
+                dx, dy = _translation(element, parents)
+                x, y = dx + float(element.attrib["x"]), dy + float(element.attrib["y"])
+                text = next(child for child in group if tag(child) == "text")
+                regions.append((text.text or "", (x, y, x + float(element.attrib["width"]), y + float(element.attrib["height"]))))
+    return sorted({(name, feature) for name, box in regions for feature, ink in features if _boxes_overlap(box, ink)})
+
+
+def _six_kb(start: int, end: int, label: str, features: tuple[tuple[int, int, str], ...], font_size: float = 10.0):
+    region = RegionAnnotation(
+        "r", CoordinateSpan(None, start, end), label=label, mark="highlight", style=RegionAnnotationStyle(label_font_size=font_size)
+    )
+    return _six_kb_drawing(region, features)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        *(pytest.param(lambda name=name: _region_case(name)[0], id=name) for name in _REGION_CASES),
+        pytest.param(lambda: _six_kb(2900, 3200, "A long label for a short region", ((2905, 2925, "tRNA-Leu"),)), id="wider-than-region"),
+        pytest.param(lambda: _six_kb(1, 300, "Mitochondrial control region", ((190, 210, "tRNA-Leu"),)), id="six-kb-left-end"),
+        pytest.param(lambda: _six_kb(5701, 6000, "Mitochondrial control region", ((5790, 5810, "tRNA-Leu"),)), id="hang-past-end"),
+        pytest.param(lambda: _six_kb(1, 450, "Mitochondrial control region", ((320, 340, "tRNA-Leu"),)), id="hang-past-start"),
+        pytest.param(
+            lambda: _six_kb(1, 900, "Mitochondrial control region", ((440, 460, "tRNA-Leu"), (650, 680, "tRNA-Ser")), 24.0),
+            id="hang-past-start-24pt",
+        ),
+        *(
+            pytest.param(
+                lambda layout=layout: _leader_zone_drawing(
+                    feature_names=("hypothetical protein", "ribosomal protein S7", "tRNA-Leu"), track_layout=layout
+                ),
+                id=f"leader-zone-{layout}",
+            )
+            for layout in ("above", "below")
+        ),
+        *(
+            pytest.param(lambda args=args: _row_drawing(*args), id="next-record-" + "-".join(map(str, args)))
+            for args in [(layout, separate, both) for layout in ("above", "middle") for separate in (False, True) for both in (False, True)]
+        ),
+    ],
+)
+def test_a_region_label_over_a_feature_label_or_its_underline_is_counted(build) -> None:
+    """A Linear feature label's underline belongs to its letters for the region labels: a region label is
+    placed off it, its backing may not cover it (only leader lines may be behind a backing), and a region
+    label still drawn over letters or an underline counts as a region label overlap (the fit warns)."""
+
+    drawing = build()
+    crossing = {name for name, _feature in _region_label_crossings(drawing.tostring())}
+    counted = sum(record.fit.region_overlaps for record in drawing._gbdraw_linear_label_fit.records)
+
+    assert len(crossing) <= counted
+
+
+def test_a_region_label_keeps_off_a_feature_label_box() -> None:
+    """OV-1357: at 24 pt a feature label's box reaches 0.18 em (4.32 px) past its letters, beyond the 3 px a
+    region label keeps from them. The box belongs to what the label draws, so the "Control region" label,
+    drawn behind the record, keeps off it as off the letters, and nothing is left to count."""
+
+    drawing = _six_kb(200, 900, "Control region", ((100, 120, "tRNA-Leu"), (300, 330, "tRNA-Ser")), 24.0)
+    svg = drawing.tostring()
+
+    assert [element for element in ElementTree.fromstring(svg).iter() if element.tag.endswith("rect") and element.attrib.get("data-label-feature-id")]
+    assert _region_label_crossings(svg) == []
+    assert [record.fit.region_overlaps for record in drawing._gbdraw_linear_label_fit.records] in ([], [0])
 
 
 def _label_candidates(svg: str) -> dict[str, str]:
@@ -2046,20 +2232,11 @@ def _row_drawing(track_layout: str, separate_strands: bool, regions_of_b: bool):
         regions.append(
             RegionAnnotation("b", CoordinateSpan(parse_record_selector("#2"), 1, 400), label="Left end region of B", mark="highlight", style=_SCENARIO_LABEL_STYLE)
         )
-    return assemble_linear_diagram_from_records(
+    return _product_drawing(
         [first, second],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "all",
-                "canvas.linear.track_layout": track_layout,
-                "canvas.strandedness": separate_strands,
-            },
-        ),
-        legend="none",
-        selected_features_set=["CDS"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", tuple(regions)),)),
-        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
+        {"labels.linear.scope": "all", "canvas.linear.track_layout": track_layout, "canvas.strandedness": separate_strands},
+        tuple(regions),
+        LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
     )
 
 

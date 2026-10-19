@@ -333,7 +333,7 @@ def test_depth_failure_reports_series_locator(tmp_path: Path, surface, content, 
         ({"objects.scale.interval": 1.5}, "INTEGER", "objects.scale.interval"),
         ({"labels.font_size.short": 0}, "POSITIVE", "labels.font_size.short"),
         ({"objects.definition.linear.line_styles.name.font_size": -1.0}, "POSITIVE", "objects.definition.linear.line_styles.name.font_size"),
-        ({"labels.stroke_width.long": -0.5}, "NONNEGATIVE", "labels.stroke_width.long"),
+        ({"objects.features.line_stroke_width.long": -0.5}, "NONNEGATIVE", "objects.features.line_stroke_width.long"),
         # OV-275: a float leaf is finite before its own domain is checked.
         ({"objects.depth.tick_font_size": math.inf}, "FINITE", "objects.depth.tick_font_size"),
         ({"objects.depth.tick_font_size": 0.0}, "POSITIVE", "objects.depth.tick_font_size"),

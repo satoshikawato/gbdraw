@@ -255,6 +255,45 @@ test('OV-159 label_rendering (b): Linear Above Feature does not reset Circular E
   }
 });
 
+// Label Line and Label Protection belong to their mode: the Linear Result
+// draws what they say (a halo instead of the default box, no underline), and
+// Save and Load keep each mode's pair.
+test('Label Line and Label Protection draw in their mode and survive Save and Load', async ({ page, browser }, testInfo) => {
+  test.setTimeout(300_000);
+  await openBoth(page);
+  await switchMode(page, 'linear');
+  await editStep(page, 'Labels', { 'form.show_labels_linear': 'all' });
+  await generate(page);
+  const drawn = () => page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.results[0].content), 'image/svg+xml');
+    const labelIds = new Set([...svg.querySelectorAll('text[data-label-feature-id]')].map((text) => `#${text.id}`));
+    return {
+      halos: [...svg.querySelectorAll('use')].filter((use) => labelIds.has(use.getAttribute('href') || use.getAttribute('xlink:href'))).length,
+      underlines: svg.querySelectorAll('line[data-label-feature-id][stroke="#ffffff"]').length,
+      boxes: svg.querySelectorAll('rect[data-label-feature-id]').length
+    };
+  });
+  const before = await drawn();
+  expect(before.boxes, 'default Linear boxes').toBeGreaterThan(0);
+  expect(before.underlines, 'default Linear underline casings').toBeGreaterThan(0);
+  expect(before.halos).toBe(0);
+  await editStep(page, 'Label style', { 'adv.label_line': 'none', 'adv.label_protection': 'halo' });
+  await generate(page);
+  const after = await drawn();
+  expect({ boxes: after.boxes, underlines: after.underlines }, 'Linear Halo, no line').toEqual({ boxes: 0, underlines: 0 });
+  expect(after.halos, 'Linear halos').toBeGreaterThan(0);
+
+  const fields = { line: 'adv.label_line', protection: 'adv.label_protection' };
+  const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('label-style.gbdraw-session.json'));
+  try {
+    const loaded = await readDrawings(fresh, fields);
+    expect(loaded.linear, 'Linear after Load').toEqual({ line: 'none', protection: 'halo' });
+    expect(loaded.circular, 'Circular after Load').toEqual({ line: 'none', protection: 'halo' });
+  } finally {
+    await fresh.context().close();
+  }
+});
+
 // OV-80: a Linear Depth row renamed `Coverage` stays Linear's; Circular (its own
 // file, no Depth) generates, and the next Linear Generate draws `Coverage` with
 // Show Depth on.

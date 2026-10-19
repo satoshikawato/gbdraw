@@ -343,10 +343,12 @@ const getPhasedCircularFeatureLine = (svg, textEl) => {
   const leaderGroups = Array.from(svg.querySelectorAll('g[id="label_leaders"], g[id^="label_leaders_"]'));
   const groupIndex = textGroups.indexOf(textGroup);
   if (groupIndex < 0 || groupIndex >= leaderGroups.length) return null;
-  const textIndex = Array.from(textGroup.querySelectorAll('text')).indexOf(textEl);
-  if (textIndex < 0) return null;
-  const leaderLines = Array.from(leaderGroups[groupIndex].querySelectorAll('line'));
-  return leaderLines[(2 * textIndex) + 1] || null;
+  const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+  if (!featureId) return null;
+  // The leader layer draws two parts per label, both bound to its feature:
+  // bend to letters, then bend to feature.
+  const leaderLines = leaderGroups[groupIndex].querySelectorAll(`line[${LABEL_FEATURE_ID_ATTRIBUTE}="${CSS.escape(featureId)}"]`);
+  return /** @type {SVGLineElement | undefined} */ (leaderLines[1]) || null;
 };
 
 /** @param {SVGSVGElement} svg @param {SVGTextElement} textEl */
