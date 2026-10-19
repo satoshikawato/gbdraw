@@ -84,6 +84,63 @@ def test_leaders_and_underlines_are_007_em_wide_and_at_least_1_px(font_size: flo
     assert leader_width_px(font_size) == pytest.approx(width)
 
 
+def _linear_label_with_leader(font_size: float, x: float, leader_end_y: float) -> dict[str, object]:
+    """A prepared Linear label above its feature, its leader running straight down from y 0 to ``leader_end_y``."""
+
+    return {
+        "label_text": "orf",
+        "font_family": "'Liberation Sans', sans-serif",
+        "font_size": font_size,
+        "middle_x": x,
+        "middle_y": -2.0 * font_size,
+        "width_px": 2.0 * font_size,
+        "height_px": font_size,
+        "rotation_deg": 0.0,
+        "text_anchor": "middle",
+        "is_embedded": False,
+        "leader_line": True,
+        "leader_start_x": x,
+        "leader_start_y": 0.0,
+        "leader_end_x": x,
+        "leader_end_y": leader_end_y,
+    }
+
+
+def test_each_leader_keeps_its_own_width_clear_in_a_figure_with_two_label_sizes() -> None:
+    """A 24 px label's leader is 1.68 px wide and a 5 px label's 1 px: the label band, the region-label
+    obstacles of both modes and the drawing read each label's own width, not the widest one (review LS-1, 6)."""
+
+    from types import SimpleNamespace
+
+    from gbdraw.diagrams.linear.annotation_labels import linear_feature_label_obstacles
+    from gbdraw.layout.linear import measure_linear_label_band
+
+    big, small = _linear_label_with_leader(24.0, 0.0, 30.0), _linear_label_with_leader(5.0, 100.0, 40.0)
+    band = measure_linear_label_band([big, small])
+    assert band is not None and band.bottom_y == pytest.approx(40.0 + 0.5)
+
+    style = FeatureLabelStyle(line="none", protection="none")
+    leaders = {
+        obstacle.owner[2]: obstacle.box.max_x - obstacle.box.min_x
+        for obstacle in linear_feature_label_obstacles([big, small], SimpleNamespace(slots=()), 0, label_style=style)
+        if obstacle.leader
+    }
+    assert leaders == {0: pytest.approx(1.68), 1: pytest.approx(1.0)}
+
+    # A label 3.6 px from a 1.68 px leader and from a 1 px leader, keeping 3 px: it meets only the wide one.
+    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, LeaderSegment, _ObstacleIndex
+
+    square = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
+    obstacles = CircularLabelObstacles(
+        segments=(
+            LeaderSegment((13.6, -5.0), (13.6, 15.0), 0.5 * leader_width_px(24.0)),
+            LeaderSegment((-3.6, -5.0), (-3.6, 15.0), 0.5 * leader_width_px(5.0)),
+        ),
+        clearance=3.0,
+    )
+    assert _ObstacleIndex(obstacles).conflicts(SimpleNamespace(parts=(square,))) == 1
+
+
 @pytest.mark.parametrize(
     ("options", "path", "value"),
     [

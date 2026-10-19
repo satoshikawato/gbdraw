@@ -143,7 +143,7 @@ from ...layout.scalar_axis import (
     format_percent_tick,
     scalar_axis_tick_values,
 )
-from ...labels.label_style import FeatureLabelStyle, widest_leader_px
+from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
     FeatureLabelRows,
@@ -869,7 +869,7 @@ def _linear_slot_footprints_for_record(
 ) -> tuple[dict[str, LinearSlotFootprint], float]:
     footprints: dict[str, LinearSlotFootprint] = {}
     font_family = str(canvas_config._cfg.objects.text.font_family)
-    label_band = measure_linear_label_band(labels, leader_stroke_width=widest_leader_px(labels))
+    label_band = measure_linear_label_band(labels)
 
     for slot in layout.slots:
         body_band = _slot_body_band(slot)
@@ -1629,7 +1629,6 @@ def _place_linear_annotation_labels_by_record(
     feature_stroke_width: float,
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
     font_family: str,
-    leader_stroke_width: float,
     label_style: FeatureLabelStyle,
     gap: float,
     new_rows: bool,
@@ -1652,9 +1651,7 @@ def _place_linear_annotation_labels_by_record(
         return feature_labels[index] if index < len(feature_labels) else []
 
     def own_ink(index: int) -> list[LabelObstacle]:
-        return linear_feature_label_obstacles(
-            labels_of(index), plans[index], leader_stroke_width, index, label_style=label_style
-        )
+        return linear_feature_label_obstacles(labels_of(index), plans[index], index, label_style=label_style)
 
     label_row_of = {index: row for row in linear_label_rows(label_frames, len(records)) for index, _x in row}
     placed: list[PlacedAnnotationLabels] = []
@@ -1699,7 +1696,6 @@ def _place_linear_annotation_labels_by_record(
                 if any(slot.renderer == "annotations" and slot.id in annotation_track_layouts for slot in plans[index].slots)
                 else (),
                 font_family=font_family,
-                leader_stroke_width=leader_stroke_width,
                 label_style=label_style,
                 gap=gap,
                 new_rows=new_rows,
@@ -1749,7 +1745,6 @@ def _collect_linear_primary_bounds(
         float(skew_config.stroke_width),
     )
     horizontal_offset = float(canvas_config.horizontal_offset)
-    label_half_stroke = 0.5 * widest_leader_px(label for labels in labels_by_record for label in labels)
     bounds: list[Aabb] = []
     for record_index, record in enumerate(records):
         placement = record_placements[record_index]
@@ -1811,6 +1806,7 @@ def _collect_linear_primary_bounds(
                 if label.get(name_x) is not None and label.get(name_y) is not None
             ]
             if leader_points:
+                label_half_stroke = 0.5 * label_leader_width_px(label)
                 bounds.append(
                     Aabb(
                         horizontal_offset
@@ -2957,7 +2953,6 @@ def assemble_linear_diagram(
         feature_stroke_width=max(float(feature_config.block_stroke_width), float(feature_config.line_stroke_width)),
         annotation_track_layouts=annotation_track_layouts,
         font_family=str(cfg.objects.text.font_family),
-        leader_stroke_width=widest_leader_px(label for labels in all_labels for label in labels),
         label_style=render_context.profile.label_style,
         gap=float(cfg.labels.spacing.linear),
         # One assembly more at most: one that places proposed rows proposes none.

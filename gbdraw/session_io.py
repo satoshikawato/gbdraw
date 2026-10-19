@@ -6331,8 +6331,6 @@ def _append_common_gui_args(
         ("legend_font_size", "--legend_font_size"),
         ("scale_interval", "--scale_interval"),
         ("font_family", "--font_family"),
-        ("label_line", "--label_line"),
-        ("label_protection", "--label_protection"),
     ):
         value = adv.get(key)
         if value not in (None, "", False):

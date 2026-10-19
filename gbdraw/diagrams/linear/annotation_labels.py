@@ -38,7 +38,7 @@ from gbdraw.core.text import text_ink_offsets
 from gbdraw.features.objects import FeatureObject
 from gbdraw.labels.fit import LabelFit
 from gbdraw.labels.label_ink import linear_label_ink
-from gbdraw.labels.label_style import FeatureLabelStyle
+from gbdraw.labels.label_style import FeatureLabelStyle, label_leader_width_px
 from gbdraw.labels.linear import (
     FeatureLabelRow,
     RecordRegionLabels,
@@ -110,7 +110,6 @@ def _feature_label_obstacles(
     label: Mapping[str, object],
     owner: ObstacleOwner,
     origin_y: float,
-    leader_half_width: float,
     *,
     label_style: FeatureLabelStyle,
 ) -> list[LabelObstacle]:
@@ -129,6 +128,7 @@ def _feature_label_obstacles(
                 max(letters.max_x, *(x for x, _ in points)), max(letters.max_y, *(y for _, y in points)),
             )
     obstacles = [LabelObstacle(letters.translated(0.0, origin_y), owner)]
+    leader_half_width = 0.5 * label_leader_width_px(label)
     for (x1, y1), (x2, y2) in zip(leader, leader[1:]):
         obstacles.append(
             LabelObstacle(Aabb(x1, origin_y + y1, x2, origin_y + y2).expanded(leader_half_width), owner, True)
@@ -143,7 +143,6 @@ def _features_origin_y(plan: LinearRecordVerticalPlan) -> float:
 def linear_feature_label_obstacles(
     feature_labels: Sequence[dict[str, object]],
     plan: LinearRecordVerticalPlan,
-    leader_stroke_width: float,
     record_index: int,
     *,
     label_style: FeatureLabelStyle,
@@ -156,7 +155,7 @@ def linear_feature_label_obstacles(
         obstacle
         for index, label in enumerate(feature_labels)
         for obstacle in _feature_label_obstacles(
-            label, (record_index, "feature", index), origin_y, 0.5 * float(leader_stroke_width), label_style=label_style
+            label, (record_index, "feature", index), origin_y, label_style=label_style
         )
     ]
 
@@ -326,7 +325,7 @@ def _choose_candidate(
 
 
 class _Record(NamedTuple):
-    """What the record's feature labels move within: their dicts, their origin and leader width,
+    """What the record's feature labels move within: their dicts, their origin,
     their style (what is drawn with their letters), the ink they must not newly meet (feature glyphs, the axis and other tracks), and where the
     label fit counts them: the x of the record's start in its row and the feature labels of the
     row's other records, each with its x (``LinearLabelFrame``)."""
@@ -334,7 +333,6 @@ class _Record(NamedTuple):
     record_index: int
     labels: list[dict[str, object]]
     origin_y: float
-    leader_half_width: float
     label_style: FeatureLabelStyle
     inks: tuple[LabelObstacle, ...]
     label_x: float = 0.0
@@ -390,7 +388,7 @@ def _another_row(
     for row in [*rows, *([top + 1] if new_rows else [])]:
         moved = linear_label_in_row(dict(label), side, row)
         boxes = _feature_label_obstacles(
-            moved, owner, record.origin_y, record.leader_half_width, label_style=record.label_style
+            moved, owner, record.origin_y, label_style=record.label_style
         )
         room = row > top
         # A new row is placed by the next assembly, whose plan makes its room: that one checks it.
@@ -472,7 +470,6 @@ def place_linear_annotation_labels(
     feature_labels: Sequence[dict[str, object]] = (),
     glyphs: Sequence[Aabb] = (),
     font_family: str,
-    leader_stroke_width: float = 0.0,
     label_style: FeatureLabelStyle,
     gap: float,
     new_rows: bool = True,
@@ -498,7 +495,6 @@ def place_linear_annotation_labels(
         record_index,
         list(feature_labels),
         _features_origin_y(plan),
-        0.5 * float(leader_stroke_width),
         label_style,
         tuple(
             LabelObstacle(box, (record_index, "ink", index))

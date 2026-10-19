@@ -18,7 +18,7 @@ not settings (Owner, LP-D100 Q-B). Leaders and underlines are drawn
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast, get_args
 
@@ -73,11 +73,11 @@ def leader_width_px(font_size: float) -> float:
     return max(LEADER_MIN_PX, LEADER_EM * float(font_size))
 
 
-def widest_leader_px(labels: Iterable[Mapping[str, object]]) -> float:
-    """The widest leader of ``labels`` (each drawn at its own ``font_size``), for readers that keep its
-    half width clear; ``LEADER_MIN_PX`` without labels."""
+def label_leader_width_px(label: Mapping[str, object]) -> float:
+    """The width of one prepared feature label's leader and underline, from its own ``font_size``: what the
+    drawing strokes and what an obstacle or a bound keeps clear of its leader."""
 
-    return max((leader_width_px(float(str(label["font_size"]))) for label in labels), default=LEADER_MIN_PX)
+    return leader_width_px(float(str(label["font_size"])))
 
 
 def _normalized(value: object, choices: tuple[str, ...], path: str) -> str:
@@ -120,8 +120,8 @@ __all__ = [
     "UNDERLINE_GAP_EM",
     "ROW_LABEL_GAP_EM",
     "UNDERLINE_TRIM_EM",
+    "label_leader_width_px",
     "leader_width_px",
     "normalize_label_line",
     "normalize_label_protection",
-    "widest_leader_px",
 ]

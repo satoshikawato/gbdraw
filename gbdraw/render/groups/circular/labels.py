@@ -12,7 +12,7 @@ from gbdraw.svg.elements import Group, Line
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
 from ....labels.label_ink import circular_label_ink
-from ....labels.label_style import leader_width_px
+from ....labels.label_style import label_leader_width_px
 from ....layout.circular import CircularRecordRenderContext
 from ....svg.ids import stable_svg_id
 from ...drawers.circular.labels import LabelDrawer
@@ -54,7 +54,7 @@ class LabelsGroup:
             start=start,
             end=end,
             stroke=self.render_context.profile.config.labels.stroke_color.label_stroke_color,
-            stroke_width=leader_width_px(float(label["font_size"])),
+            stroke_width=label_leader_width_px(label),
             stroke_linecap="round",
         )
         bind_label_part(part, label["feature_id"])

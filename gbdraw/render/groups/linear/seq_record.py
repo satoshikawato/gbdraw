@@ -14,7 +14,7 @@ from ...drawers.linear.features import FeatureDrawer
 from ...drawers.label_backing import feature_label_box, label_halo, underline_casing
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.label_ink import linear_label_ink
-from ....labels.label_style import leader_width_px
+from ....labels.label_style import label_leader_width_px
 from ....labels.linear import linear_leader_polyline, linear_record_labels, place_linear_label_row
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
@@ -217,7 +217,7 @@ class SeqRecordGroup:
             return _LabelParts(bool(leader), leader)
         ink = linear_label_ink(label, leader, underline=style.underline)
         feature_id = label["feature_id"]
-        width = leader_width_px(float(label["font_size"]))
+        width = label_leader_width_px(label)
         underline = casing = tail = None
         line = ink.underline
         if line is not None:
@@ -351,7 +351,7 @@ class SeqRecordGroup:
                 if parts.leader:
                     feature_group.add(
                         self._leader_part(
-                            parts.leader[0], parts.leader[1], feature_id, leader_width_px(float(label["font_size"]))
+                            parts.leader[0], parts.leader[1], feature_id, label_leader_width_px(label)
                         )
                     )
             label_list = bound_labels

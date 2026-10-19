@@ -680,19 +680,16 @@ def measure_linear_feature_lanes(
     return LinearFeatureLaneGeometry(lanes=lanes, occupied_band=occupied_band)
 
 
-def measure_linear_label_band(
-    labels: Sequence[dict],
-    *,
-    leader_stroke_width: float = 0.0,
-) -> VerticalBand | None:
-    """Measure the vertical paint extent of prepared Linear labels and leaders."""
+def measure_linear_label_band(labels: Sequence[dict]) -> VerticalBand | None:
+    """Measure the vertical paint extent of prepared Linear labels and leaders (each leader at its label's
+    own width)."""
 
     # Imported lazily to keep the lane geometry module independent of label setup.
+    from ..labels.label_style import label_leader_width_px
     from ..labels.linear import calculate_label_y_bounds
 
     if not labels:
         return None
-    half_stroke = 0.5 * max(0.0, float(leader_stroke_width))
     bands: list[VerticalBand] = []
     for label in labels:
         top_y, bottom_y = calculate_label_y_bounds(label)
@@ -706,6 +703,7 @@ def measure_linear_label_band(
             if value is not None and math.isfinite(float(value))
         ]
         if leader_y:
+            half_stroke = 0.5 * label_leader_width_px(label)
             top_y = min(float(top_y), min(leader_y) - half_stroke)
             bottom_y = max(float(bottom_y), max(leader_y) + half_stroke)
         bands.append(VerticalBand(float(top_y), float(bottom_y)))

@@ -1322,6 +1322,24 @@ test('a feature shape of a feature type the user added survives Save and Load', 
   assert.equal(state.drawings.linear.adv.feature_shapes.gene, 'arrow');
 });
 
+// A stored feature label style outside its list (LP-D102) reads as the
+// drawing's mode's packaged style, which the generated mode profile gives
+// (Linear an underline on a box, Circular a halo), and is listed.
+test('a stored label style outside its list reads as its mode\'s default and is listed', async () => {
+  const { configFieldRepairs, defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  const { labelStyleForMode } = await import('../../gbdraw/web/js/mode-profiles.js');
+  for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const targets = defaultSettingsContainers(mode);
+    const repairs = configFieldRepairs(targets, { adv: { label_line: 'over', label_protection: 'bogus' } }, 'config', { mode });
+    const { label_line: line, label_protection: protection } = labelStyleForMode(mode);
+    assert.deepEqual([targets.adv.label_line, targets.adv.label_protection], [line, protection], mode);
+    assert.deepEqual(describeLoadRepairs(repairs)?.items, [
+      `Settings: the value "over" (config.adv.label_line) cannot be used; ${line} is used.`,
+      `Settings: the value "bogus" (config.adv.label_protection) cannot be used; ${protection} is used.`
+    ], mode);
+  }
+});
+
 // A similarity-group name that is no text (an object, a boolean) is
 // dropped and counted, not applied as its text; a number is its text. The
 // older `priorityRules` is read only when `qualifierPriorityRules` is
