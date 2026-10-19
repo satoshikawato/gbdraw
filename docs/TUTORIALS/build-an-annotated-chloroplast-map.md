@@ -4,8 +4,9 @@
 
 You will draw the complete tobacco plastome as a Circular SVG, as in the
 Interactive SVG Gallery. Look for the functional gene colors, radial labels on
-both sides of the feature ring, one inner LSC/IRb/SSC/IRa bracket lane, GC
-content, and the upper-left legend.
+both sides of the feature ring, a tint for each structural region that spans
+from the feature ring through GC content, one inner ring of lines with the
+LSC/IRb/SSC/IRa names curved along it, GC content, and the upper-left legend.
 
 ![Gallery-style tobacco plastome drawn from the command line](../images/t-cli-06/cli_annotated_chloroplast.svg)
 
@@ -18,7 +19,7 @@ PowerShell downloads and the meaning of each file type.
 | File | Record | Length | Download |
 | --- | --- | --- | --- |
 | `NC_001879.gbk` | NCBI `NC_001879.2`, *Nicotiana tabacum* plastid, complete genome | 155,943 bp | [Record page](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2); [full GenBank file](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text) |
-| `nicotiana-tabacum-regions.tsv` | LSC, IRb, SSC, and IRa annotations | — | [`nicotiana-tabacum-regions.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv) (select **Download raw file**) |
+| `nicotiana-tabacum-regions-span.tsv` | LSC, IRb, SSC, and IRa annotations: named lines and tints | — | [`nicotiana-tabacum-regions-span.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions-span.tsv) (select **Download raw file**) |
 | `chloroplast_specific_table.tsv` | Chloroplast gene-family color rules | — | [`chloroplast_specific_table.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/chloroplast_specific_table.tsv) (select **Download raw file**) |
 | `qualifier_priority.tsv` | CDS label-priority rules | — | [`qualifier_priority.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv) (select **Download raw file**) |
 
@@ -88,43 +89,56 @@ produce one legend entry per functional group and readable radial gene labels.
 ### Step 4: Import all four plastome regions
 
 Open **Region Annotations** and import
-`nicotiana-tabacum-regions.tsv`. Keep every row in lane `0`:
+`nicotiana-tabacum-regions-span.tsv`. It holds two annotation sets with the
+same four regions:
 
-| Region | Inclusive range | Lane |
-| --- | ---: | ---: |
-| LSC | 1–86,686 | 0 |
-| IRb | 86,687–112,029 | 0 |
-| SSC | 112,030–130,600 | 0 |
-| IRa | 130,601–155,943 | 0 |
+| Set | Rows | Mark | Labels |
+| --- | --- | --- | --- |
+| `plastome_regions` | `lsc`, `irb`, `ssc`, `ira` | Line, lane `0` | LSC, IRb, SSC, IRa |
+| `plastome_tint` | `lsc_tint`, `irb_tint`, `ssc_tint`, `ira_tint` | Highlight | None |
+
+| Region | Inclusive range |
+| --- | ---: |
+| LSC | 1–86,686 |
+| IRb | 86,687–112,029 |
+| SSC | 112,030–130,600 |
+| IRa | 130,601–155,943 |
+
+The single-copy regions use blue and the inverted repeats use purple, in both
+sets.
 
 ![Annotation table containing LSC, SSC, IRa, and IRb regions](../images/t-gui-05/03-annotation-table.png)
 
 To reuse the current annotation table, select **Download TSV**. The file can
 be imported again through **Import TSV**, including any edits made here.
 
-### Step 5: Build the three-slot Gallery stack
+### Step 5: Build the four-slot Gallery stack
 
 Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
-**Ticks** and **GC skew** rows. Configure this exact outside-to-inside order:
+**Ticks** and **GC skew** rows. Configure this exact order:
 
 | Slot | Renderer | Position | Radius | Width | Other settings |
 | --- | --- | --- | ---: | ---: | --- |
 | `features` | Features | On axis | Auto | Auto | Feature on axis / split |
+| `plastome_tint` | Annotations | Overlay anchor | — | — | Set `plastome_tint`; anchor `features`; layer Underlay; Extend to `gc_content`; Marks: highlight only; labels off; padding `0` |
 | `plastome_regions` | Annotations | Inside | `0.65 ×R` | `20 px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
 | `gc_content` | Dinucleotide content | Inside | `0.56 ×R` | `0.08 ×R` | GC |
 
 Enter the number and select **px** or **×R** in each Width/Radius control.
 R is the base circle radius. Keep the features fields empty for Auto.
 
-The region annotations belong between the feature ring and GC content. They
-are not alternating outer decoration and do not need a separate legend item.
+The `plastome_tint` row draws behind the features and GC content, from the
+feature ring through the GC-content ring, so each region's genes sit on its
+tint. The `plastome_regions` ring sits between the feature ring and GC
+content, and its names curve along the ring. Neither needs a separate legend
+item.
 
 ![Circular custom-track controls for features, one plastome-region lane, and GC content](../images/t-gui-05/04-track-settings.png)
 
 ### Step 6: Generate and export the finished map
 
-Select **Generate Diagram**. Verify the four structural labels, radial gene
-labels inside and outside the feature ring, functional colors, inner GC-content
+Select **Generate Diagram**. Verify the four region tints, the four curved
+structural labels, radial gene labels inside and outside the feature ring, functional colors, inner GC-content
 profile, and upper-left legend. There should be no coordinate-tick or skew
 track. Select **SVG** to save `annotated_chloroplast_map.svg`.
 
@@ -153,7 +167,7 @@ On macOS, Linux, or WSL, run:
 ncbi_efetch="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 gbdraw_data_base="https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data"
 curl -L "${ncbi_efetch}?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text" -o NC_001879.gbk
-curl -L "$gbdraw_data_base/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv" -o nicotiana-tabacum-regions.tsv
+curl -L "$gbdraw_data_base/tobacco-plastome-regions/nicotiana-tabacum-regions-span.tsv" -o nicotiana-tabacum-regions-span.tsv
 curl -L "$gbdraw_data_base/tobacco-plastome-regions/chloroplast_specific_table.tsv" -o chloroplast_specific_table.tsv
 curl -L "$gbdraw_data_base/tobacco-plastome-regions/qualifier_priority.tsv" -o qualifier_priority.tsv
 ```
@@ -169,7 +183,7 @@ The working directory should now contain:
 ```text
 gbdraw-cli-chloroplast/
 ├── NC_001879.gbk
-├── nicotiana-tabacum-regions.tsv
+├── nicotiana-tabacum-regions-span.tsv
 ├── chloroplast_specific_table.tsv
 └── qualifier_priority.tsv
 ```
@@ -194,8 +208,9 @@ gbdraw circular \
   --inner_label_x_radius_offset 0.975 \
   --inner_label_y_radius_offset 0.975 \
   --qualifier_priority qualifier_priority.tsv \
-  --annotation_table nicotiana-tabacum-regions.tsv \
+  --annotation_table nicotiana-tabacum-regions-span.tsv \
   --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
+  --circular_track_slot 'plastome_tint:annotations@set_id=plastome_tint,side=overlay,anchor_slot=features,layer=underlay,to_slot=gc_content,marks=highlight,padding_px=0,show_labels=false,z=-1' \
   --circular_track_slot 'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress' \
   --circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content' \
   --block_stroke_color black \
@@ -212,18 +227,20 @@ gbdraw circular \
 Expected output: gbdraw writes
 `cli_annotated_chloroplast.svg` in the working directory.
 
-The explicit slots are the same three-slot stack used by the web app and
-Python steps. Because no tick or skew slot is declared, neither appears in the
-finished figure.
+The explicit slots are the same four-slot stack used by the web app and
+Python steps. `plastome_tint` is an Underlay on the feature ring that extends
+to `gc_content`; `z=-1` draws it below the feature slot it is anchored to.
+Because no tick or skew slot is declared, neither appears in the finished
+figure.
 
 ### Step 3: Inspect the result
 
 Open `cli_annotated_chloroplast.svg`. Confirm `NC_001879.2`, 147 logical
-features, radial labels, all four structural-region brackets, GC content, and
-the functional-color legend.
+features, radial labels, the four region tints, the four curved region names,
+GC content, and the functional-color legend.
 
 Your SVG should match the figure at the top of this page: the same complete
-record, structural-region brackets, track order, labels, and functional colors.
+record, region tints and names, track order, labels, and functional colors.
 
 ## In Python
 
@@ -275,6 +292,21 @@ track_slots = (
         params={"lane_direction": "split"},
     ),
     CircularTrackSlot(
+        id="plastome_tint",
+        renderer="annotations",
+        side="overlay",
+        z=-1,
+        params={
+            "set_id": "plastome_tint",
+            "anchor_slot": "features",
+            "layer": "underlay",
+            "to_slot": "gc_content",
+            "marks": ["highlight"],
+            "padding_px": 0,
+            "show_labels": False,
+        },
+    ),
+    CircularTrackSlot(
         id="plastome_regions",
         renderer="annotations",
         side="inside",
@@ -316,7 +348,7 @@ options = CircularOptions(
         qualifier_priority=Path("qualifier_priority.tsv"),
     ),
     annotations=AnnotationOptions(
-        table_file="nicotiana-tabacum-regions.tsv",
+        table_file="nicotiana-tabacum-regions-span.tsv",
     ),
     tracks=CircularTrackOptions(slots=track_slots),
     species="<i>Nicotiana tabacum</i>",
@@ -355,15 +387,17 @@ print(f"Saved {chloroplast_path}")
 <!-- executable:T-PY-02:end -->
 
 The first slot splits forward- and reverse-strand features around the axis.
-The second places all four structural regions in one inner annotation lane.
-The third adds GC content without adding coordinate ticks or a skew ring.
+The second tints each structural region behind the features, from the feature
+ring through GC content. The third draws the four region lines with their
+names in one inner annotation lane. The fourth adds GC content without adding
+coordinate ticks or a skew ring.
 
 Before running it, your working directory should contain:
 
 ```text
 gbdraw-python-chloroplast/
 ├── NC_001879.gbk
-├── nicotiana-tabacum-regions.tsv
+├── nicotiana-tabacum-regions-span.tsv
 ├── chloroplast_specific_table.tsv
 ├── qualifier_priority.tsv
 └── annotated_chloroplast.py
@@ -382,12 +416,13 @@ current directory.
 ### Step 3: Inspect the result
 
 Open `python_annotated_chloroplast.svg`. Confirm the complete
-`NC_001879.2` record, 147 logical features, radial gene labels, all four
-structural-region brackets, GC content, and the functional-color legend.
-There should be no coordinate-tick or GC-skew track.
+`NC_001879.2` record, 147 logical features, radial gene labels, the four
+region tints, the four curved region names, GC content, and the
+functional-color legend. There should be no coordinate-tick or GC-skew track.
 
 Your SVG should match the figure at the top of this page: the same record,
-feature colors, label placement, region brackets, track order, and legend.
+feature colors, label placement, region tints and names, track order, and
+legend.
 
 ## Next steps
 
@@ -410,7 +445,7 @@ feature colors, label placement, region brackets, track order, and legend.
   the CDS label priority.
 - The command and the Python program on this page run in gbdraw's automated
   documentation checks in a clean directory. The checks confirm the complete
-  record, the feature count, the annotation identities, the three-slot order,
+  record, the feature count, the annotation identities, the four-slot order,
   the typed options and slot geometry, the visible labels, and the colors. They
   also confirm that the command-line and Python renderings match and that the
   file, text, and byte outputs of the Python program are equal.
