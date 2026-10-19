@@ -52,6 +52,7 @@ await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
 await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
+await copyModule('services/drawn-groups.js', 'services/drawn-groups.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
 await copyModule('services/json-clone.js', 'services/json-clone.js');

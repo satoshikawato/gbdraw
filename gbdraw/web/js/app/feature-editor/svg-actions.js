@@ -28,6 +28,9 @@ import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
+  ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR
+} from '../../services/drawn-groups.js';
+import {
   featureIdentity,
   indexFeatureIdentities,
   renderedFeatureIdentity
@@ -477,10 +480,10 @@ export const createFeatureSvgActions = ({
    */
   const getAnnotationTarget = (target, svg) => {
     if (!target || typeof target.closest !== 'function') return null;
-    const front = target.closest('[data-gbdraw-region-label-for]')?.getAttribute('data-gbdraw-region-label-for');
+    const front = target.closest(REGION_LABEL_FRONT_SELECTOR)?.getAttribute(REGION_LABEL_FOR_ATTRIBUTE);
     const annotationEl = front
-      ? svg.querySelector(`[id="${CSS.escape(front)}"][data-gbdraw-annotation-id]`)
-      : target.closest('[data-gbdraw-annotation-id]');
+      ? svg.querySelector(`[id="${CSS.escape(front)}"]${ANNOTATION_SELECTOR}`)
+      : target.closest(ANNOTATION_SELECTOR);
     return annotationEl && svg.contains(annotationEl) ? annotationEl : null;
   };
 
@@ -1864,7 +1867,7 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           if (selectedAnnotation) {
             selectedAnnotation.value = {
-              id: annotationEl.getAttribute('data-gbdraw-annotation-id') || '',
+              id: annotationEl.getAttribute(ANNOTATION_ID_ATTRIBUTE) || '',
               setId: annotationEl.getAttribute('data-gbdraw-annotation-set-id') || '',
               trackId: annotationEl.getAttribute('data-gbdraw-annotation-track-id') || ''
             };

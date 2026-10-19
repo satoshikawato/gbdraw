@@ -8,6 +8,7 @@ import { readRecordSourceSpan, recordSourceInterval } from './record-source-coor
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
+import { ANNOTATION_SELECTOR } from './drawn-groups.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -26,7 +27,6 @@ const STANDALONE_MATCH_SELECTOR = [
   'path[data-match-kind]',
   'path[data-pairwise-match-style]'
 ].join(', ');
-const STANDALONE_ANNOTATION_SELECTOR = '[data-gbdraw-annotation-id]';
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
@@ -2093,7 +2093,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
       .map((annotation) => String(annotation?.dom_id || annotation?.domId || '').trim())
       .filter(Boolean)
   );
-  svg.querySelectorAll(STANDALONE_ANNOTATION_SELECTOR).forEach((element) => {
+  svg.querySelectorAll(ANNOTATION_SELECTOR).forEach((element) => {
     if (!annotationDomIds.has(String(element.id || '').trim())) return;
     element.setAttribute('data-gbdraw-interactive-annotation', 'true');
     addClassToken(element, 'gbdraw-interactive-annotation');

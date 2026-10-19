@@ -1,7 +1,8 @@
 // @ts-check
 // The groups of a Result that the Web app finds by what they draw: the scale,
-// the dinucleotide and depth tracks, the plot title. This module is the one
-// owner of their slot renderer names and ids, which Python writes
+// the dinucleotide and depth tracks, the plot title, the region annotations.
+// This module is the one owner of their slot renderer names, ids, and marks,
+// which Python writes
 // (gbdraw/svg/ids.py, gbdraw/features/ids.py, and the track renderers).
 
 /**
@@ -21,6 +22,15 @@ export const DINUCLEOTIDE_CONTENT_GROUPS = trackGroups(['dinucleotide_content'],
 // Circular draws GC skew as `skew`, Linear as `gc_skew`.
 export const DINUCLEOTIDE_SKEW_GROUPS = trackGroups(['dinucleotide_skew'], ['skew', 'gc_skew']);
 export const DEPTH_GROUPS = trackGroups(['depth'], ['depth']);
+
+// A region annotation's group names its annotation in both modes
+// (gbdraw/render/drawers/circular/annotations.py, linear/annotations.py); in
+// Linear, the group of a region label drawn in front of the leader lines names
+// that group's id (linear/annotations.py).
+export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
+export const REGION_LABEL_FOR_ATTRIBUTE = 'data-gbdraw-region-label-for';
+export const ANNOTATION_SELECTOR = `[${ANNOTATION_ID_ATTRIBUTE}]`;
+export const REGION_LABEL_FRONT_SELECTOR = `[${REGION_LABEL_FOR_ATTRIBUTE}]`;
 
 // The Linear scale (bar or ruler style) and the plot title are one group each.
 export const LENGTH_BAR_ID = 'length_bar';
