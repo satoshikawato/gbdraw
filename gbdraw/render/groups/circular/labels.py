@@ -11,8 +11,9 @@ from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
+from ....labels.label_ink import FeatureLabelInk, circular_label_ink, label_underline_on
 from ....layout.circular import CircularRecordRenderContext
-from ...drawers.circular.labels import LabelDrawer, circular_label_ink
+from ...drawers.circular.labels import LabelDrawer
 from ...drawers.label_backing import backing_rects, feature_label_backing_mode
 from ...label_binding import bind_label_part
 
@@ -53,19 +54,21 @@ class LabelsGroup:
         label_list = self.precalculated_labels or []
 
         drawer = LabelDrawer(profile=self.render_context.profile)
-        if self.phase in {"all", "leaders"}:
-            # Only the leaders read the stroke, so a stroke change keeps the text.
+        backing_mode = feature_label_backing_mode()
+        underline = label_underline_on()
+        if self.phase in {"all", "leaders"} or underline:
+            # Only the leaders (and the prototype's underlines) read the stroke, so a stroke change keeps the text.
             cfg = self.render_context.profile.config
             stroke_width = cfg.labels.stroke_width.for_length_param(self.geometry.length_param)
             stroke_color = cfg.labels.stroke_color.label_stroke_color
-        backing_mode = feature_label_backing_mode()
+
+        def ink_of(label: CircularLabel) -> FeatureLabelInk:
+            font_size, font_family = drawer.label_font(label, record_length)
+            return circular_label_ink(label, record_length, font_size, font_family, underline=underline)
+
         if self.phase in {"all", "text"} and backing_mode != "off":
             # The text layer is in front of every leader: backings go under all of its letters (LP-D85).
-            inks = [
-                circular_label_ink(label, drawer, record_length)
-                for label in label_list
-                if not label.get("is_embedded")
-            ]
+            inks = [ink_of(label) for label in label_list if not label.get("is_embedded")]
             for rect in backing_rects(inks, backing_mode):
                 group.add(rect)
         for label in label_list:
@@ -73,6 +76,17 @@ class LabelsGroup:
                 continue
             leader_start_x = label.get("leader_start_x", label["start_x"])
             leader_start_y = label.get("leader_start_y", label["start_y"])
+            line = ink_of(label).underline if underline else None
+            if line is not None:
+                # The leader ends on its underline, which continues it (LP-D88); the line is drawn with the
+                # letters, in front of the backings.
+                leader_start_x, leader_start_y = line[0]
+                if self.phase in {"all", "text"}:
+                    underline_path = Line(
+                        start=line[1], end=line[2], stroke=stroke_color, stroke_width=stroke_width, stroke_linecap="round"
+                    )
+                    bind_label_part(underline_path, label["feature_id"])
+                    group.add(underline_path)
             if self.phase in {"all", "leaders"}:
                 line_path = Line(
                     start=(label["middle_x"], label["middle_y"]),

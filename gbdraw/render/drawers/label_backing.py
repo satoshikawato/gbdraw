@@ -13,15 +13,13 @@ label's leader passes through, ``all`` backs every label with a leader.
 
 from __future__ import annotations
 
-import math
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from gbdraw.layout.spatial import Aabb
-from gbdraw.layout.text_geometry import Point, TextAnchor
-from gbdraw.render.drawers.annotation_marks import label_ink_offsets
+from gbdraw.labels.label_ink import UNDERLINE_GAP_EM, FeatureLabelInk
+from gbdraw.layout.text_geometry import Point
 from gbdraw.svg.elements import Rect
 
 BACKING_PADDING_EM = 0.18
@@ -30,6 +28,7 @@ BACKING_OPACITY = 0.7
 
 FeatureLabelBackingMode: TypeAlias = Literal["off", "through", "all"]
 BACKING_MODE_ENV = "GBDRAW_LABEL_BACKING"
+BACKING_OPACITY_ENV = "GBDRAW_LABEL_BACKING_OPACITY"
 
 
 def backing_box(ink: Aabb, font_size: float, *, edge_x: float | None = None, edge_y: float | None = None) -> Aabb:
@@ -52,7 +51,7 @@ def backing_box(ink: Aabb, font_size: float, *, edge_x: float | None = None, edg
     return Aabb(min_x, min_y, max_x, max_y)
 
 
-def backing_rect(box: Aabb, font_size: float) -> Rect:
+def backing_rect(box: Aabb, font_size: float, *, opacity: float = BACKING_OPACITY) -> Rect:
     """The drawn backing of ``box``."""
 
     radius = BACKING_PADDING_EM * font_size
@@ -62,9 +61,19 @@ def backing_rect(box: Aabb, font_size: float) -> Rect:
         rx=radius,
         ry=radius,
         fill=BACKING_FILL,
-        fill_opacity=BACKING_OPACITY,
+        fill_opacity=opacity,
         stroke="none",
     )
+
+
+def feature_label_backing_opacity() -> float:
+    """The feature label backing's fill opacity (``GBDRAW_LABEL_BACKING_OPACITY``, LP-D88 study; the
+    region label's ``BACKING_OPACITY`` when unset)."""
+
+    try:
+        return float(os.environ.get(BACKING_OPACITY_ENV, "") or BACKING_OPACITY)
+    except ValueError:
+        return BACKING_OPACITY
 
 
 def feature_label_backing_mode() -> FeatureLabelBackingMode:
@@ -78,85 +87,42 @@ def feature_label_backing_mode() -> FeatureLabelBackingMode:
     return "off"
 
 
-@dataclass(frozen=True)
-class FeatureLabelInk:
-    """One feature label with a leader, in its record's drawing frame.
+def feature_label_backing(label: FeatureLabelInk) -> Aabb:
+    """A feature label's backing in the frame of its ``ink``, stopped at its own drawn leader's end
+    on the side the leader arrives from, or short of its underline when it has one."""
 
-    ``ink`` is the box of its letters before the ``rotation_deg`` turn about
-    ``center`` (the point its text is drawn at); ``leader`` is its drawn leader
-    polyline, which ends at its letters.
-    """
-
-    ink: Aabb
-    font_size: float
-    rotation_deg: float
-    center: Point
-    leader: tuple[Point, ...]
-
-    def to_label_frame(self, point: Point) -> Point:
-        """``point`` turned back by ``rotation_deg`` about ``center`` (the frame of ``ink``)."""
-
-        if self.rotation_deg == 0.0:
-            return point
-        angle = math.radians(-self.rotation_deg)
-        cx, cy = self.center
-        dx, dy = point[0] - cx, point[1] - cy
-        return (cx + dx * math.cos(angle) - dy * math.sin(angle), cy + dx * math.sin(angle) + dy * math.cos(angle))
-
-    @property
-    def backing(self) -> Aabb:
-        """Its backing in the frame of ``ink``, stopped at its own leader's end on the side it arrives from."""
-
-        if not self.leader:
-            return backing_box(self.ink, self.font_size)
-        end_x, end_y = self.to_label_frame(self.leader[-1])
-        ink = self.ink
-        out_x = max(ink.min_x - end_x, end_x - ink.max_x)
-        out_y = max(ink.min_y - end_y, end_y - ink.max_y)
-        if out_x >= out_y:
-            edge = max(end_x, ink.max_x) if end_x > 0.5 * (ink.min_x + ink.max_x) else min(end_x, ink.min_x)
-            return backing_box(ink, self.font_size, edge_x=edge)
-        edge = max(end_y, ink.max_y) if end_y > 0.5 * (ink.min_y + ink.max_y) else min(end_y, ink.min_y)
-        return backing_box(ink, self.font_size, edge_y=edge)
-
-    def backing_rect(self) -> Rect:
-        rect = backing_rect(self.backing, self.font_size)
-        if self.rotation_deg != 0.0:
-            rect.rotate(self.rotation_deg, center=self.center)
-        return rect
+    line = label.underline
+    if line is not None:
+        # Stop short of the underline by its gap, so the backing never paints over the line's stroke.
+        line_y = label.to_label_frame(line[0])[1]
+        gap = UNDERLINE_GAP_EM * label.font_size
+        return backing_box(label.ink, label.font_size, edge_y=line_y - gap if line_y > label.ink.max_y else line_y + gap)
+    drawn = label.drawn
+    if not drawn:
+        return backing_box(label.ink, label.font_size)
+    end_x, end_y = label.to_label_frame(drawn[-1])
+    ink = label.ink
+    out_x = max(ink.min_x - end_x, end_x - ink.max_x)
+    out_y = max(ink.min_y - end_y, end_y - ink.max_y)
+    if out_x >= out_y:
+        edge = max(end_x, ink.max_x) if end_x > 0.5 * (ink.min_x + ink.max_x) else min(end_x, ink.min_x)
+        return backing_box(ink, label.font_size, edge_x=edge)
+    edge = max(end_y, ink.max_y) if end_y > 0.5 * (ink.min_y + ink.max_y) else min(end_y, ink.min_y)
+    return backing_box(ink, label.font_size, edge_y=edge)
 
 
-def feature_label_ink(
-    text: str,
-    font_family: str,
-    font_size: float,
-    *,
-    at: Point,
-    anchor: TextAnchor,
-    dominant_baseline: str,
-    rotation_deg: float,
-    leader: Sequence[Point],
-) -> FeatureLabelInk:
-    """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it) as its backing sees it."""
-
-    left, right, top, bottom = label_ink_offsets(
-        text, font_family, font_size, anchor, dominant_baseline=dominant_baseline
-    )
-    x, y = at
-    return FeatureLabelInk(
-        ink=Aabb(x + left, y + top, x + right, y + bottom),
-        font_size=float(font_size),
-        rotation_deg=float(rotation_deg),
-        center=(float(x), float(y)),
-        leader=tuple((float(px), float(py)) for px, py in leader),
-    )
+def feature_label_backing_rect(label: FeatureLabelInk) -> Rect:
+    rect = backing_rect(feature_label_backing(label), label.font_size, opacity=feature_label_backing_opacity())
+    if label.rotation_deg != 0.0:
+        rect.rotate(label.rotation_deg, center=label.center)
+    return rect
 
 
 def backing_rects(labels: Sequence[FeatureLabelInk], mode: FeatureLabelBackingMode) -> list[Rect]:
     """The backings of one record's feature labels, to draw before (under) all of their letters."""
 
     backed = backed_feature_labels(labels, mode)
-    return [label.backing_rect() for index, label in enumerate(labels) if index in backed]
+    return [feature_label_backing_rect(label) for index, label in enumerate(labels) if index in backed]
 
 
 def _segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
@@ -184,9 +150,9 @@ def leaders_through_text(labels: Sequence[FeatureLabelInk]) -> list[tuple[int, i
     found: list[tuple[int, int]] = []
     for text_of, label in enumerate(labels):
         for leader_of, other in enumerate(labels):
-            if leader_of == text_of or not other.leader:
+            if leader_of == text_of or not other.drawn:
                 continue
-            points = [label.to_label_frame(point) for point in other.leader]
+            points = [label.to_label_frame(point) for point in other.drawn]
             if any(_segment_through_box(a, b, label.ink) for a, b in zip(points, points[1:])):
                 found.append((leader_of, text_of))
     return found
@@ -196,7 +162,7 @@ def backed_feature_labels(labels: Sequence[FeatureLabelInk], mode: FeatureLabelB
     """The labels drawn on a backing: none, those another leader passes through, or every one with a leader."""
 
     if mode == "all":
-        return frozenset(index for index, label in enumerate(labels) if label.leader)
+        return frozenset(index for index, label in enumerate(labels) if label.drawn)
     if mode == "through":
         return frozenset(text_of for _leader_of, text_of in leaders_through_text(labels))
     return frozenset()
@@ -208,12 +174,12 @@ __all__ = [
     "BACKING_OPACITY",
     "BACKING_PADDING_EM",
     "FeatureLabelBackingMode",
-    "FeatureLabelInk",
     "backed_feature_labels",
     "backing_box",
     "backing_rect",
     "backing_rects",
-    "feature_label_ink",
+    "feature_label_backing",
+    "feature_label_backing_opacity",
     "feature_label_backing_mode",
     "leaders_through_text",
 ]

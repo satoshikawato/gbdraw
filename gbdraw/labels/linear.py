@@ -17,6 +17,7 @@ from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..core.record_metadata import _source_feature_index
 from ..core.text import calculate_bbox_dimensions
+from .label_ink import label_underline_counted, linear_label_ink
 from ..auto_sizes import determine_length_parameter
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
@@ -884,9 +885,14 @@ def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
 def linear_label_shapes(labels: list[dict]) -> list[LabelShape]:
     """One record's drawn Linear labels as the fit count sees them."""
 
+    underline = label_underline_counted()
     return [
-        LabelShape("linear", (tuple(_label_corners(label)),), linear_leader_polyline(label))
-        for label in labels
+        LabelShape(
+            "linear",
+            (tuple(_label_corners(label)),),
+            linear_label_ink(label, leader, underline=True).drawn if underline and leader else leader,
+        )
+        for label, leader in ((label, linear_leader_polyline(label)) for label in labels)
     ]
 
 

@@ -18,6 +18,7 @@ from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
 from .circular_types import CircularLabel, CircularLabelCandidateCache
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
+from .label_ink import circular_label_ink, label_underline_counted
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -305,6 +306,12 @@ def circular_label_shape(label: CircularLabel, total_length: int) -> LabelShape:
     corners = label.get("oriented_corners")
     parts = (tuple(corners),) if corners else (_label_fit_box(label, total_length),)
     kind: LabelKind = "circular_inner" if label.get("is_inner") else "circular_outer"
+    if label_underline_counted():
+        # The underline is part of the drawn leader (LP-D88 study).
+        ink = circular_label_ink(
+            label, total_length, float(label["font_size"]), str(label["font_family"]), underline=True
+        )
+        return LabelShape(kind, parts, ink.drawn)
     return LabelShape(kind, parts, leader_polyline(label))
 
 

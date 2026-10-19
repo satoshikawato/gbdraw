@@ -13,9 +13,7 @@ from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 from ....core.text import calculate_bbox_dimensions
-from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment, leader_polyline
-from ....layout.text_geometry import Point, normalize_text_anchor
-from ..label_backing import FeatureLabelInk, feature_label_ink
+from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment, rim_text_placement
 from ....labels.circular_types import CircularLabel
 from ...label_binding import bind_label_part
 
@@ -222,39 +220,6 @@ class LabelDrawer:
         return group
 
 
-def rim_text_placement(label: CircularLabel, record_length: int) -> tuple[Point, str, str, float]:
-    """Where an outer or inner label's text is drawn: its point, anchor, baseline and turn (radial labels)."""
-
-    if label.get("placement") == "radial":
-        return (
-            (float(label.get("text_x", label["start_x"])), float(label.get("text_y", label["start_y"]))),
-            str(label.get("text_anchor", "middle")),
-            str(label.get("dominant_baseline", "middle")),
-            float(label.get("rotation_deg", 0.0)),
-        )
-    anchor_value, baseline_value = horizontal_label_alignment(
-        record_length, label["middle"], label["start_x"], is_inner=label.get("is_inner", False)
-    )
-    return (float(label["start_x"]), float(label["start_y"])), anchor_value, baseline_value, 0.0
-
-
-def circular_label_ink(label: CircularLabel, drawer: LabelDrawer, record_length: int) -> FeatureLabelInk:
-    """An outer or inner label as its backing sees it (LP-D85)."""
-
-    (x, y), anchor, baseline, rotation_deg = rim_text_placement(label, record_length)
-    font_size, font_family = drawer.label_font(label, record_length)
-    return feature_label_ink(
-        str(label["label_text"]),
-        font_family,
-        float(font_size),
-        at=(x, y),
-        anchor=normalize_text_anchor(anchor),
-        dominant_baseline=baseline,
-        rotation_deg=rotation_deg,
-        leader=leader_polyline(label),
-    )
-
-
-__all__ = ["LabelDrawer", "circular_label_ink", "rim_text_placement"]
+__all__ = ["LabelDrawer"]
 
 

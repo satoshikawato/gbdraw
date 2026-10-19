@@ -11,9 +11,9 @@ from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
-from ...drawers.label_backing import backing_rects, feature_label_backing_mode, feature_label_ink
+from ...drawers.label_backing import backing_rects, feature_label_backing_mode
+from ....labels.label_ink import label_underline_on, linear_label_ink
 from ...drawers.linear.labels import LabelDrawer
-from ....layout.text_geometry import normalize_text_anchor
 from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
@@ -286,7 +286,9 @@ class SeqRecordGroup:
 
         # Process labels if enabled. Each label gets its feature identity on a
         # copy: the prepared labels are this content's arguments.
+        underlines: list[Line] = []
         if self.show_labels and self.draw_features_enabled:
+            underline = label_underline_on()
             bound_labels = []
             for label in label_list:
                 source_feature_index = label.get("source_feature_index")
@@ -300,6 +302,16 @@ class SeqRecordGroup:
                 label = {**label, "feature_id": feature_id}
                 bound_labels.append(label)
                 leader = linear_leader_polyline(label)
+                line = linear_label_ink(label, leader, underline=True).underline if leader and underline else None
+                if line is not None:
+                    # The leader ends on its underline, which continues it (LP-D88).
+                    # It is drawn with the letters, in front of the backings.
+                    leader = (leader[0], line[0])
+                    underline_path = Line(
+                        start=line[1], end=line[2], stroke=self.label_stroke_color, stroke_width=self.label_stroke_width
+                    )
+                    bind_label_part(underline_path, feature_id)
+                    underlines.append(underline_path)
                 if leader:
                     line_path = Line(
                         start=leader[0],
@@ -349,20 +361,13 @@ class SeqRecordGroup:
             mode = feature_label_backing_mode()
             if mode != "off":
                 inks = [
-                    feature_label_ink(
-                        str(label["label_text"]),
-                        str(label["font_family"]),
-                        float(label["font_size"]),
-                        at=(float(label["middle_x"]), float(label["middle_y"])),
-                        anchor=normalize_text_anchor(label.get("text_anchor", "middle")),
-                        dominant_baseline="central",
-                        rotation_deg=float(label.get("rotation_deg", 0.0)),
-                        leader=linear_leader_polyline(label),
-                    )
+                    linear_label_ink(label, linear_leader_polyline(label), underline=label_underline_on())
                     for label in label_list
                 ]
                 for rect in backing_rects(inks, mode):
                     feature_group.add(rect)
+            for underline_path in underlines:
+                feature_group.add(underline_path)
             for label in label_list:
                 feature_group = LabelDrawer().draw(label, feature_group)
 
