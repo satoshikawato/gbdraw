@@ -28,6 +28,7 @@ import { CircularMeasureInput } from './app/circular-track-slots/measure-input.j
 import { DepthTrackIndexInput } from './app/circular-track-slots/track-index-input.js';
 import { createAppSetup } from './app/app-setup.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
+import { t, tn, tx } from './utils/i18n.js';
 import { settingApplicationNote, settingApplicationSentence, settingApplicationText } from './services/setting-application.js';
 
 const { createApp } = window.Vue;
@@ -37,6 +38,9 @@ const app = createApp({
   methods: { formatFeatureLocation, settingApplicationNote, settingApplicationSentence, settingApplicationText },
   setup: createAppSetup
 });
+// Every template (the root, the x-templates, the inline component templates)
+// shows UI text through these (utils/i18n.js).
+Object.assign(app.config.globalProperties, { t, tn, tx });
 app.directive('dialog-focus', dialogFocus);
 app.directive('settings-section', settingsSection);
 app.directive('preview-transform', previewTransform);

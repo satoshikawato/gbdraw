@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { t } from '../../gbdraw/web/js/utils/i18n.js';
+
 globalThis.window = {
   Vue: {
     ref: (value) => ({ value }),
@@ -345,10 +347,10 @@ const choiceDialogStatus = async () => {
   const lines = [...template.matchAll(/<p v-if="busy" role="status"[^>]*>\{\{ (.+?) \}\}<\/p>/g)].map((match) => match[1]);
   assert.equal(lines.length, 1, 'the choice dialog has one busy status line');
   const bindings = new Function('dialogChoicePending', 'labelFitDialog', `return [${busy}, ${busyStatus}];`);
-  const text = new Function('busyStatus', `return ${lines[0]};`);
+  const text = new Function('busyStatus', 't', `return ${lines[0]};`);
   return (/** @type {boolean} */ pending, /** @type {object} */ dialog) => {
     const [isBusy, status] = bindings(pending, dialog);
-    return isBusy ? [text(status)] : [];
+    return isBusy ? [text(status, t)] : [];
   };
 };
 

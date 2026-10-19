@@ -107,15 +107,15 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in. `label` names a tip whose holder has no such text;
+// the row group it is in (this function; the template words the name, so it
+// follows the UI locale). `label` names a tip whose holder has no such text;
 // the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;
   const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
   const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
-  const name = `${group} ${label}`.replace(/\s+/g, ' ').trim();
-  return name ? `Help: ${name}` : 'Help';
+  return `${group} ${label}`.replace(/\s+/g, ' ').trim();
 };
 
 // Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the
@@ -147,7 +147,7 @@ export const HelpTip = {
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
-    const name = ref('Help');
+    const name = ref('');
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -661,7 +661,7 @@ export const DefaultColorScopeLine = {
         <span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
         <span class="font-mono">{{ line.color }}</span>.
       </template>
-      <template v-else>Sets the {{ line.type }} default color ({{ line.type }} features without their own color or rule, also hidden ones).</template>
+      <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
     </span>
   `
 };
@@ -671,7 +671,7 @@ export const ColorValueControl = {
     modelValue: { default: null },
     fallback: { type: String, default: '#000000' },
     allowNone: { type: Boolean, default: true },
-    ariaLabel: { type: String, default: 'Color value' },
+    ariaLabel: { type: String, default: '' },
     ariaDescribedby: { type: String, default: null }
   },
   emits: ['update:modelValue'],
@@ -719,12 +719,12 @@ export const ColorValueControl = {
         :disabled="!controlAvailable"
         @change="updateMode"
         class="form-input form-input-compact min-w-0"
-        :aria-label="\`\${ariaLabel} mode\`"
+        :aria-label="t('{name} mode', { name: ariaLabel || t('Color value') })"
         :aria-describedby="ariaDescribedby"
       >
-        <option value="auto">Auto</option>
-        <option v-if="allowNone" value="none">None</option>
-        <option value="color">Color</option>
+        <option value="auto">{{ t('Auto') }}</option>
+        <option v-if="allowNone" value="none">{{ t('None') }}</option>
+        <option value="color">{{ t('Color') }}</option>
       </select>
       <input
         type="color"
@@ -732,7 +732,7 @@ export const ColorValueControl = {
         @input="updateColor"
         :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
-        :aria-label="ariaLabel"
+        :aria-label="ariaLabel || t('Color value')"
         :aria-describedby="ariaDescribedby"
       >
     </div>
@@ -934,7 +934,7 @@ export const SpecificRuleRows = {
 // field; nothing when the text has no markup.
 export const MarkupPreview = {
   props: ['text'],
-  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">{{ t('Preview:') + ' ' }}</span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
   /** @param {{ text?: string | null }} props */
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };

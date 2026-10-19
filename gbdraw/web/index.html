@@ -2019,41 +2019,41 @@
             <div class="app-brand flex items-center gap-3 min-w-0">
                 <img src="./assets/gbdraw-logo-title-outlined.svg" alt="gbdraw" class="app-logo-title h-9 w-auto shrink-0">
                 <h1 class="sr-only">gbdraw</h1>
-                <span class="app-tagline text-slate-500 text-sm font-normal truncate">A genome diagram generator for microbes and organelles</span>
+                <span class="app-tagline text-slate-500 text-sm font-normal truncate">{{ t('A genome diagram generator for microbes and organelles') }}</span>
             </div>
 
                 <div class="app-toolbar flex items-center gap-2 min-w-0">
                 <div class="app-history-actions flex gap-0.5">
-                    <button @click="undoHistory" :disabled="!canUndoHistory" data-history-ignore class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="undoHistoryTitle" aria-label="Undo">
+                    <button @click="undoHistory" :disabled="!canUndoHistory" data-history-ignore class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="undoHistoryTitle" :aria-label="t('Undo')">
                         <i class="ph ph-arrow-u-up-left" aria-hidden="true"></i>
                     </button>
-                    <button @click="redoHistory" :disabled="!canRedoHistory" data-history-ignore class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="redoHistoryTitle" aria-label="Redo">
+                    <button @click="redoHistory" :disabled="!canRedoHistory" data-history-ignore class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="redoHistoryTitle" :aria-label="t('Redo')">
                         <i class="ph ph-arrow-u-up-right" aria-hidden="true"></i>
                     </button>
                 </div>
                 <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
-                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Reset Settings" aria-label="Reset Settings" :disabled="!semanticMutationAvailable">
-                        <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Reset Settings
+                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="!semanticMutationAvailable">
+                        <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> {{ t('Reset Settings') }}
                     </button>
-                    <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
-                        <gbdraw-loader v-if="sessionSavePending"></gbdraw-loader><i v-else class="ph ph-archive" aria-hidden="true"></i> Save Session
+                    <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" :title="t('Save the current Result and settings draft without generating')" :aria-label="t('Save Session')" aria-describedby="session-save-help">
+                        <gbdraw-loader v-if="sessionSavePending"></gbdraw-loader><i v-else class="ph ph-archive" aria-hidden="true"></i> {{ t('Save Session') }}
                     </button>
-                    <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
-                        <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
+                    <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Load Session')" :aria-label="t('Load Session')">
+                        <i class="ph ph-archive-tray" aria-hidden="true"></i> {{ t('Load Session') }}
                     </button>
                     <!-- D-07: Load example stays here once a Result replaces the empty Preview. -->
-                    <button v-if="galleryExamples.length" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Open a finished Gallery example as a Session" aria-label="Load example" aria-haspopup="dialog">
-                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> Load example
+                    <button v-if="galleryExamples.length" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Open a finished Gallery example as a Session')" :aria-label="t('Load example')" aria-haspopup="dialog">
+                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load example') }}
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
-                    <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Saving session…</span>
-                    <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Loading session…</span>
-                    <span v-if="featureDetailsPending && !sessionBusyReason && !sessionSavePending && !sessionImportPending" data-feature-details-pending role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Preparing feature details…</span>
+                    <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Saving session…') }}</span>
+                    <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Loading session…') }}</span>
+                    <span v-if="featureDetailsPending && !sessionBusyReason && !sessionSavePending && !sessionImportPending" data-feature-details-pending role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Preparing feature details…') }}</span>
                 </div>
-                <span id="session-save-help" class="sr-only">Save stores the current Result and generation settings draft. It does not Generate.</span>
+                <span id="session-save-help" class="sr-only">{{ t('Save stores the current Result and generation settings draft. It does not Generate.') }}</span>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
-                    <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Session</span>
+                    <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{{ t('Session') }}</span>
                     <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start" :disabled="!semanticMutationAvailable">
                         <i class="ph ph-pencil-simple" aria-hidden="true"></i>
                         <span class="truncate">{{ sessionTitleLabel }}</span>
@@ -2061,8 +2061,8 @@
                 </div>
 
                 <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button type="button" aria-label="Circular" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> Circular</button>
-                    <button type="button" aria-label="Linear" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> Linear</button>
+                    <button type="button" :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
+                    <button type="button" :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
                 </div>
             </div>
         </div>
@@ -8685,7 +8685,7 @@
         <div ref="panel" role="dialog" aria-modal="true" :aria-labelledby="labelledby" :aria-describedby="describedby" tabindex="-1"
              :aria-busy="busy ? 'true' : null" class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
             <fieldset :disabled="busy" class="contents [&_button:disabled]:opacity-60 [&_button:disabled]:cursor-wait"><slot></slot></fieldset>
-            <p v-if="busy" role="status" class="mt-3 text-xs text-slate-500">{{ busyStatus || 'Applying an edit…' }}</p>
+            <p v-if="busy" role="status" class="mt-3 text-xs text-slate-500">{{ busyStatus || t('Applying an edit…') }}</p>
         </div>
     </div>
 </script>
@@ -8695,9 +8695,9 @@
         <label :for="controlId" class="track-slot-field-label">{{ label }}</label>
         <div class="circular-measure-controls">
             <input :id="controlId" :disabled="disabled" type="text" inputmode="decimal" v-model.trim="valueText"
-                   :aria-label="`${accessibleName} value`" :aria-describedby="describedBy"
-                   :aria-invalid="view.error ? 'true' : 'false'" placeholder="Auto" class="form-input">
-            <select v-model="selectedUnit" :disabled="disabled" :aria-label="`${accessibleName} unit`"
+                   :aria-label="t('{name} value', { name: accessibleName })" :aria-describedby="describedBy"
+                   :aria-invalid="view.error ? 'true' : 'false'" :placeholder="t('Auto')" class="form-input">
+            <select v-model="selectedUnit" :disabled="disabled" :aria-label="t('{name} unit', { name: accessibleName })"
                     :aria-describedby="describedBy" class="form-input">
                 <option value="px">px</option>
                 <option value="factor">×R</option>
@@ -8711,7 +8711,7 @@
 <script type="text/x-template" id="depth-track-index-input-template">
     <div>
         <input :id="controlId" type="number" min="0" step="1" :value="text" @change="commit($event.target.value)"
-               :aria-label="`Depth track index ${slotId}`" :aria-describedby="describedBy || null"
+               :aria-label="t('Depth track index {slot}', { slot: slotId })" :aria-describedby="describedBy || null"
                :aria-invalid="error ? 'true' : 'false'" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="disabled">
         <p v-if="error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ error }}</p>
     </div>
@@ -8720,43 +8720,43 @@
 <script type="text/x-template" id="specific-rule-rows-template">
 <div class="space-y-1 mb-3">
     <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="flex items-start gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
-        <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
+        <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="t('Color rule {n} color', { n: i + 1 })" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
         <details class="min-w-0 flex-1" data-color-rule-editor>
             <summary class="flex min-w-0 cursor-pointer items-center gap-1 py-1 text-slate-700">
                 <span class="min-w-0 truncate"><span class="text-slate-500">{{ rule.feat }} ·</span> {{ rule.qual }} = <span class="font-mono">{{ patternText(rule) }}</span></span>
-                <span v-if="patternDraft(rule)" class="shrink-0 font-semibold text-amber-700">Not applied</span>
+                <span v-if="patternDraft(rule)" class="shrink-0 font-semibold text-amber-700">{{ t('Not applied') }}</span>
                 <span v-else-if="rule.cap" class="ml-auto max-w-[40%] shrink-0 truncate text-slate-500" :title="rule.cap">{{ rule.cap }}</span>
             </summary>
             <div class="mt-1 space-y-1">
                 <div class="grid grid-cols-2 gap-1">
-                    <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} feature type`" class="form-input form-input-compact" :disabled="!available">
+                    <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="t('Color rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact" :disabled="!available">
                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                     </select>
-                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact" :disabled="!available">
+                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" class="form-input form-input-compact" :disabled="!available">
                 </div>
-                <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Regular expression" data-history-ignore class="form-input form-input-compact w-full font-mono">
+                <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
                 <!-- The pattern's state under its field, once; the rule for what Save, Generate and Export use sits in the help tip. -->
                 <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="space-y-0.5 break-words text-[10px] leading-snug" data-color-rule-pattern-status data-history-ignore>
                     <div class="flex items-center gap-1 text-amber-800">
-                        <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>
-                        <help-tip :id="`${fieldId(rule)}-policy`" text="Until the pattern is accepted, Save Session and Generate use the last accepted rule, and Export uses the current Result. The draft is not saved."></help-tip>
+                        <p role="status" aria-live="polite" class="font-semibold">{{ t('Not applied') }}<span v-if="patternDraft(rule).pending"> — {{ t('Checking color rule…') }}</span></p>
+                        <help-tip :id="`${fieldId(rule)}-policy`" :text="t('Until the pattern is accepted, Save Session and Generate use the last accepted rule, and Export uses the current Result. The draft is not saved.')"></help-tip>
                     </div>
                     <operation-error v-if="patternDraft(rule).error" compact :error="patternDraft(rule).error"></operation-error>
                     <div class="flex flex-wrap gap-3">
-                        <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="font-semibold text-blue-700 underline disabled:opacity-40">Retry</button>
-                        <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">Revert</button>
+                        <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="font-semibold text-blue-700 underline disabled:opacity-40">{{ t('Retry') }}</button>
+                        <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">{{ t('Revert') }}</button>
                     </div>
                 </div>
-                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend name`" placeholder="Legend name" class="form-input form-input-compact w-full" :disabled="!available">
+                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="t('Color rule {n} legend name', { n: i + 1 })" :placeholder="t('Legend name')" class="form-input form-input-compact w-full" :disabled="!available">
                 <div class="flex items-center justify-end gap-0.5">
-                    <button aria-label="Move rule up" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                    <button aria-label="Move rule down" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                    <button aria-label="Delete rule" @click="$emit('remove', i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!available"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                    <button :aria-label="t('Move rule up')" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move rule up')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                    <button :aria-label="t('Move rule down')" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move rule down')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                    <button :aria-label="t('Delete rule')" @click="$emit('remove', i)" class="h-6 w-6 text-red-500 hover:text-red-700" :title="t('Delete rule')" :disabled="!available"><i class="ph ph-trash" aria-hidden="true"></i></button>
                 </div>
             </div>
         </details>
     </div>
-    <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">No rules added</div>
+    <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">{{ t('No rules added') }}</div>
 </div>
 </script>
 
@@ -8764,20 +8764,20 @@
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
     <div>
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>Organism / strain (optional)</span>
-        <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
-        <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">Reset to default</button>
+        <span>{{ t('Organism / strain (optional)') }}</span>
+        <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
+        <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
-      <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
       <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
     </div>
     <div>
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>Subtitle / title (optional)</span>
-        <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
-        <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">Reset to default</button>
+        <span>{{ t('Subtitle / title (optional)') }}</span>
+        <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
+        <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
-      <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultSubtitle(source) || 'e.g., Neomycin biosynthetic gene cluster'" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <input type="text" v-model="seq.record_subtitle" :aria-label="t('Subtitle / title for sequence {n}', { n: idx + 1 })" :placeholder="getLinearSourceDefaultSubtitle(source) || t('e.g., Neomycin biosynthetic gene cluster')" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
     </div>
   </div>
 </script>
@@ -8789,13 +8789,13 @@
       <span class="shrink-0 text-[10px] text-slate-500">{{ row.selector }} · {{ Number(row.recordLength).toLocaleString('en-US') }} bp</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="`Circular record ${row.recordId} ${row.selector}`"> Circular record</label>
-      <span class="ui-hint">(file: {{ row.detectedTopology }})</span>
-      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">Reset to detected</button>
+      <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="t('Circular record {record} {selector}', { record: row.recordId, selector: row.selector })"> {{ t('Circular record') }}</label>
+      <span class="ui-hint">{{ t('(file: {topology})', { topology: row.detectedTopology }) }}</span>
+      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">{{ t('Reset to detected') }}</button>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <label class="flex items-center gap-1.5">Display start <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="form-input form-input-compact w-24"></label>
-      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="($refs.start.disabled ? $refs.topology : $refs.start).focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">Reset start</button>
+      <label class="flex items-center gap-1.5">{{ t('Display start') }} <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="t('Display start {record} {selector}', { record: row.recordId, selector: row.selector })" class="form-input form-input-compact w-24"></label>
+      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="($refs.start.disabled ? $refs.topology : $refs.start).focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">{{ t('Reset start') }}</button>
     </div>
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
     <div v-if="!surface.startEnabled" class="ui-hint">{{ surface.disabledReason }}</div>
@@ -8806,11 +8806,11 @@
         <div v-if="model && compact" role="alert" :aria-label="title" class="min-w-0 break-words text-[11px] leading-snug text-red-700">
             <p>{{ model.summary }}</p>
             <details ref="details" class="mt-0.5">
-                <summary class="cursor-pointer text-[10px] font-semibold text-slate-600">Details</summary>
-                <textarea ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
+                <summary class="cursor-pointer text-[10px] font-semibold text-slate-600">{{ t('Details') }}</summary>
+                <textarea ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
                 <div class="flex flex-wrap gap-3 text-[10px]">
-                    <button type="button" @click="copyDiagnostics" class="font-semibold text-blue-700 underline">Copy diagnostics</button>
-                    <button type="button" @click="selectDiagnostics" class="font-semibold text-blue-700 underline">Select diagnostics</button>
+                    <button type="button" @click="copyDiagnostics" class="font-semibold text-blue-700 underline">{{ t('Copy diagnostics') }}</button>
+                    <button type="button" @click="selectDiagnostics" class="font-semibold text-blue-700 underline">{{ t('Select diagnostics') }}</button>
                 </div>
                 <p role="status" aria-live="polite" class="text-[10px] text-slate-600">{{ copyStatus }}</p>
             </details>
@@ -8820,11 +8820,11 @@
             <p class="mt-1 text-sm text-red-800">{{ model.summary }}</p>
             <p v-if="recoveryText" class="mt-1 text-xs text-red-800">{{ recoveryText }}</p>
             <details ref="details" class="mt-2 rounded border border-red-100 bg-white/50 p-2">
-                <summary class="cursor-pointer text-xs font-semibold text-red-700">Details</summary>
-                <textarea ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="5" class="mt-2 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-2 font-mono text-xs text-red-800" data-history-ignore></textarea>
+                <summary class="cursor-pointer text-xs font-semibold text-red-700">{{ t('Details') }}</summary>
+                <textarea ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="5" class="mt-2 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-2 font-mono text-xs text-red-800" data-history-ignore></textarea>
                 <div class="mt-2 flex flex-wrap gap-2">
-                    <button type="button" @click="copyDiagnostics" class="btn btn-secondary btn-sm">Copy diagnostics</button>
-                    <button type="button" @click="selectDiagnostics" class="btn btn-secondary btn-sm">Select diagnostics</button>
+                    <button type="button" @click="copyDiagnostics" class="btn btn-secondary btn-sm">{{ t('Copy diagnostics') }}</button>
+                    <button type="button" @click="selectDiagnostics" class="btn btn-secondary btn-sm">{{ t('Select diagnostics') }}</button>
                 </div>
                 <p role="status" aria-live="polite" class="mt-1 text-xs text-red-800">{{ copyStatus }}</p>
             </details>
@@ -8843,26 +8843,26 @@
 
 <script type="text/x-template" id="settings-section-index-template">
     <div ref="root" class="settings-index" data-history-ignore :style="rail ? null : { marginRight: inset + 'px' }" @keydown.esc="onEscape">
-        <button v-if="rail" type="button" class="settings-index-switch" aria-label="Expand settings" :aria-controls="controls"
-                v-on="tipOn('Expand settings')" @click="showStacked">
+        <button v-if="rail" type="button" class="settings-index-switch" :aria-label="t('Expand settings')" :aria-controls="controls"
+                v-on="tipOn(t('Expand settings'))" @click="showStacked">
             <i class="ph ph-caret-double-right" aria-hidden="true"></i>
         </button>
-        <nav aria-label="Settings sections">
+        <nav :aria-label="t('Settings sections')">
             <button v-for="(section, order) in entries" :key="section.key" type="button" :data-settings-entry="section.key"
                     :class="rail ? { 'starts-group': Boolean(section.input) !== Boolean(entries[order - 1]?.input), 'at-end': section.railOnly } : null"
-                    :aria-label="'Go to ' + section.title" :aria-controls="controls" :aria-current="section.key === marked ? 'true' : null"
+                    :aria-label="t('Go to {section}', { section: section.title })" :aria-controls="controls" :aria-current="section.key === marked ? 'true' : null"
                     v-on="tipOn(section.title)" @click="activate(section.key)">
                 <i class="ph" :class="section.icon" aria-hidden="true"></i><span v-if="rail">{{ section.short }}</span>
             </button>
         </nav>
-        <button v-if="!rail && view.switchable" type="button" class="settings-index-switch" aria-label="Collapse settings to icons" :aria-controls="controls"
-                v-on="tipOn('Collapse settings to icons')" @click="showRail">
+        <button v-if="!rail && view.switchable" type="button" class="settings-index-switch" :aria-label="t('Collapse settings to icons')" :aria-controls="controls"
+                v-on="tipOn(t('Collapse settings to icons'))" @click="showRail">
             <i class="ph ph-caret-double-left" aria-hidden="true"></i>
         </button>
         <div v-if="tip" ref="tipElement" class="settings-index-tip" aria-hidden="true" :data-side="tip.side" :style="{ left: tip.left + 'px', top: tip.top + 'px' }">{{ tip.text }}</div>
     </div>
-    <button v-if="rail && view.docked" type="button" class="settings-dock-close" data-history-ignore aria-label="Close section" :aria-controls="controls"
-            :style="{ right: inset + 10 + 'px' }" v-on="tipOn('Close section')" @keydown.esc="onEscape" @click="closeDocked">
+    <button v-if="rail && view.docked" type="button" class="settings-dock-close" data-history-ignore :aria-label="t('Close section')" :aria-controls="controls"
+            :style="{ right: inset + 10 + 'px' }" v-on="tipOn(t('Close section'))" @keydown.esc="onEscape" @click="closeDocked">
         <i class="ph ph-x" aria-hidden="true"></i>
     </button>
 </script>
@@ -8871,7 +8871,7 @@
     <span class="help-tip inline-block align-text-bottom">
         <button type="button" ref="trigger" data-history-ignore
                 class="help-tip-trigger inline-flex text-slate-500 hover:text-blue-500 focus-visible:text-blue-600 cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
-                :aria-label="label || name" :aria-describedby="descriptionId" :aria-expanded="visible"
+                :aria-label="label || (name ? t('Help: {name}', { name }) : t('Help'))" :aria-describedby="descriptionId" :aria-expanded="visible"
                 @pointerenter="onEnter" @pointerleave="onLeave" @focus="onFocus" @blur="close"
                 @click.stop.prevent="toggle" @keydown.esc.stop="close">
             <slot><i class="ph ph-question" aria-hidden="true"></i></slot>
@@ -8886,10 +8886,10 @@
 </script>
 
 <script type="text/x-template" id="file-uploader-template">
-    <div class="w-full" data-history-managed role="group" :aria-label="($attrs['data-input-aria-label'] || label) + ' selection'">
+    <div class="w-full" data-history-managed role="group" :aria-label="t('{name} selection', { name: $attrs['data-input-aria-label'] || label })">
         <div class="flex justify-between items-end mb-1">
             <label class="input-label mb-0">{{ label }}</label>
-            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="`Remove ${$attrs['data-input-aria-label'] || label}`" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> Remove</button>
+            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
         </div>
         <div
             class="upload-zone"
@@ -8897,7 +8897,7 @@
             role="button"
             :tabindex="uploadAvailable ? 0 : -1"
             :aria-disabled="!uploadAvailable"
-            :aria-label="`Choose ${$attrs['data-input-aria-label'] || label}`"
+            :aria-label="t('Choose {name}', { name: $attrs['data-input-aria-label'] || label })"
             @click="uploadAvailable && $refs.input.click()"
             @keydown.enter.prevent="uploadAvailable && $refs.input.click()"
             @keydown.space.prevent="uploadAvailable && $refs.input.click()"
@@ -8905,7 +8905,7 @@
             <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
-                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
+                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ t('Click to Browse') }}</span>
             </div>
             <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-warning-circle" aria-hidden="true"></i>
