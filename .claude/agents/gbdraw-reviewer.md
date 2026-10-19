@@ -15,6 +15,11 @@ change nothing.
   owner or rule in `gbdraw/web/CLAUDE.md` or `AGENTS.md`, or a test that does
   not test what it claims. Leave out style preferences and speculative
   hardening.
+- Whatever the brief lists, check each fix against "Owners and Boundaries in
+  Every Fix" in `AGENTS.md`. These are findings: the fix changes only the
+  reader while a second derivation of the value stays; a lookup by caption or
+  kind where an identity exists; new untyped or `any` data at a boundary the
+  diff touches; a missing or wrong "Boundary analysis".
 - For each finding give the file and line, what goes wrong, and a concrete
   case (input, state, and the wrong result).
 
