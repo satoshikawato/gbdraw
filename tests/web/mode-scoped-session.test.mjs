@@ -451,3 +451,42 @@ test('a Linear drawing with no ON record names the fix', () => {
   sourceState.drawings.linear.recordsOff = ['a'];
   assert.doesNotThrow(() => assertActiveModeInputs('linear', sourceState));
 });
+
+// OV-1280 (D-19, D-ORIGIN-2): the Web writer's Session 48 after the five file
+// cards keeps each card's rows and what its file set through Load and Save,
+// and Remove on each card takes back only that file's effect.
+test('Session 48 keeps what each file card loaded through Load and Save, and Remove takes back only that', async () => {
+  const fileImports = await import('../../gbdraw/web/js/services/file-imports.js');
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  const loaded = await load(fixture);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const drawing = state.drawings.circular;
+  const plain = (value) => JSON.parse(JSON.stringify(value));
+  const read = () => ({
+    rules: plain(drawing.manualSpecificRules), priority: plain(drawing.manualPriorityRules),
+    whitelist: plain(drawing.manualWhitelist), blacklist: drawing.manualBlacklist.value, fileImports: plain(drawing.fileImports)
+  });
+  const stored = fixture.modes.circular.config;
+  assert.deepEqual(read(), {
+    rules: stored.rules, priority: stored.qualifierPriorityRules, whitelist: stored.whitelist,
+    blacklist: stored.blacklistText, fileImports: stored.fileImports
+  });
+  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.files[key])),
+    [true, true, true, true, true]);
+  // Save writes them back as they were loaded.
+  const saved = await save('file cards');
+  for (const field of ['rules', 'qualifierPriorityRules', 'whitelist', 'blacklistText', 'fileImports']) {
+    assert.deepEqual(saved.modes.circular.config[field], stored[field], field);
+  }
+  // Remove on each card, as the card's owner takes it back.
+  assert.deepEqual(fileImports.withoutImportedRows(drawing.manualSpecificRules, 't_color').map((rule) => [rule.val, rule.color]),
+    [['hand', '#445566'], ['beta', '#999999']]);
+  const priority = plain(drawing.manualPriorityRules);
+  fileImports.removeImportedPriorityRows(priority);
+  assert.deepEqual(priority, [{ feat: 'CDS', order: 'gene' }, { feat: 'tRNA', order: 'product' }, { feat: 'rRNA', order: 'locus_tag' }]);
+  assert.deepEqual(fileImports.withoutImportedRows(drawing.manualWhitelist, 'whitelist').map((rule) => rule.key), ['mine', 'betas']);
+  assert.equal(fileImports.withoutImportedBlacklistWords(drawing.manualBlacklist.value, drawing.fileImports.blacklist), 'hypothetical, mine');
+  const colors = fileImports.withoutImportedDefaultColors(drawing.currentColors.value, drawing.fileImports.d_color, { CDS: '#aaaaaa', tRNA: '#bbbbbb' });
+  assert.deepEqual([colors.CDS, colors.tRNA], ['#111111', '#abcdef']);
+});

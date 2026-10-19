@@ -14,7 +14,7 @@ import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/c
 import {
   EDITOR_TABLE_OPTIONS,
   editorTableRef,
-  importedWhitelistRows,
+  markedRows,
   parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
@@ -5253,13 +5253,9 @@ export const projectCanonicalSessionRequest = ({
   // only as the cards' files, so each row read from one is its card's row.
   const fromCardFiles = markCardFileRows && !deferResourceContent;
   if (fromCardFiles) {
-    if (colorTableRef?.resourceId) {
-      projectedSpecificRules = projectedSpecificRules.map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule, importedFrom: 't_color' }));
-    }
-    if (whitelistRef) projectedWhitelist = importedWhitelistRows(projectedWhitelist);
-    if (qualifierPriorityRef) {
-      projectedPriorityRules = projectedPriorityRules.map((/** @type {{ feat: string, order: string }} */ rule) => ({ ...rule, importedFrom: 'qualifier_priority' }));
-    }
+    if (colorTableRef?.resourceId) projectedSpecificRules = markedRows(projectedSpecificRules, 't_color');
+    if (whitelistRef) projectedWhitelist = markedRows(projectedWhitelist, 'whitelist');
+    if (qualifierPriorityRef) projectedPriorityRules = markedRows(projectedPriorityRules, 'qualifier_priority');
   }
   const visibilityRef = editorTableRef(options, 'visibility');
   const projectedFeatureVisibilityRules = !deferResourceContent && visibilityRef
@@ -5693,10 +5689,10 @@ export const projectCanonicalSessionRequest = ({
   if (fromCardFiles && defaultColorsRef?.resourceId) {
     projectedFileImports.d_color = withImportedDefaultColors({}, projectedDefaultColors, () => null).imported;
   }
-  const blacklistImport = withImportedBlacklistWords('', parseBlacklistWords(projectedBlacklistText).words).imported;
-  if (fromCardFiles && explicitBindings?.blacklist != null && blacklistImport?.words.join(', ') === projectedBlacklistText) {
-    projectedFileImports.blacklist = blacklistImport;
-  }
+  // A CLI blacklist file gives every word of the text the request holds.
+  const blacklistImport = fromCardFiles && explicitBindings?.blacklist != null
+    ? withImportedBlacklistWords('', parseBlacklistWords(projectedBlacklistText).words).imported : null;
+  if (blacklistImport) projectedFileImports.blacklist = blacklistImport;
   let inputType = records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb';
   // CLI rendering can normalize GFF records to GenBank resources. Without a
   // saved Web draft, initialize the input selector from the original bindings.

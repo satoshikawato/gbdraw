@@ -1,10 +1,12 @@
 const { test, expect } = require('@playwright/test');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
-const { load } = require('./helpers/mode-transition.cjs');
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+const { load, generate, switchMode } = require('./helpers/mode-transition.cjs');
 
 const cases = [
   { label: 'Default colors file', key: 'd_color', text: 'CDS\t#123456\n', value: 'a.currentColors.CDS', expected: '#123456' },
-  { label: 'Specific rules file', key: 't_color', text: 'CDS\tproduct\tNADH\t#123456\tImported\n', value: 'a.manualSpecificRules', expected: [{ feat: 'CDS', qual: 'product', val: 'NADH', color: '#123456', cap: 'Imported', fromFile: true, importedFrom: 't_color' }] },
+  { label: 'Specific rules file', key: 't_color', text: 'CDS\tproduct\tNADH\t#123456\tImported\n', value: 'a.manualSpecificRules', expected: [{ feat: 'CDS', qual: 'product', val: 'NADH', color: '#123456', cap: 'Imported', fromFile: true }] },
   { label: 'Priority File (TSV)', key: 'qualifier_priority', text: 'CDS\tgene,product\n', value: 'a.manualPriorityRules', expected: [{ feat: 'CDS', order: 'gene,product', importedFrom: 'qualifier_priority' }] },
   { label: 'Whitelist File', key: 'whitelist', text: 'CDS\tgene\tmygene\n', value: 'a.manualWhitelist', expected: [{ feat: 'CDS', qual: 'gene', key: 'mygene', importedFrom: 'whitelist' }] },
   { label: 'Blacklist File', key: 'blacklist', text: 'mygene\n', value: 'a.manualBlacklist', expected: 'mygene' }
@@ -64,7 +66,7 @@ for (const sample of removeCases) {
       const a = window.__GBDRAW_APP__;
       const values = {
         d_color: () => ({ CDS: a.currentColors.CDS, tRNA: a.currentColors.tRNA }),
-        t_color: () => a.manualSpecificRules.map((rule) => [rule.val, rule.color, rule.importedFrom ?? null]),
+        t_color: () => a.manualSpecificRules.map((rule) => [rule.val, rule.color, rule.fromFile ? 't_color' : null]),
         qualifier_priority: () => a.manualPriorityRules.map((rule) => [rule.feat, rule.order, rule.importedFrom ?? null]),
         whitelist: () => a.manualWhitelist.map((rule) => [rule.key, rule.importedFrom ?? null]),
         blacklist: () => a.manualBlacklist
@@ -130,6 +132,72 @@ for (const sample of removeCases) {
     expect(before.file).toBeNull();
   });
 }
+
+// OV-1280 (REVIEW-1 B1): Remove acts in both drawings. The drawing that is not
+// shown takes back its rows from its own state: no rule of it is matched
+// against the shown drawing's features, and the shown figure keeps its Legend.
+for (const drawn of [false, true]) test(`Remove on the Specific rules card while the other mode is shown leaves that drawing as if the file had never been loaded${drawn ? ' (a Generate drew the file rows)' : ''}`, async ({ browser }) => {
+  // A Session load, two Generates, and a Pyodide start come before the checks.
+  test.setTimeout(300_000);
+  const page = await load(browser);
+  const circular = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const drawing = state.drawings.circular;
+    return {
+      rules: drawing.manualSpecificRules.map((rule) => [rule.val, Boolean(rule.fromFile)]),
+      legend: drawing.legendEntries.value.map((entry) => entry.caption).filter((caption) => ['Hand', 'Imported'].includes(caption))
+    };
+  });
+  // The mounted figure's text of the two rows.
+  const shownLegend = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const root = state.svgContainer.value?.querySelector('svg');
+    return [...(root?.querySelectorAll('text') ?? [])].map((node) => node.textContent).filter((text) => ['Hand', 'Imported'].includes(text));
+  });
+  await page.evaluate(async () => {
+    const a = window.__GBDRAW_APP__;
+    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'cytochrome', color: '#445566', cap: 'Hand' });
+    await a.addSpecificRule();
+  });
+  await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'rules.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#123456\tImported\n') });
+  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  const loaded = { rules: [['cytochrome', false], ['NADH', true]], legend: ['Hand', 'Imported'] };
+  await expect.poll(circular).toEqual(loaded);
+  if (drawn) await generate(page);
+  await expect.poll(shownLegend).toEqual(['Hand', 'Imported']);
+  await switchMode(page, 'linear');
+  await page.evaluate(async (content) => {
+    const app = window.__GBDRAW_APP__;
+    app.lInputType = 'gb';
+    if (!app.linearSeqs.length) app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'lambda.gbk', { type: 'text/plain', lastModified: 1 }));
+    await app.refreshLinearRecordSelectors();
+  }, readFileSync(join(__dirname, '../test_inputs/NC_001416.gb'), 'utf8'));
+  await generate(page);
+  const linear = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      legend: state.drawings.linear.legendEntries.value.map((entry) => entry.caption),
+      svg: state.svgContainer.value?.querySelector('svg')?.outerHTML ?? ''
+    };
+  });
+  const linearBefore = await linear();
+  await reveal(page.getByLabel('Specific rules file', { exact: true }));
+  await page.getByRole('button', { name: 'Remove Specific rules file', exact: true }).click();
+  const removed = { rules: [['cytochrome', false]], legend: ['Hand'] };
+  await expect.poll(circular).toEqual(removed);
+  expect(await linear()).toEqual(linearBefore);
+  // One step: Undo brings back the card and the Circular rows.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(circular).toEqual(loaded);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.files.t_color?.name ?? null)).toBe('rules.tsv');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(circular).toEqual(removed);
+  // Shown again, the Circular figure is drawn without the file's row.
+  await switchMode(page, 'circular');
+  await expect.poll(shownLegend, { timeout: 120_000 }).toEqual(['Hand']);
+  await expect.poll(circular).toEqual(removed);
+});
 
 // OV-1267: Reset Settings removes the settings a table loaded, so the card
 // that names the table goes too; one Undo brings back both.

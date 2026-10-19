@@ -21,7 +21,7 @@ const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw
 // Any other port of the watcher owner: a function that does nothing.
 const port = () => new Proxy({}, { get: () => () => {} });
 let inputs = 0;
-const owner = { calls: 0, outcome: /** @type {number | false} */ (false) };
+const owner = { calls: 0, outcome: /** @type {number | false} */ (false), removal: async () => true };
 /** @type {{ source: Function, callback: Function }[]} */
 const watchers = [];
 const imports = createAuxiliaryFileImports((target) => target);
@@ -50,7 +50,7 @@ const { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWat
       return owner.outcome;
     },
     // The other drawing holds no rows of an earlier rules file (OV-1280).
-    removeImportedSpecificRules: async () => true
+    removeImportedSpecificRules: async () => owner.removal()
   }, { get: (target, key) => target[key] ?? (() => {}) }),
   legendLayout: port(),
   resultsManager: port(),
@@ -87,4 +87,18 @@ test('a rules import the owner gave up on keeps Retry through later input change
   assert.equal(await retryAuxiliaryImportFailure(), true);
   assert.deepEqual({ calls: owner.calls, selected: state.files.t_color, error: state.errorLog.value },
     { calls: 2, selected: file, error: null });
+});
+
+// REVIEW-1 N1: Remove on the card while the rule owner refuses to take the
+// rows back (its matching failed, or a Legend row conflicts) leaves the rows,
+// so the card comes back and the error is shown; nothing rejects unhandled.
+test('a Specific rules removal the rule owner refuses brings the card back and reports why', async () => {
+  const file = { name: 'rules.tsv', text: async () => '' };
+  owner.removal = async () => { throw { code: 'LEGEND_ROW_CONFLICT' }; };
+  state.errorLog.value = null;
+  state.files.t_color = null;
+  assert.equal(await specificRulesWatcher.callback(null, file), false);
+  assert.deepEqual({ selected: state.files.t_color, operation: state.errorLog.value?.operation, pending: imports.isPending() },
+    { selected: file, operation: 'evaluateRules', pending: false });
+  owner.removal = async () => true;
 });

@@ -21,10 +21,11 @@ again.
 
 Session 48 also records which rows, colors, and Blacklist words each file card
 of the Web app loaded, so **Remove** on the card takes back only that file's
-effect. Rows of an older Session read as rows added by hand, and Remove keeps
-them. In a Session 48 that the CLI or the Python API writes, the settings read
-from its color, priority, blacklist, and whitelist files count as those files'
-cards.
+effect. In an older Session, Whitelist and Priority rows read as rows added by
+hand, and Remove keeps them; Specific rules rows that came from a rules file
+were marked so already, and Remove takes them back. In a Session 48 that the
+CLI or the Python API writes, the settings read from its color, priority,
+blacklist, and whitelist files count as those files' cards.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 48,

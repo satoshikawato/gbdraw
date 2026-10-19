@@ -266,16 +266,20 @@ export const parseBlacklistWords = (text) => {
 
 // OV-1280 (D-19): what a file card's file put into a drawing, so Remove on the
 // card takes it back and leaves the drawing as if the file had never been
-// loaded. A card is named by its `files` slot. The rows a file adds to a list
-// carry `importedFrom: <card>` (Specific rules, Whitelist, Qualifier priority);
-// a priority row whose order the file replaced keeps the order it had as
-// `handOrder`. The drawing's `fileImports` keeps what a file set in the Default
-// colors (each type's color and the user color it replaced, `null` for the
-// palette's) and in the Blacklist text (its words and the text before). An edit
-// of a row makes it the user's (the mark goes), and so does a later change of a
-// value the file set: Remove keeps both. Rows without a mark (Sessions before
-// 48, hand rows) are the user's.
+// loaded. A card is named by its `files` slot. A row a file adds to a list
+// carries its card's mark (`cardRowMark`): a Specific rules row `fromFile`
+// (on main since 2026-01-14; D-ORIGIN-1), a Whitelist or Qualifier priority row
+// `importedFrom: <card>`. A priority row whose order the file replaced keeps
+// the order it had as `handOrder`. The drawing's `fileImports` keeps what a
+// file set in the Default colors (each type's color and the user color it
+// replaced, `null` for the palette's) and in the Blacklist text (its words and
+// the text before). An edit of a row makes it the user's (the mark goes), and
+// so does a later change of a value the file set: Remove keeps both. A
+// Whitelist or priority row without a mark (Sessions before 48, hand rows) is
+// the user's.
 /** @typedef {'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} FileImportCard */
+/** @typedef {'t_color' | 'whitelist' | 'qualifier_priority'} RowFileCard A card whose file adds rows. */
+/** @typedef {{ fromFile?: boolean, importedFrom?: string }} CardMarkedRow */
 /** @typedef {{ color: string, handColor: string | null }} ImportedDefaultColor */
 /** @typedef {{ words: string[], before: string }} ImportedBlacklist */
 /**
@@ -284,6 +288,45 @@ export const parseBlacklistWords = (text) => {
  */
 /** @typedef {{ feat: string, order: string, importedFrom?: 'qualifier_priority', handOrder?: string }} PriorityRuleRow */
 /** @typedef {{ feat: string, qual: string, key: string, importedFrom?: 'whitelist' }} WhitelistRuleRow */
+
+/**
+ * The mark a row of each card's file carries.
+ * @typedef {{ t_color: { fromFile: true }, whitelist: { importedFrom: 'whitelist' }, qualifier_priority: { importedFrom: 'qualifier_priority' } }} CardRowMarks
+ */
+/** @type {Readonly<CardRowMarks>} */
+const CARD_ROW_MARKS = Object.freeze({
+  t_color: Object.freeze({ fromFile: true }),
+  whitelist: Object.freeze({ importedFrom: 'whitelist' }),
+  qualifier_priority: Object.freeze({ importedFrom: 'qualifier_priority' })
+});
+
+/**
+ * Whether `row` is a row `card`'s file added.
+ * @param {Readonly<CardMarkedRow>} row
+ * @param {RowFileCard} card
+ */
+export const isCardRow = (row, card) => card === 't_color'
+  ? row.fromFile === true
+  : row.importedFrom === CARD_ROW_MARKS[card].importedFrom;
+
+/**
+ * `rows` marked as rows of `card`'s file.
+ * @template {object} T
+ * @template {RowFileCard} C
+ * @param {readonly T[]} rows
+ * @param {C} card
+ * @returns {(T & CardRowMarks[C])[]}
+ */
+export const markedRows = (rows, card) => rows.map((row) => ({ ...row, ...CARD_ROW_MARKS[card] }));
+
+/**
+ * Makes `row` the user's: it loses `card`'s mark (an edit of the row).
+ * @param {CardMarkedRow} row Changed in place.
+ * @param {RowFileCard} card
+ */
+export const unmarkCardRow = (row, card) => {
+  Object.keys(CARD_ROW_MARKS[card]).forEach((key) => { delete row[/** @type {keyof CardMarkedRow} */ (key)]; });
+};
 
 /** @param {unknown} left @param {unknown} right */
 const sameColor = (left, right) => String(left ?? '').toLowerCase() === String(right ?? '').toLowerCase();
@@ -374,13 +417,10 @@ export const importPriorityRows = (rows, rules) => {
   rules.forEach(({ feat, order }) => {
     const row = rows.find((entry) => entry.feat === feat);
     if (!row) {
-      rows.push({ feat, order, importedFrom: 'qualifier_priority' });
+      rows.push(...markedRows([{ feat, order }], 'qualifier_priority'));
       return;
     }
-    if (row.importedFrom !== 'qualifier_priority') {
-      row.handOrder = row.order;
-      row.importedFrom = 'qualifier_priority';
-    }
+    if (!isCardRow(row, 'qualifier_priority')) Object.assign(row, { handOrder: row.order }, CARD_ROW_MARKS.qualifier_priority);
     row.order = order;
   });
 };
@@ -392,8 +432,8 @@ export const importPriorityRows = (rows, rules) => {
  */
 export const removeImportedPriorityRows = (rows) => {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
-    const { feat, importedFrom, handOrder } = rows[index];
-    if (importedFrom !== 'qualifier_priority') continue;
+    const { feat, handOrder } = rows[index];
+    if (!isCardRow(rows[index], 'qualifier_priority')) continue;
     if (handOrder === undefined) rows.splice(index, 1);
     else rows.splice(index, 1, { feat, order: handOrder });
   }
@@ -401,16 +441,9 @@ export const removeImportedPriorityRows = (rows) => {
 
 /**
  * The rows of a list without those `card`'s file added.
- * @template {{ importedFrom?: string }} T
+ * @template {CardMarkedRow} T
  * @param {readonly T[]} rows
- * @param {FileImportCard} card
+ * @param {RowFileCard} card
  * @returns {T[]}
  */
-export const withoutImportedRows = (rows, card) => rows.filter((row) => row.importedFrom !== card);
-
-/**
- * The rows a Whitelist file adds, marked with their card.
- * @param {readonly { feat: string, qual: string, key: string }[]} rules
- * @returns {WhitelistRuleRow[]}
- */
-export const importedWhitelistRows = (rules) => rules.map((rule) => ({ ...rule, importedFrom: 'whitelist' }));
+export const withoutImportedRows = (rows, card) => rows.filter((row) => !isCardRow(row, card));

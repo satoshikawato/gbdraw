@@ -182,6 +182,7 @@ export const createFeatureEditor = ({
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
   editorPorts.requestAutomaticRerender = labelActions.requestAutomaticRerender;
   editorPorts.isRedrawOwed = labelActions.isRedrawOwed;
+  editorPorts.oweRedrawWhenShown = labelActions.oweRedrawWhenShown;
   editorPorts.syncLabelEditor = labelActions.syncLabelEditor;
   // A loaded table shows on the displayed Result as a History apply does (R3):
   // the root's projection (`projectFeatureEdits`) projects it.
@@ -201,6 +202,8 @@ export const createFeatureEditor = ({
     requestAutomaticRerender: labelActions.requestAutomaticRerender,
     // D-36: the root says when a shown rerender drew the current paint.
     redrawShown: labelActions.redrawShown,
+    // OV-1280: the root pays a drawing's redraw owed while it was not shown.
+    payRedrawWhenShown: labelActions.payRedrawWhenShown,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
     specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,

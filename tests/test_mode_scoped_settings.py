@@ -467,19 +467,14 @@ def test_cli_resave_keeps_a_session_46_slices(tmp_path: Path) -> None:
 def test_session_48_keeps_what_the_file_cards_imported_through_a_cli_resave(
     session_46: dict[str, Any], tmp_path: Path
 ) -> None:
-    # OV-1280 (D-19): a slice stores what each file card's file put into it, so
-    # Remove on the card takes it back; the CLI re-save keeps it as stored.
+    # OV-1280 (D-19, D-ORIGIN-2): a slice stores what each file card's file
+    # put into it, so Remove on the card takes it back; the CLI re-save keeps
+    # the Web writer's marks (the positive fixture's) as stored.
+    written = _read("file-card-imports-circular.v48.gbdraw-session.json.gz")
+    validate_session(written)
     marks = {
-        "fileImports": {
-            "d_color": {"CDS": {"color": "#ff0000", "handColor": None}},
-            "blacklist": {"words": ["alpha"], "before": "unknown"},
-        },
-        "blacklistText": "unknown, alpha",
-        "rules": [{"feat": "CDS", "qual": "gene", "val": "a", "color": "#112233", "cap": "",
-                   "fromFile": True, "importedFrom": "t_color"}],
-        "qualifierPriorityRules": [{"feat": "CDS", "order": "product", "importedFrom": "qualifier_priority",
-                                    "handOrder": "gene"}],
-        "whitelist": [{"feat": "CDS", "qual": "gene", "key": "a", "importedFrom": "whitelist"}],
+        key: written["modes"]["circular"]["config"][key]
+        for key in ("rules", "qualifierPriorityRules", "whitelist", "blacklistText", "fileImports")
     }
     session_46["modes"]["linear"]["config"].update(copy.deepcopy(marks))
     validate_session(session_46)

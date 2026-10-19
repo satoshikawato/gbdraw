@@ -8,7 +8,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
-import { parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
+import { isCardRow, parseSpecificRules, serializeSpecificRules, unmarkCardRow, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendRowRules, prepareSpecificColorImport, rekeyedRuleRows,
@@ -46,6 +46,8 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
  * @property {(drawing: DrawingState) => boolean} isRedrawOwed
  *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
+ * @property {(drawing: DrawingState) => void} oweRedrawWhenShown
+ *   `drawing`, not shown, is drawn again when it is shown again (OV-1280).
  */
 
 /**
@@ -369,8 +371,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
     const revised = new Map();
     const rules = build(current, (row, patch) => {
-      // An edited row is the user's: it loses its file card (OV-1280).
-      const { importedFrom: _importedFrom, ...next } = { ...row, ...patch };
+      const next = { ...row, ...patch };
       revised.set(next, row);
       return next;
     });
@@ -474,7 +475,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         if (!row) return rule;
         Object.assign(row, rule);
         if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
-        if (!Object.hasOwn(rule, 'importedFrom')) delete row.importedFrom;
         return row;
       }));
       patternDrafts.reconcile();
@@ -732,7 +732,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const row = drawing.manualWhitelist[index];
     if (!row) return undefined;
     row[field] = value;
-    delete row.importedFrom;
+    unmarkCardRow(row, 'whitelist');
     return undefined;
   };
   /** @param {number} index */
@@ -817,11 +817,46 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return applied === true ? importedCount : false;
   };
   // OV-1280 (D-19): Remove on the Specific rules card takes back the rows its
-  // file added; true when there were none.
+  // file added (`fromFile`, D-ORIGIN-1); true when there were none. The shown
+  // drawing commits as any rule write does. A drawing that is not shown is
+  // written as History restores it (`history-snapshot.js`, the other mode's
+  // config and Legend state): its own rows and Legend rows, matched against
+  // nothing the shown figure holds (REVIEW-1 B1); when it is shown again, the
+  // display projects its rules onto its Result (E1) and its Result is redrawn.
   /** @param {DrawingState} drawing */
-  const removeImportedSpecificRules = (drawing) => (drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => rule.importedFrom === 't_color')
-    ? commitSpecificRules((current) => withoutImportedRows(current, 't_color'), 'Remove specific rules file', { drawing })
-    : Promise.resolve(true));
+  const removeImportedSpecificRules = (drawing) => {
+    if (!drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => isCardRow(rule, 't_color'))) return Promise.resolve(true);
+    if (drawing === state.activeDrawing()) {
+      return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), 'Remove specific rules file', { drawing });
+    }
+    return queueRuleWrite(async () => {
+      takeBackFileRulesOfHiddenDrawing(drawing);
+      ports.oweRedrawWhenShown(drawing);
+      return true;
+    });
+  };
+  /**
+   * The rows only the file's rules drew leave the drawing's Legend list, with
+   * the Legend colors given to them; the rows that stay keep theirs.
+   * @param {DrawingState} drawing Not shown.
+   */
+  const takeBackFileRulesOfHiddenDrawing = (drawing) => {
+    /** @type {SpecificColorRule[]} */
+    const before = [...drawing.manualSpecificRules];
+    const kept = withoutImportedRows(before, 't_color');
+    const keyBefore = createRuleLegendCaptions(before);
+    const keyAfter = createRuleLegendCaptions(kept);
+    const keptKeys = new Set(kept.filter((rule) => rule.cap).map(keyAfter));
+    const goneRows = before.filter((rule) => rule.cap && isCardRow(rule, 't_color'))
+      .map((rule) => ({ caption: keyBefore(rule), color: rule.color }))
+      .filter(({ caption }) => !keptKeys.has(caption));
+    const gone = new Set(goneRows.map(({ caption }) => caption));
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
+    drawing.fileLegendCaptions.value = new Set();
+    drawing.addedLegendCaptions.value = new Set([...drawing.addedLegendCaptions.value].filter((caption) => !gone.has(caption)));
+    drawing.legendEntries.value = drawing.legendEntries.value.filter((/** @type {LegendEntry} */ entry) => !gone.has(legendEntryKey(entry)));
+    retireSupersededLegendColors(drawing, [], goneRows);
+  };
 
   const applySpecificRulePreset = async () => {
     const drawing = state.activeDrawing();

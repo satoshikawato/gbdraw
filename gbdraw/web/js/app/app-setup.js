@@ -3345,6 +3345,9 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
+      // OV-1280: a Result shown again by a mode switch is drawn again when
+      // its drawing's rules changed while it was not shown.
+      if (context.bindingOptions.modeArrival) featureActions.payRedrawWhenShown(state.activeDrawing());
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
       // drawing's current paint, also after an edit made since its paint was

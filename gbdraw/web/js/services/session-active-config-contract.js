@@ -182,7 +182,7 @@ const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'obj
   recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string', fileImports: 'object',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 /** The fields of a stored rule row (Save refuses another; Load drops it with a row). */
-export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile', 'importedFrom'],
+export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
   qualifierPriorityRules: ['feat', 'order', 'importedFrom', 'handOrder'], whitelist: ['feat', 'qual', 'key', 'importedFrom'],
   annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] });
 const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];

@@ -52,6 +52,7 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
+const { isCardRow } = await import('../../gbdraw/web/js/services/file-imports.js');
 // The Generate's reuse test of stored protein results is module-private; a
 // copy of run-analysis.js that exports it imports the same modules.
 const runAnalysisUrl = pathToFileURL(path.join(process.cwd(), 'gbdraw/web/js/app/run-analysis.js'));
@@ -620,11 +621,12 @@ const LOADED_TABLES = {
 // OV-1280 (D-19): from Session 48 on, the rows and colors a CLI table option
 // gives are its file card's, so Remove on the card takes them back; an older
 // Session's rows read as rows added by hand.
+const cardRows = (rows, card) => rows.map(row => (isCardRow(row, card) ? card : null));
 const CARD_ROWS = {
-  '-t': drawing => drawing.manualSpecificRules.map(rule => rule.importedFrom ?? null),
+  '-t': drawing => cardRows(drawing.manualSpecificRules, 't_color'),
   '-d': drawing => [drawing.fileImports.d_color?.CDS?.color ?? null],
-  '--label_whitelist': drawing => drawing.manualWhitelist.map(rule => rule.importedFrom ?? null),
-  '--qualifier_priority': drawing => drawing.manualPriorityRules.map(rule => rule.importedFrom ?? null)
+  '--label_whitelist': drawing => cardRows(drawing.manualWhitelist, 'whitelist'),
+  '--qualifier_priority': drawing => cardRows(drawing.manualPriorityRules, 'qualifier_priority')
 };
 const CARD_MARKS = { '-t': 't_color', '-d': '#123456', '--label_whitelist': 'whitelist', '--qualifier_priority': 'qualifier_priority' };
 // A Session of the request and resources the Web renders.
@@ -729,8 +731,13 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
             assert.deepEqual(values, values.map(() => (marked ? CARD_MARKS[option] : null)), `${entry.id}, ${source}: ${option} card`);
           }
         }
-        // Blacklist words given on the command line have no card.
-        assert.equal(drawing.fileImports.blacklist, undefined, `${entry.id}, ${source}: blacklist card`);
+        // A blacklist the CLI Session binds as a file is its card's; words given on the command line, and a Python
+        // re-save (it keeps no file bindings), have no card. The CLI reads `--label_blacklist` as keywords, a path
+        // too (OV-1338), so the card holds the text the CLI drew with.
+        const blacklist = entry.args[entry.args.indexOf('--label_blacklist') + 1];
+        const blacklistFile = marked && source !== 'Python re-save' && blacklist?.endsWith('.txt');
+        assert.deepEqual(drawing.fileImports.blacklist?.words,
+          blacklistFile ? [path.join(root, blacklist)] : undefined, `${entry.id}, ${source}: blacklist card`);
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });

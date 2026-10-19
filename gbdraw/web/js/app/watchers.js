@@ -4,8 +4,8 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
-  importedWhitelistRows,
   importPriorityRows,
+  markedRows,
   parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
@@ -444,7 +444,13 @@ export const setupWatchers = ({
    */
   const startFileRemoval = (key, file) => {
     const pending = fileImportApplications.then(async () => {
-      if (await removeFileImport(key, drawingsOf())) return true;
+      try {
+        if (await removeFileImport(key, drawingsOf())) return true;
+      } catch (e) {
+        // A refused removal (the rule matching failed, a Legend row conflict)
+        // is reported as the import's would be (REVIEW-1 N1).
+        errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
+      }
       if (files[key] === null) {
         restoredFileSelections.set(key, file);
         files[key] = file;
@@ -569,7 +575,7 @@ export const setupWatchers = ({
     try {
       const { rules, count } = parseWhitelistRules(text);
       drawingsOf().forEach(removeImport.whitelist);
-      drawing.manualWhitelist.push(...importedWhitelistRows(rules));
+      drawing.manualWhitelist.push(...markedRows(rules, 'whitelist'));
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });

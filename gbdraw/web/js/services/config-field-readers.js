@@ -46,9 +46,10 @@ import {
 import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 import { featureColorEditColor } from './specific-color-rules.js';
 import { isLabelOverrideRow } from './label-override-table.js';
+import { isCardRow, markedRows } from './file-imports.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
-/** @import { FileImports, PriorityRuleRow, WhitelistRuleRow } from './file-imports.js' */
+/** @import { CardMarkedRow, FileImports, PriorityRuleRow, WhitelistRuleRow } from './file-imports.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
 /** @import { ObjectShape } from '../utils/contract-shape.js' */
 
@@ -318,14 +319,14 @@ export const readQualifierPriorityRules = (value) => {
       return;
     }
     const entry = /** @type {Record<string, unknown>} */ (rule);
-    const imported = entry.importedFrom === 'qualifier_priority';
+    const imported = isCardRow(/** @type {CardMarkedRow} */ (entry), 'qualifier_priority');
     const handOrder = imported && typeof entry.handOrder === 'string' ? entry.handOrder : undefined;
     // A field no gbdraw writer wrote is not read (E-OD03).
     Object.keys(entry).filter((field) => field !== 'feat' && field !== 'order'
       && !(field === 'importedFrom' && imported) && !(field === 'handOrder' && handOrder !== undefined))
       .forEach((field) => leaves.push({ at: `[${index}].${field}`, stored: entry[field], used: undefined }));
     /** @type {QualifierPriorityRule} */
-    const read = { feat, order, ...(imported ? { importedFrom: /** @type {const} */ ('qualifier_priority') } : {}),
+    const read = { ...(imported ? markedRows([{ feat, order }], 'qualifier_priority')[0] : { feat, order }),
       ...(handOrder !== undefined ? { handOrder } : {}) };
     const existing = rules.findIndex((other) => other.feat === feat);
     if (existing >= 0) {
@@ -376,7 +377,7 @@ const ruleText = (value) => String(value || '');
  */
 const textFieldLeaves = (entry, row, fields) => fields.flatMap((field) => changedLeaves(entry[field], row[field], `.${field}`));
 
-/** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string, fromFile?: true, importedFrom?: 't_color' }} StoredColorRule */
+/** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string, fromFile?: true }} StoredColorRule */
 /**
  * The specific color rules of a configuration (`rules`). A color name reads as
  * its hex value; an unset color is black; `fromFile` is kept only when set.
@@ -389,8 +390,7 @@ export const readColorRules = listOrKept(rowList((entry) => {
   const row = {
     feat: ruleText(entry.feat), qual: ruleText(entry.qual), val: ruleText(entry.val), color, cap: ruleText(entry.cap),
     // The shape normalizeSpecificRule gives: `fromFile` only when true.
-    ...(entry.fromFile ? { fromFile: true } : {}),
-    ...(entry.importedFrom === 't_color' ? { importedFrom: /** @type {const} */ ('t_color') } : {})
+    ...(entry.fromFile ? { fromFile: true } : {})
   };
   const sameColor = typeof entry.color === 'string' && resolveColorToHex(entry.color) === color;
   return {
@@ -400,9 +400,7 @@ export const readColorRules = listOrKept(rowList((entry) => {
       ...(!isUnsetValue(entry.color) && !sameColor && !keepsMeaning(entry.color, color)
         ? [{ at: '.color', stored: entry.color, used: color }] : []),
       ...(!isUnsetValue(entry.fromFile) && typeof entry.fromFile !== 'boolean' && !keepsMeaning(entry.fromFile, Boolean(entry.fromFile))
-        ? [{ at: '.fromFile', stored: entry.fromFile, used: Boolean(entry.fromFile) }] : []),
-      ...(!isUnsetValue(entry.importedFrom) && entry.importedFrom !== 't_color'
-        ? [{ at: '.importedFrom', stored: entry.importedFrom, used: undefined }] : [])
+        ? [{ at: '.fromFile', stored: entry.fromFile, used: Boolean(entry.fromFile) }] : [])
     ]
   };
 }, STORED_ROW_FIELDS.rules));
@@ -415,10 +413,10 @@ export const readColorRules = listOrKept(rowList((entry) => {
  * @type {FieldReader<StoredWhitelistRule[]>}
  */
 export const readWhitelistRules = listOrKept(rowList((entry) => {
-  const imported = entry.importedFrom === 'whitelist';
+  const imported = isCardRow(/** @type {CardMarkedRow} */ (entry), 'whitelist');
+  const read = { feat: ruleText(entry.feat), qual: ruleText(entry.qual), key: ruleText(entry.key) };
   /** @type {StoredWhitelistRule} */
-  const row = { feat: ruleText(entry.feat), qual: ruleText(entry.qual), key: ruleText(entry.key),
-    ...(imported ? { importedFrom: /** @type {const} */ ('whitelist') } : {}) };
+  const row = imported ? markedRows([read], 'whitelist')[0] : read;
   return { row, leaves: [...textFieldLeaves(entry, row, ['feat', 'qual', 'key']),
     ...(!isUnsetValue(entry.importedFrom) && !imported ? [{ at: '.importedFrom', stored: entry.importedFrom, used: undefined }] : [])] };
 }, STORED_ROW_FIELDS.whitelist));

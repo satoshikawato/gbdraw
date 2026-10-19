@@ -4,8 +4,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
-  importedWhitelistRows,
+  isCardRow,
   importPriorityRows,
+  markedRows,
   removeImportedPriorityRows,
   withImportedBlacklistWords,
   withImportedDefaultColors,
@@ -70,14 +71,20 @@ test('the Qualifier priority rows take back the user order the file replaced', (
 });
 
 test('the list rows a file added go; a hand row and an edited row stay', () => {
-  const whitelist = [{ feat: 'CDS', qual: 'gene', key: 'mine' }, ...importedWhitelistRows([{ feat: 'CDS', qual: 'gene', key: 'mine' }])];
+  const whitelist = [{ feat: 'CDS', qual: 'gene', key: 'mine' }, ...markedRows([{ feat: 'CDS', qual: 'gene', key: 'mine' }], 'whitelist')];
   assert.deepEqual(withoutImportedRows(whitelist, 'whitelist'), [{ feat: 'CDS', qual: 'gene', key: 'mine' }]);
+  // D-ORIGIN-1: a Specific rules row of the file is marked `fromFile`, as on
+  // main, so a Session up to 47 holds the mark already.
+  assert.deepEqual(markedRows([{ val: 'a' }], 't_color'), [{ val: 'a', fromFile: true }]);
+  assert.equal(isCardRow({ fromFile: true }, 't_color'), true);
+  assert.equal(isCardRow({ importedFrom: 't_color' }, 't_color'), false);
+  assert.equal(isCardRow({ fromFile: true }, 'whitelist'), false);
   const { nextRules } = prepareSpecificColorImport('CDS\tgene\talpha\t#112233\tAlpha\n',
     [{ feat: 'tRNA', qual: 'gene', val: 'hand', color: '#445566', cap: '' }]);
   assert.deepEqual(withoutImportedRows(nextRules, 't_color').map((rule) => rule.val), ['hand']);
   // Loading the card's next file replaces the rows its earlier file added.
   const replaced = prepareSpecificColorImport('CDS\tgene\tbeta\t#112233\tBeta\n', nextRules).nextRules;
-  assert.deepEqual(replaced.map((rule) => [rule.val, rule.importedFrom ?? null]), [['hand', null], ['beta', 't_color']]);
+  assert.deepEqual(replaced.map((rule) => [rule.val, rule.fromFile ?? null]), [['hand', null], ['beta', true]]);
 });
 
 test('Load keeps each mark and what the files set; it reads a foreign mark as a hand row', () => {
@@ -93,8 +100,8 @@ test('Load keeps each mark and what the files set; it reads a foreign mark as a 
     [{ feat: 'CDS', qual: 'gene', key: 'a', importedFrom: 'whitelist' }]);
   assert.deepEqual(readWhitelistRules([{ feat: 'CDS', qual: 'gene', key: 'a', importedFrom: 't_color' }]).value,
     [{ feat: 'CDS', qual: 'gene', key: 'a' }]);
-  assert.deepEqual(readColorRules([{ feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: '', fromFile: true, importedFrom: 't_color' }]).value,
-    [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: '', fromFile: true, importedFrom: 't_color' }]);
+  assert.deepEqual(readColorRules([{ feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: '', fromFile: true }]).value,
+    [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: '', fromFile: true }]);
   const fileImports = { d_color: { CDS: { color: '#ff0000', handColor: null }, tRNA: { color: '#00ff00', handColor: '#111111' } },
     blacklist: { words: ['alpha'], before: 'unknown' } };
   assert.deepEqual(readFileImports(fileImports), { value: fileImports, lost: false });
@@ -105,7 +112,7 @@ test('Load keeps each mark and what the files set; it reads a foreign mark as a 
     mode: 'circular',
     storedConfig: {
       form: createDefaultForm(), adv: createDefaultAdv('circular'), fileImports,
-      rules: [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: '', fromFile: true, importedFrom: 't_color' }],
+      rules: [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: '', fromFile: true }],
       qualifierPriorityRules: [{ feat: 'CDS', order: 'product', importedFrom: 'qualifier_priority', handOrder: 'gene' }],
       whitelist: [{ feat: 'CDS', qual: 'gene', key: 'a', importedFrom: 'whitelist' }]
     }
