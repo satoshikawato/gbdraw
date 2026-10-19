@@ -303,7 +303,7 @@ def test_nucleotide_manifest_records_the_executable_evidence() -> None:
     assert "de3" not in h6["fixtures"]
 
     faq = FAQ_PATH.read_text(encoding="utf-8")
-    assert "**Comparison** command" in faq
+    assert "three buttons at the top of **Comparison**" in faq
     assert "button that matches the effective plan is pressed" in faq
     assert "**Current:**" not in faq
     assert "**Selected pairs" in faq

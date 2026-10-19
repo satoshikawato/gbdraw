@@ -9,11 +9,11 @@
 | Uploaded BLAST outfmt 6/7 | **Upload BLAST TSV** | Prepared table input | One retained row per Linear link or Circular span |
 | LOSATN | Browser nucleotide search | Linear and Circular rings: `--losat losatn` (Python `losat="losatn"`) | Local nucleotide-alignment spans |
 | TLOSATX | Browser six-frame translated-nucleotide search | Linear and Circular rings: `--losat tlosatx` (Python `losat="tlosatx"`) | Translated query and subject spans |
-| LOSATP Pairwise | Browser protein search | `pairwise` protein-search mode | Retained individual protein matches |
-| LOSATP **Similarity groups** | Browser protein search | `orthogroup` compatibility token | Search-derived group membership and links |
-| LOSATP **Collinear blocks** | Browser protein search | `collinear` protein-search mode | Ordered blocks built from compatible anchors |
+| LOSATP Pairwise | Browser protein search | `--losat losatp --losatp_mode pairwise` (Python `losat="losatp", losatp_mode="pairwise"`) | Retained individual protein matches |
+| LOSATP **Similarity groups** | Browser protein search | `--losat losatp --losatp_mode similarity_groups` (Python `losatp_mode="similarity_groups"`) | Search-derived group membership and links |
+| LOSATP **Collinear blocks** | Browser protein search | `--losat losatp --losatp_mode collinear` (Python `losatp_mode="collinear"`) | Ordered blocks built from compatible anchors |
 | Selected mixed edges | Per-edge browser plan | `--comparisons_table` rows with `source` `losat` or `table` | Only the selected record pairs |
-| Circular similarity rings | Uploaded or browser-generated results | Prepared conservation inputs | Ordered rings around one reference |
+| Circular similarity rings | Uploaded or browser-generated results | `--losat losatn\|tlosatx` with `--conservation_sequence`, or prepared `--conservation_blast` | Ordered rings around one reference |
 
 LOSATN compares nucleotide sequence directly. TLOSATX translates both sides
 and is useful when coding similarity remains after nucleotide divergence.
