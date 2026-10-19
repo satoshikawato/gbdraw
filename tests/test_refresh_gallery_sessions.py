@@ -1369,8 +1369,10 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
 ) -> None:
     first = tmp_path / "first.gbdraw-session.json"
     second = tmp_path / "second.gbdraw-session.json"
-    first.write_text("first-original", encoding="utf-8")
-    second.write_text("second-original", encoding="utf-8")
+    first_original = '{"createdAt":"first-original"}'
+    second_original = '{"createdAt":"second-original"}'
+    first.write_text(first_original, encoding="utf-8")
+    second.write_text(second_original, encoding="utf-8")
 
     monkeypatch.setattr(refresh_gallery_sessions_module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(refresh_gallery_sessions_module, "SESSION_ROOT", tmp_path)
@@ -1389,7 +1391,7 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
         assert destination_path is not None
         if session_path == second:
             raise RuntimeError("synthetic render failure")
-        destination_path.write_text("first-refreshed", encoding="utf-8")
+        destination_path.write_text('{"createdAt":"first-refreshed"}', encoding="utf-8")
 
     monkeypatch.setattr(
         refresh_gallery_sessions_module,
@@ -1407,8 +1409,8 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
             (first.name, second.name)
         )
 
-    assert first.read_text(encoding="utf-8") == "first-original"
-    assert second.read_text(encoding="utf-8") == "second-original"
+    assert first.read_text(encoding="utf-8") == first_original
+    assert second.read_text(encoding="utf-8") == second_original
 
 
 def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
@@ -2433,3 +2435,42 @@ def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources()
         "first.gbk",
         "second.gbk",
     ]
+
+
+def test_gallery_session_refresh_keeps_the_session_created_at(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tracked = tmp_path / "kept.gbdraw-session.json.gz"
+    original = {"format": "gbdraw-session", "createdAt": "2026-01-02T03:04:05+00:00", "title": "old"}
+    tracked.write_bytes(gzip.compress(json.dumps(original).encode("utf-8"), mtime=0))
+
+    monkeypatch.setattr(refresh_gallery_sessions_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(refresh_gallery_sessions_module, "SESSION_ROOT", tmp_path)
+    monkeypatch.setattr(refresh_gallery_sessions_module, "_session_path", lambda name: tmp_path / name)
+    monkeypatch.setattr(refresh_gallery_sessions_module, "load_session", lambda path: {"path": str(path)})
+    monkeypatch.setattr(
+        refresh_gallery_sessions_module, "_validate_staged_gallery_session", lambda *_args, **_kwargs: None
+    )
+    refresh_count = 0
+
+    def fake_refresh(session_path: Path, *, destination_path: Path | None = None) -> None:
+        # Each replay stamps the time it ran, as the CLI Session writer does.
+        nonlocal refresh_count
+        refresh_count += 1
+        assert destination_path is not None
+        refreshed = {**original, "createdAt": f"2026-10-19T00:00:0{refresh_count}+00:00", "title": "new"}
+        destination_path.write_bytes(
+            gzip.compress(json.dumps(refreshed).encode("utf-8"), mtime=refresh_count)
+        )
+
+    monkeypatch.setattr(refresh_gallery_sessions_module, "_refresh_one_session", fake_refresh)
+
+    refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
+    first_run = tracked.read_bytes()
+    refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
+
+    refreshed = json.loads(gzip.decompress(first_run))
+    assert refreshed["createdAt"] == original["createdAt"]
+    assert refreshed["title"] == "new"
+    assert tracked.read_bytes() == first_run

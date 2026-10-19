@@ -1111,7 +1111,7 @@
             "orange"
           ],
           [
-            "Default CDS color",
+            "Default Colors › CDS feature color",
             "#dddddd"
           ]
         ]
@@ -1623,19 +1623,19 @@
             "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
           ],
           [
-            "Definition line: Name / Species",
+            "Titles & Record Labels › Name / Species › Style",
             "20; Bold"
           ],
           [
-            "Definition line: Subtitle",
+            "Titles & Record Labels › Subtitle › Style",
             "20"
           ],
           [
-            "Definition line: Accession",
+            "Titles & Record Labels › Accession › Style",
             "20; #7b7c7d"
           ],
           [
-            "Definition line: Length / Coordinates",
+            "Titles & Record Labels › Length / Coordinates › Style",
             "20; #7b7c7d"
           ]
         ]
@@ -1996,7 +1996,7 @@
                 "og_6: reference neoU (BGC0000709); BGC0000708 anchor livU; Arrow direction Keep as is"
               ],
               [
-                "Palette; Default CDS color",
+                "Palette; Default Colors › CDS feature color",
                 "orange; #dddddd"
               ],
               [
@@ -2072,19 +2072,19 @@
                 "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
               ],
               [
-                "Definition line: Name / Species",
+                "Titles & Record Labels › Name / Species › Style",
                 "20; Bold"
               ],
               [
-                "Definition line: Subtitle",
+                "Titles & Record Labels › Subtitle › Style",
                 "20"
               ],
               [
-                "Definition line: Accession",
+                "Titles & Record Labels › Accession › Style",
                 "20; #7b7c7d"
               ],
               [
-                "Definition line: Length / Coordinates",
+                "Titles & Record Labels › Length / Coordinates › Style",
                 "20; #7b7c7d"
               ]
             ]
