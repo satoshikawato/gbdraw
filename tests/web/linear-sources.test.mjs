@@ -356,7 +356,7 @@ test('shared LOSAT FASTA extraction vectors', async () => {
   for (const vector of sharedVectors('losat_fasta_extraction_cases.json')) {
     const entry = await extractLosatFastaFast({
       text: vector.text, fmt: vector.fmt, regionSpec: vector.regionSpec,
-      recordSelector: vector.recordSelector, reverseFlag: '0'
+      recordSelector: vector.recordSelector
     });
     assert.deepEqual({
       recordId: entry.recordId,
@@ -477,7 +477,7 @@ test('shared LOSATP specs and job plan vectors', async () => {
 // crop_genbank.py does (CI-01): REGION_INVALID with the region correction.
 test('LOSAT FASTA extraction reports a region beyond the record as a region failure (GX-09)', async () => {
   const text = '>TINY.1\n' + 'ACGT'.repeat(15) + '\n';
-  const extract = (regionSpec) => extractLosatFastaFast({ text, fmt: 'fasta', regionSpec, recordSelector: null, reverseFlag: '0' });
+  const extract = (regionSpec) => extractLosatFastaFast({ text, fmt: 'fasta', regionSpec, recordSelector: null });
   await assert.rejects(extract('1000-2000'), (error) => {
     assert.equal(error.code, 'REGION_INVALID');
     assert.deepEqual(error.context, { field: 'region', reason: 'RECORD_BOUNDS' });

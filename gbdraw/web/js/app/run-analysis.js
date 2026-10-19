@@ -1022,12 +1022,10 @@ const parseGenbankRecordsFast = (text) => {
 /**
  * @param {ParsedSequenceRecord} record
  * @param {unknown} regionSpec
- * @param {unknown} reverseFlag
  */
-const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
+const applyLosatSequenceTransforms = (record, regionSpec) => {
   const region = parseRegionText(regionSpec);
   let sequence = record.sequence;
-  if (String(reverseFlag).trim().toLowerCase() === '1') sequence = reverseComplementSequence(sequence);
   if (region) {
     const drawn = regionWithinRecord(region.start, region.end, sequence.length);
     if (!drawn) {
@@ -1120,13 +1118,13 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 /**
- * @param {{ file?: FileLike | null, text?: string | null, fmt: string, regionSpec: unknown, recordSelector: unknown, reverseFlag: unknown }} options
+ * @param {{ file?: FileLike | null, text?: string | null, fmt: string, regionSpec: unknown, recordSelector: unknown }} options
  */
-export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
+export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   const selected = selectParsedRecord(records, recordSelector);
-  const transformed = applyLosatSequenceTransforms(selected, regionSpec, reverseFlag);
+  const transformed = applyLosatSequenceTransforms(selected, regionSpec);
   return {
     fasta: buildFastaText(transformed),
     recordId: transformed.id,
@@ -3908,8 +3906,7 @@ export const createRunAnalysis = ({
                   text: sourceText,
                   fmt,
                   regionSpec,
-                  recordSelector,
-                  reverseFlag
+                  recordSelector
                 });
                 if (losatTiming) losatTiming.fastaJsExtractions += 1;
               } catch (fastError) {

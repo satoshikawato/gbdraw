@@ -3,7 +3,9 @@ from __future__ import annotations
 import random
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 from svgwrite import Drawing
@@ -391,6 +393,7 @@ def test_legacy_replay_warns_when_a_reversed_region_has_stored_comparisons(
     from types import SimpleNamespace
 
     from gbdraw.cli_utils.session import SessionCliRequest
+    from gbdraw.session import SessionDocument
 
     inputs = Path(__file__).resolve().parent / "test_inputs"
     args = [
@@ -407,7 +410,8 @@ def test_legacy_replay_warns_when_a_reversed_region_has_stored_comparisons(
         session_path="stored.gbdraw-session.json", output=None, format=None,
         overwrite=False, save_session=False, session_output=None,
     )
-    linear_cli_module.replay_legacy_session(SimpleNamespace(_data={}, drawings=()), request)  # type: ignore[arg-type]
+    document = cast("SessionDocument", SimpleNamespace(_data={}, drawings=()))
+    linear_cli_module.replay_legacy_session(document, request)
     assert ("re-run the comparison" in caplog.text) is warned
 
 
@@ -928,12 +932,12 @@ def test_web_helpers_crop_before_reverse_complementing(tmp_path: Path) -> None:
     helpers_js = (Path(__file__).resolve().parents[1] / "gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helpers: dict[str, object] = {}
     exec(helpers_js.split("`", 1)[1].rsplit("`", 1)[0], helpers)
+    extract_first_fasta = cast("Callable[..., str]", helpers["extract_first_fasta"])
+    load_for_proteins = cast("Callable[..., SeqRecord]", helpers["_load_single_linear_record_for_proteins"])
 
     def reads(region: str, reverse: str) -> tuple[object, ...]:
-        fasta = json.loads(helpers["extract_first_fasta"](str(gb_path), "genbank", region, None, reverse))  # type: ignore[operator]
-        loaded = helpers["_load_single_linear_record_for_proteins"](  # type: ignore[operator]
-            str(gff_path), "gff", str(fasta_path), region, None, reverse
-        )
+        fasta = json.loads(extract_first_fasta(str(gb_path), "genbank", region, None, reverse))
+        loaded = load_for_proteins(str(gff_path), "gff", str(fasta_path), region, None, reverse)
         return (
             fasta["fasta"].split("\n", 1)[1],
             str(loaded.seq),
