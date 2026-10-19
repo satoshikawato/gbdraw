@@ -74,10 +74,9 @@ _HCLI13_FONT_MATCHES = (
     ("Liberation Sans:style=Italic", "LiberationSans-Italic.ttf"),
     ("Liberation Sans:style=Bold Italic", "LiberationSans-BoldItalic.ttf"),
 )
-_HCLI13_FONT_PROPERTY_VARIANTS = {
-    ("True", "True", "False", "1", "1", "1"),
-    ("True", "True", "False", "1", "5", "1"),
-}
+# h-cli-13-fonts.conf assigns rgba=none, so a system whose Fontconfig turns on
+# subpixel text (rgba=1) draws the same grayscale edges as one that does not.
+_HCLI13_FONT_PROPERTIES = ("True", "True", "False", "1", "5", "1")
 _HCLI13_PNG_MAX_COMPOSITE_RMS = 4.0
 _PATH_COORDINATE_RE = re.compile(r"[ML]\s+(-?[0-9.]+),(-?[0-9.]+)")
 _BGC_RECORD_IDS = (
@@ -616,13 +615,13 @@ def _assert_hcli13_bundled_fonts(environment: dict[str, str]) -> None:
         if (
             result.returncode != 0
             or resolved_path != expected_path
-            or properties not in _HCLI13_FONT_PROPERTY_VARIANTS
+            or properties != _HCLI13_FONT_PROPERTIES
         ):
             raise RecipeContractError(
                 "H-CLI-13 Fontconfig isolation failed for "
                 f"{pattern}: resolved={resolved_path}, expected={expected_path}, "
-                f"properties={properties}, expected_property_variants="
-                f"{_HCLI13_FONT_PROPERTY_VARIANTS}, stderr={result.stderr.strip()}"
+                f"properties={properties}, expected_properties="
+                f"{_HCLI13_FONT_PROPERTIES}, stderr={result.stderr.strip()}"
             )
 
 
