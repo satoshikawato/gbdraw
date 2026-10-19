@@ -133,9 +133,9 @@ write-up of a release.
   example one tint per region from the GC track to the feature track
   (`regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_content,layer=underlay,z=-1`).
   `to_slot` follows the anchor rules, and the span adds no space between the
-  slots; in Linear, a span that shows labels keeps room for them at its edge.
-  The web app draws and saves a loaded `to_slot`; its slot editor has no
-  control for it yet. The CLI reference now documents the overlay slot
+  slots unless it has nothing to cover on a record; in Linear, a span that
+  shows labels keeps room for them at its edge. The web app's slot editor sets
+  it with **Extend to** (see below). The CLI reference now documents the overlay slot
   parameters (`anchor_slot`, `layer`, `cover_anchor`, `to_slot`). Fixed: a
   Python slot mapping that spelled the key with capitals (`Anchor_Slot`) was
   accepted but drawn on the axis instead of on its anchor slot (OV-475).
@@ -154,7 +154,7 @@ write-up of a release.
 - Linear span labels (a `highlight` annotation row without custom slots, an
   overlay slot with `to_slot`, or one with `cover_anchor=true` on the feature
   track) no longer lie on the next slot or on the axis line. The room for the
-  labels (9 px with the default label style) is now kept between slots too,
+  labels (9 px for a 10 pt label) is now kept between slots too,
   not only at the edge of the record: the next GC, skew, or feature-lane slot,
   or the axis line, moves out by up to that much on the side with label text.
   With the default `--track_layout below`, a labelled `highlight` row no
@@ -169,26 +169,83 @@ write-up of a release.
   axis line, the next slot, or the record edge; a `to_slot` or
   `cover_anchor` span's label stays outside every slot the span covers,
   whatever its mark and its own `h` (OV-1156), `label_offset` beyond the
-  span's edge or beyond the part of the mark's stroke that passes it. An
-  overlay with nothing to span on a record (`cover_anchor` on a record
-  without feature lanes, a `to_slot` span where neither slot has a band)
-  keeps its own place and its mark's label rule, as before (OV-1158); such a
-  `to_slot` span now also keeps the room for its labels on the side with
-  label text, adding no other space, instead of drawing them on the next
-  slot (OV-1159). `highlight`, `band`, and
-  `bracket` labels no longer touch or overlap their mark; `line` labels,
-  which had 4.7 px, move 0.7 px closer. The label room grows to match;
-  records grow only where nothing else already gave that room, by 0 to 7 px
-  per record in the tested figures (OV-844). A label that crossed a feature
-  label's leader line or overlapped a feature label now moves along its
-  region, its centre over one of the region's marks (never into the gap of a
-  region across the origin) and its letters on the bar (OV-1157), to the
-  nearest clear place; labels without such
-  a conflict stay where they were, for example the tobacco chloroplast `IRb`
-  and `IRa` labels with `--track_layout above` (OV-845). Where no place is
-  clear, the label goes to the place with the fewest conflicts and is drawn
-  there without a fit warning (OV-1155). The label room now also follows a
-  slot's `style_override` font size and offset (OV-848).
+  span's edge or beyond the part of the mark's stroke that passes it.
+  `highlight`, `band`, and `bracket` labels no longer touch or overlap their
+  mark; `line` labels, which had 4.7 px, move 0.7 px closer. The label room
+  grows to match; records grow only where nothing else already gave that room,
+  by 0 to 7 px per record in the tested figures (OV-844). The label room now
+  also follows a slot's `style_override` font size and offset (OV-848).
+- Linear overlays with nothing to span on a record (`cover_anchor` on a record
+  without feature lanes, a `to_slot` span where neither slot has a band) are
+  drawn there as a plain overlay on their anchor: they keep their own place,
+  their own `h`, and their mark's label rule, the anchor's spacing applies
+  (8 px for a Depth anchor), and their labels keep their room instead of lying
+  on the next slot (OV-1158, OV-1159, OV-1171). The room a span's labels need
+  beyond a slot without data on a record (for example a Depth slot with no
+  file there) no longer brings back that slot's spacing; the slots after it
+  stay packed and the letters keep `label_offset` from the axis line and the
+  next slot (OV-1170).
+- Linear: a region label that crossed a feature label's leader line or
+  overlapped a feature label now moves along its region, its centre over one
+  of the region's marks (never into the gap of a region across the origin), to
+  the nearest clear place. Its letters may hang past either end of the record
+  bar, but the record names, definition text, and the other records of the row
+  (their bars, labels, and leader lines) stop them there, and the figure grows
+  to hold them; a region label, moved or at its own place, keeps clear of the
+  other records of its row (OV-1157, OV-1172, OV-1174). Labels without such a
+  conflict stay where they were, for example the tobacco chloroplast `IRb` and
+  `IRa` labels with `--track_layout above` (OV-845).
+- Linear: a region label that meets feature labels or leader lines where no
+  place along its region is clear is placed inside its filled box, or the
+  feature labels it meets move to another row, or it is drawn in front of its
+  record's leader lines on a white rounded box at 70 % opacity that never
+  reaches past `label_offset` toward its own mark, each only when that clears
+  every overlap of the label; its font and line count never change, and
+  figures without overlaps draw as before. A label that still overlaps is
+  drawn at the place with the fewest conflicts and warns (a count on the
+  command line, a notice band in the Web app with no fix offered) (OV-1155,
+  OV-1290).
+- Circular annotation labels keep `label_offset` from other rings: an
+  annotation slot, and the outermost slot a `to_slot` or `cover_anchor` span
+  covers, reserve the labels' room, so automatic rings move clear; a ring at an
+  explicit `r` keeps its radius, and an inside numeric ring there with an
+  automatic width narrows (OV-1192, OV-1207). The gap is measured from the
+  painted edge of the mark (stroke and bracket caps included) to the letters
+  for every label orientation, inward and outward, as in Linear; letters that
+  would meet the axis circle keep the same gap beyond it, and labels past the
+  outermost ring stay on the canvas (OV-849, OV-1190, OV-1191). Labels move
+  along their region off feature labels and leaders (OV-1173), and span labels
+  stay off every covered ring (OV-1189).
+- Track slots that are not annotation slots now reject parameters their
+  renderer does not read (`to_slot` and `anchor_slot` say they belong to
+  annotation slots), from the CLI, Python slot objects and Sessions;
+  comparison-ring slots keep the keys saved Sessions store (OV-477). They
+  accept and ignore `legend_label`, `label` and `color` in slot text, and
+  `fileName` in Sessions and Python slot objects, where their renderer does not
+  read them, so Sessions from released versions with a label left on a row
+  whose renderer changed load; in the Web, changing a comparison-ring row's
+  renderer no longer keeps its label, color and file name (OV-1186). A Linear
+  GC content slot's `legend_label` now names its legend row, and each content
+  slot draws its own row under its dinucleotide, as in Circular (OV-846,
+  OV-1185).
+- Region annotation labels without `label_font_size` are drawn at the feature
+  label font size of the same drawing (by default 14 pt, or 8 pt for long records,
+  in Circular; 24 pt, or 5 pt, in Linear; or `--label_font_size`) instead of a fixed 10 pt.
+- Web app: an Overlay annotation slot row in the Circular and Linear Custom
+  Track Slots editors has an **Extend to** select that sets `to_slot`, so a
+  region tint can span from its anchor slot to a second slot; the editor
+  reports the same `to_slot` errors as the CLI before Generate, and Run Info's
+  Source recipe includes the key.
+- Web app: Generate waits for uploaded rule, priority, color, whitelist and
+  blacklist files that are still being applied, so a Priority File uploaded
+  just before Generate is no longer left out (OV-1193). A Specific rules file no
+  longer loses its rules when another rule or color file is uploaded while it
+  is still being applied (OV-1205); when it cannot be applied because other
+  inputs kept changing, an error says so and offers Retry table import, which
+  stays available after later changes, instead of the file being dropped
+  silently (OV-1206).
+- The "Labels do not fit" error for radial labels without room now says so
+  instead of showing overlap and crossing counts (OV-1194).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and

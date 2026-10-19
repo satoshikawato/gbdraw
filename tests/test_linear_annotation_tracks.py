@@ -1972,26 +1972,29 @@ def _six_kb_label_and_name(region: RegionAnnotation, features: tuple[tuple[int, 
 
 
 @pytest.mark.parametrize(
-    ("start", "end", "feature", "past"),
+    ("start", "end", "features", "past", "font_size"),
     [
         # The leader of a tRNA crosses the label's default place; the nearest clear place puts its
         # letters about 58 px past the bar end.
-        pytest.param(5701, 6000, (5790, 5810, "tRNA-Leu"), "end", id="bar-end"),
+        pytest.param(5701, 6000, ((5790, 5810, "tRNA-Leu"),), "end", 10.0, id="bar-end"),
         # Next to the record name: the letters hang before the bar start, clear of the name.
-        pytest.param(1, 450, (320, 340, "tRNA-Leu"), "start", id="bar-start"),
+        pytest.param(1, 450, ((320, 340, "tRNA-Leu"),), "start", 10.0, id="bar-start"),
+        # At the 24 pt feature label size the letters begin left of the record name (OV-1185 review LOW-1),
+        # so only the figure's left edge, not the name, decides whether they fit.
+        pytest.param(1, 900, ((440, 460, "tRNA-Leu"), (650, 680, "tRNA-Ser")), "start", 24.0, id="bar-start-left-of-name"),
     ],
 )
 def test_linear_moved_label_may_hang_past_the_bar_end(
-    start: int, end: int, feature: tuple[int, int, str], past: str
+    start: int, end: int, features: tuple[tuple[int, int, str], ...], past: str, font_size: float
 ) -> None:
     region = RegionAnnotation(
         "control",
         CoordinateSpan(None, start, end),
         label="Mitochondrial control region",
         mark="highlight",
-        style=_SCENARIO_LABEL_STYLE,
+        style=RegionAnnotationStyle(label_font_size=font_size),
     )
-    label, name, (bar_start, bar_end), (view_left, view_right), drawing = _six_kb_label_and_name(region, (feature,))
+    label, name, (bar_start, bar_end), (view_left, view_right), drawing = _six_kb_label_and_name(region, features)
     left, top, right, bottom = label["ink"]
     centre = 0.5 * (left + right)
 
@@ -2000,8 +2003,10 @@ def test_linear_moved_label_may_hang_past_the_bar_end(
     assert not _leaders_through(label)
     assert (right > bar_end) if past == "end" else (left < bar_start)
     assert label["span"][0] <= centre <= label["span"][1]
-    assert right <= name[0] or left >= name[2] + 3.0 or bottom <= name[1] or top >= name[3]
+    # 0.5 px: the measured name box starts about 0.34 px above the label's ink bottom (an offset of the measurement).
+    assert right <= name[0] or left >= name[2] + 3.0 or bottom <= name[1] + 0.5 or top >= name[3]
     assert view_left <= left and right <= view_right
+    assert font_size < 20.0 or left < name[0]
     # The PNG holds them too: no painted pixel in its first or last column.
     cairosvg = pytest.importorskip("cairosvg")
     from io import BytesIO
