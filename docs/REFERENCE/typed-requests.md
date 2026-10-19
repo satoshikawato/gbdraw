@@ -29,7 +29,7 @@ Every `RecordInput` declares a `RecordCardinality`:
 | `FIRST` | deliberately selects the first source candidate |
 | `ALL` | expands all candidates in source order |
 
-Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. The planner loads each unique source once, then applies selection, reverse complement, and record-local region transforms. Collection-level ordering and layout are applied after expansion.
+Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. The planner loads each unique source once, then applies selection and the record-local region crop, then reverse complement: a region counts its coordinates on the source strand, whether the reverse complement comes from `RecordPresentation.reverse_complement` or the region's own setting. Collection-level ordering and layout are applied after expansion.
 
 For Linear Similarity Group alignment, `similarity_alignment` stores the exact
 reference and each record's anchor or Skip decision. It has no orientation

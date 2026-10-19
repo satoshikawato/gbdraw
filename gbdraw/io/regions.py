@@ -219,15 +219,11 @@ def _crop_record_to_region(
     return new_record
 
 
-def apply_region_specs(
+def assign_region_specs(
     records: Sequence[SeqRecord],
     specs: Sequence[RegionSpec],
-    *,
-    log: logging.Logger | None = None,
-) -> list[SeqRecord]:
-    if not specs:
-        return list(records)
-    log = log or logger
+) -> dict[int, RegionSpec]:
+    """Return the region spec that applies to each record index."""
 
     total = len(records)
     selectorless = [
@@ -341,27 +337,50 @@ def apply_region_specs(
                 )
             assignments[idx] = spec
 
-    new_records: list[SeqRecord] = []
-    for idx, record in enumerate(records):
-        assigned = assignments.get(idx)
-        if not assigned:
-            new_records.append(record)
-            continue
-        log.info(
-            "INFO: Cropping record %s to %s..%s%s.",
-            record.id,
-            assigned.start,
-            assigned.end,
-            " (reverse complement)" if assigned.reverse_complement else "",
-        )
-        new_records.append(_crop_record_to_region(record, assigned, log=log))
+    return assignments
 
-    return new_records
+
+def crop_record_to_region(
+    record: SeqRecord,
+    spec: RegionSpec,
+    *,
+    log: logging.Logger | None = None,
+) -> SeqRecord:
+    """Crop one record to ``spec``, then reverse-complement the crop when it says so."""
+
+    log = log or logger
+    log.info(
+        "INFO: Cropping record %s to %s..%s%s.",
+        record.id,
+        spec.start,
+        spec.end,
+        " (reverse complement)" if spec.reverse_complement else "",
+    )
+    return _crop_record_to_region(record, spec, log=log)
+
+
+def apply_region_specs(
+    records: Sequence[SeqRecord],
+    specs: Sequence[RegionSpec],
+    *,
+    log: logging.Logger | None = None,
+) -> list[SeqRecord]:
+    if not specs:
+        return list(records)
+    assignments = assign_region_specs(records, specs)
+    return [
+        crop_record_to_region(record, assignments[idx], log=log)
+        if idx in assignments
+        else record
+        for idx, record in enumerate(records)
+    ]
 
 
 __all__ = [
     "RegionSpec",
     "apply_region_specs",
+    "assign_region_specs",
+    "crop_record_to_region",
     "parse_region_spec",
     "parse_region_specs",
 ]

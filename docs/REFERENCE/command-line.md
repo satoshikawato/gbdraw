@@ -99,7 +99,10 @@ Linear mode selects and crops records with `--record_id`, `--region`, and
 A start greater than the end selects the region from end to start and draws it
 reverse-complemented, as `:rc` does: `rec:500-100` is `rec:100-500:rc`.
 Repeated `--reverse_complement` values follow input-file order and accept the
-boolean tokens listed by `--help`. Selection, cropping, and reverse-complement
+boolean tokens listed by `--help`. A region is cropped first, on the record as
+stored in the file, and then reverse-complemented: `--region '#2:5001-40000'`
+with `--reverse_complement 1` for that file draws the same window as
+`--region '#2:5001-40000:rc'`. Selection, cropping, and reverse-complement
 display do not rewrite a source file.
 
 Circular mode writes separate results for multiple records by default.

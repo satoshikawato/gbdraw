@@ -287,6 +287,87 @@ def test_linear_region_crop_with_file_prefix(tmp_path: Path, gbdraw_runner) -> N
     assert f"{lengths['RecA']:,} bp" not in svg_content
 
 
+def _resolved_window(record_input, record_options=None) -> SeqRecord:
+    from gbdraw.api.record_planning import resolve_record_inputs
+
+    return resolve_record_inputs(
+        (record_input,),
+        record_options=record_options,
+        gff_candidate_features=None,
+        gff_keep_all_features=True,
+    ).records[0]
+
+
+def test_reverse_complement_applies_after_region_crop_in_every_spelling() -> None:
+    from gbdraw.api.requests import (
+        InMemoryRecordSource,
+        RecordCardinality,
+        RecordCollectionOptions,
+        RecordInput,
+        RecordPresentation,
+    )
+    from gbdraw.io.regions import parse_region_spec
+
+    source = SeqRecord(
+        Seq("ACGTTGCAAG" * 6),
+        id="RecA",
+        annotations={"molecule_type": "DNA"},
+    )
+    source.features = [SeqFeature(FeatureLocation(12, 18, strand=1), type="CDS")]
+    reverse = RecordPresentation(reverse_complement=True)
+
+    def record_input(**kwargs) -> RecordInput:
+        return RecordInput(
+            source=InMemoryRecordSource(source),
+            cardinality=RecordCardinality.EXACTLY_ONE,
+            **kwargs,
+        )
+
+    windows = {
+        "region rc": _resolved_window(record_input(region=parse_region_spec("11-40:rc"))),
+        "region + presentation": _resolved_window(
+            record_input(region=parse_region_spec("11-40"), presentation=reverse)
+        ),
+        "collection region + presentation": _resolved_window(
+            record_input(presentation=reverse),
+            RecordCollectionOptions(regions=(parse_region_spec("#1:11-40"),)),
+        ),
+    }
+    expected = str(source.seq[10:40].reverse_complement())
+    for spelling, window in windows.items():
+        assert str(window.seq) == expected, spelling
+        assert [
+            (int(feature.location.start), int(feature.location.end), feature.location.strand)
+            for feature in window.features
+            if feature.type == "CDS"
+        ] == [(22, 28, -1)], spelling
+
+
+@pytest.mark.linear
+def test_linear_cli_reverse_complement_flag_crops_the_region_first(
+    tmp_path: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = tmp_path / "multi_records_region_rc.gbk"
+    _write_multi_record_gbk(gbk_path)
+    svgs = []
+    for name, region_args in (
+        ("flag", ["--region", "RecA:101-400", "--reverse_complement", "1"]),
+        ("suffix", ["--region", "RecA:101-400:rc"]),
+    ):
+        returncode, output, svg_path = gbdraw_runner.run(
+            "linear",
+            [gbk_path],
+            f"linear_region_rc_{name}",
+            tmp_path,
+            extra_args=["--record_id", "RecA", *region_args, "--legend", "none"],
+        )
+        assert returncode == 0, f"gbdraw failed: {output}"
+        svgs.append(svg_path.read_text().replace(f"linear_region_rc_{name}", "OUT"))
+    assert "400-101" in svgs[0]
+    assert svgs[0] == svgs[1]
+
+
 @pytest.mark.linear
 def test_linear_reverse_complement_flag(tmp_path: Path, gbdraw_runner) -> None:
     gbk_path = tmp_path / "multi_records_rc.gbk"

@@ -42,7 +42,7 @@ from gbdraw.io.record_select import (
     parse_record_selector,
     reverse_records,
 )
-from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
+from gbdraw.io.regions import RegionSpec, assign_region_specs, crop_record_to_region, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.api.prepared import register_prepared_resource_value
 from gbdraw.render_stages import render_stage
@@ -1263,12 +1263,28 @@ def _apply_collection_options(
     records: list[SeqRecord],
     provenance: Sequence[ResolvedRecordProvenance],
     options: RecordCollectionOptions,
-) -> list[SeqRecord]:
-    if options.regions:
-        try:
-            records = apply_region_specs(records, options.regions, log=logger)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
+    pending_reverse: Sequence[bool],
+) -> tuple[list[SeqRecord], frozenset[int]]:
+    """Crop by collection regions, then reverse-complement each pending record.
+
+    A record's presentation reverse complement applies after its crop, the
+    order a region's own ``:rc`` uses, so both spellings draw one window.
+    """
+
+    try:
+        assignments = assign_region_specs(records, options.regions) if options.regions else {}
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    records = [
+        crop_record_to_region(
+            record,
+            replace(region, reverse_complement=region.reverse_complement or reverse),
+            log=logger,
+        )
+        if (region := assignments.get(index)) is not None
+        else reverse_records((record,), reverse, log=logger)[0]
+        for index, (record, reverse) in enumerate(zip(records, pending_reverse, strict=True))
+    ]
     # Labels and subtitles apply by place through effective_record_presentation.
     for field_name in ("labels", "subtitles"):
         if len(getattr(options, field_name)) > len(records):
@@ -1279,7 +1295,7 @@ def _apply_collection_options(
             )
     for record, item in zip(records, provenance, strict=True):
         _apply_provenance_annotations(record, item)
-    return records
+    return records, frozenset(assignments)
 
 
 def _detached_record(record: SeqRecord) -> SeqRecord:
@@ -1323,6 +1339,7 @@ def resolve_record_inputs(
     id_counts: dict[tuple[object, ...], Counter[str]] = {}
     records: list[SeqRecord] = []
     provenance: list[ResolvedRecordProvenance] = []
+    pending_reverse: list[bool] = []
     for input_index, record_input in enumerate(inputs):
         key = _source_key(record_input.source)
         parsed = cache.get(key)
@@ -1351,20 +1368,18 @@ def resolve_record_inputs(
                 )
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = _detached_record(source_record)
-            record = reverse_records(
-                (record,),
-                record_input.presentation.reverse_complement,
-                log=logger,
-            )[0]
+            reverse = record_input.presentation.reverse_complement
             if record_input.region is not None:
+                region = _unqualified_region(record_input.region)
                 try:
-                    record = apply_region_specs(
-                        (record,),
-                        (_unqualified_region(record_input.region),),
+                    record = crop_record_to_region(
+                        record,
+                        replace(region, reverse_complement=region.reverse_complement or reverse),
                         log=logger,
-                    )[0]
+                    )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc
+                reverse = False
             base_key = record_input.record_key or f"record-{input_index + 1}"
             record_key = (
                 f"{base_key}:{source_record_index + 1}"
@@ -1398,18 +1413,20 @@ def resolve_record_inputs(
             _apply_provenance_annotations(record, item)
             records.append(record)
             provenance.append(item)
-    before_collection = records
+            pending_reverse.append(reverse)
     collection_options = record_options or RecordCollectionOptions()
-    records = _apply_collection_options(records, provenance, collection_options)
+    records, collection_cropped = _apply_collection_options(
+        records, provenance, collection_options, pending_reverse
+    )
     provenance = [
         replace(
             item,
-            has_collection_region=record is not before,
+            has_collection_region=index in collection_cropped,
             presentation=effective_record_presentation(
                 item.presentation, collection_options, item.resolved_index
             ),
         )
-        for item, record, before in zip(provenance, records, before_collection, strict=True)
+        for index, item in enumerate(provenance)
     ]
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
 
