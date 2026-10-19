@@ -182,7 +182,8 @@ def test_selection_reverse_region_order_and_provenance(tmp_path: Path) -> None:
 
     record = resolved.records[0]
     provenance = resolved.provenance[0]
-    assert str(record.seq) == "GGT"
+    # Cropped to source 2..4 (AAC), then reverse-complemented (OV-1279).
+    assert str(record.seq) == "GTT"
     assert provenance.presentation.label == "Shown"
     assert provenance.presentation.subtitle == "Detail"
     assert "gbdraw_record_label" not in record.annotations

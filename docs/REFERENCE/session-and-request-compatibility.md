@@ -420,9 +420,7 @@ Which records Web draws from a CLI session depends on the request:
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or
-  `presentation.reverseComplement`, as Web Save does. A crop taken after
-  `--reverse_complement` is written as the same span in source coordinates.
-  Each Linear row takes its crop and orientation from the request, so
+  `presentation.reverseComplement`, as Web Save does. Each Linear row takes its crop and orientation from the request, so
   **Generate Diagram** draws the record the CLI drew.
 - A cropped or reversed record of a Circular batch or grid, the records of a
   file that a Circular batch or grid draws only partly, and every record of an
