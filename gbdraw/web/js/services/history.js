@@ -304,7 +304,8 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {number} [maxActions] Undo entries kept.
  * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
  * @property {(message: string) => void} [onHistoryLimit]
- *   Told when the limits dropped older steps, with the sentence that says so.
+ *   Told when the byte limit dropped steps, with the sentence that says so; the
+ *   step-count window (`maxActions`) drops its oldest step silently.
  * @property {<T>(value: T) => { value: T }} [makeRef]
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
@@ -685,13 +686,14 @@ export const createHistoryManager = ({
 
   // OV-1260: the step just recorded, undone, or redone (`kept`) stays even
   // when it alone is over the byte limit; the oldest other steps drop first.
+  // OV-1365: the step-count window drops silently, as an undo window does;
+  // only drops caused by the byte limit are announced.
   /** @param {HistoryEntry | null} [kept] */
   const enforceLimits = (kept = null) => {
     let undoDropped = false;
     let redoDropped = false;
     while (undoStack.length > maxActions) {
       removeEntryBytes(undoStack.shift());
-      undoDropped = true;
     }
 
     const overLimit = () => totalEntryBytes + retainedFileBytes() > maxBytes;
@@ -706,7 +708,7 @@ export const createHistoryManager = ({
       redoStack.splice(0, redoStack.length, ...keptRedo);
     }
 
-    // Every drop is announced through the one notice path.
+    // Every byte-limit drop is announced through the one notice path.
     const dropped = undoDropped && redoDropped ? 'Older undo history and the redo history were'
       : undoDropped ? 'Older undo history was' : redoDropped ? 'Redo history was' : '';
     if (dropped) onHistoryLimit(`${dropped} discarded to stay within the history limit.`);
