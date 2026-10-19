@@ -7,7 +7,6 @@ from __future__ import annotations
 import gzip
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
 
@@ -115,8 +114,8 @@ def test_an_entered_size_of_zero_or_less_is_still_refused(capsys: pytest.Capture
 
 def test_the_notice_keeps_the_web_load_wording() -> None:
     wording = (REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "load-repairs.js").read_text(encoding="utf-8")
-    assert re.search(r"`Settings: \$\{stored === undefined \? `the value of \$\{path\}` : `the value \"\$\{stored\}\" \(\$\{path\}\)`\} cannot be used; `", wording)
-    assert "defaulted: 'its default is used'" in wording
+    assert "t('Settings: the value of {path} cannot be used; its default is used.', params)" in wording
+    assert "t('Settings: the value \"{stored}\" ({path}) cannot be used; its default is used.', params)" in wording
 
 
 def _packaged(path: str) -> object:

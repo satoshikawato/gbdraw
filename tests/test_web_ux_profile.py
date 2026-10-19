@@ -219,7 +219,7 @@ def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
     assert 'class="linear-secondary-summary"' in index
     assert 'label="GenBank / DDBJ File"' in index
     assert '{{ linearSourceDepthSummary(source) }}' in index
-    assert "if (attachedCount === 0) return 'No depth track attached';" in app_setup
+    assert "if (attachedCount === 0) return t('No depth track attached');" in app_setup
     assert 'Attached to all records' in index
     assert 'Requires at least 2 loaded sequences to compare' in index
     assert 'v-if="linearComparisonUi.intentKey !== \'none\'"' not in index
@@ -315,5 +315,5 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
     assert ": t('Pairwise match details')\"" in index
     assert "element.setAttribute('role', 'button')" in svg_actions
     assert "element.setAttribute('tabindex', '0')" in svg_actions
-    assert "`Pairwise match ${index + 1}`" in svg_actions
+    assert "t('Pairwise match {n}', { n: index + 1 })" in svg_actions
     assert "e.key !== 'Enter' && e.key !== ' '" in svg_actions
