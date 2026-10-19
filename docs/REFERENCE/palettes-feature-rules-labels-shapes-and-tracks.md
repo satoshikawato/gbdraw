@@ -306,14 +306,14 @@ affected.
   `GbdrawError`.
 - If leader lines cross, labels cover the definition text, Linear region
   (annotation) labels overlap other labels or lines, or Circular region labels
-  are cut to fit their circle, but no labels overlap, the figure is drawn as
-  before. The command line prints the same
+  are cut to fit their circle or lie on other tracks, but no labels overlap,
+  the figure is drawn as before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
   `LabelLeadersCrossWarning`, a `UserWarning`.
 
 The message counts the overlapping label pairs, crossing leader pairs,
-labels over the definition text, region label overlaps, and cut region labels
-of each record and side, and lists settings
+labels over the definition text, region label overlaps, cut region labels, and
+region labels on other tracks of each record and side, and lists settings
 that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
@@ -346,7 +346,8 @@ searched; for inner, embedded, or radial labels the switches and then the font
 search share 30 seconds, and a setting is tried only if drawing the figure once
 more ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
-apart. Linear region labels and cut Circular region labels get no row.
+apart. Linear region labels and Circular region labels that are cut or lie
+on other tracks get no row.
 
 A Circular region label with `label_orientation` `auto` or `arc` is drawn
 along its circle and can take just under a whole turn, less 1 em at each
@@ -356,6 +357,16 @@ each such label counts as one cut region label (`1 region label cut`). This
 only warns: the Web app shows "Region labels are cut to fit their circle (N)."
 over the figure, with no **Choose a fix** button. A label that meets another
 label or line in Circular is still drawn without a warning.
+
+Circular keeps room for region labels beyond their annotation slot, or beyond
+the slots a span covers, and places the other tracks outside that room. A
+track with a set radius (`r=`) keeps it, so where set radii leave no room the
+labels are drawn on the track. Each label whose letters lie on another track's
+band counts as one region label on another track (`1 region label on another
+track`). This only warns: the Web app shows "Region labels lie on other
+tracks: the set track radii leave them no room (N)." over the figure, with no
+**Choose a fix** button. An overlay that spans nothing keeps no room, and its
+labels are not counted.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its

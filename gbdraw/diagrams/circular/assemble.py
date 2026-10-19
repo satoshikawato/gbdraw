@@ -724,6 +724,38 @@ def _circular_annotation_labels_by_slot(
     return labels
 
 
+# Letters lie on a track when they reach more than this into its band, as a label covers the definition text.
+REGION_TRACK_MIN_OVERLAP_PX = 0.5
+
+
+def _region_labels_on_other_tracks(
+    radial_layout: CircularRadialLayout, labels: Mapping[str, Sequence[CircularAnnotationLabel]]
+) -> int:
+    """How many annotation labels' letters lie on the drawn band of a track their slot is not drawn on.
+
+    The layout keeps a room for these letters beyond an inside or outside
+    annotation slot and beyond a span overlay (OV-1192), so they lie on a
+    track only where set radii leave no room (OV-1207); the figure is then
+    drawn and warns (LP-D86). An overlay that spans nothing has no room: its
+    labels are drawn over the tracks around it.
+    """
+
+    def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
+        return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
+
+    tracks = [slot.draw_band_px for slot in radial_layout.slots if slot.side != "overlay" and slot.draw_band_px is not None]
+    count = 0
+    for slot in radial_layout.slots:
+        own = slot.draw_band_px
+        if own is None or (slot.side == "overlay" and not slot.spans_slots):
+            continue
+        others = [band for band in tracks if band is not own and not overlaps(own.inner_px, own.outer_px, band)]
+        count += sum(
+            1 for label in labels.get(slot.id, ()) if any(overlaps(*label.ink_radii, band) for band in others)
+        )
+    return count
+
+
 def _feature_label_obstacles(
     labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
 ) -> CircularLabelObstacles:
@@ -1945,10 +1977,12 @@ def _record_label_layout(
     definition_text: Sequence[Aabb],
     radial_refused: bool,
     region_labels: Sequence[CircularAnnotationLabel] = (),
+    region_track_overlaps: int = 0,
 ) -> CircularLabelLayout | None:
     """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
 
-    Region labels cut to fit their circle are a ``circular_region`` kind that only warns (LP-D87).
+    Region labels cut to fit their circle (LP-D87) or lying on another track
+    (LP-D86) are a ``circular_region`` kind that only warns.
     """
 
     total_length = len(gb_record.seq)
@@ -1964,7 +1998,7 @@ def _record_label_layout(
         label_counts[kind] = label_counts.get(kind, 0) + 1
     placed = bool(label_counts) and place_labels is not None
     cuts = sum(label.cut for label in region_labels)
-    if not placed and not cuts:
+    if not placed and not cuts and not region_track_overlaps:
         return None
     cfg = profile.config
     horizontal = profile.label_placement == "horizontal"
@@ -1986,9 +2020,9 @@ def _record_label_layout(
 
     counts: dict[LabelKind, int] = dict(label_counts) if placed else {}
     kind_fits = circular_label_fits(drawn_labels, total_length, definition_text=definition_text) if placed else {}
-    if cuts:
+    if cuts or region_track_overlaps:
         counts["circular_region"] = len(region_labels)
-        kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts)
+        kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts, region_track_overlaps=region_track_overlaps)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
     return CircularLabelLayout(
@@ -2880,6 +2914,7 @@ def add_record_on_circular_canvas(
         definition_text=definition_text,
         radial_refused=radial_refused,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
+        region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
@@ -3379,3 +3414,4 @@ __all__ = [
     "build_circular_legend_table",
     "plan_circular_annotation_slots",
 ]
+

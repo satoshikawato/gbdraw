@@ -133,7 +133,7 @@ class CircularLabelLayout:
     refused: bool = False
     features_separated: bool = False
     probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
-    # The largest font of the record's region labels, when some are cut (``circular_region``, LP-D87).
+    # The largest font of the record's region labels, when some are cut or lie on another track (``circular_region``).
     region_font_size: float = 0.0
 
     @property
@@ -158,7 +158,8 @@ class CircularLabelLayout:
 
     @property
     def failing_feature_kinds(self) -> tuple[LabelKind, ...]:
-        """The failing sides the rows can move: cut region labels only warn, with no row (LP-D87)."""
+        """The failing sides the rows can move: region labels that are cut (LP-D87) or lie on other tracks (LP-D86)
+        only warn, with no row."""
 
         return tuple(kind for kind in self.failing_kinds if kind != "circular_region")
 

@@ -4,7 +4,8 @@ Labels fit when no two labels overlap and no two leader polylines cross
 (LP-D43 ``DEF-CROSS``); a label over the centre definition text counts like a
 crossing (LP-D49 ``DEF-WARN``). A Linear region (annotation) label over other
 labels or lines is counted by its placer and only warns (LP-D68), and so does a
-Circular region label cut to fit its circle (LP-D87). The counts take plain shapes: each label kind
+Circular region label cut to fit its circle (LP-D87) or lying on another track
+because set radii leave it no room (LP-D86). The counts take plain shapes: each label kind
 has one adapter next to its owner that turns the drawn labels into
 :class:`LabelShape` values, and one record's labels of every kind are counted
 together (LP-D48 ``SCOPE-ALL-LABELS``).
@@ -97,10 +98,11 @@ class LabelShape:
 class LabelFit:
     """Overlapping label pairs, crossing leader pairs, labels over the definition text,
     Linear region labels over other labels or lines (``region_overlaps``: pairs of a
-    region label and what it covers, LP-D68), and Circular region labels cut to fit
-    their circle (``region_cuts``, LP-D87).
+    region label and what it covers, LP-D68), Circular region labels cut to fit
+    their circle (``region_cuts``, LP-D87), and Circular region labels whose letters
+    lie on another track's band (``region_track_overlaps``, LP-D86).
 
-    The labels fit when all five are 0.
+    The labels fit when all six are 0.
     """
 
     overlap_pairs: int
@@ -108,6 +110,7 @@ class LabelFit:
     definition_overlaps: int = 0
     region_overlaps: int = 0
     region_cuts: int = 0
+    region_track_overlaps: int = 0
 
     @property
     def fits(self) -> bool:
@@ -117,6 +120,7 @@ class LabelFit:
             and self.definition_overlaps == 0
             and self.region_overlaps == 0
             and self.region_cuts == 0
+            and self.region_track_overlaps == 0
         )
 
     def __add__(self, other: LabelFit) -> LabelFit:
@@ -126,6 +130,7 @@ class LabelFit:
             self.definition_overlaps + other.definition_overlaps,
             self.region_overlaps + other.region_overlaps,
             self.region_cuts + other.region_cuts,
+            self.region_track_overlaps + other.region_track_overlaps,
         )
 
 
@@ -433,6 +438,10 @@ class LabelFitReport:
     def region_cuts(self) -> int:
         return sum(record.fit.region_cuts for record in self.records)
 
+    @property
+    def region_track_overlaps(self) -> int:
+        return sum(record.fit.region_track_overlaps for record in self.records)
+
 
 class LabelFitRows(Protocol):
     """Computes one row of a report on request; a ``time.monotonic()`` deadline may stop it (``not_computed``)."""
@@ -491,8 +500,8 @@ def _counted(count: int, singular: str, plural: str) -> str:
 
 def fit_counts(fit: LabelFit) -> str:
     counts: list[str] = []
-    # Region labels are counted on their own record (LP-D68, LP-D87), which has no other counts.
-    if fit.overlap_pairs or fit.crossing_pairs or not (fit.region_overlaps or fit.region_cuts):
+    # Region labels are counted on their own record (LP-D68, LP-D87, LP-D86), which has no other counts.
+    if fit.overlap_pairs or fit.crossing_pairs or not (fit.region_overlaps or fit.region_cuts or fit.region_track_overlaps):
         counts.append(_counted(fit.overlap_pairs, "label pair overlaps", "label pairs overlap"))
         counts.append(_counted(fit.crossing_pairs, "leader pair crosses", "leader pairs cross"))
     if fit.definition_overlaps:
@@ -501,6 +510,8 @@ def fit_counts(fit: LabelFit) -> str:
         counts.append(_counted(fit.region_overlaps, "region label overlap", "region label overlaps"))
     if fit.region_cuts:
         counts.append(_counted(fit.region_cuts, "region label cut", "region labels cut"))
+    if fit.region_track_overlaps:
+        counts.append(_counted(fit.region_track_overlaps, "region label on another track", "region labels on other tracks"))
     return ", ".join(counts)
 
 
@@ -533,6 +544,10 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
         sentences.append(f"Region labels overlap other labels or lines ({report.region_overlaps}).")
     if report.region_cuts:
         sentences.append(f"Region labels are cut to fit their circle ({report.region_cuts}).")
+    if report.region_track_overlaps:
+        sentences.append(
+            f"Region labels lie on other tracks: the set track radii leave them no room ({report.region_track_overlaps})."
+        )
     return tuple(sentences)
 
 

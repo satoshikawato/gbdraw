@@ -238,6 +238,32 @@ test('a Circular region label longer than its circle: the notice counts it as cu
   await pageShots(page, 'circular-region-cut-notice');
 });
 
+// LP-D86 (OV-1208): in the tobacco Gallery figure, the GC ring set to 0.58 x R
+// leaves the region labels drawn inside their ring no room; the figure keeps
+// the set radii and the notice counts the four labels on the GC ring, with no
+// "Choose a fix".
+test('Circular region labels left no room by set radii: the notice counts them and offers no fix', async ({ page }) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openApp(page);
+  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.adv.circular_track_slots.find((row) => row.id === 'gc_content').radius = '0.58';
+  });
+  await generateAndWaitForResult(page);
+  const notice = page.getByTestId('label-fit-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Region labels lie on other tracks: the set track radii leave them no room (4).');
+  await expect(notice.getByRole('button')).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.labelFitReports.value[0].report.rows.length;
+  })).toBe(0);
+  await pageShots(page, 'circular-region-no-room-notice');
+});
+
 // LP-D82 (e'): on one strand the control region's label meets only the tRNA-Leu leader, so it
 // is drawn in front of the leader lines on a white backing, outside its
 // annotation's group. A click on it still selects that annotation's row.
