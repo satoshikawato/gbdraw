@@ -4437,13 +4437,15 @@ export const createAppSetup = () => {
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
   );
-  const setTypeDefaultColorWithHistory = undoableAction('Change legend color', featureActions.setTypeDefaultColor);
+  const setTypeDefaultColorWithHistory = undoableAction('Change feature color', featureActions.setTypeDefaultColor);
   // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
   /** @param {number} index @param {string} color */
   const updateLegendEntryColorInPopup = async (index, color) => {
     const entry = state.activeDrawing().legendEntries.value[index];
     const type = entry ? await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
-    return typeof type === 'string' ? setTypeDefaultColorWithHistory(type, color) : updateLegendEntryColorShown(index, color);
+    if (typeof type === 'string') return setTypeDefaultColorWithHistory(type, color);
+    // null: no default color draws the row (the swatch only); undefined: the matches went stale, so do nothing.
+    return type === null ? updateLegendEntryColorShown(index, color) : type;
   };
   const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
     'Change legend stroke color',
@@ -6007,6 +6009,7 @@ export const createAppSetup = () => {
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
     readLegendTrackKind: (entry) => displayedTrackLegendRows(state.activeDrawing()).get(legendEntryKey(entry))?.kind ?? null,
     readLegendRowDefaultColorType: (entry) => featureActions.legendRowDefaultColorType(legendEntryKey(entry)),
+    readUserDefaultColor: (type) => resultsManager.readUserDefaultColor(state.activeDrawing(), type),
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
     readCommittedRecordRows: recordDisplayControls.committedRecordRows,

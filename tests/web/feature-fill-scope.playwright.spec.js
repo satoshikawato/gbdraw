@@ -486,6 +486,19 @@ test('the feature popup stays open after a Color or Stroke Change Scope choice (
     await expect(fill).toHaveValue('#c026d3');
     await expect.poll(async () => (await drawn()).fill).toBe('#c026d3');
 
+    // Choosing Color in the mode select keeps the stroke's own color (no dialog); a picked color asks, and Cancel
+    // returns the picker to the color the feature has.
+    const strokeMode = popup.getByLabel('Feature stroke color mode');
+    const strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
+    await expect(strokeMode).toHaveValue('auto');
+    const strokeOriginal = await strokePicker.inputValue();
+    await strokeMode.selectOption('color');
+    await expect(strokeMode).toHaveValue('color');
+    await strokePicker.fill('#00aa00');
+    await choose('Stroke Change Scope', 'Cancel');
+    await expect(strokePicker, 'Cancel: the stroke picker shows the feature\'s color').toHaveValue(strokeOriginal);
+    await expect(strokeMode).toHaveValue('color');
+
     await width.fill('2.5');
     await width.press('Enter');
     await choose('Stroke Change Scope', 'Cancel');

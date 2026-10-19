@@ -76,6 +76,8 @@ import {
  *   The kind of the track whose row this is in the displayed Result (`trackLegendRows`); null: a feature row.
  * @property {(entry: LegendEntry) => string | null} readLegendRowDefaultColorType
  *   The type whose default color draws the row and its Color sets (OV-1281), once the matches are ready.
+ * @property {(type: string) => string | null} readUserDefaultColor
+ *   The user default color of a feature type, or null when the user set none.
  * @property {() => { records?: readonly RequestRecordLike[] } | null} getCommittedRequest
  *   The request of the displayed Result.
  * @property {() => { records?: readonly AlignmentDecisionLike[] } | null} readAlignmentInspector
@@ -143,10 +145,10 @@ const TRACK_ROW_COLOR_SOURCE = 'Changes this legend swatch only. The plot keeps 
  * The legend-entry popup view.
  * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
  *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null,
- *   defaultColorType: string | null }} input
+ *   defaultColorType: string | null, replacedDefaultColor: string | null }} input
  *   `name`: the name the Legend draws. `trackKind`: the kind of the track whose row it is; null: a feature row.
  */
-const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType }) => {
+const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType, replacedDefaultColor }) => {
   const key = text(legendEntryKey(entry));
   const ruleLines = trackKind ? [] : rules.map(colorRuleText);
   const colorSource = trackKind
@@ -156,7 +158,8 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
       : featureTypes.has(key)
         // OV-1281: the scope dialog's words for what its Legend item choice sets (OIC-029).
         ? `Default color of ${key} features${defaultColorType ? `. A change sets the ${defaultColorType} default color (${
-          defaultColorType} features without their own color or rule, also hidden ones).` : ''}`
+          defaultColorType} features without their own color or rule, also hidden ones).${
+          replacedDefaultColor ? ` Replaces your ${defaultColorType} default color ■ ${replacedDefaultColor}.` : ''}` : ''}`
         : 'Set on individual features';
   return {
     kind: /** @type {const} */ ('legend-entry'),
@@ -289,7 +292,7 @@ const CIRCULAR_EDIT_HINTS = {
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
   state, computed, revealSetting, readLegendEntryColor, readShownLegendName = (caption) => caption, readLegendRowRules, countLegendCaptionFeatures,
-  readLegendTrackKind, readLegendRowDefaultColorType, getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
+  readLegendTrackKind, readLegendRowDefaultColorType, readUserDefaultColor, getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
   /** @returns {LegendEntry[]} */
@@ -308,11 +311,14 @@ export const createPreviewItemPopup = ({
     let featureCount = null;
     /** @type {string | null} */
     let defaultColorType = null;
+    /** @type {string | null} */
+    let replacedDefaultColor = null;
     // A track row has no rules and no features to read.
     if (!trackKind) {
       try {
         rules = readLegendRowRules(entry);
         if (matchesReady) [featureCount, defaultColorType] = [countLegendCaptionFeatures(text(legendEntryKey(entry))), readLegendRowDefaultColorType(entry)];
+        if (defaultColorType) replacedDefaultColor = readUserDefaultColor(defaultColorType);
       } catch {
         // The rule matches are still preparing: the popup shows the color alone.
       }
@@ -320,7 +326,7 @@ export const createPreviewItemPopup = ({
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
       entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes,
-      trackKind, defaultColorType
+      trackKind, defaultColorType, replacedDefaultColor
     });
   };
 
