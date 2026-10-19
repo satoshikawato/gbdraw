@@ -284,7 +284,7 @@ test('a palette row offers and keeps the color it shows after palette edits', as
   // in the color it showed, not the color it recorded at the last Generate.
   await deleteLegendRow(page, 'CDS');
   expect.soft(await page.evaluate(() => String([...document.querySelectorAll('ul[aria-labelledby="deleted-legend-items-label"] li')]
-    .find((item) => item.textContent.includes('CDS'))?.querySelector('div[title]')?.getAttribute('title') || 'no Deleted items row')
+    .find((item) => item.textContent.includes('CDS'))?.querySelector('span[title]')?.getAttribute('title') || 'no Deleted items row')
     .toLowerCase()), 'the Deleted items swatch of the CDS row').toBe(nextCds);
   await history(page, 'undo');
   await expect.poll(() => legendRowColor(page, 'CDS'), { message: 'Undo of the delete' }).toBe(nextCds);

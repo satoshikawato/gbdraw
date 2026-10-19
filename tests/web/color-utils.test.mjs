@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   buildDefaultColorOverrideTsv,
   buildPaletteColorOverrideRows,
+  colorSwatchView,
   colorValueForMode,
   colorValueMode,
   interpolateColor,
@@ -20,6 +21,13 @@ assert.equal(toNativeColorInputValue(null, '#aabbcc'), '#aabbcc');
 assert.equal(toNativeColorInputValue('none', '#aabbcc'), '#aabbcc');
 assert.equal(toNativeColorInputValue('#AbC'), '#aabbcc');
 assert.equal(toNativeColorInputValue('invalid', 'invalid'), '#000000');
+
+// OV-1386: a color of none shows an empty swatch and None, never a stale fill or a
+// black picker; its picker starts at the fallback. Any other color shows itself.
+assert.deepEqual(colorSwatchView('none', '#54bcf8'), { none: true, fill: 'transparent', picker: '#54bcf8', label: 'None' });
+assert.deepEqual(colorSwatchView(' None '), { none: true, fill: 'transparent', picker: '#000000', label: 'None' });
+assert.deepEqual(colorSwatchView('#54BCF8', '#000000'), { none: false, fill: '#54BCF8', picker: '#54bcf8', label: '#54BCF8' });
+assert.deepEqual(colorSwatchView('red'), { none: false, fill: 'red', picker: '#ff0000', label: 'red' });
 
 assert.equal(colorValueForMode('auto', '#123456'), null);
 assert.equal(colorValueForMode('none', '#123456'), 'none');

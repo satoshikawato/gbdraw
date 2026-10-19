@@ -655,6 +655,19 @@
             font-weight: 600;
             overflow-wrap: anywhere;
         }
+        /* OV-1386: a color of none, as the Palette pane shows None: an empty swatch, struck through. */
+        :root {
+            --color-none-swatch: linear-gradient(to top right, transparent calc(50% - 0.75px), #94a3b8 calc(50% - 0.75px), #94a3b8 calc(50% + 0.75px), transparent calc(50% + 0.75px));
+        }
+        .color-swatch-none {
+            background-image: var(--color-none-swatch);
+        }
+        input[type="color"].color-input-none::-webkit-color-swatch {
+            background: var(--color-none-swatch) #ffffff !important;
+        }
+        input[type="color"].color-input-none::-moz-color-swatch {
+            background: var(--color-none-swatch) #ffffff !important;
+        }
         .match-cell-sub,
         .match-mono {
             color: #475569;
@@ -6712,9 +6725,9 @@
                          :class="{ 'preview-item-popup': clickedPairwiseMatch.previewItem }"
                          :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
-                            <div v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
+                            <color-swatch v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
                                  class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
-                                 :style="{ backgroundColor: (previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8' }"></div>
+                                 :color="(previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8'"></color-swatch>
                             <i v-else class="ph ph-text-aa text-slate-500 mt-1 shrink-0" aria-hidden="true"></i>
                             <div v-if="previewItemView" class="min-w-0">
                                 <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ previewItemView.title }}</div>
@@ -6747,12 +6760,15 @@
                                     <section aria-labelledby="preview-legend-color-heading">
                                         <h3 id="preview-legend-color-heading" tabindex="-1" data-dialog-initial-focus class="feature-popup-heading">{{ t('Color') }}</h3>
                                         <div class="flex items-center gap-2">
-                                            <input type="color" :value="previewItemView.color"
-                                                   @change="updateLegendEntryColorInPopup(previewItemView.index, $event.target.value, $event.target, () => previewItemView.color)"
+                                            <!-- OV-1386: a row of color none shows the input empty and None, as the Palette pane does; it opens at its type's palette color. -->
+                                            <input type="color" :value="previewItemView.swatch.picker"
+                                                   @change="updateLegendEntryColorInPopup(previewItemView.index, $event.target.value, $event.target, () => previewItemView.swatch.picker)"
                                                    :aria-label="t('Color of {name}', { name: previewItemView.name })"
+                                                   aria-describedby="preview-legend-color-value"
                                                    :disabled="!semanticMutationAvailable"
+                                                   :class="{ 'color-input-none': previewItemView.swatch.none }"
                                                    class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
-                                            <span class="match-mono">{{ previewItemView.color }}</span>
+                                            <span id="preview-legend-color-value" :class="previewItemView.swatch.none ? 'text-xs text-slate-600' : 'match-mono'" :data-color-none="previewItemView.swatch.none ? '' : null">{{ previewItemView.swatch.label }}</span>
                                         </div>
                                         <p class="match-muted mt-1" data-preview-legend-color-source><default-color-scope-line v-if="previewItemView.defaultColorLine" :line="previewItemView.defaultColorLine"></default-color-scope-line><template v-else>{{ previewItemView.colorSource }}</template></p>
                                         <ul v-if="previewItemView.ruleLines.length" class="mt-1 space-y-0.5 text-xs text-slate-700">
@@ -7846,7 +7862,7 @@
                                             :title="t('Drag to reorder, or press the Up or Down arrow')">
                                         <i class="ph ph-dots-six-vertical text-sm" aria-hidden="true"></i>
                                     </button>
-                                    <div class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
+                                    <color-swatch class="w-5 h-5 rounded border border-slate-300 shrink-0" :color="legendEntryColor(entry)"></color-swatch>
                                     <input type="text" :value="shownLegendEntryName(entry)" :aria-label="t('Legend entry {name} name', { name: shownLegendEntryName(entry) })" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="t('Stroke options for {name}', { name: shownLegendEntryName(entry) })" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry) ? t('Hide stroke options') : t('Show stroke options')">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
@@ -7880,7 +7896,7 @@
                                 </div>
                                 <ul aria-labelledby="deleted-legend-items-label" class="space-y-1">
                                     <li v-for="(entry, idx) in deletedLegendEntries" :key="`deleted-${idx}-${entry.caption}`" class="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
-                                        <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: deletedLegendEntryColor(entry) }" :title="deletedLegendEntryColor(entry)"></div>
+                                        <color-swatch class="w-4 h-4 rounded border border-slate-300 shrink-0" :color="deletedLegendEntryColor(entry)"></color-swatch>
                                         <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ shownLegendEntryName(entry) }}</span>
                                         <button :aria-label="t('Restore {name}', { name: shownLegendEntryName(entry) })" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" :title="t('Restore this item')" :disabled="!semanticMutationAvailable">{{ t('Restore') }}</button>
                                     </li>

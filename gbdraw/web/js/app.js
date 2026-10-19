@@ -7,6 +7,7 @@ import {
   SpecificRuleRows,
   ActionMenu,
   AutoValueField,
+  ColorSwatch,
   ColorValueControl,
   DefaultColorScopeLine,
   HelpTip,
@@ -35,7 +36,7 @@ import { settingApplicationNote, settingApplicationSentence, settingApplicationT
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
+  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
   methods: { formatFeatureLocation, settingApplicationNote, settingApplicationSentence, settingApplicationText },
   setup: createAppSetup
 });
