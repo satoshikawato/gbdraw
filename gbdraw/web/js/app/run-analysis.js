@@ -99,7 +99,8 @@ import {
 import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
-  serializeSpecificRules
+  serializeSpecificRules,
+  specificRulesFileCaptions
 } from '../services/file-imports.js';
 import {
   pruneUnmatchedFeatureOverrides,
@@ -206,7 +207,6 @@ import {
 /** @import { OrderedConservationSource } from '../services/conservation-series.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
-/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
@@ -5267,7 +5267,7 @@ export const createRunAnalysis = ({
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
-        fileLegendCaptions: new Set(candidateRules.filter((/** @type {SpecificColorRule} */ rule) => rule.fromFile && rule.cap).map((/** @type {SpecificColorRule} */ rule) => rule.cap)),
+        fileLegendCaptions: specificRulesFileCaptions(candidateRules),
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
         legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,

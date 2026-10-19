@@ -12,7 +12,7 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 48 stores protein results in the search frame
+## Unreleased: Session 48 stores protein results in the search frame and what each file card loaded
 
 Session version 48 stores the protein results of a reverse-complemented Linear
 record in the record's search frame (the selected and cropped record on its
@@ -68,7 +68,39 @@ writer at `cdd310134` and `7aad9e3e0`) are the positive fixtures.
 The derived LOSATP identity token becomes `derived-option-conformance-v3`:
 derived entries written before are cache misses and are recomputed once from
 the raw cache, while the stored results are still reused, so no search runs
-again. No other field changed.
+again.
+
+Session 48 also stores what each Web file card loaded into a mode slice, so
+that **Remove** on the card gives the settings as if the file had never been
+loaded (OV-1280, D-19). One owner, `gbdraw/web/js/services/file-imports.js`,
+writes and reads it; the card key (`t_color`, `whitelist`,
+`qualifier_priority`, `d_color`, `blacklist`) is the identity:
+
+- A row that a file added carries its card's mark (`markedRows`, `isCardRow`): a `rules`
+  row keeps `fromFile: true`, the mark Sessions have stored since main's
+  2026-01-14 writer (D-ORIGIN-1), set only by the rules-file import and the CLI
+  `-t` reading: a built-in preset's rows carry no mark and are the user's
+  (D-21); a `whitelist` or `qualifierPriorityRules`
+  row carries `importedFrom` with its card key. A priority row whose hand
+  order the file replaced keeps that order in `handOrder`. A row edited by
+  hand after the load loses its mark and is the user's.
+- `config.fileImports` (registered in `gbdraw/web_support/mode_scoped_settings.py`)
+  keeps, for `d_color`, each feature type's file color and the hand color it
+  replaced (`handColor`, `null` for the palette's), and for `blacklist`, the
+  file's words and the text before the load. Remove takes a value back only
+  while it still holds the file's value.
+
+A Session up to 47 has no `importedFrom` and no `fileImports`: its whitelist
+and priority rows read as hand rows, and Remove keeps them; its `fromFile`
+rules rows are the Specific rules card's, as they were, including the rows of a
+preset, which the earlier writer stored with `fromFile` too. A Session 48 without a
+draft (CLI `--session_output`, the Python API) reads the rows its `-t`,
+whitelist, and priority files, and its `-d` and blacklist files, put into the
+request as that card's rows (`FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION` in
+`gbdraw/session_io.py`); a CLI re-save keeps the draft's marks.
+`file-card-imports-circular.v48.gbdraw-session.json.gz` (the Web writer after
+all five cards and hand edits, D-ORIGIN-2) is the positive fixture. No other
+field changed.
 
 ## Unreleased: Session 47 keys the Legend edits by the row key
 

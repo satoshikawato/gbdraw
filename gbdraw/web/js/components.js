@@ -747,7 +747,8 @@ export const ColorValueControl = {
  * @property {boolean | string} [multiple]
  * @property {boolean | string} [requestClear]
  * @property {boolean} [artifactHistory]
- * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored; a result of `false` is not committed
+ * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored, and after
+ *   a Remove with the removed file (OV-1280); a result of `false` is not committed
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -810,12 +811,18 @@ export const FileUploader = {
         emit('clearRequest', event?.currentTarget || null);
         return;
       }
+      // One History step holds the Remove and what it takes back (OV-1280).
+      const removed = /** @type {File | undefined} */ (selectedFiles.value[0]);
       const history = window.__GBDRAW_HISTORY__;
-      if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', async () => {
-          emit('update:modelValue', props.multiple ? [] : null);
-          await nextTick();
-        });
+      const apply = async () => {
+        emit('update:modelValue', props.multiple ? [] : null);
+        await nextTick();
+        return await props.afterChange?.(removed);
+      };
+      if (props.artifactHistory) {
+        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+      } else if (history?.runUndoable) {
+        void history.runUndoable('Change uploaded file', apply);
       } else {
         emit('update:modelValue', props.multiple ? [] : null);
       }

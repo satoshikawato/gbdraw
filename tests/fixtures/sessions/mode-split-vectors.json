@@ -5153,6 +5153,16 @@
       },
       "loadDefaults": [
         {
+          "pointer": "/modes/circular/config/fileImports",
+          "value": {},
+          "projected": false
+        },
+        {
+          "pointer": "/modes/linear/config/fileImports",
+          "value": {},
+          "projected": true
+        },
+        {
           "pointer": "/modes/circular/config/adv/linear_accession_visibility",
           "value": "auto",
           "projected": false

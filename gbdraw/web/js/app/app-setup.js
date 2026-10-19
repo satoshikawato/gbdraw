@@ -25,7 +25,7 @@
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState, sameColors } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -1935,6 +1935,7 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
+    moveLegendRecords: legendActions.moveLegendRecords,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     showEditorIntent: (options) => showEditorIntent(options),
@@ -3345,6 +3346,15 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
+      // OV-1280: a Result a mode switch shows again, whose drawing changed its
+      // rules while it was not shown (a file card's Remove, an Undo or Redo
+      // there), is drawn again when its Legend cannot show them, as after a
+      // History restore of the rules.
+      const arrival = arrivalShownRules;
+      arrivalShownRules = null;
+      if (context.bindingOptions.modeArrival && arrival?.rules && arrival.identity === context.resultIdentity) {
+        featureActions.followRestoredSpecificRules(arrival.rules);
+      }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
       // drawing's current paint, also after an edit made since its paint was
@@ -3788,6 +3798,7 @@ export const createAppSetup = () => {
     setLabelFilterMode,
     addWhitelistRule,
     removeWhitelistRule,
+    editWhitelistRule,
     removePriorityRule,
     addFeature,
     removeFeature,
@@ -4143,6 +4154,11 @@ export const createAppSetup = () => {
   // whose intent changed since it was last shown; each paint domain it shows
   // returns to Python's values where no operation sets it (OV-144).
   const LEGEND_STRUCTURE_DOMAINS = LIVE_EDIT_DOMAINS.legendStructure;
+  // OV-1280: the rule table the Result a mode switch shows again was last
+  // shown with (`resultPaintRecord`), read once it is ready (`afterReady`);
+  // null rules: unknown (a restored Result).
+  /** @type {{ identity: string, rules: SpecificColorRule[] | null } | null} */
+  let arrivalShownRules = null;
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
@@ -4154,6 +4170,7 @@ export const createAppSetup = () => {
   const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState(drawing);
+    arrivalShownRules = null;
     const departedIntent = departedResultIntent.get(identity);
     departedResultIntent.delete(identity);
     if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
@@ -4166,6 +4183,7 @@ export const createAppSetup = () => {
       return;
     }
     const previous = resultPaintRecord.display(identity, current);
+    if (context.bindingOptions.modeArrival) arrivalShownRules = { identity, rules: paintRuleTable(previous) };
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
     const strokes = previous.strokes !== current.strokes;
@@ -7286,6 +7304,7 @@ export const createAppSetup = () => {
     setLabelFilterMode,
     addWhitelistRule,
     removeWhitelistRule,
+    editWhitelistRule,
     removePriorityRule,
     featureKeys,
     defaultColorKeys,

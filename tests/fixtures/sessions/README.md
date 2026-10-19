@@ -331,3 +331,10 @@ features in `*_feature_svg_id` and has no `*_view_feature_svg_id` column; both
 are the positive fixtures of that reading (OV-1183) and of the Session 39 Web
 Load conversion (OV-1181): `tests/test_session_compat.py` converts and replays
 them.
+
+`file-card-imports-circular.v48.gbdraw-session.json.gz` is a Web **Save
+Session** download of the current writer (Session 48, OV-1280, D-ORIGIN-2):
+Circular holds no genome, the five file cards, and hand edits made before and
+after each load. It pins the rows each card marks, the Default colors and
+Blacklist words in `config.fileImports`, and the rows a hand edit made the
+user's. The steps and inputs are in `file-card-imports.provenance.json`.

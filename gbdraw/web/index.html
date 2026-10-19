@@ -5096,9 +5096,9 @@
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
                                         <p class="ui-hint">Only show labels matching case-insensitive Python regex. Examples: <span class="font-mono">(?i)NADH</span> and <span class="font-mono">(?P&lt;name&gt;NADH)</span>. Use <span class="font-mono">^...$</span> for exact matches.</p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
-                                            <input v-model="row.feat" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input v-model="row.qual" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input v-model="row.key" placeholder="Pattern" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.feat" @input="editWhitelistRule(i, 'feat', $event.target.value)" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.qual" @input="editWhitelistRule(i, 'qual', $event.target.value)" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.key" @input="editWhitelistRule(i, 'key', $event.target.value)" placeholder="Pattern" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
                                             <button @click="removeWhitelistRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1">×</button>
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">+ Add Rule</button>
@@ -6734,7 +6734,7 @@
                                                    class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
                                             <span class="match-mono">{{ previewItemView.color }}</span>
                                         </div>
-                                        <p class="match-muted mt-1" data-preview-legend-color-source>{{ previewItemView.colorSource }}<template v-if="previewItemView.defaultColorLine">. <default-color-scope-line :line="previewItemView.defaultColorLine"></default-color-scope-line></template></p>
+                                        <p class="match-muted mt-1" data-preview-legend-color-source><default-color-scope-line v-if="previewItemView.defaultColorLine" :line="previewItemView.defaultColorLine"></default-color-scope-line><template v-else>{{ previewItemView.colorSource }}</template></p>
                                         <ul v-if="previewItemView.ruleLines.length" class="mt-1 space-y-0.5 text-xs text-slate-700">
                                             <li v-for="line in previewItemView.ruleLines" :key="line" class="match-mono">{{ line }}</li>
                                         </ul>

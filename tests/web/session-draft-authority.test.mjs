@@ -249,6 +249,7 @@ assert.deepEqual(CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, [
   'filterMode',
   'whitelist',
   'blacklistText',
+  'fileImports',
   'losatProgram',
   'circularConservation',
   'annotationSets',

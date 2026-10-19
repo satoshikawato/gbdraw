@@ -4,10 +4,16 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
+  importPriorityRows,
+  markedRows,
   parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
-  parseWhitelistRules
+  parseWhitelistRules,
+  removeImportedPriorityRows,
+  withImportedBlacklistWords,
+  withoutImportedBlacklistWords,
+  withoutImportedRows
 } from '../services/file-imports.js';
 import {
   legendPositionOrDefault,
@@ -17,6 +23,7 @@ import {
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 /** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { FileImportCard } from '../services/file-imports.js' */
 
 /**
  * @typedef {object} RecordDiscoveryWatcherOptions
@@ -48,7 +55,7 @@ export const runRecordDiscoveryWatcher = async ({
  * for them. The composition root creates it before all of them.
  * @typedef {object} AuxiliaryFileImports
  * @property {(file: FileLike, pending: Promise<boolean>) => void} track Holds `file`'s import until it settles.
- * @property {(file: FileLike) => Promise<boolean> | undefined} wait The import of `file`, while it applies.
+ * @property {(file: FileLike) => Promise<boolean> | undefined} wait The import of `file`, or its removal (OV-1280), while it applies.
  * @property {() => boolean} isPending
  * @property {() => Promise<void>} settle Waits until no import is pending, including one that starts meanwhile.
  */
@@ -98,12 +105,16 @@ export const createAuxiliaryFileImports = (reactive) => {
  *   The Legend owner's reaction to a rebuilt Legend.
  * @property {{
  *   syncLabelEditor: (options?: Record<string, any>) => void,
- *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>
- * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV.
+ *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>,
+ *   removeImportedSpecificRules: (drawing: DrawingState) => Promise<unknown>
+ * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV and its Remove.
  * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
  *   The Legend layout owner's canvas padding and drag affordances.
- * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
- *   The Results owner's palette draft projections.
+ * @property {{
+ *   applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void,
+ *   importDefaultColors: (drawing: DrawingState, colors: Record<string, string>) => void,
+ *   removeImportedDefaultColors: (drawing: DrawingState) => void
+ * }} resultsManager The Results owner's palette draft projections and the Default colors file's colors.
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
  * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
  * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
@@ -389,9 +400,71 @@ export const setupWatchers = ({
   const applyFileImport = (key, apply, file, previousFile) => {
     const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
     restoredFileSelections.delete(key);
-    if (restored) return;
-    if (semanticFileWatchersSuppressed.value || !file) return;
+    if (restored || semanticFileWatchersSuppressed.value) return;
+    if (!file) return previousFile ? startFileRemoval(/** @type {FileImportCard} */ (key), previousFile) : undefined;
     return startFileImport(key, apply, file, previousFile);
+  };
+  // OV-1280 (D-19): Remove on a card, and a file that replaces the card's
+  // file, take back what the card's file put into each drawing.
+  const drawingsOf = () => /** @type {DrawingState[]} */ ([state.drawings.circular, state.drawings.linear]);
+  /** @type {Record<Exclude<FileImportCard, 't_color'>, (drawing: DrawingState) => void>} */
+  const removeImport = {
+    d_color: (drawing) => resultsManager.removeImportedDefaultColors(drawing),
+    blacklist: (drawing) => {
+      const imported = drawing.fileImports.blacklist;
+      if (!imported) return;
+      drawing.manualBlacklist.value = withoutImportedBlacklistWords(drawing.manualBlacklist.value, imported);
+      delete drawing.fileImports.blacklist;
+    },
+    whitelist: (drawing) => {
+      const rows = withoutImportedRows(drawing.manualWhitelist, 'whitelist');
+      if (rows.length < drawing.manualWhitelist.length) drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...rows);
+    },
+    qualifier_priority: (drawing) => removeImportedPriorityRows(drawing.manualPriorityRules)
+  };
+  /**
+   * @param {FileImportCard} key
+   * @param {DrawingState[]} drawings
+   * @returns {Promise<boolean>}
+   */
+  const removeFileImport = async (key, drawings) => {
+    if (key !== 't_color') {
+      drawings.forEach(removeImport[key]);
+      return true;
+    }
+    // The shown drawing first: a removal it refuses leaves every drawing as it
+    // was (REVIEW-2 N2); one not shown cannot refuse.
+    const shown = state.activeDrawing();
+    for (const drawing of [...drawings.filter((one) => one === shown), ...drawings.filter((one) => one !== shown)]) {
+      if (await featureActions.removeImportedSpecificRules(drawing) !== true) return false;
+    }
+    return true;
+  };
+  /**
+   * The removal waits for the imports still applying, as they wait for each
+   * other; a removal that cannot apply brings the card back.
+   * @param {FileImportCard} key
+   * @param {FileLike} file The removed file.
+   * @returns {Promise<boolean>}
+   */
+  const startFileRemoval = (key, file) => {
+    const pending = fileImportApplications.then(async () => {
+      try {
+        if (await removeFileImport(key, drawingsOf())) return true;
+      } catch (e) {
+        // A refused removal (the rule matching failed, a Legend row conflict)
+        // is reported as the import's would be (REVIEW-1 N1).
+        errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
+      }
+      if (files[key] === null) {
+        restoredFileSelections.set(key, file);
+        files[key] = file;
+      }
+      return false;
+    });
+    fileImportApplications = pending.catch(() => {});
+    trackAuxiliaryFileImport(file, pending);
+    return pending;
   };
   /**
    * @param {string} key
@@ -466,7 +539,8 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { colors, count } = parseColorTable(text);
-      drawing.currentColors.value = { ...drawing.currentColors.value, ...colors };
+      drawingsOf().forEach(removeImport.d_color);
+      resultsManager.importDefaultColors(drawing, colors);
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -479,6 +553,8 @@ export const setupWatchers = ({
     try {
       const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
       if (importedCount === false) return false;
+      // The import replaced the rows the earlier file added to its drawing.
+      if (!await removeFileImport('t_color', drawingsOf().filter((other) => other !== drawing))) return false;
       console.log(`Loaded ${importedCount} rules from file.`);
     } catch (e) {
       if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
@@ -490,14 +566,8 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { rules, count } = parsePriorityRules(text);
-      rules.forEach((rule) => {
-        const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat: string }} */ r) => r.feat === rule.feat);
-        if (idx >= 0) {
-          drawing.manualPriorityRules[idx].order = rule.order;
-        } else {
-          drawing.manualPriorityRules.push({ feat: rule.feat, order: rule.order });
-        }
-      });
+      drawingsOf().forEach(removeImport.qualifier_priority);
+      importPriorityRows(drawing.manualPriorityRules, rules);
       console.log(`Loaded ${count} priority rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -509,7 +579,8 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { rules, count } = parseWhitelistRules(text);
-      rules.forEach((rule) => drawing.manualWhitelist.push(rule));
+      drawingsOf().forEach(removeImport.whitelist);
+      drawing.manualWhitelist.push(...markedRows(rules, 'whitelist'));
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -521,10 +592,11 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { words, count } = parseBlacklistWords(text);
-      if (words.length > 0) {
-        const existing = drawing.manualBlacklist.value ? drawing.manualBlacklist.value.trim() : '';
-        const separator = existing && !existing.endsWith(',') ? ', ' : '';
-        drawing.manualBlacklist.value = existing + separator + words.join(', ');
+      drawingsOf().forEach(removeImport.blacklist);
+      const { text: blacklist, imported } = withImportedBlacklistWords(drawing.manualBlacklist.value, words);
+      drawing.manualBlacklist.value = blacklist;
+      if (imported) {
+        drawing.fileImports.blacklist = imported;
         console.log(`Loaded ${count} blacklist words.`);
       }
     } catch (e) {

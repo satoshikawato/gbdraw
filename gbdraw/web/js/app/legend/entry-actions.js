@@ -2,6 +2,7 @@
 /** @import { DrawingState } from '../../state.js' */
 /** @import { LegendRowName } from '../../services/legend-row-names.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
+/** @import { RuleRowColor } from '../../services/specific-color-rules.js' */
 /**
  * A Legend row record as the editor lists, restores, and compares it.
  * @typedef {{ caption?: string, originalCaption?: string, color?: string, featureIds?: unknown[], xPos?: number, yPos?: number }} EntryRecord
@@ -22,7 +23,7 @@ import {
   resultLegendRows,
   shownLegendRowNames
 } from '../../services/legend-svg.js';
-import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
+import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
 /** @param {unknown} value */
@@ -410,26 +411,37 @@ export const createLegendEntryActions = ({
   // Moves the drawing's Legend records, the generated inventory and colors,
   // and the open Stroke options of each re-keyed row to its new key
   // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
-  // written, moved.
+  // written, moved. For a drawing that is not shown (`hidden`: the Specific
+  // rules file card's Remove, OV-1280), the records of the `removed` rows go
+  // too, with the Legend colors that copy them (`legendColorCopies`), the
+  // moved list is written here, and the inventory, colors, and Stroke
+  // options, which are the shown Result's, stay.
   /**
    * @param {DrawingState} drawing
    * @param {EntryRecord[]} entries
    * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
+   * @param {{ removed: readonly RuleRowColor[] } | null} [hidden] The removed rule rows.
    * @returns {EntryRecord[]}
    */
-  const moveLegendRecords = (drawing, entries, moves) => {
+  const moveLegendRecords = (drawing, entries, moves, hidden = null) => {
+    /** @type {Set<string>} */
+    const removed = new Set(hidden ? hidden.removed.map(({ caption }) => caption) : []);
+    /** @param {EntryRecord[]} list @returns {EntryRecord[]} */
+    const kept = (list) => (hidden ? list.filter((entry) => !removed.has(legendEntryKey(entry))) : list);
+    const colorOverrides = { ...drawing.legendColorOverrides };
+    if (hidden) legendColorCopies(colorOverrides, hidden.removed).forEach((key) => { delete colorOverrides[key]; });
     /** @type {Set<string>} */
     const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
     const moved = rekeyLegendRecords({
-      entries,
-      deletedEntries: /** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || []),
-      dormantEntries: /** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || []),
-      colorOverrides: { ...drawing.legendColorOverrides },
+      entries: kept(entries),
+      deletedEntries: kept(/** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || [])),
+      dormantEntries: kept(/** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || [])),
+      colorOverrides,
       strokeOverrides: { ...drawing.legendStrokeOverrides },
-      addedCaptions: [...drawing.addedLegendCaptions.value],
-      originalOrder: /** @type {string[]} */ (originalLegendOrder.value),
-      originalColors: /** @type {Record<string, string>} */ (originalLegendColors.value),
-      strokeOptionsOpen: [...strokeOptionsOpen]
+      addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !removed.has(caption)),
+      originalOrder: hidden ? [] : /** @type {string[]} */ (originalLegendOrder.value),
+      originalColors: hidden ? {} : /** @type {Record<string, string>} */ (originalLegendColors.value),
+      strokeOptionsOpen: hidden ? [] : [...strokeOptionsOpen]
     }, moves);
     drawing.deletedLegendEntries.value = moved.deletedEntries;
     drawing.dormantLegendEntries.value = moved.dormantEntries;
@@ -440,6 +452,10 @@ export const createLegendEntryActions = ({
       Object.assign(store, records);
     }
     drawing.addedLegendCaptions.value = new Set(moved.addedCaptions);
+    if (hidden) {
+      drawing.legendEntries.value = moved.entries;
+      return moved.entries;
+    }
     originalLegendOrder.value = moved.originalOrder;
     originalLegendColors.value = moved.originalColors;
     strokeOptionsOpen.clear();
@@ -847,6 +863,7 @@ export const createLegendEntryActions = ({
     legendEntryName,
     legendRowIsNamed,
     legendRowName,
+    moveLegendRecords,
     onLegendGeometryChanged,
     prepareFileLegendEntries,
     readLegendRowNames,

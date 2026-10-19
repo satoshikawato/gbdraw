@@ -2,6 +2,7 @@
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { specificRulesFileCaptions } from './file-imports.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
@@ -42,7 +43,7 @@ import {
   configFieldRepairs, defaultSettingsContainers, installStoredSettings, readBlacklistText, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
   readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
-  readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
+  readColorRules, readFileImports, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readSessionInputType, readSimilarityAlignment
@@ -242,6 +243,7 @@ import {
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+  FILE_IMPORT_ORIGIN_SESSION_VERSION,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -888,6 +890,7 @@ export const buildConfigData = (drawing) => ({
   filterMode: drawing.filterMode.value,
   whitelist: drawing.manualWhitelist,
   blacklistText: drawing.manualBlacklist.value,
+  fileImports: cloneJsonData(drawing.fileImports),
   losatProgram: drawing.losatProgram.value,
   circularConservation: drawing.circularConservation,
   annotationSets: normalizeAnnotationSets(drawing.annotationSets),
@@ -2366,7 +2369,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         // A Session without a Web draft (CLI, Python) holds its tables only
         // in the request, so Load reads them; a draft holds them already.
         deferResourceContent: currentSession && hasStoredDraft,
-        adoptCanonicalPayloads: currentSession
+        adoptCanonicalPayloads: currentSession,
+        // OV-1280: from Session 48 on, a Session without a draft holds each
+        // table as its card's file.
+        markCardFileRows: !hasStoredDraft && sourceSessionVersion >= FILE_IMPORT_ORIGIN_SESSION_VERSION
       }
     : null;
   /** @type {SessionRequestProjection | null} */
@@ -2866,11 +2872,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   const storedRules = readColorRules(data.rules);
   if (!storedRules.kept) {
     drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...storedRules.value);
-    drawing.fileLegendCaptions.value = new Set(
-      storedRules.value
-        .filter((rule) => rule.fromFile && rule.cap)
-        .map((rule) => rule.cap)
-    );
+    drawing.fileLegendCaptions.value = specificRulesFileCaptions(storedRules.value);
   }
   if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
     replaceQualifierPriorityRules(drawing, data.qualifierPriorityRules);
@@ -2883,6 +2885,8 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
     drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...storedWhitelist.value);
   }
   if (data.blacklistText !== undefined) drawing.manualBlacklist.value = readBlacklistText(data.blacklistText).value;
+  // Absent before Session 48: no file's colors or words to take back (OV-1280).
+  replacePlainObject(drawing.fileImports, readFileImports(data.fileImports).value);
   if (data.losatProgram) {
     drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
   }
@@ -6066,7 +6070,8 @@ const importSessionDocument = async (e, options = {}) => {
         return Object.fromEntries(Object.entries(draft).filter(([key]) => !unsaved.includes(key)));
       };
       const split = splitDraftIntoModes({
-        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides']) || {},
+        // A Session 27-44 draft never saved `fileImports` (Session 48).
+        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides', 'fileImports']) || {},
         // With a catalog, the feature-edit migration writes `featureOverrides`.
         ...(savedDraft(data.features) ? { features: withoutUnsavedEmpty(features, data.features, [
           'featureColorOverrides', 'featureVisibilityManualRules', 'labelOverrideRows', 'labelTextBulkOverrides',

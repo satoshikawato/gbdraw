@@ -114,6 +114,7 @@ const resetRuleDraftState = (state, drawing) => {
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
   replaceReactiveArray(drawing.manualPriorityRules);
+  clearReactiveObject(drawing.fileImports);
   replaceReactiveObject(state.newPriorityRule, createDefaultPriorityRule());
   state.newColorFeat.value = editorDefaults.newColorFeat;
   state.newColorVal.value = editorDefaults.newColorVal;

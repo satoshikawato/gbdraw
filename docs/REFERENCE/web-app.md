@@ -1438,7 +1438,9 @@ Session saved and every Similarity group name, including the saved names of
 groups that the current results do not show. The **Default colors file**,
 **Specific rules file**, **Blacklist File**, **Whitelist File**, and **Priority
 File (TSV)** cards are removed with the settings they loaded; the input files
-(genome, Depth, and Circular conservation files) stay. In Linear it also clears each record's **Definition**, **Subtitle**,
+(genome, Depth, and Circular conservation files) stay. **Remove** on one of these
+cards takes back what its file loaded in both modes and keeps your own edits,
+including the rows a **Preset scheme** added; one **Undo** brings both back. In Linear the reset also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan, and turns the
 Linear comparisons off (their uploaded tables stay); the Files, each
 row's selected record, the file defaults, and Depth assignments stay. The name

@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { FileImports } from './file-imports.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
@@ -58,6 +59,7 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
  * @property {string} [filterMode] `None`, `Whitelist`, or `Blacklist`.
  * @property {Array<Record<string, any>>} [whitelist]
  * @property {string} [blacklistText]
+ * @property {FileImports} [fileImports] What the Default colors and Blacklist files set (OV-1280).
  * @property {string} [losatProgram]
  * @property {Record<string, any>} [circularConservation]
  * @property {Array<Record<string, any>>} [annotationSets]
@@ -126,7 +128,7 @@ export const createDefaultCircularConservation = () => ({ enabled: false, source
   subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
-  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
+  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'fileImports', 'losatProgram', 'circularConservation',
   'annotationSets', 'recordDisplayDrafts', 'recordsOff', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
@@ -177,11 +179,11 @@ export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDef
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
-  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
+  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string', fileImports: 'object',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 /** The fields of a stored rule row (Save refuses another; Load drops it with a row). */
 export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
-  qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
+  qualifierPriorityRules: ['feat', 'order', 'importedFrom', 'handOrder'], whitelist: ['feat', 'qual', 'key', 'importedFrom'],
   annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] });
 const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
