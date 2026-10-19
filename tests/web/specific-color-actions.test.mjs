@@ -1290,9 +1290,9 @@ test('a mode switch to a drawing whose file rules were removed while it was not 
 // else its caption), never by keys allocated again from the colors the rows
 // list, and a deleted row is one Python draws. So a type row that shares the
 // caption keeps its rename, color, and Delete.
-const hiddenRuleRow = ({ rule, entries, deleted = [], colors = {}, options = {} }) => {
+const hiddenRuleRow = ({ rule, rules = [rule], entries, deleted = [], colors = {}, options = {} }) => {
   const s = setup(undefined, options);
-  s.state.manualSpecificRules.splice(0, Infinity, { ...rule, fromFile: true });
+  s.state.manualSpecificRules.splice(0, Infinity, ...rules.map((one) => ({ ...one, fromFile: true })));
   s.state.legendEntries.value = entries.map(([key, caption, color]) => ({ caption, originalCaption: key, color }));
   s.state.deletedLegendEntries.value = deleted.map(([key, caption, color]) => ({ caption, originalCaption: key, color }));
   s.state.addedLegendCaptions.value = new Set(entries.map(([key]) => key).filter((key) => key.includes(' [')));
@@ -1354,6 +1354,21 @@ test('a hidden Remove retires the Legend color copy of a removed file rule row t
   assert.deepEqual({ ...s.state.legendColorOverrides }, {});
   assert.deepEqual(listedRows(s.state.legendEntries.value), []);
 });
+
+// Two removed rule groups stored under one key (no allocated key is listed)
+// each retire their own Legend color copy (OV-152): the copy of either color goes.
+for (const copy of ['#ff0000', '#0000ff']) {
+  test(`a hidden Remove of two file rules stored under one key retires the Legend color copy of either (${copy})`, async () => {
+    const { s } = hiddenRuleRow({
+      rules: [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#ff0000', cap: 'File' },
+        { feat: 'CDS', qual: 'gene', val: 'c', color: '#0000ff', cap: 'File' }],
+      entries: [],
+      colors: { File: copy, Other: copy }
+    });
+    assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+    assert.deepEqual({ ...s.state.legendColorOverrides }, { Other: copy }, 'the copy goes; a color of another row stays');
+  });
+}
 
 // D-21 (Q-ORIGIN-1 = A): preset rows are the user's, as hand-made rows are:
 // Remove and a new rules file never take them, in any drawing.

@@ -455,7 +455,7 @@ export const rekeyedRuleRows = (before, after, rendererRows = []) => {
  * @param {readonly Partial<SpecificColorRule>[]} before
  * @param {readonly Partial<SpecificColorRule>[]} after The rules of `before` that stay.
  * @param {Iterable<string>} listedKeys
- * @returns {{ gone: { caption: PythonLegendKey, color: string }[], rekeyed: Map<PythonLegendKey, PythonLegendKey> }}
+ * @returns {{ gone: RuleRowColor[], rekeyed: Map<PythonLegendKey, PythonLegendKey> }}
  */
 export const listedRuleRowRemoval = (before, after, listedKeys) => {
   const listed = [...listedKeys].map(captionRowKey);
@@ -482,6 +482,33 @@ export const listedRuleRowRemoval = (before, after, listedKeys) => {
   const gone = [...removed.values()].map((group) => ({ caption: storedKey(group), color: group.color }))
     .filter(({ caption }) => !held.has(caption));
   return { gone, rekeyed };
+};
+
+/**
+ * A rule row: its Legend key and the color its rules draw it in.
+ * @typedef {{ caption: PythonLegendKey, color: string }} RuleRowColor
+ */
+
+// OV-152: the keys of the Legend colors that copy a removed rule row's color,
+// which go with the row: left behind, a copy would paint the row Generate
+// draws for the features' palette color. A copy is stored under the row's key
+// in the row's color (the popup stores the caption's color when it recolors a
+// whole group, OV-61). A color set in the Legend editor is no copy: the editor
+// recolors the rules of a row a rule draws (legend.js), so its colors sit on
+// rows no rule draws and stay. Each removed row is read on its own, so two
+// removed groups stored under one key each retire their own copy.
+/**
+ * @param {Readonly<Record<string, string>>} overrides
+ * @param {readonly RuleRowColor[]} removedRows
+ * @returns {PythonLegendKey[]}
+ */
+export const legendColorCopies = (overrides, removedRows) => {
+  /** @type {PythonLegendKey[]} */
+  const copies = [];
+  for (const { caption, color } of removedRows) {
+    if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) copies.push(caption);
+  }
+  return copies;
 };
 
 // The rule rows the reading of saved captions re-keys (F2): a caption saved

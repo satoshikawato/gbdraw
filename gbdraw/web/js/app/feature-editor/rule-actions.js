@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
-/** @import { SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
@@ -11,7 +11,7 @@ import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-util
 import { isCardRow, parseSpecificRules, serializeSpecificRules, specificRulesFileCaptions, unmarkCardRow, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
+  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
@@ -75,11 +75,11 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
 /**
  * The Legend owner's move of a drawing's Legend records to the re-keyed keys
  * (`moveLegendRecords` in app/legend/entry-actions.js); with `hidden`, for a
- * drawing not shown, it also drops the records of the `removed` rows (key to
- * color; a Legend color that copies the row's color goes too) and writes the
+ * drawing not shown, it also drops the records of the `removed` rows (with
+ * the Legend colors that copy them, `legendColorCopies`) and writes the
  * drawing's Legend list.
  * @typedef {(drawing: DrawingState, entries: LegendEntry[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
- *   hidden?: { removed: ReadonlyMap<string, string> } | null) => unknown} MoveLegendRecordsPort
+ *   hidden?: { removed: readonly RuleRowColor[] } | null) => unknown} MoveLegendRecordsPort
  */
 
 /**
@@ -294,15 +294,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // win at Generate over the recolored rule, so a commit that recolors the row
   // retires it; `afterCommit` may store a new one.
   // OV-152: a commit that removes a rule row (Clear All, a deleted or
-  // recaptioned rule) retires that copy too; left behind, it would paint the
-  // row Generate draws for the features' palette color. A copy has the removed
-  // rule's caption and color. A color set in the Legend editor is no copy: the
-  // editor recolors the rules of a row a rule draws (legend.js), so its colors
-  // sit on rows no rule draws and stay.
+  // recaptioned rule) retires that copy too (`legendColorCopies`).
   /**
    * @param {DrawingState} drawing
    * @param {{ caption: string, color: string }[]} intents
-   * @param {{ caption: string, color: string }[]} removedRuleRows
+   * @param {readonly RuleRowColor[]} removedRuleRows
    */
   const retireSupersededLegendColors = (drawing, intents, removedRuleRows) => {
     const overrides = drawing.legendColorOverrides;
@@ -311,11 +307,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         delete overrides[caption];
       }
     }
-    for (const { caption, color } of removedRuleRows) {
-      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) {
-        delete overrides[caption];
-      }
-    }
+    legendColorCopies(overrides, removedRuleRows).forEach((key) => { delete overrides[key]; });
   };
   // OV-444 (OV-443, OV-445): this owner is the one writer of the rule table,
   // and every write goes through one line (`queueRuleWrite`), in the order it
@@ -851,7 +843,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const { gone, rekeyed } = listedRuleRowRemoval(before, kept, [...entries, ...deletedEntries, ...dormantEntries].map(legendEntryKey));
     drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
     drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
-    moveLegendRecords(drawing, entries, rekeyed, { removed: new Map(gone.map(({ caption, color }) => [caption, color])) });
+    moveLegendRecords(drawing, entries, rekeyed, { removed: gone });
   };
   /** @param {DrawingState} drawing */
   const removeImportedSpecificRules = (drawing) => {
