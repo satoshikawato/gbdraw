@@ -59,7 +59,6 @@ _SHARED_LENGTH_PAIRS = (
 _MODE_LENGTH_PAIRS: Mapping[DiagramMode, tuple[str, ...]] = {
     "circular": (
         "labels.font_size",
-        "labels.stroke_width",
         "objects.axis.circular.stroke_width",
     ),
     "linear": (

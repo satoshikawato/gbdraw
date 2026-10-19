@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal, Optional, Sequence, cast
 from .config.toml import load_config_toml
+from .labels.label_style import LABEL_LINES, LABEL_PROTECTIONS
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
@@ -696,6 +697,16 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Cannot be combined with --label_placement above_feature except as "auto". Default: "auto".',
         choices=['auto', 'embedded_only', 'external_only'],
         default='auto',
+        type=str)
+    parser.add_argument(
+        '--label_line',
+        help='Line under each feature label with a leader: "under" draws one that continues the leader; "none" draws none. Default: "under".',
+        choices=LABEL_LINES,
+        type=str)
+    parser.add_argument(
+        '--label_protection',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), "box" (a white box), or "none". Default: "halo".',
+        choices=LABEL_PROTECTIONS,
         type=str)
     parser.add_argument(
         '--label_rotation',
@@ -1461,6 +1472,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.definition.linear.show_length": definition_show_length,
         "labels.spacing.linear": args.linear_label_spacing,
         "labels.rendering": label_rendering,
+        "labels.linear.line": args.label_line,
+        "labels.linear.protection": args.label_protection,
         "labels.linear.placement": label_placement,
         "labels.linear.rotation": label_rotation,
         "objects.features.line_stroke_color": line_stroke_color,

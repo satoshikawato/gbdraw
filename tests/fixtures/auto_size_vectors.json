@@ -147,7 +147,6 @@
       "recordLengths": [306008, 50466],
       "expected": {
         "labels.font_size": 8,
-        "labels.stroke_width": 0.5,
         "objects.axis.circular.stroke_width": 1
       }
     },

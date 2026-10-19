@@ -10,6 +10,7 @@ from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from .labels.label_style import LABEL_LINES, LABEL_PROTECTIONS
 from .io.cli_tables import (
     read_circular_track_table,
 )
@@ -486,6 +487,16 @@ def _get_args(
         help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Default: "auto".',
         choices=['auto', 'embedded_only', 'external_only'],
         default='auto',
+        type=str)
+    parser.add_argument(
+        '--label_line',
+        help='Line under each feature label with a leader: "under" draws one that continues the leader; "none" draws none. Default: "none".',
+        choices=LABEL_LINES,
+        type=str)
+    parser.add_argument(
+        '--label_protection',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), "box" (a white box), or "none". Default: "halo".',
+        choices=LABEL_PROTECTIONS,
         type=str)
     parser.add_argument(
         '--label_placement',
@@ -1163,6 +1174,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.definition.circular.font_size": definition_font_size,
         "objects.definition.circular.plot_title_font_size": plot_title_font_size,
         "labels.rendering": label_rendering,
+        "labels.circular.line": args.label_line,
+        "labels.circular.protection": args.label_protection,
         "labels.circular.placement": circular_label_placement,
         "labels.filtering.raw": filtering_override,
         "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,

@@ -57,6 +57,7 @@ from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
+from ...labels.label_style import widest_leader_px
 from ...labels.circular import (
     CircularLabelProbeStopped,
     assign_leader_start_points,
@@ -677,11 +678,7 @@ def _external_label_obstacles_on_canvas(
     canvas_config: CircularCanvasConfigurator,
 ) -> tuple[Aabb, ...]:
     """Return authoritative per-label overlay obstacles in plot coordinates."""
-    half_stroke = 0.5 * float(
-        canvas_config.profile.config.labels.stroke_width.for_length_param(
-            canvas_config.length_param
-        )
-    )
+    half_stroke = 0.5 * widest_leader_px(labels)
     return tuple(
         _external_label_paint_bounds_local(
             label,
@@ -739,9 +736,7 @@ def _feature_label_obstacles(
 
     shapes = circular_label_shapes(labels, total_length)
     spacing = float(canvas_config.profile.config.labels.spacing.circular)
-    half_stroke = 0.5 * float(
-        canvas_config.profile.config.labels.stroke_width.for_length_param(canvas_config.length_param)
-    )
+    half_stroke = 0.5 * widest_leader_px(labels)
     return CircularLabelObstacles(
         shapes=tuple(shape.parts for shape in shapes),
         segments=tuple(segment for shape in shapes for segment in zip(shape.leader, shape.leader[1:])),

@@ -50,8 +50,6 @@ class SeqRecordGroup:
 
         self.show_labels = render_context.profile.labels_enabled
 
-        self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.length_param)
-        self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         self.font_size = cfg.labels.font_size.for_length_param(self.length_param)
         self.strandedness = render_context.profile.strandedness
         self.track_ratio_factors = geometry.track_ratio_factors

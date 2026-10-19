@@ -1097,7 +1097,8 @@ def _annotation_label_crossings(drawing) -> dict[str, int]:
         ((float(line.attrib["x1"]), float(line.attrib["y1"])), (float(line.attrib["x2"]), float(line.attrib["y2"])))
         for line in groups["label_leaders"]
     ]
-    feature_labels = [_feature_label_corners(text) for text in groups["label_text"]]
+    # The letters, not their halos.
+    feature_labels = [_feature_label_corners(text) for text in groups["label_text"] if text.tag.endswith("}text")]
     crossings: dict[str, int] = {}
     for element in root.iter():
         label = element.attrib.get("data-gbdraw-annotation-label")

@@ -3455,6 +3455,8 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
             "height_px": 20.0,
             "is_inner": False,
             "is_embedded": False,
+            # The leader is 0.07 em wide: 1.4 px at 20 px.
+            "font_size": 20.0,
         }
     ]
     canvas_config = SimpleNamespace(
@@ -3465,15 +3467,6 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         legend_offset_x=0.0,
         legend_offset_y=0.0,
         length_param="short",
-        profile=SimpleNamespace(
-            config=SimpleNamespace(
-                labels=SimpleNamespace(
-                    stroke_width=SimpleNamespace(
-                        for_length_param=lambda _length_param: 2.0,
-                    )
-                )
-            )
-        ),
     )
     original_canvas = vars(canvas_config).copy()
     original_labels = copy.deepcopy(labels)
@@ -3486,7 +3479,7 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
 
     assert len(obstacles) == 1
     assert obstacles[0].max_x == pytest.approx(1090.0)
-    assert obstacles[0].min_x == pytest.approx(889.0)
+    assert obstacles[0].min_x == pytest.approx(889.3)
     assert obstacles[0].max_x > canvas_config.total_width
     assert vars(canvas_config) == original_canvas
     assert labels == original_labels

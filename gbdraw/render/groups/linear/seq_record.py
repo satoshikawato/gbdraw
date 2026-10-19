@@ -2,22 +2,25 @@
 # coding: utf-8
 
 from collections import Counter
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from Bio.SeqRecord import SeqRecord
-from gbdraw.svg.elements import Group, Line, Text
+from gbdraw.svg.elements import Group, Line, Rect, Text
 
 from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
+from ...drawers.label_backing import feature_label_box, label_halo, underline_casing
 from ...drawers.linear.labels import LabelDrawer
+from ....labels.label_ink import linear_label_ink
+from ....labels.label_style import leader_width_px
 from ....labels.linear import linear_leader_polyline, linear_record_labels, place_linear_label_row
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
-from ....svg.ids import record_group_svg_id
+from ....svg.ids import record_group_svg_id, stable_svg_id
 from ....layout.record_labels import source_ruler_ticks
 from ...label_binding import bind_label_part
 from .feature_identity import LinearFeatureDomIndex
@@ -29,6 +32,19 @@ from .length_bar import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+class _LabelParts(NamedTuple):
+    """A feature label's drawn style parts: whether it has a leader, the leader line the leader layer draws
+    (two points, or none when the whole leader lies within its casing), the leader's tail in front of its
+    underline casing, the casing, the underline and the box (None when not drawn)."""
+
+    has_leader: bool
+    leader: tuple[tuple[float, float], ...]
+    tail: Line | None = None
+    casing: Line | None = None
+    underline: Line | None = None
+    box: Rect | None = None
+
 
 class SeqRecordGroup:
     """Manages the visualization of a SeqRecord in a linear layout."""
@@ -93,8 +109,6 @@ class SeqRecordGroup:
         self.show_labels = profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
-        # Keep legacy behavior: linear label leader line width uses the "long" value.
-        self.label_stroke_width = cfg.labels.stroke_width.long
         self.normalize_length = geometry.normalize_length
         scale_cfg = cfg.objects.scale
         self.scale_style = str(scale_cfg.style).strip().lower()
@@ -187,6 +201,40 @@ class SeqRecordGroup:
                 coordinates.append(int(tick))
             tick += tick_interval
         return sorted(coordinates, reverse=(start_coord > end_coord))
+
+    def _leader_part(self, start: tuple[float, float], end: tuple[float, float], feature_id: str, width: float) -> Line:
+        """One straight part of a feature label's leader, or its underline: one style for both (LP-D95)."""
+
+        part = Line(start=start, end=end, stroke=self.label_stroke_color, stroke_width=width)
+        bind_label_part(part, feature_id)
+        return part
+
+    def _label_style_parts(self, label: dict, leader: tuple[tuple[float, float], ...]) -> _LabelParts:
+        """A label's drawn parts in the style of its mode (``FeatureLabelStyle``)."""
+
+        style = self.profile.label_style
+        if not leader or (not style.underline and style.protection != "box"):
+            return _LabelParts(bool(leader), leader)
+        ink = linear_label_ink(label, leader, underline=style.underline)
+        feature_id = label["feature_id"]
+        width = leader_width_px(float(label["font_size"]))
+        underline = casing = tail = None
+        line = ink.underline
+        if line is not None:
+            # The leader ends on its underline, which continues it (LP-D88), or stops above the letters.
+            leader = (leader[0], line[0])
+            if line[1] != line[2]:
+                underline = self._leader_part(line[1], line[2], feature_id, width)
+                # The leader layer draws the leader up to its casing; its tail is drawn in front of the casing.
+                cased = underline_casing(line[1], line[2], float(label["font_size"]))
+                entry = cased.entry(leader[0], line[0])
+                casing = cased.element(feature_id)
+                tail = self._leader_part(entry, line[0], feature_id, width)
+                leader_layer = () if entry == leader[0] else (leader[0], entry)
+                box = feature_label_box(ink, leader) if style.protection == "box" else None
+                return _LabelParts(True, leader_layer, tail, casing, underline, box)
+        box = feature_label_box(ink, leader) if style.protection == "box" else None
+        return _LabelParts(True, leader, None, None, None, box)
 
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
         if not self.axis_ruler_enabled or bar_length <= 0 or record_length <= 0:
@@ -284,6 +332,7 @@ class SeqRecordGroup:
 
         # Process labels if enabled. Each label gets its feature identity on a
         # copy: the prepared labels are this content's arguments.
+        styled: list[_LabelParts] = []
         if self.show_labels and self.draw_features_enabled:
             bound_labels = []
             for label in label_list:
@@ -297,16 +346,14 @@ class SeqRecordGroup:
                     )
                 label = {**label, "feature_id": feature_id}
                 bound_labels.append(label)
-                leader = linear_leader_polyline(label)
-                if leader:
-                    line_path = Line(
-                        start=leader[0],
-                        end=leader[1],
-                        stroke=self.label_stroke_color,
-                        stroke_width=self.label_stroke_width,
+                parts = self._label_style_parts(label, linear_leader_polyline(label))
+                styled.append(parts)
+                if parts.leader:
+                    feature_group.add(
+                        self._leader_part(
+                            parts.leader[0], parts.leader[1], feature_id, leader_width_px(float(label["font_size"]))
+                        )
                     )
-                    bind_label_part(line_path, feature_id)
-                    feature_group.add(line_path)
             label_list = bound_labels
 
         # Draw features
@@ -342,10 +389,25 @@ class SeqRecordGroup:
                     ),
                 )
 
-        # Add labels
+        # Add labels: in front of every leader and glyph, the boxes, the halos, the underline casings, the
+        # leader tails, the underlines, then the letters (a halo or a casing must not erode an underline).
         if self.show_labels:
+            letters_at = len(feature_group.elements)
             for label in label_list:
                 feature_group = LabelDrawer().draw(label, feature_group)
+            texts = feature_group.elements[letters_at:]
+            halos = [
+                label_halo(text, stable_svg_id("label_text", self.record_group_id, label["feature_id"], index))
+                for index, (label, text, parts) in enumerate(zip(label_list, texts, styled))
+                if parts.has_leader and self.profile.label_style.protection == "halo"
+            ]
+            feature_group.elements[letters_at:letters_at] = [
+                *(parts.box for parts in styled if parts.box is not None),
+                *halos,
+                *(parts.casing for parts in styled if parts.casing is not None),
+                *(parts.tail for parts in styled if parts.tail is not None),
+                *(parts.underline for parts in styled if parts.underline is not None),
+            ]
 
         if has_feature_shift:
             feature_group.translate(0.0, self.feature_offset_y)

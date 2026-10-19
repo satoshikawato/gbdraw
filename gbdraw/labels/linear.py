@@ -12,6 +12,7 @@ from typing import Any, NamedTuple, cast
 from .coordinates import display_label_segment
 
 from .filtering import get_label_text, label_filter_maps
+from .label_style import ROW_LABEL_GAP_EM
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
@@ -54,9 +55,20 @@ from .fit import (
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
+def _row_label_margin_px(label: Mapping[str, Any]) -> float:
+    """The room a label keeps free on each side of its letters in its label row: half of
+    ``ROW_LABEL_GAP_EM`` of its own font size, so neighbours keep the gap between them. A label drawn
+    on its feature is in no row."""
+
+    if label.get("is_embedded"):
+        return 0.0
+    return 0.5 * ROW_LABEL_GAP_EM * float(label["font_size"])
+
+
 def check_label_overlap(label1, label2):
-    """Check if two labels overlap horizontally"""
-    return not (label1["end"] < label2["start"] or label2["end"] < label1["start"])
+    """Check if two labels overlap horizontally, with the room each keeps beside it in its row"""
+    margin1, margin2 = _row_label_margin_px(label1), _row_label_margin_px(label2)
+    return not (label1["end"] + margin1 < label2["start"] - margin2 or label2["end"] + margin2 < label1["start"] - margin1)
 
 
 def find_lowest_available_track(track_dict, label):
@@ -78,7 +90,8 @@ def find_lowest_available_track(track_dict, label):
 
 
 def _linear_label_interval(label: dict) -> Interval:
-    return Interval(float(label["start"]), float(label["end"]))
+    margin = _row_label_margin_px(label)
+    return Interval(float(label["start"]) - margin, float(label["end"]) + margin)
 
 
 def _linear_label_aabb(label: dict) -> Aabb:
@@ -951,14 +964,27 @@ def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
     return ((label["middle"], label["feature_middle_y"]), (label["middle"], label_edge_y))
 
 
+def _row_label_corners(label: dict) -> list[tuple[float, float]]:
+    """The corners of a label's box widened by the room it keeps beside it in its row (a rotated
+    label keeps its box)."""
+
+    corners = _label_corners(label)
+    margin = _row_label_margin_px(label)
+    if not margin or float(label.get("rotation_deg", 0.0)) != 0.0:
+        return corners
+    middle = 0.5 * (min(px for px, _py in corners) + max(px for px, _py in corners))
+    return [(px + math.copysign(margin, px - middle), py) for px, py in corners]
+
+
 def linear_label_shapes(labels: Sequence[dict], x: float = 0.0) -> list[LabelShape]:
     """One record's drawn Linear labels as the fit count sees them, moved ``x`` right (the record's
-    start in its row)."""
+    start in its row): each row label with the room it keeps beside it, so a pair the rows separate
+    for their gap counts as an overlap."""
 
     return [
         LabelShape(
             "linear",
-            (translate_points(_label_corners(label), x, 0.0),),
+            (translate_points(_row_label_corners(label), x, 0.0),),
             translate_points(linear_leader_polyline(label), x, 0.0),
         )
         for label in labels

@@ -12,6 +12,7 @@ names and constructors; only the default of ``debug`` differs.
 from __future__ import annotations
 
 from typing import Any
+from xml.etree.ElementTree import Element
 
 from svgwrite import container, gradients, masking, path, shapes, text
 
@@ -20,6 +21,19 @@ class Group(container.Group):
     def __init__(self, *args: Any, **extra: Any) -> None:
         extra.setdefault("debug", False)
         super().__init__(*args, **extra)
+
+
+class Use(container.Use):
+    """A ``<use>`` whose reference is its ``xlink:href`` attribute: svgwrite would set it again from the
+    constructor's ``href`` when it serializes, undoing a rename of the referenced id (the multi-record
+    merge renames ids and the references to them)."""
+
+    def __init__(self, *args: Any, **extra: Any) -> None:
+        extra.setdefault("debug", False)
+        super().__init__(*args, **extra)
+
+    def get_xml(self) -> Element:
+        return super(container.Use, self).get_xml()
 
 
 class Path(path.Path):
@@ -87,4 +101,5 @@ __all__ = [
     "TSpan",
     "Text",
     "TextPath",
+    "Use",
 ]

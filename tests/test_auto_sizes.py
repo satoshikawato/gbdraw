@@ -246,7 +246,6 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
     size = canvas.length_param
     for path in (
         "labels.font_size",
-        "labels.stroke_width",
         "objects.axis.circular.stroke_width",
         "objects.features.block_stroke_width",
         "objects.features.line_stroke_width",
@@ -329,7 +328,6 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
         canvas = CircularCanvasConfigurator(output_prefix="t", profile=profile, legend="none", gb_record=_record(length))
         for path in (
             "labels.font_size",
-            "labels.stroke_width",
             "objects.axis.circular.stroke_width",
             "objects.features.block_stroke_width",
             "objects.features.line_stroke_width",
