@@ -153,12 +153,14 @@ def test_only_a_horizontal_label_gets_the_underline_and_its_obstacles_agree() ->
     from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 
     under, plain = FeatureLabelStyle(line="under", protection="box"), FeatureLabelStyle(line="none", protection="box")
-    assert under.draws_underline(0.0) and not under.draws_underline(-45.0) and not under.draws_underline(45.0)
-    assert not plain.draws_underline(0.0)
+    assert under.draws_underline(turned=False) and not under.draws_underline(turned=True)
+    assert not plain.draws_underline(turned=False)
     flat = _linear_label_with_leader(10.0, 0.0, -14.0)
     turned = {**flat, "rotation_deg": -45.0, "text_anchor": "start"}
     flat_ink = linear_label_ink(flat, linear_leader_polyline(flat), under)
     assert flat_ink.underline is not None and flat_ink.underline_box is not None
+    # A full turn draws the label horizontal again, so it keeps the underline.
+    assert linear_label_ink({**flat, "rotation_deg": -360.0}, linear_leader_polyline(flat), under).underline is not None
     ink = linear_label_ink(turned, leader := linear_leader_polyline(turned), under)
     assert ink.underline is None and ink.underline_box is None
     assert ink == linear_label_ink(turned, leader, plain)
@@ -170,6 +172,31 @@ def test_only_a_horizontal_label_gets_the_underline_and_its_obstacles_agree() ->
     assert linear_feature_label_obstacles([flat], plan, 0, label_style=under) != linear_feature_label_obstacles(
         [flat], plan, 0, label_style=plain
     )
+
+
+@pytest.mark.parametrize("angle", [90.0, 270.0])
+def test_a_circular_radial_label_gets_no_underline_even_where_it_reads_horizontally(angle: float) -> None:
+    """LP-D112: a Circular radial label is turned whatever its angle; at 3 and 9 o'clock its rotation is 0 (it
+    reads horizontally) and it still gets no underline, while a horizontal (arc) label there gets one."""
+
+    from gbdraw.labels.circular_radial import radial_text_orientation
+    from gbdraw.labels.label_ink import circular_label_ink
+
+    under = FeatureLabelStyle(line="under", protection="none")
+    rotation, anchor, baseline = radial_text_orientation(angle, is_inner=False)
+    point = {"start_x": 100.0, "start_y": 0.0, "middle_x": 90.0, "middle_y": 0.0, "feature_middle_x": 80.0}
+    label = {
+        "label_text": "orf",
+        "font_family": "'Liberation Sans', sans-serif",
+        "font_size": 10.0,
+        "middle": 1000,
+        "is_inner": False,
+        **point,
+    }
+    radial = {**label, "placement": "radial", "rotation_deg": rotation, "text_anchor": anchor, "dominant_baseline": baseline}
+    assert rotation == 0.0
+    assert circular_label_ink(radial, 4000, under).underline is None
+    assert circular_label_ink(label, 4000, under).underline is not None
 
 
 @pytest.mark.parametrize(

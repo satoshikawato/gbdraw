@@ -65,11 +65,11 @@ class FeatureLabelStyle:
     line: LabelLine
     protection: LabelProtection
 
-    def draws_underline(self, rotation_deg: float) -> bool:
-        """Whether a feature label drawn turned ``rotation_deg`` about its point gets this style's underline:
-        only a horizontal one does (LP-D112)."""
+    def draws_underline(self, turned: bool) -> bool:
+        """Whether a feature label gets this style's underline: a turned one (a Linear label given a rotation,
+        a Circular radial label, whatever its angle) does not (LP-D112)."""
 
-        return self.line == "under" and float(rotation_deg) == 0.0
+        return self.line == "under" and not turned
 
     @property
     def draws_from_ink(self) -> bool:
