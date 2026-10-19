@@ -286,6 +286,15 @@ instead of refused, and each repair is a row in the dialog:
   saved comparison that the **Comparisons** card keeps read-only or asks
   about keeps its record references, which that card reports.
 
+A font size of 0 or less in a Session (feature labels, Legend, scale and
+ruler labels, ticks, definition text, plot title, GC content and Depth ticks,
+or a Linear Record Labels style such as Name / Species) reads as Auto, the
+default size, with the row `Settings: the value "0" (<place>) cannot be used;
+its default is used.` `gbdraw render --session`, `gbdraw circular --session`,
+`gbdraw linear --session` and the Python API read it the same way and print
+that row as a `WARNING:` line. **Generate**, the CLI size options and the
+Python options still refuse such a size.
+
 When the saved diagram's settings cannot be read at all (for example, their
 `schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
 of version 42, 44, 46, 47 or 48 saved by the web app. A row says that the saved
@@ -420,9 +429,7 @@ Which records Web draws from a CLI session depends on the request:
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or
-  `presentation.reverseComplement`, as Web Save does. A crop taken after
-  `--reverse_complement` is written as the same span in source coordinates.
-  Each Linear row takes its crop and orientation from the request, so
+  `presentation.reverseComplement`, as Web Save does. Each Linear row takes its crop and orientation from the request, so
   **Generate Diagram** draws the record the CLI drew.
 - A cropped or reversed record of a Circular batch or grid, the records of a
   file that a Circular batch or grid draws only partly, and every record of an
@@ -659,7 +666,11 @@ artifacts; use `render_session()` when those artifacts belong in the result.
 `render_request()` accepts current typed requests, not historical session
 envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–48;
 versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
-loads them from their saved settings. Request schema 9 keeps schema 7's
+loads them from their saved settings. A Linear replay that combines `--region`,
+`--reverse_complement 1`, and `-b` or `--comparisons_table` now crops before it
+reverse-complements, so it can draw another window than the one its stored
+comparison was searched on; it prints a `WARNING:` line, and the comparison may
+need to be run again. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.

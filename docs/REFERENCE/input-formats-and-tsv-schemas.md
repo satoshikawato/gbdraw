@@ -120,11 +120,10 @@ One records-table row represents one displayed record. A table uses either
 GenBank rows or GFF3/FASTA rows; it cannot mix the two forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
-The two apply in different orders: `region=1000-9000:rc` crops 1000..9000 of
-the record as stored in the file and then reverse-complements the crop, while
-`reverse_complement=1` reverse-complements the whole record first, so a
-`region` in the same row counts its coordinates on the reverse-complemented
-record. `--region` and `--reverse_complement` follow the same order.
+A region is always counted on the record as stored in the file:
+`region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both
+crop 1000..9000 and then reverse-complement the crop. `--region` and
+`--reverse_complement` follow the same order.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
 sort before blank values; equal values keep table order. When placement is
@@ -233,6 +232,13 @@ error that names the file and line; a missing cell is reported as a missing
 value. The [feature override
 table](#feature-override-table) is different: it quotes a `label_text` that
 contains `"`.
+
+A Label whitelist `keyword` is a case-insensitive regular expression searched
+in the values of the row's qualifier. An empty `keyword` cell, as in
+`CDS<TAB>product<TAB>`, matches every value of that qualifier, so every CDS
+with a `product` keeps its label. A row without the third cell, or with an
+empty `feature_type` or `qualifier`, is reported as a missing value. In this
+table, cells such as `NA` and `null` are values, not blanks.
 
 A Specific-colors `color` is `none` (no fill), an SVG color name, both in any
 letter case, `#RGB`, or `#RRGGBB`. Other values, including hex colors with

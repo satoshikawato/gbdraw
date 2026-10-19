@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
@@ -483,6 +484,15 @@ def extract_features_from_records_payload(
     return payload
 
 
+def _crop_then_reverse(records: list[SeqRecord], region_spec: object | None, reverse_flag: object | None) -> list[SeqRecord]:
+    """Crop to ``region_spec``, then reverse-complement, the planner's order (OV-1279)."""
+    from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
+
+    specs = parse_region_specs([str(region_spec)]) if region_spec else []
+    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
+
+
 def extract_features_from_genbank_payload(
     gb_path: str | Path,
     region_spec: object | None = None,
@@ -494,17 +504,11 @@ def extract_features_from_genbank_payload(
     include_biological_features: bool = False,
 ) -> dict[str, object]:
     """Extract the Rich Feature Popup payload shape from a GenBank file."""
-    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    from gbdraw.io.record_select import parse_record_selector, select_record
 
     records = list(SeqIO.parse(str(gb_path), "genbank"))
     selector = parse_record_selector(_normalize_record_selector(record_selector))
-    records = select_record(records, selector)
-    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-    records = reverse_records(records, reverse)
-    if region_spec:
-        from gbdraw.io.regions import apply_region_specs, parse_region_specs
-
-        records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
+    records = _crop_then_reverse(select_record(records, selector), region_spec, reverse_flag)
     return extract_features_from_records_payload(
         records,
         selected_features=selected_features,
@@ -531,18 +535,13 @@ def extract_features_from_gff_fasta_payload(
     from gbdraw.io.genome import load_gff_fasta
 
     selector = _normalize_record_selector(record_selector)
-    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
     records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
         keep_all_features=True,
         record_selectors=[selector] if selector else None,
-        reverse_flags=[reverse],
     )
-    if region_spec:
-        from gbdraw.io.regions import apply_region_specs, parse_region_specs
-
-        records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
+    records = _crop_then_reverse(records, region_spec, reverse_flag)
     return extract_features_from_records_payload(
         records,
         selected_features=selected_features,

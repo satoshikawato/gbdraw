@@ -63,6 +63,7 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
@@ -1936,6 +1937,78 @@ def _decode_diagram_options(
     if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
     return decoded
+
+
+def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a stored request with each font size <= 0 read as Auto, as Web Load does (Owner Q-13 a, OV-1282).
+
+    The Session reader (``decode_session_request``) calls it; a fresh request,
+    such as a Web Generate, keeps refusing such a size (PD-OI-081).
+
+    A font size is a ``POSITIVE`` style leaf (``style_leaf_domain``), in
+    ``config`` or ``configOverrides``. Auto is the value the request's base
+    gives that path: an override leaf is dropped, and inside ``config`` (or an
+    override that holds a table) the leaf takes the stored ``config`` value
+    (for an override), else the packaged one, else ``None`` (a Linear
+    definition line style then inherits its size). Changed containers are
+    copies; the stored request stays as saved.
+    """
+
+    packaged: list[Mapping[str, object]] = []  # Read on the first replacement only.
+    packaged_base = object()
+
+    def lookup(tree: object, path: str) -> object:
+        if tree is packaged_base:
+            if not packaged:
+                packaged.append(load_config_toml("gbdraw.data", "config.toml"))
+            tree = packaged[0]
+        for key in path.split("."):
+            if not isinstance(tree, MappingABC) or key not in tree:
+                return None
+            tree = tree[key]
+        return tree
+
+    def read(value: object, path: str, where: str, bases: tuple[object, ...]) -> object:
+        if isinstance(value, MappingABC):
+            children = {
+                key: read(child, f"{path}.{key}", f"{where}.{key}", bases) for key, child in value.items()
+            }
+            return children if any(children[key] is not value[key] for key in value) else value
+        domain = style_leaf_domain(path)
+        if (
+            value is None  # Unset stays unset; only a stored number <= 0 is replaced.
+            or domain is None
+            or domain[0] != "POSITIVE"
+            or read_stored_font_size(value, path=where) is not None
+        ):
+            return value
+        return next((default for base in bases if (default := lookup(base, path)) is not None), None)
+
+    result = dict(payload)
+    stored = result.get("diagramOptions")
+    if not isinstance(stored, MappingABC):
+        return result
+    options = dict(stored)
+    result["diagramOptions"] = options
+    config = options.get("config")
+    if isinstance(config, MappingABC):
+        options["config"] = {
+            key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged_base,))
+            for key, child in config.items()
+        }
+    overrides = options.get("configOverrides")
+    if isinstance(overrides, MappingABC):
+        bases = (options.get("config"), packaged_base)
+        kept: dict[str, Any] = {}
+        for key, value in overrides.items():
+            where = f'renderRequest.diagramOptions.configOverrides["{key}"]'
+            if isinstance(value, MappingABC):
+                kept[key] = read(value, key, where, bases)
+            elif read(value, key, where, ()) is value:
+                kept[key] = value
+            # Else dropped, as Web Load drops it: the base value applies.
+        options["configOverrides"] = kept
+    return result
 
 
 def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -5517,4 +5590,5 @@ __all__ = [
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
     "with_automatic_scale_interval",
+    "with_stored_font_sizes_as_auto",
 ]

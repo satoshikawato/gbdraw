@@ -99,7 +99,10 @@ Linear mode selects and crops records with `--record_id`, `--region`, and
 A start greater than the end selects the region from end to start and draws it
 reverse-complemented, as `:rc` does: `rec:500-100` is `rec:100-500:rc`.
 Repeated `--reverse_complement` values follow input-file order and accept the
-boolean tokens listed by `--help`. Selection, cropping, and reverse-complement
+boolean tokens listed by `--help`. A region is cropped first, on the record as
+stored in the file, and then reverse-complemented: `--region '#2:5001-40000'`
+with `--reverse_complement 1` for that file draws the same window as
+`--region '#2:5001-40000:rc'`. Selection, cropping, and reverse-complement
 display do not rewrite a source file.
 
 Circular mode writes separate results for multiple records by default.
@@ -268,7 +271,12 @@ names keep the given letters in upper case, for example `AU skew`. Font sizes
 must be greater than zero and stroke widths zero or greater; offsets, spacing,
 `track_axis_gap`, and label rotation keep their current ranges. A rejected
 value stops with an `ERROR:` line that names the option or setting instead of
-drawing an empty or flat track or printing a traceback.
+drawing an empty or flat track or printing a traceback. An unknown `-f/--format`
+token or `-p/--palette` name, or a palette name in `FeatureOptions(palette=...)`,
+stops with an error that lists the accepted values; nothing is written. A
+saved Session that stores an unknown palette name still draws with the default
+palette, and a Session 27-30 whose saved arguments hold an unknown format token
+still replays without it.
 
 ## Rotate a plastome and place a multipart feature
 

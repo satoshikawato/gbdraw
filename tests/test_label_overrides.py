@@ -288,6 +288,55 @@ def test_get_label_text_whitelist_regex_matches_product() -> None:
     assert get_label_text(feature, filtering, record_id="rec1") == "wsv360-like protein"
 
 
+def test_a_whitelist_row_with_a_blank_keyword_matches_every_value_of_its_qualifier(tmp_path: Path) -> None:
+    """OV-350 (Owner Q-10 a): ``CDS<TAB>product<TAB>`` keeps every CDS product label."""
+
+    from gbdraw.labels.filtering import read_filter_list_file
+
+    path = tmp_path / "whitelist.tsv"
+    path.write_text("CDS\tproduct\t\nCDS\tnote\tNA\n", encoding="utf-8")
+    whitelist = read_filter_list_file(str(path))
+    assert whitelist is not None
+    assert whitelist.to_dict("records") == [
+        {"feature_type": "CDS", "qualifier": "product", "keyword": ""},
+        {"feature_type": "CDS", "qualifier": "note", "keyword": "NA"},
+    ]
+    filtering = preprocess_label_filtering(_base_filtering(whitelist_df=whitelist))
+    for product in ("enzyme alpha", "hypothetical protein", "wsv360-like protein"):
+        assert get_label_text(_make_seq_feature(product=product), filtering, record_id="rec1") == product
+
+
+def test_cli_draws_every_product_label_for_a_blank_whitelist_keyword(tmp_path: Path, gbdraw_runner) -> None:
+    gbk = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
+    svgs = []
+    for name, rows in (("blank", "CDS\tproduct\t\n"), ("any", "CDS\tproduct\t.*\n")):
+        whitelist = tmp_path / f"{name}.tsv"
+        whitelist.write_text(rows, encoding="utf-8")
+        returncode, output, svg_path = gbdraw_runner.run(
+            "linear", [gbk], f"whitelist_{name}", tmp_path,
+            extra_args=["--show_labels", "--label_whitelist", str(whitelist)],
+        )
+        assert returncode == 0, output
+        svgs.append(svg_path.read_text(encoding="utf-8").replace(f"whitelist_{name}", "OUT"))
+    assert "tail fiber" in svgs[0]
+    assert svgs[0] == svgs[1]
+
+
+@pytest.mark.parametrize(
+    ("text", "missing"),
+    [("\tproduct\tkinase\n", "['feature_type']"), ("CDS\t\tkinase\n", "['qualifier']"), ("CDS\tproduct\n", "['keyword']")],
+)
+def test_a_whitelist_row_without_a_feature_type_qualifier_or_keyword_cell_is_refused(
+    text: str, missing: str, tmp_path: Path
+) -> None:
+    from gbdraw.labels.filtering import read_filter_list_file
+
+    path = tmp_path / "whitelist.tsv"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ValidationError, match=re.escape(f"at line 1. Missing columns: {missing}.")):
+        read_filter_list_file(str(path))
+
+
 def test_get_label_text_whitelist_regex_is_case_insensitive() -> None:
     feature = _make_seq_feature(product="WSV514-like protein")
     filtering = preprocess_label_filtering(

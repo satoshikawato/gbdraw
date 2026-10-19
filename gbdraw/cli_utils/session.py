@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from gbdraw.cli_utils.common import add_font_file_args, register_font_files
+from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.core.fonts import custom_font_families
 from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.exceptions import ValidationError
@@ -25,6 +26,7 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.render.formats import (
     SVG_FORMAT,
+    parse_output_formats,
     resolve_format_output_path,
     resolve_output_paths,
 )
@@ -99,6 +101,28 @@ class SessionCliRequest:
     embed_fonts: bool = True
 
 
+def read_stored_font_size_options(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Read each replayed ``--*font_size`` option <= 0 as Auto (OV-1282, D-PYB-7).
+
+    The released CLI stored such a value in ``cliInvocation.args`` and drew it;
+    replay keeps the option's default instead (``auto`` for one value of a
+    per-track list), with the notice of the other Session readers. The options
+    are the parsed ones whose destination names a font size.
+    """
+
+    for dest, value in vars(args).items():
+        if not dest.endswith("font_size") or value is None:
+            continue
+        path = f"cliInvocation.args --{dest}"
+        if isinstance(value, list):
+            setattr(args, dest, [
+                "auto" if read_stored_font_size(item, path=path) is None and item is not None else item
+                for item in value
+            ])
+        elif read_stored_font_size(value, path=path) is None:
+            setattr(args, dest, parser.get_default(dest))
+
+
 def add_session_args(parser: argparse.ArgumentParser) -> None:
     """Add session input/output options to a diagram parser."""
 
@@ -133,6 +157,12 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         ),
         type=str,
     )
+
+
+def _format_override(value: str | None) -> str | None:
+    """Read a ``-f/--format`` override typed with ``--session`` (OV-1244)."""
+
+    return None if value is None else ",".join(parse_output_formats(value))
 
 
 def parse_session_pre_args(
@@ -180,7 +210,7 @@ def parse_session_pre_args(
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -269,7 +299,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -1307,6 +1337,7 @@ __all__ = [
     "RenderedSvg",
     "SessionCliRequest",
     "add_session_args",
+    "read_stored_font_size_options",
     "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
     "collect_track_slot_geometry_records",

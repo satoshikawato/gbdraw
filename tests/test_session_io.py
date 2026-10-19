@@ -3610,8 +3610,8 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     The request names the crop (in source coordinates) and the orientation, as
     the Web writes them, instead of a re-serialized copy of the drawn record.
     The Web draft that loads the bound input file then draws the same record,
-    and a replay draws the same SVG. Orientation applied before a crop (the
-    CLI order) is written as the equivalent source-coordinate crop.
+    and a replay draws the same SVG. ``--reverse_complement`` applies after
+    the crop, as ``:rc`` does (OV-1279), so the request names the same crop.
     """
 
     single, multi = _cli_session_inputs(tmp_path)
@@ -3637,9 +3637,9 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     ] == [
         (first, None, single_region, False),
         (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
-        # Reversed 360 bp record cropped to 21..300 = source 61..340, reversed.
+        # Cropped to source 21..300, then reversed.
         (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
-                        "start": 61, "end": 340, "reverseComplement": True}, False),
+                        "start": 21, "end": 300, "reverseComplement": True}, False),
     ]
     assert _resource_bytes(session, first) == single.read_bytes()
     assert _resource_bytes(session, second) == multi.read_bytes()

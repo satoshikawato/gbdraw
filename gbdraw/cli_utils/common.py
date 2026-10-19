@@ -24,7 +24,14 @@ from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
 from gbdraw.render.export import has_cairosvg
-from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format, normalize_format_token
+from gbdraw.io.colors import require_palette_name
+from gbdraw.render.formats import (
+    CAIROSVG_FORMATS,
+    SVG_FORMAT,
+    is_cairosvg_format,
+    normalize_format_token,
+    parse_output_formats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -633,6 +640,17 @@ def apply_record_display_cli_options(
     return replace(manifest, records=(replace(
         manifest.records[0], display=display, cardinality=RecordCardinality.EXACTLY_ONE,
     ),))
+
+
+def validate_output_choice_args(args: argparse.Namespace) -> None:
+    """Refuse an unknown ``-f/--format`` token or ``-p/--palette`` name (OV-1244).
+
+    The replay of a released legacy Session skips this check: its saved
+    arguments keep the fallbacks they were drawn with.
+    """
+
+    parse_output_formats(args.format)
+    require_palette_name(args.palette)
 
 
 def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:

@@ -22,7 +22,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentReference,
     SimilarityAlignmentReferenceError,
 )
-from gbdraw.render.formats import ACCEPTED_FORMATS, normalize_format_token
+from gbdraw.render.formats import parse_output_formats
 from gbdraw.render.output_paths import is_windows_reserved_filename_component
 
 from .options import (
@@ -318,17 +318,7 @@ class RecordCollectionOptions:
 def _normalized_formats(formats: Sequence[str] | str) -> tuple[str, ...]:
     if not isinstance(formats, (str, Sequence)):
         raise ValidationError("formats must be a string or sequence of strings.")
-    raw_formats = formats.split(",") if isinstance(formats, str) else formats
-    normalized_formats: list[str] = []
-    for raw_format in raw_formats:
-        normalized = normalize_format_token(raw_format)
-        if normalized not in ACCEPTED_FORMATS:
-            raise ValidationError(f"Unsupported output format: {raw_format}")
-        if normalized not in normalized_formats:
-            normalized_formats.append(normalized)
-    if not normalized_formats:
-        raise ValidationError("At least one output format is required.")
-    return tuple(normalized_formats)
+    return parse_output_formats(formats)
 
 
 def _validate_interactive_metadata_policy(

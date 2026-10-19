@@ -390,9 +390,6 @@ def test_request_crop_known_dormant_and_materialized_request_rebind(
 ):
     record = _record()
     exact = _exact(record)
-    if reverse:
-        start, end = map(int, region.split("-"))
-        region = f"{len(record) + 1 - end}-{len(record) + 1 - start}"
     request = _request(
         records=(
             RecordInput(
@@ -588,7 +585,8 @@ def test_resource_catalog_is_built_once_and_reused_across_crop_reverse_display(
     for start, crop, reverse in [
         (None, None, False),
         (25, None, False),
-        (None, "25-70", True),
+        # Source 51..96, then reversed: the placed features fall outside the crop.
+        (None, "51-96", True),
     ]:
         inp = RecordInput(
             GenBankInputSource(path),

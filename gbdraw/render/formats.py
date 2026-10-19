@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
+from gbdraw.exceptions import ValidationError
+
 SVG_FORMAT = "svg"
 INTERACTIVE_SVG_FORMAT = "interactive_svg"
 PNG_FORMAT = "png"
@@ -45,13 +47,41 @@ def dedupe_formats(formats: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(formats))
 
 
+def parse_output_formats(formats: Sequence[str] | str) -> tuple[str, ...]:
+    """Read requested output formats, refusing a token that names none.
+
+    The CLI ``-f/--format``, ``RenderOutputRequest`` and ``save_figure_to``
+    read formats here. A comma-separated string splits into tokens.
+    """
+
+    tokens = formats.split(",") if isinstance(formats, str) else formats
+    accepted: list[str] = []
+    for token in tokens:
+        fmt = normalize_format_token(token)
+        if fmt not in ACCEPTED_FORMATS:
+            raise ValidationError(
+                f"Unknown output format {str(token).strip()!r}; choose from: {', '.join(ACCEPTED_FORMATS)}.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        if fmt not in accepted:
+            accepted.append(fmt)
+    if not accepted:
+        raise ValidationError("At least one output format is required.", diagnostic={"code": "INPUT_INVALID"})
+    return tuple(accepted)
+
+
 def parse_format_string(
     out_formats: str,
     *,
     logger: logging.Logger | None = None,
     fallback: Sequence[str] = (PNG_FORMAT,),
 ) -> list[str]:
-    """Parse a comma-separated output format string."""
+    """Parse a comma-separated output format string, skipping unknown tokens.
+
+    Only the replay of a released legacy Session, whose saved arguments may
+    hold a token that named no format, and the deprecated lenient export read
+    formats this way; every entry a user types uses ``parse_output_formats``.
+    """
 
     parsed: list[str] = []
     for raw in str(out_formats).split(","):
@@ -64,46 +94,6 @@ def parse_format_string(
                     "WARNING: Unaccepted/unrecognized output file format: %s",
                     fmt,
                 )
-
-    accepted = dedupe_formats(parsed)
-    if not accepted:
-        if logger is not None:
-            logger.warning(
-                "WARNING: No valid output file format was specified; generate a PNG file."
-            )
-        accepted = list(fallback)
-    return accepted
-
-
-def normalize_format_sequence(
-    formats: Sequence[str] | str | None,
-    *,
-    logger: logging.Logger | None = None,
-    none_default: Sequence[str] = (SVG_FORMAT,),
-    fallback: Sequence[str] = (PNG_FORMAT,),
-) -> list[str]:
-    """Normalize API format input while preserving existing fallback behavior."""
-
-    if formats is None:
-        return list(none_default)
-    if isinstance(formats, str):
-        return parse_format_string(formats, logger=logger, fallback=fallback)
-
-    parsed: list[str] = []
-    for raw in formats:
-        if raw is None:
-            continue
-        fmt = normalize_format_token(raw)
-        if not fmt:
-            continue
-        if fmt not in ACCEPTED_FORMATS:
-            if logger is not None:
-                logger.warning(
-                    "WARNING: Unaccepted/unrecognized output file format: %s",
-                    fmt,
-                )
-            continue
-        parsed.append(fmt)
 
     accepted = dedupe_formats(parsed)
     if not accepted:
@@ -176,9 +166,9 @@ __all__ = [
     "classify_formats",
     "dedupe_formats",
     "is_cairosvg_format",
-    "normalize_format_sequence",
     "normalize_format_token",
     "parse_format_string",
+    "parse_output_formats",
     "resolve_format_output_path",
     "resolve_output_paths",
 ]

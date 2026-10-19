@@ -9,7 +9,6 @@ import base64
 import binascii
 import copy
 import csv
-import functools
 import gzip
 import hashlib
 import io
@@ -17,7 +16,6 @@ import json
 import math
 import os
 import re
-import sys
 import tempfile
 import zlib
 from dataclasses import dataclass
@@ -46,9 +44,10 @@ from .core.numeric import (
     parse_ascii_integer,
     parse_ascii_nonnegative_integer,
 )
+from .config.models.root import read_stored_font_size
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import is_user_color, named_color_hex
+from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import OutputExistsError, commit_staged_output_file
@@ -2990,18 +2989,6 @@ def _normalize_palette_colors(colors: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-@functools.cache
-def _color_palettes() -> dict[str, Any]:
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-    from importlib import resources
-
-    with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as handle:
-        return tomllib.load(handle)
-
-
 def _palette_colors(name: object) -> dict[str, Any]:
     """A palette's normalized colors, or none (``paletteColorsFromDefinitions``).
 
@@ -3011,10 +2998,10 @@ def _palette_colors(name: object) -> dict[str, Any]:
     """
 
     palette = _js_text(name)
-    colors = _color_palettes().get(palette) if palette != "title" else None
-    if not isinstance(colors, Mapping) or not colors:
+    colors = packaged_color_palettes().get(palette)
+    if not colors:
         return {}
-    return _normalize_palette_colors({str(key): str(value) for key, value in colors.items()})
+    return _normalize_palette_colors(dict(colors))
 
 
 def _merges_override_colors(config: object) -> bool:
@@ -6039,6 +6026,9 @@ def _gui_session_to_cli_args(
     form = form_value if isinstance(form_value, Mapping) else {}
     adv_value = config.get("adv")
     adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
+    # A stored font size <= 0 replays as Auto (no option), as Web Load reads it (OV-1282).
+    for key in [key for key in adv if str(key).endswith("font_size")]:
+        adv[key] = read_stored_font_size(adv[key], path=f"config.adv.{key}")
     if int(session.get("version", 0)) <= 30:
         effective_features = adv.get("features")
         if not isinstance(effective_features, list):
@@ -6640,7 +6630,10 @@ def _append_linear_definition_line_style_args(
         if not isinstance(raw_style, Mapping):
             continue
         parts: list[str] = []
-        font_size = raw_style.get("font_size")
+        font_size = read_stored_font_size(
+            raw_style.get("font_size"),
+            path=f"config.adv.linear_definition_line_styles.{line_kind}.font_size",
+        )
         if font_size not in (None, "", False):
             parts.append(f"size={font_size}")
         font_weight = str(raw_style.get("font_weight") or "").strip()
