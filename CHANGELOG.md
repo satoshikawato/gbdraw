@@ -21,9 +21,11 @@ write-up of a release.
   Circular draws a white halo around the letters. Leaders and underlines are
   0.07 em wide, at least 1 px, in both modes.
   - In Linear the underline takes no room in its label row, so labels keep
-    their rows and the figure its size. Region labels keep off underlines as
-    off the letters; a region label that meets one moves the feature label to
-    another row, or is drawn and warned about.
+    their rows and the figure its size.
+  - In both modes region labels keep off a feature label's underline and box
+    as off its letters. In Linear a region label that meets one moves the
+    feature label to another row, or is drawn and warned about; in Circular
+    the region label takes the place along its region that meets the fewest.
   - Each Linear underline lies on a white casing that cuts other labels'
     leaders where they cross it, and stops 0.12 em inside the letters at each
     end, so neighbouring underlines stay apart.

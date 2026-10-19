@@ -162,9 +162,9 @@ letters, so a leader behind them is cut away; `box` draws a white box at 80 %
 opacity behind them, 0.18 em beyond the letters and stopping short of the
 underline. Leaders and underlines are 0.07 em wide, at least 1 px. In
 Linear, neighbouring feature labels in one label row keep at least 0.25 em of
-their font size apart; a label that would come closer takes another row. The
-underline takes no room in its label row, and region labels keep off it as off
-the letters.
+their font size apart; a label that would come closer takes another row, and
+the underline takes no room in its label row. In both modes region labels keep
+off a feature label's underline and box as off its letters.
 
 `--font_family` sets the font of all diagram text: one family name such as
 `"DejaVu Serif"` or a CSS font-family list. The default is Liberation Sans.

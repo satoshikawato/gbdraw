@@ -99,22 +99,24 @@ whitelist, and priority files, and its `-d` and blacklist files, put into the
 request as that card's rows (`FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION` in
 `gbdraw/session_io.py`); a CLI re-save keeps the draft's marks.
 `file-card-imports-circular.v48.gbdraw-session.json.gz` (the Web writer after
-all five cards and hand edits, D-ORIGIN-2) is the positive fixture. No other
-field changed.
+all five cards and hand edits, D-ORIGIN-2) is the positive fixture.
 
-Session 48 (no new version: the Web app of `main` drops the two settings as
-unknown and draws its own label style) stores the feature label style of each
-diagram mode as `adv.label_line` (`none`, `under`) and `adv.label_protection`
-(`none`, `halo`, `box`) in each mode's slice (`modes.<m>.config.adv`), the
-`copy` row of the mode-scoped registry. The canonical request carries them as
-`labels.<mode>.line` and `labels.<mode>.protection` only when they differ from
-the mode's packaged style, so a request of the default style is the request an
-earlier writer wrote (Gallery publication compares it unchanged). A Session without them
-loads with the packaged defaults of each mode (Linear `under` and `box`,
-Circular `none` and `halo`, `gbdraw.labels.label_style`). The config value
-`labels.stroke_width` is removed: a stored config that holds it loads and draws
-the new leader width (0.07 em, at least 1 px); an override of it fails with the
-unknown-path error.
+Session 48 also stores the feature label style of each diagram mode as
+`adv.label_line` (`none`, `under`) and `adv.label_protection` (`none`, `halo`,
+`box`) in each mode's slice (`modes.<m>.config.adv`), the `copy` row of the
+mode-scoped registry. The mode-slice `adv` shape is closed, so these keys need
+a new Session version; Session 48 has not reached `main` (whose reader, Session
+47, refuses a Session 48 file), so they go into its entry. The canonical
+request carries them as `labels.<mode>.line` and `labels.<mode>.protection`
+only when they differ from the mode's packaged style, so a request of the
+default style is the request an earlier writer wrote (Gallery publication
+compares it unchanged). A Session without them loads with the packaged
+defaults of each mode (Linear `under` and `box`, Circular `none` and `halo`,
+`gbdraw.labels.label_style`); a stored value outside its list loads as the
+mode's default. The config value `labels.stroke_width` is removed: a stored
+config that holds it loads and draws the new leader width (0.07 em, at least
+1 px); an override of it fails with the unknown-path error. No other field
+changed.
 
 ## Unreleased: Session 47 keys the Legend edits by the row key
 
