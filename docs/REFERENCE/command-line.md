@@ -154,7 +154,8 @@ by exact selectors; its rows decide before the visibility and label tables (see
 
 `--label_line` (`none`, `under`) and `--label_protection` (`none`, `halo`,
 `box`) set how a feature label with a leader line is drawn. The defaults are
-`under` and `box` in Linear, and `none` and `halo` in Circular. `under` draws a
+`under` and `box` in Linear, and `none` and `none` in Circular, which draws
+no halo unless `halo` is chosen. `under` draws a
 line under the letters of a horizontal label that continues the leader; a label
 drawn turned (`--label_rotation` in Linear, radial labels in Circular) gets no
 line, and its leader ends at the letters as with `none`. In Linear the line

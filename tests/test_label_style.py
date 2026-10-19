@@ -61,10 +61,10 @@ def _leader_widths(svg: str) -> set[str]:
 
 
 def test_each_mode_has_its_packaged_label_style() -> None:
-    # Linear: an underline on a white box at 0.8; Circular: a halo (LP-D106).
+    # Linear: an underline on a white box at 0.8; Circular: neither (a halo can be chosen, LP-D110).
     config = GbdrawConfig.from_dict(load_default_config())
     assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "box")
-    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "halo")
+    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "none")
     assert BOX_OPACITY == 0.8
     packaged = load_config_toml("gbdraw.data", "config.toml")["labels"]
     for mode in ("linear", "circular"):

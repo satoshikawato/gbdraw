@@ -250,7 +250,7 @@ feature = ["note"]
   scope = "none"
   placement = "horizontal"
   line = "none"
-  protection = "halo"
+  protection = "none"
 [labels.spacing]
   circular = 3.0
   linear = 3.0

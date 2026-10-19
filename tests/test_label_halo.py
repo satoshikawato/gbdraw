@@ -121,8 +121,8 @@ def _is_leader(line: ET.Element) -> bool:
             "linear",
             ("--gbk", str(INPUTS / "NC_001416.gb"), str(LAMBDA), "--show_labels", "all", "--separate_strands", "--label_protection", "halo"),
         ),
-        ("circular", ("--gbk", str(LAMBDA), "--labels", "both")),
-        ("circular", ("--gbk", str(LAMBDA), str(LAMBDA), "--labels", "--multi_record_canvas")),
+        ("circular", ("--gbk", str(LAMBDA), "--labels", "both", "--label_protection", "halo")),
+        ("circular", ("--gbk", str(LAMBDA), str(LAMBDA), "--labels", "--multi_record_canvas", "--label_protection", "halo")),
     ],
     ids=["linear", "linear-two-records", "circular", "circular-multi-canvas"],
 )

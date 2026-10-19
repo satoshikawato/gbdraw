@@ -464,7 +464,7 @@ options:
   --label_protection {none,halo,box}
                         What keeps a leader passing behind a feature label off
                         its letters: "halo" (a white outline of the letters),
-                        "box" (a white box), or "none". Default: "halo".
+                        "box" (a white box), or "none". Default: "none".
   --label_placement {horizontal,radial}
                         External circular label placement: "horizontal" or
                         "radial". Default: "horizontal".

@@ -1324,7 +1324,7 @@ test('a feature shape of a feature type the user added survives Save and Load', 
 
 // A stored feature label style outside its list (LP-D102) reads as the
 // drawing's mode's packaged style, which the generated mode profile gives
-// (Linear an underline on a box, Circular a halo), and is listed.
+// (Linear an underline on a box, Circular neither), and is listed.
 test('a stored label style outside its list reads as its mode\'s default and is listed', async () => {
   const { configFieldRepairs, defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
   const { labelStyleForMode } = await import('../../gbdraw/web/js/mode-profiles.js');

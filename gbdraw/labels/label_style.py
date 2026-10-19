@@ -34,9 +34,9 @@ LABEL_LINES: tuple[LabelLine, ...] = get_args(LabelLine)
 LABEL_PROTECTIONS: tuple[LabelProtection, ...] = get_args(LabelProtection)
 
 # The packaged defaults (config.toml writes the same values; a test compares them): Linear an underline on a
-# box, Circular a halo (LP-D106).
+# box, Circular neither a line nor a protection; a halo can be chosen (LP-D110).
 DEFAULT_LABEL_LINE: Mapping[LabelStyleMode, LabelLine] = {"linear": "under", "circular": "none"}
-DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "box", "circular": "halo"}
+DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "box", "circular": "none"}
 
 # The halo: a white stroke of the letters this many font sizes wide (half of it beyond the glyphs).
 HALO_WIDTH_EM = 0.08
