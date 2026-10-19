@@ -713,6 +713,24 @@ test('Extend to (to_slot) faults are the ones Python refuses, in both modes and 
   });
 });
 
+// OV-1302: a disabled or missing slot named by an Overlay row refuses Save, Generate and
+// Load with a recognized diagnostic that names the row, not a plain Error.
+test('an Overlay row naming a disabled or missing slot throws a named diagnostic', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const [overlay, reason, field] of [
+      [{ params: { to_slot: 'off' } }, 'OVERLAY_SPAN', 'to_slot'],
+      [{ params: { to_slot: 'missing' } }, 'OVERLAY_SPAN', 'to_slot'],
+      [{ params: { anchor_slot: 'off' } }, 'OVERLAY_ANCHOR', 'anchor_slot']
+    ]) {
+      const slots = spanStack(mode, overlay);
+      assert.throws(() => validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]), (error) => (
+        error.code === 'TRACK_INVALID' && error.context.reason === reason
+        && error.context.field === field && error.context.slotIndex === slots.length - 1
+      ), `${mode} ${field}`);
+    }
+  }
+});
+
 test('Extend to (to_slot) is written to the slot text and the payload, and None writes nothing', () => {
   for (const mode of ['circular', 'linear']) {
     const spec = mode === 'linear' ? buildLinearTrackSlotSpec : buildCircularTrackSlotSpec;

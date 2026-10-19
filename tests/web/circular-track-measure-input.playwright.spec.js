@@ -57,8 +57,8 @@ const openPanel = async page => {
 };
 const counts = page => page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
 // The first Undo or Redo after a Load can start the diagram Worker to prepare
-// rules (the Load itself may not need it), so a step may take that long.
-const expectCounts = async (page, undo, redo = 0) => expect.poll(() => counts(page), { timeout: 180_000 }).toEqual([undo, redo]);
+// rules (the Load itself may not need it); that first restore passes a long `timeout`.
+const expectCounts = async (page, undo, redo = 0, timeout = undefined) => expect.poll(() => counts(page), { timeout }).toEqual([undo, redo]);
 const scalar = (page, slot = 'gc_content', field = 'width') => page.evaluate(({ slot, field }) => (
   window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === slot)[field]
 ), { slot, field });
@@ -215,7 +215,7 @@ test('numeric and unit edits each have one History step, no derived status, and 
   await expectCounts(page, initial[0] + 3);
   expect(await workerCounts(page)).toEqual(workers);
   await undo(page);
-  await expectCounts(page, initial[0] + 2, 1);
+  await expectCounts(page, initial[0] + 2, 1, 180_000);
   await expect(valueControl(page, 'gc_content', 'Width')).toHaveValue('1.');
   await expect(unitControl(page, 'gc_content', 'Width')).toHaveValue('px');
   await undo(page);

@@ -680,9 +680,9 @@ export const validateTrackSlotBindingInvariants = (
       if (key === 'to_slot' && !targetId) continue;
       const target = enabledById.get(targetId);
       if (!target) {
-        throw new Error(
-          `${modeLabel} annotation slot '${slot.id}' references unknown ${key}=${JSON.stringify(targetId)}.`
-        );
+        throw diagnosticError('TRACK_INVALID', {
+          reason: key === 'to_slot' ? 'OVERLAY_SPAN' : 'OVERLAY_ANCHOR', field: key, slotIndex
+        });
       }
       if (target.renderer === 'annotations' || anchorlessSet.has(target.renderer)) {
         throw new Error(

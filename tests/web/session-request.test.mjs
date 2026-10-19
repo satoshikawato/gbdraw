@@ -289,7 +289,7 @@ assert.throws(
     supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer']
   }),
-  /unknown anchor_slot/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_ANCHOR' && error.context.field === 'anchor_slot'
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -1553,7 +1553,7 @@ invalidCircularOverlay.renderRequest.diagramOptions.tracks = {
 };
 assert.throws(
   () => projectCanonicalSessionRequest(invalidCircularOverlay),
-  /references unknown anchor_slot/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_ANCHOR' && error.context.field === 'anchor_slot'
 );
 
 const emptyDepthColumn = structuredClone(canonical);

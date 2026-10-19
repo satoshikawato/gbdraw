@@ -112,8 +112,7 @@ for (const [name, file] of [['tobacco', TOBACCO], ['hepa', HEPA]]) {
   });
 }
 
-// Review F1: a Session whose request has no `configOverrides` (as older CLI
-// Sessions are); a live value creates them, as a Generate from the same draft
+// Review F1: a Session whose request has no `configOverrides`; a live value creates them, as a Generate from the same draft
 // sends them. The Gallery Session holds its command line's overrides, so the
 // case removes them.
 test('tobacco: a loaded Session applies a Legend font size with no Generate', async ({ browser }, testInfo) => {
