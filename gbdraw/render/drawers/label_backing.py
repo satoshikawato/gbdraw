@@ -28,11 +28,17 @@ casings, so the casing never cuts its joint and no ink is drawn twice.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 from gbdraw.labels.label_ink import FeatureLabelInk
-from gbdraw.labels.label_style import BOX_OPACITY, HALO_COLOR, HALO_WIDTH_EM, UNDERLINE_GAP_EM, leader_width_px
+from gbdraw.labels.label_style import (
+    BOX_OPACITY,
+    HALO_COLOR,
+    HALO_WIDTH_EM,
+    UNDERLINE_GAP_EM,
+    FeatureLabelStyle,
+    leader_width_px,
+)
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import Point
 from gbdraw.render.label_binding import bind_label_part
@@ -150,9 +156,9 @@ def backing_rect(box: Aabb, font_size: float, *, opacity: float = BACKING_OPACIT
     )
 
 
-def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, float]]) -> Aabb:
+def feature_label_backing(label: FeatureLabelInk) -> Aabb:
     """A feature label's box in the frame of its ``ink``: stopped short of its underline by the line's gap
-    when it has one, else at the end of its ``leader`` on the side the leader arrives from (where the label's
+    when it has one, else at the end of its drawn leader on the side the leader arrives from (where the label's
     underline ends it when the leader stops above the letters)."""
 
     line = label.underline
@@ -161,9 +167,9 @@ def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, 
         gap = UNDERLINE_GAP_EM * label.font_size
         edge = line_y - gap if line_y > label.ink.max_y else line_y + gap
         return backing_box(label.ink, label.font_size, edge_y=edge)
-    if not leader:
+    if not label.leader:
         return backing_box(label.ink, label.font_size)
-    end_x, end_y = label.to_label_frame(line[0] if line is not None else leader[-1])
+    end_x, end_y = label.to_label_frame(line[0] if line is not None else label.leader[-1])
     ink = label.ink
     out_x = max(ink.min_x - end_x, end_x - ink.max_x)
     out_y = max(ink.min_y - end_y, end_y - ink.max_y)
@@ -174,26 +180,31 @@ def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, 
     return backing_box(ink, label.font_size, edge_y=edge)
 
 
-def feature_label_box_bounds(label: FeatureLabelInk, leader: Sequence[tuple[float, float]]) -> Aabb:
-    """The drawing-frame bounds of the box ``feature_label_box`` draws for ``label`` and ``leader``, turned
-    with its letters: what the box covers, for the region labels that keep off it (OV-1357)."""
-
-    box = feature_label_backing(label, leader)
-    if label.rotation_deg == 0.0:
-        return box
-    corners = [label.from_label_frame(corner) for corner in (
-        (box.min_x, box.min_y), (box.max_x, box.min_y), (box.min_x, box.max_y), (box.max_x, box.max_y)
-    )]
-    xs, ys = [x for x, _ in corners], [y for _, y in corners]
-    return Aabb(min(xs), min(ys), max(xs), max(ys))
+def _corners(box: Aabb) -> tuple[Point, Point, Point, Point]:
+    return ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
 
 
-def feature_label_box(label: FeatureLabelInk, leader: Sequence[tuple[float, float]], feature_id: str | None) -> Rect:
-    """The drawn box of a feature label (``protection = box``), turned with its letters; ``leader`` is the
-    leader as drawn. Like a halo or a casing it takes no pointer events, and it is bound to its label
-    (``feature_id``, required: ``bind_label_part`` refuses none) so that it is hidden with it."""
+def feature_label_drawn_parts(label: FeatureLabelInk, style: FeatureLabelStyle) -> tuple[tuple[Point, ...], ...]:
+    """What ``style`` draws with a feature label's letters besides them, as convex polygons in the drawing
+    frame: its underline with its stroke (``line = under``) and its white box turned with the letters
+    (``protection = box``). ``label`` is its ink with the style's underline. Both modes' region labels keep off
+    these as off the letters (OV-1357, OV-1358)."""
 
-    rect = backing_rect(feature_label_backing(label, leader), label.font_size, opacity=BOX_OPACITY)
+    parts: list[tuple[Point, ...]] = []
+    line = label.underline_box if style.underline else None
+    if line is not None:
+        parts.append(_corners(line))
+    if style.protection == "box":
+        parts.append(tuple(label.from_label_frame(corner) for corner in _corners(feature_label_backing(label))))
+    return tuple(parts)
+
+
+def feature_label_box(label: FeatureLabelInk, feature_id: str | None) -> Rect:
+    """The drawn box of a feature label (``protection = box``), turned with its letters. Like a halo or a
+    casing it takes no pointer events, and it is bound to its label (``feature_id``, required:
+    ``bind_label_part`` refuses none) so that it is hidden with it."""
+
+    rect = backing_rect(feature_label_backing(label), label.font_size, opacity=BOX_OPACITY)
     if label.rotation_deg != 0.0:
         rect.rotate(label.rotation_deg, center=label.center)
     rect.attribs["aria-hidden"] = "true"
@@ -209,7 +220,7 @@ __all__ = [
     "backing_rect",
     "feature_label_backing",
     "feature_label_box",
-    "feature_label_box_bounds",
+    "feature_label_drawn_parts",
     "label_halo",
     "underline_casing",
     "UnderlineCasing",

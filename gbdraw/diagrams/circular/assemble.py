@@ -57,13 +57,15 @@ from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
+from ...labels.label_ink import circular_label_ink
 from ...labels.label_style import widest_leader_px
+from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
     CircularLabelProbeStopped,
     assign_leader_start_points,
     circular_label_fits,
     circular_label_font_size,
-    circular_label_shapes,
+    circular_label_shape,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
@@ -732,14 +734,25 @@ def _feature_label_obstacles(
     labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
 ) -> CircularLabelObstacles:
     """The record's drawn feature labels and their leaders, as the fit count sees them, for annotation labels to
-    keep the label spacing from (OV-1173)."""
+    keep the label spacing from (OV-1173). A label with a leader also covers what its style draws with its letters,
+    its underline and its white box (OV-1358, the Linear rule of OV-1357)."""
 
-    shapes = circular_label_shapes(labels, total_length)
+    style = canvas_config.profile.label_style
+    shapes = [
+        (
+            shape,
+            ()
+            if label.get("is_embedded")
+            else feature_label_drawn_parts(circular_label_ink(label, total_length, underline=style.underline), style),
+        )
+        for label in labels
+        if (shape := circular_label_shape(label, total_length)).parts
+    ]
     spacing = float(canvas_config.profile.config.labels.spacing.circular)
     half_stroke = 0.5 * widest_leader_px(labels)
     return CircularLabelObstacles(
-        shapes=tuple(shape.parts for shape in shapes),
-        segments=tuple(segment for shape in shapes for segment in zip(shape.leader, shape.leader[1:])),
+        shapes=tuple((*shape.parts, *drawn) for shape, drawn in shapes),
+        segments=tuple(segment for shape, _drawn in shapes for segment in zip(shape.leader, shape.leader[1:])),
         clearance=spacing,
         segment_clearance=spacing + half_stroke,
     )

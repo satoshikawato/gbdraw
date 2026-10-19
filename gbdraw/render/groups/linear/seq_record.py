@@ -231,9 +231,9 @@ class SeqRecordGroup:
                 casing = cased.element(feature_id)
                 tail = self._leader_part(entry, line[0], feature_id, width)
                 leader_layer = () if entry == leader[0] else (leader[0], entry)
-                box = feature_label_box(ink, leader, feature_id) if style.protection == "box" else None
+                box = feature_label_box(ink, feature_id) if style.protection == "box" else None
                 return _LabelParts(True, leader_layer, tail, casing, underline, box)
-        box = feature_label_box(ink, leader, feature_id) if style.protection == "box" else None
+        box = feature_label_box(ink, feature_id) if style.protection == "box" else None
         return _LabelParts(True, leader, None, None, None, box)
 
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:

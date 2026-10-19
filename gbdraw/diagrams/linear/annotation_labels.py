@@ -51,7 +51,7 @@ from gbdraw.labels.linear import (
 )
 from gbdraw.layout.linear import LinearFeatureLaneGeometry
 from gbdraw.layout.spatial import Aabb
-from gbdraw.render.drawers.label_backing import feature_label_box_bounds
+from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, linear_annotation_labels
 
 from .track_slots import LinearRecordVerticalPlan
@@ -120,20 +120,14 @@ def _feature_label_obstacles(
 
     letters = _feature_label_box(label)
     leader = linear_leader_polyline(dict(label))
-    if leader and (label_style.underline or label_style.protection == "box"):
-        ink = linear_label_ink(label, leader, underline=label_style.underline)
-        drawn = [
-            box
-            for box in (
-                ink.underline_box,
-                feature_label_box_bounds(ink, leader) if label_style.protection == "box" else None,
+    if leader:
+        drawn = feature_label_drawn_parts(linear_label_ink(label, leader, underline=label_style.underline), label_style)
+        points = [point for part in drawn for point in part]
+        if points:
+            letters = Aabb(
+                min(letters.min_x, *(x for x, _ in points)), min(letters.min_y, *(y for _, y in points)),
+                max(letters.max_x, *(x for x, _ in points)), max(letters.max_y, *(y for _, y in points)),
             )
-            if box is not None
-        ]
-        letters = Aabb(
-            min(box.min_x for box in (letters, *drawn)), min(box.min_y for box in (letters, *drawn)),
-            max(box.max_x for box in (letters, *drawn)), max(box.max_y for box in (letters, *drawn)),
-        )
     obstacles = [LabelObstacle(letters.translated(0.0, origin_y), owner)]
     for (x1, y1), (x2, y2) in zip(leader, leader[1:]):
         obstacles.append(

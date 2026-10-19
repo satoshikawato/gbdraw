@@ -89,7 +89,7 @@ class LabelsGroup:
         if style.protection == "box":
             for label, contact, _line in drawn:
                 ink = circular_label_ink(label, self.record_length, underline=style.underline)
-                group.add(feature_label_box(ink, (*ink.leader[:-1], contact), label["feature_id"]))
+                group.add(feature_label_box(ink, label["feature_id"]))
         drawer = LabelDrawer(profile=self.render_context.profile)
         feature_anchor_radius = float(self.geometry.radius)
         letters = Group()
