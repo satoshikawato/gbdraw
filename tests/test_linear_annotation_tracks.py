@@ -2098,6 +2098,62 @@ def test_linear_moved_label_keeps_off_the_next_record_in_its_row(
     assert right <= float(second["axisXpx"])
 
 
+def test_a_feature_label_moved_for_a_region_label_keeps_off_the_row_neighbours_labels_as_counted() -> None:
+    """LP-D82 with OV-1188: a region label at the right end of record A meets A's tRNA-Pro label. Record B,
+    in the same row, is dragged 300 px right (a stored translation), so where it is drawn, the row above
+    tRNA-Pro is clear; where the label fit counts it (B's frame in the row as solved), B's first label
+    hangs left into that row. The move is checked as the fit counts it, so it is not made and the figure
+    is drawn, with the region label's overlap warned about, as before the row count (review N1)."""
+
+    import warnings
+
+    from gbdraw.api.options import LinearRecordTranslation
+    from gbdraw.diagrams.linear.assemble import stable_record_keys
+
+    def record(name: str, features: tuple[tuple[int, int, str], ...]) -> SeqRecord:
+        item = SeqRecord(Seq("ACGT" * 1500), id=name, name=name, description=name, annotations={"topology": "linear"})
+        item.features = [
+            SeqFeature(FeatureLocation(start - 1, end, strand=1), type="CDS", qualifiers={"product": [product]})
+            for start, end, product in features
+        ]
+        return item
+
+    records = [
+        record("recA", (
+            (5830, 5850, "tRNA-Leu"),
+            (5560, 5580, "tRNA-Pro"),
+            (3000, 3020, "first middle protein"),
+            (3030, 3050, "second middle protein"),
+            (3060, 3080, "third middle protein"),
+        )),
+        record("recB", (
+            (1, 40, "a very long hanging product label"),
+            (41, 80, "another very long hanging label"),
+            (81, 120, "yet another long hanging label"),
+        )),
+    ]
+    style = RegionAnnotationStyle(**{**_REGION_STYLE.__dict__, "label_font_size": 20.0})
+    region = RegionAnnotation(
+        "r0", CoordinateSpan(parse_record_selector("recA"), 5501, 6000),
+        label="Mitochondrial control region", mark="highlight", style=style,
+    )
+    options = LinearDiagramOptions(
+        config_overrides={"labels.linear.scope": "all", "canvas.linear.track_layout": "above"},
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+    )
+    layout = LinearMultiRecordOptions(
+        record_gap_px=5.0,
+        multi_record_positions=("#1@1", "#2@1"),
+        record_translations=(LinearRecordTranslation(str(stable_record_keys(records)[1]), 300.0, 0.0),),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_linear_diagram(records, options=options, layout=layout)
+
+    label_fit = drawing._gbdraw_linear_label_fit
+    assert [(record.record_id, record.label_kind) for record in label_fit.records] == [("recA", "linear_region")]
+
+
 @pytest.mark.parametrize(
     ("x", "segment", "hanging", "placed"),
     [

@@ -149,6 +149,7 @@ from ...labels.linear import (
     LinearLabelFrame,
     calculate_label_bounds,
     linear_label_fit,
+    linear_label_rows,
     with_feature_label_rows,
 )
 from ...tracks import (
@@ -1633,9 +1634,11 @@ def _place_linear_annotation_labels_by_record(
     leader_stroke_width: float,
     gap: float,
     new_rows: bool,
+    label_frames: Sequence[LinearLabelFrame] | None,
 ) -> tuple[list[PlacedAnnotationLabels], list[list[dict]]]:
     """Each record's annotation labels, placed along their spans in record order, and every
-    record's feature labels after the moves made for them (LP-D82).
+    record's feature labels after the moves made for them (LP-D82), which the label fit of their
+    row (``label_frames``, as ``linear_label_fit`` reads them) counts no larger.
 
     Obstacles are the record's own feature labels and leaders, every record's
     name and definition text, and, from the other records of the same row,
@@ -1645,16 +1648,19 @@ def _place_linear_annotation_labels_by_record(
     The record's feature glyphs bound the empty area inside a filled mark (LP-D75).
     """
 
-    def own_ink(index: int) -> list[LabelObstacle]:
+    def labels_of(index: int) -> list[dict]:
         # Read when used: an earlier record's region labels may have moved its feature labels.
-        return linear_feature_label_obstacles(
-            feature_labels[index] if index < len(feature_labels) else [], plans[index], leader_stroke_width, index
-        )
+        return feature_labels[index] if index < len(feature_labels) else []
 
+    def own_ink(index: int) -> list[LabelObstacle]:
+        return linear_feature_label_obstacles(labels_of(index), plans[index], leader_stroke_width, index)
+
+    label_row_of = {index: row for row in linear_label_rows(label_frames, len(records)) for index, _x in row}
     placed: list[PlacedAnnotationLabels] = []
     for index, record in enumerate(records):
         here = placements[index]
         obstacles = own_ink(index)
+        label_row = label_row_of[index]
         for other, there in placements.items():
             same_row = other != index and there.row == here.row
             dx, dy = there.x - here.x, there.axis_y - here.axis_y
@@ -1679,7 +1685,7 @@ def _place_linear_annotation_labels_by_record(
                 plan=plans[index],
                 annotation_track_layouts=annotation_track_layouts,
                 obstacles=obstacles,
-                feature_labels=feature_labels[index] if index < len(feature_labels) else [],
+                feature_labels=labels_of(index),
                 # Only a record with annotation labels to place reads its glyphs.
                 glyphs=linear_feature_glyph_boxes(
                     feature_dicts[index],
@@ -1695,6 +1701,8 @@ def _place_linear_annotation_labels_by_record(
                 leader_stroke_width=leader_stroke_width,
                 gap=gap,
                 new_rows=new_rows,
+                label_x=next(x for other, x in label_row if other == index),
+                row_labels=[(labels_of(other), x) for other, x in label_row if other != index],
             )
         )
         feature_labels = with_feature_label_rows(feature_labels, placed[-1].rows)
@@ -2954,6 +2962,7 @@ def assemble_linear_diagram(
         gap=float(cfg.labels.spacing.linear),
         # One assembly more at most: one that places proposed rows proposes none.
         new_rows=feature_label_rows is None,
+        label_frames=label_frames,
     )
     annotation_labels_by_record = [placed.by_slot for placed in placed_annotation_labels]
     label_fit = linear_label_fit(

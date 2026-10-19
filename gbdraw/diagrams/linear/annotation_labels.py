@@ -36,6 +36,7 @@ from gbdraw.annotations import ResolvedAnnotationTrack, annotation_track_params_
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.core.text import text_ink_offsets
 from gbdraw.features.objects import FeatureObject
+from gbdraw.labels.fit import LabelFit
 from gbdraw.labels.linear import (
     FeatureLabelRow,
     RecordRegionLabels,
@@ -44,7 +45,7 @@ from gbdraw.labels.linear import (
     linear_label_row,
     linear_label_side,
     linear_leader_polyline,
-    linear_record_label_fit,
+    linear_row_label_fit,
 )
 from gbdraw.layout.linear import LinearFeatureLaneGeometry
 from gbdraw.layout.spatial import Aabb
@@ -304,13 +305,22 @@ def _choose_candidate(
 
 class _Record(NamedTuple):
     """What the record's feature labels move within: their dicts, their origin and leader width,
-    and the ink they must not newly meet (feature glyphs, the axis and other tracks)."""
+    the ink they must not newly meet (feature glyphs, the axis and other tracks), and where the
+    label fit counts them: the x of the record's start in its row and the feature labels of the
+    row's other records, each with its x (``LinearLabelFrame``)."""
 
     record_index: int
     labels: list[dict[str, object]]
     origin_y: float
     leader_half_width: float
     inks: tuple[LabelObstacle, ...]
+    label_x: float = 0.0
+    row_labels: tuple[tuple[Sequence[dict[str, object]], float], ...] = ()
+
+    def label_fit(self, labels: Sequence[dict[str, object]]) -> LabelFit:
+        """The label fit's count of the row's feature labels with the record's labels ``labels``."""
+
+        return linear_row_label_fit([*self.row_labels, (labels, self.label_x)])
 
 
 class _Way(NamedTuple):
@@ -340,7 +350,8 @@ def _another_row(
     """The row the feature label ``owner`` moves to, off the region label's letters ``region``:
     another row of its side, the nearest first (the outer one on a tie), then, when ``new_rows``,
     one new row beyond them. A move into an existing row makes no new overlap with the ink and
-    obstacles; no move makes the label fit's count of the record's feature labels larger."""
+    obstacles; no move makes the label fit's count of the row's feature labels larger, counted
+    where and as the label fit counts them (``_Record.label_fit``)."""
 
     label = labels[owner[2]]
     side = linear_label_side(label)
@@ -352,7 +363,7 @@ def _another_row(
     others = [*(item for item in obstacles if item.owner != owner), *record.inks]
     before_boxes = [item for item in obstacles if item.owner == owner]
     before = _owners_met(before_boxes, owner, others)
-    fit = linear_record_label_fit(labels)
+    fit = record.label_fit(labels)
     for row in [*rows, *([top + 1] if new_rows else [])]:
         moved = linear_label_in_row(dict(label), side, row)
         boxes = _feature_label_obstacles(moved, owner, record.origin_y, record.leader_half_width)
@@ -361,7 +372,7 @@ def _another_row(
         if not room and (boxes[0].box.intersects(region, gap) or not _owners_met(boxes, owner, others) <= before):
             continue
         trial = [moved if index == owner[2] else item for index, item in enumerate(labels)]
-        after = linear_record_label_fit(trial)
+        after = record.label_fit(trial)
         if after.overlap_pairs > fit.overlap_pairs or after.crossing_pairs > fit.crossing_pairs:
             continue
         return row, room, moved, boxes
@@ -439,6 +450,8 @@ def place_linear_annotation_labels(
     leader_stroke_width: float = 0.0,
     gap: float,
     new_rows: bool = True,
+    label_x: float = 0.0,
+    row_labels: Sequence[tuple[Sequence[dict[str, object]], float]] = (),
 ) -> PlacedAnnotationLabels:
     """Each annotation slot's labels on one record, placed along their spans (slot-local y).
 
@@ -447,8 +460,10 @@ def place_linear_annotation_labels(
     records of its row), from this record's bar start and axis; ``glyphs``
     the record's feature glyph boxes (``linear_feature_glyph_boxes``). The
     record's ``feature_labels`` may make way (LP-D82); ``new_rows`` allows a
-    move to a new row. A placed label still over an obstacle counts one pair
-    per obstacle owner.
+    move to a new row. ``label_x`` and ``row_labels`` are where the label fit
+    counts the row's feature labels (the record's start and the other records'
+    labels, each with its start); no move makes that count larger. A placed
+    label still over an obstacle counts one pair per obstacle owner.
     """
 
     obstacles = list(obstacles)
@@ -461,6 +476,8 @@ def place_linear_annotation_labels(
             LabelObstacle(box, (record_index, "ink", index))
             for index, box in enumerate(_track_inks(plan, "", glyphs, sequence_width))
         ),
+        float(label_x),
+        tuple(row_labels),
     )
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
     font_sizes: list[float] = []

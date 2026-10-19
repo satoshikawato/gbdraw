@@ -988,10 +988,11 @@ def _linear_row_label_fits(row: Sequence[tuple[Sequence[dict], float]]) -> tuple
     return [LabelFit(overlap, crossing) for overlap, crossing in counts], embedded_overlap
 
 
-def linear_record_label_fit(labels: Sequence[dict]) -> LabelFit:
-    """One record's drawn feature labels counted with the shared rule (their layout boxes and leaders)."""
+def linear_row_label_fit(row: Sequence[tuple[Sequence[dict], float]]) -> LabelFit:
+    """The drawn feature labels of one Linear row (each record's labels with the x of its start, its
+    ``LinearLabelFrame``) counted together, as ``linear_label_fit`` counts them."""
 
-    return _linear_row_label_fits([(labels, 0.0)])[0][0]
+    return sum(_linear_row_label_fits(row)[0], FITS)
 
 
 # The drawing attribute that carries a Linear figure's label fit to the check.
@@ -1147,7 +1148,7 @@ __all__ = [
     "linear_label_row",
     "linear_label_rows",
     "linear_label_side",
-    "linear_record_label_fit",
+    "linear_row_label_fit",
     "linear_record_labels",
     "place_linear_label_row",
     "with_feature_label_rows",
