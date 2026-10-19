@@ -651,6 +651,21 @@ export const ActionMenu = {
   `
 };
 
+/** The OIC-029 line from `defaultColorScopeLine`: the sentence for a Legend item choice that sets a type's default color. */
+export const DefaultColorScopeLine = {
+  props: { line: { type: Object, required: true } },
+  template: `
+    <span data-default-color-scope-sentence>
+      <template v-if="line.kind === 'replaces'">
+        Replaces your {{ line.type }} default color
+        <span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
+        <span class="font-mono">{{ line.color }}</span>.
+      </template>
+      <template v-else>Sets the {{ line.type }} default color ({{ line.type }} features without their own color or rule, also hidden ones).</template>
+    </span>
+  `
+};
+
 export const ColorValueControl = {
   props: {
     modelValue: { default: null },
@@ -670,6 +685,12 @@ export const ColorValueControl = {
     const pickerValue = computed(() => (
       toNativeColorInputValue(props.modelValue, props.fallback)
     ));
+    // Controlled: a parent that refuses the emit (a cancelled scope dialog) leaves the props unchanged, so Vue
+    // does not patch the native input; put the shown value back to the prop's.
+    const settleControl = async (/** @type {HTMLInputElement | HTMLSelectElement} */ target, /** @type {() => string} */ shown) => {
+      await nextTick();
+      if (target.isConnected && target.value !== shown()) target.value = shown();
+    };
     const updateMode = (/** @type {{ target: HTMLSelectElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
@@ -678,6 +699,7 @@ export const ColorValueControl = {
         'update:modelValue',
         colorValueForMode(nextMode, props.modelValue, props.fallback)
       );
+      return settleControl(event.target, () => mode.value);
     };
     const updateColor = (/** @type {{ target: HTMLInputElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
@@ -686,6 +708,7 @@ export const ColorValueControl = {
         'update:modelValue',
         toNativeColorInputValue(event?.target?.value, props.fallback)
       );
+      return settleControl(event.target, () => pickerValue.value);
     };
     return { mode, pickerValue, updateMode, updateColor, controlAvailable };
   },

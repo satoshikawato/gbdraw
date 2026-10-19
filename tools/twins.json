@@ -221,7 +221,7 @@
         "gbdraw/web/js/app/legend/layout-actions.js:createLegendLayoutActions"
       ],
       "vector": "tests/fixtures/legend_layout_vectors.json",
-      "reason": "A Legend edit lays out in the browser with no Generate; 462 measurement and 132 Legend cases from Python pin the port (difference 0).",
+      "reason": "A Legend edit lays out in the browser with no Generate; 462 measurement and 140 Legend cases from Python pin the port (difference 0).",
       "retireWhen": "incremental rendering lays out an edited Legend in Python (OV-165 part 2)",
       "source": "inventory C section B (Legend measurement and layout; OV-127, OV-143, OV-165, #940)"
     },

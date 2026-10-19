@@ -198,9 +198,8 @@ test('while a palette is queued, Apply to all shows its color now and switching 
   }, USER_CDS);
   const line = page.locator('[data-default-color-scope-line]');
   await expect(line).toContainText(
-    'Sets the CDS default color (CDS features without their own color or rule, also hidden ones).'
+    'Sets the CDS default color (CDS features without their own color or rule, also hidden ones). Applies now, also over the queued palette.'
   );
-  await expect(line).toContainText('Applies now, also over the queued palette.');
   await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.handleFeatureStyleScopeChoice('caption');

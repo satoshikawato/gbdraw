@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { createPreviewItemPopup, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
+import { createPreviewItemPopup, defaultColorScopeLine, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
+import { legendEntryKey } from '../../gbdraw/web/js/services/legend-svg.js';
+import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
 
 class FakeElement {
   constructor(attributes = {}, { parent = null, text = '', children = [] } = {}) {
@@ -77,7 +79,9 @@ const createPopup = ({
   renameLegendRow = null, legendRenameSettled = async () => {}, readShownLegendName = undefined,
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
-  rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null
+  rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
+  countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {}, userDefaultColors = {},
+  readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null
 } = {}) => {
   const steps = [];
   const form = {
@@ -98,7 +102,10 @@ const createPopup = ({
     readLegendEntryColor: (entry) => entry.color,
     readShownLegendName,
     readLegendRowRules: () => rules,
-    countLegendCaptionFeatures: () => featureCount,
+    countLegendCaptionFeatures,
+    readLegendTrackKind,
+    readLegendRowDefaultColorType: (entry) => defaultColorTypes[entry.originalCaption || entry.caption] ?? null,
+    readUserDefaultColor: (type) => userDefaultColors[type] ?? null,
     getCommittedRequest: () => ({ records: requestRecords }),
     readCommittedRecordRows: () => recordRows,
     readAlignmentInspector: () => alignment && { records: [alignment] },
@@ -296,10 +303,72 @@ test('the legend-entry view names the rule behind the color and the feature coun
   const byType = openView(createPopup(), { kind: 'legend-entry', key: 'tRNA' }, false);
   assert.equal(byType.subtitle, 'Counting features…');
   assert.equal(byType.colorSource, 'Default color of tRNA features');
+  // OV-1281 / OIC-029: once the matches are ready, the view carries the one line of what Color sets; the owner shapes it.
+  assert.deepEqual(defaultColorScopeLine('tRNA', null), { kind: 'sets', type: 'tRNA', color: null });
+  assert.deepEqual(defaultColorScopeLine('tRNA', '#112233'), { kind: 'replaces', type: 'tRNA', color: '#112233' });
+  assert.equal(defaultColorScopeLine(null, '#112233'), null);
+  const drawn = openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' });
+  assert.deepEqual([drawn.colorSource, drawn.defaultColorLine], ['Default color of tRNA features', { kind: 'sets', type: 'tRNA', color: null }]);
+  // N-2: a type that already has a user default color says it replaces it.
+  assert.deepEqual(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' }, userDefaultColors: { tRNA: '#112233' } }),
+    { kind: 'legend-entry', key: 'tRNA' }).defaultColorLine, { kind: 'replaces', type: 'tRNA', color: '#112233' });
+  const early = openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' }, false);
+  assert.deepEqual([early.colorSource, early.defaultColorLine], ['Default color of tRNA features', null],
+    'before the matches are ready the popup does not say what Color sets');
   const single = openView(createPopup({ entries: [{ caption: 'x', color: '#000000' }], featureTypes: [], featureCount: 1 }),
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');
   assert.equal(single.colorSource, 'Set on individual features');
+});
+
+test('the legend-entry view of a track row names its plot, not features (OV-1272)', () => {
+  let counted = 0;
+  const created = createPopup({
+    entries: [
+      { caption: 'GC content', originalCaption: 'GC content', color: '#a0a0a0' },
+      { caption: 'GC skew (+)', originalCaption: 'GC skew (+)', color: '#6dded3' },
+      { caption: 'Depth', originalCaption: 'Depth', color: '#333333' }
+    ],
+    featureTypes: ['CDS'], featureCount: 0,
+    // A rule whose caption spells a track row does not draw it.
+    rules: [{ feat: 'CDS', qual: 'product', val: 'x' }],
+    trackKinds: { 'GC content': 'content', 'GC skew (+)': 'skew', Depth: 'depth' },
+    countLegendCaptionFeatures: () => { counted += 1; return 0; }
+  });
+  const views = ['GC content', 'GC skew (+)', 'Depth'].map((key) => openView(created, { kind: 'legend-entry', key }));
+  assert.deepEqual(views.map((view) => view.subtitle), ['Content plot', 'Skew plot', 'Depth plot']);
+  views.forEach((view) => {
+    assert.equal(view.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
+    assert.deepEqual(view.ruleLines, []);
+  });
+  assert.deepEqual([views[0].title, views[0].name, views[0].dialogLabel], ['GC content', 'GC content', 'Legend item: GC content']);
+  // Not counted as features while the matches prepare either.
+  const preparing = openView(created, { kind: 'legend-entry', key: 'GC content' }, false);
+  assert.equal(preparing.subtitle, 'Content plot');
+  assert.equal(counted, 0, 'a track row counts no features');
+});
+
+// Review N6: the row kind comes from Python's keys (trackLegendRows), never from the name. A feature row named
+// "GC content" holds that key, and the content track takes "GC content (2)" (D-15-65). The port is wired as
+// app-setup.js `readLegendTrackKind` wires it: displayedTrackLegendRows(...).get(legendEntryKey(entry))?.kind.
+test('a feature row named like a track row keeps the feature view (OV-1272)', () => {
+  const pythonRows = new Map([['GC content', { color: '#ff0000' }], ['GC content (2)', { color: '#a0a0a0' }]]);
+  const rows = trackLegendRows(
+    [{ slotId: null, kind: 'content', label: 'GC content', positiveColor: null, negativeColor: null }], pythonRows);
+  const created = createPopup({
+    entries: [
+      { caption: 'GC content', originalCaption: 'GC content', color: '#ff0000' },
+      { caption: 'GC content (2)', originalCaption: 'GC content (2)', color: '#a0a0a0' }
+    ],
+    featureTypes: ['CDS'], featureCount: 3,
+    readLegendTrackKind: (entry) => rows.get(legendEntryKey(entry))?.kind ?? null
+  });
+  const feature = openView(created, { kind: 'legend-entry', key: 'GC content' });
+  const track = openView(created, { kind: 'legend-entry', key: 'GC content (2)' });
+  assert.equal(feature.subtitle, '3 features');
+  assert.notEqual(feature.colorSource, track.colorSource);
+  assert.equal(track.subtitle, 'Content plot');
+  assert.equal(track.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
 });
 
 test('the record-definition view lists the facts of the displayed Result', () => {

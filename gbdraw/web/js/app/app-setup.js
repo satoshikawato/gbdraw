@@ -39,7 +39,7 @@ import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/sessi
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
-import { createPreviewItemPopup } from './preview-item-popup.js';
+import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -1824,15 +1824,18 @@ export const createAppSetup = () => {
     const request = getCommittedCanonicalRenderRequest();
     return request ? drawnTracks(request) : loadedTracks(getLoadedTrackSettings());
   };
+  // The Legend rows Python drew for the displayed Result's tracks, by key.
+  /** @param {DrawingState} drawing */
+  const displayedTrackLegendRows = (drawing) => {
+    const { pythonRows, sharedLegendKeys } = displayedLegendRowContext(state, drawing);
+    return trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys);
+  };
   // The keys of the displayed Result's Legend rows whose drawn track the draft
   // hides (OV-1198, OV-1215): the live compile deletes them, and the Legend
   // list leaves them out, so a hidden track's rows leave and return with it.
   /** @param {DrawingState} drawing @returns {string[]} */
-  const hiddenTrackLegendRows = (drawing) => {
-    const { pythonRows, sharedLegendKeys } = displayedLegendRowContext(state, drawing);
-    return hiddenTrackLegendKeys(trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys),
-      drawing === state.drawings.linear ? 'linear' : 'circular', drawing);
-  };
+  const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(displayedTrackLegendRows(drawing),
+    drawing === state.drawings.linear ? 'linear' : 'circular', drawing);
   const svgActions = createSvgStyles({
     state,
     watch,
@@ -4434,6 +4437,26 @@ export const createAppSetup = () => {
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
   );
+  const setTypeDefaultColorWithHistory = undoableAction('Change feature color', featureActions.setTypeDefaultColor);
+  // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
+  // `input` shows the row's color again afterwards (`shownColor()`): a refused edit leaves the view as it was.
+  /** @param {number} index @param {string} color @param {HTMLInputElement} input @param {() => string} shownColor */
+  const updateLegendEntryColorInPopup = async (index, color, input, shownColor) => {
+    try {
+      return await requestLegendEntryColorInPopup(index, color);
+    } finally {
+      await nextTick();
+      if (input.isConnected && input.value !== shownColor()) input.value = shownColor();
+    }
+  };
+  /** @param {number} index @param {string} color */
+  const requestLegendEntryColorInPopup = async (index, color) => {
+    const entry = state.activeDrawing().legendEntries.value[index];
+    const type = entry ? await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
+    if (typeof type === 'string') return setTypeDefaultColorWithHistory(type, color);
+    // null: no default color draws the row (the swatch only); undefined: the matches went stale, so do nothing.
+    return type === null ? updateLegendEntryColorShown(index, color) : type;
+  };
   const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
     'Change legend stroke color',
     setLegendEntryStrokeColorValue
@@ -5994,6 +6017,9 @@ export const createAppSetup = () => {
     readShownLegendName: legendActions.shownLegendName,
     readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
+    readLegendTrackKind: (entry) => displayedTrackLegendRows(state.activeDrawing()).get(legendEntryKey(entry))?.kind ?? null,
+    readLegendRowDefaultColorType: (entry) => featureActions.legendRowDefaultColorType(legendEntryKey(entry)),
+    readUserDefaultColor: (type) => resultsManager.readUserDefaultColor(state.activeDrawing(), type),
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
     readCommittedRecordRows: recordDisplayControls.committedRecordRows,
@@ -7464,6 +7490,8 @@ export const createAppSetup = () => {
     commitPreviewItemField: previewItemPopup.commitField,
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
+    updateLegendEntryColorInPopup,
+    defaultColorScopeLine,
     renameLegendEntry,
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included

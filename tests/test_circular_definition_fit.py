@@ -240,7 +240,7 @@ def test_definition_that_cannot_be_wrapped_reports_the_definition_band() -> None
     payload = serialize_web_error(error, operation="generate", stage="render")
     assert payload["code"] == "TRACK_LAYOUT"
     assert payload["context"]["reason"] == "DEFINITION_RESERVED"
-    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx"}
+    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx", "keptInsidePx", "keptInsideTracks", "slotTrack"}
 
 
 @pytest.mark.circular
@@ -263,3 +263,105 @@ def test_the_definition_band_message_names_the_tracks_kept_inside(tmp_path: Path
     assert "cannot fit inside between 189.6px and 386.1px" in message
     assert "the center definition text reserves 122.6px" in message
     assert "and 67.1px are kept for the tracks inside it ('gc_content', 'gc_skew')" in message
+
+
+def _lambda_resolved_overlaps(tmp_path: Path, *extra: str) -> ValidationError:
+    from gbdraw.circular import circular_main
+
+    with pytest.raises(ValidationError) as caught:
+        circular_main(
+            [
+                "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"),
+                "--separate_strands", "--track_type", "tuckin", "-l", "left", "--resolve_overlaps",
+                "-o", str(tmp_path / "out"), "-f", "svg", *extra,
+            ]
+        )
+    return caught.value
+
+
+@pytest.mark.circular
+def test_the_definition_band_failure_offers_the_gc_tracks_kept_inside(tmp_path: Path) -> None:
+    """OV-1274: the GC rows' kept room is a context key, and turning them off or narrowing them is a remedy."""
+
+    error = _lambda_resolved_overlaps(tmp_path)
+    assert _layout_reason(error) == "DEFINITION_RESERVED"
+    assert (
+        "set a smaller center_reserved_radius, turn off or narrow the GC content and GC skew tracks "
+        "(--no-gc, --no-skew, --gc_content_width, --gc_skew_width), or place tracks outside."
+    ) in str(error)
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert context["keptInsidePx"] == 67
+    assert context["keptInsideTracks"] == "gc_content,gc_skew"
+
+    # Only the row still drawn is kept and named.
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc")
+    assert "turn off or narrow the GC skew track (--no-skew, --gc_skew_width)" in str(error)
+    assert "--no-gc" not in str(error)
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert context["keptInsideTracks"] == "gc_skew"
+    assert 33 <= context["keptInsidePx"] <= 34
+
+    # With both rows off no GC row is named or offered. (This figure still fails, on the scale ticks: OV-1276,
+    # whose window and remedy the next test pins.)
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
+    assert "GC" not in str(error)
+    assert "keptInsideTracks" not in serialize_web_error(error, operation="generate", stage="render")["context"]
+
+
+@pytest.mark.circular
+def test_the_room_kept_inside_names_every_row_and_offers_only_the_gc_rows(tmp_path: Path) -> None:
+    """OV-1274 (review N-1): a Depth row shares the kept room; only the GC rows travel to the Web as named rows.
+
+    tests/web/error-normalization.test.mjs words this context ("among them GC content and GC skew").
+    """
+
+    depth = tmp_path / "lambda.depth.tsv"
+    depth.write_text("".join(f"NC_001416.1\t{position}\t{10 + position % 7}\n" for position in range(1, 48503, 50)))
+    error = _lambda_resolved_overlaps(tmp_path, "--depth_track", str(depth))
+    message = str(error)
+    assert "90.8px are kept for the tracks inside it ('depth', 'gc_content', 'gc_skew')" in message
+    assert "turn off or narrow the GC content and GC skew tracks" in message
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert (context["keptInsidePx"], context["keptInsideTracks"]) == (91, "gc_content,gc_skew")
+    assert "slotTrack" not in context
+
+
+@pytest.mark.circular
+def test_the_definition_band_failure_starts_its_band_at_the_reserve(tmp_path: Path) -> None:
+    """OV-1276: a window with nothing kept inside it starts at the definition band, in the message and the context;
+    the scale ticks that do not fit offer hiding the scale."""
+
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
+    assert _layout_reason(error) == "DEFINITION_RESERVED"
+    assert (
+        "Circular track slot 'ticks' cannot fit inside between 122.6px and 386.1px "
+        "because the center definition text reserves 122.6px."
+    ) in str(error)
+    assert "set a smaller center_reserved_radius, hide the scale (--hide_scale; with an explicit track list, remove the ticks slot), or place tracks outside." in str(error)
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert (context["innerPx"], context["outerPx"], context["slotTrack"]) == (123, 386, "ticks")
+
+
+@pytest.mark.circular
+def test_the_scale_remedy_names_the_ticks_slot_of_an_explicit_track_list(tmp_path: Path) -> None:
+    """OV-1276 (review B-1): with an explicit track list --hide_scale leaves an enabled ticks slot, so the remedy says so."""
+
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew", "--circular_track_order", "features,ticks")
+    assert "'ticks' cannot fit inside" in str(error)
+    assert "hide the scale (--hide_scale; with an explicit track list, remove the ticks slot)" in str(error)
+
+
+def test_a_kept_scale_row_adds_no_scale_remedy() -> None:
+    """OV-1276 (review N-1): the scale is offered only when it is the failed slot; a kept GC row is still offered."""
+
+    from gbdraw.diagrams.circular.radial_layout import PlacementWindow, _InsideFitError, _KeptInsideSlot
+
+    window = PlacementWindow(
+        200,
+        386,
+        kept_inside_px=40,
+        kept_inside_slots=(_KeptInsideSlot("ticks", "ticks"), _KeptInsideSlot("gc_content", "dinucleotide_content")),
+    )
+    message = str(_InsideFitError("slot", intent=None, placement_window=window))
+    assert "turn off or narrow the GC content track (--no-gc, --gc_content_width)" in message
+    assert "--hide_scale" not in message

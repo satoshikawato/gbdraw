@@ -41,7 +41,7 @@ NATIVE_TABLE_BASELINE = {"_EXACT": 25, "_TEMPLATES": 20, "_CONSTRAINTS": 22}
 # annotation input checks, CLI adapter and table reader messages, and internal
 # renderer state. One total, so a site that moves to another module does not
 # change it.
-UNPROVEN_BASELINE = 1196
+UNPROVEN_BASELINE = 1187
 
 
 def _package_sources() -> list[Path]:

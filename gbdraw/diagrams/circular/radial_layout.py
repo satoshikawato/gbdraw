@@ -64,15 +64,78 @@ AnnotationLabelRoom = Callable[[RadialBand, CircularAxisLayout, str, Mapping[str
 
 
 @dataclass(frozen=True)
+class _SwitchedTrack:
+    """A track row with an off option, in the words a fit failure offers it with (OV-1274, OV-1276)."""
+
+    # The diagnostic identifier (``keptInsideTracks``, ``slotTrack``; utils/error-normalization.js words it).
+    diagnostic_id: str
+    words: str
+    # How the CLI turns the row off, as the remedy names it.
+    off_remedy: str
+    # The option that narrows the row, or None.
+    width_option: str | None = None
+
+
+# The rows with an off option, by renderer. Other rows are named by slot ID only.
+_SWITCHED_TRACKS: Mapping[str, _SwitchedTrack] = {
+    "dinucleotide_content": _SwitchedTrack("gc_content", "GC content", "--no-gc", "--gc_content_width"),
+    "dinucleotide_skew": _SwitchedTrack("gc_skew", "GC skew", "--no-skew", "--gc_skew_width"),
+    "ticks": _SwitchedTrack("ticks", "scale", "--hide_scale; with an explicit track list, remove the ticks slot"),
+}
+# Their diagnostic identifiers: the vocabulary of the Web error adapter.
+SWITCHED_TRACK_IDS: frozenset[str] = frozenset(track.diagnostic_id for track in _SWITCHED_TRACKS.values())
+
+
+def _switched_track_remedy(tracks: Sequence[_SwitchedTrack]) -> str:
+    """Turning ``tracks`` off (and narrowing those with a width option), as list items ending in ", ", or ""."""
+
+    narrowable = [(track, track.width_option) for track in tracks if track.width_option is not None]
+    remedy = ""
+    if narrowable:
+        words = " and ".join(track.words for track, _width in narrowable)
+        options = ", ".join([*(track.off_remedy for track, _width in narrowable), *(width for _track, width in narrowable)])
+        remedy = f"turn off or narrow the {words} track{'s' if len(narrowable) > 1 else ''} ({options}), "
+    return remedy + "".join(f"hide the {track.words} ({track.off_remedy}), " for track in tracks if track.width_option is None)
+
+
+# The owner of the center reservation band among the occupied bands.
+_CENTER_RESERVATION = "definition"
+
+
+@dataclass(frozen=True)
+class _KeptInsideSlot:
+    slot_id: str
+    renderer: str
+
+
+@dataclass(frozen=True)
 class PlacementWindow:
     inner_px: float
     outer_px: float
     # The reserved band (tick labels) may reach below inner_px to this edge of
     # a pinned row, as it may touch the row below it in top-down packing.
     reserved_inner_px: float | None = None
-    # The room kept below inner_px for the inside rows placed after this window's rows, and their slot IDs.
+    # The room kept below inner_px for the inside rows placed after this window's rows, and those rows.
     kept_inside_px: float = 0.0
-    kept_inside_slot_ids: tuple[str, ...] = ()
+    kept_inside_slots: tuple[_KeptInsideSlot, ...] = ()
+    # The outer edge of the center reservation (definition text or center_reserved_radius). Placement reads it from
+    # the occupied bands; a fit failure reports the window from it (OV-1276).
+    center_reserved_px: float = 0.0
+
+    @property
+    def usable_inner_px(self) -> float:
+        """The lower edge of the band the window's rows may use: inner_px, or the center reservation above it."""
+
+        return max(float(self.inner_px), float(self.center_reserved_px))
+
+    @property
+    def kept_switched_tracks(self) -> tuple[_SwitchedTrack, ...]:
+        """The narrowable rows (GC) among the rows kept inside, each once, in slot order; the scale is offered only when it fails."""
+
+        if self.kept_inside_px <= LAYOUT_EPSILON:
+            return ()
+        tracks = (_SWITCHED_TRACKS.get(slot.renderer) for slot in self.kept_inside_slots)
+        return tuple(dict.fromkeys(track for track in tracks if track is not None and track.width_option is not None))
 
 
 @dataclass(frozen=True)
@@ -112,16 +175,24 @@ class _RadialSlotIntent:
     span_label_rooms: tuple[_SpanLabelRoom, ...] = ()
 
 
-def _cannot_fit_diagnostic(intent: "_RadialSlotIntent | None", window: Any = None) -> dict[str, object]:
+def _cannot_fit_diagnostic(
+    intent: "_RadialSlotIntent | None", window: PlacementWindow | None = None
+) -> dict[str, object]:
     """Track row and usable band of a fit failure; the slot ID stays private.
 
-    A pinned slot has no band to report, and an unbounded band is omitted.
+    A pinned slot has no band to report, and an unbounded band is omitted. The
+    room kept below the band and the rows with an off option it is kept for (OV-1274) are named.
     """
 
     diagnostic: dict[str, object] = {"code": "TRACK_LAYOUT", "reason": "CANNOT_FIT"}
     if window is not None and float(window.outer_px) < float("inf"):
-        diagnostic["innerPx"] = max(0, round(float(window.inner_px)))
+        diagnostic["innerPx"] = max(0, round(window.usable_inner_px))
         diagnostic["outerPx"] = max(0, round(float(window.outer_px)))
+    if window is not None and window.kept_inside_px > LAYOUT_EPSILON:
+        diagnostic["keptInsidePx"] = round(float(window.kept_inside_px))
+        kept_tracks = window.kept_switched_tracks
+        if kept_tracks:
+            diagnostic["keptInsideTracks"] = [track.diagnostic_id for track in kept_tracks]
     if intent is not None:
         diagnostic["slotIndex"] = int(intent.slot_index)
     return diagnostic
@@ -1391,17 +1462,22 @@ class _InsideFitError(ValidationError):
         self.subject = subject
         self.placement_window = placement_window
         self.hint = hint
+        # The failed row, when it has an off option (OV-1276: the scale ticks).
+        self.slot_track = _SWITCHED_TRACKS.get(intent.renderer) if intent is not None else None
         kept = self._kept_inside()
+        diagnostic = _cannot_fit_diagnostic(intent, placement_window)
+        if self.slot_track is not None:
+            diagnostic["slotTrack"] = self.slot_track.diagnostic_id
         super().__init__(
             f"{self._between()}{f'; below it, {kept}' if kept else ''}. Move the slot, reduce widths, "
-            f"disable conflicting labels, or use side=outside.{hint}",
-            diagnostic=_cannot_fit_diagnostic(intent, placement_window),
+            f"disable conflicting labels, {self._switch_remedy()}or use side=outside.{hint}",
+            diagnostic=diagnostic,
         )
 
     def _between(self) -> str:
         return (
             f"{self.subject} cannot fit inside between "
-            f"{self.placement_window.inner_px:.1f}px and {self.placement_window.outer_px:.1f}px"
+            f"{self.placement_window.usable_inner_px:.1f}px and {self.placement_window.outer_px:.1f}px"
         )
 
     def _kept_inside(self) -> str:
@@ -1410,8 +1486,14 @@ class _InsideFitError(ValidationError):
         window = self.placement_window
         if window.kept_inside_px <= LAYOUT_EPSILON:
             return ""
-        slot_ids = ", ".join(f"'{slot_id}'" for slot_id in window.kept_inside_slot_ids)
+        slot_ids = ", ".join(f"'{slot.slot_id}'" for slot in window.kept_inside_slots)
         return f"{window.kept_inside_px:.1f}px are kept for the tracks inside it ({slot_ids})"
+
+    def _switch_remedy(self) -> str:
+        """Turning off the failed row or the rows the window keeps room for (OV-1274, OV-1276), or ""."""
+
+        failed = () if self.slot_track is None else (self.slot_track,)
+        return _switched_track_remedy(tuple(dict.fromkeys((*failed, *self.placement_window.kept_switched_tracks))))
 
     def limited_by_center(self, reserved_radius_px: float, *, explicit_radius: bool) -> ValidationError:
         """Name the center reservation (definition text or explicit radius) as the cause."""
@@ -1419,15 +1501,17 @@ class _InsideFitError(ValidationError):
         kept = self._kept_inside()
         reserved = f"{float(reserved_radius_px):.1f}px{f' and {kept}' if kept else ''}"
         if explicit_radius:
+            switch_remedy = self._switch_remedy()
             message = (
                 f"{self._between()} because center_reserved_radius reserves {reserved}. "
-                f"Set a smaller center_reserved_radius or place tracks outside.{self.hint}"
+                f"Set a smaller center_reserved_radius{f', {switch_remedy}' if switch_remedy else ' '}"
+                f"or place tracks outside.{self.hint}"
             )
         else:
             message = (
                 f"{self._between()} because the center definition text reserves {reserved}. "
                 "Shorten the species or strain text, reduce the definition font size, "
-                f"set a smaller center_reserved_radius, or place tracks outside.{self.hint}"
+                f"set a smaller center_reserved_radius, {self._switch_remedy()}or place tracks outside.{self.hint}"
             )
         return ValidationError(
             message,
@@ -1911,18 +1995,18 @@ def _future_unresolved_inside_span_px(
     feature_dict: Mapping[str, Any] | None,
     depth_config: DepthAxisSource | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
-) -> tuple[float, tuple[str, ...]]:
-    """The smallest span the unresolved inside rows after ``start_pos`` need, and their slot IDs."""
+) -> tuple[float, tuple[_KeptInsideSlot, ...]]:
+    """The smallest span the unresolved inside rows after ``start_pos`` need, and those rows."""
 
     span = 0.0
-    slot_ids: list[str] = []
+    slots: list[_KeptInsideSlot] = []
     outer_neighbor = current_outer_intent
     for future in ordered_intents[start_pos + 1:]:
         if future.slot_index in resolved_by_index:
             break
         if future.side != "inside" or future.placement_policy == "hard":
             break
-        slot_ids.append(future.slot_id)
+        slots.append(_KeptInsideSlot(future.slot_id, future.renderer))
         span += _gap_between_inner_outer_tracks(future, outer_neighbor) + _minimum_future_inside_width_px(
             future,
             axis_radius_px=axis_radius_px,
@@ -1933,7 +2017,7 @@ def _future_unresolved_inside_span_px(
             depth_config=depth_config,
         )
         outer_neighbor = future
-    return span, tuple(slot_ids)
+    return span, tuple(slots)
 
 
 def _inner_limit_with_reserved_future_span(
@@ -1977,6 +2061,9 @@ def _inside_placement_window(
 ) -> PlacementWindow:
     inner_limit = 0.0
     reserved_inner_limit: float | None = None
+    center_reserved = max(
+        (float(band.outer_px) for owner, band in occupied if owner == _CENTER_RESERVATION), default=0.0
+    )
     # A pinned row listed after the group but lying above its window, or above
     # a pinned row of the group, contradicts the stack order: no lower bound.
     future_hard = _next_future_hard_slot(
@@ -2002,7 +2089,7 @@ def _inside_placement_window(
             if band is not None
         )
         inner_limit = reserved_inner_limit + gap_to_future_hard
-    future_span, future_slot_ids = _future_unresolved_inside_span_px(
+    future_span, future_slots = _future_unresolved_inside_span_px(
         ordered_intents,
         start_pos=start_pos,
         current_outer_intent=current_outer_intent,
@@ -2015,7 +2102,9 @@ def _inside_placement_window(
         resolved_by_index=resolved_by_index,
     )
     if future_span <= LAYOUT_EPSILON:
-        return PlacementWindow(inner_limit, float(inside_max_outer), reserved_inner_limit)
+        return PlacementWindow(
+            inner_limit, float(inside_max_outer), reserved_inner_limit, center_reserved_px=center_reserved
+        )
     # The span kept free for the rows after this group bounds both bands.
     inner_limit = max(
         inner_limit,
@@ -2030,7 +2119,8 @@ def _inside_placement_window(
         inner_limit,
         float(inside_max_outer),
         kept_inside_px=float(future_span),
-        kept_inside_slot_ids=future_slot_ids,
+        kept_inside_slots=future_slots,
+        center_reserved_px=center_reserved,
     )
 
 
@@ -2225,7 +2315,7 @@ def _resolve_circular_radial_layout(
     )
     occupied: list[tuple[str, RadialBand]] = []
     if definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
-        occupied.append(("definition", definition_band))
+        occupied.append((_CENTER_RESERVATION, definition_band))
 
     intents = _slot_intents(
         slots,
@@ -2273,7 +2363,7 @@ def _resolve_circular_radial_layout(
             conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:
                 diagnostic = _cannot_fit_diagnostic(intent)
-                if conflict[0] == "definition":
+                if conflict[0] == _CENTER_RESERVATION:
                     diagnostic = _center_reserved_diagnostic(diagnostic, explicit_radius=center_reserved_radius_explicit)
                 raise ValidationError(
                     f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'.",
