@@ -108,6 +108,8 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
             label="filter list file",
             filepath=filepath,
             legacy_rows=LEGACY_TABLE_ROWS["label-whitelist"],
+            keep_default_na=False,
+            na_filter=False,
         )
     except ParseError:
         raise
@@ -120,7 +122,14 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
     except Exception as e:
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    _refuse_missing_values(df, required_cols, filepath)
+    # OV-350: an empty keyword cell is the empty pattern, which matches every
+    # value of its qualifier. An empty feature type or qualifier, or a row
+    # without a keyword cell, is still a missing value.
+    _refuse_missing_values(
+        df.assign(**{column: df[column].mask(df[column] == "") for column in ("feature_type", "qualifier")}),
+        required_cols,
+        filepath,
+    )
 
     logger.info(f"Successfully loaded filter list from {filepath}")
     return df

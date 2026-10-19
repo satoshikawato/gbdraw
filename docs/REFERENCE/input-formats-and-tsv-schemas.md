@@ -233,6 +233,13 @@ value. The [feature override
 table](#feature-override-table) is different: it quotes a `label_text` that
 contains `"`.
 
+A Label whitelist `keyword` is a case-insensitive regular expression searched
+in the values of the row's qualifier. An empty `keyword` cell, as in
+`CDS<TAB>product<TAB>`, matches every value of that qualifier, so every CDS
+with a `product` keeps its label. A row without the third cell, or with an
+empty `feature_type` or `qualifier`, is reported as a missing value. In this
+table, cells such as `NA` and `null` are values, not blanks.
+
 A Specific-colors `color` is `none` (no fill), an SVG color name, both in any
 letter case, `#RGB`, or `#RRGGBB`. Other values, including hex colors with
 alpha and names that only a browser knows, such as `currentColor` and system
