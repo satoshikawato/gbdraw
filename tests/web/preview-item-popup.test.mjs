@@ -234,7 +234,7 @@ test('a Circular record popup without its own fields names the cause', () => {
   assert.equal(hint('multi-record-canvas'), 'Multi-Record Canvas uses a grid. Turn it off to select one record.');
   assert.equal(hint('no-single-record'), 'Select one record to edit crop, orientation, and title lines.');
   for (const cause of ['multi-record-canvas', 'no-single-record']) {
-    assert.ok(sidebar.includes(`>${hint(cause)}</p>`), `the sidebar shows the ${cause} sentence`);
+    assert.ok(sidebar.includes(`>{{ t('${hint(cause)}') }}</p>`), `the sidebar shows the ${cause} sentence`);
   }
 });
 
