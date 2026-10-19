@@ -902,7 +902,7 @@ const featureListBottomSpacerPx = computed(
 const featureEditorStatusText = computed(() => {
   const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
   if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
-    return count > 0 ? t('{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
+    return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
   }
   if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
     return t('Feature editor unavailable');

@@ -708,7 +708,7 @@ export const createAppSetup = () => {
         !sameLinearComparisonEdge(edge, drawing.linearComparisonPlan.edges[index])
       ));
     if (invalidate && changed && !onlyPendingSourcesChanged(drawing, normalized)) {
-      similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
+      similarityAlignmentActions?.clearForMutation?.(msg('comparison configuration changed.'));
     }
     drawing.linearComparisonPlan.mode = normalized.mode;
     drawing.linearComparisonPlan.defaultSource = normalized.defaultSource;
@@ -1025,7 +1025,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
     if (drawing.losatProgram.value === nextProgram) return true;
-    similarityAlignmentActions?.clearForMutation?.('comparison program changed.');
+    similarityAlignmentActions?.clearForMutation?.(msg('comparison program changed.'));
     drawing.losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts(drawing);
     return true;
@@ -1043,7 +1043,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (drawing.losat.blastp?.mode === nextBlastpMode) return true;
-    similarityAlignmentActions?.clearForMutation?.('comparison mode changed.');
+    similarityAlignmentActions?.clearForMutation?.(msg('comparison mode changed.'));
     const hitLimits = drawing.losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
     hitLimits[drawing.losat.blastp.mode] = {
       candidateLimit: drawing.losat.blastp.candidateLimit,
@@ -1455,7 +1455,7 @@ export const createAppSetup = () => {
     }));
     applyLinearSeqMutation(drawing, [
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
-    ], { alignmentMutation: 'record selector changed.' });
+    ], { alignmentMutation: msg('record selector changed.') });
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
   };
@@ -5360,7 +5360,7 @@ export const createAppSetup = () => {
         region_start: null,
         region_end: null,
         region_reverse: false
-      })), { alignmentMutation: 'settings reset.' });
+      })), { alignmentMutation: msg('settings reset.') });
       invalidateLinearComparisonArtifacts(drawing);
       matchSequenceRegistry?.reset?.();
       circularTrackNewRenderer.value = 'dinucleotide_skew';
@@ -6283,7 +6283,7 @@ export const createAppSetup = () => {
     {
       preserveLosatCacheInfo = false,
       layoutEntries = drawing.linearRecordRows,
-      alignmentMutation = 'source set changed.',
+      alignmentMutation = msg('source set changed.'),
       retiredRecordKeys = /** @type {string[]} */ ([])
     } = {}
   ) => {
@@ -6480,7 +6480,7 @@ export const createAppSetup = () => {
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )), { alignmentMutation: 'source replaced.', retiredRecordKeys: [...members] });
+    )), { alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members] });
     if (keepSource) {
       pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
       pendingLinearUploads.add(replacement.uid);
@@ -6580,7 +6580,7 @@ export const createAppSetup = () => {
     if (listMode === 'linear') {
       applyLinearSeqMutation(drawing, linearSeqs.map((seq) => (
         deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq
-      )), { alignmentMutation: 'record settings deleted.' });
+      )), { alignmentMutation: msg('record settings deleted.') });
     }
     return true;
   };
@@ -6615,7 +6615,7 @@ export const createAppSetup = () => {
     afterRecordSetChange: (listMode) => {
       if (listMode !== 'linear') return;
       invalidateLinearComparisonArtifacts(state.drawings.linear, { preserveLosatCacheInfo: true });
-      similarityAlignmentActions?.clearForMutation?.('record drawing changed.');
+      similarityAlignmentActions?.clearForMutation?.(msg('record drawing changed.'));
     },
     removeSource: removeRecordSource,
     deleteRecordSettings,
@@ -6674,7 +6674,7 @@ export const createAppSetup = () => {
     if (!sequence) return false;
     const next = String(value || '');
     if (String(sequence.region_record_id || '') === next) return false;
-    similarityAlignmentActions?.clearForMutation?.('record selector changed.');
+    similarityAlignmentActions?.clearForMutation?.(msg('record selector changed.'));
     sequence.region_record_id = next;
     // The inferred definition follows the record the row now selects (D-12).
     if (lInputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
@@ -6702,7 +6702,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const next = value === 'gff' ? 'gff' : 'gb';
     if (lInputType.value === next) return false;
-    similarityAlignmentActions?.clearForMutation?.('source type changed.');
+    similarityAlignmentActions?.clearForMutation?.(msg('source type changed.'));
     lInputType.value = next;
     return true;
   };
@@ -6716,7 +6716,7 @@ export const createAppSetup = () => {
       ? null
       : Number(value);
     if (Object.is(sequence[field], next)) return false;
-    similarityAlignmentActions?.clearForMutation?.('record crop changed.');
+    similarityAlignmentActions?.clearForMutation?.(msg('record crop changed.'));
     sequence[field] = next;
     return true;
   };

@@ -1,5 +1,6 @@
 // @ts-check
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { t } from '../utils/i18n.js';
 
 /**
  * @param {unknown} value
@@ -94,14 +95,18 @@ export const linearLabelSizeLengths = (recordLengths, labelScope) => (
 
 /**
  * The note an Auto field shows: a value measured in the last render, or,
- * before one, an estimate marked as such (TK-15).
+ * before one, an estimate marked as such (TK-15). `variesByRecord` says the
+ * measured value differs between records (a Linear features row).
  * @param {string} text
  * @param {string} unit
  * @param {boolean} estimate
+ * @param {boolean} [variesByRecord]
  */
-const autoNote = (text, unit, estimate) => {
+const autoNote = (text, unit, estimate, variesByRecord = false) => {
   if (!text) return '';
-  return estimate ? `≈ ${text} ${unit} (estimate)` : `${text} ${unit} (auto)`;
+  const params = { value: text, unit };
+  if (estimate) return t('≈ {value} {unit} (estimate)', params);
+  return variesByRecord ? t('{value} {unit} (auto; varies by record)', params) : t('{value} {unit} (auto)', params);
 };
 
 /**
@@ -120,12 +125,12 @@ export const overlayFollowsNote = (slot) => {
   const anchor = normalizeOptionalText(params.anchor_slot);
   if (!anchor) return '';
   const target = normalizeOptionalText(params.to_slot);
-  return target ? `follows ${anchor} → ${target}` : `follows ${anchor}`;
+  return target ? t('follows {anchor} → {target}', { anchor, target }) : t('follows {anchor}', { anchor });
 };
 
-/** @param {unknown} value @param {{ estimate?: boolean }} [options] */
-export const formatPxAuto = (value, { estimate = false } = {}) => (
-  autoNote(roundDisplayNumber(value, 1), 'px', estimate)
+/** @param {unknown} value @param {{ estimate?: boolean, variesByRecord?: boolean }} [options] */
+export const formatPxAuto = (value, { estimate = false, variesByRecord = false } = {}) => (
+  autoNote(roundDisplayNumber(value, 1), 'px', estimate, variesByRecord)
 );
 
 /**

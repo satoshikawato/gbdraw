@@ -2111,7 +2111,7 @@
                             </div>
                             <div>
                                 <div class="flex items-center justify-between gap-2">
-                                    <span class="input-label text-[10px]">{{ t('Record') }} <help-tip id="help-circular-record" :text="t('Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output.')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Record') }} <help-tip id="help-circular-record" :text="t('Select the record to draw as one Circular diagram. Leave this on All records to draw each record as its own diagram.')"></help-tip></span>
                                     <button
                                         v-if="circularRecordDiscoveryState.status === 'ready' ? circularRecordDiscoveryState.records.length > 1 : circularRecordDiscoveryState.hasInput && circularRecordDiscoveryState.status === 'deferred'"
                                         type="button"
@@ -2881,7 +2881,7 @@
                                         ? t('Saved comparison preserved as read-only')
                                         : t('Saved comparison needs a decision') }}
                                 </div>
-                                <p>{{ importedComparisonIntent.message }}</p>
+                                <p>{{ tm(importedComparisonIntent.message) }}</p>
                                 <p>{{ t('The controls below are a replacement draft. The saved comparison and last successful Result remain unchanged until Generate succeeds.') }}</p>
                                 <p v-if="importedComparisonIntent.action" class="font-semibold">
                                     {{ t('Selected action: {action}', { action: importedComparisonIntent.action }) }}
@@ -6259,7 +6259,7 @@
                                        @change="updateClickedFeatureColor($event.target.value)"
                                        data-history-managed
                                        :disabled="!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
-                                       :title="canEditFeatureColor(clickedFeature.feat) ? t('Change fill color') : t('No stable identifier available')"
+                                       :title="canEditFeatureColor(clickedFeature.feat) ? t('Change fill color') : t('The color of this feature cannot be changed.')"
                                        :aria-label="t('Feature fill color')"
                                        :class="['w-12 h-10 border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed']">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
@@ -6940,12 +6940,12 @@
                                     </div>
                                 </div>
                                 <div v-for="section in clickedPairwiseMatch.sections"
-                                     :key="`match-section-${section.title}`"
+                                     :key="`match-section-${section.id}`"
                                      class="pairwise-match-popup-section">
                                     <div class="pairwise-match-popup-section-title">{{ section.title }}</div>
                                     <template v-if="!section.featureRows || !section.featureRows.length">
                                         <div v-for="row in section.rows"
-                                             :key="`match-row-${section.title}-${row.label}-${row.value}`"
+                                             :key="`match-row-${section.id}-${row.id}-${row.value}`"
                                              class="pairwise-match-popup-row">
                                             <div class="pairwise-match-popup-key">{{ row.label }}</div>
                                             <div class="pairwise-match-popup-value">{{ row.value }}</div>
@@ -6971,7 +6971,7 @@
                                             </thead>
                                             <tbody>
                                                 <tr v-for="featureRow in section.featureRows"
-                                                    :key="`match-feature-${section.title}-${featureRow.key}`"
+                                                    :key="`match-feature-${section.id}-${featureRow.key}`"
                                                     @click="openPairwiseFeatureRow(featureRow, $event)"
                                                     :class="[
                                                       'pairwise-match-feature-row',
@@ -7054,7 +7054,7 @@
                                 <details v-if="pairwiseGroupView.technicalRows.length" class="match-disclosure mt-2" data-match-group-technical>
                                     <summary>{{ t('Technical details') }}</summary>
                                     <dl class="match-disclosure-body match-detail-rows">
-                                        <template v-for="row in pairwiseGroupView.technicalRows" :key="`match-group-row-${row.label}`">
+                                        <template v-for="row in pairwiseGroupView.technicalRows" :key="`match-group-row-${row.id}`">
                                             <dt>{{ row.label }}</dt>
                                             <dd>{{ row.value }}</dd>
                                         </template>
@@ -7066,7 +7066,7 @@
                                 <div class="match-disclosure-body">
                                     <p class="mb-2 match-muted">{{ clickedPairwiseMatch.block.note }}</p>
                                     <dl class="match-detail-rows">
-                                        <template v-for="row in clickedPairwiseMatch.block.detailRows" :key="`collinear-detail-${row.label}`">
+                                        <template v-for="row in clickedPairwiseMatch.block.detailRows" :key="`collinear-detail-${row.id}`">
                                             <dt>{{ row.label }}</dt>
                                             <dd>{{ row.value }}</dd>
                                         </template>
@@ -7917,7 +7917,7 @@
                                            :value="getFeatureColor(feat)"
                                            @change="requestFeatureColorChange(feat, $event.target.value)"
                                            :disabled="!semanticMutationAvailable || (!canEditFeatureColor(feat))"
-                                           :title="canEditFeatureColor(feat) ? t('Change fill color') : t('No stable identifier available')"
+                                           :title="canEditFeatureColor(feat) ? t('Change fill color') : t('The color of this feature cannot be changed.')"
                                            :aria-label="t('Fill color for {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
                                            :class="['w-5 h-5 rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
                                     <button type="button" data-history-ignore

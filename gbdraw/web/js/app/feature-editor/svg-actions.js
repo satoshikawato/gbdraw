@@ -3,6 +3,7 @@
 /** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
+/** @import { PopupRow } from '../pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds } from '../../utils/popup-bounds.js';
@@ -81,7 +82,7 @@ export {
 
 /**
  * The hover summary of a pairwise match, as the match popup builds it.
- * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: Array<{ label: string, value: string }> }} MatchHoverSummary
+ * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: PopupRow[] }} MatchHoverSummary
  */
 
 /**
@@ -819,7 +820,7 @@ export const createFeatureSvgActions = ({
     color: resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8',
     heading: summary.title,
     subtitle: summary.subtitle || summary.id || '',
-    rows: summary.rows.map((row) => ({ ...row, clamp: row.label === 'Query' || row.label === 'Subject' }))
+    rows: summary.rows.map((row) => ({ ...row, clamp: row.id === 'Query' || row.id === 'Subject' }))
   };
 
   // The rows without a value are not shown; the view keeps its other rows

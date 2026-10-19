@@ -50,8 +50,9 @@ import { msg, t, tm, tn } from '../utils/i18n.js';
 /** @typedef {ReturnType<typeof buildGroupView>} GroupView The view of one similarity group. */
 
 /**
- * One popup table row.
- * @typedef {{ label: string, value: string }} PopupRow
+ * One popup table row. `id` is the row's English label (a `msg` key) and its
+ * identity: code finds a row by `id`, never by the shown `label` (`tm(id)`).
+ * @typedef {{ id: string, label: string, value: string }} PopupRow
  */
 
 /**
@@ -59,7 +60,8 @@ import { msg, t, tm, tn } from '../utils/i18n.js';
  * feature sections add their list data and the Similarity group section
  * adds the copy and FASTA fields.
  * @typedef {object} PopupSection
- * @property {string} title The shown title (`tm` of its English `msg` title).
+ * @property {string} id The English title (a `msg` key): the section's identity.
+ * @property {string} title The shown title, `tm(id)`.
  * @property {PopupRow[]} rows
  * @property {FeatureListRow[]} [featureRows]
  * @property {MemberRow[]} [memberRows]
@@ -300,13 +302,13 @@ const normalizeMatchKind = (value, element = null) => {
 
 /**
  * @param {PopupRow[]} rows
- * @param {string} label
+ * @param {string} id The English row label (a `msg` key).
  * @param {unknown} value
  */
-const addRow = (rows, label, value) => {
+const addRow = (rows, id, value) => {
   const text = normalizeText(value);
   if (!text) return;
-  rows.push({ label, value: text });
+  rows.push({ id, label: tm(id), value: text });
 };
 
 /**
@@ -1188,13 +1190,14 @@ const overrideValue = (overrides, key) => {
 };
 
 /**
- * @param {string} title
+ * @param {string} id The English section title (a `msg` key).
  * @param {PopupRow[]} rows
  * @param {Partial<PopupSection>} [extras]
  * @returns {PopupSection}
  */
-const section = (title, rows, extras = {}) => ({
-  title: tm(title),
+const section = (id, rows, extras = {}) => ({
+  id,
+  title: tm(id),
   rows: rows.filter((row) => normalizeText(row.value)),
   ...extras
 });
@@ -1689,15 +1692,15 @@ const buildGroupView = ({
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
   /** @type {PopupRow[]} */
   const technicalRows = [];
-  addRow(technicalRows, localGroups ? t('Collinear group ID') : t('Similarity group ID'), orthogroupId);
-  addRow(technicalRows, t('Description'), userDescription ? '' : group?.description);
-  addRow(technicalRows, t('Scope'), groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope)));
-  addRow(technicalRows, t('RBH seeds'), Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
-  addRow(technicalRows, t('Group paths'), firstText(
+  addRow(technicalRows, localGroups ? msg('Collinear group ID') : msg('Similarity group ID'), orthogroupId);
+  addRow(technicalRows, msg('Description'), userDescription ? '' : group?.description);
+  addRow(technicalRows, msg('Scope'), groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope)));
+  addRow(technicalRows, msg('RBH seeds'), Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
+  addRow(technicalRows, msg('Group paths'), firstText(
     group?.orthologPathCount,
     Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : ''
   ));
-  addRow(technicalRows, t('Related edges'), firstText(
+  addRow(technicalRows, msg('Related edges'), firstText(
     group?.relatedEdgeCount,
     Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
   ));
@@ -1797,18 +1800,18 @@ const collinearDetailRows = (element, descriptor) => {
   const rows = [];
   const identity = finiteNumber(descriptor.identity);
   const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
-  addRow(rows, t('Block ID'), descriptor.collinearityBlockId);
-  addRow(rows, t('Kind'), attr(element, 'data-collinearity-block-kind'));
-  addRow(rows, t('Orientation'), attr(element, 'data-collinearity-orientation'));
-  addRow(rows, t('Color mode'), attr(element, 'data-collinearity-color-mode'));
+  addRow(rows, msg('Block ID'), descriptor.collinearityBlockId);
+  addRow(rows, msg('Kind'), attr(element, 'data-collinearity-block-kind'));
+  addRow(rows, msg('Orientation'), attr(element, 'data-collinearity-orientation'));
+  addRow(rows, msg('Color mode'), attr(element, 'data-collinearity-color-mode'));
   if (descriptor.matchKind === 'collinear') {
-    addRow(rows, t('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
+    addRow(rows, msg('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
     // LOSATP anchors: the summed protein alignment length.
-    addRow(rows, t('Aligned length'), alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
+    addRow(rows, msg('Aligned length'), alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
   }
-  addRow(rows, t('Block score'), attr(element, 'data-collinearity-block-score'));
-  addRow(rows, t('Block e-value'), attr(element, 'data-collinearity-block-evalue'));
-  addRow(rows, t('Anchor'), [
+  addRow(rows, msg('Block score'), attr(element, 'data-collinearity-block-score'));
+  addRow(rows, msg('Block e-value'), attr(element, 'data-collinearity-block-evalue'));
+  addRow(rows, msg('Anchor'), [
     attr(element, 'data-collinearity-anchor-index'),
     attr(element, 'data-collinearity-anchor-count')
   ].filter(Boolean).join(' / '));
@@ -1968,14 +1971,14 @@ const buildFeatureRows = ({
     locusId,
     displayName
   });
-  addRow(rows, t('Record'), firstText(feature?.record_id, recordId));
-  addRow(rows, t('Location'), firstText(formatFeatureLocation(feature), interval));
-  addRow(rows, displayProteinIds.includes(';') ? t('Protein IDs') : t('Protein ID'), displayProteinIds);
-  addRow(rows, t('Gene'), firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
-  addRow(rows, t('Locus tag'), firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
-  addRow(rows, t('Product'), firstText(feature?.product, qualifierFirstValue(feature, 'product')));
-  addRow(rows, t('Locus ID'), locusId);
-  addRow(rows, t('Display name'), displayName);
+  addRow(rows, msg('Record'), firstText(feature?.record_id, recordId));
+  addRow(rows, msg('Location'), firstText(formatFeatureLocation(feature), interval));
+  addRow(rows, displayProteinIds.includes(';') ? msg('Protein IDs') : msg('Protein ID'), displayProteinIds);
+  addRow(rows, msg('Gene'), firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
+  addRow(rows, msg('Locus tag'), firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
+  addRow(rows, msg('Product'), firstText(feature?.product, qualifierFirstValue(feature, 'product')));
+  addRow(rows, msg('Locus ID'), locusId);
+  addRow(rows, msg('Display name'), displayName);
   return section(title, rows, { featureRows });
 };
 
@@ -2213,41 +2216,41 @@ export const buildMatchPopupPayload = (
 
   /** @type {PopupRow[]} */
   const summaryRows = [];
-  addRow(summaryRows, t('Query record'), descriptor.queryRecordId);
-  addRow(summaryRows, t('Subject record'), descriptor.subjectRecordId);
-  addRow(summaryRows, t('Query interval'), qInterval);
-  addRow(summaryRows, t('Query table interval'), descriptor.queryTableInterval);
-  addRow(summaryRows, t('Subject interval'), sInterval);
-  addRow(summaryRows, t('Subject table interval'), descriptor.subjectTableInterval);
-  addRow(summaryRows, t('Orientation'), descriptor.orientation);
+  addRow(summaryRows, msg('Query record'), descriptor.queryRecordId);
+  addRow(summaryRows, msg('Subject record'), descriptor.subjectRecordId);
+  addRow(summaryRows, msg('Query interval'), qInterval);
+  addRow(summaryRows, msg('Query table interval'), descriptor.queryTableInterval);
+  addRow(summaryRows, msg('Subject interval'), sInterval);
+  addRow(summaryRows, msg('Subject table interval'), descriptor.subjectTableInterval);
+  addRow(summaryRows, msg('Orientation'), descriptor.orientation);
   if (matchKind === 'homology') {
-    addRow(summaryRows, t('Ring label'), attr(element, 'data-track-label'));
+    addRow(summaryRows, msg('Ring label'), attr(element, 'data-track-label'));
     const rawSourceIndex = integerAttr(element, 'data-source-index');
-    addRow(summaryRows, t('Source index'), rawSourceIndex !== null ? String(rawSourceIndex + 1) : '');
-    addRow(summaryRows, t('Reference side'), attr(element, 'data-reference-side'));
-    addRow(summaryRows, t('Reference record'), attr(element, 'data-reference-record-id'));
+    addRow(summaryRows, msg('Source index'), rawSourceIndex !== null ? String(rawSourceIndex + 1) : '');
+    addRow(summaryRows, msg('Reference side'), attr(element, 'data-reference-side'));
+    addRow(summaryRows, msg('Reference record'), attr(element, 'data-reference-record-id'));
   }
 
   /** @type {PopupRow[]} */
   const alignmentRows = [];
-  addRow(alignmentRows, t('Identity'), descriptor.identity);
-  addRow(alignmentRows, t('Alignment length'), attr(element, 'data-alignment-length'));
-  addRow(alignmentRows, t('E-value'), attr(element, 'data-evalue'));
-  addRow(alignmentRows, t('Bit score'), attr(element, 'data-bitscore'));
-  addRow(alignmentRows, t('Mismatches'), attr(element, 'data-mismatches'));
-  addRow(alignmentRows, t('Gap opens'), attr(element, 'data-gap-opens'));
-  addRow(alignmentRows, t('Edge kind'), attr(element, 'data-edge-kind'));
-  addRow(alignmentRows, t('Render role'), attr(element, 'data-render-role'));
-  addRow(alignmentRows, t('RBH seed'), attr(element, 'data-rbh-orthogroup-id'));
-  addRow(alignmentRows, t('Group path ID'), attr(element, 'data-ortholog-path-id'));
-  addRow(alignmentRows, t('Query group genes'), attr(element, 'data-query-orthogroup-member-count'));
-  addRow(alignmentRows, t('Subject group genes'), attr(element, 'data-subject-orthogroup-member-count'));
-  addRow(alignmentRows, t('Query member role'), attr(element, 'data-query-orthogroup-role'));
-  addRow(alignmentRows, t('Subject member role'), attr(element, 'data-subject-orthogroup-role'));
-  addRow(alignmentRows, t('Query confidence'), attr(element, 'data-query-orthogroup-confidence'));
-  addRow(alignmentRows, t('Subject confidence'), attr(element, 'data-subject-orthogroup-confidence'));
-  addRow(alignmentRows, t('Query assignment'), attr(element, 'data-query-orthogroup-assignment-reason'));
-  addRow(alignmentRows, t('Subject assignment'), attr(element, 'data-subject-orthogroup-assignment-reason'));
+  addRow(alignmentRows, msg('Identity'), descriptor.identity);
+  addRow(alignmentRows, msg('Alignment length'), attr(element, 'data-alignment-length'));
+  addRow(alignmentRows, msg('E-value'), attr(element, 'data-evalue'));
+  addRow(alignmentRows, msg('Bit score'), attr(element, 'data-bitscore'));
+  addRow(alignmentRows, msg('Mismatches'), attr(element, 'data-mismatches'));
+  addRow(alignmentRows, msg('Gap opens'), attr(element, 'data-gap-opens'));
+  addRow(alignmentRows, msg('Edge kind'), attr(element, 'data-edge-kind'));
+  addRow(alignmentRows, msg('Render role'), attr(element, 'data-render-role'));
+  addRow(alignmentRows, msg('RBH seed'), attr(element, 'data-rbh-orthogroup-id'));
+  addRow(alignmentRows, msg('Group path ID'), attr(element, 'data-ortholog-path-id'));
+  addRow(alignmentRows, msg('Query group genes'), attr(element, 'data-query-orthogroup-member-count'));
+  addRow(alignmentRows, msg('Subject group genes'), attr(element, 'data-subject-orthogroup-member-count'));
+  addRow(alignmentRows, msg('Query member role'), attr(element, 'data-query-orthogroup-role'));
+  addRow(alignmentRows, msg('Subject member role'), attr(element, 'data-subject-orthogroup-role'));
+  addRow(alignmentRows, msg('Query confidence'), attr(element, 'data-query-orthogroup-confidence'));
+  addRow(alignmentRows, msg('Subject confidence'), attr(element, 'data-subject-orthogroup-confidence'));
+  addRow(alignmentRows, msg('Query assignment'), attr(element, 'data-query-orthogroup-assignment-reason'));
+  addRow(alignmentRows, msg('Subject assignment'), attr(element, 'data-subject-orthogroup-assignment-reason'));
 
   const sections = [section(msg('Summary'), summaryRows), section(msg('Alignment'), alignmentRows)];
   const blockRows = collinearDetailRows(element, descriptor);
@@ -2313,33 +2316,33 @@ const formatPairwiseMatchHoverRows = ({
   /** @type {PopupRow[]} */
   const rows = [];
   /**
-   * @param {string} label
+   * @param {string} id
    * @param {unknown} value
    */
-  const addFirst = (label, value) => addRow(rows, label, value);
+  const addFirst = (id, value) => addRow(rows, id, value);
   if (!matchKind) return rows;
   if (matchKind === 'orthogroup') {
-    addFirst(t('Kind'), matchKind);
-    addFirst(t('Similarity group'), orthogroupId);
-    addFirst(t('Display name'), displayName);
-    addFirst(t('Genes'), memberCount);
+    addFirst(msg('Kind'), matchKind);
+    addFirst(msg('Similarity group'), orthogroupId);
+    addFirst(msg('Display name'), displayName);
+    addFirst(msg('Genes'), memberCount);
     return rows.slice(0, 6);
   }
-  addFirst(t('Kind'), matchKind);
-  addFirst(t('Identity'), identity);
-  addFirst(t('Query'), queryInterval);
-  addFirst(t('Subject'), subjectInterval);
+  addFirst(msg('Kind'), matchKind);
+  addFirst(msg('Identity'), identity);
+  addFirst(msg('Query'), queryInterval);
+  addFirst(msg('Subject'), subjectInterval);
   if (matchKind === 'collinear') {
     addFirst(
       groupScope === 'adjacent_local'
-        ? t('Collinear groups')
-        : t('Similarity groups'),
+        ? msg('Collinear groups')
+        : msg('Similarity groups'),
       String(blockOrthogroupCount ?? '')
     );
   } else {
-    addFirst(t('Similarity group'), orthogroupId);
+    addFirst(msg('Similarity group'), orthogroupId);
   }
-  addFirst(t('Block'), collinearityBlockId);
+  addFirst(msg('Block'), collinearityBlockId);
   return rows.slice(0, 6);
 };
 
@@ -2402,23 +2405,22 @@ export const buildPairwiseMatchHoverSummary = (
 /** @param {MatchPopupPayload | null | undefined} payload */
 export const buildPairwiseMatchHoverRows = (payload) => {
   if (!payload) return [];
-  // A payload and its hover rows are built in the shown locale: a section is the one whose title
-  // is the shown text of the English title.
-  const summary = payload.sections.find((entry) => entry.title === tm(msg('Summary')));
-  const alignment = payload.sections.find((entry) => entry.title === tm(msg('Alignment')));
+  // Sections and rows are found by their English identity, so a payload built in
+  // another language still gives its hover rows.
+  const summary = payload.sections.find((entry) => entry.id === 'Summary');
+  const alignment = payload.sections.find((entry) => entry.id === 'Alignment');
   /**
    * @param {PopupSection | undefined} sectionEntry
-   * @param {string} label
+   * @param {string} id
    */
-  const findValue = (sectionEntry, label) => (
-    // The row's label is shown text: the row of the same English label in this locale.
-    sectionEntry?.rows.find((row) => row.label === tm(label))?.value || ''
+  const findValue = (sectionEntry, id) => (
+    sectionEntry?.rows.find((row) => row.id === id)?.value || ''
   );
   return formatPairwiseMatchHoverRows({
     matchKind: payload.matchKind,
-    identity: payload.block ? payload.block.identity : findValue(alignment, msg('Identity')),
-    queryInterval: payload.block ? payload.block.query.interval : findValue(summary, msg('Query interval')),
-    subjectInterval: payload.block ? payload.block.subject.interval : findValue(summary, msg('Subject interval')),
+    identity: payload.block ? payload.block.identity : findValue(alignment, 'Identity'),
+    queryInterval: payload.block ? payload.block.query.interval : findValue(summary, 'Query interval'),
+    subjectInterval: payload.block ? payload.block.subject.interval : findValue(summary, 'Subject interval'),
     orthogroupId: payload.orthogroupId,
     displayName: payload.matchKind === 'orthogroup' ? payload.group?.displayName : '',
     memberCount: payload.matchKind === 'orthogroup' ? payload.group?.memberCount : '',

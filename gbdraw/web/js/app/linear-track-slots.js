@@ -1055,12 +1055,9 @@ export const createLinearTrackSlotEditor = ({
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
-    const autoText = formatPxAuto(value);
-    if (normalizeRenderer(slot?.renderer) === 'features') {
-      return autoText
-        ? autoText.replace('(auto)', '(auto; varies by record)')
-        : 'record-specific (auto)';
-    }
+    const variesByRecord = normalizeRenderer(slot?.renderer) === 'features';
+    const autoText = formatPxAuto(value, { variesByRecord });
+    if (variesByRecord) return autoText || t('record-specific (auto)');
     if (field === 'height' || field === 'spacing') return autoText;
     return '';
   };
