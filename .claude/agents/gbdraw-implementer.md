@@ -36,6 +36,9 @@ You implement exactly the step in your brief, in a worktree created with the
 - **Design problems you find** (coupling, duplicated derivations, a module that
   does two owners' work): fix a small one in this step and name it; report a
   larger one.
+- **Owners and boundaries.** For a change to code under `gbdraw/`, apply
+  "Owners and Boundaries in Every Fix" in `AGENTS.md` within the brief's scope,
+  and write its "Boundary analysis" into the step handoff and the PR body.
 - **Decisions.** Do not ask the Owner. Return open decisions to the caller with
   your recommendation. Never post an approval, and never merge a PR that
   expands authority.
@@ -44,4 +47,4 @@ You implement exactly the step in your brief, in a worktree created with the
   remains) to the path in the brief and finish.
 
 Return a short report the caller can act on without opening your logs: branch, head SHA, PR number and state, the tests you
-ran with their results, bugs found, decisions you took, and what remains.
+ran with their results, bugs found, the boundary analysis, decisions you took, and what remains.
