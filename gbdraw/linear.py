@@ -115,6 +115,7 @@ from .cli_utils.session import (
     preflight_session_sidecar_if_requested,
     render_canonical_session_if_present,
     save_session_sidecar_if_requested,
+    read_stored_font_size_options,
 )
 from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -856,6 +857,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
 
     args_list = [str(token) for token in (args or [])]
     args = parser.parse_args(args)
+    if _legacy_session:
+        read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
     if not _legacy_session:

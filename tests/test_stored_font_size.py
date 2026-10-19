@@ -216,3 +216,108 @@ def test_a_fresh_request_still_refuses_a_font_size_of_zero_or_less(tmp_path: Pat
             decode_canonical_request(
                 session["renderRequest"], resource_paths=materialized.resource_paths, output_directory=tmp_path
             )
+
+
+# Written by the released 0.13.0 CLI (tag 0.13.0, 8be9e3a5): `gbdraw linear --gbk F1.gb
+# --label_font_size 0` and `gbdraw circular --gbk F1.gb --label_font_size 0
+# --legend_font_size 0`, each with --session_output; both drew. Provenance:
+# tests/fixtures/sessions/legacy-font-size.provenance.json.
+RELEASED_CLI = {
+    "linear": SESSIONS / "legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz",
+    "circular": SESSIONS / "legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz",
+}
+
+
+def _replay(mode: str, session: dict[str, Any], tmp_path: Path, name: str) -> bytes:
+    import gbdraw.circular as circular_cli_module
+
+    path = tmp_path / f"{name}.gbdraw-session.json"
+    path.write_text(json.dumps(session), encoding="utf-8")
+    main = linear_cli_module.linear_main if mode == "linear" else circular_cli_module.circular_main
+    main(["--session", str(path), "-o", name, "-f", "svg"])
+    return (tmp_path / f"{name}.svg").read_bytes()
+
+
+def _without_font_size_args(session: dict[str, Any]) -> dict[str, Any]:
+    args = session["cliInvocation"]["args"]
+    kept: list[str] = []
+    skip = False
+    for token in args:
+        if skip:
+            skip = False
+        elif token.endswith("font_size"):
+            skip = True
+        else:
+            kept.append(token)
+    session["cliInvocation"]["args"] = kept
+    return session
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_a_released_cli_session_with_a_font_size_of_zero_replays_as_auto(
+    mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    caplog.set_level(logging.WARNING, logger="gbdraw.config.models.root")
+    stored = _session(RELEASED_CLI[mode])
+    assert stored["version"] == 30
+    options = [token for token in stored["cliInvocation"]["args"] if token.endswith("font_size")]
+    assert options and _replay(mode, stored, tmp_path, "stored") == _replay(
+        mode, _without_font_size_args(_session(RELEASED_CLI[mode])), tmp_path, "auto"
+    )
+    for option in options:
+        assert f'Settings: the value "0" (cliInvocation.args {option}) cannot be used' in caplog.text
+
+
+def test_a_released_cli_session_with_a_font_size_still_invalid_gives_the_cli_error(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    session = _session(RELEASED_CLI["linear"])
+    args = session["cliInvocation"]["args"]
+    args[args.index("--label_font_size") + 1] = "nan"
+    path = tmp_path / "stored.gbdraw-session.json"
+    path.write_text(json.dumps(session), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, "-m", "gbdraw.cli", "linear", "--session", str(path), "-o", "out", "-f", "svg"],
+        cwd=tmp_path, capture_output=True, text=True, check=False,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+    )
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "label_font_size" in result.stderr
+    assert not (tmp_path / "out.svg").exists()
+
+
+def test_a_stored_unset_font_size_stays_unset_without_a_notice(caplog: pytest.LogCaptureFixture) -> None:
+    from gbdraw.session_request_codec import with_stored_font_sizes_as_auto
+
+    caplog.set_level(logging.WARNING, logger="gbdraw.config.models.root")
+    unset = {"diagramOptions": {
+        "config": {"objects": {"gc_content": {"tick_font_size": None}}, "labels": {"font_size": {"long": None}}},
+        "configOverrides": {"objects.legends.font_size.long": None},
+    }}
+    assert with_stored_font_sizes_as_auto(unset) == unset
+    assert "cannot be used" not in caplog.text
+    zero = {"diagramOptions": {"config": {"labels": {"font_size": {"long": 0}}}}}
+    assert with_stored_font_sizes_as_auto(zero)["diagramOptions"]["config"]["labels"]["font_size"]["long"] == 8
+    assert "cannot be used" in caplog.text
+
+
+def test_the_packaged_config_is_read_only_when_a_size_is_replaced(monkeypatch: pytest.MonkeyPatch) -> None:
+    import gbdraw.session_request_codec as codec
+
+    calls: list[tuple[str, str]] = []
+    real = codec.load_config_toml
+
+    def counting(directory: str, name: str) -> dict:
+        calls.append((directory, name))
+        return real(directory, name)
+
+    monkeypatch.setattr(codec, "load_config_toml", counting)
+    codec.with_stored_font_sizes_as_auto(_session(CLI_CONFIG)["renderRequest"])
+    assert calls == []
+    two_zeros = {"diagramOptions": {"config": {"labels": {"font_size": {"long": 0, "short": -1}}}}}
+    codec.with_stored_font_sizes_as_auto(two_zeros)
+    assert calls == [("gbdraw.data", "config.toml")]

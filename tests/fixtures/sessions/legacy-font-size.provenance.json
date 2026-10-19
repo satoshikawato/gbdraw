@@ -1,0 +1,25 @@
+{
+  "purpose": "Positive fixtures for OV-1282 (Owner Q-13 a, D-PYB-7): a font size of 0 or less stored in the arguments of a released CLI Session replays as Auto with the Web's notice.",
+  "record": "first LOCUS (R2c) of tests/fixtures/web_comparison_shared_block.gb (sha256 d869dd7d849540646125c3eed4ae2a95d84b8a0355563c0f8df546f619e94d0c) renamed F1, written as F1.gb with Biopython",
+  "compression": "gzip -n -9",
+  "fixtures": {
+    "legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz": {
+      "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+      "history": "release tag 0.13.0",
+      "writer": "gbdraw/linear.py --session_output (CLI sidecar) of tag 0.13.0, run from `git archive 0.13.0 gbdraw` with PYTHONPATH",
+      "command": "python -m gbdraw.cli linear --gbk F1.gb -o legacy-font-linear -f svg --label_font_size 0 --session_output legacy-font-linear.gbdraw-session.json",
+      "storedAt": "cliInvocation.args --label_font_size",
+      "sessionVersion": 30,
+      "drewWith0.13.0": true
+    },
+    "legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz": {
+      "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+      "history": "release tag 0.13.0",
+      "writer": "gbdraw/circular.py --session_output (CLI sidecar) of tag 0.13.0, run from `git archive 0.13.0 gbdraw` with PYTHONPATH",
+      "command": "python -m gbdraw.cli circular --gbk F1.gb -o legacy-font-circular -f svg --label_font_size 0 --legend_font_size 0 --session_output legacy-font-circular.gbdraw-session.json",
+      "storedAt": "cliInvocation.args --label_font_size --legend_font_size",
+      "sessionVersion": 30,
+      "drewWith0.13.0": true
+    }
+  }
+}

@@ -1954,9 +1954,14 @@ def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]
     copies; the stored request stays as saved.
     """
 
-    packaged = load_config_toml("gbdraw.data", "config.toml")
+    packaged: list[Mapping[str, Any]] = []  # Read on the first replacement only.
+    packaged_base = object()
 
     def lookup(tree: object, path: str) -> object:
+        if tree is packaged_base:
+            if not packaged:
+                packaged.append(load_config_toml("gbdraw.data", "config.toml"))
+            tree = packaged[0]
         for key in path.split("."):
             if not isinstance(tree, MappingABC) or key not in tree:
                 return None
@@ -1970,7 +1975,12 @@ def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]
             }
             return children if any(children[key] is not value[key] for key in value) else value
         domain = style_leaf_domain(path)
-        if domain is None or domain[0] != "POSITIVE" or read_stored_font_size(value, path=where) is not None:
+        if (
+            value is None  # Unset stays unset; only a stored number <= 0 is replaced.
+            or domain is None
+            or domain[0] != "POSITIVE"
+            or read_stored_font_size(value, path=where) is not None
+        ):
             return value
         return next((default for base in bases if (default := lookup(base, path)) is not None), None)
 
@@ -1983,12 +1993,12 @@ def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]
     config = options.get("config")
     if isinstance(config, MappingABC):
         options["config"] = {
-            key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged,))
+            key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged_base,))
             for key, child in config.items()
         }
     overrides = options.get("configOverrides")
     if isinstance(overrides, MappingABC):
-        bases = (options.get("config"), packaged)
+        bases = (options.get("config"), packaged_base)
         kept: dict[str, Any] = {}
         for key, value in overrides.items():
             where = f'renderRequest.diagramOptions.configOverrides["{key}"]'

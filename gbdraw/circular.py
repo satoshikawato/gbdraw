@@ -106,6 +106,7 @@ from .cli_utils.session import (
     render_canonical_session_if_present,
     resolve_session_sidecar_path,
     save_session_sidecar_if_requested,
+    read_stored_font_size_options,
 )
 from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -573,6 +574,8 @@ def _get_args(
     add_session_args(parser)
 
     args = parser.parse_args(args)
+    if _allow_legacy_track_transport:
+        read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
     if not _allow_legacy_track_transport:
