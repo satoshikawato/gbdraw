@@ -261,9 +261,9 @@ describes content and skew for reversed pairs.
 Command-line and Python conversion to those formats requires CairoSVG and its
 runtime libraries. In a conda environment, PDF, EPS, or PS export can also abort
 with `free(): invalid pointer` when pandas loads conda-forge `pyarrow` (its `orc`
-2.1.2 ships its own zlib). Update or remove `pyarrow`/`orc` in that environment,
+2.1.2 ships its own zlib). Remove `pyarrow` from that environment
 or export SVG; a pip install is not affected. In Python, `import cairocffi` before
-`import pandas` also avoids the abort. See [output names, dependencies, and
+`import pandas` or `import gbdraw` also avoids the abort. See [output names, dependencies, and
 overwrite](./REFERENCE/output-formats-and-export.md#names-dependencies-and-overwrite).
 
 ### Are there known visualization or conversion limitations?

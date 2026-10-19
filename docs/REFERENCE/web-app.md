@@ -470,9 +470,7 @@ CDS	gene
 ![A Lambda–DE3 comparison containing the live portal label, record metadata, feature labels, legend, and comparison ribbons.](../assets/web-app/linear-current-result.png)
 
 The figure uses a gene-label priority rule and uses larger label fonts for
-readability. Use preview zoom and pan to inspect individual features. The
-documentation capture instructions regenerate the image and verify all
-checkpoints through the UI.
+readability. Use preview zoom and pan to inspect individual features.
 
 ## Circular source records and one-record settings
 
@@ -1248,7 +1246,7 @@ changes. They also stay when crop, reverse complement, record order, or a second
 copy of the record changes how the feature is drawn. Every drawn copy of the
 feature shows the edit. Hiding a feature hides its label in the current Result, as Generate does;
 with **Auto Reflow** on, the remaining labels are placed again.
-**Auto Reflow** (Editor) places the labels again after each later label, visibility, or color edit. Turning it on does not move the labels already drawn; they are placed again at the next such edit or **Generate Diagram**.
+**Auto Reflow** (Editor) places the labels again after each later label text, **Label visibility**, or feature visibility edit. Turning it on does not move the labels already drawn; they are placed again at the next such edit or **Generate Diagram**.
 
 The Features list and **Search features** list the displayed Result's features
 of the types selected in **Features** at the last Generate, every feature the

@@ -44,7 +44,7 @@ Searches never download. Automatic native selection uses this order:
 3. the verified managed cache;
 4. a source-checkout bundled binary;
 5. `losat` on `PATH`;
-6. The NCBI BLAST+ program of the search (`blastn`, `tblastx`, or `blastp`) on `PATH`.
+6. the NCBI BLAST+ program of the search (`blastn`, `tblastx`, or `blastp`) on `PATH`.
 
 gbdraw recognizes a conda prefix only when `Path(sys.prefix) / "conda-meta"` is a
 directory. It does not use `CONDA_PREFIX`, `PATH`, or
@@ -186,8 +186,9 @@ LOSATP Pairwise mode searches each adjacent input pair. With three or
 more records, it does not add an implicit first-to-last comparison.
 
 `--losat_output_dir DIR` (with `--losat`) writes the raw search rows of the run.
-LOSATN and TLOSATX write one TSV per compared record pair and `comparisons.tsv`,
-which `--comparisons_table` accepts unchanged. LOSATP writes the raw
+LOSATN and TLOSATX write one TSV per compared record pair and `comparisons.tsv`
+(Linear), or one TSV per ring and `conservation.tsv` (Circular); `--comparisons_table`
+and `--conservation_table` accept them unchanged. LOSATP writes the raw
 protein-search rows from the Linear run to `DIR/losatp.raw.tsv` as one
 deterministic, commented outfmt 6
 file. The writer creates `DIR`, resolves session-internal runtime handles to

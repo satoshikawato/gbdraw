@@ -122,7 +122,7 @@ Use `render_session()` for a supported saved session and
 | `build_session_document()` | resolve one request, or several drawings, and embed their resources in a session document |
 | `save_session_document()` | build and write the document |
 | `load_session_document()` | parse and validate a saved document |
-| `upgrade_session_document()` | return a Session 31–44, 46, or 47 in the current version without rendering it, with a warning for each dropped Result |
+| `upgrade_session_document()` | return a readable Session 31–47 in the current version without rendering it, with a warning for each dropped Result |
 | `materialize_session()` | expose embedded resources as temporary paths |
 | `session_to_request()` | convert one drawing of a materialized session to a typed request |
 | `with_request_output()` | replace output settings without mutating the request |
