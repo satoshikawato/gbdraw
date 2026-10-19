@@ -272,13 +272,15 @@ drawing an empty or flat track or printing a traceback.
 
 ## Rotate a plastome and place a multipart feature
 
-This example keeps the colors, radial labels, structural-region brackets and GC
-track of the [annotated chloroplast tutorial](../TUTORIALS/build-an-annotated-chloroplast-map.md#on-the-command-line).
+This example keeps the colors, radial labels and GC track of the
+[annotated chloroplast tutorial](../TUTORIALS/build-an-annotated-chloroplast-map.md#on-the-command-line)
+and marks the structural regions with brackets.
 Start in an empty directory. Download the complete GenBank record from
 [NCBI NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), saving it as
-`NC_001879.gbk` (155,943 bp, circular). Obtain the three support tables listed in
-that tutorial: `chloroplast_specific_table.tsv`, `qualifier_priority.tsv`, and
-`nicotiana-tabacum-regions.tsv`.
+`NC_001879.gbk` (155,943 bp, circular). Obtain three support tables:
+`chloroplast_specific_table.tsv` and `qualifier_priority.tsv` from that tutorial,
+and the bracket table
+[`nicotiana-tabacum-regions.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv).
 
 Create `tables/placements.tsv` with these complete contents (real tabs):
 
