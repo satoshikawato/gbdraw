@@ -15,12 +15,10 @@ from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
 from gbdraw.render.document import write_svg_document
 from gbdraw.render.formats import (
-    CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
     classify_formats,
     parse_output_formats,
-    normalize_format_token,
     resolve_format_output_path,
     resolve_output_paths,
 )
@@ -203,18 +201,13 @@ def render_to_bytes(
     the custom fonts they use.
     """
 
-    fmt_norm = normalize_format_token(fmt)
-    if not fmt_norm:
-        raise ValidationError("Format must be specified (e.g., 'svg', 'png').")
-
+    fmt_norm = parse_output_formats((fmt,))[0]
     if fmt_norm in {SVG_FORMAT, INTERACTIVE_SVG_FORMAT}:
         svg_source = write_svg_document(canvas).body
         embedding = _font_embedding(svg_source, embed_fonts)
         if fmt_norm == INTERACTIVE_SVG_FORMAT:
             svg_source = enrich_svg(svg_source, context=interactive_context)
         return embed_font_css(svg_source, embedding).encode("utf-8")
-    if fmt_norm not in CAIROSVG_FORMATS:
-        raise ValidationError(f"Unsupported format: {fmt}")
 
     if "pyodide" in sys.modules:
         raise ValidationError("Binary export is not available under WebAssembly (pyodide).")

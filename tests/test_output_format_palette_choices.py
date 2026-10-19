@@ -114,3 +114,18 @@ def test_a_session_format_override_refuses_an_unknown_format(command: str) -> No
         parse_render_args(args) if command == "render" else parse_session_pre_args(args, mode="linear")
     request = parse_render_args(["--session", str(RELEASED_CLI_LINEAR), "-f", "SVG,interactive-svg"])
     assert request.format == "svg,interactive_svg"
+
+
+def test_a_diagram_refuses_an_unknown_format_with_the_choices(tmp_path: Path) -> None:
+    """N-3: Diagram.to_bytes and Diagram.save read the format like every other entry."""
+    from gbdraw import draw_circular, read_genbank
+
+    diagram = draw_circular(read_genbank(HUMAN))
+    for value in ("foo", "svg,png", ""):
+        with pytest.raises(ValidationError, match=f"Unknown output format {value!r}; choose from: {FORMAT_CHOICES}") as excinfo:
+            diagram.to_bytes(value)
+        assert excinfo.value.diagnostic == {"code": "INPUT_INVALID"}
+    with pytest.raises(ValidationError, match=f"Unknown output format 'foo'; choose from: {FORMAT_CHOICES}"):
+        diagram.save(tmp_path / "out.svg", format="foo")
+    assert not list(tmp_path.iterdir())
+    assert diagram.to_bytes("Interactive-SVG").startswith(b"<")
