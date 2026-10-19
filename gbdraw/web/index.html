@@ -2978,7 +2978,7 @@
                                             aria-describedby="help-comparison-losatp-mode"
                                             class="form-input px-2 py-1.5 text-xs"
                                          :disabled="!semanticMutationAvailable">
-                                            <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.label }}{{ modeOption.selectable ? '' : ' ' + t('(all pairs only)') }}</option>
+                                            <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.selectable ? modeOption.label : t('{label} (all pairs only)', { label: modeOption.label }) }}</option>
                                         </select>
                                     </div>
 
@@ -3172,7 +3172,7 @@
                                         </div>
                                         <div v-if="pair.source === 'upload'" class="min-w-0 space-y-1">
                                             <file-uploader
-                                                :label="t('BLAST TSV')"
+                                                label="BLAST TSV"
                                                 :data-linear-comparison-pair-upload="pair.edgeKey"
                                                 data-comparison-focus="pair-upload"
                                                 :data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
@@ -3446,7 +3446,7 @@
                                         <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
                                     </div>
                                     <details class="text-[10px]" data-annotation-style>
-                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span>{{ t('Style:') }} <span class="capitalize">{{ item.mark }}</span><template v-if="item.label"> · {{ item.label }}</template></span></summary>
+                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span><i18n-text :text="t('Style: {mark}')"><template #mark><span class="capitalize">{{ item.mark }}</span></template></i18n-text><template v-if="item.label"> · {{ item.label }}</template></span></summary>
                                         <div class="mt-1 space-y-1">
                                             <div class="grid grid-cols-2 gap-1">
                                                 <select v-model="item.mark" :aria-label="t('Annotation mark')" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">{{ t('Highlight (behind features)') }}</option><option value="band">{{ t('Band (annotation lane)') }}</option><option value="line">{{ t('Line') }}</option><option value="bracket">{{ t('Bracket') }}</option></select>
@@ -3677,7 +3677,7 @@
                                 <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
                                     <p role="status" aria-live="polite" aria-atomic="true">{{ linearLabelAutoDisclosure }}</p>
                                     <div v-if="linearLabelAutoFields.length" class="flex flex-wrap gap-2">
-                                        <button v-for="row in linearLabelAutoFields" :key="row.key" type="button" class="text-blue-600 underline" :aria-controls="'linear-label-visibility-' + row.key" @click="focusLinearLabelVisibility(row.key)">{{ t('Record Labels:') }} {{ row.label }}</button>
+                                        <button v-for="row in linearLabelAutoFields" :key="row.key" type="button" class="text-blue-600 underline" :aria-controls="'linear-label-visibility-' + row.key" @click="focusLinearLabelVisibility(row.key)">{{ t('Record Labels: {label}', { label: row.label }) }}</button>
                                     </div>
                                 </div>
                                 <div>
@@ -3907,7 +3907,7 @@
                                                         <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" :title="t('Overflow behavior')" :aria-label="t('Linear track slot {id} Overflow behavior', { id: entry.slot.id })" :disabled="!semanticMutationAvailable"><option value="error">{{ t('Error on overflow') }}</option><option value="compress">{{ t('Compress') }}</option><option value="clip">{{ t('Clip') }}</option></select>
                                                         <select v-if="entry.slot.side === 'overlay'" :value="entry.slot.params.anchor_slot || ''" @change="setLinearOverlayAnnotationParam(entry.slot, 'anchor_slot', $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" :title="t('Enabled drawable anchor')" :aria-label="t('Linear track slot {id} Enabled drawable anchor', { id: entry.slot.id })" :disabled="!semanticMutationAvailable">
                                                             <option value="">{{ t('Select anchor') }}</option>
-                                                            <option v-if="!linearAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">{{ t('Invalid:') }} {{ entry.slot.params.anchor_slot }}</option>
+                                                            <option v-if="!linearAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">{{ t('Invalid: {slot}', { slot: entry.slot.params.anchor_slot }) }}</option>
                                                             <option v-for="option in linearAnnotationAnchorOptions(entry.slot)" :key="`linear-anchor-${linearTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                         </select>
                                                         <select v-if="entry.slot.side === 'overlay'" :value="entry.slot.params.layer" @change="setLinearOverlayAnnotationParam(entry.slot, 'layer', $event.target.value)" :aria-label="t('Linear track slot {id} Annotation layer', { id: entry.slot.id })" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">{{ t('Underlay') }}</option><option value="foreground">{{ t('Foreground') }}</option></select>
@@ -3920,7 +3920,7 @@
                                                             <span class="track-slot-field-label">{{ t('Extend to') }} <help-tip :id="`help-linear-slot-extend-to-${entry.index}`" :text="t('Stretch the overlay from its anchor to this slot, over every slot between them (to_slot). None: the overlay\'s own band.')"></help-tip></span>
                                                             <select :value="entry.slot.params.to_slot || ''" @change="setLinearOverlayAnnotationParam(entry.slot, 'to_slot', $event.target.value)" :aria-label="t('Linear track slot {id} Extend to', { id: entry.slot.id })" :aria-describedby="`help-linear-slot-extend-to-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                                                 <option value="">{{ t('None') }}</option>
-                                                                <option v-if="!linearAnnotationAnchorIsKnown(entry.slot, 'to_slot') && entry.slot.params.to_slot" :value="entry.slot.params.to_slot">{{ t('Invalid:') }} {{ entry.slot.params.to_slot }}</option>
+                                                                <option v-if="!linearAnnotationAnchorIsKnown(entry.slot, 'to_slot') && entry.slot.params.to_slot" :value="entry.slot.params.to_slot">{{ t('Invalid: {slot}', { slot: entry.slot.params.to_slot }) }}</option>
                                                                 <option v-for="option in linearAnnotationAnchorOptions(entry.slot, 'to_slot')" :key="`linear-extend-to-${linearTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                             </select>
                                                         </div>
@@ -4300,7 +4300,7 @@
                                                         <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value, $event)" :aria-label="t('Circular track slot {id} Annotation placement', { id: entry.slot.id })" class="form-input px-1 py-0.5 text-[10px]" :title="t('Placement')" :disabled="!semanticMutationAvailable"><option value="outside">{{ t('Outside axis') }}</option><option value="inside">{{ t('Inside axis') }}</option><option value="overlay">{{ t('Overlay anchor') }}</option></select>
                                                         <select v-if="entry.slot.side === 'overlay'" :value="entry.slot.params.anchor_slot || ''" @change="setCircularOverlayAnnotationParam(entry.slot, 'anchor_slot', $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" :title="t('Enabled drawable anchor')" :aria-label="t('Circular track slot {id} Enabled drawable anchor', { id: entry.slot.id })" :disabled="!semanticMutationAvailable">
                                                             <option value="">{{ t('Select anchor') }}</option>
-                                                            <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">{{ t('Invalid:') }} {{ entry.slot.params.anchor_slot }}</option>
+                                                            <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">{{ t('Invalid: {slot}', { slot: entry.slot.params.anchor_slot }) }}</option>
                                                             <option v-for="option in circularAnnotationAnchorOptions(entry.slot)" :key="`circular-anchor-${circularTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                         </select>
                                                         <select v-if="entry.slot.side === 'overlay'" :value="entry.slot.params.layer" @change="setCircularOverlayAnnotationParam(entry.slot, 'layer', $event.target.value)" :aria-label="t('Circular track slot {id} Annotation layer', { id: entry.slot.id })" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">{{ t('Underlay') }}</option><option value="foreground">{{ t('Foreground') }}</option></select>
@@ -4314,7 +4314,7 @@
                                                             <span class="track-slot-field-label">{{ t('Extend to') }} <help-tip :id="`help-circular-slot-extend-to-${entry.index}`" :text="t('Stretch the overlay from its anchor to this slot, over every slot between them (to_slot). None: the overlay\'s own band.')"></help-tip></span>
                                                             <select :value="entry.slot.params.to_slot || ''" @change="setCircularOverlayAnnotationParam(entry.slot, 'to_slot', $event.target.value)" :aria-label="t('Circular track slot {id} Extend to', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-extend-to-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                                                 <option value="">{{ t('None') }}</option>
-                                                                <option v-if="!circularAnnotationAnchorIsKnown(entry.slot, 'to_slot') && entry.slot.params.to_slot" :value="entry.slot.params.to_slot">{{ t('Invalid:') }} {{ entry.slot.params.to_slot }}</option>
+                                                                <option v-if="!circularAnnotationAnchorIsKnown(entry.slot, 'to_slot') && entry.slot.params.to_slot" :value="entry.slot.params.to_slot">{{ t('Invalid: {slot}', { slot: entry.slot.params.to_slot }) }}</option>
                                                                 <option v-for="option in circularAnnotationAnchorOptions(entry.slot, 'to_slot')" :key="`circular-extend-to-${circularTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                             </select>
                                                         </div>
@@ -4353,7 +4353,7 @@
                                                         </div>
                                                     </div>
                                                     <details class="track-slot-more" :data-track-slot-more="entry.slot.id" :open="circularTrackSlotOptionsOpen(entry.slot)" @toggle="setCircularTrackSlotOptionsOpen(entry.slot, $event)">
-                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span class="sr-only">{{ t('Circular track slot') }} {{ entry.slot.id }} </span><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700"> {{ t('· gaps set') }}</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700"> {{ t('· custom colors') }}</span></span></summary>
+                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span class="sr-only">{{ t('Circular track slot {id}', { id: entry.slot.id }) }} </span><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700"> {{ t('· gaps set') }}</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700"> {{ t('· custom colors') }}</span></span></summary>
                                                         <div class="mt-1 space-y-1">
                                                             <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                                 <div class="track-slot-field">
@@ -5682,7 +5682,7 @@
 
                             <div class="flex gap-2">
                                 <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                    <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> {{ t('GitHub') }}
+                                    <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> GitHub
                                 </a>
                                 <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
                                     <i class="ph ph-bug text-lg" aria-hidden="true"></i> {{ t('Issues') }}
@@ -6820,7 +6820,7 @@
                                 <section class="match-lead" data-collinear-summary>
                                     <div><span class="font-semibold">{{ clickedPairwiseMatch.block.query.recordId }}</span> {{ clickedPairwiseMatch.block.query.intervalText }}<span v-if="clickedPairwiseMatch.block.query.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.query.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.query.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.query.tableInterval }) }}</div>
-                                    <div><span class="match-muted">{{ t('vs') + ' ' }}</span><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
+                                    <div><i18n-text :text="t('vs {record}')"><template #record><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span></template></i18n-text> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.subject.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.subject.tableInterval }) }}</div>
                                     <div class="match-lead-facts">{{ clickedPairwiseMatch.block.facts.join(' · ') }}</div>
                                     <div class="match-actions">
@@ -8071,7 +8071,7 @@
                         <div data-similarity-group-list class="flex-[2_1_0%] min-h-[6rem] overflow-y-auto border-b border-slate-200 custom-scrollbar">
                             <button v-for="row in orthogroupRows"
                                     :key="row.id"
-                                    v-memo="[row, selectedOrthogroup && selectedOrthogroup.id === row.id]"
+                                    v-memo="[row, selectedOrthogroup && selectedOrthogroup.id === row.id, uiLocale.value]"
                                     :data-similarity-group-row="row.id"
                                     :aria-current="selectedOrthogroup && selectedOrthogroup.id === row.id ? 'true' : null"
                                     @click="selectOrthogroup(row.group.id)"
@@ -8464,7 +8464,7 @@
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
-                    <i18n-text :text="t('{record}: {count} {kind} at {size} pt ({counts})')" :params="{ count: record.labelCount, kind: record.labelKindTitle, size: record.fontSize, counts: record.counts }"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
+                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
                 </li>
             </ul>
             <p v-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>

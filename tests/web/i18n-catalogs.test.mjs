@@ -154,18 +154,41 @@ const decodeEntities = (text) => text.replace(ENTITY, (whole, name) => {
 });
 
 /**
- * index.html as Vue compiles it: the browser decodes entities in the page
- * before Vue reads the in-DOM root, but an x-template's text reaches Vue as
- * written, so the x-template blocks stay undecoded.
+ * index.html as Vue compiles it: Vue decodes entities itself, in attributes
+ * and in {{ }}, in the in-DOM root and in an x-template alike.
  */
-const compiledHtml = (html) => {
-  let result = '';
-  let last = 0;
-  for (const block of html.matchAll(X_TEMPLATE)) {
-    result += decodeEntities(html.slice(last, block.index)) + block[0];
-    last = block.index + block[0].length;
+const compiledHtml = (html) => decodeEntities(html);
+
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+const TRANSLATED = /(?<![\w$.])(?:tn|tx|t)\(|<i18n-text\b/;
+
+/**
+ * The elements with a `v-memo` whose subtree shows UI text (a t(), tn() or
+ * tx() call, or an <i18n-text>) and whose dependency list lacks
+ * `uiLocale.value`: a locale switch would not update the memoized subtree.
+ * @returns {string[]} one `file:line: ...` problem per element
+ */
+const vMemoProblems = (source, file) => {
+  const problems = [];
+  for (const start of source.matchAll(/<([A-Za-z][\w-]*)\b(?:"[^"]*"|'[^']*'|[^'">])*?\sv-memo=(?:"([^"]*)"|'([^']*)')(?:"[^"]*"|'[^']*'|[^'">])*>/g)) {
+    const tag = start[1].toLowerCase();
+    const deps = start[2] ?? start[3];
+    // Find the matching end tag by counting the same tag name.
+    const tags = new RegExp(`<(/?)${tag}\\b(?:"[^"]*"|'[^']*'|[^'">])*?(/?)>`, 'gi');
+    tags.lastIndex = start.index + start[0].length;
+    let depth = 1;
+    let end = source.length;
+    for (let next = tags.exec(source); next; next = tags.exec(source)) {
+      if (next[1]) depth -= 1;
+      else if (!next[2] && !VOID_TAGS.has(tag)) depth += 1;
+      if (depth === 0) { end = next.index; break; }
+    }
+    const body = source.slice(start.index, end);
+    if (TRANSLATED.test(body) && !deps.includes('uiLocale.value')) {
+      problems.push(`${file}:${source.slice(0, start.index).split('\n').length}: v-memo="${deps}" shows UI text but does not list uiLocale.value`);
+    }
   }
-  return result + decodeEntities(html.slice(last));
+  return problems;
 };
 
 /**
@@ -272,20 +295,42 @@ test('extraction refuses a key that is not a literal', () => {
   ]);
 });
 
-test('index.html keys are read after the browser decodes entities, x-templates and modules as written', () => {
+test('index.html keys are read after Vue decodes entities, in the root and in x-templates', () => {
   const html = [
     '<div :title="t(\'Change &quot;{from}&quot; to {to} &amp; &#x41; &#66;\')"></div>',
-    '<script type="text/x-template" id="a">{{ t(\'Keep "{name}" as is\') }}</script>',
-    '<p>{{ t(\'Fish &amp; chips\') }} {{ t(\'Wait&nbsp;now &copy;\') }}</p>',
-    '<script type="text/x-template" id="b">{{ t(\'A &amp; B\') }}</script>'
+    '<script type="text/x-template" id="a">{{ t(\'Keep &quot;{name}&quot; &amp; "{other}"\') }}</script>',
+    '<p>{{ t(\'Fish &amp; chips\') }} {{ t(\'Wait&nbsp;now &copy;\') }}</p>'
   ].join('\n');
   assert.deepEqual(extractCalls(compiledHtml(html), 'sample').map((call) => call.key ?? call.problem), [
     'Change "{from}" to {to} & A B',
-    'Keep "{name}" as is',
+    'Keep "{name}" & "{other}"',
     'Fish & chips',
-    'sample:3: t() key holds an HTML entity; write the character',
-    'sample:4: t() key holds an HTML entity; write the character'
+    'sample:3: t() key holds an HTML entity; write the character'
   ]);
+  // A module's key is read as written: an entity there is refused.
+  assert.deepEqual(extractCalls('t(\'A &amp; B\')', 'module.js').map((call) => call.problem), [
+    'module.js:1: t() key holds an HTML entity; write the character'
+  ]);
+});
+
+test('a v-memo that shows UI text lists uiLocale.value in its dependencies', () => {
+  const html = [
+    '<li v-for="r in rows" v-memo="[r.id]"><b>{{ t(\'Edited\') }}</b><i>x</i></li>',
+    '<li v-for="r in rows" v-memo="[r.id, uiLocale.value]"><b>{{ t(\'Edited\') }}</b></li>',
+    '<li v-for="r in rows" v-memo="[r.id]"><b>{{ r.name }}</b></li>',
+    '<ul v-memo="[x]"><li><i18n-text :text="t(\'a {b}\')"></i18n-text></li></ul><p>{{ t(\'Outside\') }}</p>',
+    "<script>const template = `<div v-memo='[a]'><span>${'{{ t(\\'In JS\\') }}'}</span></div>`;</script>"
+  ].join('\n');
+  assert.deepEqual(vMemoProblems(html, 'sample').map((problem) => problem.split(' shows')[0]), [
+    'sample:1: v-memo="[r.id]"',
+    'sample:4: v-memo="[x]"',
+    'sample:5: v-memo="[a]"'
+  ]);
+});
+
+test('every v-memo in the Web UI that shows UI text lists uiLocale.value', () => {
+  const problems = sourceFiles().flatMap((path) => vMemoProblems(readFileSync(path, 'utf8'), relative(webRoot, path).split(sep).join('/')));
+  assert.deepEqual(problems, []);
 });
 
 test('a raw double quote inside a double-quoted attribute with a translation call is refused', () => {

@@ -9,7 +9,7 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
-import { textParts } from './utils/i18n.js';
+import { textParts, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
@@ -109,8 +109,9 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in (this function; the template words the name, so it
-// follows the UI locale). `label` names a tip whose holder has no such text;
+// the row group it is in (this function). The name comes from the page text,
+// so the tip reads it when it mounts and again after a UI locale switch has
+// re-rendered the page. `label` names a tip whose holder has no such text;
 // the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
@@ -214,7 +215,9 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    onMounted(() => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); });
+    const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
+    onMounted(readName);
+    watch(uiLocale, () => nextTick(readName));
     return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
