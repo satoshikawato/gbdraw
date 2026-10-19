@@ -491,6 +491,10 @@ test('the feature popup stays open after a Color or Stroke Change Scope choice (
     const strokeMode = popup.getByLabel('Feature stroke color mode');
     const strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
     await expect(strokeMode).toHaveValue('auto');
+    // The mode path: None asks, and Cancel puts the select back to Auto.
+    await strokeMode.selectOption('none');
+    await choose('Stroke Change Scope', 'Cancel');
+    await expect(strokeMode, 'Cancel: the mode select shows Auto again').toHaveValue('auto');
     const strokeOriginal = await strokePicker.inputValue();
     await strokeMode.selectOption('color');
     await expect(strokeMode).toHaveValue('color');

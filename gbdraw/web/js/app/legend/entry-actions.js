@@ -744,14 +744,16 @@ export const createLegendEntryActions = ({
   // The Legend color of the rows of `keys`: the drawing's override of each key
   // and the color of each listed row of them (D-35: the keys a merged row
   // stands for, `legendRowKeys`).
-  /** @param {readonly PythonLegendKey[]} keys @param {string} color */
-  const writeLegendRowColor = (keys, color) => {
+  /** @param {readonly PythonLegendKey[]} keys @param {string} color @param {{ inherit?: readonly PythonLegendKey[] }} [options] */
+  const writeLegendRowColor = (keys, color, { inherit = [] } = {}) => {
     const drawing = state.activeDrawing();
     const recolored = new Set(keys);
     /** @type {EntryRecord[]} */ (drawing.legendEntries.value).forEach((entry) => {
       if (recolored.has(legendEntryKey(entry))) entry.color = color;
     });
     keys.forEach((key) => { drawing.legendColorOverrides[key] = color; });
+    // The rows of `inherit` follow their type's default color again: no Legend color of their own.
+    inherit.forEach((key) => { delete drawing.legendColorOverrides[key]; });
   };
 
   // A Legend row color writes the editor intent only; the composition root

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { createPreviewItemPopup, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
+import { createPreviewItemPopup, defaultColorScopeLine, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
 import { legendEntryKey } from '../../gbdraw/web/js/services/legend-svg.js';
 import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
 
@@ -303,14 +303,18 @@ test('the legend-entry view names the rule behind the color and the feature coun
   const byType = openView(createPopup(), { kind: 'legend-entry', key: 'tRNA' }, false);
   assert.equal(byType.subtitle, 'Counting features…');
   assert.equal(byType.colorSource, 'Default color of tRNA features');
-  // OV-1281: once the matches are ready, a row the default color draws says that its Color sets it.
-  assert.equal(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' }).colorSource,
-    'Default color of tRNA features. A change sets the tRNA default color (tRNA features without their own color or rule, also hidden ones).');
-  // N-2: a type that already has a user default color says it replaces it (OIC-029).
-  assert.match(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' }, userDefaultColors: { tRNA: '#112233' } }),
-    { kind: 'legend-entry', key: 'tRNA' }).colorSource, / Replaces your tRNA default color ■ #112233\.$/);
-  assert.equal(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' }, false).colorSource,
-    'Default color of tRNA features', 'before the matches are ready the popup does not say what Color sets');
+  // OV-1281 / OIC-029: once the matches are ready, the view carries the one line of what Color sets; the owner shapes it.
+  assert.deepEqual(defaultColorScopeLine('tRNA', null), { kind: 'sets', type: 'tRNA', color: null });
+  assert.deepEqual(defaultColorScopeLine('tRNA', '#112233'), { kind: 'replaces', type: 'tRNA', color: '#112233' });
+  assert.equal(defaultColorScopeLine(null, '#112233'), null);
+  const drawn = openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' });
+  assert.deepEqual([drawn.colorSource, drawn.defaultColorLine], ['Default color of tRNA features', { kind: 'sets', type: 'tRNA', color: null }]);
+  // N-2: a type that already has a user default color says it replaces it.
+  assert.deepEqual(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' }, userDefaultColors: { tRNA: '#112233' } }),
+    { kind: 'legend-entry', key: 'tRNA' }).defaultColorLine, { kind: 'replaces', type: 'tRNA', color: '#112233' });
+  const early = openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' }, false);
+  assert.deepEqual([early.colorSource, early.defaultColorLine], ['Default color of tRNA features', null],
+    'before the matches are ready the popup does not say what Color sets');
   const single = openView(createPopup({ entries: [{ caption: 'x', color: '#000000' }], featureTypes: [], featureCount: 1 }),
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');

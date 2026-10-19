@@ -142,6 +142,18 @@ const TRACK_ROW_SUBTITLE = Object.freeze({ content: 'Content plot', skew: 'Skew 
 const TRACK_ROW_COLOR_SOURCE = 'Changes this legend swatch only. The plot keeps the color set in Settings.';
 
 /**
+ * OIC-029: what the Legend item choice of the scope dialog and the Legend popup's Color do to a type's default
+ * color. The one owner of that line; `DefaultColorScopeLine` draws it.
+ * @typedef {{ kind: 'sets' | 'replaces', type: string, color: string | null }} DefaultColorScopeLine
+ * @param {string | null | undefined} type
+ * @param {string | null | undefined} replacedColor the user default color of `type`, if the user set one
+ * @returns {DefaultColorScopeLine | null}
+ */
+export const defaultColorScopeLine = (type, replacedColor) => (
+  type ? { kind: replacedColor ? 'replaces' : 'sets', type, color: replacedColor || null } : null
+);
+
+/**
  * The legend-entry popup view.
  * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
  *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null,
@@ -157,9 +169,7 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
       ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
       : featureTypes.has(key)
         // OV-1281: the scope dialog's words for what its Legend item choice sets (OIC-029).
-        ? `Default color of ${key} features${defaultColorType ? `. A change sets the ${defaultColorType} default color (${
-          defaultColorType} features without their own color or rule, also hidden ones).${
-          replacedDefaultColor ? ` Replaces your ${defaultColorType} default color ■ ${replacedDefaultColor}.` : ''}` : ''}`
+        ? `Default color of ${key} features`
         : 'Set on individual features';
   return {
     kind: /** @type {const} */ ('legend-entry'),
@@ -175,6 +185,7 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
         ? 'Counting features…'
         : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
     colorSource,
+    defaultColorLine: trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor),
     ruleLines
   };
 };

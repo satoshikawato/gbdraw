@@ -39,7 +39,7 @@ import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/sessi
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
-import { createPreviewItemPopup } from './preview-item-popup.js';
+import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -4439,8 +4439,18 @@ export const createAppSetup = () => {
   );
   const setTypeDefaultColorWithHistory = undoableAction('Change feature color', featureActions.setTypeDefaultColor);
   // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
+  // `input` shows the row's color again afterwards (`shownColor()`): a refused edit leaves the view as it was.
+  /** @param {number} index @param {string} color @param {HTMLInputElement} input @param {() => string} shownColor */
+  const updateLegendEntryColorInPopup = async (index, color, input, shownColor) => {
+    try {
+      return await requestLegendEntryColorInPopup(index, color);
+    } finally {
+      await nextTick();
+      if (input.isConnected && input.value !== shownColor()) input.value = shownColor();
+    }
+  };
   /** @param {number} index @param {string} color */
-  const updateLegendEntryColorInPopup = async (index, color) => {
+  const requestLegendEntryColorInPopup = async (index, color) => {
     const entry = state.activeDrawing().legendEntries.value[index];
     const type = entry ? await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
     if (typeof type === 'string') return setTypeDefaultColorWithHistory(type, color);
@@ -7481,6 +7491,7 @@ export const createAppSetup = () => {
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     updateLegendEntryColorInPopup,
+    defaultColorScopeLine,
     renameLegendEntry,
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included

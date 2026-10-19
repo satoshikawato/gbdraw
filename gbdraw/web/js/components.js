@@ -651,6 +651,21 @@ export const ActionMenu = {
   `
 };
 
+/** The OIC-029 line from `defaultColorScopeLine`: the sentence for a Legend item choice that sets a type's default color. */
+export const DefaultColorScopeLine = {
+  props: { line: { type: Object, required: true } },
+  template: `
+    <span data-default-color-scope-sentence>
+      <template v-if="line.kind === 'replaces'">
+        Replaces your {{ line.type }} default color
+        <span class="inline-block w-3 h-3 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
+        <span class="font-mono">{{ line.color }}</span>.
+      </template>
+      <template v-else>Sets the {{ line.type }} default color ({{ line.type }} features without their own color or rule, also hidden ones).</template>
+    </span>
+  `
+};
+
 export const ColorValueControl = {
   props: {
     modelValue: { default: null },
