@@ -83,6 +83,25 @@ def test_underline_continues_the_leader_and_is_part_of_it() -> None:
         leader=((60.0, 50.0), (41.0, 95.0)), under_y=103.0, over_y=88.0,
     )
     assert beside.underline == ((40.0, 103.0), (40.0, 103.0), (0.0, 103.0))
+    # A Circular leader keeps its bends: its last segment is re-aimed at the line's near end, never a T (LP-D90).
+    circular = FeatureLabelInk(
+        ink=Aabb(0.0, 90.0, 40.0, 100.0), font_size=10.0, rotation_deg=0.0, center=(0.0, 95.0),
+        leader=((15.0, 140.0), (10.0, 120.0), (5.0, 100.5)), under_y=103.0, over_y=88.0, join_at_end=True,
+    )
+    assert circular.drawn == ((15.0, 140.0), (10.0, 120.0), (0.0, 103.0), (40.0, 103.0))
+    assert len(circular.drawn) - 1 == len(circular.leader)
+    # It meets the end on the side where the leader ends today, even when its bend lies nearer the other end.
+    anchored = FeatureLabelInk(
+        ink=Aabb(0.0, 90.0, 40.0, 100.0), font_size=10.0, rotation_deg=0.0, center=(0.0, 95.0),
+        leader=((60.0, 140.0), (45.0, 110.0), (-0.5, 95.0)), under_y=103.0, over_y=88.0, join_at_end=True,
+    )
+    assert anchored.drawn == ((60.0, 140.0), (45.0, 110.0), (0.0, 103.0), (40.0, 103.0))
+    # From above, re-aimed under the letters the leader would run through them: the line goes over them instead.
+    over = FeatureLabelInk(
+        ink=Aabb(0.0, 90.0, 40.0, 100.0), font_size=10.0, rotation_deg=0.0, center=(0.0, 95.0),
+        leader=((60.0, 60.0), (30.0, 80.0), (40.5, 95.0)), under_y=103.0, over_y=88.0, join_at_end=True,
+    )
+    assert over.drawn[-2:] == ((40.0, 88.0), (0.0, 88.0))
 
 
 def test_backing_opacity_switch(monkeypatch: pytest.MonkeyPatch) -> None:

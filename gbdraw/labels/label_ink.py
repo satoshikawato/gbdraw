@@ -4,10 +4,11 @@ Study prototype (LP-D85, LP-D88). ``GBDRAW_LABEL_UNDERLINE=on`` draws a line
 under the label's letters that continues its leader (the LoVis4u convention):
 the leader ends where it meets the line, at the point of the line nearest the
 leader's previous point (the near end for a leader that arrives from the side,
-a T for a leader that arrives from straight below or above). The line runs
+a T for a leader that arrives from straight below or above; a Circular leader
+always meets it at the end where it ends today, LP-D90). The line runs
 along the letters' ink, one ``UNDERLINE_GAP_EM`` beyond the font's descent
-line, or beyond its ascent line when the leader arrives from straight above
-the letters (a Linear label below its feature). The drawers and the fit count
+line, or beyond its ascent line when the leader would otherwise run through
+the letters (it arrives from above, as for a Linear label below its feature). The drawers and the fit count
 read the same polyline (``drawn``): the line is part of the label's leader for
 crossings. ``draw`` draws the line without counting it (a study view).
 """
@@ -42,6 +43,25 @@ def label_underline_counted() -> bool:
     return os.environ.get(UNDERLINE_ENV, "").strip().lower() == "on"
 
 
+def segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
+    """Whether the segment passes through the interior of ``box`` (a touch of its edge does not count)."""
+
+    t0, t1 = 0.0, 1.0
+    for origin, delta, low, high in (
+        (start[0], end[0] - start[0], box.min_x, box.max_x),
+        (start[1], end[1] - start[1], box.min_y, box.max_y),
+    ):
+        if abs(delta) < 1e-12:
+            if origin <= low or origin >= high:
+                return False
+            continue
+        ta, tb = (low - origin) / delta, (high - origin) / delta
+        t0, t1 = max(t0, min(ta, tb)), min(t1, max(ta, tb))
+        if t1 - t0 <= 1e-9:
+            return False
+    return True
+
+
 @dataclass(frozen=True)
 class FeatureLabelInk:
     """One feature label with a leader, in its record's drawing frame.
@@ -50,6 +70,9 @@ class FeatureLabelInk:
     ``center`` (the point its text is drawn at); ``leader`` is the leader the
     engine places, which ends at the letters. ``under_y`` / ``over_y`` are the
     y (label frame) of an underline below or above the letters; None without one.
+    ``join_at_end``: the leader meets the line at the end on the side where it
+    ends today, never inside it (Circular, LP-D90: its last segment is re-aimed
+    there, no bend is added).
     """
 
     ink: Aabb
@@ -59,6 +82,7 @@ class FeatureLabelInk:
     leader: tuple[Point, ...]
     under_y: float | None = None
     over_y: float | None = None
+    join_at_end: bool = False
 
     def _turned(self, point: Point, degrees: float) -> Point:
         if degrees == 0.0:
@@ -83,16 +107,23 @@ class FeatureLabelInk:
         if self.under_y is None or self.over_y is None or len(self.leader) < 2:
             return None
         previous = self.to_label_frame(self.leader[-2])
-        # Over the letters only for a leader that arrives from straight above them (a T); a leader from
-        # below or from the side meets the line under them.
-        from_above = previous[1] < self.ink.min_y and self.ink.min_x <= previous[0] <= self.ink.max_x
-        y = self.over_y if from_above else self.under_y
         meet_x = min(max(previous[0], self.ink.min_x), self.ink.max_x)
         near_x, far_x = (
             (self.ink.min_x, self.ink.max_x)
             if abs(meet_x - self.ink.min_x) <= abs(meet_x - self.ink.max_x)
             else (self.ink.max_x, self.ink.min_x)
         )
+        if self.join_at_end:
+            # The end on the side where the engine's leader ends today (the text anchor's side).
+            end_x = self.to_label_frame(self.leader[-1])[0]
+            near_x, far_x = (
+                (self.ink.min_x, self.ink.max_x)
+                if abs(end_x - self.ink.min_x) <= abs(end_x - self.ink.max_x)
+                else (self.ink.max_x, self.ink.min_x)
+            )
+            meet_x = near_x
+        # Under the letters, unless the leader would then run through them (it arrives from above): over them.
+        y = self.over_y if segment_through_box(previous, (meet_x, self.under_y), self.ink) else self.under_y
         return (
             self.from_label_frame((meet_x, y)),
             self.from_label_frame((near_x, y)),
@@ -126,6 +157,7 @@ def feature_label_ink(
     rotation_deg: float,
     leader: Sequence[Point],
     underline: bool = False,
+    join_at_end: bool = False,
 ) -> FeatureLabelInk:
     """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it)."""
 
@@ -154,6 +186,7 @@ def feature_label_ink(
         leader=tuple((float(px), float(py)) for px, py in leader),
         under_y=under_y,
         over_y=over_y,
+        join_at_end=join_at_end,
     )
 
 
@@ -189,12 +222,14 @@ def circular_label_ink(
         rotation_deg=rotation_deg,
         leader=leader_polyline(label),
         underline=underline,
+        join_at_end=True,
     )
 
 
 __all__ = [
     "UNDERLINE_ENV",
     "UNDERLINE_GAP_EM",
+    "segment_through_box",
     "FeatureLabelInk",
     "circular_label_ink",
     "feature_label_ink",

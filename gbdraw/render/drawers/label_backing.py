@@ -18,8 +18,7 @@ from collections.abc import Sequence
 from typing import Literal, TypeAlias
 
 from gbdraw.layout.spatial import Aabb
-from gbdraw.labels.label_ink import UNDERLINE_GAP_EM, FeatureLabelInk
-from gbdraw.layout.text_geometry import Point
+from gbdraw.labels.label_ink import UNDERLINE_GAP_EM, FeatureLabelInk, segment_through_box
 from gbdraw.svg.elements import Rect
 
 BACKING_PADDING_EM = 0.18
@@ -125,25 +124,6 @@ def backing_rects(labels: Sequence[FeatureLabelInk], mode: FeatureLabelBackingMo
     return [feature_label_backing_rect(label) for index, label in enumerate(labels) if index in backed]
 
 
-def _segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
-    """Whether the segment passes through the interior of ``box`` (a touch of its edge does not count)."""
-
-    t0, t1 = 0.0, 1.0
-    for origin, delta, low, high in (
-        (start[0], end[0] - start[0], box.min_x, box.max_x),
-        (start[1], end[1] - start[1], box.min_y, box.max_y),
-    ):
-        if abs(delta) < 1e-12:
-            if origin <= low or origin >= high:
-                return False
-            continue
-        ta, tb = (low - origin) / delta, (high - origin) / delta
-        t0, t1 = max(t0, min(ta, tb)), min(t1, max(ta, tb))
-        if t1 - t0 <= 1e-9:
-            return False
-    return True
-
-
 def leaders_through_text(labels: Sequence[FeatureLabelInk]) -> list[tuple[int, int]]:
     """(leader of, text of) pairs: a label's leader drawn through another label's letters."""
 
@@ -153,7 +133,7 @@ def leaders_through_text(labels: Sequence[FeatureLabelInk]) -> list[tuple[int, i
             if leader_of == text_of or not other.drawn:
                 continue
             points = [label.to_label_frame(point) for point in other.drawn]
-            if any(_segment_through_box(a, b, label.ink) for a, b in zip(points, points[1:])):
+            if any(segment_through_box(a, b, label.ink) for a, b in zip(points, points[1:])):
                 found.append((leader_of, text_of))
     return found
 
