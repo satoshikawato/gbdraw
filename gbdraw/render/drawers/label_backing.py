@@ -64,6 +64,7 @@ def label_halos(texts: Sequence[Text], width_em: float) -> list[Use]:
             text.attribs["id"] = f"label_text_{feature_id}" + (f"_{count}" if count else "")
         halo = Use(
             href=f"#{text.attribs['id']}",
+            fill="none",  # the clone draws no letters of its own (PDF text is not doubled)
             stroke=HALO_COLOR,
             stroke_width=width_em * float(font_size),
             stroke_linejoin="round",

@@ -11,7 +11,7 @@ from gbdraw.svg.elements import Group, Line, Text
 
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
-from ....labels.label_ink import FeatureLabelInk, circular_label_ink, label_underline_on
+from ....labels.label_ink import FeatureLabelInk, circular_label_ink, label_underline_on, rule_leader_width
 from ....layout.circular import CircularRecordRenderContext
 from ...drawers.circular.labels import LabelDrawer
 from ...drawers.label_backing import backing_rects, feature_label_backing_mode, feature_label_halo_em, label_halos
@@ -72,9 +72,11 @@ class LabelsGroup:
             for rect in backing_rects(inks, backing_mode):
                 group.add(rect)
 
-        def leader_part(start: tuple[float, float], end: tuple[float, float], feature_id: str | None) -> Line:
+        def leader_part(
+            start: tuple[float, float], end: tuple[float, float], feature_id: str | None, width: float
+        ) -> Line:
             # One straight part of a leader or of its underline: one style for both (LP-D95).
-            part = Line(start=start, end=end, stroke=stroke_color, stroke_width=stroke_width, stroke_linecap="round")
+            part = Line(start=start, end=end, stroke=stroke_color, stroke_width=width, stroke_linecap="round")
             bind_label_part(part, feature_id)
             return part
 
@@ -85,15 +87,21 @@ class LabelsGroup:
             leader_start_x = label.get("leader_start_x", label["start_x"])
             leader_start_y = label.get("leader_start_y", label["start_y"])
             line = ink_of(label).underline if underline else None
+            # The LP-D98 width rule (study switch) or labels.stroke_width; only parts that read the stroke use it.
+            width = (
+                (rule_leader_width(drawer.label_font(label, record_length)[0], "circular") or stroke_width)
+                if self.phase in {"all", "leaders"} or underline
+                else 0.0
+            )
             if line is not None:
                 # The leader ends on its underline, which continues it (LP-D88); the line is drawn with the
                 # letters, in front of the backings.
                 leader_start_x, leader_start_y = line[0]
                 if self.phase in {"all", "text"} and line[1] != line[2]:
-                    group.add(leader_part(line[1], line[2], label["feature_id"]))
+                    group.add(leader_part(line[1], line[2], label["feature_id"], width))
             if self.phase in {"all", "leaders"}:
                 bend = (label["middle_x"], label["middle_y"])
-                group.add(leader_part(bend, (leader_start_x, leader_start_y), label["feature_id"]))
+                group.add(leader_part(bend, (leader_start_x, leader_start_y), label["feature_id"], width))
                 group.add(
                     leader_part(
                         bend,
@@ -102,6 +110,7 @@ class LabelsGroup:
                             label.get("feature_anchor_y", label["feature_middle_y"]),
                         ),
                         label["feature_id"],
+                        width,
                     )
                 )
             if self.phase in {"all", "text"}:

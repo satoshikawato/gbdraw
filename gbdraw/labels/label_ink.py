@@ -30,6 +30,10 @@ from .circular_types import CircularLabel
 UNDERLINE_ENV = "GBDRAW_LABEL_UNDERLINE"
 UNDERLINE_GAP_EM = 0.06
 OVERLINE_ENV = "GBDRAW_LABEL_OVERLINE"
+LEADER_WIDTH_ENV = "GBDRAW_LABEL_LEADER_WIDTH"
+LINE_GAP_ENV = "GBDRAW_LABEL_LINE_GAP"
+LEADER_WIDTH_FLOOR_PX = 1.0
+LEADER_WIDTH_EM = 0.07
 GAP_STOP_EM = 0.20
 
 
@@ -67,6 +71,25 @@ def label_overline(mode: DiagramMode) -> OverlineMode:
 
     value = study_switch(OVERLINE_ENV, mode)
     return "gap" if value == "gap" else "none" if value == "none" else "line"
+
+
+def rule_leader_width(font_size: float, mode: DiagramMode) -> float | None:
+    """The leader (and underline) width of the LP-D98 rule, ``max(1.0 px, 0.07 x font size)``, when the prototype
+    switch ``GBDRAW_LABEL_LEADER_WIDTH=rule`` asks for it; None otherwise (``labels.stroke_width`` applies)."""
+
+    if study_switch(LEADER_WIDTH_ENV, mode) != "rule":
+        return None
+    return max(LEADER_WIDTH_FLOOR_PX, LEADER_WIDTH_EM * float(font_size))
+
+
+def line_half_width_em(font_size: float, mode: DiagramMode) -> float:
+    """Half the line's width in em when its gap is measured to the line's edge (``GBDRAW_LABEL_LINE_GAP=edge``,
+    LP-D98 with the width rule); 0.0 when the gap is measured to its centre."""
+
+    width = rule_leader_width(font_size, mode)
+    if width is None or study_switch(LINE_GAP_ENV, mode) != "edge":
+        return 0.0
+    return 0.5 * width / float(font_size)
 
 
 def label_underline_in_box(mode: DiagramMode) -> bool:
@@ -210,6 +233,7 @@ def feature_label_ink(
     underline: bool = False,
     join_at_end: bool = False,
     overline: OverlineMode = "line",
+    line_half_em: float = 0.0,
 ) -> FeatureLabelInk:
     """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it)."""
 
@@ -226,10 +250,11 @@ def feature_label_ink(
         metrics = get_font_vertical_metrics(font_family)
         shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
         if metrics is not None and shift is not None:
-            under_y = y + (shift + metrics.descent + UNDERLINE_GAP_EM) * size
-            over_y = y + (shift - metrics.ascent - UNDERLINE_GAP_EM) * size
+            under_y = y + (shift + metrics.descent + UNDERLINE_GAP_EM + line_half_em) * size
+            over_y = y + (shift - metrics.ascent - UNDERLINE_GAP_EM - line_half_em) * size
         else:
-            under_y, over_y = y + bottom + UNDERLINE_GAP_EM * size, y + top - UNDERLINE_GAP_EM * size
+            reach = (UNDERLINE_GAP_EM + line_half_em) * size
+            under_y, over_y = y + bottom + reach, y + top - reach
         if overline == "gap":
             over_y = y + top - GAP_STOP_EM * size
     return FeatureLabelInk(
@@ -259,6 +284,7 @@ def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], *, un
         leader=leader,
         underline=underline,
         overline=label_overline("linear"),
+        line_half_em=line_half_width_em(float(str(label["font_size"])), "linear"),
     )
 
 
@@ -280,6 +306,7 @@ def circular_label_ink(
         underline=underline,
         join_at_end=True,
         overline=label_overline("circular"),
+        line_half_em=line_half_width_em(font_size, "circular"),
     )
 
 
@@ -294,6 +321,8 @@ __all__ = [
     "label_underline_counted",
     "label_underline_in_box",
     "label_overline",
+    "line_half_width_em",
+    "rule_leader_width",
     "OverlineMode",
     "GAP_STOP_EM",
     "OVERLINE_ENV",

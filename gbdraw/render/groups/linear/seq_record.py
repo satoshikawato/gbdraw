@@ -12,7 +12,7 @@ from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.label_backing import backing_rects, feature_label_backing_mode, feature_label_halo_em, label_halos
-from ....labels.label_ink import label_underline_on, linear_label_ink
+from ....labels.label_ink import label_underline_on, linear_label_ink, rule_leader_width
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
 from ....config.models.render_profiles import LinearRenderProfile
@@ -190,10 +190,10 @@ class SeqRecordGroup:
             tick += tick_interval
         return sorted(coordinates, reverse=(start_coord > end_coord))
 
-    def _leader_part(self, start: tuple[float, float], end: tuple[float, float], feature_id: str) -> Line:
+    def _leader_part(self, start: tuple[float, float], end: tuple[float, float], feature_id: str, width: float) -> Line:
         """One straight part of a feature label's leader (or of its underline, which shares the leader's style)."""
 
-        part = Line(start=start, end=end, stroke=self.label_stroke_color, stroke_width=self.label_stroke_width)
+        part = Line(start=start, end=end, stroke=self.label_stroke_color, stroke_width=width)
         bind_label_part(part, feature_id)
         return part
 
@@ -309,15 +309,16 @@ class SeqRecordGroup:
                 label = {**label, "feature_id": feature_id}
                 bound_labels.append(label)
                 leader = linear_leader_polyline(label)
+                width = rule_leader_width(float(label["font_size"]), "linear") or self.label_stroke_width
                 line = linear_label_ink(label, leader, underline=True).underline if leader and underline else None
                 if line is not None:
                     # The leader ends on its underline, which continues it (LP-D88) in the same style
                     # (LP-D95). It is drawn with the letters, in front of the backings.
                     leader = (leader[0], line[0])
                     if line[1] != line[2]:
-                        underlines.append(self._leader_part(line[1], line[2], feature_id))
+                        underlines.append(self._leader_part(line[1], line[2], feature_id, width))
                 if leader:
-                    feature_group.add(self._leader_part(leader[0], leader[1], feature_id))
+                    feature_group.add(self._leader_part(leader[0], leader[1], feature_id, width))
             label_list = bound_labels
 
         # Draw features

@@ -15,6 +15,8 @@ from gbdraw.labels.label_ink import (
     label_underline_counted,
     label_underline_in_box,
     label_underline_on,
+    line_half_width_em,
+    rule_leader_width,
     study_switch,
     underline_reach_em,
 )
@@ -177,3 +179,14 @@ def test_a_halo_is_a_white_use_of_the_label_text(monkeypatch: pytest.MonkeyPatch
     assert [h.attribs["xlink:href"] for h in halos] == ["#label_text_f1", "#label_text_f1_1"]
     assert halos[0].attribs["stroke"] == "#ffffff" and float(halos[0].attribs["stroke-width"]) == pytest.approx(2.88)
     assert "data-label-feature-id" not in halos[0].attribs  # the Web label editor binds labels by this attribute
+
+
+def test_the_lp_d98_width_rule_and_the_gap_to_the_line_edge(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert rule_leader_width(10.0, "linear") is None and line_half_width_em(10.0, "linear") == 0.0
+    monkeypatch.setenv("GBDRAW_LABEL_LEADER_WIDTH", "rule")
+    assert rule_leader_width(10.0, "circular") == pytest.approx(1.0)  # the 1.0 px floor
+    assert rule_leader_width(24.0, "linear") == pytest.approx(1.68)
+    assert line_half_width_em(24.0, "linear") == 0.0  # gap still measured to the line's centre
+    monkeypatch.setenv("GBDRAW_LABEL_LINE_GAP_LINEAR", "edge")
+    assert line_half_width_em(24.0, "linear") == pytest.approx(0.035)
+    assert line_half_width_em(24.0, "circular") == 0.0
