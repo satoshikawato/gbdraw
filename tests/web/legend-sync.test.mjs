@@ -147,6 +147,7 @@ assert.deepEqual(buildLegendIntents([
 class MockElement {
   constructor(tagName, attributes = {}, textContent = '') {
     this.tagName = tagName;
+    this.localName = tagName;
     this.attributes = new Map(Object.entries(attributes));
     this.children = [];
     this.parentElement = null;

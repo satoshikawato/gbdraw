@@ -2170,6 +2170,44 @@ test('a fill addressed by Python\'s key reaches a renamed row; a reconcile witho
   assert.equal(serializeNode(svg), drawn);
 });
 
+// OV-1385: a Legend row's swatch is the path Python draws in the row, whatever
+// fill it shows now. Python draws a row of color `none` with a swatch of fill
+// `none`, so a live fill of `none` shows what Generate draws, and the next
+// live edits still find the swatch. A row Python draws with a paint server
+// (a gradient bar or a hatch pattern) has no solid swatch, as before.
+test('a Legend swatch of fill none is still the row\'s swatch, and live fills after none reach it (OV-1385)', () => {
+  const svg = legendSvg();
+  const drawn = serializeNode(svg);
+  const cds = () => svg.querySelectorAll('g[data-legend-key]')[0];
+  const domains = ['legendFills', 'legendStrokes'];
+  const fill = (color) => legendOperations({ legendFills: [{ caption: 'CDS', color }] });
+  reconcileMountedResult(svg, fill('none'), { domains });
+  assert.equal(legendSwatch(cds())?.getAttribute('fill'), 'none');
+  reconcileMountedResult(svg, fill('#123456'), { domains });
+  assert.equal(legendSwatch(cds()).getAttribute('fill'), '#123456', 'a live fill after none reaches the swatch');
+  reconcileMountedResult(svg, fill('none'), { domains });
+  reconcileMountedResult(svg, legendOperations({
+    legendStrokes: [{
+      caption: 'CDS', strokeColor: '#e63946', strokeWidth: 2,
+      reach: { listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }
+    }]
+  }), { domains });
+  assert.equal(legendSwatch(cds()).getAttribute('stroke'), '#e63946', 'a live stroke after none reaches the swatch');
+  reconcileMountedResult(svg, legendOperations(), { domains });
+  assert.equal(serializeNode(svg), drawn, 'a reconcile without the edits returns Python\'s row');
+
+  const pythonNone = legendRow('GC content', 7);
+  pythonNone.children[0].setAttribute('fill', 'none');
+  assert.equal(legendSwatch(pythonNone), pythonNone.children[0], 'Python\'s own swatch of fill none');
+  const gradient = new FakeElement('g', { 'data-legend-key': 'Identity' }, [
+    new FakeElement('linearGradient', { id: 'g1' }), new FakeElement('text'), new FakeElement('path', { fill: 'url(#g1)' })
+  ]);
+  const hatch = new FakeElement('g', { 'data-legend-key': 'Region' }, [
+    new FakeElement('path', { fill: 'url(#hatch)' }), new FakeElement('text')
+  ]);
+  assert.deepEqual([legendSwatch(gradient), legendSwatch(hatch)], [null, null], 'a paint-server row has no solid swatch');
+});
+
 test('an editor row is cloned from Python\'s first row and removed by a reconcile without its add', () => {
   const editorRow = legendRow('Mine', 7, { 'data-legend-owner': 'direct-editor', 'data-test-stroke': '#ff00ff' });
   const svg = legendSvg([editorRow, legendRow('CDS', 31), legendRow('tRNA', 55)]);
