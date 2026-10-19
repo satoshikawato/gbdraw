@@ -9,6 +9,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
+from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
 
@@ -229,16 +230,16 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
 
 
 def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
-    source = INDEX_PATH.read_text(encoding="utf-8")
+    source = read_english_index(INDEX_PATH)
     for label in (
-        "Definition for sequence ${idx + 1}",
-        "Region start for sequence ${idx + 1}",
-        "Region end for sequence ${idx + 1}",
-        "Reverse complement for sequence ${idx + 1}",
+        "t('Definition for sequence {n}', { n: idx + 1 })",
+        "t('Region start for sequence {n}', { n: idx + 1 })",
+        "t('Region end for sequence {n}', { n: idx + 1 })",
+        "t('Reverse complement for sequence {n}', { n: idx + 1 })",
         'aria-label="Arrange linear records in rows"',
-        "Linear record row for sequence ${idx + 1}",
+        "t('Linear record row for sequence {n}', { n: idx + 1 })",
         'aria-label="Linear record gap"',
-        "TLOSATX gencode for sequence ${idx + 1}",
+        "t('TLOSATX gencode for sequence {n}', { n: idx + 1 })",
         'aria-label="Linear comparison minimum alignment length"',
         'data-capture="linear-blast-source"',
         'aria-label="Set all adjacent comparisons"',
@@ -260,12 +261,12 @@ def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
         'label="BLAST TSV"',
         ':data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"',
         ">Raw LOSAT filename</label>",
-        "Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}",
-        "Save Raw LOSAT TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}",
+        "t('Raw LOSAT filename for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })",
+        "t('Save Raw LOSAT TSV for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })",
         'aria-label="Pairwise Comparisons"',
         'aria-label="Circular reference gencode"',
-        "Comparison ring label ${row.index + 1}",
-        "Comparison gencode ${row.index + 1}",
+        "t('Comparison ring label {n}', { n: row.index + 1 })",
+        "t('Comparison gencode {n}', { n: row.index + 1 })",
         'aria-label="Circular comparison minimum alignment length"',
         'aria-label="Circular comparison ring width"',
         'aria-label="Circular comparison ring gap"',

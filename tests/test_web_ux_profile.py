@@ -1,4 +1,5 @@
 from pathlib import Path
+from tests.utils.web_markup import read_english_index
 
 
 WEB_INDEX = (
@@ -7,7 +8,7 @@ WEB_INDEX = (
 
 
 def test_circular_legend_selector_exposes_every_supported_corner() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
 
     for position in ("upper_left", "upper_right", "lower_left", "lower_right"):
         assert (
@@ -17,7 +18,7 @@ def test_circular_legend_selector_exposes_every_supported_corner() -> None:
 
 
 def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
 
     assert 'aria-label="Circular" :aria-pressed="mode === \'circular\'"' in index
     assert 'aria-label="Linear" :aria-pressed="mode === \'linear\'"' in index
@@ -27,8 +28,8 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
         '@change="handleFile"' in index
     )
     assert (
-        'role="group" :aria-label="($attrs[\'data-input-aria-label\'] || label) '
-        '+ \' selection\'"' in index
+        'role="group" :aria-label="t(\'{name} selection\', '
+        '{ name: $attrs[\'data-input-aria-label\'] || label })"' in index
     )
 
     for label, control_id in (
@@ -60,7 +61,7 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
 
 
 def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
 
     for label, control_id in (
         ("Track Layout", "linear-track-layout"),
@@ -70,7 +71,7 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
         assert f'id="{control_id}"' in index, label
 
     assert '<summary aria-label="Layout">' in index
-    assert '<summary aria-label="Axis &amp; Scale">' in index
+    assert '<summary aria-label="Axis & Scale">' in index
     assert 'aria-label="Show Coordinate Scale (Linear)"' in index
     assert 'aria-label="Linear scale style"' in index
     assert 'role="group" aria-label="Set all adjacent comparisons"' in index
@@ -114,7 +115,7 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
 
 
 def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
 
     assert 'data-linear-record-list' in index
     assert (
@@ -198,7 +199,7 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
 
 
 def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
     app_setup = (WEB_INDEX.parent / "js" / "app" / "app-setup.js").read_text(
         encoding="utf-8"
     )
@@ -251,7 +252,7 @@ def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
 
 
 def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
 
     template_start = index.index(
         '<script type="text/x-template" id="file-uploader-template">'
@@ -260,7 +261,10 @@ def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
     assert 'role="button"' in template
     assert ':tabindex="uploadAvailable ? 0 : -1"' in template
     assert ':aria-disabled="!uploadAvailable"' in template
-    assert ':aria-label="`Choose ${$attrs[\'data-input-aria-label\'] || label}`"' in template
+    assert (
+        ':aria-label="t(\'Choose {name}\', '
+        '{ name: $attrs[\'data-input-aria-label\'] || label })"' in template
+    )
     assert '@keydown.enter.prevent="uploadAvailable && $refs.input.click()"' in template
     assert '@keydown.space.prevent="uploadAvailable && $refs.input.click()"' in template
     stylesheet = (WEB_INDEX.parent / "css" / "tailwind.input.css").read_text(encoding="utf-8")
@@ -268,7 +272,7 @@ def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
 
 
 def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
-    index = WEB_INDEX.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX)
     svg_actions = (
         WEB_INDEX.parent
         / "js"
@@ -290,12 +294,12 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
         assert f'aria-label="{label}"' in index
 
     assert (
-        ':aria-label="`Raw LOSAT filename for #${pair.queryIndex + 1} '
-        'to #${pair.subjectIndex + 1}`"' in index
+        ':aria-label="t(\'Raw LOSAT filename for #{from} to #{to}\', '
+        '{ from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"' in index
     )
     assert (
-        ':aria-label="`Save Raw LOSAT TSV for #${pair.queryIndex + 1} '
-        'to #${pair.subjectIndex + 1}`"' in index
+        ':aria-label="t(\'Save Raw LOSAT TSV for #{from} to #{to}\', '
+        '{ from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"' in index
     )
     assert (
         ':data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to '
@@ -308,7 +312,7 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
     assert ':data-testid="testId || undefined"' in index
     assert "'testId'" in components
     assert 'role="dialog"' in index
-    assert ": 'Pairwise match details'\"" in index
+    assert ": t('Pairwise match details')\"" in index
     assert "element.setAttribute('role', 'button')" in svg_actions
     assert "element.setAttribute('tabindex', '0')" in svg_actions
     assert "`Pairwise match ${index + 1}`" in svg_actions
