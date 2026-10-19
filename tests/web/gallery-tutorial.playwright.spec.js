@@ -425,7 +425,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     })
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Palette orange' }).first()).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Default CDS color #dddddd' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Default Colors › CDS feature color #dddddd' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Min identity (%) 30 (default 0)' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: 'File 5 › Record options › Reverse complement On' })
@@ -438,7 +438,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     tutorialPanel.getByRole('row', { name: 'Features › Arrow Geometry › Shaft Width Ratio 0.6' }).first()
   ).toBeVisible();
   await expect(
-    tutorialPanel.getByRole('row', { name: 'Definition line: Accession 20; #7b7c7d' }).first()
+    tutorialPanel.getByRole('row', { name: 'Titles & Record Labels › Accession › Style 20; #7b7c7d' }).first()
   ).toBeVisible();
   await expect(tutorialPanel.getByText('Generate reuses the LOSAT results, so only the drawing changes.')).toBeVisible();
   const bgc0708MibigHref = 'https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk';
