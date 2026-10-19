@@ -487,6 +487,11 @@ def _passes_orthogroup_label_eligibility(
     return top_member_ids is not None and bool(identities.intersection(top_member_ids))
 
 
+# Room a label needs inside its feature beyond its advance, in em (both ends together), so letters keep off
+# the feature's ends and arrowhead (Owner D-20).
+_EMBEDDED_LABEL_MARGIN_EM = 0.25
+
+
 class LinearLabelFrame(NamedTuple):
     """Where a record's feature labels are stacked and counted: its Linear row and the x of the record's
     start in that row. A record translation moves the record with its labels (OV-1188)."""
@@ -782,7 +787,10 @@ def linear_record_labels(
                 }
             )
             labels.append(label_entry)
-        elif label_rendering != "external_only" and bbox_width_px < longest_segment_length_in_pixels:
+        elif (
+            label_rendering != "external_only"
+            and bbox_width_px + _EMBEDDED_LABEL_MARGIN_EM * font_size < longest_segment_length_in_pixels
+        ):
             label_entry.update({"middle_y": feature_y, "is_embedded": True, "track_id": "track_0"})
             labels.append(label_entry)
         elif label_rendering != "embedded_only":
