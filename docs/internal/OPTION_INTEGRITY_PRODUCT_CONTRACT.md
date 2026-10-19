@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `67`
+- Contract revision: `68`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1859,6 +1859,239 @@ Status: active Product authority
     the scenario revision `7`, `8`, and `9` receipts keep their text and their
     SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
     retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 68 changes: `PD-OI-097` is replaced for scenario revision `11`
+  (concern `product.circular-outer-label-fit`), and `PD-OI-098` for scenario
+  revision `2` (concern `diagram-generation.diagram-font`; the outcome
+  `A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED` is kept). They come from the
+  Product Decision Owner `satoshikawato`'s replies of `2026-10-19` on the
+  style of feature labels: what keeps the leader lines that pass behind a
+  label off its letters, a Linear underline joined to the leader line, the
+  width of leader lines, and a minimum gap between labels in one Linear row
+  (OV-1355). Each quotation below is the part of a reply that carries the
+  answer; Replies 1 to 24 are those of the Revision 50, 53, 66, and 67
+  entries.
+  - Reply 25 (scenario revision `11`, `2026-10-19`), to the question
+    「Q9: フィーチャーラベルを、後ろを通るリーダー線からどう守りますか？（ページの図1・2・6・8）」
+    the selected option and its description:
+    「ハロー 0.08-0.12em (推奨)」
+    「文字の形に沿った白い縁取り。リーダー線は文字の間で元の濃さのまま残る。領域ラベルの背景 0.7 は今のまま」
+    and the answer:
+    「ハロー 0.08-0.12em (推奨)」
+    (`LBL-HALO`)
+  - Reply 26 (scenario revision `11`, `2026-10-19`), to the question
+    「Q10: Linear のデフォルトはどれにしますか？（図1・3・4）」
+    the selected option and its description:
+    「下線+ハロー (推奨)」
+    「LP-D93 の「下線+半透明背景」と同じ目的を、リーダー線を隠さないハローで果たす」
+    and the answer:
+    「下線+ハロー (推奨)」
+    (`LIN-UNDER`)
+  - Reply 27 (scenario revision `11`, `2026-10-19`), to the question
+    「Q11: Circular のデフォルトはどれにしますか？（図6・7）」
+    the selected option and its description:
+    「ハロー、下線なし (推奨)」
+    「Circular でリーダー線が文字を通る所は少なく（lambda で3か所）、違いは小さい」
+    and the answer:
+    「ハロー、下線なし (推奨)」
+    (`CIR-NO-UNDER`)
+  - Reply 28 (scenario revision `11`, `2026-10-19`), to the question
+    「Q12: 上から来るリーダー線（ラベルがトラックの下にあるときなど）はどう終えますか？（図5）」
+    the selected option and its description:
+    「0.20em 上で止める (推奨)」
+    「文字の 0.20 em 上で止める。線の交差も折れ点も増えない（LP-D90 と両立）」
+    and the answer:
+    「0.20em 上で止める (推奨)」
+    (`GAP-STOP`)
+  - Reply 29 (scenario revision `11`, `2026-10-19`), to the question
+    「Q13: リーダー線（と下線）の太さをどうしますか？（図4・7・9・10）」
+    the selected option and its description:
+    「両モード 0.07倍・≧1px (推奨)」
+    「文字サイズの 0.07 倍、ただし 1.0 px 以上。Linear と長い配列の Circular は 0.5→1.0 px 以上に太く、短い配列の Circular（14 pt）は 1.5→1.0 px に細くなる。下線と文字の間は線の縁から測る」
+    and the answer:
+    「両モード 0.07倍・≧1px (推奨)」
+    (`LEADER-007`)
+  - Reply 30 (scenario revision `11`, `2026-10-19`), to the question
+    「Q14: 選べるようにするオプションの形は？」
+    the selected option and its description:
+    「2つに分ける (推奨)」
+    「label_line（none / under）と label_protection（none / halo / box）。下線と守りを独立に選べ、「下線+背景」も選べる」
+    and the answer:
+    「2つに分ける (推奨)」
+    (`LBL-OPTS-2`)
+  - Reply 31 (scenario revision `11`, `2026-10-19`), to the question
+    「Q15: この変更（Q9〜Q14）をいつ入れますか？」
+    the selected option and its description:
+    「0.14.0 に入れる」
+    「タグの前に入れる（P-03 の凍結の例外になる）」
+    and the answer:
+    「0.14.0 に入れる」
+    (`LBL-0140`)
+  - Reply 32 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-A: フィーチャーラベルのハローの幅は？（ページ https://claude.ai/artifact/NN3ZELDPbp3u6pFqP8TsTz Version 6 の図 Q-A 1・2）」
+    the selected option and its description:
+    「0.08 em (推奨)」
+    「読む大きさでは差が見えず、リーダー線を一番多く残す（ラベル内で見える割合 89 %、dev 83 %）」
+    and the answer:
+    「0.08 em (推奨)」
+    (`HALO-008`)
+  - Reply 33 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-B: 名前と置き場所はこれでよいですか？ CLI --label_line {none,under} / --label_protection {none,halo,box}（両モード）、config [labels.linear]/[labels.circular] の line / protection、Python は config_overrides のみ、GUI は Labels の Label Rendering の後に Label Line（None/Underline）と Label Protection（None/Halo/Box）。ハローの幅と箱の不透明度は固定。」
+    the selected option and its description:
+    「このまま (推奨)」
+    「上の名前と置き場所。GUI の画面は PR でスクリーンショットをお見せします」
+    and the answer:
+    「このまま (推奨)」
+    (`OPT-NAMES`)
+  - Reply 34 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-D: この変更より前に保存した Session の見た目は？（図 Q-D 1・2）」
+    the selected option and its description:
+    「A 次の Generate で新しく (推奨)」
+    「保存された図は Generate までそのまま。Python で labels.stroke_width を指定するとエラー（CHANGELOG に書く）」
+    and the answer:
+    「A 次の Generate で新しく (推奨)」
+    (`SESS-NEXT-GEN`)
+  - Reply 35 (`2026-10-19`), to the question
+    「Q-F: 全体の図（図 Q-D 2）を見て、Linear のリーダー線の太さは Q13 のままでよいですか？ 24 pt で 0.5 → 1.68 px になり、下線とあわせて灰色の格子が目立ちます。」
+    the selected option and its description:
+    「Q13 のまま」
+    「文字サイズの 0.07 倍、1.0 px 以上。24 pt で 1.68 px、50 % に縮めてもコントラスト 2.49:1」
+    and the answer:
+    「Q13 のまま」
+    Reply 35 confirms the width of Reply 29 and adds no choice token.
+  - Reply 36 (scenario revision `11`, `2026-10-19`), to the question
+    「S1 Web PDF のハロー：Web の PDF 書き出し（svg2pdf）は、ハローを黒い文字の重複として描き、ラベルを 2 回取り出してしまいます（ページの図 S1）。どうしますか？」
+    the selected option and its description:
+    「B ハローを描かない (推奨)」
+    「Web PDF だけハローを外す。SVG・PNG・CLI の PDF にはハローがある。Web PDF の見た目は今と同じで、ラベルは 1 回ずつ取り出せる。」
+    and the answer:
+    「B ハローを描かない (推奨)」
+    (`WEBPDF-NO-HALO`)
+  - Reply 37 (scenario revision `11`, `2026-10-19`), to the question
+    「S2 Linear の段と下線：計画 (a) では全ラベルが動いて図が高くなり、BGC で段が変わり、HmmtDNA 20 pt で警告なしの重なりが出ました。(b') なら実データは dev と同じ位置・大きさです（ページの図 S2 1〜6）。どうしますか？」
+    the selected option and its description:
+    「(b') 段に数えない (推奨)」
+    「下線は段の高さに数えず、領域名だけが下線をよける。実データの図は dev と同じ。領域名が下線に当たるときだけ、ラベルが新しい段に移るか警告。背景で下線を隠さない。」
+    and the answer:
+    「(b') 段に数えない (推奨)」
+    (`UNDER-NOT-IN-ROW`)
+  - Reply 38 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-G 下線の白い縁：上の段へ伸びるリーダー線が、ほかのラベルの下線を横切るとつなぎ目に見えます（lambda で 293 か所）。下線に白い縁を付けると、横切る線は下線の所で途切れます（新しいページの図 G 1〜3）。どうしますか？」
+    the selected option and its description:
+    「付ける (推奨)」
+    「ほかのラベルのリーダー線は下線の所で途切れ、後ろを通るように見える。自分のリーダー線はつながったまま。文字や形は隠れない。PDF +0.5 %。」
+    and the answer:
+    「付ける (推奨)」
+    (`UNDER-CASING`)
+  - Reply 39 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-H 下線の端：同じ段で隣り合うラベルの下線が、密な所では 1 本につながって見えます（tobacco IR 5 pt で 0.43 px）。下線の両端を 0.12 em ずつ短くしますか（図 H 1〜3）？」
+    the selected option and its description:
+    「両端を 0.12 em 短く (推奨)」
+    「隣どうしの下線が離れる（0.43 → 1.63 px、24 pt で 1.07 → 6.83 px）。どの下線も文字より少し短くなる（24 pt で片側 2.9 px）。ラベルの位置は変わらない。」
+    and the answer:
+    「両端を 0.12 em 短く (推奨)」
+    (`UNDER-TRIM`)
+  - Reply 40 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-I 同じ段の最小のすき間：Linear では、同じ段の隣どうしのラベルがすき間なしで並び、1 語に見えることがあります（HmmtDNA 24 pt の "tRNA-SertRNA-Lys"。dev にもある不具合 OV-1355）。すき間を入れると、詰まった段のラベルが別の段に移ります（新しいページの図 I 1〜3）。どうしますか？」
+    the selected option and its description:
+    「0.25 em、LS の PR で (推奨)」
+    「ほぼ単語 1 つ分の空白。近すぎる組はどの図でもなくなる。lambda 21、tobacco IR 22、HmmtDNA 4 ラベルが別の段へ。図の高さは変わらない。出力の作り直しは 1 回で済む。」
+    and the answer:
+    「0.25 em、LS の PR で (推奨)」
+    (`ROW-GAP-025`)
+  - Reply 41 (`2026-10-19`), the message on figure E1 of the page that showed
+    the built figures:
+    「実装した図の確認: やっぱ塗りつぶし前の方がいいかも。Lambda,ラベルの背景のリーダー線目立ちすぎ。下線＋塗りつぶしがいいかな。Thoughts?」
+  - Reply 42 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-K1：Linear のフィーチャーラベルの既定をどれにしますか？白い背景は文字の外 0.18 em までで、ラベルの位置・段・図の大きさはどの案でも変わりません。白い背景なら PDF はほとんど大きくならず（lambda 24 pt でハロー 355 KB → 27 KB）、Web の PDF も SVG と同じ見た目になります。背景の濃さは Linear と Circular の Box で共通の 1 つの値です。（ページの図 K 1〜K 5）」
+    the selected option and its description:
+    「下線＋白い背景 0.8」
+    「文字の上でも線が 2 割の濃さで続いて見える。」
+    and the answer:
+    「下線＋白い背景 0.8」
+    (`LIN-BOX-080`)
+  - Reply 43 (`2026-10-19`), to the question
+    「Q-K2：Circular の既定はどうしますか？白い背景にすると、タバコ葉緑体のように色の付いた帯の上で、ラベルごとに白い四角が見えます（ページの図 K 6）。」
+    the selected option and its description:
+    「ハローのまま (推奨)」
+    「Circular でリーダー線が文字を通る所は少ない（lambda で 3 か所）。帯の上に白い四角が出ない。」
+    and the answer:
+    「ハローのまま (推奨)」
+  - Reply 42 did not select the recommended option. For Linear it replaces
+    the halo of Replies 25 and 26 with a white box behind the letters at
+    opacity `0.8`, the one fixed Box opacity of Reply 33 for both modes. Reply 43
+    keeps the halo of Reply 27 for Circular and adds no choice token.
+  - Approvals the Owner gave on `2026-10-19` of an earlier wording of both
+    receipts, with a halo as the Linear default, were made void by Reply 42
+    before they reached `dev`; they are not part of this record.
+  - Replies 25 to 43 state no rationale, preserved or retired effect, or
+    accepted risk as a receipt field; the descriptions of their options say
+    how each choice is realized. The approved receipts of Replies 44 and 45
+    word those fields, and the change receipt below adds none.
+  - Reply 44 (`2026-10-19`), approving the `PD-OI-097` receipt texts below,
+    to the question
+    「Q-E1（書き直し）：PD-OI-097 rev 11 の受領文です。前の文面から、Linear の守りを白い背景（不透明度 0.8）、Circular をハローにし、Choice に LIN-BOX-080 を足し、Must preserve に「領域ラベルは下線か白い背景にかかるとき別の段に移すか警告する」「Linear の白い背景はほかのラベルの文字と下線を覆わない」を入れ、Accepted residual risk の PDF/EPS の数字を測り直した値にしました。Decision date は 2026-10-19 です。足す文と全文はページの一番上の節にあります。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract rev 68 に記録し、この返答を Reply として引用して SHA-256 を計算する。そのあと出力の作り直しとレビューを経て PR を開く（merge は Owner）。」
+    and the answer:
+    「承認 (推奨)」
+    The record's scenario revision `11` receipt and the change receipt below
+    are the approved texts.
+    So the record's scenario revision `11` receipt appends the choices of
+    Replies 25 to 34, 36 to 40, and 42 to the Choice; the sentences from
+    「フィーチャーラベルは、後ろを通るリーダー線から守る。」 to the end to the Rationale;
+    the sentences from 「0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。」
+    to the end to the May retire; and the sentences from
+    「Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。」
+    to the end to the Accepted residual risk of scenario revision `10`. In
+    its Must preserve, 「重なりも交差もない図は 0.13.0 と同じに描く。」 reads the
+    sentences from 「重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。」 to
+    「Linear の白い背景は、ほかのラベルの文字と下線を覆わない。」. Its other fields
+    are those of scenario revision `10`, with the decision date of the last
+    reply.
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `09af42ad585ac8add25662150d394b6e45b4ea647fa325a261d773c650fcf5a5`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 11
+    Choice: LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Reply 45 (`2026-10-19`), approving the `PD-OI-098` receipt text recorded
+    under that record below, to the question
+    「Q-E2（書き直し）：PD-OI-098 rev 2 の受領文です。〔変えないもの〕の「font を選ばない図の文字の配置と出力」の後に「（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）」を足し、Scenario revision 2、Decision date 2026-10-19 にします。ほかの欄は rev 1 のままです。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract rev 68 に記録する。」
+    and the answer:
+    「承認 (推奨)」
+  - Receipt change (`PD-OI-098`): in 〔変えないもの〕 of the Must preserve,
+    「font を選ばない図の文字の配置と出力、」
+    reads
+    「font を選ばない図の文字の配置と出力（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）、」.
+    Every other field of the scenario revision `1` receipt is unchanged,
+    with Scenario revision `2` and the decision date of Reply 45; the
+    scenario revision `1` receipt stays in the record.
+  - Reply 45 states no rationale, preserved or retired effect, or accepted
+    risk for this change, and the receipt adds none.
+  - New receipt SHA-256: `PD-OI-098` scenario revision `2`
+    `a305e5d6eefb69914e20e1397cca98298c3050315dff6d488638c2dff5160cc8`.
+  - Scope: the record receipts for `PD-OI-097` scenario revision `11` and
+    `PD-OI-098` scenario revision `2` are recorded below; the `PD-OI-097`
+    scenario revision `7`, `8`, `9`, and `10` receipts and the `PD-OI-098`
+    scenario revision `1` receipt keep their text and their SHA-256.
+    `PD-OI-088` applies unchanged. No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -6540,8 +6773,17 @@ Decision date: 2026-10-16
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `10`
-- Supersedes: `PD-OI-097`, scenario revision `9`. Scenario revision `10`
+- Scenario revision: `11`
+- Supersedes: `PD-OI-097`, scenario revision `10`. Scenario revision `11`
+  keeps every outcome of scenario revision `10` and adds `LBL-HALO`,
+  `LIN-UNDER`, `CIR-NO-UNDER`, `GAP-STOP`, `LEADER-007`, `LBL-OPTS-2`,
+  `LBL-0140`, `HALO-008`, `OPT-NAMES`, `SESS-NEXT-GEN`, `WEBPDF-NO-HALO`,
+  `UNDER-NOT-IN-ROW`, `UNDER-CASING`, `UNDER-TRIM`, `ROW-GAP-025`, and
+  `LIN-BOX-080`; it keeps every field of scenario revision `10` except the
+  Rationale, the May retire, and the Accepted residual risk, to each of which
+  Reply 44 of the Revision 68 entry appends the feature label style, and the
+  Must preserve, in which it replaces the
+  sentence on figures without overlaps or crossings. Scenario revision `10`
   keeps every outcome of scenario revision `9` and adds `RGN-CUT-WARN`; it
   keeps every field of scenario revision `9` except the Rationale, to which
   Reply 24 of the Revision 67 entry appends the Circular region labels cut to
@@ -6552,10 +6794,11 @@ Decision date: 2026-10-16
   the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
   and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN`
-- Normative outcome: exactly the complete approved scenario revision `10`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080`
+- Normative outcome: exactly the complete approved scenario revision `11`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7`, `8`, and `9` receipts are kept as they were approved.
+  scenario revision `7`, `8`, `9`, and `10` receipts are kept as they were
+  approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -6591,6 +6834,17 @@ Decision date: 2026-10-16
   evidence.
 - Receipt SHA-256 (scenario revision `10`; UTF-8, excluding the final newline):
   `ae0bca6a9a6e4778ebc0a1bc9b12976a34eb389d874eab7c8e8857d502d5ee16`.
+- Decision source (scenario revision `11`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 68 entry above; Reply 44 approves the fifth
+  receipt and JSON below. They keep the fields of scenario revision `10`, add
+  the choices and the sentences of Reply 44, replace its Must preserve
+  sentence on figures without overlaps or crossings, and carry the decision
+  date of the last reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `11`; UTF-8, excluding the final newline):
+  `5b46373ac9f54da0c7b2aa59571169ca92b7039305b13ebf521e2821d3cacd47`.
 
 ```text
 PRODUCT_DECISION
@@ -6706,23 +6960,68 @@ Decision date: 2026-10-19
 }
 ```
 
+Scenario revision `11` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 44 of the Revision 68 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 11
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときはそのラベルを別の段に移し、Linear の領域ラベルがフィーチャーラベルの下線か白い背景にかかるときは領域ラベルを別の段に移すか警告する。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 11,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときはそのラベルを別の段に移し、Linear の領域ラベルがフィーチャーラベルの下線か白い背景にかかるときは領域ラベルを別の段に移すか警告する。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
 ### PD-OI-098: Font of the diagram text
 
 - Concern key: `diagram-generation.diagram-font`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-098`, scenario revision `1`. Scenario revision `2`
+  keeps the outcome and every field of scenario revision `1` except the Must
+  preserve, to whose 〔変えないもの〕 Reply 45 of the Revision 68 entry adds the
+  exception for the feature label style and the Web PDF text anchors
+  (OV-1303), and the decision date.
 - Status: `ACCEPTED`
 - Selected outcome: `A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
-- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The
+  scenario revision `1` receipt is kept as it was approved.
+- Decision source (scenario revision `1`): the Owner reply of `2026-10-13` quoted verbatim in the
   Revision 51 entry above. The Owner approved the receipt text below as
   written. The receipt reproduces its fields without translation or
   additional terms. This record does not supersede another decision. The
   runtime, tests, and documentation that implement it merge with it (static
   Product Contract co-change); this record supplies no runtime acceptance
   evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `14dc5e981573dce50e9815f4457d34de6786c819ae31a5b4672e178359af3675`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 68 entry above; Reply 45 approves the
+  second receipt and JSON below. They keep the fields of scenario revision
+  `1`, add the exception of Reply 45 to its Must preserve, and carry the
+  decision date of the reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `a305e5d6eefb69914e20e1397cca98298c3050315dff6d488638c2dff5160cc8`.
 
 ```text
 PRODUCT_DECISION
@@ -6748,6 +7047,35 @@ Decision date: 2026-10-13
   "acceptedResidualRisk": "別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-13"
+}
+```
+
+Scenario revision `2` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 45 of the Revision 68 entry):
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.diagram-font
+Scenario revision: 2
+Choice: A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED
+Rationale: 図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。
+Must preserve: 〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）、Session の保存と読み込みの手順、Gallery の Session。
+May retire: Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。
+Accepted residual risk: 別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "diagram-generation.diagram-font",
+  "scenarioRevision": 2,
+  "choice": "A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED",
+  "rationale": "図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。",
+  "mustPreserve": "〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）、Session の保存と読み込みの手順、Gallery の Session。",
+  "mayRetire": "Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。",
+  "acceptedResidualRisk": "別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
 }
 ```
 
