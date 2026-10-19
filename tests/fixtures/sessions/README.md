@@ -313,7 +313,8 @@ LOSATP entries, stored as `main`'s Web Session writer lays it out;
 `150d26706` (command in its `.provenance.json`). Both are the positive fixtures of the
 Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.py`
 replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
-`e8b460772` drew (equal to `main`'s replay), and `tests/test_api_session.py`
+`e8b460772` drew (equal to `main`'s replay); the BGC replay was redrawn after the
+Linear label packing changed its record rows (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
 `BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and

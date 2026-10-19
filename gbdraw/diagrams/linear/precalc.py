@@ -31,7 +31,14 @@ from ...features.objects import FeatureObject
 from ...render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 from ...labels.filtering import label_filter_maps
 from ...render_stages import render_stage
-from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
+from ...labels.linear import (
+    LinearLabelFrame,
+    LinearRecordLabels,
+    calculate_label_y_bounds,
+    linear_label_rows,
+    linear_record_labels,
+    place_linear_label_row,
+)
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
@@ -151,8 +158,13 @@ def _precalculate_label_dimensions(
     sequence_widths: Sequence[float] | None = None,
     feature_lane_geometries: Sequence[LinearFeatureLaneGeometry] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    label_frames: Sequence[LinearLabelFrame] | None = None,
 ) -> tuple[float, list[list[dict]], list[float]]:
-    """Pre-calculates label placements for all records to determine the required canvas height."""
+    """Pre-calculates label placements for all records to determine the required canvas height.
+
+    The labels of the records in one row (``label_frames``; each record alone in its row without them)
+    are stacked together (OV-1188).
+    """
 
     profile = render_context.profile
     cfg = profile.config
@@ -167,6 +179,7 @@ def _precalculate_label_dimensions(
         profile=profile,
     )
     max_required_height: float = 0
+    record_labels: list[LinearRecordLabels | None] = []
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
@@ -174,8 +187,7 @@ def _precalculate_label_dimensions(
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
-            all_labels_by_record.append([])
-            record_label_heights.append(0.0)
+            record_labels.append(None)
             continue
         member_ids, top_member_ids = orthogroup_label_sets_for_record(
             orthogroup_label_eligibility if label_scope == "orthogroup_top" else None,
@@ -211,7 +223,7 @@ def _precalculate_label_dimensions(
             genome_size_normalization_factor = record_length / canvas_config.longest_genome
 
         # Label x-positions must use the same final axis width as record rendering.
-        label_list = prepare_label_list_linear(
+        labels = linear_record_labels(
             feature_dict,
             record_length,
             alignment_width,
@@ -233,7 +245,24 @@ def _precalculate_label_dimensions(
             record_transform=(record_transforms[i] if record_transforms is not None else None),
             label_filtering=label_filtering,
         )
+        record_labels.append(labels)
+
+    placed_by_record: dict[int, list[dict]] = {}
+    for row in linear_label_rows(label_frames, len(records)):
+        members = [(i, x, unplaced) for i, x in row if (unplaced := record_labels[i]) is not None]
+        placed = place_linear_label_row(
+            [(unplaced, x) for _i, x, unplaced in members],
+            profile=profile,
+            track_layout=render_context.feature_track_layout,
+        )
+        placed_by_record.update(zip((i for i, _x, _unplaced in members), placed, strict=True))
+
+    for i in range(len(records)):
+        label_list = placed_by_record.get(i, [])
         all_labels_by_record.append(label_list)
+        if i not in placed_by_record:
+            record_label_heights.append(0.0)
+            continue
 
         min_y_coord_record = 0.0
         for label in label_list:
