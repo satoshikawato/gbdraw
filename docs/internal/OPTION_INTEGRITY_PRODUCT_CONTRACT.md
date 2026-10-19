@@ -2028,7 +2028,7 @@ Status: active Product authority
     before they reached `dev`; they are not part of this record.
   - Replies 25 to 43 state no rationale, preserved or retired effect, or
     accepted risk as a receipt field; the descriptions of their options say
-    how each choice is realized. The approved receipts of Replies 44 and 45
+    how each choice is realized. The approved receipts of Replies 44 to 46
     word those fields, and the change receipt below adds none.
   - Reply 44 (`2026-10-19`), approving the `PD-OI-097` receipt texts below,
     to the question
@@ -2038,8 +2038,9 @@ Status: active Product authority
     「このとおり Contract rev 68 に記録し、この返答を Reply として引用して SHA-256 を計算する。そのあと出力の作り直しとレビューを経て PR を開く（merge は Owner）。」
     and the answer:
     「承認 (推奨)」
-    The record's scenario revision `11` receipt and the change receipt below
-    are the approved texts.
+    The change receipt below is the approved text. Reply 46 corrected one
+    Must preserve sentence of the record's receipt that Reply 44 approved,
+    before that wording reached `dev`.
     So the record's scenario revision `11` receipt appends the choices of
     Replies 25 to 34, 36 to 40, and 42 to the Choice; the sentences from
     「フィーチャーラベルは、後ろを通るリーダー線から守る。」 to the end to the Rationale;
@@ -2087,6 +2088,25 @@ Status: active Product authority
     risk for this change, and the receipt adds none.
   - New receipt SHA-256: `PD-OI-098` scenario revision `2`
     `a305e5d6eefb69914e20e1397cca98298c3050315dff6d488638c2dff5160cc8`.
+  - Reply 46 (`2026-10-19`), approving the corrected `PD-OI-097` receipt text
+    recorded under that record below, to the question
+    「Q-E1（訂正）：PR 前のレビューで、承認いただいた PD-OI-097 rev 11 の Must preserve の 1 文が動きと合っていませんでした（「領域ラベルを別の段に移す」と書いたが、実際は文字にかかるときと同じくフィーチャーラベルの方を別の段へ移し、解消しなければ描いて警告する）。動きは変えず、その 1 文を「Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。」に直します。ほかの文と PD-OI-098 rev 2 はそのままです（ページの一番上の節）。この訂正した受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「訂正した文面を Contract rev 68 に記録し、この返答を Reply として引用して SHA-256 を計算し直す。そのあと PR を開く（merge は Owner）。」
+    and the answer:
+    「承認 (推奨)」
+    The record's scenario revision `11` receipt is the approved text. In its
+    Must preserve, the sentence that Reply 44 approved as
+    「ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときはそのラベルを別の段に移し、Linear の領域ラベルがフィーチャーラベルの下線か白い背景にかかるときは領域ラベルを別の段に移すか警告する。」
+    reads
+    「ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。」.
+    The behavior is unchanged, and every other sentence is as Reply 44
+    approved it. The wording that Reply 44 approved was corrected by Reply 46
+    before it reached `dev`; it is not part of this record.
+  - Reply 46 states no rationale, preserved or retired effect, or accepted
+    risk beyond the corrected sentence, and the change receipt above is
+    unchanged.
   - Scope: the record receipts for `PD-OI-097` scenario revision `11` and
     `PD-OI-098` scenario revision `2` are recorded below; the `PD-OI-097`
     scenario revision `7`, `8`, `9`, and `10` receipts and the `PD-OI-098`
@@ -6781,9 +6801,9 @@ Decision date: 2026-10-16
   `UNDER-NOT-IN-ROW`, `UNDER-CASING`, `UNDER-TRIM`, `ROW-GAP-025`, and
   `LIN-BOX-080`; it keeps every field of scenario revision `10` except the
   Rationale, the May retire, and the Accepted residual risk, to each of which
-  Reply 44 of the Revision 68 entry appends the feature label style, and the
-  Must preserve, in which it replaces the
-  sentence on figures without overlaps or crossings. Scenario revision `10`
+  Replies 44 and 46 of the Revision 68 entry append the feature label
+  style, and the Must preserve, in which they replace the sentence on
+  figures without overlaps or crossings. Scenario revision `10`
   keeps every outcome of scenario revision `9` and adds `RGN-CUT-WARN`; it
   keeps every field of scenario revision `9` except the Rationale, to which
   Reply 24 of the Revision 67 entry appends the Circular region labels cut to
@@ -6835,16 +6855,17 @@ Decision date: 2026-10-16
 - Receipt SHA-256 (scenario revision `10`; UTF-8, excluding the final newline):
   `ae0bca6a9a6e4778ebc0a1bc9b12976a34eb389d874eab7c8e8857d502d5ee16`.
 - Decision source (scenario revision `11`): the Owner replies of `2026-10-19`
-  quoted verbatim in the Revision 68 entry above; Reply 44 approves the fifth
-  receipt and JSON below. They keep the fields of scenario revision `10`, add
-  the choices and the sentences of Reply 44, replace its Must preserve
+  quoted verbatim in the Revision 68 entry above; Reply 46 approves the fifth
+  receipt and JSON below, which correct one Must preserve sentence of the text
+  that Reply 44 approved. They keep the fields of scenario revision `10`, add
+  the choices and the sentences of Replies 44 and 46, replace its Must preserve
   sentence on figures without overlaps or crossings, and carry the decision
   date of the last reply, without translation or additional terms. The
   runtime, tests, and documentation that implement it merge with it (static
   Product Contract co-change); this record supplies no runtime acceptance
   evidence.
 - Receipt SHA-256 (scenario revision `11`; UTF-8, excluding the final newline):
-  `5b46373ac9f54da0c7b2aa59571169ca92b7039305b13ebf521e2821d3cacd47`.
+  `21bb6008d55e26f39220929f1f0047a4a2dcdd5ee9b10610015c4b512bb5a6ef`.
 
 ```text
 PRODUCT_DECISION
@@ -6960,7 +6981,7 @@ Decision date: 2026-10-19
 }
 ```
 
-Scenario revision `11` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 44 of the Revision 68 entry):
+Scenario revision `11` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 46 of the Revision 68 entry):
 
 ```text
 PRODUCT_DECISION
@@ -6968,7 +6989,7 @@ Concern: product.circular-outer-label-fit
 Scenario revision: 11
 Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080
 Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。
-Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときはそのラベルを別の段に移し、Linear の領域ラベルがフィーチャーラベルの下線か白い背景にかかるときは領域ラベルを別の段に移すか警告する。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
 May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。
 Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。
 Owner: satoshikawato
@@ -6981,7 +7002,7 @@ Decision date: 2026-10-19
   "scenarioRevision": 11,
   "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080",
   "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。",
-  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときはそのラベルを別の段に移し、Linear の領域ラベルがフィーチャーラベルの下線か白い背景にかかるときは領域ラベルを別の段に移すか警告する。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
   "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。",
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。",
   "owner": "satoshikawato",
