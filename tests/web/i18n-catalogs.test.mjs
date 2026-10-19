@@ -1,8 +1,10 @@
 // The Web UI translation runtime (gbdraw/web/js/utils/i18n.js) and its
 // catalogs (gbdraw/web/js/utils/i18n-catalogs/<locale>.js). English is the
-// key: the literal first argument of `t()`, the `other` argument of `tn()`,
+// key: the literal first argument of `t()` and of `msg()` (a text kept until
+// it is shown, which `tm()` translates there), the `other` argument of `tn()`,
 // and `context + '\u0004' + text` of `tx()`. This test lists those literals in
 // index.html and the modules, and fails on a call whose key is not a literal,
+// on a `tm()` given a literal (that is a `t()` call),
 // on a catalog key that no call produces, on a translation whose placeholders
 // differ from the English, and on a value that is not a string. It prints
 // the coverage of each locale without failing.
@@ -12,7 +14,7 @@ import { join, relative, sep } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-import { CONTEXT_SEPARATOR, SOURCE_LOCALE, setUiLocale, t, textParts, tn, tx, uiLocale } from '../../gbdraw/web/js/utils/i18n.js';
+import { CONTEXT_SEPARATOR, SOURCE_LOCALE, msg, setUiLocale, t, textParts, tm, tn, tx, uiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const jsRoot = join(webRoot, 'js');
@@ -24,10 +26,13 @@ const RUNTIME_FILES = new Set(['utils/i18n.js']);
 // they make the catalog key.
 const CALLS = {
   t: { literals: [0], key: ([text]) => text },
+  msg: { literals: [0], key: ([text]) => text },
   tn: { literals: [1, 2], key: ([, , other]) => other },
   tx: { literals: [0, 1], key: ([context, text]) => context + CONTEXT_SEPARATOR + text }
 };
-const CALL_START = /(?<![\w$.])(tn|tx|t)\(/g;
+const CALL_START = /(?<![\w$.])(msg|tn|tx|t)\(/g;
+// `tm()` translates a value that `msg()` marked; a literal there is a `t()` call.
+const TM_LITERAL = /(?<![\w$.])tm\(\s*['"`]/g;
 const ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', 0: '\0' };
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
@@ -134,6 +139,10 @@ const extractCalls = (source, file) => {
       continue;
     }
     calls.push({ where, key, english: name === 'tx' ? args[1] : key });
+  }
+  for (const match of source.matchAll(TM_LITERAL)) {
+    const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
+    calls.push({ where, problem: `${where}: tm() takes a value that msg() marked; write t() for a literal` });
   }
   return calls;
 };
@@ -285,13 +294,27 @@ test('extraction reads the quoting forms of templates and modules', () => {
 });
 
 test('extraction refuses a key that is not a literal', () => {
-  const source = 't(entry.title); t(`Go to ${name}`); t(\'Help: \' + name); tn(count, one, \'{count} rows\'); t(\'A &amp; B\')';
+  const source = 't(entry.title); t(`Go to ${name}`); t(\'Help: \' + name); tn(count, one, \'{count} rows\'); t(\'A &amp; B\'); msg(title)';
   assert.deepEqual(extractCalls(source, 'sample').map((call) => call.problem), [
     'sample:1: argument 1 of t() is not a string literal',
     'sample:1: argument 1 of t() is not a string literal',
     'sample:1: argument 1 of t() is not a string literal',
     'sample:1: argument 2 of tn() is not a string literal',
-    'sample:1: t() key holds an HTML entity; write the character'
+    'sample:1: t() key holds an HTML entity; write the character',
+    'sample:1: argument 1 of msg() is not a string literal'
+  ]);
+});
+
+test('msg() literals are keys; tm() reads a marked value and refuses a literal', () => {
+  const source = [
+    'const TITLES = { canvas: msg(\'Canvas\'), font: msg("Font") };',
+    '{{ tm(section.title) }} {{ tm(note.text, { n: 2 }) }} item.msg(\'not a key\'); notmsg(\'x\');',
+    'const shown = tm(\'Canvas\') + tm(`Font`);'
+  ].join('\n');
+  assert.deepEqual(extractCalls(source, 'sample').map((call) => call.key ?? call.problem), [
+    'Canvas', 'Font',
+    'sample:3: tm() takes a value that msg() marked; write t() for a literal',
+    'sample:3: tm() takes a value that msg() marked; write t() for a literal'
   ]);
 });
 
@@ -393,6 +416,29 @@ test('catalog check: stale keys, placeholder sets and non-string values', () => 
   ]);
 });
 
+// A module that marks keys with msg() imports it from utils/i18n.js, or, when
+// a test loads it without utils/i18n.js (copied alone or with a fixed set of
+// its imports), declares the same identity.
+const LOCAL_MARKER = 'const msg = (text) => text;';
+const MSG_IMPORT = /^import \{[^}]*\bmsg\b[^}]*\} from '(?:\.\.\/|\.\/)+utils\/i18n\.js';$/m;
+const markerProblems = (source, file) => {
+  if (!/(?<![\w$.])msg\(/.test(source)) return [];
+  const local = source.split('\n').filter((line) => /^\s*(?:const|let|var|function)\s+msg\b/.test(line));
+  if (MSG_IMPORT.test(source) && !local.length) return [];
+  if (!MSG_IMPORT.test(source) && local.length === 1 && local[0].trim() === LOCAL_MARKER) return [];
+  return [`${file}: msg() comes from utils/i18n.js, or, in a module a test loads without it, from \`${LOCAL_MARKER}\``];
+};
+
+test('msg() is the marker of utils/i18n.js or its identity where a test loads the module without it', () => {
+  assert.deepEqual(markerProblems('import { msg } from \'../utils/i18n.js\';\nconst a = msg(\'A\');', 'a.js'), []);
+  assert.deepEqual(markerProblems('const msg = (text) => text;\nconst a = msg(\'A\');', 'b.js'), []);
+  assert.deepEqual(markerProblems('import x from \'./x.js\';\nconst msg = (text) => text;\nmsg(\'A\');', 'c.js'), []);
+  assert.equal(markerProblems('import { msg } from \'../utils/i18n.js\';\nconst msg = (text) => text;\nmsg(\'A\');', 'e.js').length, 1);
+  assert.equal(markerProblems('const msg = (text) => text.trim();\nmsg(\'A\');', 'd.js').length, 1);
+  assert.deepEqual(sourceFiles().filter((path) => path.endsWith('.js'))
+    .flatMap((path) => markerProblems(readFileSync(path, 'utf8'), relative(webRoot, path).split(sep).join('/'))), []);
+});
+
 test('every catalog matches the keys and placeholders of the sources', async () => {
   const english = new Map(sourceCalls().filter((call) => call.key).map((call) => [call.key, call.english]));
   for (const file of catalogFiles()) {
@@ -415,6 +461,10 @@ test('English passes through with its placeholders filled', () => {
   assert.equal(tn(2, '{count} row', '{count} rows'), '2 rows');
   assert.equal(tn(0, 'one record', '{count} records of {file}', { file: 'a.gb' }), '0 records of a.gb');
   assert.equal(tx('Linear (size scaling)', 'Linear'), 'Linear');
+  assert.equal(msg('Canvas'), 'Canvas', 'msg() keeps the English, so comparisons keep working');
+  assert.equal(tm(msg('Canvas')), 'Canvas');
+  assert.equal(tm('Step {n}', { n: 2 }), 'Step 2');
+  assert.equal(tm('a.gbk'), 'a.gbk', 'a value that is no key shows as written');
 });
 
 test('a locale shows its catalog and falls back to English', async () => {
@@ -439,6 +489,11 @@ test('a locale shows its catalog and falls back to English', async () => {
     assert.equal(t('Linear'), 'Linear', 'tx context keys are not t keys');
     assert.equal(t('Load Session'), 'Load Session', 'a missing translation shows the English');
     assert.equal(tn(1, 'one record', '{count} records'), 'one record');
+    const title = msg('Save Session');
+    assert.equal(title, 'Save Session', 'a marked value stays English in every locale');
+    assert.equal(tm(title), 'セッションを保存', 'tm() translates a marked value where it is shown');
+    assert.equal(tm('Rows {from}–{to}', { from: 1, to: 2 }), '1–2 行');
+    assert.equal(tm('a.gbk'), 'a.gbk');
     await assert.rejects(setUiLocale('../x'), /Unknown UI locale/);
     assert.equal(uiLocale.value, 'ja', 'a refused locale changes nothing');
   } finally {

@@ -36,17 +36,23 @@ const isEditableControl = (element) => {
   return TEXT_INPUT_TYPES.has(String(element.type || '').toLowerCase());
 };
 
+// This module stays import-free (tests/web/history-inputs.test.mjs loads it
+// alone), so it declares the key marker of utils/i18n.js itself.
+/** @param {string} text @returns {string} */
+const msg = (text) => text;
+
+// A step label is History's identity: English, marked for translation where it is shown.
 /** @param {HistoryControl | null} element */
 const controlLabel = (element) => {
-  if (!element) return 'Edit';
+  if (!element) return msg('Edit');
   const tag = String(element.tagName || '').toLowerCase();
-  if (tag === 'button') return 'Change setting';
-  if (tag === 'select') return 'Change setting';
+  if (tag === 'button') return msg('Change setting');
+  if (tag === 'select') return msg('Change setting');
   const type = String(element.type || '').toLowerCase();
-  if (type === 'file') return 'Change uploaded file';
-  if (type === 'checkbox' || type === 'radio') return 'Change setting';
-  if (type === 'color') return 'Change color';
-  return 'Edit setting';
+  if (type === 'file') return msg('Change uploaded file');
+  if (type === 'checkbox' || type === 'radio') return msg('Change setting');
+  if (type === 'color') return msg('Change color');
+  return msg('Edit setting');
 };
 
 /**

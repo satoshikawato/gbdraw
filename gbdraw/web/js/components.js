@@ -301,7 +301,7 @@ export const SettingsSectionTitle = {
   props: { section: { type: String, required: true } },
   /** @param {{ section: SettingsSectionKey }} props */
   setup: (props) => ({ entry: SETTINGS_SECTIONS.find((section) => section.key === props.section) }),
-  template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ entry.title }}'
+  template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ tm(entry.title) }}'
 };
 
 // The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),

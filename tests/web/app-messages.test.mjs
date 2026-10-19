@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
@@ -40,10 +39,7 @@ test('the Web app asks and reports in its own dialog and notice, never alert() o
   }
 });
 
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-app-messages-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await writeFile(join(tempDir, 'app-messages.js'), await readFile(join(webJsRoot, 'app', 'app-messages.js'), 'utf8'), 'utf8');
-const { createChoicePrompt, createNoticeBanner } = await import(pathToFileURL(join(tempDir, 'app-messages.js')));
+const { createChoicePrompt, createNoticeBanner } = await import(pathToFileURL(join(webJsRoot, 'app', 'app-messages.js')));
 const reactive = (value) => value;
 
 test('the choice prompt resolves to the chosen action, and a new question cancels the open one', async () => {

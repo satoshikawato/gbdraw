@@ -8849,9 +8849,9 @@
         <nav :aria-label="t('Settings sections')">
             <button v-for="(section, order) in entries" :key="section.key" type="button" :data-settings-entry="section.key"
                     :class="rail ? { 'starts-group': Boolean(section.input) !== Boolean(entries[order - 1]?.input), 'at-end': section.railOnly } : null"
-                    :aria-label="t('Go to {section}', { section: section.title })" :aria-controls="controls" :aria-current="section.key === marked ? 'true' : null"
-                    v-on="tipOn(section.title)" @click="activate(section.key)">
-                <i class="ph" :class="section.icon" aria-hidden="true"></i><span v-if="rail">{{ section.short }}</span>
+                    :aria-label="t('Go to {section}', { section: tm(section.title) })" :aria-controls="controls" :aria-current="section.key === marked ? 'true' : null"
+                    v-on="tipOn(tm(section.title))" @click="activate(section.key)">
+                <i class="ph" :class="section.icon" aria-hidden="true"></i><span v-if="rail">{{ tm(section.short) }}</span>
             </button>
         </nav>
         <button v-if="!rail && view.switchable" type="button" class="settings-index-switch" :aria-label="t('Collapse settings to icons')" :aria-controls="controls"

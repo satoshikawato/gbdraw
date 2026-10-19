@@ -271,6 +271,7 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
+import { msg, t, tm } from '../utils/i18n.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -427,7 +428,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
   }
 });
 
-const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: 'Undo or Redo in progress. Retry after it finishes.' });
+const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: msg('Undo or Redo in progress. Retry after it finishes.') });
 // E1: a History step that switches the diagram mode; its changes name `ui.mode`.
 /** @param {unknown} changes */
 const historyStepSwitchesMode = (changes) => (Array.isArray(changes) ? changes : [])
@@ -723,7 +724,7 @@ export const createAppSetup = () => {
    * @param {DrawingState} drawing
    * @param {(next: LinearComparisonPlan) => void} mutator
    */
-  const mutateLinearComparisonPlan = (drawing, mutator) => history.runUndoable('Change comparisons', () => {
+  const mutateLinearComparisonPlan = (drawing, mutator) => history.runUndoable(msg('Change comparisons'), () => {
     const next = normalizeLinearComparisonPlan(drawing.linearComparisonPlan);
     mutator(next);
     replaceLinearComparisonPlan(drawing, next);
@@ -972,7 +973,7 @@ export const createAppSetup = () => {
   const runLinearComparisonIssueAction = (issue, actionKey) => {
     if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
     if (actionKey === 'pairwise') {
-      return history.runUndoable('Change setting', () => setLinearComparisonLosatpMode('pairwise'));
+      return history.runUndoable(msg('Change setting'), () => setLinearComparisonLosatpMode('pairwise'));
     }
     if (actionKey === 'choose-file' && chooseLinearComparisonPairFile(issue.edgeKey, { focus: true })) return true;
     return focusLinearComparisonIssue(issue);
@@ -1659,7 +1660,7 @@ export const createAppSetup = () => {
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
     // OV-1260: dropped older steps are told, not silent.
-    onHistoryLimit: (text) => showNotice({ text, tone: 'warning' }),
+    onHistoryLimit: (text) => showNotice({ text: tm(text), tone: 'warning' }),
     makeRef: ref,
     mutationAvailability: sessionOperationAvailability,
     // An Undo or Redo of a mode switch waits as the mode buttons do (E1).
@@ -1691,7 +1692,7 @@ export const createAppSetup = () => {
     onFontsLost: (lost) => {
       fontSettings.markFontsLost(lost.map((font) => font.identity));
       showNotice({
-        text: 'Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.',
+        text: t('Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.'),
         items: lost.map((font) => font.label)
       });
     }
@@ -1717,13 +1718,15 @@ export const createAppSetup = () => {
   });
   const undoHistoryTitle = computed(() => {
     void history.revision.value;
+    // A step label is History's identity (services/history.js compares it):
+    // it stays English and is translated here, where it is shown.
     const label = history.undoLabel();
-    return label ? `Undo ${label}` : 'Undo';
+    return label ? t('Undo {action}', { action: tm(label) }) : t('Undo');
   });
   const redoHistoryTitle = computed(() => {
     void history.revision.value;
     const label = history.redoLabel();
-    return label ? `Redo ${label}` : 'Redo';
+    return label ? t('Redo {action}', { action: tm(label) }) : t('Redo');
   });
   const undoHistory = () => history.undo();
   const redoHistory = () => history.redo();
@@ -2744,7 +2747,7 @@ export const createAppSetup = () => {
   };
   /** @param {LinearSourceGroup} source @param {number} index */
   const clearLinearSourceDepthFile = (source, index) => history.runUndoable(
-    'Clear File Depth TSV',
+    msg('Clear File Depth TSV'),
     () => setLinearSourceDepthFile(source, index, null)
   );
   const addCircularDepthTrack = () => {
@@ -3027,7 +3030,7 @@ export const createAppSetup = () => {
     // B22 (R11): the input is data-history-managed. This one Add Seq step
     // captures its before now, the row appears at once, and the step commits
     // after the label read, so Undo and Redo restore the label.
-    const step = history.runUndoable('Change uploaded file', settleComparisonRecordLabels);
+    const step = history.runUndoable(msg('Change uploaded file'), settleComparisonRecordLabels);
     clearDerivedCircularConservationBlasts();
     files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
     losatCacheInfo.value = [];
@@ -3599,7 +3602,7 @@ export const createAppSetup = () => {
   // controls read (R13).
   const sessionPreparationBusyReason = () => (
     history.mutationPending() || ruleMatchingBlocking.value || auxiliaryFileImports.isPending()
-      ? 'Applying an edit. Retry after the edit finishes.'
+      ? msg('Applying an edit. Retry after the edit finishes.')
       : ''
   );
   /** @param {string} operation */
@@ -3610,7 +3613,8 @@ export const createAppSetup = () => {
   const dialogChoicePending = dialogChoice.pending;
   const sessionSaveAvailable = computed(() => !sessionSaveLoadAvailability('save'));
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
-  const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
+  // The reason is English (its owners mark it with `msg`); it is translated where it is shown.
+  const sessionBusyReason = computed(() => tm(sessionSaveLoadAvailability('save')?.reason || ''));
   // OV-378: the first feature popup after a Session load waits for Python to
   // match the rules; say so, since Save and Load stay available meanwhile.
   const featureDetailsPending = computed(() => ruleMatchingPending.value && !ruleMatchingBlocking.value);
@@ -3621,9 +3625,9 @@ export const createAppSetup = () => {
   /** @param {string} actionLabel @param {() => void} proceed */
   const confirmSessionReplacement = async (actionLabel, proceed) => {
     if (await history.hasChangesSinceSavePoint() && await askChoice({
-      title: 'Replace the current work?',
-      description: 'Loading a Session replaces the current settings and Results and clears Undo history. '
-        + 'Changes since the last Save Session or Load Session are lost.',
+      title: t('Replace the current work?'),
+      description: t('Loading a Session replaces the current settings and Results and clears Undo history.')
+        + ' ' + t('Changes since the last Save Session or Load Session are lost.'),
       actions: [{ id: 'load', label: actionLabel, tone: 'primary' }]
     }) !== 'load') return;
     // `proceed` may open the file picker: the user activation of the click that
@@ -3633,7 +3637,7 @@ export const createAppSetup = () => {
   // The template's hidden file input (`ref="sessionInput"`).
   const sessionInput = ref(null);
   const openSessionFilePicker = () => confirmSessionReplacement(
-    'Load Session', () => sessionInput.value?.click()
+    t('Load Session'), () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
   // A loaded Session says so in the notice banner, with what the load changed
@@ -3649,9 +3653,9 @@ export const createAppSetup = () => {
     if (result?.status === 'ok') {
       // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94).
       depthTrackUiCounts.circular = Math.max(1, state.drawings.circular.adv.depth_tracks.length);
-      showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.notices || [] });
+      showNotice({ text: name ? t('Session loaded: {file}', { file: name }) : t('Session loaded.'), items: result.notices || [] });
     } else if (result?.status === 'legacy') {
-      showNotice({ text: 'Configuration loaded from an older gbdraw. Save Session to keep it in the current format.' });
+      showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
     return result;
   };
@@ -3663,7 +3667,7 @@ export const createAppSetup = () => {
     confirmSessionFonts: fontSettings.confirmSessionFonts,
     // BA-D25: one question before a Load that cannot restore everything.
     confirmLoadRepairs: async (dialog) => {
-      const load = await askChoice({ ...dialog, actions: [{ id: 'load', label: 'Load', tone: 'primary' }] }) === 'load';
+      const load = await askChoice({ ...dialog, actions: [{ id: 'load', label: t('Load'), tone: 'primary' }] }) === 'load';
       if (load) noticeBanner.dismiss();
       return load;
     },
@@ -3753,7 +3757,7 @@ export const createAppSetup = () => {
     closeExampleChooser();
     // The chooser returns focus to its button before the question opens.
     await nextTick();
-    await confirmSessionReplacement('Load example', async () => {
+    await confirmSessionReplacement(t('Load example'), async () => {
       exampleSessionPending.value = true;
       try {
         const file = await fetchGalleryExampleSession(example);
@@ -4420,7 +4424,7 @@ export const createAppSetup = () => {
     return summary.dormant || summary.unmatched || summary.removed ? summary : null;
   });
   // An explicit removal of the edits Python reported unresolved (R2).
-  const removeUnmatchedFeatureEdits = undoableAction('Remove unmatched feature edits', () => {
+  const removeUnmatchedFeatureEdits = undoableAction(msg('Remove unmatched feature edits'), () => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -4430,32 +4434,32 @@ export const createAppSetup = () => {
       notices: featureIdentityNotices.value
     }) > 0;
   });
-  const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
-  const moveFeatureVisibilityRuleDownWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleDown);
-  const moveFeatureVisibilityRuleUpWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleUp);
-  const removeFeatureVisibilityRuleWithHistory = undoableAction('Remove feature visibility rule', removeFeatureVisibilityRule);
+  const addFeatureVisibilityRuleWithHistory = undoableAction(msg('Add feature visibility rule'), addFeatureVisibilityRule);
+  const moveFeatureVisibilityRuleDownWithHistory = undoableAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleDown);
+  const moveFeatureVisibilityRuleUpWithHistory = undoableAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleUp);
+  const removeFeatureVisibilityRuleWithHistory = undoableAction(msg('Remove feature visibility rule'), removeFeatureVisibilityRule);
   const setFeatureVisibilityRuleFieldWithHistory = undoableAction(
-    'Edit feature visibility rule',
+    msg('Edit feature visibility rule'),
     setFeatureVisibilityRuleField
   );
-  const setFeatureVisibilityWithHistory = undoableAction('Change feature visibility', setFeatureVisibility);
+  const setFeatureVisibilityWithHistory = undoableAction(msg('Change feature visibility'), setFeatureVisibility);
   const updateClickedFeatureVisibilityWithHistory = undoableAction(
-    'Change feature visibility',
+    msg('Change feature visibility'),
     updateClickedFeatureVisibility
   );
   const handleFeatureVisibilityScopeChoiceWithHistory = undoableAction(
-    'Change feature visibility',
+    msg('Change feature visibility'),
     handleFeatureVisibilityScopeChoice
   );
-  const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
-  const setFeatureColorValueWithHistory = undoableAction('Change feature color', setFeatureColorValue);
-  const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
+  const requestFeatureColorChangeWithHistory = undoableAction(msg('Change feature color'), requestFeatureColorChange);
+  const setFeatureColorValueWithHistory = undoableAction(msg('Change feature color'), setFeatureColorValue);
+  const updateClickedFeatureColorWithHistory = undoableAction(msg('Change feature color'), updateClickedFeatureColor);
   const editLegendEntryColor = editEditorIntent('Change legend color', updateLegendEntryColor, { domains: LEGEND_FILL_DOMAINS });
   /** @param {number} index @param {string} color */
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
   );
-  const setTypeDefaultColorWithHistory = undoableAction('Change feature color', featureActions.setTypeDefaultColor);
+  const setTypeDefaultColorWithHistory = undoableAction(msg('Change feature color'), featureActions.setTypeDefaultColor);
   // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
   // `input` shows the row's color again afterwards (`shownColor()`): a refused edit leaves the view as it was.
   /** @param {number} index @param {string} color @param {HTMLInputElement} input @param {() => string} shownColor */
@@ -4508,11 +4512,11 @@ export const createAppSetup = () => {
     displayLabel: featureStyleScopeDialog.displayLabelOffered === true,
     annotationLabel: featureStyleScopeDialog.annotationLabelOffered === true
   }));
-  const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
-  const joinLegendGroupWithHistory = undoableAction('Rename legend item', joinLegendGroup);
+  const handleLegendNameCommitWithHistory = undoableAction(msg('Rename legend item'), handleLegendNameCommit);
+  const joinLegendGroupWithHistory = undoableAction(msg('Rename legend item'), joinLegendGroup);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
   // keys; neither is a click, so each move records its own History step.
-  const moveLegendEntryWithHistory = undoableAction('Move legend item', moveLegendEntry);
+  const moveLegendEntryWithHistory = undoableAction(msg('Move legend item'), moveLegendEntry);
   const legendReorder = reactive({ from: /** @type {number | null} */ (null), over: /** @type {number | null} */ (null) });
   /** @param {number} from @param {number} to @param {boolean} [refocus] */
   const reorderLegendEntry = (from, to, refocus = false) => {
@@ -4573,7 +4577,7 @@ export const createAppSetup = () => {
     const key = legendRenameDialog.deletedTargetKey;
     const restores = choice === 'merge' || (choice === 'keep-both' && legendRenameDialog.keepBothRestores);
     if (!restores || !key) return handleLegendRenameChoice(choice);
-    return history.runUndoableCheckpoint('Rename legend item', async () => {
+    return history.runUndoableCheckpoint(msg('Rename legend item'), async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
       const index = deleted.findIndex((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === key);
       if (index >= 0) restoreLegendRows(() => restoreDeletedLegendEntries([index]));
@@ -4596,7 +4600,7 @@ export const createAppSetup = () => {
     handleResetColorChoice,
     cancelResetColor
   );
-  const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
+  const resetClickedFeatureFillColorWithHistory = undoableAction(msg('Reset feature color'), resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = editEditorIntent('Change feature stroke', updateClickedFeatureStroke);
   const setClickedFeatureStrokeColorValueWithHistory = editEditorIntent(
     'Change feature stroke',
@@ -4607,13 +4611,13 @@ export const createAppSetup = () => {
     setClickedFeatureStrokeWidthValue
   );
   const resetClickedFeatureStrokeWithHistory = editEditorIntent('Reset feature stroke', resetClickedFeatureStroke);
-  const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
+  const setFeatureColorWithHistory = undoableAction(msg('Change feature color'), setFeatureColor);
   const selectedFeatureBulkColor = ref('#2563eb');
   const selectedFeatureBulkCaption = ref('Selected features');
   const selectedFeatureBulkVisibility = ref('off');
   const selectedFeatureBulkStrokeColor = ref('#1f2937');
   const selectedFeatureBulkStrokeWidth = ref(1.5);
-  const applySelectedFeatureColor = () => history.runUndoable('Change selected feature color', async () => {
+  const applySelectedFeatureColor = () => history.runUndoable(msg('Change selected feature color'), async () => {
     const changed = await applyColorToSelectedFeatures(
       selectedFeatures.value,
       selectedFeatureBulkColor.value,
@@ -4623,7 +4627,7 @@ export const createAppSetup = () => {
     return changed;
   });
   const applySelectedFeatureVisibility = async () => {
-    const changed = await history.runUndoableCommand('Change selected feature visibility', () =>
+    const changed = await history.runUndoableCommand(msg('Change selected feature visibility'), () =>
       buildSelectedFeaturesVisibilityCommand(selectedFeatures.value, selectedFeatureBulkVisibility.value)
     );
     if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
@@ -4644,17 +4648,19 @@ export const createAppSetup = () => {
     if (!first) return null;
     return openFeatureEditorForFeature(first, event);
   };
-  const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
-  const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
+  const updateClickedFeatureLabelTextWithHistory = undoableAction(msg('Change label text'), updateClickedFeatureLabelText);
+  const handleLabelTextScopeChoiceWithHistory = undoableAction(msg('Change label text'), handleLabelTextScopeChoice);
   // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
+  // The label stays an unmarked literal (its Undo title stays English): a
+  // registered test reads it from this line (feature-label-visual-unit.test.mjs).
   const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice, { joinsOpenStep: true });
   const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
-    'Change label text',
+    msg('Change label text'),
     requestLabelTextChangeByFeatureId
   );
-  const requestLabelTextChangeByKeyWithHistory = undoableAction('Change label text', requestLabelTextChangeByKey);
-  const resetAllLabelTextOverridesWithHistory = undoableAction('Reset label edits', resetAllLabelTextOverrides);
-  const loadLabelOverrideTableWithHistory = undoableAction('Load label edits', loadLabelOverrideTable);
+  const requestLabelTextChangeByKeyWithHistory = undoableAction(msg('Change label text'), requestLabelTextChangeByKey);
+  const resetAllLabelTextOverridesWithHistory = undoableAction(msg('Reset label edits'), resetAllLabelTextOverrides);
+  const loadLabelOverrideTableWithHistory = undoableAction(msg('Load label edits'), loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
   const exactReplayCopyStatus = ref('');
 
@@ -5286,19 +5292,19 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
-      title: 'Reset all settings?',
-      description: 'Circular and Linear both return to their default settings. This also removes your edits:',
+      title: t('Reset all settings?'),
+      description: t('Circular and Linear both return to their default settings.') + ' ' + t('This also removes your edits:'),
       items: [
-        'Colors, color rules, and the palette',
-        'Labels, Feature visibility, and Feature placements',
-        'Legend names, deleted Legend rows, Similarity group names, and Region Annotations',
-        'Linear record definitions, subtitles, regions, reverse complement, and alignment',
-        'Linear comparisons, which turn off; their uploaded tables stay',
-        'The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded'
+        t('Colors, color rules, and the palette'),
+        t('Labels, Feature visibility, and Feature placements'),
+        t('Legend names, deleted Legend rows, Similarity group names, and Region Annotations'),
+        t('Linear record definitions, subtitles, regions, reverse complement, and alignment'),
+        t('Linear comparisons, which turn off; their uploaded tables stay'),
+        t('The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded')
       ],
-      note: 'Input files (genome, Depth, and Circular conservation files), the records you chose, and File defaults stay. Undo brings the settings back.',
-      actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
-      cancelLabel: 'Keep settings'
+      note: t('Input files (genome, Depth, and Circular conservation files), the records you chose, and File defaults stay.') + ' ' + t('Undo brings the settings back.'),
+      actions: [{ id: 'reset', label: t('Reset all settings'), tone: 'danger' }],
+      cancelLabel: t('Keep settings')
     });
     if (choice !== 'reset') return false;
     return resetSettings();
@@ -5324,7 +5330,7 @@ export const createAppSetup = () => {
     // caller reads the reset settings right after resetSettings(). One
     // rerender follows the step: the rerender requests wait until it ends
     // (OV-1076).
-    return holdAutomaticRerender(() => history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
+    return holdAutomaticRerender(() => history.runUndoableCheckpoint(msg('Reset settings'), () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
@@ -5786,7 +5792,7 @@ export const createAppSetup = () => {
       const result = await exportMethod(snapshot, fontPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
-        showNotice({ text: `Exported ${result.filename}. Find it in your browser's downloads.`, items: result.fontWarnings });
+        showNotice({ text: t('Exported {file}.', { file: result.filename }) + ' ' + t('Find it in your browser\'s downloads.'), items: result.fontWarnings });
       }
       return result;
     } catch (error) {
@@ -5831,18 +5837,18 @@ export const createAppSetup = () => {
   // The Session title is asked in the app's dialog; Save asks for it when the Session has none.
   /** @param {{ title: string, actionLabel: string }} request */
   const askSessionTitle = ({ title, actionLabel }) => askText({
-    title, label: 'Session title', value: normalizeSessionTitle(sessionTitle.value), actionLabel
+    title, label: t('Session title'), value: normalizeSessionTitle(sessionTitle.value), actionLabel
   });
 
   const editSessionTitle = async () => {
     const busy = sessionOperationAvailability();
     if (busy) return busy;
-    const input = await askSessionTitle({ title: 'Rename Session', actionLabel: 'Rename' });
+    const input = await askSessionTitle({ title: t('Rename Session'), actionLabel: t('Rename') });
     if (input === null) return;
     // The title is part of the History snapshot: a rename is its own step.
     const title = normalizeSessionTitle(input);
     if (title === normalizeSessionTitle(sessionTitle.value)) return;
-    return history.runUndoable('Rename Session', () => { sessionTitle.value = title; });
+    return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; });
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
@@ -5854,7 +5860,7 @@ export const createAppSetup = () => {
     resolveTitle: async () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {
-        const input = await askSessionTitle({ title: 'Save Session', actionLabel: 'Save' });
+        const input = await askSessionTitle({ title: t('Save Session'), actionLabel: t('Save') });
         if (input === null) {
           recordSessionLifecycleEvent('session-save-title-canceled');
           return null;
@@ -5898,7 +5904,7 @@ export const createAppSetup = () => {
       history.markSavePoint();
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
       showNotice({
-        text: `Session saved: ${filename}. Find it in your browser's downloads.`,
+        text: t('Session saved: {file}.', { file: filename }) + ' ' + t('Find it in your browser\'s downloads.'),
         // Each drawing's font, and the font of the shown Result, whose committed
         // request the Session saves too (OV-742).
         items: customFontSaveWarnings(
@@ -6046,7 +6052,7 @@ export const createAppSetup = () => {
     sessionBusy: sessionOperationAvailability,
     // The popup sits outside the app root that records the Legend panel's text
     // edits, so its rename records its own step.
-    renameLegendRow: undoableAction('Rename legend item', renameLegendEntry),
+    renameLegendRow: undoableAction(msg('Rename legend item'), renameLegendEntry),
     legendRenameSettled: () => (legendRenameDialog.show ? new Promise((resolve) => {
       const stop = watch(() => legendRenameDialog.show, (/** @type {unknown} */ shown) => { if (!shown) { stop(); resolve(undefined); } });
     }) : Promise.resolve())
@@ -6408,7 +6414,7 @@ export const createAppSetup = () => {
       return false;
     }
     const operation = await history.runUndoable(
-      intent === 'clear' ? 'Clear Linear File' : 'Delete Linear File',
+      intent === 'clear' ? msg('Clear Linear File') : msg('Delete Linear File'),
       () => removeLinearSource(plan, intent)
     );
     closeLinearSourceRemovalDialog({ restoreFocus: false });
@@ -6643,7 +6649,7 @@ export const createAppSetup = () => {
     const plan = linearSourceMovePlan(drawing, sourceIndex, direction);
     if (!plan.allowed) return;
     const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
-    return history.runUndoable('Move File', () => {
+    return history.runUndoable(msg('Move File'), () => {
       applyLinearSeqMutation(drawing, next, {
         preserveLosatCacheInfo: true,
         layoutEntries: plan.rows,
@@ -6711,7 +6717,7 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!seq) return;
-    history.runUndoable('Reset record definition', () => {
+    history.runUndoable(msg('Reset record definition'), () => {
       seq.definition = '';
     });
   };
@@ -6721,7 +6727,7 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!seq) return;
-    history.runUndoable('Reset record subtitle', () => {
+    history.runUndoable(msg('Reset record subtitle'), () => {
       seq.record_subtitle = '';
     });
   };
@@ -6815,10 +6821,10 @@ export const createAppSetup = () => {
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
     canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
-    retryLabelImportFailure: undoableAction('Load label edits', featureActions.retryLabelImportFailure),
+    retryLabelImportFailure: undoableAction(msg('Load label edits'), featureActions.retryLabelImportFailure),
     editLabelImportFailure: featureActions.editLabelImportFailure,
     canRetryFeatureEditTableImport: featureActions.canRetryFeatureEditTableImport,
-    retryFeatureEditTableImport: undoableAction('Load feature edits', featureActions.retryFeatureEditTableImport),
+    retryFeatureEditTableImport: undoableAction(msg('Load feature edits'), featureActions.retryFeatureEditTableImport),
     reselectFeatureEditTable: featureActions.reselectFeatureEditTable,
     retrySpecificRuleFailure: featureActions.retrySpecificRuleFailure,
     editSpecificRuleFailure: featureActions.editSpecificRuleFailure,
@@ -6887,7 +6893,7 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     annotationImportNotice,
-    importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
+    importAnnotationTableFile: undoableAction(msg('Import annotations'), annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
@@ -7257,7 +7263,7 @@ export const createAppSetup = () => {
     circularRecordList,
     refreshCircularRecordOrder,
     waitForAuxiliaryFileImport: auxiliaryFileImports.wait, canRetryAuxiliaryImportFailure,
-    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
+    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint(msg('Change uploaded file'), retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
@@ -7499,7 +7505,7 @@ export const createAppSetup = () => {
     downloadLabelOverrideTable,
     loadLabelOverrideTable: loadLabelOverrideTableWithHistory,
     downloadFeatureEditTable: featureActions.downloadFeatureEditTable,
-    loadFeatureEditTable: undoableAction('Load feature edits', featureActions.loadFeatureEditTable),
+    loadFeatureEditTable: undoableAction(msg('Load feature edits'), featureActions.loadFeatureEditTable),
     syncLabelEditor,
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
@@ -7537,7 +7543,7 @@ export const createAppSetup = () => {
     endLegendReorder,
     sortLegendEntries,
     sortLegendEntriesByDefault,
-    resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
+    resetLegendPosition: undoableAction(msg('Reset legend position'), resetLegendPosition),
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
     isLegendStrokeOptionsOpen,
@@ -7547,8 +7553,8 @@ export const createAppSetup = () => {
     updateLegendEntryStrokeWidth: editEditorIntent('Change legend stroke width', updateLegendEntryStrokeWidth),
     resetLegendEntryStroke: editEditorIntent('Reset legend stroke', resetLegendEntryStroke),
     resetAllStrokes: editEditorIntent('Reset all strokes', resetAllStrokes),
-    resetAllPositions: undoableAction('Reset positions', resetAllPositions),
-    resetLayout: undoableAction('Reset layout', resetLayout),
+    resetAllPositions: undoableAction(msg('Reset positions'), resetAllPositions),
+    resetLayout: undoableAction(msg('Reset layout'), resetLayout),
     layoutResetAvailable,
     canvasPadding: drawingMember('canvasPadding'),
     showCanvasControls,

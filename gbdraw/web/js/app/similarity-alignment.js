@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { t, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -2239,10 +2240,18 @@ export const createSimilarityAlignmentActions = ({
     } else if (sameAfter) {
       effect = `No record is reversed. ${features[0].toUpperCase()}${features.slice(1)} already point${eligible.length === 1 ? 's' : ''} ${sameAfter}.`;
     } else {
-      effect = `No record is reversed. ${plural(eligible.length, 'chosen feature')} keep their current directions.`;
+      effect = t('No record is reversed.') + ' '
+        + tn(eligible.length, '{count} chosen feature keep their current directions.', '{count} chosen features keep their current directions.');
     }
-    if (excluded) effect += ` ${plural(excluded, 'record')} ${excluded === 1 ? 'stays' : 'stay'} unchanged; the reason is in ${excluded === 1 ? 'its card' : 'their cards'}.`;
-    if (unknownStrand) effect += ` ${plural(unknownStrand, 'record')} ${unknownStrand === 1 ? 'keeps its' : 'keep their'} direction; the reason is in ${unknownStrand === 1 ? 'its card' : 'their cards'}.`;
+    // Verb agreement lives in the two forms of one key.
+    if (excluded) {
+      effect += ' ' + tn(excluded, '{count} record stays unchanged; the reason is in its card.',
+        '{count} records stay unchanged; the reason is in their cards.');
+    }
+    if (unknownStrand) {
+      effect += ' ' + tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
+        '{count} records keep their direction; the reason is in their cards.');
+    }
     // D-11: the reference feature centre stays fixed; its record's left edge may move.
     const shift = Math.round(projected.reference.deltaX);
     const referenceShift = shift

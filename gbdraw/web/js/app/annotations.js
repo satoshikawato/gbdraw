@@ -16,6 +16,7 @@ import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { t, tn } from '../utils/i18n.js';
 
 // The editor keeps every id valid: an empty id takes the default and a used
 // one a numbered suffix. The panel notice names the id it stored (FL-14).
@@ -252,9 +253,10 @@ export const createAnnotationEditor = ({
   // choice, and Cancel changes nothing.
   /** @param {number} setCount */
   const askReplaceAll = (setCount) => askChoice({
-    title: 'Remove all annotation sets?',
-    description: `The imported table has no annotation rows. Importing it removes all ${setCount} annotation ${setCount === 1 ? 'set' : 'sets'}.`,
-    actions: [{ id: 'remove', label: 'Remove all sets', tone: 'danger' }]
+    title: t('Remove all annotation sets?'),
+    description: t('The imported table has no annotation rows.') + ' '
+      + tn(setCount, 'Importing it removes all {count} annotation set.', 'Importing it removes all {count} annotation sets.'),
+    actions: [{ id: 'remove', label: t('Remove all sets'), tone: 'danger' }]
   });
   /** @param {string} text */
   const importAnnotationTable = async (text) => {

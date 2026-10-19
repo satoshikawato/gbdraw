@@ -7,6 +7,7 @@ import {
   readSvgDocumentParts
 } from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
@@ -316,9 +317,9 @@ _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
 };
 
 // The first-use preparation steps, reported as they start: a real step
-// count, not a time estimate.
+// count, not a time estimate. The page translates the names where it shows them.
 const RUNTIME_PREPARATION_STEPS = Object.freeze([
-  'loading Python', 'loading the package installer', 'checking packages', 'installing packages', 'starting gbdraw'
+  msg('loading Python'), msg('loading the package installer'), msg('checking packages'), msg('installing packages'), msg('starting gbdraw')
 ]);
 
 const initializeRuntime = async ({

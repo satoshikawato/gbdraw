@@ -4,14 +4,17 @@
 // has one owner, the place that writes it. There is no English catalog. A
 // catalog (`./i18n-catalogs/<locale>.js`, a frozen `Record<string, string>`)
 // maps that English text to the shown text of one locale; a missing entry
-// shows the English. Templates reach `t`, `tn` and `tx` through
-// `app.config.globalProperties` (app.js).
+// shows the English. Templates reach `t`, `tn`, `tx` and `tm` through
+// `app.config.globalProperties` (app.js). A text kept until it is shown (a
+// table evaluated at import, a value in state, a value code compares) stays
+// English, marked with `msg('…')`, and is translated where it is shown with
+// `tm(value)`.
 //
 // Never translated: the figure and every export, Session JSON, CLI / Source
 // recipe / Exact replay text, diagnostics text, console output, identifiers
 // (History step labels, `:key` values, `data-*`, ids), file and biological
-// names. Keys are literal arguments, so tests/web/i18n-catalogs.test.mjs can
-// list them.
+// names. Keys are literal arguments of `t`, `tn`, `tx` and `msg`, so
+// tests/web/i18n-catalogs.test.mjs can list them.
 
 /**
  * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module.
@@ -108,6 +111,28 @@ export const tn = (count, one, other, params) => (
  * @returns {string}
  */
 export const tx = (context, text, params) => substitute(lookup(context + CONTEXT_SEPARATOR + text, text), params);
+
+/**
+ * Marks an English UI text that is kept until it is shown: a value of a table
+ * evaluated at import, a value kept in state, or a value that code compares
+ * (a History step label, a section title). Returns `text` unchanged, so the
+ * value stays English and comparisons keep working; the catalog check reads
+ * its literal argument as a key. Translate the value where it is shown with
+ * `tm(value)`.
+ * @param {string} text
+ * @returns {string}
+ */
+export const msg = (text) => text;
+
+/**
+ * The shown text of a value that `msg()` marked, read where it is shown. A
+ * value that no `msg()` or `t()` call makes a key (a file name, a warning
+ * Python words) shows as written.
+ * @param {string} text
+ * @param {TranslationParams} [params]
+ * @returns {string}
+ */
+export const tm = (text, params) => substitute(lookup(text, text), params);
 
 /**
  * Splits a shown text at the placeholders that `slots` names. Another
