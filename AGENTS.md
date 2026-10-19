@@ -117,16 +117,18 @@ python -m build
 
 ## Owners and Boundaries in Every Fix
 
-Every bug fix and every change to code under `gbdraw/` applies these rules to
-the code and data it touches. They do not authorize cleanup beyond that.
+Every fix or other change to code under `gbdraw/` applies these rules to the
+code and data it touches. They do not widen a task's scope or authorize
+cleanup beyond it.
 
 - Before fixing, name the channel: which owner writes the value, which code
   reads it, and by which key. Fix the channel, not only the reader that showed
   the bug.
 - One owner per value and per transformation. A value shown on two surfaces
   (the drawing and an editor, the live preview and Generate, Python and the
-  Web) comes from one owner function. Remove the second derivation in the same
-  change; do not add a third. Fix a live versus Generate difference in the
+  Web) comes from one owner function. Never add another derivation. Remove the
+  second one in the same change when it is within the task's scope; otherwise
+  list it as remaining work. Fix a live versus Generate difference in the
   shared compile path (R3 in `gbdraw/web/CLAUDE.md`) and add a parity case.
 - Find a row, slot, record, or feature by its identity (slot id, row id,
   feature id), never by its caption, display text, or kind when an identity
@@ -134,17 +136,19 @@ the code and data it touches. They do not authorize cleanup beyond that.
 - Type the data that crosses a boundary you touch (between modules, between
   Python and the Web, in a Session): a named JSDoc typedef, dataclass, or
   `TypedDict` that says which fields are required. Use no `any` or `Any`, and no
-  optional chaining that hides a missing required field. Type baselines only go
-  down (R14 in `gbdraw/web/CLAUDE.md`, "Type checking" in `CLAUDE.md`).
+  optional chaining that hides a missing required field. A type baseline never
+  rises without the Owner's approval (R14 in `gbdraw/web/CLAUDE.md`, "Type
+  checking" in `CLAUDE.md`).
 - Do not hand-copy a Python-owned value or rule into JavaScript. Carry it
   through an existing generator with a `--check` test (for example
   `tools/generate_web_contracts.py`); a twin that cannot be avoided follows R9.
 - When the conforming fix needs a structure `dev` does not have yet, take the
-  largest step that does not need it and list the rest.
-- The step handoff and the body of a pull request that changes code under
-  `gbdraw/` include a short "Boundary analysis": the channel, the rules the fix
-  applies, what it removed, any twin that remains, and what is left for a later
-  structure. Describe rules in words, not by internal tracking IDs.
+  largest step that does not need it and list the rest as remaining work.
+- The step handoff and the pull request body include a short "Boundary
+  analysis": the channel, the rules the fix applies, what it removed, any twin
+  that remains, and the remaining work. Describe each rule in words; a design
+  rule number such as R3 may follow the words, but campaign-internal IDs may
+  not.
 
 ## Product Behavior Semantics Review
 
