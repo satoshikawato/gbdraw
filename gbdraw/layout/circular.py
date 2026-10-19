@@ -163,6 +163,10 @@ class CircularResolvedSlot:
     # How far ``reserved_band_px`` reaches past the slot's own reservation, on the label side, for the labels of a
     # span overlay that covers this slot: other slots keep out of it, but it does not move the slot itself.
     span_label_room_px: float = 0.0
+    # A span overlay whose labels the layout keeps a room for past the slots it covers, where set radii allow: one
+    # that covers only inside or outside slots. Over split feature lanes or another overlay it keeps none (OV-1360),
+    # nor does an overlay that spans nothing (OV-1359).
+    span_keeps_label_room: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))

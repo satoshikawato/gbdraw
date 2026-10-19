@@ -367,8 +367,8 @@ and its own labels' room) counts as one region label on another track
 (`1 region label on another track`). This only warns: the Web app shows
 "Region labels lie on other tracks: the set track radii leave them no room
 (N)." over the figure, with no **Choose a fix** button. Annotation overlays
-take no band, and an overlay that spans nothing keeps no room, so its labels
-are not counted.
+take no band. An overlay that spans nothing, or that covers split feature
+lanes or another overlay, keeps no room, so its labels are not counted.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its

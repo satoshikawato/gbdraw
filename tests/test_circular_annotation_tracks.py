@@ -1505,11 +1505,19 @@ def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str,
         ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,w=18px",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
         ("ticks:ticks@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
-        # An overlay that spans nothing keeps no room; its labels are drawn over the tracks around it (OV-1359).
+        # An overlay that spans nothing, or covers split feature lanes, keeps no room; its labels are drawn over the
+        # tracks around it whatever the radii (OV-1359, OV-1360).
         ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=false,z=5"),
+        ("features:features@lane_direction=split",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
+         "gc:dinucleotide_content@side=outside"),
+        ("o1:dinucleotide_content@side=outside", "features:features@lane_direction=split",
+         "gc:dinucleotide_content@side=inside",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,to_slot=gc,z=5"),
     ],
-    ids=["automatic-radii", "split-features-automatic", "tick-labels-automatic", "overlay-spanning-nothing"],
+    ids=["automatic-radii", "split-features-automatic", "tick-labels-automatic", "overlay-spanning-nothing",
+         "span-over-split-features", "span-from-split-features"],
 )
 def test_circular_region_labels_with_their_room_do_not_warn(slots: tuple[str, ...]) -> None:
     with warnings.catch_warnings():

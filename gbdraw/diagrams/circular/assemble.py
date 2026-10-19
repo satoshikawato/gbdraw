@@ -739,8 +739,9 @@ def _region_labels_on_other_tracks(
     drawn and warns (LP-D86). A track takes the band the layout keeps for it
     (``own_reserved_band_px``): its drawing with its tick or axis labels and
     its own labels' room. Annotation overlays draw over other tracks and take
-    none, and an overlay that spans nothing has no room: its labels are drawn
-    over the tracks around it.
+    none. An overlay the layout keeps no room for (``span_keeps_label_room``:
+    one that spans nothing or covers another overlay) has its labels drawn
+    over the tracks around it whatever the radii, so they are not counted.
     """
 
     def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
@@ -756,7 +757,7 @@ def _region_labels_on_other_tracks(
     count = 0
     for slot in radial_layout.slots:
         own = slot.draw_band_px
-        if own is None or (slot.side == "overlay" and not slot.spans_slots):
+        if own is None or (slot.side == "overlay" and not slot.span_keeps_label_room):
             continue
         others = [band for track, band in tracks if track is not slot and not overlaps(own.inner_px, own.outer_px, band)]
         count += sum(
