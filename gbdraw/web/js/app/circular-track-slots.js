@@ -22,6 +22,7 @@ import {
   formatRadiusFactorAuto,
   isManualSlotValue,
   normalizeOptionalText,
+  overlayFollowsNote,
   sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
@@ -1829,6 +1830,8 @@ export const createCircularTrackSlotEditor = ({
     const lookup = circularSlotGeometryLookup(slot?.id);
     const resolved = circularTrackSlotEffectiveEnabled(slot) ? findTrackSlotGeometry(lookup) : null;
     const estimate = !resolved;
+    const follows = estimate && (field === 'width' || field === 'radius') ? overlayFollowsNote(slot) : '';
+    if (follows) return follows;
     const geometry = resolved || estimateCircularSlotGeometry(state.drawings.circular, slot, slotIndex);
     if (field === 'width') return formatPxAuto(geometry.widthPx, { estimate });
     if (field === 'radius') {

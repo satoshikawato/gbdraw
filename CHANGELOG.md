@@ -260,6 +260,10 @@ write-up of a release.
 - CLI: a `marks=` filter in an annotation track slot spec is written to
   `--session_output` as a list, so the web app loads the Session instead of
   reporting "has invalid mark filters" (OV-1298).
+- Web app: until a diagram draws it, an **Overlay anchor** annotation row's
+  Circular **Width** and **Radius** notes and Linear height note name the rows
+  it follows, such as "follows features → gc_content", instead of a size
+  estimate that ignored those rows (OV-1300).
 - Web app: Generate waits for uploaded rule, priority, color, whitelist and
   blacklist files that are still being applied, so a Priority File uploaded
   just before Generate is no longer left out (OV-1193). A Specific rules file no

@@ -431,7 +431,10 @@ use, and turning the option off enables those rows again. A row with another
 dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
 rows it drew; any other row, and every row before the first Generate, shows an
-estimate written as "≈ … (estimate)". A ticks row's **Radius** note is the tick
+estimate written as "≈ … (estimate)". An **Overlay anchor** annotation row
+that no diagram has drawn yet names the rows it follows instead, such as
+"follows features → gc_content" (Circular **Width** and **Radius**, Linear
+height). A ticks row's **Radius** note is the tick
 anchor, the radius that a typed **Radius** pins, not the centre of its band.
 
 ### Follow a Result and its settings draft

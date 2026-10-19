@@ -303,6 +303,71 @@ test('Circular editor requests resolved geometry with each public slot ID', () =
   }
 });
 
+// OV-1300 (LP-D99): an Overlay annotation row has no number of its own until a
+// Generate resolves it; its Width/Radius (Circular) and height (Linear) notes
+// name the rows it follows, by slot id.
+test('an Overlay annotation row names the rows it follows until Generate resolves it', () => {
+  const overlay = (id, params) => ({
+    id, renderer: 'annotations', enabled: true, side: 'overlay', params: { set_id: id, ...params }
+  });
+  const circularSlots = [
+    { id: 'features', renderer: 'features', enabled: true, side: 'inside', params: {} },
+    overlay('tint', { anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' }),
+    overlay('marks', { anchor_slot: 'features', layer: 'foreground' }),
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'inside', params: { nt: 'GC' } }
+  ];
+  const resolvedRows = [
+    { slotIndex: 0, slotId: 'features', widthPx: 18.5, radiusFactor: 0.94 },
+    { slotIndex: 3, slotId: 'gc_content', widthPx: 24, radiusFactor: 0.56 }
+  ];
+  const geometry = { value: { mode: 'circular', records: [{ resultIndex: 0, recordIndex: 0, slots: resolvedRows }] } };
+  const circularEditor = createCircularTrackSlotEditor({
+    state: withDrawings({
+      mode: { value: 'circular' },
+      form: { track_type: 'tuckin', show_depth: false, suppress_gc: false, suppress_skew: true, show_scale: true },
+      adv: { circular_track_slots: circularSlots, circular_track_slots_axis_index: 0, nt: 'GC', features: [],
+        feature_shapes: {}, depth_tracks: [] },
+      files: { c_depth: [] },
+      circularConservation: { enabled: false, series: [] },
+      circularRecordList: { value: [] },
+      annotationSets: [],
+      selectedResultIndex: { value: 0 },
+      trackSlotResolvedGeometry: geometry
+    })
+  });
+  const circularNote = (index, field) => circularEditor.circularTrackSlotGeometryAutoText(
+    circularSlots[index], index, field
+  );
+  assert.deepEqual(
+    [circularNote(1, 'width'), circularNote(1, 'radius'), circularNote(2, 'width'), circularNote(2, 'radius')],
+    ['follows features → gc_content', 'follows features → gc_content', 'follows features', 'follows features']
+  );
+  assert.equal(circularNote(0, 'width'), '18.5 px (auto)');
+  // After a Generate that drew the row, the note is the resolved value again.
+  geometry.value.records[0].slots = [...resolvedRows, { slotIndex: 1, slotId: 'tint', widthPx: 225.1, radiusFactor: 0.77 }];
+  assert.deepEqual([circularNote(1, 'width'), circularNote(1, 'radius')], ['225.1 px (auto)', '0.77 R (auto)']);
+
+  const linearSlots = [
+    { id: 'features', renderer: 'features', enabled: true, side: 'overlay', height: null, spacing: null, z: 0, params: {} },
+    { ...overlay('tint', { anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' }),
+      height: null, spacing: null, z: -1 },
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'below', height: null, spacing: null,
+      z: 0, params: { nt: 'GC' } }
+  ];
+  const linearEditor = createLinearTrackSlotEditor({
+    state: withDrawings({
+      form: { linear_track_layout: 'middle', show_depth: false },
+      adv: { linear_track_slots: linearSlots, linear_track_slots_axis_index: 0, depth_tracks: [],
+        depth_color: '#4A90E2', depth_height: null, gc_height: null, nt: 'GC' },
+      files: { linearSeqs: [] },
+      annotationSets: [],
+      selectedResultIndex: { value: 0 },
+      trackSlotResolvedGeometry: { value: null }
+    })
+  });
+  assert.equal(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[1], 1, 'height'), 'follows features → gc_content');
+});
+
 // TR-08: Python emits geometry only for rendered rows, so a slot index does not
 // identify a row. Geometry is found by slot ID alone.
 test('a row without rendered geometry does not resolve to another row', () => {

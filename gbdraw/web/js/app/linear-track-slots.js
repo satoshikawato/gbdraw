@@ -11,7 +11,8 @@ import {
   findTrackSlotGeometry,
   formatPxAuto,
   isManualSlotValue,
-  normalizeOptionalText
+  normalizeOptionalText,
+  overlayFollowsNote
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
@@ -1035,11 +1036,10 @@ export const createLinearTrackSlotEditor = ({
   };
 
   // Only a rendered row has resolved geometry; a disabled row shows the estimate.
-  /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot */
-  const linearTrackSlotDisplayGeometry = (drawing, slot) => {
-    const resolved = slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null;
-    return resolved || estimateLinearSlotGeometry(drawing, slot);
-  };
+  /** @param {OptionalLinearSlot} slot */
+  const linearResolvedSlotGeometry = (slot) => (
+    slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null
+  );
 
   // The row index is part of the shared template call; Linear geometry is
   // found by slot ID alone.
@@ -1047,7 +1047,10 @@ export const createLinearTrackSlotEditor = ({
   const linearTrackSlotGeometryAutoText = (slot, _slotIndex, field) => {
     const drawing = state.drawings.linear;
     if (isManualSlotValue(linearSlotManualValue(slot, field))) return '';
-    const geometry = linearTrackSlotDisplayGeometry(drawing, slot);
+    const resolved = linearResolvedSlotGeometry(slot);
+    const follows = !resolved && field === 'height' ? overlayFollowsNote(slot) : '';
+    if (follows) return follows;
+    const geometry = resolved || estimateLinearSlotGeometry(drawing, slot);
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
