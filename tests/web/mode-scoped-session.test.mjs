@@ -454,8 +454,9 @@ test('a Linear drawing with no ON record names the fix', () => {
 
 // OV-1280 (D-19, D-ORIGIN-2): the Web writer's Session 48 after the five file
 // cards keeps each card's rows and what its file set through Load and Save,
-// and Remove on each card takes back only that file's effect.
-test('Session 48 keeps what each file card loaded through Load and Save, and Remove takes back only that', async () => {
+// and the file-imports.js helpers each card's Remove calls take back only that
+// file's effect (the Remove path itself: auxiliary-file-history Playwright cases).
+test('Session 48 keeps what each file card loaded through Load and Save, and the card-mark helpers take back only that', async () => {
   const fileImports = await import('../../gbdraw/web/js/services/file-imports.js');
   const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz', import.meta.url))));
   resetDrawings();

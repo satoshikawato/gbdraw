@@ -432,8 +432,13 @@ export const setupWatchers = ({
       drawings.forEach(removeImport[key]);
       return true;
     }
-    const outcomes = await Promise.all(drawings.map((drawing) => featureActions.removeImportedSpecificRules(drawing)));
-    return outcomes.every((outcome) => outcome === true);
+    // The shown drawing first: a removal it refuses leaves every drawing as it
+    // was (REVIEW-2 N2); one not shown cannot refuse.
+    const shown = state.activeDrawing();
+    for (const drawing of [...drawings.filter((one) => one === shown), ...drawings.filter((one) => one !== shown)]) {
+      if (await featureActions.removeImportedSpecificRules(drawing) !== true) return false;
+    }
+    return true;
   };
   /**
    * The removal waits for the imports still applying, as they wait for each

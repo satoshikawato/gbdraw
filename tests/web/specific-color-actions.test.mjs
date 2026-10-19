@@ -14,7 +14,7 @@ import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/service
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 /**
  * @param {typeof evaluatePythonRules} [evaluate]
@@ -45,6 +45,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
   const preparation = createRulePreparation({state: withDrawings(state), evaluate});
   let prepareLegend = async () => {};
   let previousIntents = [];
+  let lastRekeyed = null;
   let openTransaction = null;
   const legendApplies = [];
   let rerenders = 0;
@@ -61,8 +62,9 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
   const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: withDrawings(state), rulePreparation:preparation,
     runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
     runUndoable: history?.runUndoable || transact('intent'),
-    prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
+    prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents,rekeyed}) => {
     previousIntents=previousFileIntents;
+    lastRekeyed=rekeyed;
     await prepareLegend(intents);
     if (!isCurrent()) return false;
     return { diff: diffLegendIntents(state.legendEntries.value, intents), isCurrent: () => true, apply: () => {
@@ -71,8 +73,68 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
       state.results.value=[{name:'figure',content:'after'}];
     } };
   }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
-  return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
+  return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
+// REVIEW-2 N1 (OV-1280): Remove on the Specific rules card while another mode
+// is shown takes the file's rows out of that drawing at once; its Legend
+// follows when it is shown again, through the commit a Remove in the shown
+// drawing runs: the same rows, the same keys (a caption a hand rule shares in
+// another color, a file rule captioned like a type's row), the same re-keyed
+// rows. Until then its Legend is as it was.
+test('a Specific rules removal in a drawing not shown gives its Legend, once shown, what a shown removal gives', async () => {
+  const hand = { feat: 'CDS', qual: 'gene', val: 'a', color: '#445566', cap: 'Hypothetical' };
+  const fileRules = [
+    { feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Hypothetical', fromFile: true },
+    { feat: 'CDS', qual: 'gene', val: 'b', color: '#654321', cap: 'CDS', fromFile: true }
+  ];
+  const drawn = [['CDS', '#54bcf8'], ['Hypothetical [#445566]', '#445566'], ['Hypothetical [#123456]', '#123456'], ['CDS [#654321]', '#654321']];
+  const arrange = (s) => {
+    s.state.originalLegendOrder = { value: drawn.map(([key]) => key) };
+    s.state.svgContainer = mounted(drawn);
+    s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, { ...hand }, ...fileRules.map((rule) => ({ ...rule })));
+    s.state.legendEntries.value = drawn.map(([key, color]) => ({ caption: key, originalCaption: key, color }));
+    s.state.addedLegendCaptions.value = new Set(drawn.slice(1).map(([key]) => key));
+    let intents = null;
+    s.setLegendPreparation(async (next) => { intents = next; });
+    return () => ({ intents, previous: s.previousIntents(), rekeyed: [...(s.rekeyed() || [])] });
+  };
+  const shown = setup();
+  const shownLegend = arrange(shown);
+  assert.equal(await shown.actions.removeImportedSpecificRules(shown.state), true);
+  const expected = shownLegend();
+  assert.deepEqual(expected.rekeyed, [['Hypothetical [#445566]', 'Hypothetical']]);
+
+  const hidden = setup();
+  const hiddenLegend = arrange(hidden);
+  hidden.state.mode = { value: 'linear' };
+  withModeDrawings(hidden.state, { circular: hidden.state, linear: { manualSpecificRules: [] } });
+  const listed = JSON.stringify([hidden.state.legendEntries.value, [...hidden.state.addedLegendCaptions.value]]);
+  assert.equal(await hidden.actions.removeImportedSpecificRules(hidden.state), true);
+  assert.deepEqual(hidden.state.manualSpecificRules, [hand]);
+  assert.equal(JSON.stringify([hidden.state.legendEntries.value, [...hidden.state.addedLegendCaptions.value]]), listed,
+    'its Legend waits until it is shown');
+  hidden.state.mode.value = 'circular';
+  assert.equal(await hidden.actions.settleWhenShown(hidden.state), true);
+  assert.deepEqual(hiddenLegend(), expected);
+  assert.equal(hidden.rerenders(), 1, 'and its Result is drawn again');
+  assert.equal(await hidden.actions.settleWhenShown(hidden.state), false, 'once');
+});
+
+// REVIEW-2 N3: a Result Python draws from the drawing's current rules (a
+// Generate, a label rerender: the root calls `forgetWhenShown`) owes nothing,
+// so showing the drawing later asks for no redraw.
+test('a Generate after a Specific rules removal in a drawing not shown clears what that drawing owes', async () => {
+  const s = setup();
+  s.state.manualSpecificRules.push({ feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Imported', fromFile: true });
+  s.state.mode = { value: 'linear' };
+  withModeDrawings(s.state, { circular: s.state, linear: { manualSpecificRules: [] } });
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  s.state.mode.value = 'circular';
+  s.actions.forgetWhenShown(s.state);
+  assert.equal(await s.actions.settleWhenShown(s.state), false);
+  assert.equal(s.rerenders(), 0);
+});
+
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
 // Generate draws it.

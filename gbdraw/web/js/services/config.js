@@ -2,6 +2,7 @@
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { specificRulesFileCaptions } from './file-imports.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
@@ -2871,11 +2872,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   const storedRules = readColorRules(data.rules);
   if (!storedRules.kept) {
     drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...storedRules.value);
-    drawing.fileLegendCaptions.value = new Set(
-      storedRules.value
-        .filter((rule) => rule.fromFile && rule.cap)
-        .map((rule) => rule.cap)
-    );
+    drawing.fileLegendCaptions.value = specificRulesFileCaptions(storedRules.value);
   }
   if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
     replaceQualifierPriorityRules(drawing, data.qualifierPriorityRules);

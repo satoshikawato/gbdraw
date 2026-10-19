@@ -447,3 +447,12 @@ export const removeImportedPriorityRows = (rows) => {
  * @returns {T[]}
  */
 export const withoutImportedRows = (rows, card) => rows.filter((row) => !isCardRow(row, card));
+
+/**
+ * The captions of the Specific rules file's rows: the Legend rows a Generate
+ * names as the file's (`fileLegendCaptions`).
+ * @param {readonly (CardMarkedRow & { cap?: unknown })[]} rules
+ * @returns {Set<string>}
+ */
+export const specificRulesFileCaptions = (rules) => new Set(rules
+  .filter((rule) => isCardRow(rule, 't_color') && rule.cap).map((rule) => String(rule.cap)));

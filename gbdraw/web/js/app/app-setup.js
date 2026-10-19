@@ -3345,9 +3345,16 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
-      // OV-1280: a Result shown again by a mode switch is drawn again when
-      // its drawing's rules changed while it was not shown.
-      if (context.bindingOptions.modeArrival) featureActions.payRedrawWhenShown(state.activeDrawing());
+      // OV-1280: a Result shown again by a mode switch settles what its
+      // drawing's rules owe it from a change made while it was not shown; a
+      // Result Python drew from the current rules owes nothing (REVIEW-2 N3).
+      if (context.bindingOptions.modeArrival) {
+        featureActions.settleWhenShown(state.activeDrawing()).catch((error) => {
+          console.error('The Legend could not follow the rules changed while this mode was not shown.', normalizeUserFacingError(error));
+        });
+      } else if (context.phase === 'generate' || context.phase === 'label-reflow') {
+        featureActions.forgetWhenShown(state.activeDrawing());
+      }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
       // drawing's current paint, also after an edit made since its paint was

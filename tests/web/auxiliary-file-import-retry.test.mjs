@@ -50,7 +50,7 @@ const { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWat
       return owner.outcome;
     },
     // The other drawing holds no rows of an earlier rules file (OV-1280).
-    removeImportedSpecificRules: async () => owner.removal()
+    removeImportedSpecificRules: async (drawing) => owner.removal(drawing)
   }, { get: (target, key) => target[key] ?? (() => {}) }),
   legendLayout: port(),
   resultsManager: port(),
@@ -100,5 +100,23 @@ test('a Specific rules removal the rule owner refuses brings the card back and r
   assert.equal(await specificRulesWatcher.callback(null, file), false);
   assert.deepEqual({ selected: state.files.t_color, operation: state.errorLog.value?.operation, pending: imports.isPending() },
     { selected: file, operation: 'evaluateRules', pending: false });
+  owner.removal = async () => true;
+});
+
+// REVIEW-2 N2: the shown drawing's removal runs first; one it refuses leaves
+// the drawing that is not shown unchanged, so the card comes back with no
+// half-done removal.
+test('a Specific rules removal the shown drawing refuses never changes the drawing not shown', async () => {
+  const file = { name: 'rules.tsv', text: async () => '' };
+  const shown = state.activeDrawing();
+  /** @type {unknown[]} */
+  const removed = [];
+  owner.removal = async (drawing) => {
+    removed.push(drawing);
+    return drawing !== shown;
+  };
+  state.files.t_color = null;
+  assert.equal(await specificRulesWatcher.callback(null, file), false);
+  assert.deepEqual({ removed, selected: state.files.t_color }, { removed: [shown], selected: file });
   owner.removal = async () => true;
 });

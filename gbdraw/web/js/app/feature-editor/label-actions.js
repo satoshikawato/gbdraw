@@ -1127,17 +1127,6 @@ export const createFeatureLabelActions = ({
   const isRedrawOwed = (drawing) => redrawOwed.has(drawing);
   /** @param {DrawingState} drawing */
   const redrawShown = (drawing) => { redrawOwed.delete(drawing); };
-  // OV-1280 (REVIEW-1 B1): a drawing not shown whose rules a file card's
-  // Remove changed is drawn again when it is shown again, since only its own
-  // Result's Legend rows tell what Python draws for its rules.
-  /** @type {WeakSet<DrawingState>} */
-  const redrawWhenShown = new WeakSet();
-  /** @param {DrawingState} drawing */
-  const oweRedrawWhenShown = (drawing) => { redrawWhenShown.add(drawing); };
-  /** @param {DrawingState} drawing Shown again: the redraw it owes is asked for. */
-  const payRedrawWhenShown = (drawing) => {
-    if (redrawWhenShown.delete(drawing)) requestAutomaticRerender();
-  };
 
   /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
@@ -1841,8 +1830,6 @@ export const createFeatureLabelActions = ({
     requestAutomaticRerender,
     isRedrawOwed,
     redrawShown,
-    oweRedrawWhenShown,
-    payRedrawWhenShown,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,
