@@ -4723,8 +4723,7 @@
                   "kind": "main"
                 }
               }
-            },
-            "fileImports": {}
+            }
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -5050,8 +5049,7 @@
                   "kind": "main"
                 }
               }
-            },
-            "fileImports": {}
+            }
           },
           "features": {
             "featureOverrides": {
@@ -5154,6 +5152,16 @@
         }
       },
       "loadDefaults": [
+        {
+          "pointer": "/modes/circular/config/fileImports",
+          "value": {},
+          "projected": false
+        },
+        {
+          "pointer": "/modes/linear/config/fileImports",
+          "value": {},
+          "projected": true
+        },
         {
           "pointer": "/modes/circular/config/adv/linear_accession_visibility",
           "value": "auto",
@@ -5652,8 +5660,7 @@
             "unmanagedConfigOverrides": {},
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {},
-            "fileImports": {}
+            "featurePlacementOverrides": {}
           },
           "features": {
             "featureOverrides": {},
@@ -5974,8 +5981,7 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {},
-            "fileImports": {}
+            "featurePlacementOverrides": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -6369,8 +6375,7 @@
             "unmanagedConfigOverrides": {},
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {},
-            "fileImports": {}
+            "featurePlacementOverrides": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -6628,8 +6633,7 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {},
-            "fileImports": {}
+            "featurePlacementOverrides": {}
           },
           "features": {
             "featureOverrides": {},
@@ -7108,8 +7112,7 @@
                   "kind": "main"
                 }
               }
-            },
-            "fileImports": {}
+            }
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -7396,8 +7399,7 @@
                   "kind": "main"
                 }
               }
-            },
-            "fileImports": {}
+            }
           },
           "features": {
             "featureOverrides": {},
@@ -7861,8 +7863,7 @@
                   "kind": "main"
                 }
               }
-            },
-            "fileImports": {}
+            }
           },
           "features": {
             "featureOverrides": {},
@@ -8199,8 +8200,7 @@
                   "kind": "main"
                 }
               }
-            },
-            "fileImports": {}
+            }
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -9896,8 +9896,7 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {},
-            "fileImports": {}
+            "featurePlacementOverrides": {}
           },
           "features": {
             "featureOverrides": {}
@@ -10056,8 +10055,7 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {},
-            "fileImports": {}
+            "featurePlacementOverrides": {}
           },
           "ui": {
             "canvasPadding": {

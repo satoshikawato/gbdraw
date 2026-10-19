@@ -6070,7 +6070,8 @@ const importSessionDocument = async (e, options = {}) => {
         return Object.fromEntries(Object.entries(draft).filter(([key]) => !unsaved.includes(key)));
       };
       const split = splitDraftIntoModes({
-        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides']) || {},
+        // A Session 27-44 draft never saved `fileImports` (Session 48).
+        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides', 'fileImports']) || {},
         // With a catalog, the feature-edit migration writes `featureOverrides`.
         ...(savedDraft(data.features) ? { features: withoutUnsavedEmpty(features, data.features, [
           'featureColorOverrides', 'featureVisibilityManualRules', 'labelOverrideRows', 'labelTextBulkOverrides',
