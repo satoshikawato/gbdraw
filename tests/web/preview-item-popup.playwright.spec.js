@@ -50,7 +50,7 @@ test('a Legend row opens its popup; rename, remove, keyboard, and Layout edit', 
   const dialog = page.getByRole('dialog', { name: 'Legend item: tRNA', exact: true });
   await expect(dialog).toBeVisible();
   await expectPlacedBeside(page, legendPoint);
-  await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText(/^Default color of tRNA features\. Sets the tRNA default color/);
+  await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText(/^Sets the tRNA default color/);
 
   // Rename: one History step, shown in the Legend panel's rows.
   const before = await undoCount(page);
@@ -139,7 +139,7 @@ test('a default-colored Legend row popup Color sets the type\'s default color', 
   const dialog = page.getByRole('dialog', { name: 'Legend item: tRNA', exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText(
-    'Default color of tRNA features. Sets the tRNA default color (tRNA features without their own color or rule, also hidden ones).');
+    'Sets the tRNA default color (tRNA features without their own color or rule, also hidden ones).');
   const steps = await undoCount(page);
   await dialog.getByLabel('Color of tRNA', { exact: true }).fill('#c026d3');
   await settle(page);

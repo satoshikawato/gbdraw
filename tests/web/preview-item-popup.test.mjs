@@ -308,7 +308,8 @@ test('the legend-entry view names the rule behind the color and the feature coun
   assert.deepEqual(defaultColorScopeLine('tRNA', '#112233'), { kind: 'replaces', type: 'tRNA', color: '#112233' });
   assert.equal(defaultColorScopeLine(null, '#112233'), null);
   const drawn = openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' });
-  assert.deepEqual([drawn.colorSource, drawn.defaultColorLine], ['Default color of tRNA features', { kind: 'sets', type: 'tRNA', color: null }]);
+  // OV-1336: once the line is shown it is the only text; the caption does not repeat it.
+  assert.deepEqual([drawn.colorSource, drawn.defaultColorLine], [null, { kind: 'sets', type: 'tRNA', color: null }]);
   // N-2: a type that already has a user default color says it replaces it.
   assert.deepEqual(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' }, userDefaultColors: { tRNA: '#112233' } }),
     { kind: 'legend-entry', key: 'tRNA' }).defaultColorLine, { kind: 'replaces', type: 'tRNA', color: '#112233' });

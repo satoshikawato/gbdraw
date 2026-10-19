@@ -163,14 +163,17 @@ export const defaultColorScopeLine = (type, replacedColor) => (
 const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType, replacedDefaultColor }) => {
   const key = text(legendEntryKey(entry));
   const ruleLines = trackKind ? [] : rules.map(colorRuleText);
-  const colorSource = trackKind
-    ? TRACK_ROW_COLOR_SOURCE
-    : ruleLines.length
-      ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
-      : featureTypes.has(key)
-        // OV-1281: the scope dialog's words for what its Legend item choice sets (OIC-029).
-        ? `Default color of ${key} features`
-        : 'Set on individual features';
+  const defaultColorLine = trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor);
+  // OV-1336: the OIC-029 line, once shown, says where the color comes from by itself; the caption gives way.
+  const colorSource = defaultColorLine
+    ? null
+    : trackKind
+      ? TRACK_ROW_COLOR_SOURCE
+      : ruleLines.length
+        ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
+        : featureTypes.has(key)
+          ? `Default color of ${key} features`
+          : 'Set on individual features';
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,
@@ -185,7 +188,7 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
         ? 'Counting features…'
         : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
     colorSource,
-    defaultColorLine: trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor),
+    defaultColorLine,
     ruleLines
   };
 };

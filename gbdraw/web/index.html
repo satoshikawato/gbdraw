@@ -6734,7 +6734,7 @@
                                                    class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
                                             <span class="match-mono">{{ previewItemView.color }}</span>
                                         </div>
-                                        <p class="match-muted mt-1" data-preview-legend-color-source>{{ previewItemView.colorSource }}<template v-if="previewItemView.defaultColorLine">. <default-color-scope-line :line="previewItemView.defaultColorLine"></default-color-scope-line></template></p>
+                                        <p class="match-muted mt-1" data-preview-legend-color-source><default-color-scope-line v-if="previewItemView.defaultColorLine" :line="previewItemView.defaultColorLine"></default-color-scope-line><template v-else>{{ previewItemView.colorSource }}</template></p>
                                         <ul v-if="previewItemView.ruleLines.length" class="mt-1 space-y-0.5 text-xs text-slate-700">
                                             <li v-for="line in previewItemView.ruleLines" :key="line" class="match-mono">{{ line }}</li>
                                         </ul>
