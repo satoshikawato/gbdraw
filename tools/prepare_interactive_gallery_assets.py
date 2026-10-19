@@ -144,7 +144,7 @@ HMMTDNA_BASIC_COMMAND = (
 
 TOBACCO_CHLOROPLAST_COMMAND = (
     "gbdraw circular --gbk NC_001879.gbk "
-    "--annotation_table nicotiana-tabacum-regions.tsv --separate_strands "
+    "--annotation_table nicotiana-tabacum-regions-span.tsv --separate_strands "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin "
     "-t chloroplast_specific_table.tsv --qualifier_priority qualifier_priority.tsv "
     "--block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 "
@@ -154,6 +154,9 @@ TOBACCO_CHLOROPLAST_COMMAND = (
     "--inner_label_y_radius_offset 0.975 --species '<i>Nicotiana tabacum</i>' "
     "--definition_font_size 28 --legend upper_left "
     "--circular_track_slot 'features:features@side=overlay,lane_direction=split' "
+    "--circular_track_slot "
+    "'plastome_tint:annotations@set_id=plastome_tint,side=overlay,anchor_slot=features,"
+    "layer=underlay,to_slot=gc_content,marks=highlight,padding_px=0,show_labels=false,z=-1' "
     "--circular_track_slot "
     "'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,"
     "show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1' "
@@ -306,9 +309,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         title="Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
         tags=("Circular", "Interactive SVG"),
         description=(
-            "The 155,943-bp tobacco chloroplast genome with brackets for the large single-copy "
-            "region (LSC), the small single-copy region (SSC), and the two inverted repeats "
-            "(IRa and IRb). An annotation table supplies the four region boundaries, and a color "
+            "The 155,943-bp tobacco chloroplast genome with its large single-copy region (LSC), "
+            "small single-copy region (SSC), and two inverted repeats (IRa and IRb) tinted from "
+            "the gene track through the GC content track and named on curved labels along an "
+            "inner ring. An annotation table supplies the four region boundaries, and a color "
             "table groups genes by function, such as photosystem I, RNA polymerase, and NADH "
             "dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and "
             "the rRNA genes, appear twice: once in IRa and once in IRb."
@@ -319,6 +323,8 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
         command=TOBACCO_CHLOROPLAST_COMMAND,
+        session_from_command=True,
+        command_dir="gbdraw/web/tutorial-data/tobacco-plastome-regions",
     ),
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",

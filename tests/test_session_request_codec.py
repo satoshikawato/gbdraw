@@ -97,6 +97,8 @@ from gbdraw.tracks import (
     ScalarSpec,
     normalize_circular_track_slots,
     normalize_linear_track_slots,
+    parse_circular_track_slot,
+    parse_linear_track_slot,
 )
 
 
@@ -1639,6 +1641,47 @@ def test_spanning_annotation_slot_round_trips_with_to_slot(tmp_path: Path, mode:
     assert payload_slots[2]["params"]["to_slot"] == "gc_content"
     assert decoded_slots == slots
     assert normalize(decoded_slots)[2].annotation.to_slot == "gc_content"
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_annotation_slot_mark_filter_from_a_spec_is_written_as_a_list(
+    tmp_path: Path, mode: str
+) -> None:
+    """A CLI ``marks=`` filter reaches the Session as the list the Web reads (OV-1298)."""
+
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    spec = "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,layer=underlay,marks=highlight|Line,z=-1"
+    request: CircularDiagramRequest | LinearDiagramRequest
+    if mode == "circular":
+        request = CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(tracks=CircularTrackOptions(circular_track_slots=(
+                CircularTrackSlot(id="features", renderer="features"),
+                parse_circular_track_slot(spec),
+            ))),
+        )
+    else:
+        request = LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=LinearDiagramOptions(tracks=LinearTrackOptions(
+                linear_track_slots=(
+                    LinearTrackSlot(id="features", renderer="features", side="overlay"),
+                    parse_linear_track_slot(spec),
+                ),
+                linear_track_axis_index=0,
+            )),
+        )
+
+    encoded = encode_canonical_request(request)
+    params = encoded.payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"][1]["params"]
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "marks"),
+        output_directory=tmp_path / "output",
+    )
+
+    assert params["marks"] == ["highlight", "line"]
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
