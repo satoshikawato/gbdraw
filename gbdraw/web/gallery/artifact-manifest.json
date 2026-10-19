@@ -17,8 +17,8 @@
       "sha256": "1b82e9d609f94979d7912a3adc9c7a88b57f4dc1ea709715fe56cda51b8cb487"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1334198,
-      "sha256": "4fc6fb664c4fc30dc9ae17e2aa7f44ef16b4fb10bab851e10c28bc0a89cfc360"
+      "bytes": 1334269,
+      "sha256": "323c40041ac5814171ff746b8c638ddde3232c27569ea5a4d63a0a3b7b8c901a"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 494091,
@@ -41,8 +41,8 @@
       "sha256": "bbb81b8b3a0f64ca3696a15d02e9124ec92af045ecb4ea1241dcf389d32ebe42"
     },
     "gallery/examples/lambda_basic_linear.svg": {
-      "bytes": 814840,
-      "sha256": "002c9f8d8c51e507ff1a1011889e2e6d10ac91da41b3e55c3155186d119b7e32"
+      "bytes": 814838,
+      "sha256": "b6f2d4962e8739d2f4f20c14bff78268c4ff97a4371c901cf31bbc88052757bf"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
       "bytes": 7549874,
@@ -57,8 +57,8 @@
       "sha256": "da86207da24e2e35342f5c07d3fa72705411fcaff693e113a3d14f6bb0029dba"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3033205,
-      "sha256": "bf6eda2f483c3eb6ffdf36fcb759849cb3bdcc591ac747817de47f7539941f0a"
+      "bytes": 3033240,
+      "sha256": "0a89c2e79410c7fc164929a78642146bfa810c179190a1423f8c05afa0e5e445"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 325092,
@@ -81,8 +81,8 @@
       "sha256": "9c9e749dd2f4497e740b648f1812a7d5c8035b332e2738ee4f7ce2590a757539"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
-      "bytes": 790967,
-      "sha256": "4ba84d983bfea4c08da008bea1bd8119f4e5689955d2396f03d8a48122b9f419"
+      "bytes": 790965,
+      "sha256": "bf4df11eebde69ed9c059a8a6cc77ef7cf8fd2912e9f63978c738c6d3c9b38c8"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
       "bytes": 6266202,
@@ -97,8 +97,8 @@
       "sha256": "07976662a311647582d8e9d50c3deb2f5cb881ac2923a523549ea49e00aa8fca"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 250024,
-      "sha256": "0243daa566ac01c917e73662c16d3c23c21152c3929655bef2aa410c6a6a2f9f"
+      "bytes": 250095,
+      "sha256": "ea7be899cd7559970ab27c2eee634e0f3eb3500451f4ae5d0acf553093826578"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 134329,
@@ -121,8 +121,8 @@
       "sha256": "7142338528d28da7dcf139768d990a02c35cbad1352512e601a4773f5e17f1fc"
     },
     "gallery/sources/lambda_basic_linear.svg": {
-      "bytes": 74049,
-      "sha256": "0fe1b94cde364d393e0900ee8610a6e83169f2d1184a58d27883f4e4cc1bd862"
+      "bytes": 74047,
+      "sha256": "f87f35264c1a737bebc375c3a4950b5ff155ec31e46350375b7479f6b1387968"
     },
     "gallery/sources/majanivirus_orthogroup.svg": {
       "bytes": 1895477,
@@ -137,8 +137,8 @@
       "sha256": "f4d1aeb84b9bd2777b9ec53e8dfe2cc9bae404de391abba64f90b5ea40a5b51c"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 19266,
-      "sha256": "658851a91812d3fd197be4680e68ed58c1838bde1fc2d33d025d9bd52776efa4"
+      "bytes": 18930,
+      "sha256": "bb312d940c8d9889f849f558b32cd59194b1e3b892c0e5560d2428efb3a0347f"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22334,
@@ -161,8 +161,8 @@
       "sha256": "3dc267f7eb289a91e309457cb5c3dca176007145baffcff2e8007c73b6a1ec7a"
     },
     "gallery/thumbnails/lambda_basic_linear.webp": {
-      "bytes": 22354,
-      "sha256": "a5b0744bbbe96f51df541ba9cc985d2f8be822774f271d8b167e2d5a4f1f2f78"
+      "bytes": 22448,
+      "sha256": "256b967a0c57246a25446909d4d34ad60261eb8d8dae593173c8e2216acc13ba"
     },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
       "bytes": 15786,
