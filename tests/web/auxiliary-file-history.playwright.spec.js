@@ -204,10 +204,12 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   // two switches) brings the file's rows back while Circular is not shown;
   // shown again, its figure, last shown without them, is drawn with them.
   await switchMode(page, 'linear');
+  // Each Undo is waited for by the History stacks it changes.
+  const stacks = () => page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()].join('/'));
   for (let step = 0; step < 8 && await undoCount() >= removedAt; step += 1) {
-    const before = await undoCount();
+    const before = await stacks();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
-    await expect.poll(undoCount, { timeout: 60_000 }).toBeLessThan(before);
+    await expect.poll(stacks, { timeout: 60_000 }).not.toBe(before);
   }
   await expect.poll(circular).toEqual(loaded);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
