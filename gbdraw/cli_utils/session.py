@@ -1141,7 +1141,6 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "-t": "files.t_color",
     "--table": "files.t_color",
     "--label_whitelist": "files.whitelist",
-    "--label_blacklist": "files.blacklist",
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
@@ -1235,9 +1234,6 @@ def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: boo
         return
     if slot == "files.t_color":
         files["t_color"] = entry
-        return
-    if slot == "files.blacklist":
-        files["blacklist"] = entry
         return
     if slot == "files.whitelist":
         files["whitelist"] = entry
