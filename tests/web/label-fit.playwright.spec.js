@@ -14,6 +14,7 @@ const ROW_KINDS = ['outward_both', 'outward_vertical', 'outward_horizontal', 'sm
 const SCREENSHOTS = process.env.GBDRAW_LABEL_FIT_SCREENSHOTS || '';
 
 const SARS = () => readFileSync(join(process.cwd(), 'tests/test_inputs/SARS-CoV-2.gbk'), 'utf8');
+const LAMBDA = () => readFileSync(join(process.cwd(), 'tests/test_inputs/NC_001416.gb'), 'utf8');
 
 const openWithOuterLabels = async (page, { name, text, fontSize = null, rendering = 'auto' }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -75,7 +76,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await expect(separate).toContainText('separate overlapping features');
   await expect(separate).toContainText('Resolve Overlaps On');
   await expect(separate).toContainText(/\d+ × \d+ px/);
-  await expect(separate.locator('[data-label-fit-note]')).toHaveText('14 leader pairs still cross');
+  await expect(separate.locator('[data-label-fit-note]')).toHaveText('15 leader pairs still cross');
   await shot(dialog.getByRole('dialog'), 'label-fit-dialog-crossing-row.png');
 
   const before = { undo: await undoCount(page), settings: await labelSettings(page) };
@@ -101,7 +102,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   // No overlap; the leaders the row said still cross show the notice bar.
   const notice = page.getByTestId('label-fit-notice');
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText('Leader lines cross (14 pairs).');
+  await expect(notice).toContainText('Leader lines cross (15 pairs).');
   await shot(notice, 'label-fit-notice-after-crossing-row.png');
   // The row's settings are one step (PD-OI-088); the Generate that follows is its own.
   expect(await undoCount(page)).toBe(before.undo + 2);
@@ -117,8 +118,10 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
 
 test('crossing leaders: the notice bar opens the dialog, which computes the rows; Cancel keeps the figure', async ({ page }) => {
   test.setTimeout(600000);
-  // External labels only: the embedded labels would overlap (test above); outside, leaders cross.
-  await openWithOuterLabels(page, { name: 'SARS-CoV-2.gbk', text: SARS(), fontSize: 14, rendering: 'external_only' });
+  // Lambda with labels Out at 16 pt and no blacklist: no labels overlap and leaders cross, the recipe of the
+  // Python twin (tests/test_web_label_fit.py). SARS-CoV-2 with external labels only at 14 pt crossed only
+  // because labels next to the origin could wrap past their neighbours (OV-1366); it fits now.
+  await openWithOuterLabels(page, { name: 'NC_001416.gb', text: LAMBDA(), fontSize: 16 });
   await generateAndWaitForResult(page);
   const notice = page.getByTestId('label-fit-notice');
   await expect(notice).toBeVisible();
