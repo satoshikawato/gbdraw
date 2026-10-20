@@ -21,8 +21,8 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-// Save Session downloads through a link (G2 saves the loaded Session).
-globalThis.document = { createElement: () => ({ click: () => {} }) };
+// Save Session downloads through a link (G2 saves the loaded Session); setUiLocale sets the page's lang.
+globalThis.document = { createElement: () => ({ click: () => {} }), documentElement: { setAttribute: () => {} } };
 installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
