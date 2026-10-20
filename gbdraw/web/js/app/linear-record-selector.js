@@ -3,6 +3,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 /** @import { LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
@@ -378,8 +379,11 @@ export const createLinearRecordSelector = ({
   /** @param {LinearSeqLike} seq */
   const errorModelFor = (seq) => stateFor(seq).error;
   /** @param {LinearSeqLike} seq */
-  // A stored '' (no error) has no `summary`: the read is undefined and `||` returns ''.
-  const errorFor = (seq) => /** @type {UserFacingError} */ (errorModelFor(seq))?.summary || errorModelFor(seq);
+  // A stored '' (no error) is no model: it is returned as is.
+  const errorFor = (seq) => {
+    const error = errorModelFor(seq);
+    return error && typeof error === 'object' ? errorText(error.summaryParts) : error;
+  };
   /** @param {LinearSeqLike} seq */
   const warningFor = (seq) => {
     const selectorState = stateFor(seq);

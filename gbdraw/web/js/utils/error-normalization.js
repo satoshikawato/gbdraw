@@ -250,7 +250,7 @@ FloatingPointError OverflowError ArithmeticError AssertionError AttributeError I
 NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 /** @type {Readonly<Record<string, string>>} */
-const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
+const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result {n}.', COMPARISON_INPUT: 'Comparison sequence {n}.' });
 // The tables a Session stores as text resources, as the documentation names them.
 /** @type {Readonly<Record<string, string>>} */
 export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
@@ -260,13 +260,82 @@ const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // OV-1274, OV-1276: the Circular track rows with an off control that a failed
 // placement names (`keptInsideTracks`, `slotTrack`; gbdraw/diagrams/circular/radial_layout.py
 // `SWITCHED_TRACK_IDS`), the control that turns each off, and the setting that narrows it.
+// `verb` is the phrase that turns the control off; tracks with the same verb in a row share it.
 /** @typedef {{ name: string, verb: string, control: string, width?: string }} SwitchedTrack */
 /** @type {Readonly<Record<string, SwitchedTrack>>} */
 const SWITCHED_TRACKS = Object.freeze({
-  gc_content: { name: 'GC content', verb: 'select', control: 'Hide GC Content', width: 'GC Content Width' },
-  gc_skew: { name: 'GC skew', verb: 'select', control: 'Hide GC Skew', width: 'GC Skew Width' },
-  ticks: { name: 'the scale', verb: 'clear', control: 'Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row)' }
+  gc_content: { name: 'GC content', verb: 'select {control}', control: 'Hide GC Content', width: 'GC Content Width' },
+  gc_skew: { name: 'GC skew', verb: 'select {control}', control: 'Hide GC Skew', width: 'GC Skew Width' },
+  ticks: { name: 'the scale', verb: 'clear {control}', control: 'Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row)' }
 });
+// The sentences of a summary other than the table rows above: each is one part
+// (`ErrorTextPart`) and a catalog key; `{name}` takes the part's value.
+const PHRASES = Object.freeze({
+  diagramLinear: 'Diagram: Linear.', diagramCircular: 'Diagram: Circular.', sessionTable: 'Session table: {table}.',
+  sequence: 'Sequence {n}.', pair: 'Pair: #{query} to #{subject}.', featureCaption: 'Feature: {caption}.',
+  line: 'Line {row}.', column: 'Column {column}.', trackRow: 'Track row {row}.', depthSeries: 'Depth series {series}.',
+  setting: 'Setting: {path}.', feature: 'Feature: {feature}.', featuresAffected: 'Features affected: {count}.',
+  field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
+  sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
+  sessionUnsupported: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
+  keptBelow: 'Below it, {px} px are kept for the tracks inside it.',
+  keptBelowAmong: 'Below it, {px} px are kept for the tracks inside it, among them {tracks}.',
+  makeRoom: 'To make room, {actions}.',
+  makeRoomWidth: 'To make room, {actions}, or reduce {widths} (with Custom Track Slots on, the row width).',
+  makeRoomWidths: 'To make room, {actions}, or reduce {widths} (with Custom Track Slots on, the row widths).',
+  and: '{first} and {second}', or: '{first} or {second}',
+  position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
+  exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
+  schema: 'Load a supported Session file or recreate it with the current writer.',
+  notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
+  liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
+  liveEditRetry: 'Retry the live edit or use Generate.',
+  liveEditChange: 'Change the edit, or change the settings and use Generate.',
+  operationError: 'Operation error'
+});
+/**
+ * One sentence or phrase of a user-facing error text. `text` is the English
+ * template and its catalog key; each `{name}` takes `params[name]`: a part is
+ * shown through its own key, a string or a number as written (identifiers,
+ * file names, counts). A `verbatim` text is no key: it is shown as written
+ * (Python words it, D-09).
+ * @typedef {object} ErrorTextPart
+ * @property {string} text
+ * @property {Readonly<Record<string, string | number | ErrorTextPart>>} [params]
+ * @property {true} [verbatim]
+ */
+const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+/**
+ * @param {ErrorTextPart} part
+ * @param {(text: string) => string} translate
+ * @returns {string}
+ */
+const renderPart = (part, translate) => {
+  const text = part.verbatim ? part.text : translate(part.text);
+  const { params } = part;
+  return params ? text.replace(PLACEHOLDER, (whole, /** @type {string} */ name) => {
+    if (!Object.hasOwn(params, name)) return whole;
+    const value = params[name];
+    return typeof value === 'object' ? renderPart(value, translate) : String(value);
+  }) : text;
+};
+/**
+ * The one renderer of error text parts: the English text with no `translate`,
+ * the shown text with the UI translation (`errorText` in utils/error-text.js).
+ * @param {readonly ErrorTextPart[]} parts
+ * @param {(text: string) => string} [translate] the shown text of a key
+ * @param {string} [separator] between two parts
+ * @returns {string}
+ */
+export const renderErrorText = (parts, translate = (text) => text, separator = ' ') =>
+  parts.map((part) => renderPart(part, translate)).join(separator);
+/**
+ * Joins parts with `and` or `or` as English does: "A or B or C".
+ * @param {ErrorTextPart[]} items at least one
+ * @param {'and' | 'or'} conjunction
+ * @returns {ErrorTextPart}
+ */
+const listPart = (items, conjunction) => items.reduce((first, second) => ({ text: PHRASES[conjunction], params: { first, second } }));
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
@@ -319,7 +388,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {string} stage
  * @property {UserFacingContext} context
  * @property {{ code: string, stage: string }[]} secondary
- * @property {string} summary
+ * @property {string} summary The English text of `summaryParts`.
+ * @property {ErrorTextPart[]} summaryParts The sentences of the summary, shown through `errorText`.
  * @property {{ label: string, text: string }[]} details
  * @property {string[]} actions
  */
@@ -590,33 +660,50 @@ const contextFor = (value) => {
 // OV-1253: the CLI's words for a Session version this app does not read
 // (gbdraw/session_io.py `validate_session`). The Session reader
 // (services/session-authority.js) names the versions it reads.
-/** @param {UserFacingContext} context */
+/**
+ * @param {UserFacingContext} context
+ * @returns {ErrorTextPart | null}
+ */
 const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, readSessionVersions }) => {
-  if (sessionVersion === undefined) return '';
+  if (sessionVersion === undefined) return null;
   if (reason === 'SESSION_TOO_NEW' && latestSessionVersion !== undefined) {
-    return `Session version ${sessionVersion} is newer than this gbdraw supports (${latestSessionVersion}).`;
+    return { text: PHRASES.sessionTooNew, params: { version: sessionVersion, latest: latestSessionVersion } };
   }
   if (reason === 'SESSION_VERSION_UNSUPPORTED' && readSessionVersions) {
-    return `Unsupported session version: ${sessionVersion}. This gbdraw reads Session versions ${readSessionVersions}.`;
+    return { text: PHRASES.sessionUnsupported, params: { version: sessionVersion, versions: readSessionVersions } };
   }
-  return '';
+  return null;
 };
 
 // OV-1274, OV-1276: the room a Circular placement keeps below its band for the
 // inside rows after it (other rows may share it), and the off controls and widths
 // of the failed row and the kept rows that have them.
-/** @param {UserFacingContext} context */
-const trackRoomText = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
+/**
+ * @param {UserFacingContext} context
+ * @returns {ErrorTextPart[]}
+ */
+const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   const kept = keptInsidePx !== undefined && keptInsideTracks ? keptInsideTracks.split(',') : [];
-  const keptNames = kept.map((track) => SWITCHED_TRACKS[track].name).join(' and ');
-  const room = keptInsidePx === undefined ? ''
-    : ` Below it, ${keptInsidePx} px are kept for the tracks inside it${keptNames ? `, among them ${keptNames}` : ''}.`;
+  /** @type {ErrorTextPart[]} */
+  const parts = keptInsidePx === undefined ? [] : [kept.length
+    ? { text: PHRASES.keptBelowAmong, params: { px: keptInsidePx, tracks: listPart(kept.map((track) => ({ text: SWITCHED_TRACKS[track].name })), 'and') } }
+    : { text: PHRASES.keptBelow, params: { px: keptInsidePx } }];
   const tracks = [...new Set([...(slotTrack ? [slotTrack] : []), ...kept])].map((track) => SWITCHED_TRACKS[track]);
-  if (!tracks.length) return room;
-  const offs = tracks.map((track, index) => `${index && tracks[index - 1].verb === track.verb ? '' : `${track.verb} `}${track.control}`);
-  const widths = tracks.flatMap((track) => (track.width ? [track.width] : []));
-  return `${room} To make room, ${offs.join(' or ')}${widths.length
-    ? `, or reduce ${widths.join(' or ')} (with Custom Track Slots on, the row width${widths.length > 1 ? 's' : ''})` : ''}.`;
+  if (!tracks.length) return parts;
+  // Tracks in a row with the same verb share it: "select A or B or clear C".
+  /** @type {{ verb: string, controls: ErrorTextPart[] }[]} */
+  const groups = [];
+  for (const track of tracks) {
+    const last = groups[groups.length - 1];
+    if (last?.verb === track.verb) last.controls.push({ text: track.control });
+    else groups.push({ verb: track.verb, controls: [{ text: track.control }] });
+  }
+  const actions = listPart(groups.map(({ verb, controls }) => ({ text: verb, params: { control: listPart(controls, 'or') } })), 'or');
+  const widths = tracks.flatMap((track) => (track.width ? [{ text: track.width }] : []));
+  parts.push(widths.length
+    ? { text: widths.length > 1 ? PHRASES.makeRoomWidths : PHRASES.makeRoomWidth, params: { actions, widths: listPart(widths, 'or') } }
+    : { text: PHRASES.makeRoom, params: { actions } });
+  return parts;
 };
 
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
@@ -647,48 +734,51 @@ export const normalizeUserFacingError = (value, {
   }
   const [message, actions] = DEFINITIONS[result.code];
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
-  const { featureId, featureType, featureStart, featureEnd, featureCount } = result.context;
+  const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
-  const locators = [
-    diagramMode !== undefined ? `Diagram: ${diagramMode === 'linear' ? 'Linear' : 'Circular'}.` : '',
-    sessionTable !== undefined ? `Session table: ${SESSION_TABLE_LABELS[sessionTable]}.` : '',
-    inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
+  const { queryRecordIndex, subjectRecordIndex, labelFitCounts, exceptionType } = result.context;
+  // One part per sentence, in the order the summary shows them.
+  /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
+  const pieces = [
+    { text: message },
+    diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
+    sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
+    inputOrdinal !== undefined && { text: ORDINAL_LABELS[result.code] || PHRASES.sequence, params: { n: inputOrdinal } },
     // A comparison pair as the comparison panel numbers it (#1 to #2).
-    result.context.queryRecordIndex !== undefined && result.context.subjectRecordIndex !== undefined
-      ? `Pair: #${result.context.queryRecordIndex + 1} to #${result.context.subjectRecordIndex + 1}.` : '',
-    featureCaption !== undefined ? `Feature: ${featureCaption}.` : '',
-    row !== undefined ? `Line ${row}.` : '',
-    column !== undefined ? `Column ${column}.` : '',
-    slotIndex !== undefined ? `Track row ${slotIndex + 1}.` : '',
-    seriesIndex !== undefined ? `Depth series ${seriesIndex + 1}.` : '',
-    configPath !== undefined ? `Setting: ${configPath}.` : '',
-    featureName ? `Feature: ${featureName}.` : '',
+    queryRecordIndex !== undefined && subjectRecordIndex !== undefined
+      && { text: PHRASES.pair, params: { query: queryRecordIndex + 1, subject: subjectRecordIndex + 1 } },
+    featureCaption !== undefined && { text: PHRASES.featureCaption, params: { caption: featureCaption } },
+    row !== undefined && { text: PHRASES.line, params: { row } },
+    column !== undefined && { text: PHRASES.column, params: { column } },
+    slotIndex !== undefined && { text: PHRASES.trackRow, params: { row: slotIndex + 1 } },
+    seriesIndex !== undefined && { text: PHRASES.depthSeries, params: { series: seriesIndex + 1 } },
+    configPath !== undefined && { text: PHRASES.setting, params: { path: configPath } },
+    featureName && { text: PHRASES.feature, params: { feature: featureName } },
     // `undefined > 1` is false: with no count there is no line.
-    /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
-  ].filter(Boolean).map((text) => ` ${text}`).join('');
-  const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const kept = trackRoomText(result.context);
-  const guidance = sessionVersionGuidance(result.context)
-    || REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
-  const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
-  // The context keeps Python's zero-based index; people count from one.
-  const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
-  const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
-  const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
-  const labelFit = result.context.labelFitCounts ? ` ${result.context.labelFitCounts}` : '';
-  const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
-  const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
-    ? ' Load a supported Session file or recreate it with the current writer.' : '';
+    /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
+    field && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
+    sessionVersionGuidance(result.context)
+      || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
+    innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
+    ...trackRoomParts(result.context),
+    labelFitCounts && { text: labelFitCounts, verbatim: /** @type {const} */ (true) },
+    // The context keeps Python's zero-based index; people count from one.
+    position !== undefined && { text: PHRASES.position, params: { position: position + 1 } },
+    columnCount !== undefined && { text: PHRASES.requiredColumns, params: { count: columnCount } },
+    recordCount !== undefined && { text: PHRASES.loadedRecords, params: { count: recordCount } },
+    exceptionType && { text: PHRASES.exception, params: { type: exceptionType } },
+    result.operation === 'align' && field === 'direction' && reason === 'SOURCE_VIEW_CONFLICT' && { text: PHRASES.applyAgain },
+    result.code === 'INPUT_INVALID' && field === 'schema' && { text: PHRASES.schema }
+  ];
   // A file chosen in Load Session that is not JSON is not a Session;
   // every other Session reason keeps its correction.
   const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
-    && result.context.field === 'schema' && result.context.reason === 'JSON_FORMAT'
-    ? 'This file is not a gbdraw Session: it is not valid JSON.' : '';
-  const continuation = result.operation === 'align' && result.context.field === 'direction'
-    && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${kept}${labelFit}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)
+    && field === 'schema' && reason === 'JSON_FORMAT';
+  result.summaryParts = notASession ? [{ text: PHRASES.notASession }]
+    : pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece));
+  result.summary = renderErrorText(result.summaryParts)
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
@@ -729,26 +819,31 @@ export const retryCanSucceed = (error) =>
 export const liveEditFailure = (error) => {
   if (!error) return null;
   const retry = retryCanSucceed(error);
-  const next = error.actions.includes('generate') ? ''
-    : retry ? ' Retry the live edit or use Generate.' : ' Change the edit, or change the settings and use Generate.';
-  return { ...error, actions: retry ? ['retry', 'generate'] : ['generate'],
-    note: `Live edit failed: direct edits already applied are kept; geometry may still need updating. ${error.summary}${next}` };
+  const next = error.actions.includes('generate') ? [] : [{ text: retry ? PHRASES.liveEditRetry : PHRASES.liveEditChange }];
+  const noteParts = [{ text: PHRASES.liveEditFailed }, ...error.summaryParts, ...next];
+  return { ...error, actions: retry ? ['retry', 'generate'] : ['generate'], noteParts, note: renderErrorText(noteParts) };
 };
 
 // Presentation of finite operation and transaction facts stays with public wording.
-/** @param {string | null | undefined} operation */
-export const operationErrorTitle = (operation) => (/** @type {Readonly<Record<string, string>>} */ ({
+/** @type {Readonly<Record<string, string>>} */
+const OPERATION_TITLES = Object.freeze({
   generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error', 'session-load': 'Session not loaded',
   'export-svg': 'SVG export error', 'export-png': 'PNG export error', 'export-pdf': 'PDF export error',
   listSequenceRecords: 'Input error', listGffFastaRecords: 'Input error', readComparisonSequence: 'Input error',
   readFeatureOverrideTable: 'Feature edits TSV error',
   'feature-extraction': 'Feature preparation error'
-})[/** @type {string} */ (operation)] || 'Operation error');
-/** @param {string | null | undefined} recovery */
-export const generationRecoveryGuidance = (recovery) => (/** @type {Readonly<Record<string, string>>} */ ({
+});
+/** @type {Readonly<Record<string, string>>} */
+const RECOVERY_GUIDANCE = Object.freeze({
   'no-result': 'No successful Result is available yet. Correct the cause and retry.',
   // The one notice that the shown Result is the last successful one (PD-OI-016).
   preserved: 'Showing the last successful Result; your changes were not applied.',
   restored: 'Showing the last successful Result again; your changes were not applied. Correct the cause and retry.',
   'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'
-})[/** @type {string} */ (recovery)] || '');
+});
+/** @param {string | null | undefined} operation */
+export const operationErrorTitle = (operation) => (
+  Object.hasOwn(OPERATION_TITLES, String(operation)) ? OPERATION_TITLES[String(operation)] : PHRASES.operationError);
+/** @param {string | null | undefined} recovery */
+export const generationRecoveryGuidance = (recovery) => (
+  Object.hasOwn(RECOVERY_GUIDANCE, String(recovery)) ? RECOVERY_GUIDANCE[String(recovery)] : '');

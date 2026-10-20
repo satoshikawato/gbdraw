@@ -23,6 +23,7 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -402,7 +403,7 @@ export const createRecordDisplayControls = ({
     const failed = discoveries.find(({ status }) => status === 'error');
     return failed
       ? recordTargetError('discovery-failed',
-        (typeof failed.error === 'string' ? failed.error : failed.error?.summary) || tm(RECORD_READ_ERROR_LABEL))
+        (typeof failed.error === 'string' ? failed.error : failed.error && errorText(failed.error.summaryParts)) || tm(RECORD_READ_ERROR_LABEL))
       : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, t('The records of this feature have not been read yet.'));
   };
   // The display start and orientation that Generate would apply from this

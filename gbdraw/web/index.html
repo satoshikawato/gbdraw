@@ -2117,7 +2117,7 @@
                                 <span v-if="circularRecordDiscoveryState.status === 'deferred'">{{ t('Records not inspected') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">{{ t('Inspecting source records…') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ t('{count} source record(s) inspected', { count: circularRecordDiscoveryState.records.length }) }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ t('{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount, count: circularRecordDiscoveryState.records.length }) }}</span></template></span>
-                                <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ circularRecordDiscoveryState.error?.summary || t('Source inspection failed. Retry or replace the input.') }}</span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ (circularRecordDiscoveryState.error && errorText(circularRecordDiscoveryState.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.') }}</span>
                                 <span v-else>{{ cInputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? t('Retry source inspection') : circularRecordDiscoveryState.status === 'ready' ? t('Inspect source records again') : t('Inspect source records') }}</button>
@@ -5750,7 +5750,7 @@
                     <i class="ph ph-x" aria-hidden="true"></i>
                 </button>
             </div>
-            <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? t('Live edit applying: geometry is being updated. Direct edits already applied are kept.') : labelReflowLastError.note }}</p>
+            <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? t('Live edit applying: geometry is being updated. Direct edits already applied are kept.') : errorText(labelReflowLastError.noteParts) }}</p>
 
             <p v-if="sessionSaveNeedsGenerate && !processing" data-session-save-needs-generate role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ t('This Result comes from a Session saved by an older gbdraw. Generate once before Save Session.') }}</p>
 
@@ -5886,7 +5886,7 @@
                      role="alert"
                      data-similarity-alignment-start-error
                      class="-mx-4 border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-900 shrink-0">
-                    {{ similarityAlignmentError.summary }}
+                    {{ errorText(similarityAlignmentError.summaryParts) }}
                 </div>
                 <div v-if="similarityAlignmentSummary"
                      data-similarity-alignment-summary
@@ -8002,7 +8002,7 @@
                                     {{ t('Reflowing label placement...') }}
                                 </span>
                             </div>
-                            <p v-if="labelReflowLastError" class="text-[10px] text-amber-700" :title="labelReflowLastError.summary">
+                            <p v-if="labelReflowLastError" class="text-[10px] text-amber-700" :title="errorText(labelReflowLastError.summaryParts)">
                                 <i class="ph ph-warning" aria-hidden="true"></i> {{ t('Auto Reflow failed. Current diagram is kept.') }}
                             </p>
                         </div>
@@ -8819,7 +8819,7 @@
 
     <script type="text/x-template" id="operation-error-template">
         <div v-if="model && compact" role="alert" :aria-label="title" class="min-w-0 break-words text-[11px] leading-snug text-red-700">
-            <p>{{ model.summary }}</p>
+            <p>{{ errorText(model.summaryParts) }}</p>
             <details ref="details" class="mt-0.5">
                 <summary class="cursor-pointer text-[10px] font-semibold text-slate-600">{{ t('Details') }}</summary>
                 <textarea ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
@@ -8832,7 +8832,7 @@
         </div>
         <div v-else-if="model" role="alert" :aria-label="title" class="min-w-0 break-words">
             <p class="font-bold text-red-700">{{ title }}</p>
-            <p class="mt-1 text-sm text-red-800">{{ model.summary }}</p>
+            <p class="mt-1 text-sm text-red-800">{{ errorText(model.summaryParts) }}</p>
             <p v-if="recoveryText" class="mt-1 text-xs text-red-800">{{ recoveryText }}</p>
             <details ref="details" class="mt-2 rounded border border-red-100 bg-white/50 p-2">
                 <summary class="cursor-pointer text-xs font-semibold text-red-700">{{ t('Details') }}</summary>

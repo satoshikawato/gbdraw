@@ -31,6 +31,7 @@ import { DepthTrackIndexInput } from './app/circular-track-slots/track-index-inp
 import { createAppSetup } from './app/app-setup.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { t, tm, tn, tx, uiLocale } from './utils/i18n.js';
+import { errorText } from './utils/error-text.js';
 import { settingApplicationNote, settingApplicationSentence, settingApplicationText } from './services/setting-application.js';
 
 const { createApp } = window.Vue;
@@ -42,8 +43,9 @@ const app = createApp({
 });
 // Every template (the root, the x-templates, the inline component templates)
 // shows UI text through these (utils/i18n.js). `uiLocale` is for a v-memo whose
-// body shows UI text: it lists `uiLocale.value` in its dependencies.
-Object.assign(app.config.globalProperties, { t, tn, tx, tm, uiLocale });
+// body shows UI text: it lists `uiLocale.value` in its dependencies. An error
+// text is shown from its parts with `errorText` (utils/error-text.js).
+Object.assign(app.config.globalProperties, { t, tn, tx, tm, uiLocale, errorText });
 // A sentence with elements inside it: <i18n-text :text="t('…{name}…')"> with a #name slot.
 app.component('I18nText', I18nText);
 app.directive('dialog-focus', dialogFocus);

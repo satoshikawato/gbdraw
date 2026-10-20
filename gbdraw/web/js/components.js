@@ -10,7 +10,7 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
-import { msg, t, textParts, uiLocale } from './utils/i18n.js';
+import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
@@ -923,8 +923,9 @@ export const OperationError = {
   /** @param {{ error: string | Record<string, unknown> | null | undefined, recovery: string | null | undefined }} props */
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
-    const title = computed(() => operationErrorTitle(model.value?.operation));
-    const recoveryText = computed(() => generationRecoveryGuidance(props.recovery));
+    // The title and the recovery line are rows of the wording owner's tables, shown translated.
+    const title = computed(() => tm(operationErrorTitle(model.value?.operation)));
+    const recoveryText = computed(() => tm(generationRecoveryGuidance(props.recovery)));
     const diagnostics = computed(() => (model.value?.details || []).map((/** @type {UserFacingError['details'][number]} */ section) =>
       `${section.label}\n${section.text}`).join('\n\n'));
     const details = ref(null);

@@ -2,8 +2,10 @@
 // catalogs (gbdraw/web/js/utils/i18n-catalogs/<locale>.js). English is the
 // key: the literal first argument of `t()` and of `msg()` (a text kept until
 // it is shown, which `tm()` translates there), the `other` argument of `tn()`,
-// and `context + '\u0004' + text` of `tx()`. This test lists those literals in
-// index.html and the modules, and fails on a call whose key is not a literal,
+// `context + '\u0004' + text` of `tx()`, and the table values of the error
+// wording owner (tests/web/helpers/error-text-keys.mjs). This test lists those
+// literals in index.html and the modules, and fails on a call whose key is not
+// a literal,
 // on a `tm()` given a literal (that is a `t()` call),
 // on a catalog key that no call produces, on a translation whose placeholders
 // differ from the English, and on a value that is not a string. It prints
@@ -15,6 +17,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import { CONTEXT_SEPARATOR, SOURCE_LOCALE, msg, setUiLocale, t, textParts, tm, tn, tx, uiLocale } from '../../gbdraw/web/js/utils/i18n.js';
+import { errorTextKeys } from './helpers/error-text-keys.mjs';
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const jsRoot = join(webRoot, 'js');
@@ -441,6 +444,8 @@ test('msg() is the marker of utils/i18n.js or its identity where a test loads th
 
 test('every catalog matches the keys and placeholders of the sources', async () => {
   const english = new Map(sourceCalls().filter((call) => call.key).map((call) => [call.key, call.english]));
+  // The error text keys are the values of the wording owner's tables (D-17), read without msg() markers.
+  for (const key of await errorTextKeys()) english.set(key, key);
   for (const file of catalogFiles()) {
     const { default: catalog } = await import(pathToFileURL(join(catalogRoot, file)).href);
     assert.ok(Object.isFrozen(catalog), `${file} exports a frozen object`);

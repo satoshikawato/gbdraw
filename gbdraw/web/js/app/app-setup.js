@@ -272,6 +272,7 @@ import {
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
 import { msg, t, tm, tn } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -608,7 +609,7 @@ export const createAppSetup = () => {
     ) return '';
     return classifyOptionalPositiveNumber(drawing.adv.comparison_height).status === 'invalid'
       // A diagnostic error object is truthy, so it always normalizes to a model.
-      ? /** @type {UserFacingError} */ (normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' }))).summary
+      ? errorText(/** @type {UserFacingError} */ (normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' }))).summaryParts)
       : '';
   });
 
@@ -4969,7 +4970,7 @@ export const createAppSetup = () => {
     closeAfterChoice: dialogChoice.closeAfterChoice,
     choicePending: () => dialogChoice.pending.value,
     runAnalysis: () => runAnalysis(),
-    errorSummary: (error) => normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summary
+    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts)
   });
   // The notice bar over the shown Result drawn with crossing leaders or labels
   // over the definition text (WARN-NOTICE, DEF-WARN).
