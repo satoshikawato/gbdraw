@@ -5659,7 +5659,10 @@
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> {{ t('Privacy & Security') }}</strong>
                                 <i18n-text :text="t('This tool runs {where} using WebAssembly (Pyodide).')"><template #where><strong>{{ t('entirely in your browser') }}</strong></template></i18n-text> {{ t('Uploaded genomic data is processed locally and never leaves your device.') }}
                             </div>
-                            <!-- GOOGLE_ANALYTICS_NOTICE -->
+                            <div v-if="hostedBuild.googleAnalytics" class="bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
+                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-chart-line" aria-hidden="true"></i> {{ t('Hosted Site Analytics') }}</strong>
+                                <i18n-text :text="t('The hosted {site} deployment uses Google Analytics 4 for aggregate page-usage metrics.')"><template #site><strong>gbdraw.app</strong></template></i18n-text> {{ t('Uploaded genome files and generated diagrams are still processed locally in your browser and are not sent to Google Analytics by gbdraw.') }}
+                            </div>
 
                             <div>
                                 <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes" aria-hidden="true"></i> {{ t('How to cite') }}</strong>

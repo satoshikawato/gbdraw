@@ -548,3 +548,12 @@ test('when setUiLocale calls overlap, only the latest one applies', async () => 
     await setUiLocale(SOURCE_LOCALE);
   }
 });
+
+test('the hosted analytics notice of the About section is in the key list', () => {
+  const keys = new Set(sourceCalls().map((call) => call.key));
+  for (const key of [
+    'Hosted Site Analytics',
+    'The hosted {site} deployment uses Google Analytics 4 for aggregate page-usage metrics.',
+    'Uploaded genome files and generated diagrams are still processed locally in your browser and are not sent to Google Analytics by gbdraw.'
+  ]) assert.ok(keys.has(key), key);
+});
