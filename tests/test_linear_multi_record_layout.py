@@ -125,7 +125,7 @@ def test_shared_scale_and_fixed_gap_for_two_by_two_layout() -> None:
         align_center=False,
     )
 
-    assert plan.px_per_bp == pytest.approx(1000 / 1500)
+    assert plan.placement_for_index(0).px_per_bp == pytest.approx(1000 / 1500)
     assert plan.placement_for_index(0).sequence_width == pytest.approx(2000 / 3)
     assert plan.placement_for_index(1).x == pytest.approx((2000 / 3) + 24)
     assert plan.placement_for_index(2).sequence_width == pytest.approx(1600 / 3)

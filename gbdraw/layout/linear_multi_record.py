@@ -91,7 +91,6 @@ class LinearLayoutPlan:
     """Immutable result of resolving Linear rows and record placements."""
 
     placements: tuple[LinearRecordPlacement, ...]
-    px_per_bp: float
     row_count: int
     content_left: float
     content_right: float
@@ -153,7 +152,6 @@ class LinearHorizontalLayout:
 
     placements: tuple[LinearRecordPlacement, ...]
     rows: tuple[tuple[int, ...], ...]
-    px_per_bp: float
     content_left: float
     content_right: float
 
@@ -196,7 +194,7 @@ def solve_linear_horizontal_layout(
     normalize_length: bool = False,
     record_order: Sequence[int] | None = None,
 ) -> LinearHorizontalLayout:
-    """Resolve one shared bp scale and each record's x and width in its row.
+    """Resolve each record's x, width and bp scale in its row.
 
     It is the one owner of a record's x and width in both row modes. A record's width is its
     share of the narrowest row's scale (``scale_px * length / scale_bp``; a record alone in its
@@ -255,11 +253,11 @@ def solve_linear_horizontal_layout(
         row_px.append(width - gap_width)
         row_bp.append(sum(item.sequence_length for item in row_items))
     row_scales = [px / bp for px, bp in zip(row_px, row_bp)]
-    px_per_bp = min(row_scales)
-    if not math.isfinite(px_per_bp) or px_per_bp <= 0:
+    narrowest_scale = min(row_scales)
+    if not math.isfinite(narrowest_scale) or narrowest_scale <= 0:
         raise ValidationError("Linear layout did not produce a positive shared bp scale.")
     # The narrowest row's pixels and bp: every row draws at its scale.
-    narrowest = row_scales.index(px_per_bp)
+    narrowest = row_scales.index(narrowest_scale)
     scale_px, scale_bp = row_px[narrowest], row_bp[narrowest]
 
     placements: list[LinearRecordPlacement] = []
@@ -312,7 +310,6 @@ def solve_linear_horizontal_layout(
     return LinearHorizontalLayout(
         placements=tuple(placements),
         rows=tuple(tuple(item.record_index for item in row_items) for row_items in grouped),
-        px_per_bp=px_per_bp,
         content_left=content_left,
         content_right=content_right,
     )
@@ -465,7 +462,6 @@ def solve_linear_layout(
     content_bottom = max(item.axis_y + item.bottom_extent for item in placements)
     return LinearLayoutPlan(
         placements=tuple(placements),
-        px_per_bp=horizontal.px_per_bp,
         row_count=len(rows),
         content_left=horizontal.content_left,
         content_right=horizontal.content_right,
