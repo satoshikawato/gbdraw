@@ -1321,7 +1321,7 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
         "`NC_042057.1` (42,925 bp)",
         "| Settings / Performance | Execution | Serial |",
         "| Settings / Performance | Total threads | 1 |",
-        "| Settings / Performance | Parallel runs | 1 parallel job |",
+        "| Settings / Performance | Parallel runs | 1 parallel run |",
         "| Settings / Performance | Threads per run | Fixed at 1 |",
         "| Settings | LOSAT Mode | LOSATN |",
         "| Settings | LOSATN task | `megablast` |",

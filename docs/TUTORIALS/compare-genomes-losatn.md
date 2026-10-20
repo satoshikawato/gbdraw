@@ -85,7 +85,7 @@ Finally, open **Selected pairs**, open **File name** in the pair from sequence
 | Basic | Output Prefix | `lambda-de3-losatn` |
 | Settings / Performance | Execution | Serial |
 | Settings / Performance | Total threads | 1 |
-| Settings / Performance | Parallel runs | 1 parallel job |
+| Settings / Performance | Parallel runs | 1 parallel run |
 | Settings / Performance | Threads per run | Fixed at 1 |
 | Selected pairs / File name | Raw LOSAT filename | `lambda-de3.losatn.tsv` |
 

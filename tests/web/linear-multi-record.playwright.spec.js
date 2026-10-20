@@ -4076,7 +4076,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
     ['32', 12, 2], ['16', 12, 1], ['2', 2, 1], ['8', 8, 1], ['24', 12, 2]
   ]) {
     await total.selectOption(budget);
-    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} parallel jobs)`);
+    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} parallel runs)`);
     await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
   }
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -4110,7 +4110,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await expect(runs.locator('option:checked')).toContainText('1 effective');
   await expect(threads.locator('option:checked')).toContainText('4 effective');
   await total.selectOption('32');
-  await expect(runs.locator('option:checked')).toHaveText('2 parallel jobs');
+  await expect(runs.locator('option:checked')).toHaveText('2 parallel runs');
   await expect(threads.locator('option:checked')).toHaveText('8');
   await runs.selectOption({ index: 0 });
   await threads.selectOption('auto');

@@ -3127,7 +3127,7 @@
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('Parallel runs') }}</label>
                                                 <select v-model="losatExecution.parallelWorkers" :aria-label="t('LOSAT parallel runs')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                                    <option :value="undefined">{{ tn(losatAutoPairWorkers, 'Auto ({count} parallel job)', 'Auto ({count} parallel jobs)') }}</option>
+                                                    <option :value="undefined">{{ tn(losatAutoPairWorkers, 'Auto ({count} parallel run)', 'Auto ({count} parallel runs)') }}</option>
                                                     <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
                                                 </select>
                                             </div>
