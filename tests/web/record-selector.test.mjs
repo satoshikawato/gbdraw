@@ -12,6 +12,7 @@ await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-r
 await writeFile(join(tempRoot, 'linear-record-selector.js'), (await readFile(join(sourceRoot, 'linear-record-selector.js'), 'utf8'))
   .replace('../utils/i18n.js', pathToFileURL(join(sourceRoot, '../utils/i18n.js')).href)
   .replace('../utils/error-normalization.js', pathToFileURL(join(sourceRoot, '../utils/error-normalization.js')).href)
+  .replace('../utils/error-text.js', pathToFileURL(join(sourceRoot, '../utils/error-text.js')).href)
   .replace('../services/record-options.js', pathToFileURL(join(sourceRoot, '../services/record-options.js')).href)
   .replace('../services/record-discovery.js', pathToFileURL(join(sourceRoot, '../services/record-discovery.js')).href), 'utf8');
 
