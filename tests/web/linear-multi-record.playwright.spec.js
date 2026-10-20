@@ -4076,7 +4076,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
     ['32', 12, 2], ['16', 12, 1], ['2', 2, 1], ['8', 8, 1], ['24', 12, 2]
   ]) {
     await total.selectOption(budget);
-    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} runs)`);
+    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} parallel jobs)`);
     await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
   }
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
