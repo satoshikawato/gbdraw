@@ -40,6 +40,16 @@ write-up of a release.
   - `labels.stroke_width` is removed. An override of it fails with the
     unknown-path error. A saved Session keeps its saved diagram until the next
     Generate, which draws the new style.
+- Circular labels of an annotation overlay that spans split feature lanes
+  (`lane_direction=split`, as in the `middle` preset), or that spans nothing
+  (no `to_slot`, `cover_anchor=false`), keep a room like other span labels:
+  automatic rings move clear of the letters instead of lying under them, and
+  where set radii leave no room the labels count as region labels on other
+  tracks in the warning (OV-1359, OV-1360). When such an overlay lies at the
+  outer edge, the canvas grows by its labels' room even where nothing
+  overlapped before; a `to_slot` span from split feature lanes to an inside
+  slot no longer reserves its room past that slot, so the circle gets smaller.
+  Figures without such a labelled overlay draw as before.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

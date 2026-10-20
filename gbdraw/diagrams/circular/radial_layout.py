@@ -59,6 +59,10 @@ PREFERRED_MIN_NUMERIC_WIDTH_FRACTION = 0.4
 PREFERRED_MIN_SKEW_WIDTH_FRACTION = 0.4
 
 PlacementPolicy = Literal["hard", "preferred", "auto", "overlay"]
+# The band a span overlay's labels start from, on the slot that holds their room: ``to_slot`` stretches over the
+# slots' whole bands ("whole"), ``cover_anchor`` over the anchor's draw band ("draw"), and an overlay that spans
+# nothing draws its own width on the anchor's draw band ("own").
+SpanExtent = Literal["whole", "draw", "own"]
 # How far an annotation slot's labels reach beyond its band, gap included: for the band, the axis, the slot's side and
 # params, and whether the band is a span over other slots.
 AnnotationLabelRoom = Callable[[RadialBand, CircularAxisLayout, str, Mapping[str, Any], bool], float]
@@ -141,11 +145,13 @@ class PlacementWindow:
 
 @dataclass(frozen=True)
 class _SpanLabelRoom:
-    """The labels' room of a span overlay past the outermost slot it covers, for a band of that slot."""
+    """The labels' room of a span overlay past the slot that holds it (``_span_room_holder``), for a band of it."""
 
     room: Callable[[RadialBand], float]
-    # ``to_slot`` stretches over the slots' whole bands, ``cover_anchor`` over the anchor's draw band.
-    whole_band: bool
+    extent: SpanExtent
+    # The overlay's own width (its intent's, never negative), the band its labels start from when it spans nothing
+    # ("own"); the final overlay loop draws the same width.
+    width_px: float
 
 
 @dataclass(frozen=True)
@@ -722,15 +728,25 @@ def _span_label_rooms_by_slot(
         holder = _span_room_holder(annotation, by_id)
         if holder is None:
             continue
+        extent = _span_extent(annotation)
         span_rooms.setdefault(holder.slot_id, []).append(
-            _SpanLabelRoom(_bound_span_label_room(room, axis, intent.slot), whole_band=annotation.to_slot is not None)
+            _SpanLabelRoom(_bound_span_label_room(room, axis, intent.slot, extent), extent, float(intent.width_px))
         )
     return span_rooms
+
+
+def _span_extent(annotation: AnnotationTrackParams) -> SpanExtent:
+    if annotation.to_slot is not None:
+        return "whole"
+    return "draw" if annotation.cover_anchor else "own"
 
 
 class _SpanCoveredSlot(Protocol):
     @property
     def side(self) -> str: ...
+
+    @property
+    def renderer(self) -> str: ...
 
     @property
     def slot_index(self) -> int: ...
@@ -742,49 +758,61 @@ _SpanCoveredSlotT = TypeVar("_SpanCoveredSlotT", bound=_SpanCoveredSlot)
 def _span_room_holder(
     annotation: AnnotationTrackParams, by_id: Mapping[str, _SpanCoveredSlotT]
 ) -> _SpanCoveredSlotT | None:
-    """The slot whose reserved band holds a span overlay's labels' room: the outermost slot it covers (OD-R1174 F1).
-    An ``outside`` slot lies beyond every other, and on one side the slot listed first lies outermost. A covered
-    overlay (split feature lanes, a plot overlay) holds none, and an overlay that spans nothing has no room."""
+    """The slot whose reserved band holds a span overlay's labels' room: the outermost slot it covers, or its anchor
+    when it spans nothing (OD-R1174 F1). An ``outside`` slot lies beyond every other, split feature lanes (a features
+    overlay) lie on the axis, beyond every ``inside`` slot, and on one side the slot listed first lies outermost.
+    Another covered overlay (a plot overlay) holds none."""
 
-    if annotation.to_slot is None and not annotation.cover_anchor:
-        return None
     covered = [
         by_id[slot_id]
         for slot_id in (annotation.anchor_slot, annotation.to_slot)
-        if slot_id is not None and slot_id in by_id and by_id[slot_id].side != "overlay"
+        if slot_id is not None
+        and slot_id in by_id
+        and (by_id[slot_id].side != "overlay" or by_id[slot_id].renderer == "features")
     ]
-    return min(covered, key=lambda item: (item.side != "outside", item.slot_index)) if covered else None
+    rank = {"outside": 0, "overlay": 1}
+    return min(covered, key=lambda item: (rank.get(item.side, 2), item.slot_index)) if covered else None
 
 
-def _span_room_band(resolved: CircularResolvedSlot, whole_band: bool) -> RadialBand | None:
+def _span_room_band(resolved: CircularResolvedSlot, extent: SpanExtent, width_px: float) -> RadialBand | None:
     """The band of a span's room holder that the room lies past: its whole band for ``to_slot``, its draw band for
-    ``cover_anchor``."""
+    ``cover_anchor``, and the overlay's own width on its draw band for an overlay that spans nothing. Without
+    ``to_slot`` the overlay draws this band on its anchor."""
 
-    if whole_band:
+    if extent == "whole":
         return resolved.packing_band_px or resolved.draw_band_px
-    return resolved.draw_band_px or resolved.packing_band_px
+    band = resolved.draw_band_px or resolved.packing_band_px
+    if band is None:
+        return None
+    return _band_from_center_width(band.center_px, band.width_px if extent == "draw" else width_px)
 
 
 def _bound_span_label_room(
-    room: AnnotationLabelRoom, axis: CircularAxisLayout, overlay: NormalizedCircularTrackSlot
+    room: AnnotationLabelRoom, axis: CircularAxisLayout, overlay: NormalizedCircularTrackSlot, extent: SpanExtent
 ) -> Callable[[RadialBand], float]:
-    return lambda band: room(band, axis, overlay.side, overlay.params, True)
+    # An overlay that spans nothing places its labels from its own mark, as the drawer does (``spans_slots`` unset).
+    covers_slots = extent != "own"
+    return lambda band: room(band, axis, overlay.side, overlay.params, covers_slots)
 
 
 def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedSlot) -> CircularResolvedSlot:
-    """``resolved`` with the labels' room of the spans it is the outermost covered slot of reserved past its band.
+    """``resolved`` with the labels' room of the spans it holds (``_span_room_holder``) reserved past its band.
 
-    The room is measured on the band the span stretches over from this slot: the draw band for ``cover_anchor``, the
-    whole band for ``to_slot``. A ``to_slot`` span also covers slots further in; its letters' reach past the edge
-    does not grow with the span's width, so this slot's own band bounds it.
+    The room is measured on the band the span stretches over from this slot (``_span_room_band``). A ``to_slot``
+    span also covers slots further in; its letters' reach past the edge does not grow with the span's width, so this
+    slot's own band bounds it. A span whose labels need no room (none shown) reserves nothing, even when it draws
+    wider than this slot.
     """
 
     reserved = resolved.reserved_band_px
     reach = 0.0
     for span in intent.span_label_rooms:
-        band = _span_room_band(resolved, span.whole_band)
-        if band is not None:
-            reach = max(reach, float(band.outer_px) + span.room(band))
+        band = _span_room_band(resolved, span.extent, span.width_px)
+        if band is None:
+            continue
+        room = span.room(band)
+        if room > LAYOUT_EPSILON:
+            reach = max(reach, float(band.outer_px) + room)
     if reserved is None or reach <= float(reserved.outer_px) + LAYOUT_EPSILON:
         return resolved
     return replace(
@@ -984,6 +1012,19 @@ def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
         fraction = idx / float(steps)
         values.append(width - ((width - min_width) * fraction))
     return [(max(0.0, value), idx > 0) for idx, value in enumerate(values)]
+
+
+def _occupied_band(intent: _RadialSlotIntent, resolved: CircularResolvedSlot) -> RadialBand | None:
+    """The band other slots keep out of: the reserved band, and for an overlay (split feature lanes, a plot overlay)
+    its own band widened by its gaps, as no row is packed next to it. The span label room past it is not widened:
+    it ends ``label_offset`` beyond the letters, as past any other slot."""
+
+    reserved = resolved.reserved_band_px
+    own = resolved.own_reserved_band_px
+    if intent.side != "overlay" or reserved is None or own is None:
+        return reserved
+    widened = own.expanded_sides(intent.inner_gap_px, intent.outer_gap_px)
+    return RadialBand(widened.inner_px, max(widened.outer_px, float(reserved.outer_px)))
 
 
 def _slot_reserves(intent: _RadialSlotIntent) -> bool:
@@ -2199,9 +2240,9 @@ def resolve_circular_radial_layout(
     """Resolve every slot band; a failed inside placement names its cause.
 
     ``annotation_label_rooms`` measure, per annotation slot ID, the room its
-    labels need beyond its band; an annotation slot reserves that room, and a
-    span overlay's room is reserved past the outermost slot it covers while
-    that slot is packed, so rings placed around them keep clear of the
+    labels need beyond its band; an annotation slot reserves that room, and an
+    annotation overlay's room is reserved past the slot that holds it
+    (``_span_room_holder``) while that slot is packed, so rings placed around them keep clear of the
     letters. Two pinned slots keep their radii even when one reaches into the
     other's label room, and when the rings on one side of the axis cannot
     make the room at all, they keep the places they take without that side's
@@ -2248,9 +2289,10 @@ def _label_rooms_off_failed_side(
     rooms: Mapping[str, AnnotationLabelRoom], slots: Sequence[CircularTrackSlot], error: ValidationError
 ) -> dict[str, AnnotationLabelRoom]:
     """``rooms`` without those that reach the side (inside or outside of the axis) of the slot ``error`` names: an
-    annotation slot's room reaches its own side; a span's room reaches the side of each slot it covers, and the
-    outside too when it covers the inside row next to the axis (its room then reaches past the axis, as in the
-    placement order). An error that names no slot drops every room."""
+    annotation slot's room reaches its own side; a span's room reaches the side of the slot that holds it
+    (``_span_room_holder``), and the outside when that slot is split feature lanes or the inside row next to the axis
+    (its room then reaches past the axis, as in the placement order). An error that names no slot drops every
+    room."""
 
     normalized = normalize_circular_track_slots(slots)
     slot_index = (error.diagnostic or {}).get("slotIndex")
@@ -2264,9 +2306,11 @@ def _label_rooms_off_failed_side(
         annotation = slot.annotation
         if slot.side != "overlay" or annotation is None:
             return {slot.side}
-        covered = [slot_id for slot_id in (annotation.anchor_slot, annotation.to_slot) if slot_id in by_id]
-        reached = {by_id[slot_id].side for slot_id in covered}
-        return reached | {"outside"} if first_inside is not None and first_inside.id in covered else reached
+        holder = _span_room_holder(annotation, by_id)
+        if holder is None:
+            return set()
+        past_axis = holder.side == "overlay" or holder is first_inside
+        return {holder.side} - {"overlay"} | ({"outside"} if past_axis else set())
 
     return {
         slot_id: room
@@ -2387,12 +2431,7 @@ def _resolve_circular_radial_layout(
                     diagnostic=diagnostic,
                 )
         resolved_by_index[intent.slot_index] = resolved
-        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
-            band = (
-                resolved.reserved_band_px.expanded_sides(intent.inner_gap_px, intent.outer_gap_px)
-                if intent.side == "overlay"
-                else resolved.reserved_band_px
-            )
+        if _slot_reserves(intent) and (band := _occupied_band(intent, resolved)) is not None:
             occupied.append((intent.slot_id, band))
             if pinned_band is not None:
                 pinned_occupied.append((intent.slot_id, pinned_band))
@@ -2481,116 +2520,24 @@ def _resolve_circular_radial_layout(
                     inner_px = min(axis_radius_px, inner_px)
                 rows_above_inside.append((intent, inner_px))
             continue
+        # Outside rows are placed by ``place_outside_rows``, and every overlay (placement policy "overlay") was
+        # resolved with the pinned slots above, so only inside rows remain.
         if intent.side == "outside":
             continue
 
-        if intent.side == "overlay":
-            resolved = _measure_radial_slot(
-                intent,
-                anchor_offset_px=0.0,
-                axis_radius_px=axis_radius_px,
-                feature_dict=feature_dict,
-                geometry=geometry,
-                cfg=cfg,
-                total_length=int(total_length),
-                depth_config=depth_config,
-            )
-        else:
-            # Every group starts with this row, which faces the rows above it.
-            outer_limit = _outer_limit_below_rows(inside_max_outer, rows_above_inside, intent)
-            movable_group = _inside_movable_stack_group_from(
-                ordered_intents,
-                intent_pos,
-                resolved_by_index,
-                keep_preset_lanes=keep_preset_lanes,
-            )
-            if movable_group and (len(movable_group) > 1 or _anchored_inside(intent)):
-                placement_window = _inside_placement_window(
-                    ordered_intents,
-                    start_pos=intent_pos + len(movable_group) - 1,
-                    current_outer_intent=movable_group[-1],
-                    inside_max_outer=outer_limit,
-                    occupied=occupied,
-                    axis_radius_px=axis_radius_px,
-                    geometry=geometry,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    feature_dict=feature_dict,
-                    depth_config=depth_config,
-                    resolved_by_index=resolved_by_index,
-                    group=movable_group,
-                )
-                resolved_group = _place_inside_auto_stack_group(
-                    movable_group,
-                    occupied=occupied,
-                    axis_radius_px=axis_radius_px,
-                    placement_window=placement_window,
-                    feature_dict=feature_dict,
-                    geometry=geometry,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    depth_config=depth_config,
-                )
-                for group_intent, group_resolved in zip(movable_group, resolved_group):
-                    resolved_by_index[group_intent.slot_index] = group_resolved
-                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
-                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
-                    if group_resolved.packing_band_px is not None:
-                        rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
-                continue
-
-            preferred_group = _preferred_numeric_group_from(
-                ordered_intents,
-                intent_pos,
-                resolved_by_index,
-                keep_preset_lanes=keep_preset_lanes,
-            )
-            if preferred_group:
-                placement_window = _inside_placement_window(
-                    ordered_intents,
-                    start_pos=intent_pos + len(preferred_group) - 1,
-                    current_outer_intent=preferred_group[-1],
-                    inside_max_outer=outer_limit,
-                    occupied=occupied,
-                    axis_radius_px=axis_radius_px,
-                    geometry=geometry,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    feature_dict=feature_dict,
-                    depth_config=depth_config,
-                    resolved_by_index=resolved_by_index,
-                    group=preferred_group,
-                )
-                resolved_group = _place_preferred_numeric_group(
-                    preferred_group,
-                    occupied=occupied,
-                    placement_window=placement_window,
-                    axis_radius_px=axis_radius_px,
-                    feature_dict=feature_dict,
-                    geometry=geometry,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    depth_config=depth_config,
-                )
-                for group_intent, group_resolved in zip(preferred_group, resolved_group):
-                    resolved_by_index[group_intent.slot_index] = group_resolved
-                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
-                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
-                    if group_resolved.packing_band_px is not None:
-                        rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
-                continue
-
-            inside_group = _inside_auto_stack_group_from(
-                ordered_intents,
-                intent_pos,
-                resolved_by_index,
-            )
-            if not inside_group:
-                inside_group = [intent]
+        # Every group starts with this row, which faces the rows above it.
+        outer_limit = _outer_limit_below_rows(inside_max_outer, rows_above_inside, intent)
+        movable_group = _inside_movable_stack_group_from(
+            ordered_intents,
+            intent_pos,
+            resolved_by_index,
+            keep_preset_lanes=keep_preset_lanes,
+        )
+        if movable_group and (len(movable_group) > 1 or _anchored_inside(intent)):
             placement_window = _inside_placement_window(
                 ordered_intents,
-                start_pos=intent_pos + len(inside_group) - 1,
-                current_outer_intent=inside_group[-1],
+                start_pos=intent_pos + len(movable_group) - 1,
+                current_outer_intent=movable_group[-1],
                 inside_max_outer=outer_limit,
                 occupied=occupied,
                 axis_radius_px=axis_radius_px,
@@ -2600,64 +2547,10 @@ def _resolve_circular_radial_layout(
                 feature_dict=feature_dict,
                 depth_config=depth_config,
                 resolved_by_index=resolved_by_index,
+                group=movable_group,
             )
-            if len(inside_group) > 1:
-                try:
-                    resolved_group = _place_inside_auto_stack_group(
-                        inside_group,
-                        occupied=occupied,
-                        axis_radius_px=axis_radius_px,
-                        placement_window=placement_window,
-                        feature_dict=feature_dict,
-                        geometry=geometry,
-                        cfg=cfg,
-                        total_length=int(total_length),
-                        depth_config=depth_config,
-                    )
-                except ValidationError:
-                    fallback_group = _inside_movable_stack_group_from(
-                        ordered_intents,
-                        intent_pos,
-                        resolved_by_index,
-                        keep_preset_lanes=keep_preset_lanes,
-                    )
-                    if len(fallback_group) <= len(inside_group):
-                        raise
-                    fallback_window = _inside_placement_window(
-                        ordered_intents,
-                        start_pos=intent_pos + len(fallback_group) - 1,
-                        current_outer_intent=fallback_group[-1],
-                        inside_max_outer=outer_limit,
-                        occupied=occupied,
-                        axis_radius_px=axis_radius_px,
-                        geometry=geometry,
-                        cfg=cfg,
-                        total_length=int(total_length),
-                        feature_dict=feature_dict,
-                        depth_config=depth_config,
-                        resolved_by_index=resolved_by_index,
-                    )
-                    resolved_group = _place_inside_auto_stack_group(
-                        fallback_group,
-                        occupied=occupied,
-                        axis_radius_px=axis_radius_px,
-                        placement_window=fallback_window,
-                        feature_dict=feature_dict,
-                        geometry=geometry,
-                        cfg=cfg,
-                        total_length=int(total_length),
-                        depth_config=depth_config,
-                    )
-                    inside_group = fallback_group
-                for group_intent, group_resolved in zip(inside_group, resolved_group):
-                    resolved_by_index[group_intent.slot_index] = group_resolved
-                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
-                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
-                    if group_resolved.packing_band_px is not None:
-                        rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
-                continue
-            resolved = _place_inside_auto(
-                intent,
+            resolved_group = _place_inside_auto_stack_group(
+                movable_group,
                 occupied=occupied,
                 axis_radius_px=axis_radius_px,
                 placement_window=placement_window,
@@ -2667,14 +2560,145 @@ def _resolve_circular_radial_layout(
                 total_length=int(total_length),
                 depth_config=depth_config,
             )
+            for group_intent, group_resolved in zip(movable_group, resolved_group):
+                resolved_by_index[group_intent.slot_index] = group_resolved
+                if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                    occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                if group_resolved.packing_band_px is not None:
+                    rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
+            continue
+
+        preferred_group = _preferred_numeric_group_from(
+            ordered_intents,
+            intent_pos,
+            resolved_by_index,
+            keep_preset_lanes=keep_preset_lanes,
+        )
+        if preferred_group:
+            placement_window = _inside_placement_window(
+                ordered_intents,
+                start_pos=intent_pos + len(preferred_group) - 1,
+                current_outer_intent=preferred_group[-1],
+                inside_max_outer=outer_limit,
+                occupied=occupied,
+                axis_radius_px=axis_radius_px,
+                geometry=geometry,
+                cfg=cfg,
+                total_length=int(total_length),
+                feature_dict=feature_dict,
+                depth_config=depth_config,
+                resolved_by_index=resolved_by_index,
+                group=preferred_group,
+            )
+            resolved_group = _place_preferred_numeric_group(
+                preferred_group,
+                occupied=occupied,
+                placement_window=placement_window,
+                axis_radius_px=axis_radius_px,
+                feature_dict=feature_dict,
+                geometry=geometry,
+                cfg=cfg,
+                total_length=int(total_length),
+                depth_config=depth_config,
+            )
+            for group_intent, group_resolved in zip(preferred_group, resolved_group):
+                resolved_by_index[group_intent.slot_index] = group_resolved
+                if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                    occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                if group_resolved.packing_band_px is not None:
+                    rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
+            continue
+
+        inside_group = _inside_auto_stack_group_from(
+            ordered_intents,
+            intent_pos,
+            resolved_by_index,
+        )
+        if not inside_group:
+            inside_group = [intent]
+        placement_window = _inside_placement_window(
+            ordered_intents,
+            start_pos=intent_pos + len(inside_group) - 1,
+            current_outer_intent=inside_group[-1],
+            inside_max_outer=outer_limit,
+            occupied=occupied,
+            axis_radius_px=axis_radius_px,
+            geometry=geometry,
+            cfg=cfg,
+            total_length=int(total_length),
+            feature_dict=feature_dict,
+            depth_config=depth_config,
+            resolved_by_index=resolved_by_index,
+        )
+        if len(inside_group) > 1:
+            try:
+                resolved_group = _place_inside_auto_stack_group(
+                    inside_group,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    placement_window=placement_window,
+                    feature_dict=feature_dict,
+                    geometry=geometry,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    depth_config=depth_config,
+                )
+            except ValidationError:
+                fallback_group = _inside_movable_stack_group_from(
+                    ordered_intents,
+                    intent_pos,
+                    resolved_by_index,
+                    keep_preset_lanes=keep_preset_lanes,
+                )
+                if len(fallback_group) <= len(inside_group):
+                    raise
+                fallback_window = _inside_placement_window(
+                    ordered_intents,
+                    start_pos=intent_pos + len(fallback_group) - 1,
+                    current_outer_intent=fallback_group[-1],
+                    inside_max_outer=outer_limit,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    geometry=geometry,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    feature_dict=feature_dict,
+                    depth_config=depth_config,
+                    resolved_by_index=resolved_by_index,
+                )
+                resolved_group = _place_inside_auto_stack_group(
+                    fallback_group,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    placement_window=fallback_window,
+                    feature_dict=feature_dict,
+                    geometry=geometry,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    depth_config=depth_config,
+                )
+                inside_group = fallback_group
+            for group_intent, group_resolved in zip(inside_group, resolved_group):
+                resolved_by_index[group_intent.slot_index] = group_resolved
+                if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                    occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                if group_resolved.packing_band_px is not None:
+                    rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
+            continue
+        resolved = _place_inside_auto(
+            intent,
+            occupied=occupied,
+            axis_radius_px=axis_radius_px,
+            placement_window=placement_window,
+            feature_dict=feature_dict,
+            geometry=geometry,
+            cfg=cfg,
+            total_length=int(total_length),
+            depth_config=depth_config,
+        )
 
         resolved_by_index[intent.slot_index] = resolved
-        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
-            band = (
-                resolved.reserved_band_px.expanded_sides(intent.inner_gap_px, intent.outer_gap_px)
-                if intent.side == "overlay"
-                else resolved.reserved_band_px
-            )
+        if _slot_reserves(intent) and (band := _occupied_band(intent, resolved)) is not None:
             occupied.append((intent.slot_id, band))
         if resolved.packing_band_px is not None and resolved.side == "inside":
             rows_above_inside.append((intent, float(resolved.packing_band_px.inner_px)))
@@ -2715,16 +2739,21 @@ def _resolve_circular_radial_layout(
                 if anchor_band is not None
                 else float(anchor.anchor_radius_px or axis_radius_px)
             )
+            # The overlay's own width is the intent's, the one its labels' room is measured from (``_SpanLabelRoom``).
             width = (
                 float(anchor_band.width_px)
                 if annotation.cover_anchor and anchor_band is not None
-                else max(0.0, float(overlay_resolved.resolved_width_px or intent.width_px))
+                else float(intent.width_px)
             )
-            draw_band = _band_from_center_width(anchor_radius, width)
+            # The same band its labels' room is measured from when the anchor holds that room.
+            anchor_draw_band = _span_room_band(anchor, _span_extent(annotation), width)
+            draw_band = (
+                anchor_draw_band if anchor_draw_band is not None else _band_from_center_width(anchor_radius, width)
+            )
         # The room lies past the holder, so it keeps the labels off other tracks only when the holder sets the span's
-        # outer edge; split feature lanes (an overlay) further out leave it under the letters (OV-1360).
+        # outer edge.
         holder = _span_room_holder(annotation, by_id)
-        holder_band = None if holder is None else _span_room_band(holder, annotation.to_slot is not None)
+        holder_band = None if holder is None else _span_room_band(holder, _span_extent(annotation), width)
         anchored = replace(
             overlay_resolved,
             anchor_radius_px=anchor_radius,
