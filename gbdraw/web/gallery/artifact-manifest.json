@@ -17,8 +17,8 @@
       "sha256": "03d7796543a50019ed2e7743ba642200659b893f80b5cb73e417beed50929d7d"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1334635,
-      "sha256": "056b555029129726deb3f8808430fa7cabc97b5783ddc776a8607fdeb00126dd"
+      "bytes": 1342738,
+      "sha256": "cbedea7f88e8e64f06c3fe428b1d3f2ed6790970e4187e948e6dac3c8600930b"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 494814,
@@ -57,8 +57,8 @@
       "sha256": "da86207da24e2e35342f5c07d3fa72705411fcaff693e113a3d14f6bb0029dba"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3033695,
-      "sha256": "f1d6c58b078a9392c10965de915d10307326f2579444c0343bd1ab76d8cd9add"
+      "bytes": 3042396,
+      "sha256": "68fa57513ee6daaa78d88d0d68b79747c6e411005d1e6bf28fb8a400c1fa56c9"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 325878,
@@ -97,8 +97,8 @@
       "sha256": "e8a0d048c67162f60d4ade2f74447dd54cf8ede795d3e4c05540a205683a764a"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 250461,
-      "sha256": "322253dc896478dfa59885a14d5170dc08856b4065e4ba68770700de6fb5b131"
+      "bytes": 258564,
+      "sha256": "621f86fa53a875c242cd5b44825237904a21fe25c1fc8e884c910175918da9a7"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 135052,
@@ -137,8 +137,8 @@
       "sha256": "f4d1aeb84b9bd2777b9ec53e8dfe2cc9bae404de391abba64f90b5ea40a5b51c"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 18918,
-      "sha256": "0094617d236aeaca4ca676d850fd8ac2f2dfbe5f8ca958a3e7001129167f0be8"
+      "bytes": 18926,
+      "sha256": "778c5d890fabae94fdc4af505a0d3ab15cb97eab6ce6b03e66eba41a392de2ee"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22298,
