@@ -4,13 +4,11 @@
 from gbdraw.exceptions import ComparisonIdentityError
 
 import math
-from typing import Dict, Sequence, cast
+from typing import Dict, Literal, Sequence, cast
 
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
-from ....canvas.linear import LinearCanvasGeometry
-from ....layout.linear_coords import normalize_position_linear
 from ....core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
     COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
@@ -106,7 +104,6 @@ class PairWiseMatchGroup:
     Handles the visualization of pairwise matches (comparisons) in a linear layout.
 
     Attributes:
-        canvas_config (LinearCanvasGeometry): The canvas values the ribbons are scaled by.
         sequence_length_dict (Dict[str, int]): Dictionary of sequence lengths.
         comparison_df (DataFrame): DataFrame containing comparison data.
         comparison_height (float): Height of the comparison track.
@@ -115,37 +112,32 @@ class PairWiseMatchGroup:
 
     def __init__(
         self,
-        canvas_config: LinearCanvasGeometry,
         sequence_length_dict: dict,
         comparison_df: DataFrame,
         actual_comparison_height: float,
         comparison_count: int,
         blast_config,
         records,
-        record_offsets_x: dict[int, float] | None = None,
-        query_record_index: int | None = None,
-        subject_record_index: int | None = None,
-        query_placement: LinearRecordPlacement | None = None,
-        subject_placement: LinearRecordPlacement | None = None,
         query_y: float | None = None,
         subject_y: float | None = None,
         feature_dom_index: LinearFeatureDomIndex | None = None,
         record_transforms: Sequence[RecordDisplayTransform] | None = None,
         *,
-        align_center: bool,
+        query_placement: LinearRecordPlacement,
+        subject_placement: LinearRecordPlacement,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
 
         Args:
-            canvas_config (LinearCanvasGeometry): The canvas values the ribbons are scaled by.
             sequence_length_dict (Dict[str, int]): Dictionary of sequence lengths.
             comparison_df (DataFrame): DataFrame containing comparison data.
             comparison_height (float): Height of the comparison track.
             comparison_count (int): Counter for the number of comparisons.
+            query_placement, subject_placement: Where the two records are drawn; a match end
+                at bp ``p`` sits at ``placement.x_for_position(p)``. Their ``record_index`` is
+                the comparison's query and subject record.
         """
-        self.canvas_config: LinearCanvasGeometry = canvas_config
-        self.align_center = bool(align_center)
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
         self.comparison_height: float = actual_comparison_height
@@ -168,59 +160,35 @@ class PairWiseMatchGroup:
         self.curve_tension: float = float(getattr(blast_config, "curve_tension", 0.5))
         self.comparison_count: int = comparison_count
         self.records = records
-        self.query_record_index = (
-            int(query_record_index)
-            if query_record_index is not None
-            else self.comparison_count - 1
-        )
-        self.subject_record_index = (
-            int(subject_record_index)
-            if subject_record_index is not None
-            else self.comparison_count
-        )
         self.query_placement = query_placement
         self.subject_placement = subject_placement
         self.query_y = 0 if query_y is None else float(query_y)
         self.subject_y = self.comparison_height if subject_y is None else float(subject_y)
         self.feature_dom_index = feature_dom_index
         self.record_transforms = record_transforms
-        self.record_offsets_x = record_offsets_x or {}
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
-        self.calculate_query_subject_offsets()
         self.match_group = Group(id=self.track_id)
-        if self.query_placement is not None:
-            self.match_group.attribs["data-query-record-index"] = self.query_record_index
-            self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
-            self.match_group.attribs["data-query-row"] = self.query_placement.row
-        if self.subject_placement is not None:
-            self.match_group.attribs["data-subject-row"] = self.subject_placement.row
+        self.match_group.attribs["data-query-record-index"] = self.query_record_index
+        self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
+        self.match_group.attribs["data-query-row"] = self.query_placement.row
+        self.match_group.attribs["data-subject-row"] = self.subject_placement.row
         self.add_elements_to_group()
 
-    def calculate_query_subject_offsets(self) -> None:
-        """
-        Calculates the horizontal offsets for the query and subject sequences.
+    @property
+    def query_record_index(self) -> int:
+        return self.query_placement.record_index
 
-        This method determines the starting x-coordinates for the query and subject in the alignment,
-        ensuring they are centered if specified in the configuration. The results are
-        stored on ``self`` (``query_offset_x``, ``subject_offset_x`` and the alignment offsets).
-        """
-        if self.query_placement is not None and self.subject_placement is not None:
-            self.query_offset_x = 0.0
-            self.subject_offset_x = 0.0
-        elif self.canvas_config.normalize_length:
-            self.query_offset_x = 0
-            self.subject_offset_x = 0
-        else:
-            if self.align_center:
-                qlen = len(self.records[self.query_record_index].seq)
-                slen = len(self.records[self.subject_record_index].seq)
-                self.query_offset_x = (self.canvas_config.longest_genome - qlen) / 2
-                self.subject_offset_x = (self.canvas_config.longest_genome - slen) / 2
-            else:
-                self.query_offset_x = self.subject_offset_x = 0
-        self.query_alignment_offset_x = float(self.record_offsets_x.get(self.query_record_index, 0.0))
-        self.subject_alignment_offset_x = float(self.record_offsets_x.get(self.subject_record_index, 0.0))
+    @property
+    def subject_record_index(self) -> int:
+        return self.subject_placement.record_index
+
+    def _placements(self, role: Literal["query", "subject"]) -> tuple[LinearRecordPlacement, LinearRecordPlacement]:
+        """The ``role`` record's placement and the other record's."""
+
+        if role == "query":
+            return self.query_placement, self.subject_placement
+        return self.subject_placement, self.query_placement
 
     def _record_id_for_index(self, index: int) -> str:
         try:
@@ -310,17 +278,16 @@ class PairWiseMatchGroup:
                 rendered_ids.append(rendered_id)
         return ";".join(rendered_ids)
 
-    def _feature_attachment_y(self, row: object, role: str, default_y: float) -> float:
+    def _feature_attachment_y(self, row: object, role: Literal["query", "subject"], default_y: float) -> float:
         index = getattr(self, "feature_dom_index", None)
-        placement = getattr(self, f"{role}_placement", None)
-        other = getattr(self, "subject_placement" if role == "query" else "query_placement", None)
-        if index is None or not index.attachment_bands or placement is None or other is None:
+        placement, other = self._placements(role)
+        if index is None or not index.attachment_bands:
             return default_y
         view_id = _attribute_text(_row_value(row, f"{role}_view_feature_svg_id", "")) or _attribute_text(
             _row_value(row, f"{role}_feature_svg_id", "")
         )
         rendered_ids = self._rendered_feature_svg_id_values(
-            view_id, record_index=getattr(self, f"{role}_record_index"),
+            view_id, record_index=placement.record_index,
             feature_index_value=_row_value(row, f"{role}_feature_index", ""),
         )
         bands = [index.attachment_bands[key] for key in rendered_ids.split(";") if key in index.attachment_bands]
@@ -368,13 +335,9 @@ class PairWiseMatchGroup:
         )
         dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
         if endpoints is None:
-            query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
+            query_start, query_end, subject_start, subject_end = row.qstart, row.qend, row.sstart, row.send
         else:
             query_start, query_end, subject_start, subject_end = endpoints
-            query_start += self.query_offset_x
-            query_end += self.query_offset_x
-            subject_start += self.subject_offset_x
-            subject_end += self.subject_offset_x
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
             query_start, query_end, self._feature_attachment_y(row, "query", getattr(self, "query_y", 0)), is_query=True
         )
@@ -428,12 +391,8 @@ class PairWiseMatchGroup:
         row: DataFrame,
         match_index: int | None = None,
     ) -> None:
-        query_record_index = int(
-            getattr(self, "query_record_index", self.comparison_count - 1)
-        )
-        subject_record_index = int(
-            getattr(self, "subject_record_index", self.comparison_count)
-        )
+        query_record_index = self.query_record_index
+        subject_record_index = self.subject_record_index
         # Endpoint records own record identity; table IDs never override them.
         query_record_id = self._record_id_for_index(query_record_index)
         subject_record_id = self._record_id_for_index(subject_record_index)
@@ -561,12 +520,8 @@ class PairWiseMatchGroup:
             "query_display_name": "data-query-display-name",
             "subject_display_name": "data-subject-display-name",
         }
-        query_record_index = int(
-            getattr(self, "query_record_index", self.comparison_count - 1)
-        )
-        subject_record_index = int(
-            getattr(self, "subject_record_index", self.comparison_count)
-        )
+        query_record_index = self.query_record_index
+        subject_record_index = self.subject_record_index
         for role, record_index in (
             ("query", query_record_index),
             ("subject", subject_record_index),
@@ -598,61 +553,14 @@ class PairWiseMatchGroup:
             if text:
                 path.attribs[attribute] = text
 
-    def calculate_offsets(self, row: DataFrame) -> tuple[float, float, float, float]:
-        """
-        Calculates the start and end positions for a pairwise match.
-
-        Args:
-            row (DataFrame): A row from the DataFrame containing match information.
-
-        Returns:
-            Tuple[float, float, float, float]: Start and end positions for the query and subject matches.
-        """
-        query_start: float = row.qstart + self.query_offset_x
-        query_end: float = row.qend + self.query_offset_x
-        subject_start: float = row.sstart + self.subject_offset_x
-        subject_end: float = row.send + self.subject_offset_x
-        return query_start, query_end, subject_start, subject_end
-
     def normalize_positions(
         self, start: float, end: float, y_position: float, is_query: bool
     ) -> tuple[float, float, float, float]:
         """
-        Normalizes the start and end positions for display on the linear canvas.
+        Places the start and end positions on the linear canvas through the record's placement.
         """
-        placement = (
-            getattr(self, "query_placement", None)
-            if is_query
-            else getattr(self, "subject_placement", None)
-        )
-        if placement is not None:
-            start_x = placement.x_for_position(start)
-            end_x = placement.x_for_position(end)
-        elif self.canvas_config.normalize_length:
-            # Normalize based on the length of each record itself
-            if is_query:
-                query_record_index = int(
-                    getattr(self, "query_record_index", self.comparison_count - 1)
-                )
-                genome_length = len(self.records[query_record_index].seq)
-            else:
-                subject_record_index = int(
-                    getattr(self, "subject_record_index", self.comparison_count)
-                )
-                genome_length = len(self.records[subject_record_index].seq)
-
-            start_x = self.canvas_config.alignment_width * (start / genome_length)
-            end_x = self.canvas_config.alignment_width * (end / genome_length)
-        else:
-            # Normalize based on the longest genome as before
-            start_x = normalize_position_linear(start, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
-            end_x = normalize_position_linear(end, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
-
-        if placement is None:
-            alignment_offset = self.query_alignment_offset_x if is_query else self.subject_alignment_offset_x
-            start_x += alignment_offset
-            end_x += alignment_offset
-        return start_x, y_position, end_x, y_position
+        placement = self.query_placement if is_query else self.subject_placement
+        return placement.x_for_position(start), y_position, placement.x_for_position(end), y_position
 
     def construct_path_description(
         self,

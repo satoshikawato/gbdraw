@@ -163,10 +163,18 @@ lies on a white casing that cuts other labels' leaders where they cross it, and
 each end stops 0.12 em inside the letters. `halo` draws a white outline 0.08 em wide around the
 letters, so a leader behind them is cut away; `box` draws a white box at 80 %
 opacity behind them, 0.18 em beyond the letters and stopping short of the
-underline. Leaders and underlines are 0.07 em wide, at least 1 px. In
+underline. A label drawn inside its feature gets no box. In Linear a turned
+`above_feature` label that sits on its feature without a leader gets the box
+too, and its sides toward the feature stop at the letters. Leaders and underlines are 0.07 em wide, at least 1 px. In
 Linear, neighbouring feature labels in one label row keep at least 0.25 em of
-their font size apart; a label that would come closer takes another row, and
-the underline takes no room in its label row. In both modes region labels keep
+their font size apart; a label that would come closer, or lie over its
+record's definition text, takes another row, and the underline takes no room
+in its label row. With `--label_placement
+above_feature`, Linear draws each label over its own feature (below a
+negative-strand feature with `--separate_strands`): a horizontal label starts
+one row off its feature with a leader, as with `auto`, and a turned label sits
+on its feature; labels move away from the axis off each other and off the
+record's definition text. In both modes region labels keep
 off a feature label's underline and box as off its letters.
 
 `--font_family` sets the font of all diagram text: one family name such as

@@ -67,11 +67,12 @@ class SeqRecordGroup:
         record_index: int = 0,
         record_count: int = 1,
         group_id: str | None = None,
-        sequence_width: float | None = None,
         record_local_ruler: bool = False,
         feature_offset_y: float = 0.0,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_transform: RecordDisplayTransform | None = None,
+        *,
+        sequence_width: float,
     ) -> None:
         self.record_transform = record_transform
         self.gb_record = gb_record
@@ -96,7 +97,8 @@ class SeqRecordGroup:
                 record_count=self.record_count,
             )
         )
-        self.sequence_width = float(sequence_width) if sequence_width is not None else None
+        # The record's drawn axis width, from its placement (``solve_linear_horizontal_layout``).
+        self.sequence_width = float(sequence_width)
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)
         self.feature_lane_geometry = feature_lane_geometry
@@ -109,7 +111,6 @@ class SeqRecordGroup:
         self.show_labels = profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
-        self.normalize_length = geometry.normalize_length
         scale_cfg = cfg.objects.scale
         self.scale_style = str(scale_cfg.style).strip().lower()
         self.scale_stroke_color = scale_cfg.stroke_color
@@ -142,18 +143,17 @@ class SeqRecordGroup:
     def axis_ruler_enabled(self) -> bool:
         return self._axis_ruler_enabled
 
-    def draw_linear_axis(self, alignment_width: float, genome_size_normalization_factor: float) -> Line:
+    def draw_linear_axis(self, alignment_width: float) -> Line:
         """
         Draws a linear axis for the genomic record visualization.
 
         Args:
             alignment_width (float): Width of the alignment area.
-            genome_size_normalization_factor (float): Normalization factor based on the genome size.
 
         Returns:
             Line: An SVG line element representing the linear axis.
         """
-        bar_length: float = alignment_width * genome_size_normalization_factor
+        bar_length: float = alignment_width
         linear_axis_stroke_color: str = self._cfg.objects.axis.linear.stroke_color
         start_x: float = 0
         start_y: float = 0
@@ -213,10 +213,14 @@ class SeqRecordGroup:
         """A label's drawn parts in the style of its mode (``FeatureLabelStyle``)."""
 
         style = self.profile.label_style
-        if not leader or not style.draws_from_ink:
+        if not style.draws_from_ink:
             return _LabelParts(bool(leader), leader)
         ink = linear_label_ink(label, leader, style)
         feature_id = label["feature_id"]
+        box = feature_label_box(ink, feature_id) if ink.draws_box(style) else None
+        if not leader:
+            # A turned label on its feature has its box too (OV-1361).
+            return _LabelParts(False, leader, box=box)
         width = label_leader_width_px(label)
         underline = casing = tail = None
         line = ink.underline
@@ -231,9 +235,7 @@ class SeqRecordGroup:
                 casing = cased.element(feature_id)
                 tail = self._leader_part(entry, line[0], feature_id, width)
                 leader_layer = () if entry == leader[0] else (leader[0], entry)
-                box = feature_label_box(ink, feature_id) if style.protection == "box" else None
                 return _LabelParts(True, leader_layer, tail, casing, underline, box)
-        box = feature_label_box(ink, feature_id) if style.protection == "box" else None
         return _LabelParts(True, leader, None, None, None, box)
 
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
@@ -312,16 +314,15 @@ class SeqRecordGroup:
         record_length: int,
         cds_height: float,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         separate_strands: bool,
         arrow_length: float,
         group: Group,
         label_list: list,
     ) -> Group:
         """Draws the genomic features onto the provided SVG group."""
-        bar_length: float = alignment_width * genome_size_normalization_factor
+        bar_length: float = alignment_width
         # Draw the axis
-        axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
+        axis_path = self.draw_linear_axis(alignment_width)
         group.add(axis_path)
         self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
 
@@ -372,7 +373,6 @@ class SeqRecordGroup:
                     genome_length=record_length,
                     cds_height=cds_height,
                     alignment_width=alignment_width,
-                    normalization_factor=genome_size_normalization_factor,
                     feature_strand=feature_strand,
                     separate_strands=separate_strands,
                     arrow_length=arrow_length,
@@ -423,13 +423,8 @@ class SeqRecordGroup:
         Returns:
             Group: The SVG group prepared for SeqRecord visualization.
         """
-        alignment_width: float = (
-            self.sequence_width
-            if self.sequence_width is not None
-            else self.geometry.alignment_width
-        )
+        alignment_width: float = self.sequence_width
         cds_height: float = self.geometry.cds_height
-        longest_genome: int = self.geometry.longest_genome
         arrow_length: float = self.geometry.arrow_length
 
         separate_strands = self.separate_strands
@@ -447,13 +442,6 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
-        if self.sequence_width is not None:
-            genome_size_normalization_factor: float = 1.0
-        elif self.normalize_length:
-            genome_size_normalization_factor = 1.0
-        else:
-            genome_size_normalization_factor = record_length / longest_genome
-
         feature_dict = self.feature_layers.foreground_features
         label_list = []
         if self.show_labels and self.draw_features_enabled:
@@ -464,7 +452,6 @@ class SeqRecordGroup:
                     feature_dict,
                     record_length,
                     alignment_width,
-                    genome_size_normalization_factor,
                     cds_height,
                     separate_strands,
                     self.track_layout,
@@ -488,7 +475,6 @@ class SeqRecordGroup:
             record_length,
             cds_height,
             alignment_width,
-            genome_size_normalization_factor,
             separate_strands,
             arrow_length,
             record_group,

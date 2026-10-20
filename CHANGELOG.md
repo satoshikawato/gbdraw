@@ -50,6 +50,18 @@ write-up of a release.
   overlapped before; a `to_slot` span from split feature lanes to an inside
   slot no longer reserves its room past that slot, so the circle gets smaller.
   Figures without such a labelled overlay draw as before.
+- Linear `--label_placement above_feature`: a horizontal label now starts one
+  row off its own feature, the height of the first `auto` row, with a leader
+  from the feature, and so gets the underline and the white box as in `auto`
+  (it was drawn on the feature with none of them). A turned label
+  (`--label_rotation`) keeps its place on its feature and, with
+  `--label_protection box`, now gets the white box, whose sides toward the
+  feature stop at the letters, so a neighbour's leader through its letters is
+  faded there. Linear feature labels, in `auto` rows too, move off the
+  record's definition text instead of covering it, and a label still over it
+  counts in the label warning. Figures with horizontal `above_feature` labels
+  get taller; `auto` figures move only a label that lay over the definition
+  text (OV-1361, OV-1395, OV-1396, OV-1398).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

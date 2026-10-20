@@ -64,7 +64,7 @@ from gbdraw.api.options import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
-from tests.utils.comparison_tables import converted_pair_rows
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_placement
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
@@ -83,19 +83,6 @@ def _record(
     record = SeqRecord(Seq(sequence), id=record_id)
     record.features = list(features or [])
     return record
-
-
-def _orthogroup_alignment_canvas_config() -> object:
-    return type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "alignment_width": 1000.0,
-            "longest_genome": 1000,
-        },
-    )()
 
 
 def _cds(
@@ -4149,7 +4136,7 @@ def test_web_losatp_payload_helper_output_follows_explicit_display_pairs(
     assert displayed_only["cache"]["convertedPayloadHit"] is False
 
 
-def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
+def test_pairwise_match_group_places_each_end_through_its_record_placement() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
         _record("record_b", sequence="A" * 1000),
@@ -4165,7 +4152,6 @@ def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> Non
             }
         ]
     )
-    canvas_config = _orthogroup_alignment_canvas_config()
     blast_config = type(
         "BlastConfig",
         (),
@@ -4181,15 +4167,14 @@ def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> Non
     )()
 
     group = PairWiseMatchGroup(
-        canvas_config,
         {"record_a": 1000, "record_b": 1000},
         comparison,
         100.0,
         1,
         blast_config,
         records,
-        record_offsets_x={1: -300.0},
-        align_center=canvas_config.align_center,
+        query_placement=ribbon_placement(0, px_per_bp=1.0),
+        subject_placement=ribbon_placement(1, px_per_bp=1.0, x=-300.0),
     ).get_group()
 
     path = group.elements[0]

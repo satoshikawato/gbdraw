@@ -68,7 +68,7 @@ def test_gc_content_outline_contract_matches_in_both_modes(
     ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC")
     linear_group = LinearGcContentDrawer(
         _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(Group(), frame, 120, 600.0, 1.0, 24.0, 0.0, 0.0, "GC")
+    ).draw(Group(), frame, 120, 600.0, 24.0, 0.0, 0.0, "GC")
 
     for group in (circular_group, linear_group):
         paths = _main_paths(group, stroke_color=stroke_color)
@@ -92,7 +92,6 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
         frame,
         120,
         600.0,
-        1.0,
         24.0,
         0.0,
         0.0,
@@ -109,7 +108,7 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
     ("drawer", "args"),
     [
         (CircularGcContentDrawer, (100.0, Group(), _gc_frame(), 120, 20.0, 0.8, "GC")),
-        (LinearGcContentDrawer, (Group(), _gc_frame(), 120, 600.0, 1.0, 24.0, 0.0, 0.0, "GC")),
+        (LinearGcContentDrawer, (Group(), _gc_frame(), 120, 600.0, 24.0, 0.0, 0.0, "GC")),
     ],
 )
 def test_none_stroke_remains_invisible_with_positive_width(drawer, args) -> None:

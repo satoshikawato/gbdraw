@@ -291,3 +291,31 @@ def test_a_style_change_rebuilds_its_stages_without_an_undeclared_read(
         # The style is in the keys of the stages that draw it: they are rebuilt, not reused.
         rebuilt = {"record_content"} if mode == "linear" else {"label_leaders_content", "label_text_content"}
         assert rebuilt & set(warm.stages.builds), warm.stages.builds
+
+
+def test_a_label_gets_its_box_when_it_has_a_leader_or_sits_beside_its_feature() -> None:
+    """LP-D121 (OV-1361, LP-D119): ``protection = box`` gives a feature label its white box when the label has
+    a leader or is drawn on its feature without one (Linear ``above_feature``), turned or not; a label drawn
+    inside its feature has neither and gets no box, and ``protection = none`` draws none."""
+
+    from gbdraw.labels.label_ink import linear_label_ink
+    from gbdraw.labels.linear import linear_leader_polyline
+
+    box, none = FeatureLabelStyle(line="under", protection="box"), FeatureLabelStyle(line="under", protection="none")
+    for has_leader in (False, True):
+        for beside_feature in (False, True):
+            assert box.draws_box(has_leader=has_leader, beside_feature=beside_feature) is (has_leader or beside_feature)
+            assert not none.draws_box(has_leader=has_leader, beside_feature=beside_feature)
+
+    with_leader = _linear_label_with_leader(10.0, 0.0, -14.0)
+    inside = {**with_leader, "is_embedded": True, "leader_line": False, "middle_y": 0.0}
+    beside = {**inside, "middle_y": -8.0, "above_feature_place_above": True}
+    for rotation in (0.0, -45.0):
+        drawn = {
+            name: linear_label_ink(turned, linear_leader_polyline(turned), box)
+            for name, label in (("leader", with_leader), ("beside", beside), ("inside", inside))
+            for turned in [{**label, "rotation_deg": rotation}]
+        }
+        assert drawn["leader"].draws_box(box)
+        assert drawn["beside"].draws_box(box) and drawn["beside"].feature_edge_y == 0.0
+        assert not drawn["inside"].draws_box(box) and drawn["inside"].feature_edge_y is None

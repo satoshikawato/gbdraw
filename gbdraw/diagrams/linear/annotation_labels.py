@@ -119,7 +119,7 @@ def _feature_label_obstacles(
 
     letters = _feature_label_box(label)
     leader = linear_leader_polyline(dict(label))
-    if leader:
+    if label_style.draws_from_ink:
         drawn = feature_label_drawn_parts(linear_label_ink(label, leader, label_style), label_style)
         points = [point for part in drawn for point in part]
         if points:

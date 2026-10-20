@@ -688,7 +688,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=argparse_float)
     parser.add_argument(
         '--label_placement',
-        help='Linear label placement mode ("auto" or "above_feature"; default: "auto"). "above_feature" draws labels above features (or below negative-strand features when --separate_strands is used).',
+        help='Linear label placement mode ("auto" or "above_feature"; default: "auto"). "above_feature" draws each label over its own feature (below negative-strand features when --separate_strands is used): a horizontal label starts one row off its feature with a leader, as in "auto"; a turned label (--label_rotation) sits on its feature.',
         type=_parse_linear_label_placement,
         metavar="{auto,above_feature}",
     )

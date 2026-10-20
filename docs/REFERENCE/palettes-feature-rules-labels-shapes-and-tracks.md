@@ -275,7 +275,9 @@ horizontally and 0.1 px vertically; radial, embedded, and Linear labels
 overlap when their text areas intersect. Two leader lines cross when they
 intersect; lines that only touch do not cross. A Circular label with a leader
 covers the definition text in the centre when its box overlaps a line of that
-text by more than 0.5 px in both directions.
+text by more than 0.5 px in both directions. A Linear label covers the
+definition text beside its record when its text area intersects that text's
+box.
 
 Before the check, gbdraw repairs small defects of horizontal Circular labels.
 When a record has 1 to 100 overlapping label pairs, crossing leader pairs, and

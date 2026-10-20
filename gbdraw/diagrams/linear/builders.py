@@ -13,7 +13,6 @@ from pandas import DataFrame
 from svgwrite import Drawing
 
 from ...canvas import LinearCanvasConfigurator
-from ...canvas.linear import LinearCanvasGeometry
 from ...features.factory import FeatureBuildResult
 from ...layout.linear_multi_record import LinearRecordPlacement
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
@@ -77,9 +76,7 @@ def add_record_group(
     dom_group_id: str | None = None,
     slot_id: str | None = None,
     slot_renderer: str | None = None,
-    sequence_width: float | None = None,
     record_local_ruler: bool = False,
-    placement: LinearRecordPlacement | None = None,
     multi_record_layout: bool = False,
     feature_offset_y: float = 0.0,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
@@ -87,11 +84,10 @@ def add_record_group(
     record_translation_x: float = 0.0,
     record_translation_y: float = 0.0,
     *,
+    placement: LinearRecordPlacement,
     group_key: GroupKey,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
-    if placement is not None:
-        sequence_width = placement.sequence_width
     content = render_stage(
         "record_content",
         build_group_content,
@@ -112,7 +108,7 @@ def add_record_group(
         record_index=record_index,
         record_count=record_count,
         group_id=dom_group_id or group_id,
-        sequence_width=sequence_width,
+        sequence_width=placement.sequence_width,
         record_local_ruler=record_local_ruler,
         feature_offset_y=feature_offset_y,
         feature_lane_geometry=feature_lane_geometry,
@@ -123,7 +119,7 @@ def add_record_group(
         record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
         record_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
-    if record_count > 1 and placement is not None:
+    if record_count > 1:
         record_group.attribs["data-record-key"] = str(placement.record_key)
         record_group.attribs["data-record-translation-x"] = str(
             float(record_translation_x)
@@ -132,8 +128,6 @@ def add_record_group(
             float(record_translation_y)
         )
     if multi_record_layout:
-        if placement is None:
-            raise ValueError("multi_record_layout requires a resolved record placement")
         record_group.attribs["data-record-index"] = placement.record_index
         record_group.attribs["data-record-row"] = placement.row
         record_group.attribs["data-record-column"] = placement.column
@@ -156,9 +150,9 @@ def add_gc_content_group(
     dom_group_id: str | None = None,
     slot_id: str | None = None,
     slot_renderer: str | None = None,
-    sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
     *,
+    sequence_width: float,
     group_key: GroupKey,
 ) -> Drawing:
     """Adds a GC content group to the linear canvas."""
@@ -167,11 +161,8 @@ def add_gc_content_group(
         build_group_content,
         GcContentGroup,
         gb_record=record,
-        alignment_width=canvas_config.alignment_width,
-        longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.gc_height if track_height is None else float(track_height),
         gc_config=gc_config,
-        normalize_length=canvas_config.normalize_length,
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
@@ -203,9 +194,9 @@ def add_depth_group(
     slot_id: str | None = None,
     slot_renderer: str | None = None,
     track_height: float | None = None,
-    sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
     *,
+    sequence_width: float,
     group_key: GroupKey,
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
@@ -214,11 +205,8 @@ def add_depth_group(
         build_group_content,
         DepthGroup,
         gb_record=record,
-        alignment_width=canvas_config.alignment_width,
-        longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.depth_height if track_height is None else float(track_height),
         depth_config=depth_config,
-        normalize_length=canvas_config.normalize_length,
         depth_df=depth_df,
         group_id=dom_group_id or group_id,
         axis_group_id=dom_axis_group_id or axis_group_id,
@@ -249,9 +237,9 @@ def add_gc_skew_group(
     dom_group_id: str | None = None,
     slot_id: str | None = None,
     slot_renderer: str | None = None,
-    sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
     *,
+    sequence_width: float,
     group_key: GroupKey,
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
@@ -260,11 +248,8 @@ def add_gc_skew_group(
         build_group_content,
         GcSkewGroup,
         gb_record=record,
-        alignment_width=canvas_config.alignment_width,
-        longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.skew_height if track_height is None else float(track_height),
         skew_config=skew_config,
-        normalize_length=canvas_config.normalize_length,
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
@@ -456,11 +441,9 @@ def add_record_definition_group(
 def linear_comparison_content(
     comparisons: tuple[LinearComparison, ...],
     index: int,
-    geometry: LinearCanvasGeometry,
     blast_config: BlastMatchConfigurator,
     records: tuple[SeqRecord, ...],
     *,
-    align_center: bool,
     height: float,
     query_placement: LinearRecordPlacement,
     subject_placement: LinearRecordPlacement,
@@ -478,22 +461,18 @@ def linear_comparison_content(
     comparison = comparisons[index]
     return build_group_content(
         PairWiseMatchGroup,
-        geometry,
         blast_config.sequence_length_dict,
         comparison.matches,
         height,
         index + 1,
         blast_config,
         records,
-        query_record_index=comparison.query_record_index,
-        subject_record_index=comparison.subject_record_index,
         query_placement=query_placement,
         subject_placement=subject_placement,
         query_y=query_y,
         subject_y=subject_y,
         feature_dom_index=feature_dom_index,
         record_transforms=record_transforms,
-        align_center=align_center,
     )
 
 
@@ -511,7 +490,6 @@ def add_explicit_comparisons_on_linear_canvas(
 ) -> Drawing:
     """Draw comparisons using explicit endpoint placements."""
 
-    geometry = canvas_config.geometry()
     for index, comparison in enumerate(comparisons):
         query = placements[comparison.query_record_index]
         subject = placements[comparison.subject_record_index]
@@ -531,10 +509,8 @@ def add_explicit_comparisons_on_linear_canvas(
             linear_comparison_content,
             comparisons,
             index,
-            geometry,
             blast_config,
             tuple(records),
-            align_center=bool(canvas_config.align_center),
             height=abs(subject_anchor - query_anchor),
             query_placement=query,
             subject_placement=subject,

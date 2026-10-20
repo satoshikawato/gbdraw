@@ -61,7 +61,6 @@ def create_intron_path_linear(
     coord_dict: dict,
     genome_length: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     cds_height: float,
     feature_strand: str,
     separate_strands: bool,
@@ -86,10 +85,10 @@ def create_intron_path_linear(
     )
 
     normalized_start = normalize_position_to_linear_track(
-        feat_start, genome_length, alignment_width, genome_size_normalization_factor
+        feat_start, genome_length, alignment_width
     )
     normalized_end = normalize_position_to_linear_track(
-        feat_end, genome_length, alignment_width, genome_size_normalization_factor
+        feat_end, genome_length, alignment_width
     )
 
     feature_path = f"M {normalized_start},{middle_y} L{normalized_end},{middle_y} z"
@@ -100,7 +99,6 @@ def create_rectangle_path_linear(
     coord_dict: dict,
     genome_length: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     cds_height: float,
     feature_strand: str,
     separate_strands: bool,
@@ -123,10 +121,10 @@ def create_rectangle_path_linear(
     )
 
     normalized_start = normalize_position_to_linear_track(
-        feat_start, genome_length, alignment_width, genome_size_normalization_factor
+        feat_start, genome_length, alignment_width
     )
     normalized_end = normalize_position_to_linear_track(
-        feat_end, genome_length, alignment_width, genome_size_normalization_factor
+        feat_end, genome_length, alignment_width
     )
 
     feature_path = (
@@ -148,22 +146,22 @@ def get_arrow_strand_positions(normalized_start: float, normalized_end: float) -
 
 
 def calculate_normalized_arrow_length(
-    arrow_length: float, genome_length: int, alignment_width: float, genome_size_normalization_factor: float
+    arrow_length: float, genome_length: int, alignment_width: float
 ) -> float:
-    return alignment_width * (arrow_length / genome_length) * genome_size_normalization_factor
+    return alignment_width * (arrow_length / genome_length)
 
 
 def normalize_feature_positions(
-    coord_dict: dict, genome_length: int, alignment_width: float, genome_size_normalization_factor: float
+    coord_dict: dict, genome_length: int, alignment_width: float
 ) -> Tuple[float, float]:
     feat_start = int(coord_dict["feat_start"])
     feat_end = int(coord_dict["feat_end"])
 
     normalized_start = normalize_position_to_linear_track(
-        feat_start, genome_length, alignment_width, genome_size_normalization_factor
+        feat_start, genome_length, alignment_width
     )
     normalized_end = normalize_position_to_linear_track(
-        feat_end, genome_length, alignment_width, genome_size_normalization_factor
+        feat_end, genome_length, alignment_width
     )
 
     return normalized_start, normalized_end
@@ -254,7 +252,6 @@ def create_arrow_path_linear(
     feature_strand: str,
     genome_length: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     separate_strands: bool,
     feature_track_id: int = 0,
     track_layout: str = "middle",
@@ -265,12 +262,12 @@ def create_arrow_path_linear(
 ) -> list[str]:
     """Create a Linear arrow, preserving the legacy path at full shaft width."""
     normalized_start, normalized_end = normalize_feature_positions(
-        coord_dict, genome_length, alignment_width, genome_size_normalization_factor
+        coord_dict, genome_length, alignment_width
     )
     normalized_feat_len = normalized_end - normalized_start
 
     automatic_head_length_px = calculate_normalized_arrow_length(
-        arrow_length, genome_length, alignment_width, genome_size_normalization_factor
+        arrow_length, genome_length, alignment_width
     )
 
     arrow_start, arrow_end = get_arrow_strand_positions(normalized_start, normalized_end)[coord_dict["feat_strand"]]
@@ -339,7 +336,6 @@ def create_arrowhead_path_linear(
     feature_strand: str,
     genome_length: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     separate_strands: bool,
     feature_track_id: int = 0,
     track_layout: str = "middle",
@@ -355,7 +351,6 @@ def create_arrowhead_path_linear(
         feature_strand=feature_strand,
         genome_length=genome_length,
         alignment_width=alignment_width,
-        genome_size_normalization_factor=genome_size_normalization_factor,
         separate_strands=separate_strands,
         feature_track_id=feature_track_id,
         track_layout=track_layout,
@@ -370,7 +365,6 @@ def create_arrow_shaft_path_linear(
     coord_dict: dict,
     genome_length: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     cds_height: float,
     feature_strand: str,
     separate_strands: bool,
@@ -382,7 +376,7 @@ def create_arrow_shaft_path_linear(
 ) -> list[str]:
     """Create a reduced-width shaft block for a multipart arrow."""
     normalized_start, normalized_end = normalize_feature_positions(
-        coord_dict, genome_length, alignment_width, genome_size_normalization_factor
+        coord_dict, genome_length, alignment_width
     )
     top_y, middle_y, bottom_y = _resolve_feature_y_positions(
         cds_height=cds_height,

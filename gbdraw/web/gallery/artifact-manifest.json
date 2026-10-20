@@ -17,8 +17,8 @@
       "sha256": "03d7796543a50019ed2e7743ba642200659b893f80b5cb73e417beed50929d7d"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1334635,
-      "sha256": "056b555029129726deb3f8808430fa7cabc97b5783ddc776a8607fdeb00126dd"
+      "bytes": 1342735,
+      "sha256": "464b3ca4c83384168ed110cb31b906dcc95feaa9f886f85d61987abb1741ac92"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 494814,
@@ -34,11 +34,11 @@
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 16674673,
-      "sha256": "a867db40c2e8d33fbdd32bf8ddd6c3d2f56f93439e90d33977bf95af35976e88"
+      "sha256": "bc11a4603581fe6790ea0285d1fccec8979383664e32c288cce48f578dea5c01"
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
       "bytes": 19487690,
-      "sha256": "bbb81b8b3a0f64ca3696a15d02e9124ec92af045ecb4ea1241dcf389d32ebe42"
+      "sha256": "b4e882b267eb856994bd7d210a38badf6cf4346742a06c5ae77810597be519bd"
     },
     "gallery/examples/lambda_basic_linear.svg": {
       "bytes": 874628,
@@ -53,12 +53,12 @@
       "sha256": "62042afa0ececa97f151413c35487f486349d783ca78ec6da978c596792b7ceb"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 14964200,
-      "sha256": "da86207da24e2e35342f5c07d3fa72705411fcaff693e113a3d14f6bb0029dba"
+      "bytes": 14964129,
+      "sha256": "fe2309f196293b282bccc777b2687b80bcfce92ddc8530a9258384b89952ec7b"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3033695,
-      "sha256": "f1d6c58b078a9392c10965de915d10307326f2579444c0343bd1ab76d8cd9add"
+      "bytes": 3042393,
+      "sha256": "68f4f668c696782485089d8854475a730aef22bf262123dd902a9fd137444cbb"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 325878,
@@ -73,12 +73,12 @@
       "sha256": "f2d214fe8e585f761adf509587d8a053838a09435bb33b7986aec84d8538c71b"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
-      "bytes": 11692473,
-      "sha256": "68d8e94df879f2e5c483b0e1e0961d5c3f90a027d9c7ff1ff8dc674a01ddbb84"
+      "bytes": 11692476,
+      "sha256": "742e5abbcd9915e3e83be95f888a0a7a727392898686b8eaadfe689b96667e9c"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 15023074,
-      "sha256": "3a0e4f054a970c7f33d7008176013f5bf6f6334d5c24aeb59a992ab5615138d8"
+      "bytes": 15023064,
+      "sha256": "c41dd9dd82d792aeec19e0f4573e293ba06194cd795b7fdde391314231125ed5"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
       "bytes": 856074,
@@ -93,12 +93,12 @@
       "sha256": "39278adb9279a4ebda6b5e7f01beee27a83e0955e6b114cff30a2e075b13f232"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 28324622,
-      "sha256": "e8a0d048c67162f60d4ade2f74447dd54cf8ede795d3e4c05540a205683a764a"
+      "bytes": 28324625,
+      "sha256": "5414a032a6e7358c9394f1f59f710229507c0084c7fa78e5985f72dab22d987b"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 250461,
-      "sha256": "322253dc896478dfa59885a14d5170dc08856b4065e4ba68770700de6fb5b131"
+      "bytes": 258561,
+      "sha256": "ce489cb3a866c97b71ed45f39e6fd1654bd104f66afb668eb0e63b2c4284ef78"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 135052,
@@ -114,11 +114,11 @@
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 6323978,
-      "sha256": "877fd8d2bcb6e74f7e93484d1402cd670143116266bfeb20b6f44ea29d5b95f5"
+      "sha256": "250fd3e144a7d7479ce591d6dfc994a5ad5c32c9965669c93dfbf4e490f9e4da"
     },
     "gallery/sources/hepatoplasmataceae_orthogroup.svg": {
       "bytes": 8370852,
-      "sha256": "7142338528d28da7dcf139768d990a02c35cbad1352512e601a4773f5e17f1fc"
+      "sha256": "2fbc789dd69ea97bc4dfee82013c13001e7f5498e0c791b86fa1c744c5a45ab0"
     },
     "gallery/sources/lambda_basic_linear.svg": {
       "bytes": 133837,
@@ -133,12 +133,12 @@
       "sha256": "016fe7a91dfb3ce865078317572f5871a736ec5f39a4c14d6ffa116efd1a6468"
     },
     "gallery/sources/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 5168715,
-      "sha256": "f4d1aeb84b9bd2777b9ec53e8dfe2cc9bae404de391abba64f90b5ea40a5b51c"
+      "bytes": 5168644,
+      "sha256": "f22743caed6093e8bb63cbf6e0f6910be1b2756cc68d5981ed94e34e61a5e853"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 18918,
-      "sha256": "0094617d236aeaca4ca676d850fd8ac2f2dfbe5f8ca958a3e7001129167f0be8"
+      "bytes": 18926,
+      "sha256": "778c5d890fabae94fdc4af505a0d3ab15cb97eab6ce6b03e66eba41a392de2ee"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22298,
