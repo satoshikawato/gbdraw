@@ -1311,26 +1311,7 @@ def _resolve_label_leader_line_collisions(
                 continue
 
             current_angle = float(unwrapped_angles[label_idx])
-            lower_bound = (
-                float(unwrapped_angles[label_idx - 1]) + min_order_gap_deg
-                if label_idx > 0
-                else -float("inf")
-            )
-            upper_bound = (
-                float(unwrapped_angles[label_idx + 1]) - min_order_gap_deg
-                if label_idx < len(labels) - 1
-                else float("inf")
-            )
-            if label_idx == 0:
-                lower_bound = max(
-                    lower_bound,
-                    float(unwrapped_angles[-1]) - 360.0 + min_order_gap_deg,
-                )
-            elif label_idx == len(labels) - 1:
-                upper_bound = min(
-                    upper_bound,
-                    float(unwrapped_angles[0]) + 360.0 - min_order_gap_deg,
-                )
+            lower_bound, upper_bound = _cyclic_order_bounds(unwrapped_angles, label_idx, min_order_gap_deg)
             if lower_bound >= upper_bound:
                 continue
 
@@ -3122,13 +3103,13 @@ def improved_label_placement_fc(
         return penalty
 
     def enforce_order(min_gap: float) -> bool:
-        changed = False
-        for i in range(1, len(labels)):
-            minimum_allowed = labels[i - 1]["angle_unwrapped"] + min_gap
-            if labels[i]["angle_unwrapped"] < minimum_allowed:
-                update_label_coordinates(labels[i], minimum_allowed)
-                changed = True
-        return changed
+        angles = [float(label["angle_unwrapped"]) for label in labels]
+        if not _keep_cyclic_order(angles, min_gap):
+            return False
+        for label, angle in zip(labels, angles):
+            if angle != label["angle_unwrapped"]:
+                update_label_coordinates(label, angle)
+        return True
 
     def overlapping_pairs() -> list[tuple[int, int]]:
         return [
@@ -3268,14 +3249,7 @@ def improved_label_placement_fc(
                             ordered[idx] = candidate
 
                         # Keep global ordering constraints valid.
-                        for i in range(1, n_labels):
-                            minimum_allowed = ordered[i - 1] + min_order_gap
-                            if ordered[i] < minimum_allowed:
-                                ordered[i] = minimum_allowed
-                        for i in range(n_labels - 2, -1, -1):
-                            maximum_allowed = ordered[i + 1] - min_order_gap
-                            if ordered[i] > maximum_allowed:
-                                ordered[i] = maximum_allowed
+                        _keep_cyclic_order(ordered, min_order_gap)
 
                         # Respect per-label shift budget.
                         violates_budget = False
@@ -3339,6 +3313,7 @@ def improved_label_placement_fc(
             changes_made = False
             if enforce_order(min_order_gap):
                 changes_made = True
+            angles = [float(label["angle_unwrapped"]) for label in labels]
 
             iteration_order = sorted(range(len(labels)), key=local_density_weight)
             # Peer pruning (output-preserving): check_overlap is false for labels whose reach boxes are disjoint.
@@ -3356,15 +3331,11 @@ def improved_label_placement_fc(
                 if current_overlaps == 0 and current_middle_penalty == 0 and current_target_delta == 0:
                     continue
 
-                lower_bound = target_angle - shift_limit_deg
-                upper_bound = target_angle + shift_limit_deg
-                if label_idx > 0:
-                    lower_bound = max(lower_bound, labels[label_idx - 1]["angle_unwrapped"] + min_order_gap)
-                if label_idx < len(labels) - 1:
-                    upper_bound = min(upper_bound, labels[label_idx + 1]["angle_unwrapped"] - min_order_gap)
+                order_lower, order_upper = _cyclic_order_bounds(angles, label_idx, min_order_gap)
+                lower_bound = max(target_angle - shift_limit_deg, order_lower)
+                upper_bound = min(target_angle + shift_limit_deg, order_upper)
                 if lower_bound > upper_bound:
-                    lower_bound = labels[label_idx - 1]["angle_unwrapped"] + min_order_gap if label_idx > 0 else lower_bound
-                    upper_bound = labels[label_idx + 1]["angle_unwrapped"] - min_order_gap if label_idx < len(labels) - 1 else upper_bound
+                    lower_bound, upper_bound = order_lower, order_upper
                     if lower_bound > upper_bound:
                         continue
 
@@ -3464,6 +3435,7 @@ def improved_label_placement_fc(
                     label["start_x"] = best_x
                     label["start_y"] = best_y
                     label["angle_unwrapped"] = best_angle
+                    angles[label_idx] = best_angle
                     reach_boxes[label_idx] = _label_reach_box(label, reach_pad)
                     changes_made = True
             if not changes_made:
@@ -3669,6 +3641,41 @@ def improved_label_placement_fc(
     for label in labels:
         label.pop("_opt_original_idx", None)
     return labels
+
+
+def _cyclic_order_bounds(angles: Sequence[float], idx: int, min_gap: float) -> tuple[float, float]:
+    """The open angle interval that keeps label ``idx`` between its neighbours in feature order.
+
+    ``angles`` are the labels' unwrapped angles in feature order. The first and last labels are
+    neighbours across the origin, so no label may pass another by wrapping around the circle.
+    """
+    last = len(angles) - 1
+    lower = float(angles[idx - 1]) + min_gap if idx > 0 else float(angles[last]) - 360.0 + min_gap
+    upper = float(angles[idx + 1]) - min_gap if idx < last else float(angles[0]) + 360.0 - min_gap
+    return lower, upper
+
+
+def _keep_cyclic_order(angles: list[float], min_gap: float) -> bool:
+    """Move ``angles`` in place into their `_cyclic_order_bounds`, keeping the first; return whether any moved.
+
+    A forward pass lifts each label above the one before it; a backward pass then lowers the labels
+    that passed the first label's place one turn later, so the chain spans less than a full circle.
+    The backward pass ignores overshoots below 1e-9 degrees: ``(a + gap) - gap`` can round below ``a``,
+    and lowering by that rounding would undo the forward pass on every call.
+    """
+    changed = False
+    last = len(angles) - 1
+    for idx in range(1, last + 1):
+        lower, _ = _cyclic_order_bounds(angles, idx, min_gap)
+        if angles[idx] < lower:
+            angles[idx] = lower
+            changed = True
+    for idx in range(last, 0, -1):
+        _, upper = _cyclic_order_bounds(angles, idx, min_gap)
+        if angles[idx] > upper + 1e-9:
+            angles[idx] = upper
+            changed = True
+    return changed
 
 
 def _derive_monotonic_unwrapped_angles(labels: list[CircularLabel], total_length: int) -> list[float]:
@@ -4176,12 +4183,7 @@ def _refine_labels_to_preferred_hemisphere(
             if current_half in (0, preferred_half):
                 continue
 
-            lower_bound = current_unwrapped_angles[label_idx - 1] + min_order_gap if label_idx > 0 else -float("inf")
-            upper_bound = (
-                current_unwrapped_angles[label_idx + 1] - min_order_gap
-                if label_idx < len(labels) - 1
-                else float("inf")
-            )
+            lower_bound, upper_bound = _cyclic_order_bounds(current_unwrapped_angles, label_idx, min_order_gap)
             if lower_bound >= upper_bound:
                 continue
 
@@ -4309,12 +4311,11 @@ def _refine_labels_to_preferred_hemisphere(
                                 for move_idx in range(block_start, block_end + 1):
                                     candidate_angles[move_idx] += delta
 
-                                order_valid = True
-                                for check_idx in range(1, len(candidate_angles)):
-                                    if candidate_angles[check_idx] <= candidate_angles[check_idx - 1] + min_order_gap:
-                                        order_valid = False
-                                        break
-                                if not order_valid:
+                                if any(
+                                    candidate_angles[check_idx]
+                                    <= _cyclic_order_bounds(candidate_angles, check_idx, min_order_gap)[0]
+                                    for check_idx in range(len(candidate_angles))
+                                ):
                                     continue
 
                                 candidate_labels = [item.copy() for item in labels]
@@ -4444,7 +4445,9 @@ def _polish_total_leader_distance(
             )
         )
 
-    def _update_label_coordinates(label: CircularLabel, angle_unwrapped: float) -> None:
+    def _move_label(label_idx: int, angle_unwrapped: float) -> None:
+        unwrapped[label_idx] = angle_unwrapped
+        label = labels[label_idx]
         label["angle_unwrapped"] = angle_unwrapped
         label["start_x"], label["start_y"] = calculate_coordinates(
             center_x,
@@ -4500,21 +4503,12 @@ def _polish_total_leader_distance(
 
         for label_idx in label_order:
             label = labels[label_idx]
-            current_angle = float(label["angle_unwrapped"])
+            current_angle = unwrapped[label_idx]
             target_angle = _target_angle_unwrapped(label)
             if math.isclose(current_angle, target_angle, abs_tol=1e-9):
                 continue
 
-            lower_bound = (
-                float(labels[label_idx - 1]["angle_unwrapped"]) + min_order_gap
-                if label_idx > 0
-                else -float("inf")
-            )
-            upper_bound = (
-                float(labels[label_idx + 1]["angle_unwrapped"]) - min_order_gap
-                if label_idx < (len(labels) - 1)
-                else float("inf")
-            )
+            lower_bound, upper_bound = _cyclic_order_bounds(unwrapped, label_idx, min_order_gap)
             if lower_bound >= upper_bound:
                 continue
 
@@ -4644,7 +4638,7 @@ def _polish_total_leader_distance(
                 continue
 
             accepted_angle, accepted_score = accepted
-            _update_label_coordinates(label, accepted_angle)
+            _move_label(label_idx, accepted_angle)
             reach_boxes[label_idx] = _label_reach_box(label, reach_pad)
             plain_overlaps = accepted_score[0]
             min_gap_overlaps = accepted_score[1]
