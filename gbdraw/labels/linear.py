@@ -56,11 +56,12 @@ from .fit import (
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 def _row_label_margin_px(label: Mapping[str, Any]) -> float:
-    """The room a label keeps free on each side of its letters in its label row: half of
-    ``ROW_LABEL_GAP_EM`` of its own font size, so neighbours keep the gap between them. A label drawn
-    on its feature is in no row."""
+    """The room a label keeps free at both ends of its text in its label row: half of
+    ``ROW_LABEL_GAP_EM`` of its own font size, so neighbours on one line keep the gap between them
+    (LP-D104), horizontal or turned. The rows are the auto rows and the rows ``above_feature``
+    labels stack in; a label drawn inside its feature is in no row."""
 
-    if label.get("is_embedded"):
+    if label.get("is_embedded") and "above_feature_place_above" not in label:
         return 0.0
     return 0.5 * ROW_LABEL_GAP_EM * float(label["font_size"])
 
@@ -92,11 +93,6 @@ def find_lowest_available_track(track_dict, label):
 def _linear_label_interval(label: dict) -> Interval:
     margin = _row_label_margin_px(label)
     return Interval(float(label["start"]) - margin, float(label["end"]) + margin)
-
-
-def _linear_label_aabb(label: dict) -> Aabb:
-    left, right, top, bottom = calculate_label_bounds(label)
-    return Aabb(left, top, right, bottom)
 
 
 def _external_label_bucket_size(alignment_width: float) -> float:
@@ -161,8 +157,9 @@ def _rotated_corner_offsets(
     height_px: float,
     rotation_deg: float,
     text_anchor: str,
+    along_text_px: float = 0.0,
 ) -> tuple[tuple[float, float], ...]:
-    return text_box_corner_offsets(width_px, height_px, rotation_deg, text_anchor)
+    return text_box_corner_offsets(width_px, height_px, rotation_deg, text_anchor, along_text_px=along_text_px)
 
 
 def _rotated_y_bounds_from_anchor(
@@ -255,16 +252,19 @@ def _label_covers_keep_clear(label: Mapping[str, object], boxes: Sequence[Aabb])
     )
 
 
-def _label_corners(label: dict, shift_y: float = 0.0) -> list[tuple[float, float]]:
+def _label_corners(label: dict, shift_y: float = 0.0, along_text_px: float = 0.0) -> list[tuple[float, float]]:
+    """A label's box moved ``shift_y`` down, with ``along_text_px`` added at both ends of its text."""
+
     middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"]) + shift_y
     return list(
         translate_points(
             _rotated_corner_offsets(
-            float(label["width_px"]),
-            float(label["height_px"]),
-            float(label.get("rotation_deg", 0.0)),
-            str(label.get("text_anchor", "middle")),
+                float(label["width_px"]),
+                float(label["height_px"]),
+                float(label.get("rotation_deg", 0.0)),
+                str(label.get("text_anchor", "middle")),
+                along_text_px,
             ),
             middle_x,
             middle_y,
@@ -278,7 +278,7 @@ def _project_polygon(points: Sequence[tuple[float, float]], axis_x: float, axis_
 
 
 def _rotated_label_rects_intersect(label1: dict, label2: dict, label1_shift_y: float = 0.0) -> bool:
-    return _shifted_label_overlaps(label1, _label_corners(label2), label1_shift_y, None)
+    return _shifted_label_overlaps(label1, _label_corners(label2), label1_shift_y, None, 0.0)
 
 
 def _update_linear_label_leader_end(label: dict) -> None:
@@ -294,10 +294,12 @@ _SHIFT_DECISION_MARGIN_PX = 1e-6
 
 class _PlacedLinearLabel(NamedTuple):
     """A label that no longer moves, or a box the labels keep clear of, with the shapes the collision
-    pass reads."""
+    pass reads: a label's box with its row gap (``_row_label_corners``), a keep-clear box as it is."""
 
     aabb: Aabb
     corners: list[tuple[float, float]]
+    # A label: the moving label keeps its own row gap from it too. A keep-clear box: its bare box.
+    keeps_row_gap: bool
 
 
 def _vertical_overlap_shift_range(
@@ -346,8 +348,10 @@ def _shifted_label_overlaps(
     other_corners: Sequence[tuple[float, float]],
     shift: float,
     overlap_range: tuple[float, float] | None,
+    along_text_px: float,
 ) -> bool:
-    """Polygon test of ``label`` moved by ``shift`` against fixed corners.
+    """Polygon test of ``label`` moved by ``shift``, with ``along_text_px`` at both ends of its text,
+    against fixed corners.
 
     A shift clearly inside or outside ``overlap_range`` is answered from the range;
     one within the margin of its edges, or any shift without a range, runs the test.
@@ -358,7 +362,9 @@ def _shifted_label_overlaps(
             return True
         if shift < low - _SHIFT_DECISION_MARGIN_PX or shift > high + _SHIFT_DECISION_MARGIN_PX:
             return False
-    return convex_polygons_intersect(_label_corners(label, shift_y=shift), other_corners, touching=False)
+    return convex_polygons_intersect(
+        _label_corners(label, shift_y=shift, along_text_px=along_text_px), other_corners, touching=False
+    )
 
 
 def _vertical_label_shift_to_clear(
@@ -368,10 +374,11 @@ def _vertical_label_shift_to_clear(
     direction: float,
     fallback_shift: float,
     min_gap_px: float,
+    along_text_px: float,
 ) -> float:
     shift_sign = -1.0 if direction < 0.0 else 1.0
     high = max(abs(float(fallback_shift)), float(min_gap_px), 1.0)
-    while _shifted_label_overlaps(label, other_corners, shift_sign * high, overlap_range):
+    while _shifted_label_overlaps(label, other_corners, shift_sign * high, overlap_range, along_text_px):
         high *= 2.0
         if high > max(abs(float(fallback_shift)) * 8.0, 1024.0):
             return fallback_shift
@@ -379,7 +386,7 @@ def _vertical_label_shift_to_clear(
     low = 0.0
     for _ in range(20):
         mid = (low + high) / 2.0
-        if _shifted_label_overlaps(label, other_corners, shift_sign * mid, overlap_range):
+        if _shifted_label_overlaps(label, other_corners, shift_sign * mid, overlap_range, along_text_px):
             low = mid
         else:
             high = mid
@@ -406,10 +413,12 @@ def _place_linear_label_without_overlap(
       far below ``_SHIFT_DECISION_MARGIN_PX``, inside which the polygon test decides.
     """
     original_y = float(label["middle_y"])
-    original_corners = _label_corners(label)
+    row_gap = _row_label_margin_px(label)
+    # The label's box at its start, bare (against keep-clear boxes) and with its row gap (against labels).
+    original_corners = {0.0: _label_corners(label), row_gap: _label_corners(label, along_text_px=row_gap)}
     clearance = _SHIFT_DECISION_MARGIN_PX
     moves_up = direction < 0.0
-    start_aabb = _linear_label_aabb(label)
+    start_aabb = _row_label_aabb(label)
     column = [
         (placed_id, placed_by_id[placed_id])
         for placed_id in (
@@ -426,7 +435,7 @@ def _place_linear_label_without_overlap(
     start_ranges: dict[int, tuple[float, float] | None] = {}
     for _ in range(len(placed_by_id) + 1):
         required_shift = 0.0
-        label_aabb = _linear_label_aabb(label)
+        label_aabb = _row_label_aabb(label)
         accumulated_shift = float(label["middle_y"]) - original_y
         # The y clauses of ``Aabb.intersects(other, clearance)``: as the label moves
         # away from the axis, the first becomes true and stays true, the second
@@ -445,15 +454,16 @@ def _place_linear_label_without_overlap(
         # ``reached`` now holds exactly the placed labels whose bbox the label's meets.
         for placed_id, other in reached:
             other_aabb = other.aabb
+            along_text_px = row_gap if other.keeps_row_gap else 0.0
             if placed_id not in start_ranges:
-                start_ranges[placed_id] = _vertical_overlap_shift_range(original_corners, other.corners)
+                start_ranges[placed_id] = _vertical_overlap_shift_range(original_corners[along_text_px], other.corners)
             start_range = start_ranges[placed_id]
             overlap_range = (
                 None
                 if start_range is None
                 else (start_range[0] - accumulated_shift, start_range[1] - accumulated_shift)
             )
-            if not _shifted_label_overlaps(label, other.corners, 0.0, overlap_range):
+            if not _shifted_label_overlaps(label, other.corners, 0.0, overlap_range, along_text_px):
                 continue
 
             if moves_up:
@@ -461,7 +471,7 @@ def _place_linear_label_without_overlap(
             else:
                 fallback_shift = (other_aabb.max_y + float(min_gap_px)) - label_aabb.min_y
             shift = _vertical_label_shift_to_clear(
-                label, other.corners, overlap_range, direction, fallback_shift, min_gap_px
+                label, other.corners, overlap_range, direction, fallback_shift, min_gap_px, along_text_px
             )
             required_shift = min(required_shift, shift) if moves_up else max(required_shift, shift)
 
@@ -476,8 +486,8 @@ def _place_linear_label_without_overlap(
 def _resolve_above_feature_label_overlaps(
     labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()
 ) -> None:
-    """Stack rotated above-feature labels away from the axis when their bboxes collide, and off the
-    ``keep_clear`` boxes (the definition text), which are placed first."""
+    """Stack above-feature labels away from the axis when their boxes, each with its row gap along its
+    text, collide, and off the ``keep_clear`` boxes (the definition text), which are placed first."""
     if not labels:
         return
 
@@ -489,14 +499,15 @@ def _resolve_above_feature_label_overlaps(
         placed_x_index = IntervalIndex(bucket_size=_above_feature_label_bucket_size(side_labels, min_gap_px))
         for box in keep_clear:
             corners = [(box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)]
-            placed_by_id[len(placed_by_id)] = _PlacedLinearLabel(box, corners)
+            placed_by_id[len(placed_by_id)] = _PlacedLinearLabel(box, corners, keeps_row_gap=False)
             placed_x_index.insert(len(placed_by_id) - 1, Interval(box.min_x, box.max_x))
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
             if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
-            placed = _PlacedLinearLabel(_linear_label_aabb(label), _label_corners(label))
+            corners = _row_label_corners(label)
+            placed = _PlacedLinearLabel(Aabb(*aabb_from_points(corners)), corners, keeps_row_gap=True)
             placed_id = len(placed_by_id)
             placed_by_id[placed_id] = placed
             placed_x_index.insert(placed_id, Interval(placed.aabb.min_x, placed.aabb.max_x))
@@ -1043,15 +1054,14 @@ def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
 
 
 def _row_label_corners(label: dict) -> list[tuple[float, float]]:
-    """The corners of a label's box widened by the room it keeps beside it in its row (a rotated
-    label keeps its box)."""
+    """The corners of a label's box with the room it keeps at both ends of its text in its row: the one
+    shape of a row label for the packer, the above-feature resolver and the fit count."""
 
-    corners = _label_corners(label)
-    margin = _row_label_margin_px(label)
-    if not margin or float(label.get("rotation_deg", 0.0)) != 0.0:
-        return corners
-    middle = 0.5 * (min(px for px, _py in corners) + max(px for px, _py in corners))
-    return [(px + math.copysign(margin, px - middle), py) for px, py in corners]
+    return _label_corners(label, along_text_px=_row_label_margin_px(label))
+
+
+def _row_label_aabb(label: dict) -> Aabb:
+    return Aabb(*aabb_from_points(_row_label_corners(label)))
 
 
 def linear_label_shapes(labels: Sequence[dict], x: float = 0.0) -> list[LabelShape]:
