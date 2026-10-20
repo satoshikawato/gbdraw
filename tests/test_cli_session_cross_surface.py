@@ -14,6 +14,7 @@ import json
 
 import pytest
 
+from gbdraw.cli_utils.session import collect_embedded_files_from_cli_args
 from tests.utils.cli_session_cross_surface import (
     check,
     load_cases,
@@ -32,6 +33,15 @@ TABLE_FIELDS = {
     "--label_whitelist": ("labelWhitelistTable",),
     "--qualifier_priority": ("qualifierPriorityTable",),
 }
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_label_blacklist_is_recorded_as_keywords_never_as_a_file(mode):
+    """OV-1338: `--label_blacklist` takes keywords, so an existing path binds no Blacklist File."""
+    path = "tests/fixtures/cli_session_cross_surface/blacklist.txt"
+    files, bindings = collect_embedded_files_from_cli_args(mode, ["--label_blacklist", path])
+    assert files["blacklist"] is None
+    assert bindings == ()
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])

@@ -731,13 +731,9 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
             assert.deepEqual(values, values.map(() => (marked ? CARD_MARKS[option] : null)), `${entry.id}, ${source}: ${option} card`);
           }
         }
-        // A blacklist the CLI Session binds as a file is its card's; words given on the command line, and a Python
-        // re-save (it keeps no file bindings), have no card. The CLI reads `--label_blacklist` as keywords, a path
-        // too (OV-1338), so the card holds the text the CLI drew with.
-        const blacklist = entry.args[entry.args.indexOf('--label_blacklist') + 1];
-        const blacklistFile = marked && source !== 'Python re-save' && blacklist?.endsWith('.txt');
-        assert.deepEqual(drawing.fileImports.blacklist?.words,
-          blacklistFile ? [path.join(root, blacklist)] : undefined, `${entry.id}, ${source}: blacklist card`);
+        // The CLI reads `--label_blacklist` as keywords, a path too (OV-1338), so no Session binds it as a Blacklist
+        // File: the card stays empty and the keyword box holds the text the CLI drew with.
+        assert.equal(drawing.fileImports.blacklist, undefined, `${entry.id}, ${source}: blacklist card`);
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });
