@@ -4,8 +4,9 @@ The geometry owner that both drawers (underline, leader end, box backing)
 and the Linear region-label placer (the underline as part of the letters) read
 (LP-D88, LP-D90, LP-D98). The underline takes no room in a Linear label's row
 box.
-With an underline (``label_style.FeatureLabelStyle.line == "under"``) the
-leader ends where it meets the line, at the point of the line nearest the
+With an underline (``label_style.FeatureLabelStyle.draws_underline``: the
+style's ``line`` is ``under`` and the label is not turned) the leader
+ends where it meets the line, at the point of the line nearest the
 leader's previous point (the near end for a leader that arrives from the side,
 a T for one from straight below); a Circular leader meets it at the end where
 it ends today, with its last segment re-aimed there and no added bend (LP-D90).
@@ -26,7 +27,7 @@ from ..layout.spatial import Aabb
 from ..layout.text_geometry import Point, TextAnchor, normalize_text_anchor
 from .circular_leaders import leader_polyline, rim_text_placement
 from .circular_types import CircularLabel
-from .label_style import GAP_STOP_EM, UNDERLINE_GAP_EM, UNDERLINE_TRIM_EM, leader_width_px
+from .label_style import GAP_STOP_EM, UNDERLINE_GAP_EM, UNDERLINE_TRIM_EM, FeatureLabelStyle, leader_width_px
 
 
 def segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
@@ -139,11 +140,13 @@ def feature_label_ink(
     anchor: TextAnchor,
     dominant_baseline: str,
     rotation_deg: float,
+    turned: bool,
     leader: Sequence[Point],
-    underline: bool,
+    style: FeatureLabelStyle,
     join_at_end: bool = False,
 ) -> FeatureLabelInk:
-    """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it)."""
+    """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it), with an underline
+    when ``style`` draws one under it and the label is not ``turned``."""
 
     size = float(font_size)
     offsets = text_ink_offsets(text, font_family, size, dominant_baseline=dominant_baseline, text_anchor=anchor)
@@ -155,7 +158,7 @@ def feature_label_ink(
     left, right, top, bottom = offsets
     x, y = float(at[0]), float(at[1])
     under_y = stop_y = None
-    if underline:
+    if style.draws_underline(turned):
         # The gap is measured to the line's edge, so its centre lies half its width further out.
         reach = UNDERLINE_GAP_EM * size + 0.5 * leader_width_px(size)
         metrics = get_font_vertical_metrics(font_family)
@@ -178,9 +181,10 @@ def feature_label_ink(
     )
 
 
-def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], *, underline: bool) -> FeatureLabelInk:
-    """A drawn Linear feature label (``dominant-baseline=central``)."""
+def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], style: FeatureLabelStyle) -> FeatureLabelInk:
+    """A drawn Linear feature label (``dominant-baseline=central``); turned when given a rotation."""
 
+    rotation_deg = float(str(label.get("rotation_deg", 0.0)))
     return feature_label_ink(
         str(label["label_text"]),
         str(label["font_family"]),
@@ -188,14 +192,15 @@ def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], *, un
         at=(float(str(label["middle_x"])), float(str(label["middle_y"]))),
         anchor=normalize_text_anchor(label.get("text_anchor", "middle")),
         dominant_baseline="central",
-        rotation_deg=float(str(label.get("rotation_deg", 0.0))),
+        rotation_deg=rotation_deg,
+        turned=rotation_deg % 360.0 != 0.0,
         leader=leader,
-        underline=underline,
+        style=style,
     )
 
 
-def circular_label_ink(label: CircularLabel, record_length: int, *, underline: bool) -> FeatureLabelInk:
-    """A drawn outer or inner Circular label."""
+def circular_label_ink(label: CircularLabel, record_length: int, style: FeatureLabelStyle) -> FeatureLabelInk:
+    """A drawn outer or inner Circular label; a radial one is turned, even where it reads horizontally."""
 
     (x, y), anchor, baseline, rotation_deg = rim_text_placement(label, record_length)
     return feature_label_ink(
@@ -206,8 +211,9 @@ def circular_label_ink(label: CircularLabel, record_length: int, *, underline: b
         anchor=normalize_text_anchor(anchor),
         dominant_baseline=baseline,
         rotation_deg=rotation_deg,
+        turned=label.get("placement") == "radial",
         leader=leader_polyline(label),
-        underline=underline,
+        style=style,
         join_at_end=True,
     )
 

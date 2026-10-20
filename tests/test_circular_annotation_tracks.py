@@ -1179,7 +1179,7 @@ def test_circular_annotation_labels_keep_off_what_the_feature_label_style_draws(
 ) -> None:
     """OV-1358: what an annotation label keeps off is everything drawn for a feature label, its letters and, by
     its style, its underline and its white box (the Linear rule, OV-1357): each drawn underline and box is one of
-    the obstacle parts (a halo, the default, adds none)."""
+    the obstacle parts (a halo adds none)."""
 
     from Bio import SeqIO
 

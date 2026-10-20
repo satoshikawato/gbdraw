@@ -781,7 +781,7 @@ def _feature_label_obstacles(
             shape,
             ()
             if label.get("is_embedded")
-            else feature_label_drawn_parts(circular_label_ink(label, total_length, underline=style.underline), style),
+            else feature_label_drawn_parts(circular_label_ink(label, total_length, style), style),
         )
         for label in labels
         if (shape := circular_label_shape(label, total_length)).parts

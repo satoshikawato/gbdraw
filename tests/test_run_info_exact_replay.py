@@ -26,7 +26,7 @@ pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sessions/HmmtDNA_basic_circular.issue-469.json.gz"
 SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
-OUTPUT_SHA = "ee09a01a634d9cb3fe993e756ea0aad73109a4fd4e848039d9dc6e85595a0eb5"
+OUTPUT_SHA = "96efbd45f967ee658d8899afa88ee5af93532b225d68f681fd6d355ef21b35cb"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went

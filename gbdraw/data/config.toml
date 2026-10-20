@@ -243,14 +243,14 @@ feature = ["note"]
   scope = "none"
   placement = "auto"
   rotation = 0.0
-  line = "under"        # none | under: a line under the letters that continues the leader
+  line = "under"        # none | under: a line under a horizontal label that continues the leader
   protection = "box"    # none | halo | box: what keeps a leader behind the letters off them
 
 [labels.circular]
   scope = "none"
   placement = "horizontal"
   line = "none"
-  protection = "halo"
+  protection = "none"
 [labels.spacing]
   circular = 3.0
   linear = 3.0
