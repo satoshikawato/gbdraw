@@ -2141,7 +2141,7 @@ export default Object.freeze({
   "The figure is drawn. Choose a fix to Generate again, or Cancel to keep it.": "图谱已绘制。请选择修复方式并重新生成，或点击“取消”保留当前图谱。",
   "The file is empty.": "该文件为空。",
   "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "该文件经过gzip压缩。请先解压（例如使用gunzip）；GenBank/DDBJ输入必须是未压缩的平面文件。",
-  "The file is not a GenBank/DDBJ flat file: it has no record header line.": "该文件不是GenBank/DDBJ平面文件：没有记录的首行（LOCUS行）。",
+  "The file is not a GenBank/DDBJ flat file: it has no record header line.": "该文件不是GenBank/DDBJ平面文件：缺少记录头行。",
   "The font could not be loaded.": "无法加载该字体。",
   "The font of all diagram text: labels, titles, legend, and scale.": "图谱中所有文本的字体：标签、标题、图例和比例尺。",
   "The generated result could not be accepted. Retry the operation.": "无法接受生成的结果。请重试该操作。",
