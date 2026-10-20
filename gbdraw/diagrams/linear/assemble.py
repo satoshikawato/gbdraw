@@ -16,7 +16,8 @@ import copy
 from dataclasses import dataclass, replace
 import logging
 import math
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NamedTuple, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 import pandas as pd
@@ -55,7 +56,7 @@ from ...configurators import (
 )
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
-from ...core.text import calculate_bbox_dimensions
+from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ...render.group_content import (
     CANVAS_SCOPE,
     GroupContent,
@@ -140,6 +141,9 @@ from ...linear_comparison import (
 )
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
+    LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
+    LINEAR_SCALAR_AXIS_STROKE_PX,
+    LINEAR_SCALAR_AXIS_TICK_PX,
     _depth_axis_bounds,
     _format_depth_tick,
     format_percent_tick,
@@ -1543,87 +1547,77 @@ def _linear_axis_ruler_bounds(
     return union_aabbs(bounds)
 
 
-def _linear_scalar_axis_left_overhang(
-    plan: LinearRecordVerticalPlan,
-    *,
-    gc_config: GcContentConfigurator,
-    depth_by_index: dict[int, DepthTrackData],
-    cfg: GbdrawConfig,
-) -> float:
-    """Measure left-facing scalar-axis ticks and labels from resolved data."""
+class LinearScalarAxisLeftRoom(NamedTuple):
+    """How far left of a record's axis start its left-facing scalar axes (depth, GC%) draw: their line
+    (``axis_px``, 0 without an axis) and their tick labels (``tick_labels_px``, 0 without labels)."""
 
-    overhang = 0.0
-    for slot in plan.slots:
-        if slot.paint_band is None:
-            continue
+    axis_px: float
+    tick_labels_px: float
+
+
+def _linear_scalar_axis_left_room(
+    slots: Sequence[LinearResolvedTrack],
+    *,
+    gc_config_of: Callable[[Mapping[str, object], Mapping[int, DepthTrackData]], GcContentConfigurator],
+    depth_by_index: Mapping[int, DepthTrackData],
+    cfg: GbdrawConfig,
+) -> LinearScalarAxisLeftRoom:
+    """One record's left-facing scalar axes as the drawers draw them, measured once from the resolved
+    data with the drawn (SVG) text width: the figure bound and the definition column read it (OV-1399,
+    OV-1403). ``gc_config_of`` gives the GC content configuration a slot (by its params) of the record
+    (by its depth tracks) is drawn with."""
+
+    axis_px = 0.0
+    tick_labels_px = 0.0
+    for slot in slots:
         labels: list[str] = []
-        axis_config: object | None = None
+        axis_config: object
         if slot.renderer == "depth":
             depth_track = depth_by_index.get(_depth_slot_track_index(slot))
-            if depth_track is None:
+            if depth_track is None or not bool(depth_track.config.show_axis):
                 continue
             axis_config = depth_track.config
-            if not bool(getattr(axis_config, "show_axis", False)):
-                continue
-            axis_min, axis_max = _depth_axis_bounds(
-                depth_track.df,
-                getattr(axis_config, "min_depth", None),
-                getattr(axis_config, "max_depth", None),
-            )
+            min_depth = depth_track.config.min_depth
+            axis_min, axis_max = _depth_axis_bounds(depth_track.df, min_depth, depth_track.config.max_depth)
             labels = [
                 _format_depth_tick(value)
                 for value in scalar_axis_tick_values(
                     axis_min,
                     axis_max,
-                    show_ticks=bool(getattr(axis_config, "show_ticks", False)),
-                    large_tick_interval=getattr(
-                        axis_config,
-                        "large_tick_interval",
-                        None,
-                    ),
+                    show_ticks=bool(depth_track.config.show_ticks),
+                    large_tick_interval=depth_track.config.large_tick_interval,
                 )
-                if not (
-                    getattr(axis_config, "min_depth", None) is None
-                    and math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9)
-                )
+                if not (min_depth is None and math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9))
             ]
-        elif (
-            slot.renderer == "dinucleotide_content"
-            and str(getattr(gc_config, "mode", "deviation")).strip().lower()
-            == "percent"
-        ):
-            axis_config = gc_config
-            if not bool(getattr(axis_config, "show_axis", False)):
+        elif slot.renderer == "dinucleotide_content":
+            gc_slot_config = gc_config_of(slot.params, depth_by_index)
+            if str(gc_slot_config.mode) != "percent" or not bool(gc_slot_config.show_axis):
                 continue
+            axis_config = gc_slot_config
             labels = [
                 format_percent_tick(value)
                 for value in scalar_axis_tick_values(
-                    float(getattr(gc_config, "min_percent", 0.0) or 0.0),
-                    float(getattr(gc_config, "max_percent", 100.0) or 100.0),
-                    show_ticks=bool(getattr(gc_config, "show_ticks", False)),
-                    large_tick_interval=getattr(
-                        gc_config,
-                        "large_tick_interval",
-                        None,
-                    ),
+                    float(0.0 if gc_slot_config.min_percent is None else gc_slot_config.min_percent),
+                    float(100.0 if gc_slot_config.max_percent is None else gc_slot_config.max_percent),
+                    show_ticks=bool(gc_slot_config.show_ticks),
+                    large_tick_interval=gc_slot_config.large_tick_interval,
                 )
             ]
-        if axis_config is None:
+        else:
             continue
-        overhang = max(overhang, 0.4)
-        font_size = linear_scalar_axis_tick_font_size_px(
-            axis_config,
-            float(slot.height),
-        )
+        axis_px = max(axis_px, 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX)
+        font_size = linear_scalar_axis_tick_font_size_px(axis_config, float(slot.height))
         for label in labels:
-            width, _height = calculate_bbox_dimensions(
+            width, _height = calculate_svg_bbox_dimensions(
                 label,
                 cfg.objects.text.font_family,
                 font_size,
                 cfg.canvas.dpi,
             )
-            overhang = max(overhang, 4.5 + float(width))
-    return overhang
+            tick_labels_px = max(
+                tick_labels_px, LINEAR_SCALAR_AXIS_TICK_PX + LINEAR_SCALAR_AXIS_LABEL_GAP_PX + float(width)
+            )
+    return LinearScalarAxisLeftRoom(axis_px, tick_labels_px)
 
 
 def _linear_annotation_bounds(
@@ -1768,7 +1762,7 @@ def _collect_linear_primary_bounds(
     record_plans: list[LinearRecordVerticalPlan],
     record_collision_bands: list[tuple[CollisionBand, ...]],
     labels_by_record: list[list[dict]],
-    record_depth_by_index: list[dict[int, DepthTrackData]],
+    record_scalar_axis_rooms: Sequence[LinearScalarAxisLeftRoom],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_labels_by_record: Sequence[AnnotationLabelsBySlot],
     normalized_comparisons: list[LinearComparison],
@@ -1803,15 +1797,12 @@ def _collect_linear_primary_bounds(
     for record_index, record in enumerate(records):
         placement = record_placements[record_index]
         plan = record_plans[record_index]
-        scalar_overhang = _linear_scalar_axis_left_overhang(
-            plan,
-            gc_config=gc_config,
-            depth_by_index=record_depth_by_index[record_index],
-            cfg=cfg,
-        )
+        scalar_axis = record_scalar_axis_rooms[record_index]
         bounds.append(
             Aabb(
-                horizontal_offset + placement.x - max(half_stroke, scalar_overhang),
+                horizontal_offset
+                + placement.x
+                - max(half_stroke, scalar_axis.axis_px, scalar_axis.tick_labels_px),
                 placement.axis_y + plan.paint_band.top_y - half_stroke,
                 horizontal_offset + placement.x + placement.sequence_width + half_stroke,
                 placement.axis_y + plan.paint_band.bottom_y + half_stroke,
@@ -2385,6 +2376,64 @@ def assemble_linear_diagram(
             record_transforms=record_transforms,
             record_presentations=presentations,
         )
+    record_depth_data: list[list[DepthTrackData]] = (
+        build_depth_track_dataframes(
+            records,
+            record_depth_tracks,
+            base_config=depth_config,
+            depth_df_builder=build_depth_df,
+        )
+        if render_context.depth_enabled
+        else [[] for _ in records]
+    )
+    record_depth_by_index = [
+        index_depth_track_row(row, record_index=record_index)
+        for record_index, row in enumerate(record_depth_data)
+    ]
+    representative_depth_data = representative_depth_tracks(record_depth_data)
+    representative_depth_configs = {
+        track.track_index: track.config
+        for track in representative_depth_data
+    }
+
+    def drawn_gc_config(
+        slot_params: Mapping[str, object], depth_by_index: Mapping[int, DepthTrackData]
+    ) -> GcContentConfigurator:
+        """The GC content configuration a record's slot (by its params) is drawn with: its dinucleotide,
+        and the depth axis font size when it shows a percent axis beside a depth axis."""
+
+        primary_depth_track = depth_by_index.get(primary_depth_track_index)
+        return _gc_config_matching_linear_depth_axis_font_size(
+            gc_config=_clone_gc_config_with_dinucleotide(
+                gc_config, slot_dinucleotide(slot_params, str(gc_config.dinucleotide))
+            ),
+            depth_config=(
+                primary_depth_track.config
+                if primary_depth_track is not None
+                else representative_depth_configs.get(primary_depth_track_index, depth_config)
+            ),
+            depth_height=resolved_depth_heights_by_index.get(
+                primary_depth_track_index,
+                float(canvas_config.default_depth_height),
+            ),
+            depth_enabled=render_context.depth_enabled,
+        )
+
+    # What each record's left-facing scalar axes draw left of its axis start, measured once: the figure
+    # bound reads it, and the definition column keeps its gap from the tick labels (LP-D122, OV-1399).
+    record_scalar_axis_rooms = [
+        _linear_scalar_axis_left_room(
+            linear_track_layout.slots,
+            gc_config_of=drawn_gc_config,
+            depth_by_index=depth_by_index,
+            cfg=cfg,
+        )
+        for depth_by_index in record_depth_by_index
+    ]
+    canvas_config.configure_definition_column_gap(
+        max((room.tick_labels_px for room in record_scalar_axis_rooms), default=0.0)
+    )
+
     def resolve_horizontal_frame(
         placements: Mapping[int, LinearRecordPlacement],
     ) -> tuple[tuple[tuple[float, float], ...], float, list[tuple[Aabb, ...]]]:
@@ -2420,7 +2469,7 @@ def assemble_linear_diagram(
                     keep_definition_left_aligned=bool(canvas_config.keep_definition_left_aligned),
                     definition_column_width=max_def_width,
                     row_definition_width=row_definition_width,
-                    definition_gap=float(canvas_config.definition_gap),
+                    definition_gap=float(canvas_config.definition_column_gap),
                     text_anchor=cfg.objects.definition.linear.text_anchor,
                     definition_column_left=column_left,
                 ),
@@ -2461,25 +2510,6 @@ def assemble_linear_diagram(
     if feature_label_rows is not None:
         all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
 
-    record_depth_data: list[list[DepthTrackData]] = (
-        build_depth_track_dataframes(
-            records,
-            record_depth_tracks,
-            base_config=depth_config,
-            depth_df_builder=build_depth_df,
-        )
-        if render_context.depth_enabled
-        else [[] for _ in records]
-    )
-    record_depth_by_index = [
-        index_depth_track_row(row, record_index=record_index)
-        for record_index, row in enumerate(record_depth_data)
-    ]
-    representative_depth_data = representative_depth_tracks(record_depth_data)
-    representative_depth_configs = {
-        track.track_index: track.config
-        for track in representative_depth_data
-    }
     record_vertical_plans, record_definition_geometries = _build_linear_record_vertical_plans(
         records=records,
         layout=linear_track_layout,
@@ -2591,7 +2621,7 @@ def assemble_linear_diagram(
                 keep_definition_left_aligned=bool(canvas_config.keep_definition_left_aligned),
                 definition_column_width=definition_column_width,
                 row_definition_width=row_definition_width,
-                definition_gap=float(canvas_config.definition_gap),
+                definition_gap=float(canvas_config.definition_column_gap),
                 definition_column_left=definition_column_left,
             )
             for index in range(len(records))
@@ -3063,23 +3093,7 @@ def assemble_linear_diagram(
                     nt = slot_dinucleotide(slot.params, str(gc_config.dinucleotide))
                     per_nt_gc_dfs = record_gc_dfs_by_nt.get(nt, record_gc_dfs)
                     shared_gc_df = per_nt_gc_dfs[record_index] if record_index < len(per_nt_gc_dfs) else None
-                    primary_depth_track = depth_by_index.get(primary_depth_track_index)
-                    slot_gc_config = _gc_config_matching_linear_depth_axis_font_size(
-                        gc_config=_clone_gc_config_with_dinucleotide(gc_config, nt),
-                        depth_config=(
-                            primary_depth_track.config
-                            if primary_depth_track is not None
-                            else representative_depth_configs.get(
-                                primary_depth_track_index,
-                                depth_config,
-                            )
-                        ),
-                        depth_height=resolved_depth_heights_by_index.get(
-                            primary_depth_track_index,
-                            float(canvas_config.default_depth_height),
-                        ),
-                        depth_enabled=render_context.depth_enabled,
-                    )
+                    slot_gc_config = drawn_gc_config(slot.params, depth_by_index)
                     canvas = add_gc_content_group(
                         canvas,
                         record,
@@ -3248,7 +3262,7 @@ def assemble_linear_diagram(
         record_plans=record_vertical_plans,
         record_collision_bands=record_collision_bands,
         labels_by_record=all_labels,
-        record_depth_by_index=record_depth_by_index,
+        record_scalar_axis_rooms=record_scalar_axis_rooms,
         annotation_track_layouts=annotation_track_layouts,
         annotation_labels_by_record=annotation_labels_by_record,
         normalized_comparisons=normalized_comparisons,

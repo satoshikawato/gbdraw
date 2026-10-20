@@ -9,6 +9,9 @@ from gbdraw.svg.elements import Group, Line, Path, Text
 from ....configurators import DepthConfigurator
 from ....layout.linear_coords import normalize_position_to_linear_track
 from ....layout.scalar_axis import (
+    LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
+    LINEAR_SCALAR_AXIS_STROKE_PX,
+    LINEAR_SCALAR_AXIS_TICK_PX,
     _depth_axis_bounds,
     _format_depth_tick,
     _prepare_depth_plot_dataframe,
@@ -39,8 +42,8 @@ class DepthDrawer:
         self.small_tick_interval: float | None = depth_config.small_tick_interval
         self.tick_font_size: float | None = depth_config.tick_font_size
         self.axis_stroke: str = "#4b5563"
-        self.axis_stroke_width: float = 0.8
-        self.axis_tick_size: float = 3.0
+        self.axis_stroke_width: float = LINEAR_SCALAR_AXIS_STROKE_PX
+        self.axis_tick_size: float = LINEAR_SCALAR_AXIS_TICK_PX
         self.axis_small_tick_size: float = 2.0
 
     def _add_axes(
@@ -130,7 +133,7 @@ class DepthDrawer:
                 axis_group.add(
                     Text(
                         tick_label,
-                        insert=(start_x - self.axis_tick_size - 1.5, tick_y),
+                        insert=(start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX, tick_y),
                         fill=self.axis_stroke,
                         font_size=font_size,
                         text_anchor="end",

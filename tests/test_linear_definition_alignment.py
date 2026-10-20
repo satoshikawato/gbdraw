@@ -3,9 +3,12 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 import re
+import subprocess
+import sys
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
+import pandas as pd
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -48,6 +51,7 @@ def _canvas_config(
     return SimpleNamespace(
         canvas_padding=50,
         definition_gap=definition_gap,
+        definition_column_gap=definition_gap,
         horizontal_offset=horizontal_offset,
         keep_definition_left_aligned=keep_definition_left_aligned,
         length_param="short",
@@ -858,3 +862,115 @@ def test_linear_definition_gap_svg_converts_with_cairosvg(tmp_path: Path) -> Non
         output_path = tmp_path / f"linear_definition_gap{suffix}"
         assert output_path.exists()
         assert output_path.stat().st_size > 0
+
+
+_REPOSITORY = Path(__file__).resolve().parents[1]
+
+
+def _drawn_text_edges(
+    svg: str, cfg: GbdrawConfig, *, composed: bool = True
+) -> tuple[list[float], list[float]]:
+    """The right edges of the drawn definition lines and the left edges of the drawn scalar axis tick
+    labels (text-anchor ``end`` in a ``*_axis`` group), in canvas x (``composed``) or in the frame the
+    figure bounds are collected in (without the composition move), measured with the drawn (SVG) width."""
+
+    from gbdraw.core.text import calculate_svg_bbox_dimensions
+
+    definition_right: list[float] = []
+    axis_label_left: list[float] = []
+
+    def walk(element: ET.Element, x: float, role: str | None) -> None:
+        moves = re.findall(r"translate\(\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)\s*\)", element.get("transform", ""))
+        if not composed and element.get("data-gbdraw-composition-role") is not None:
+            moves = moves[1:]
+        for dx, _dy in moves:
+            x += float(dx)
+        tag = element.tag.rsplit("}", 1)[-1]
+        if element.get("data-gbdraw-role") == "record-definition":
+            role = "definition"
+        elif tag == "g" and str(element.get("id", "")).endswith("_axis"):
+            role = "axis"
+        if tag == "text" and role is not None:
+            text = "".join(element.itertext())
+            width, _height = calculate_svg_bbox_dimensions(
+                text,
+                element.get("font-family", cfg.objects.text.font_family),
+                float(str(element.get("font-size"))),
+                cfg.canvas.dpi,
+            )
+            left = x + float(element.get("x", 0.0)) - {"start": 0.0, "end": width}.get(
+                str(element.get("text-anchor")), 0.5 * width
+            )
+            if role == "definition":
+                definition_right.append(left + width)
+            elif element.get("text-anchor") == "end":
+                axis_label_left.append(left)
+        for child in element:
+            walk(child, x, role)
+
+    walk(ET.fromstring(svg), 0.0, None)
+    return definition_right, axis_label_left
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "args",
+    (
+        pytest.param(
+            [
+                "--gbk", "examples/MjeNMV.gb", "examples/MelaMJNV.gb",
+                "--region", "#1:1000-100000", "--region", "#2:5000-120000",
+                "--depth_track", "tests/test_inputs/MjeNMV.DRR271272.depth.tsv",
+                "tests/test_inputs/MelaMJNV.DRR394934.depth.tsv", "--depth_track_label", "Depth",
+            ],
+            id="depth-region",
+        ),
+        pytest.param(
+            [
+                "--gbk", "examples/MjeNMV.gb", "--gc", "--gc_content_mode", "percent",
+                "--show_gc_content_axis", "--show_gc_content_ticks",
+            ],
+            id="gc-percent",
+        ),
+    ),
+)
+def test_linear_definition_keeps_its_gap_from_the_scalar_axis_tick_labels(args: list[str], tmp_path: Path) -> None:
+    """OV-1399 (LP-D122 option B): the definition keeps ``definition_gap`` from the left-facing depth or
+    GC% axis tick labels, not from the axis line (the definition's second line ran into "8191x")."""
+
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    absolute = [str(_REPOSITORY / arg) if arg.startswith(("examples/", "tests/")) else arg for arg in args]
+    result = subprocess.run(
+        [sys.executable, "-m", "gbdraw.cli", "linear", *absolute, "-o", str(tmp_path / "out"), "-f", "svg"],
+        capture_output=True, text=True, timeout=300, cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    definition_right, axis_label_left = _drawn_text_edges((tmp_path / "out.svg").read_text(encoding="utf-8"), cfg)
+
+    assert definition_right and axis_label_left
+    assert min(axis_label_left) - max(definition_right) >= cfg.canvas.linear.definition_gap - 1e-6
+
+
+@pytest.mark.linear
+def test_linear_figure_bound_is_the_drawn_scalar_axis_tick_labels() -> None:
+    """OV-1403: the figure's left bound reads the tick labels' drawn (SVG) width, the room the definition
+    column reads; it read the point-style width at the figure's dpi (115.5 px for "35555x" at 30 px,
+    drawn 98.4 px), a bound 17 px wider than the drawing."""
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict["objects"]["definition"]["linear"]["show_accession"] = False
+    config_dict["objects"]["definition"]["linear"]["show_length"] = False
+    cfg = GbdrawConfig.from_dict(config_dict)
+    record = SeqRecord(Seq("ATGC" * 30), id="rec1", name="rec1")
+    record.annotations["molecule_type"] = "DNA"
+    depth = pd.DataFrame(
+        {"reference_name": ["rec1"] * 40, "position": list(range(1, 41)), "depth": [88888.0] * 40}
+    )
+    # Large tick labels lie further left than anything else the record draws.
+    drawing = assemble_linear_diagram_from_records(
+        [record], cfg=cfg, legend="none", depth_track_tables=[[depth]], depth_track_tick_font_sizes=[30.0]
+    )
+    _definition_right, axis_label_left = _drawn_text_edges(drawing.tostring(), cfg, composed=False)
+
+    assert axis_label_left
+    assert getattr(drawing, "_gbdraw_linear_source_content_bounds").min_x == pytest.approx(min(axis_label_left))

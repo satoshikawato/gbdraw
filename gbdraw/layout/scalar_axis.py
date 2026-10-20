@@ -11,6 +11,14 @@ from gbdraw.auto_sizes import scalar_axis_tick_font_size
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
+# A Linear left-facing scalar axis (depth, GC%): its line width, its large tick length and the gap from a
+# tick to its label, which is drawn left of the tick with text-anchor ``end``. The drawers and the record's
+# left room (the figure bound and the definition column) read these.
+LINEAR_SCALAR_AXIS_STROKE_PX = 0.8
+LINEAR_SCALAR_AXIS_TICK_PX = 3.0
+LINEAR_SCALAR_AXIS_LABEL_GAP_PX = 1.5
+
+
 def project_scalar_samples(
     positions, values, transform: RecordDisplayTransform
 ) -> tuple[DisplaySeries, ...]:
@@ -189,6 +197,9 @@ ScalarTickFormatter = Callable[[float], str]
 
 
 __all__ = [
+    "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
+    "LINEAR_SCALAR_AXIS_STROKE_PX",
+    "LINEAR_SCALAR_AXIS_TICK_PX",
     "ScalarTickFormatter",
     "format_percent_tick",
     "has_tick_value",
