@@ -193,9 +193,16 @@ def solve_linear_horizontal_layout(
     available_width: float,
     record_gap_px: float = 24.0,
     align_center: bool = True,
+    normalize_length: bool = False,
     record_order: Sequence[int] | None = None,
 ) -> LinearHorizontalLayout:
     """Resolve one shared bp scale and each record's x and width in its row.
+
+    It is the one owner of a record's x and width in both row modes. A record's width is its
+    share of the narrowest row's scale (``scale_px * length / scale_bp``; a record alone in its
+    row: its share of the longest record), and ``align_center`` splits a row's free space
+    evenly on both sides. With ``normalize_length`` every record fills its own row.
+    A record's ``px_per_bp`` is its width over its length.
 
     It reads only the records' lengths and horizontal insets, never their vertical extents or
     collision bands, so it runs once per drawing, before the labels are placed.
@@ -231,7 +238,12 @@ def solve_linear_horizontal_layout(
         row = normalized_rows[record_index]
         grouped[row].append(by_index[record_index])
 
-    row_scales: list[float] = []
+    if normalize_length and any(len(row_items) > 1 for row_items in grouped):
+        raise ValidationError(
+            "normalize_length=True cannot be combined with multiple records in one Linear row."
+        )
+    row_px: list[float] = []
+    row_bp: list[int] = []
     for row_items in grouped:
         gap_width = gap * max(0, len(row_items) - 1)
         if width <= gap_width:
@@ -240,24 +252,36 @@ def solve_linear_horizontal_layout(
                 f"record_count={len(row_items)}, record_gap_px={gap:g}, "
                 f"available_width={width:g}."
             )
-        row_scales.append(
-            (width - gap_width) / sum(item.sequence_length for item in row_items)
-        )
+        row_px.append(width - gap_width)
+        row_bp.append(sum(item.sequence_length for item in row_items))
+    row_scales = [px / bp for px, bp in zip(row_px, row_bp)]
     px_per_bp = min(row_scales)
     if not math.isfinite(px_per_bp) or px_per_bp <= 0:
         raise ValidationError("Linear layout did not produce a positive shared bp scale.")
+    # The narrowest row's pixels and bp: every row draws at its scale.
+    narrowest = row_scales.index(px_per_bp)
+    scale_px, scale_bp = row_px[narrowest], row_bp[narrowest]
 
     placements: list[LinearRecordPlacement] = []
     content_left = 0.0
     content_right = 0.0
     for row_index, row_items in enumerate(grouped):
-        sequence_widths = [item.sequence_length * px_per_bp for item in row_items]
         effective_gaps = [
             max(gap, row_items[index].right_inset + row_items[index + 1].left_inset)
             for index in range(len(row_items) - 1)
         ]
-        row_width = compensated_sum(sequence_widths) + compensated_sum(effective_gaps)
-        cursor = 0.5 * (width - row_width) if align_center else 0.0
+        if normalize_length:
+            sequence_widths = [width]
+            cursor = 0.0
+        else:
+            sequence_widths = [scale_px * item.sequence_length / scale_bp for item in row_items]
+            # The row's free space: the scale's pixels its bp leave, plus those its gaps leave.
+            free_px = (
+                scale_px * ((scale_bp - row_bp[row_index]) / scale_bp)
+                + (width - scale_px)
+                - compensated_sum(effective_gaps)
+            )
+            cursor = 0.5 * free_px if align_center else 0.0
         content_left = min(content_left, cursor - row_items[0].left_inset)
         for column, (item, sequence_width_value) in enumerate(zip(row_items, sequence_widths)):
             placements.append(
@@ -275,7 +299,7 @@ def solve_linear_horizontal_layout(
                     bottom_extent=0.0,
                     comparison_top_y=0.0,
                     comparison_bottom_y=0.0,
-                    px_per_bp=px_per_bp,
+                    px_per_bp=sequence_width_value / item.sequence_length,
                 )
             )
             content_right = max(

@@ -26,7 +26,7 @@ from gbdraw.features.ids import compute_feature_hash, make_linear_rendered_featu
 from gbdraw.io.colors import load_default_colors
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
-from tests.utils.linear_render_context import make_linear_record_render_context
+from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
 
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
@@ -144,6 +144,7 @@ def test_duplicate_record_id_label_precalculation_is_index_aligned_for_reverse_c
         feature_config,
         canvas_config,
         render_context=make_linear_record_render_context(profile),
+        sequence_widths=alone_sequence_widths(records, canvas_config),
     )
 
     assert len(labels_by_record) == 2

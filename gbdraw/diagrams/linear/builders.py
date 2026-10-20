@@ -467,8 +467,6 @@ def linear_comparison_content(
         index + 1,
         blast_config,
         records,
-        query_record_index=comparison.query_record_index,
-        subject_record_index=comparison.subject_record_index,
         query_placement=query_placement,
         subject_placement=subject_placement,
         query_y=query_y,

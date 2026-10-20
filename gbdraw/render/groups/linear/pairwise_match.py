@@ -4,7 +4,7 @@
 from gbdraw.exceptions import ComparisonIdentityError
 
 import math
-from typing import Dict, Sequence, cast
+from typing import Dict, Literal, Sequence, cast
 
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
@@ -118,8 +118,6 @@ class PairWiseMatchGroup:
         comparison_count: int,
         blast_config,
         records,
-        query_record_index: int | None = None,
-        subject_record_index: int | None = None,
         query_y: float | None = None,
         subject_y: float | None = None,
         feature_dom_index: LinearFeatureDomIndex | None = None,
@@ -137,7 +135,8 @@ class PairWiseMatchGroup:
             comparison_height (float): Height of the comparison track.
             comparison_count (int): Counter for the number of comparisons.
             query_placement, subject_placement: Where the two records are drawn; a match end
-                at bp ``p`` sits at ``placement.x_for_position(p)``.
+                at bp ``p`` sits at ``placement.x_for_position(p)``. Their ``record_index`` is
+                the comparison's query and subject record.
         """
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
@@ -161,16 +160,6 @@ class PairWiseMatchGroup:
         self.curve_tension: float = float(getattr(blast_config, "curve_tension", 0.5))
         self.comparison_count: int = comparison_count
         self.records = records
-        self.query_record_index = (
-            int(query_record_index)
-            if query_record_index is not None
-            else self.comparison_count - 1
-        )
-        self.subject_record_index = (
-            int(subject_record_index)
-            if subject_record_index is not None
-            else self.comparison_count
-        )
         self.query_placement = query_placement
         self.subject_placement = subject_placement
         self.query_y = 0 if query_y is None else float(query_y)
@@ -185,6 +174,21 @@ class PairWiseMatchGroup:
         self.match_group.attribs["data-query-row"] = self.query_placement.row
         self.match_group.attribs["data-subject-row"] = self.subject_placement.row
         self.add_elements_to_group()
+
+    @property
+    def query_record_index(self) -> int:
+        return self.query_placement.record_index
+
+    @property
+    def subject_record_index(self) -> int:
+        return self.subject_placement.record_index
+
+    def _placements(self, role: Literal["query", "subject"]) -> tuple[LinearRecordPlacement, LinearRecordPlacement]:
+        """The ``role`` record's placement and the other record's."""
+
+        if role == "query":
+            return self.query_placement, self.subject_placement
+        return self.subject_placement, self.query_placement
 
     def _record_id_for_index(self, index: int) -> str:
         try:
@@ -274,17 +278,16 @@ class PairWiseMatchGroup:
                 rendered_ids.append(rendered_id)
         return ";".join(rendered_ids)
 
-    def _feature_attachment_y(self, row: object, role: str, default_y: float) -> float:
+    def _feature_attachment_y(self, row: object, role: Literal["query", "subject"], default_y: float) -> float:
         index = getattr(self, "feature_dom_index", None)
-        placement: LinearRecordPlacement = getattr(self, f"{role}_placement")
-        other: LinearRecordPlacement = self.subject_placement if role == "query" else self.query_placement
+        placement, other = self._placements(role)
         if index is None or not index.attachment_bands:
             return default_y
         view_id = _attribute_text(_row_value(row, f"{role}_view_feature_svg_id", "")) or _attribute_text(
             _row_value(row, f"{role}_feature_svg_id", "")
         )
         rendered_ids = self._rendered_feature_svg_id_values(
-            view_id, record_index=getattr(self, f"{role}_record_index"),
+            view_id, record_index=placement.record_index,
             feature_index_value=_row_value(row, f"{role}_feature_index", ""),
         )
         bands = [index.attachment_bands[key] for key in rendered_ids.split(";") if key in index.attachment_bands]
@@ -388,12 +391,8 @@ class PairWiseMatchGroup:
         row: DataFrame,
         match_index: int | None = None,
     ) -> None:
-        query_record_index = int(
-            getattr(self, "query_record_index", self.comparison_count - 1)
-        )
-        subject_record_index = int(
-            getattr(self, "subject_record_index", self.comparison_count)
-        )
+        query_record_index = self.query_record_index
+        subject_record_index = self.subject_record_index
         # Endpoint records own record identity; table IDs never override them.
         query_record_id = self._record_id_for_index(query_record_index)
         subject_record_id = self._record_id_for_index(subject_record_index)
@@ -521,12 +520,8 @@ class PairWiseMatchGroup:
             "query_display_name": "data-query-display-name",
             "subject_display_name": "data-subject-display-name",
         }
-        query_record_index = int(
-            getattr(self, "query_record_index", self.comparison_count - 1)
-        )
-        subject_record_index = int(
-            getattr(self, "subject_record_index", self.comparison_count)
-        )
+        query_record_index = self.query_record_index
+        subject_record_index = self.subject_record_index
         for role, record_index in (
             ("query", query_record_index),
             ("subject", subject_record_index),

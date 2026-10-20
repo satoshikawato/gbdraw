@@ -80,8 +80,8 @@ class LengthBarGroup:
         """
         Initializes the LengthBarGroup with the given parameters.
 
-        ``longest_record_width`` is the drawn width of a record ``longest_genome`` bp long (the
-        canvas's ``record_sequence_width``): the scale maps bp to px as that record does.
+        ``longest_record_width`` is the drawn width of a record ``longest_genome`` bp long (its
+        placement's ``sequence_width``): the scale maps bp to px as that record does.
         """
         # --- 1. Load all settings from the 'scale' section of the config ---
         scale_config = scale

@@ -54,7 +54,7 @@ from gbdraw.labels.linear import (
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_bbox_dimensions, calculate_svg_bbox_dimensions, text_ink_offsets
 from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.render.drawers.linear.labels import LabelDrawer
-from tests.utils.linear_render_context import make_linear_record_render_context
+from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -270,6 +270,7 @@ def _prepare_linear_labels_for_records(
         feature_cfg,
         canvas_cfg,
         render_context=make_linear_record_render_context(profile),
+        sequence_widths=alone_sequence_widths(records, canvas_cfg),
         label_frames=label_frames,
     )
     return all_labels_by_record if all_records else all_labels_by_record[0]
@@ -1005,6 +1006,7 @@ def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None
         feature_cfg,
         canvas_cfg,
         render_context=make_linear_record_render_context(profile),
+        sequence_widths=alone_sequence_widths([record], canvas_cfg),
     )
 
     assert required_label_height > 0
@@ -1066,6 +1068,7 @@ def test_linear_precalculated_labels_match_final_alignment_width_positions() -> 
         feature_cfg,
         canvas_cfg,
         render_context=make_linear_record_render_context(profile),
+        sequence_widths=alone_sequence_widths([record], canvas_cfg),
     )
     precalculated_tuples = sorted(
         (
@@ -1666,21 +1669,26 @@ def test_linear_label_keep_clear_box_is_the_drawn_definition_box(
 
 
 @pytest.mark.linear
-def test_linear_shared_rows_solve_the_horizontal_places_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Records sharing rows get their x and width from one horizontal solve, which the labels, the
-    keep-clear boxes, the collision bands and the drawing all read; the row stacking keeps them
-    (OV-1400: the keep-clear boxes used to read a first full row solve, the drawing a second)."""
+@pytest.mark.parametrize("shared_row", (True, False))
+def test_linear_horizontal_places_labels_and_vertical_plans_are_solved_once(
+    monkeypatch: pytest.MonkeyPatch, shared_row: bool
+) -> None:
+    """Every record gets its x and width from one horizontal solve, in both row modes, which the
+    labels, the keep-clear boxes, the collision bands and the drawing all read; the row stacking
+    keeps them (OV-1400). The labels and the vertical plans are built once, at those widths."""
 
     import gbdraw.diagrams.linear.assemble as assemble_module
     from gbdraw.api.options import LinearMultiRecordOptions
 
     horizontal: list[object] = []
     stacked: list[object] = []
+    label_widths: list[object] = []
+    plans: list[object] = []
 
-    def counting(calls: list[object], original):
+    def counting(calls: list[object], original, read=lambda result, kwargs: result):
         def solve(*args: object, **kwargs: object):
             result = original(*args, **kwargs)
-            calls.append(result)
+            calls.append(read(result, kwargs))
             return result
 
         return solve
@@ -1688,11 +1696,24 @@ def test_linear_shared_rows_solve_the_horizontal_places_once(monkeypatch: pytest
     monkeypatch.setattr(
         assemble_module,
         "solve_linear_horizontal_layout",
-        counting(horizontal, getattr(assemble_module, "solve_linear_horizontal_layout", None)),
-        raising=False,
+        counting(horizontal, assemble_module.solve_linear_horizontal_layout),
     )
     monkeypatch.setattr(
         assemble_module, "solve_linear_layout", counting(stacked, assemble_module.solve_linear_layout)
+    )
+    monkeypatch.setattr(
+        assemble_module,
+        "_precalculate_label_dimensions",
+        counting(
+            label_widths,
+            assemble_module._precalculate_label_dimensions,
+            lambda _result, kwargs: kwargs.get("sequence_widths"),
+        ),
+    )
+    monkeypatch.setattr(
+        assemble_module,
+        "_build_linear_record_vertical_plans",
+        counting(plans, assemble_module._build_linear_record_vertical_plans),
     )
     records = [
         _synthetic_label_record("first", 2000, "alpha"),
@@ -1705,16 +1726,23 @@ def test_linear_shared_rows_solve_the_horizontal_places_once(monkeypatch: pytest
             records,
             cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
             legend="none",
-            layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2", "#3@2")),
+            layout=(
+                LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2", "#3@2"))
+                if shared_row
+                else None
+            ),
         )
 
     assert len(horizontal) == 1
-    assert len(stacked) == 1
+    assert len(plans) == 1
     places = horizontal[0].placements  # type: ignore[attr-defined]
-    drawn = stacked[0].placements  # type: ignore[attr-defined]
-    assert [(p.record_index, p.x, p.sequence_width, p.px_per_bp) for p in places] == [
-        (p.record_index, p.x, p.sequence_width, p.px_per_bp) for p in drawn
-    ]
+    assert label_widths == [[p.sequence_width for p in sorted(places, key=lambda p: p.record_index)]]
+    assert len(stacked) == (1 if shared_row else 0)
+    if shared_row:
+        drawn = stacked[0].placements  # type: ignore[attr-defined]
+        assert [(p.record_index, p.x, p.sequence_width, p.px_per_bp) for p in places] == [
+            (p.record_index, p.x, p.sequence_width, p.px_per_bp) for p in drawn
+        ]
 
 
 @pytest.mark.linear

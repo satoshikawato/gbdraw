@@ -154,9 +154,10 @@ def _precalculate_label_dimensions(
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     render_context: LinearRecordRenderContext,
+    *,
+    sequence_widths: Sequence[float],
     precomputed_feature_dicts: list[FeatureDict] | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
-    sequence_widths: Sequence[float] | None = None,
     feature_lane_geometries: Sequence[LinearFeatureLaneGeometry] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     label_frames: Sequence[LinearLabelFrame] | None = None,
@@ -167,8 +168,7 @@ def _precalculate_label_dimensions(
     The labels of the records in one row (``label_frames``; each record alone in its row without them)
     are stacked together (OV-1188). ``label_keep_clear`` are each record's boxes its labels keep
     clear of, in their coordinates (``LinearRecordLabels.keep_clear``). ``sequence_widths`` are the
-    records' drawn axis widths (their placements' ``sequence_width``); without them each record is
-    as wide as it is alone in its row (``LinearCanvasConfigurator.record_sequence_width``).
+    records' drawn axis widths (their placements' ``sequence_width``).
     """
 
     profile = render_context.profile
@@ -220,11 +220,7 @@ def _precalculate_label_dimensions(
         labels = linear_record_labels(
             feature_dict,
             record_length,
-            (
-                float(sequence_widths[i])
-                if sequence_widths is not None
-                else canvas_config.record_sequence_width(record_length)
-            ),
+            float(sequence_widths[i]),
             canvas_config.cds_height,
             profile.strandedness,
             render_context.feature_track_layout,

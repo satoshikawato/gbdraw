@@ -178,6 +178,45 @@ def test_layout_rejects_gap_that_consumes_available_width() -> None:
         )
 
 
+@pytest.mark.parametrize("available_width", (1000.0, 997.3))
+@pytest.mark.parametrize("align_center", (True, False))
+def test_records_alone_in_their_rows_keep_their_share_of_the_longest_record(
+    available_width: float, align_center: bool
+) -> None:
+    """One horizontal solve places every record, also one alone in its row: its width is its share of
+    the longest record, and centring splits the rest evenly, with the arithmetic the drawings had."""
+
+    lengths = (1000, 777, 333, 4097)
+    longest = max(lengths)
+    horizontal = solve_linear_horizontal_layout(
+        [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length) for index, length in enumerate(lengths)],
+        tuple(range(len(lengths))),
+        available_width=available_width,
+        align_center=align_center,
+    )
+
+    for index, length in enumerate(lengths):
+        placement = horizontal.placement_for_index(index)
+        width = available_width * length / longest
+        assert placement.sequence_width == width
+        assert placement.x == (available_width * ((longest - length) / longest) / 2 if align_center else 0.0)
+        assert placement.px_per_bp == width / length
+
+
+def test_normalized_records_fill_their_rows() -> None:
+    measurements = [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length) for index, length in enumerate((1000, 333))]
+    horizontal = solve_linear_horizontal_layout(
+        measurements, (0, 1), available_width=997.3, normalize_length=True
+    )
+
+    assert [(p.x, p.sequence_width, p.px_per_bp) for p in horizontal.placements] == [
+        (0.0, 997.3, 997.3 / 1000),
+        (0.0, 997.3, 997.3 / 333),
+    ]
+    with pytest.raises(ValidationError, match="normalize_length"):
+        solve_linear_horizontal_layout(measurements, (0, 0), available_width=997.3, normalize_length=True)
+
+
 def test_comparison_anchor_can_overlay_x_disjoint_record_header() -> None:
     measurements = (
         LinearRecordMeasurement(

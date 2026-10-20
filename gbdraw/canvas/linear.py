@@ -397,28 +397,6 @@ class LinearCanvasConfigurator:
         self.horizontal_offset = reserve + float(self.definition_gap)
         self.total_width = self.horizontal_offset + self.alignment_width
 
-    def record_sequence_width(self, record_length: int) -> float:
-        """The axis width of a record alone in its row: the alignment width, scaled by the record's
-        share of the longest record unless lengths are normalized. A record sharing its row takes
-        its width from the row solve instead."""
-
-        if self.normalize_length:
-            return float(self.alignment_width)
-        return float(self.alignment_width) * record_length / max(1, self.longest_genome)
-
-    def record_x(self, record_length: int) -> float:
-        """The x of a record alone in its row: centered by its share of the longest record when
-        ``align_center`` is set and lengths are not normalized, otherwise at 0. A record sharing
-        its row takes its x from the row solve instead."""
-
-        if self.normalize_length or not self.align_center:
-            return 0.0
-        return (
-            self.alignment_width
-            * ((self.longest_genome - record_length) / self.longest_genome)
-            / 2
-        )
-
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas for the linear representation based on the configurator's settings.

@@ -97,7 +97,7 @@ class SeqRecordGroup:
                 record_count=self.record_count,
             )
         )
-        # The record's drawn axis width, from its placement (``record_sequence_width`` or the row solve).
+        # The record's drawn axis width, from its placement (``solve_linear_horizontal_layout``).
         self.sequence_width = float(sequence_width)
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)

@@ -560,6 +560,35 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
 
 
 @pytest.mark.linear
+def test_pairwise_match_group_reads_its_records_from_their_placements() -> None:
+    """The ribbons' record indices are the placements' records, the ones the ribbons are drawn
+    between, whatever the comparison's position in the drawing."""
+
+    blast_config = SimpleNamespace(
+        fill_color="#d3d3d3", min_color="#ffffff", max_color="#000000", fill_opacity=1.0,
+        stroke_color="none", stroke_width=0, identity=0, sequence_length_dict={},
+    )
+    records = [SeqRecord(Seq("A" * 400), id=f"record_{index}") for index in range(3)]
+    match_group = PairWiseMatchGroup(
+        {},
+        pd.DataFrame.from_records([{"identity": 95, "qstart": 1, "qend": 80, "sstart": 1, "send": 80}]),
+        40,
+        1,
+        blast_config,
+        records,
+        query_placement=ribbon_placement(0, px_per_bp=2.5),
+        subject_placement=ribbon_placement(2, px_per_bp=2.5),
+    ).get_group()
+
+    assert match_group.attribs["data-query-record-index"] == 0
+    assert match_group.attribs["data-subject-record-index"] == 2
+    path = match_group.elements[0].tostring()
+    assert 'data-query-record-index="0"' in path
+    assert 'data-subject-record-index="2"' in path
+    assert 'data-subject-record-id="record_2"' in path
+
+
+@pytest.mark.linear
 @pytest.mark.parametrize("source", ["blast", "protein"])
 def test_comparison_rows_refuse_an_ordered_table_past_the_last_record(source: str) -> None:
     # OV-977 (D-67 A): the stage used to drop the second table of two records.
