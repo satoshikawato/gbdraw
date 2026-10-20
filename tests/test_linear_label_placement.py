@@ -1599,3 +1599,68 @@ def test_linear_label_fit_counts_a_label_over_the_definition_text() -> None:
     assert clear.records == ()
     assert [record.fit.definition_overlaps for record in covered.records] == [1]
     assert covered.outcome == "warn"
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("shared_row", (False, True))
+@pytest.mark.parametrize("translation_x", (-240.0, 160.0))
+def test_linear_label_keep_clear_box_is_the_drawn_definition_box(
+    monkeypatch: pytest.MonkeyPatch, translation_x: float, shared_row: bool
+) -> None:
+    """The definition box the labels keep clear of is the box the fit count reads: with
+    ``keep_definition_left_aligned`` the text starts at the column left of the translated records,
+    so a record translation moves the text relative to its record before the labels are placed
+    (a record alone in its row: its own text; a shared row: the row's heading)."""
+
+    import gbdraw.diagrams.linear.assemble as assemble_module
+    from gbdraw.api.options import LinearMultiRecordOptions, LinearRecordTranslation
+    from gbdraw.api.requests import RecordPresentation
+
+    captured: dict[str, object] = {}
+
+    def capturing(name: str, keyword: str, original: Callable[_P, _R]) -> Callable[_P, _R]:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            if kwargs.get(keyword) is not None:
+                captured[name] = list(kwargs[keyword])
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    monkeypatch.setattr(
+        assemble_module,
+        "_precalculate_label_dimensions",
+        capturing("packer", "label_keep_clear", assemble_module._precalculate_label_dimensions),
+    )
+    monkeypatch.setattr(
+        assemble_module, "linear_label_fit", capturing("drawn", "definition_boxes", assemble_module.linear_label_fit)
+    )
+    records = [
+        _synthetic_label_record("first", 2000, "alpha"),
+        _synthetic_label_record("second", 1500, "beta"),
+        _synthetic_label_record("third", 1200, "gamma"),
+    ]
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {"canvas.linear.keep_definition_left_aligned": True, "labels.linear.scope": "all"},
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assemble_linear_diagram_from_records(
+            records,
+            cfg=cfg,
+            legend="none",
+            layout=LinearMultiRecordOptions(
+                multi_record_positions=("#1@1", "#2@2", "#3@2") if shared_row else None,
+                record_translations=(LinearRecordTranslation("record-2", x=translation_x),),
+            ),
+            _record_presentations=[RecordPresentation(label="Same row") for _record in records],
+        )
+
+    packer, drawn = captured["packer"], captured["drawn"]
+    assert isinstance(packer, list) and isinstance(drawn, list) and any(packer)
+    if shared_row:
+        # The fit count also reads each record's own header, above its labels' band.
+        assert all(set(boxes) <= set(drawn_boxes) for boxes, drawn_boxes in zip(packer, drawn))
+    else:
+        assert packer == drawn

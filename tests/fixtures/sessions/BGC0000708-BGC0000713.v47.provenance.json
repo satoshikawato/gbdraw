@@ -53,7 +53,7 @@
     "sha256": "621f86fa53a875c242cd5b44825237904a21fe25c1fc8e884c910175918da9a7",
     "mainReplaySha256": "0243daa566ac01c917e73662c16d3c23c21152c3929655bef2aa410c6a6a2f9f",
     "mainReplayEqualsBaseReplay": false,
-    "differenceFromMainReplay": "record row offsets and one feature label (Linear label packing); the comparison bands are the same",
+    "differenceFromMainReplay": "record row offsets and one feature label (Linear label packing), then 24 white label boxes and one wider leader (label boxes; the label text is unchanged); the comparison bands are the same",
     "storedResultEqualsMainReplay": true
   },
   "reversedRecordItemsInV": {
