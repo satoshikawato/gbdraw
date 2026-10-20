@@ -1664,3 +1664,75 @@ def test_linear_label_keep_clear_box_is_the_drawn_definition_box(
         assert all(set(boxes) <= set(drawn_boxes) for boxes, drawn_boxes in zip(packer, drawn))
     else:
         assert packer == drawn
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("shared_row", (False, True))
+@pytest.mark.parametrize("translation_x", (-240.0, 160.0))
+def test_linear_row_gap_reads_the_drawn_collision_bands(
+    monkeypatch: pytest.MonkeyPatch, translation_x: float, shared_row: bool
+) -> None:
+    """The bands the vertical gap between rows is solved from are the bands the drawing uses: at
+    each record's final translation, with the definition column's left and text anchor of the
+    drawing (OV-1400; a record alone in its row: the gap loop; a shared row: the row solve)."""
+
+    import gbdraw.diagrams.linear.assemble as assemble_module
+    import gbdraw.layout.linear_multi_record as multi_record_module
+    from gbdraw.api.options import LinearMultiRecordOptions, LinearRecordTranslation
+    from gbdraw.api.requests import RecordPresentation
+    from gbdraw.layout.linear import CollisionBand, resolve_axis_gap
+
+    read: list[CollisionBand] = []
+    drawn: list[CollisionBand] = []
+
+    def reading_gap(current: Sequence[CollisionBand], following: Sequence[CollisionBand], **kwargs: object):
+        read.extend((*current, *following))
+        return resolve_axis_gap(current, following, **kwargs)  # type: ignore[arg-type]
+
+    def solving(*args: object, **kwargs: object):
+        read.clear()  # Only the last solve places the rows; the first reads no definition bands.
+        return original_solve(*args, **kwargs)
+
+    def placing(*args: object, **kwargs: object):
+        drawn.extend(band for bands in kwargs["collision_bands"] for band in bands)  # type: ignore[attr-defined]
+        return original_place(*args, **kwargs)
+
+    original_solve = assemble_module.solve_linear_layout
+    original_place = assemble_module._place_linear_annotation_labels_by_record
+    monkeypatch.setattr(multi_record_module, "resolve_axis_gap", reading_gap)
+    monkeypatch.setattr(assemble_module, "resolve_axis_gap", reading_gap)
+    monkeypatch.setattr(assemble_module, "solve_linear_layout", solving)
+    monkeypatch.setattr(assemble_module, "_place_linear_annotation_labels_by_record", placing)
+    records = [
+        _synthetic_label_record("first", 2000, "alpha"),
+        _synthetic_label_record("second", 1500, "beta"),
+        _synthetic_label_record("third", 1200, "gamma"),
+    ]
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {
+            "canvas.linear.keep_definition_left_aligned": True,
+            "canvas.linear.align_center": True,
+            "labels.linear.scope": "all",
+        },
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assemble_linear_diagram_from_records(
+            records,
+            cfg=GbdrawConfig.from_dict(config_dict),
+            legend="none",
+            layout=LinearMultiRecordOptions(
+                multi_record_positions=("#1@1", "#2@2", "#3@2") if shared_row else None,
+                record_translations=(LinearRecordTranslation("record-2", x=translation_x),),
+            ),
+            _record_presentations=[RecordPresentation(label="Same row") for _record in records],
+        )
+
+    def key(band: CollisionBand) -> tuple[str, float, float, float, float]:
+        return (band.kind, *(round(value, 6) for value in (band.x_start, band.x_end, band.top_y, band.bottom_y)))
+
+    read_definitions = {key(band) for band in read if band.kind == "definition"}
+    assert read_definitions
+    assert read_definitions <= {key(band) for band in drawn if band.kind == "definition"}
+    assert {key(band) for band in read} <= {key(band) for band in drawn}

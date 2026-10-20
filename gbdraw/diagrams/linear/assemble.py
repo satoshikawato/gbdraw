@@ -333,25 +333,16 @@ def _layout_linear_annotation_tracks(
     if sequence_widths is not None and len(sequence_widths) != len(records):
         raise ValueError("sequence_widths must contain one width for every record")
     record_lengths = {index: len(record.seq) for index, record in enumerate(records)}
-    if sequence_widths is None:
-        bp_per_px = {
-            index: len(record.seq)
-            / max(
-                1.0,
-                float(canvas_config.alignment_width)
-                * (
-                    1.0
-                    if canvas_config.normalize_length
-                    else len(record.seq) / max(1, canvas_config.longest_genome)
-                ),
-            )
-            for index, record in enumerate(records)
-        }
-    else:
-        bp_per_px = {
-            index: len(record.seq) / max(1.0, float(sequence_widths[index]))
-            for index, record in enumerate(records)
-        }
+    # Without the final widths (before the row solve), each record's width alone in its row.
+    widths = (
+        sequence_widths
+        if sequence_widths is not None
+        else [canvas_config.record_sequence_width(len(record.seq)) for record in records]
+    )
+    bp_per_px = {
+        index: len(record.seq) / max(1.0, float(widths[index]))
+        for index, record in enumerate(records)
+    }
     updated_slots: list[LinearTrackSlot] = []
     layouts: dict[str, ResolvedAnnotationTrack] = {}
     for slot in slots:
@@ -1356,8 +1347,8 @@ def _record_collision_bands(
     definition_column_width: float,
     row_definition_width: float,
     definition_gap: float,
-    text_anchor: str = "middle",
-    definition_column_left: float = 0.0,
+    text_anchor: str,
+    definition_column_left: float,
 ) -> tuple[CollisionBand, ...]:
     """Build alignment-local collision domains for one placed record."""
 
@@ -1407,8 +1398,8 @@ def _record_definition_bands(
     definition_column_width: float,
     row_definition_width: float,
     definition_gap: float,
-    text_anchor: str = "middle",
-    definition_column_left: float = 0.0,
+    text_anchor: str,
+    definition_column_left: float,
 ) -> list[CollisionBand]:
     """The boxes of a placed record's definition text (``place_linear_definition`` on x, the
     definition geometry's bands on y), in the coordinates of ``record_x``."""
@@ -2400,13 +2391,7 @@ def assemble_linear_diagram(
             else:
                 record_offset_x = 0.0
             record_offsets_x.append(record_offset_x)
-            sequence_width = (
-                float(canvas_config.alignment_width)
-                if canvas_config.normalize_length
-                else float(canvas_config.alignment_width)
-                * len(record.seq)
-                / max(1, canvas_config.longest_genome)
-            )
+            sequence_width = canvas_config.record_sequence_width(len(record.seq))
             horizontal_placements[record_index] = LinearRecordPlacement(
                 record_index=record_index,
                 record_key=RecordKey(str(record_keys[record_index])),
@@ -2485,6 +2470,11 @@ def assemble_linear_diagram(
         precomputed_feature_dicts=record_feature_dicts,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
         feature_lane_geometries=record_feature_lane_geometries,
+        sequence_widths=(
+            None
+            if multi_record_enabled
+            else [horizontal_placements[index].sequence_width for index in range(len(records))]
+        ),
         record_transforms=record_transforms,
         label_keep_clear=label_keep_clear,
     )
@@ -2605,10 +2595,32 @@ def assemble_linear_diagram(
 
     definition_column_width = max_def_width
 
+    def drawn_collision_bands(
+        placements: Mapping[int, LinearRecordPlacement],
+    ) -> list[tuple[CollisionBand, ...]]:
+        """Each record's collision bands where the drawing puts them (OV-1400): at the record's
+        final translation, with the definition column's left and the text anchor the drawing uses.
+        The row solves read these, so the gap between rows is solved from the drawn boxes."""
+
+        return [
+            _record_collision_bands(
+                plan=record_vertical_plans[index],
+                definition_geometry=record_definition_geometries[index],
+                sequence_width=placements[index].sequence_width,
+                record_x=placements[index].x + final_translations[index][0],
+                multi_record_enabled=multi_record_enabled,
+                text_anchor=cfg.objects.definition.linear.text_anchor,
+                keep_definition_left_aligned=bool(canvas_config.keep_definition_left_aligned),
+                definition_column_width=definition_column_width,
+                row_definition_width=row_definition_width,
+                definition_gap=float(canvas_config.definition_gap),
+                definition_column_left=definition_column_left,
+            )
+            for index in range(len(records))
+        ]
+
     record_offsets: list[float] = [0.0 for _record in records]
-    record_collision_bands: list[tuple[CollisionBand, ...]] = [
-        () for _record in records
-    ]
+    record_collision_bands: list[tuple[CollisionBand, ...]]
     boundary_gap_resolutions: list[AxisGapResolution] = []
     multi_record_plan = None
     # Where each record's feature labels are stacked and counted: its row and its start in it (OV-1188).
@@ -2625,6 +2637,7 @@ def assemble_linear_diagram(
     if multi_record_enabled:
         def build_measurements(
             horizontal_plan=None,
+            drawn_bands: Sequence[tuple[CollisionBand, ...]] = (),
         ) -> list[LinearRecordMeasurement]:
             measurements: list[LinearRecordMeasurement] = []
             for index, record in enumerate(records):
@@ -2636,22 +2649,10 @@ def assemble_linear_diagram(
                 )
                 collision_bands: tuple[CollisionBand, ...] = ()
                 if placement is not None:
-                    absolute_bands = _record_collision_bands(
-                        plan=record_plan,
-                        definition_geometry=record_definition_geometries[index],
-                        sequence_width=placement.sequence_width,
-                        record_x=placement.x,
-                        multi_record_enabled=True,
-                        keep_definition_left_aligned=bool(
-                            canvas_config.keep_definition_left_aligned
-                        ),
-                        definition_column_width=definition_column_width,
-                        row_definition_width=row_definition_width,
-                        definition_gap=float(canvas_config.definition_gap),
-                    )
+                    # The drawn bands, from the record's x in the solve, which adds it back.
                     collision_bands = tuple(
                         band.translate(x=-placement.x)
-                        for band in absolute_bands
+                        for band in drawn_bands[index]
                     )
                 measurements.append(
                     LinearRecordMeasurement(
@@ -2788,8 +2789,11 @@ def assemble_linear_diagram(
             canvas_config,
         )
         current_y = resolve_first_axis_y()
+        record_collision_bands = drawn_collision_bands(
+            {index: multi_record_plan.placement_for_index(index) for index in range(len(records))}
+        )
         multi_record_plan = solve_measurements(
-            build_measurements(multi_record_plan),
+            build_measurements(multi_record_plan, record_collision_bands),
             first_axis_y=current_y,
         )
         record_offsets = [
@@ -2800,40 +2804,10 @@ def assemble_linear_diagram(
             multi_record_plan.placement_for_index(index).x
             for index in range(len(records))
         ]
-        record_collision_bands = [
-            _record_collision_bands(
-                plan=record_vertical_plans[index],
-                definition_geometry=record_definition_geometries[index],
-                sequence_width=multi_record_plan.placement_for_index(index).sequence_width,
-                record_x=multi_record_plan.placement_for_index(index).x,
-                multi_record_enabled=True,
-                keep_definition_left_aligned=bool(
-                    canvas_config.keep_definition_left_aligned
-                ),
-                definition_column_width=definition_column_width,
-                row_definition_width=row_definition_width,
-                definition_gap=float(canvas_config.definition_gap),
-            )
-            for index in range(len(records))
-        ]
         boundary_gap_resolutions = list(multi_record_plan.row_gap_resolutions)
         current_y = max(record_offsets)
     else:
-        for index, horizontal in horizontal_placements.items():
-            record_collision_bands[index] = _record_collision_bands(
-                plan=record_vertical_plans[index],
-                definition_geometry=record_definition_geometries[index],
-                sequence_width=horizontal.sequence_width,
-                record_x=horizontal.x,
-                multi_record_enabled=False,
-                text_anchor=cfg.objects.definition.linear.text_anchor,
-                keep_definition_left_aligned=bool(
-                    canvas_config.keep_definition_left_aligned
-                ),
-                definition_column_width=definition_column_width,
-                row_definition_width=row_definition_width,
-                definition_gap=float(canvas_config.definition_gap),
-            )
+        record_collision_bands = drawn_collision_bands(horizontal_placements)
 
         ordered_rows = tuple(ordered_record_indices)
         for row_position, record_index in enumerate(ordered_rows):
@@ -2917,22 +2891,6 @@ def assemble_linear_diagram(
         )
         record_offsets_x[record_index] = record_placements[record_index].x
         record_offsets[record_index] = record_placements[record_index].axis_y
-    for record_index, placement in record_placements.items():
-        record_collision_bands[record_index] = _record_collision_bands(
-            plan=record_vertical_plans[record_index],
-            definition_geometry=record_definition_geometries[record_index],
-            sequence_width=record_placements[record_index].sequence_width,
-            record_x=record_placements[record_index].x,
-            multi_record_enabled=multi_record_enabled,
-            text_anchor=cfg.objects.definition.linear.text_anchor,
-            keep_definition_left_aligned=bool(
-                canvas_config.keep_definition_left_aligned
-            ),
-            definition_column_width=definition_column_width,
-            row_definition_width=row_definition_width,
-            definition_gap=float(canvas_config.definition_gap),
-            definition_column_left=definition_column_left,
-        )
     painted_content_bottom = max(
         (
             float(record_offsets[index]) + plan.canvas_band.bottom_y

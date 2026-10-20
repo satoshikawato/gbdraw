@@ -166,7 +166,9 @@ def _precalculate_label_dimensions(
 
     The labels of the records in one row (``label_frames``; each record alone in its row without them)
     are stacked together (OV-1188). ``label_keep_clear`` are each record's boxes its labels keep
-    clear of, in their coordinates (``LinearRecordLabels.keep_clear``).
+    clear of, in their coordinates (``LinearRecordLabels.keep_clear``). ``sequence_widths`` are the
+    records' drawn axis widths (their placements' ``sequence_width``); without them each record is
+    as wide as it is alone in its row (``LinearCanvasConfigurator.record_sequence_width``).
     """
 
     profile = render_context.profile
@@ -185,7 +187,6 @@ def _precalculate_label_dimensions(
     record_labels: list[LinearRecordLabels | None] = []
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
-    normalize_length = cfg.canvas.linear.normalize_length
     label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
@@ -215,22 +216,16 @@ def _precalculate_label_dimensions(
             feature_dict = feature_result.foreground_features
 
         record_length = len(record.seq)
-        if sequence_widths is not None:
-            alignment_width = float(sequence_widths[i])
-            genome_size_normalization_factor = 1.0
-        elif normalize_length:
-            alignment_width = canvas_config.alignment_width
-            genome_size_normalization_factor = 1.0
-        else:
-            alignment_width = canvas_config.alignment_width
-            genome_size_normalization_factor = record_length / canvas_config.longest_genome
-
-        # Label x-positions must use the same final axis width as record rendering.
+        # Label x-positions use the record's drawn axis width (its placement's ``sequence_width``).
         labels = linear_record_labels(
             feature_dict,
             record_length,
-            alignment_width,
-            genome_size_normalization_factor,
+            (
+                float(sequence_widths[i])
+                if sequence_widths is not None
+                else canvas_config.record_sequence_width(record_length)
+            ),
+            1.0,
             canvas_config.cds_height,
             profile.strandedness,
             render_context.feature_track_layout,
