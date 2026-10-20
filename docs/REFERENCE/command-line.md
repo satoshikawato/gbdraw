@@ -167,8 +167,9 @@ underline. A label drawn inside its feature gets no box. In Linear a turned
 `above_feature` label that sits on its feature without a leader gets the box
 too, and its sides toward the feature stop at the letters. Leaders and underlines are 0.07 em wide, at least 1 px. In
 Linear, neighbouring feature labels in one label row keep at least 0.25 em of
-their font size apart; a label that would come closer takes another row, and
-the underline takes no room in its label row. With `--label_placement
+their font size apart; a label that would come closer, or lie over its
+record's definition text, takes another row, and the underline takes no room
+in its label row. With `--label_placement
 above_feature`, Linear draws each label over its own feature (below a
 negative-strand feature with `--separate_strands`): a horizontal label starts
 one row off its feature with a leader, as with `auto`, and a turned label sits

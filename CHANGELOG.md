@@ -57,10 +57,11 @@ write-up of a release.
   (`--label_rotation`) keeps its place on its feature and, with
   `--label_protection box`, now gets the white box, whose sides toward the
   feature stop at the letters, so a neighbour's leader through its letters is
-  faded there. Labels move off the record's definition text instead of
-  covering it, and a Linear label over the definition text in either placement
+  faded there. Linear feature labels, in `auto` rows too, move off the
+  record's definition text instead of covering it, and a label still over it
   counts in the label warning. Figures with horizontal `above_feature` labels
-  get taller; `auto` figures draw as before (OV-1361, OV-1395, OV-1396).
+  get taller; `auto` figures move only a label that lay over the definition
+  text (OV-1361, OV-1395, OV-1396, OV-1398).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
