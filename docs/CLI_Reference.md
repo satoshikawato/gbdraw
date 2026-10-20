@@ -1385,8 +1385,11 @@ options:
   --label_placement {auto,above_feature}
                         Linear label placement mode ("auto" or
                         "above_feature"; default: "auto"). "above_feature"
-                        draws labels above features (or below negative-strand
-                        features when --separate_strands is used).
+                        draws each label over its own feature (below negative-
+                        strand features when --separate_strands is used): a
+                        horizontal label starts one row off its feature with a
+                        leader, as in "auto"; a turned label
+                        (--label_rotation) sits on its feature.
   --label_rendering {auto,embedded_only,external_only}
                         Label rendering policy: "auto" embeds fitting labels
                         and routes others externally; "embedded_only" drops
