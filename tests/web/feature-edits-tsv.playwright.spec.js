@@ -273,7 +273,7 @@ test('Load Feature Edits TSV counts rows that name no record or feature and reje
   ].join('\n'));
   expect(await loadTable(page, table)).toEqual({
     text: 'Loaded 3 row(s). Applied 1 feature edit(s).',
-    items: ['2 row(s) name no record or feature of the current diagram and were not applied.']
+    items: ['2 row(s) were not applied: no matching record, or no matching feature in that record.']
   });
   expect(await draftRows(page)).toEqual([[2, target.identity, 'off', null, null]]);
 

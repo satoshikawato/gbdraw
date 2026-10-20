@@ -1698,7 +1698,7 @@ export const createFeatureLabelActions = ({
       // change. An edit of the label intent stays; it is named first, since
       // it also redraws the diagram and makes the rule preparation stale.
       const changed = labelIntent !== labelIntentSignature(drawing)
-        ? t('Not applied: a label or feature visibility edit was made while the table loaded. The edit was kept. Load the table again.')
+        ? t('Not applied: label text, label visibility, or feature visibility changed while the table loaded. The changes were kept. Load the table again.')
         : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
           ? t('Not applied: the displayed diagram changed while the table loaded. Load the table again.')
           : !rulePreparation.isCurrent(before)

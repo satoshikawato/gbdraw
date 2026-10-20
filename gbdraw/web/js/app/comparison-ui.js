@@ -452,7 +452,7 @@ const projectSectionKeys = ({
 const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-upload'
   ? [{ key: 'choose-file', label: t('Choose file'), ariaLabel: pairLabel ? t('Choose file for {pair}', { pair: pairLabel }) : t('Choose file') }]
   : code === 'selected-losat-requires-pairwise'
-    ? [{ key: 'all-losat', label: t('Run LOSAT for all pairs') }, { key: 'pairwise', label: t('Use Pairwise matches') }]
+    ? [{ key: 'all-losat', label: t('Run LOSAT for all adjacent pairs') }, { key: 'pairwise', label: t('Use Pairwise matches') }]
     : [{ key: 'show', label: t('Show pair'), ariaLabel: pairLabel ? t('Show pair {pair}', { pair: pairLabel }) : t('Show pair') }]
 ).map((action) => Object.freeze({ ariaLabel: action.label, ...action })));
 

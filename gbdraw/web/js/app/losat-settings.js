@@ -172,7 +172,7 @@ export const createLosatSettings = ({ state }) => {
   const losatAutoPairWorkers = computed(() => losatThreadPlan.value.autoPairWorkers);
   const losatPairWorkerOptions = computed(() => losatEstimatedJobCount.value === 0 ? [] : appendRequestedIntegerOption(
     createPositiveIntegerOptions(losatMaxPairWorkers.value).map((option) => ({
-      ...option, label: tn(Number(option.value), '{count} run', '{count} runs')
+      ...option, label: tn(Number(option.value), '{count} parallel job', '{count} parallel jobs')
     })),
     losatExecution.parallelWorkers,
     losatThreadPlan.value.pairWorkers

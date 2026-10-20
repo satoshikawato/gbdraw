@@ -872,7 +872,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   await expect(losatpMode).toHaveValue('pairwise');
 
   // The disabled options say why; the one way out is the command that compares every pair.
-  await expect(losatpMode.locator('option[value="orthogroup"]')).toHaveText('Similarity groups (all pairs only)');
+  await expect(losatpMode.locator('option[value="orthogroup"]')).toHaveText('Similarity groups (all adjacent pairs only)');
   await expect(comparisonCard(page).locator('[data-linear-comparison-issues]')).toHaveCount(0);
   // The command needs loaded sequences to compare.
   await page.evaluate((contents) => {
@@ -1370,7 +1370,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change setting', mode: 'pairwise', plan: 'selected' });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await history()).toEqual(before);
-  await issues.getByRole('button', { name: 'Run LOSAT for all pairs', exact: true }).click();
+  await issues.getByRole('button', { name: 'Run LOSAT for all adjacent pairs', exact: true }).click();
   await settled();
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change comparisons', mode: 'collinear', plan: 'adjacent' });
   // A LOSAT runtime failure has no pair issue: Show in Comparison opens

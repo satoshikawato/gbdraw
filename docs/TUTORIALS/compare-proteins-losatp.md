@@ -87,7 +87,7 @@ to **Curve**, then enter the filter values and the deterministic
 | Settings / Result filters | Min length | `0` |
 | Settings / Performance | Execution | Serial |
 | Settings / Performance | Total threads | `1` |
-| Settings / Performance | Parallel runs | `1 run` |
+| Settings / Performance | Parallel runs | `1 parallel job` |
 | Settings / Performance | Threads per run | `1` |
 | Layout | Separate Strands | Off |
 | Basic | Output Prefix | `bgc_losatp_groups` |

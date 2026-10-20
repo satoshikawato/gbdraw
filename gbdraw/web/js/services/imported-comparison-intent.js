@@ -408,7 +408,7 @@ export const classifyImportedComparisonIntent = ({
   ));
   if (hasDirectProteinInput && !pipeline) {
     return preserved(
-      msg('The saved comparison is executable, but current controls cannot edit this canonical protein input.')
+      msg('The saved comparison can run, but the current controls cannot edit its stored protein-input format.')
     );
   }
   if (pipeline && !generatedPipelineIsProjectable({ records, comparisons, pipeline })) {

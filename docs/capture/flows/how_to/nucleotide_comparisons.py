@@ -997,7 +997,7 @@ def capture_gui_circular_rings(
         popup = page.get_by_role("dialog", name="Pairwise match details", exact=True)
         expect(popup).to_be_visible()
         popup_text = popup.inner_text()
-        for expected in ("Homology ring match", "NC_012920.1", "span"):
+        for expected in ("Comparison ring match", "NC_012920.1", "span"):
             if expected not in popup_text:
                 raise AssertionError(f"Circular HSP popup is missing {expected!r}")
         fasta_buttons = popup.get_by_role("button", name=re.compile(r"FASTA"))
@@ -1015,7 +1015,7 @@ def capture_gui_circular_rings(
             page, output_paths["hsp-popup.png"], "Circular"
         )
         popup_report = {
-            "title": "Homology ring match",
+            "title": "Comparison ring match",
             "text": popup_text,
             "download_suggested_filename": fasta_download.suggested_filename,
         }

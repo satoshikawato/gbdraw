@@ -3260,7 +3260,7 @@ export const createRunAnalysis = ({
         drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
-          setProcessingStatus(t('Preparing conservation comparisons...'));
+          setProcessingStatus(t('Preparing sequence comparisons for the circular diagram...'));
           // Thresholds are evaluated before conservation work; the request
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
@@ -3372,7 +3372,7 @@ export const createRunAnalysis = ({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
-              setProcessingStatus(t('Running {program} conservation: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
+              setProcessingStatus(t('Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
               const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
@@ -3385,7 +3385,7 @@ export const createRunAnalysis = ({
                 },
                 onProgress: ({ completed, total }) => {
                   if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                  setProcessingStatus(t('Running {program} conservation: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed, total }));
+                  setProcessingStatus(t('Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed, total }));
                 }
               });
               losatResults.forEach((result) => {
@@ -3405,7 +3405,7 @@ export const createRunAnalysis = ({
                 });
               });
             } else {
-              setProcessingStatus(t('Using cached LOSAT conservation results...'));
+              setProcessingStatus(t('Using cached LOSAT comparison results for the circular diagram...'));
             }
             throwIfGenerationCanceled();
             retainCompletedLosatSearch(cacheMap, losatPairs);

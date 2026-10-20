@@ -177,7 +177,7 @@ const MATCH_KIND_TITLES = {
   pairwise: msg('Pairwise match'),
   orthogroup: msg('Similarity-group match'),
   collinear: msg('Collinearity block'),
-  homology: msg('Homology ring match')
+  homology: msg('Comparison ring match')
 };
 
 const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear', 'homology']);

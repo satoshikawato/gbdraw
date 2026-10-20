@@ -155,7 +155,7 @@ export const createFeatureEditTableActions = ({
       showNotice({
         text: `${t('Loaded {count} row(s).', { count: rows.length + unmatchedRows.length })} ${t('Applied {count} feature edit(s).', { count: rows.length })}`,
         items: unmatchedRows.length > 0
-          ? [t('{count} row(s) name no record or feature of the current diagram and were not applied.', { count: unmatchedRows.length })]
+          ? [t('{count} row(s) were not applied: no matching record, or no matching feature in that record.', { count: unmatchedRows.length })]
           : []
       });
       return true;

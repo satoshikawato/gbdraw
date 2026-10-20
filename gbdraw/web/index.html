@@ -2991,7 +2991,7 @@
                                             aria-describedby="help-comparison-losatp-mode"
                                             class="form-input px-2 py-1.5 text-xs"
                                          :disabled="!semanticMutationAvailable">
-                                            <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.selectable ? modeOption.label : t('{label} (all pairs only)', { label: modeOption.label }) }}</option>
+                                            <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.selectable ? modeOption.label : t('{label} (all adjacent pairs only)', { label: modeOption.label }) }}</option>
                                         </select>
                                     </div>
 
@@ -3127,7 +3127,7 @@
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('Parallel runs') }}</label>
                                                 <select v-model="losatExecution.parallelWorkers" :aria-label="t('LOSAT parallel runs')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                                    <option :value="undefined">{{ tn(losatAutoPairWorkers, 'Auto ({count} run)', 'Auto ({count} runs)') }}</option>
+                                                    <option :value="undefined">{{ tn(losatAutoPairWorkers, 'Auto ({count} parallel job)', 'Auto ({count} parallel jobs)') }}</option>
                                                     <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
                                                 </select>
                                             </div>
@@ -3740,7 +3740,7 @@
                                             <input type="checkbox" v-model="form.normalize_length" aria-describedby="help-linear-normalize-record-lengths" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                             <span>{{ t('Normalize Record Lengths') }}</span>
                                         </label>
-                                        <help-tip id="help-linear-normalize-record-lengths" :text="t('Normalize sequence lengths to be equal. Suppresses the length bar.')"></help-tip>
+                                        <help-tip id="help-linear-normalize-record-lengths" :text="t('Draw all sequences at the same displayed length. Hides the length bar.')"></help-tip>
                                     </div>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
                                         <div class="flex items-center text-xs">
@@ -4086,7 +4086,7 @@
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
                                         :class="enabledOptionClass"
-                                        :title="t('Shift features vertically to avoid overlap.')"
+                                        :title="t('Shift features radially to avoid overlap.')"
                                     >
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>{{ t('Resolve Overlaps') }}</span>
@@ -4731,7 +4731,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="group-heading" :aria-label="t('DEFAULT COLORS')">{{ t('DEFAULT COLORS') }} <help-tip :text="t('Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it and stay when you change the palette, after a question.')"></help-tip></h4>
+                                    <h4 class="group-heading" :aria-label="t('DEFAULT COLORS')">{{ t('DEFAULT COLORS') }} <help-tip :text="t('Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it; when you change the palette, a dialog asks whether to keep them.')"></help-tip></h4>
                                     <button @click="requestResetColors" class="text-[10px] text-blue-600 hover:underline" :disabled="!semanticMutationAvailable">{{ t('Reset') }}</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -4856,7 +4856,7 @@
 
                 <div v-settings-section="'features'" data-setting="features" class="card">
                     <details>
-                        <summary :aria-label="t('Features')"><settings-section-title section="features"></settings-section-title> <help-tip :text="t('Choose each feature type\'s rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features.')"></help-tip></summary>
+                        <summary :aria-label="t('Features')"><settings-section-title section="features"></settings-section-title> <help-tip :text="t('Choose each feature type\'s rendering. Underlay removes it from feature lanes and labels, then highlights each feature\'s span across the full thickness of the feature track, behind foreground features.')"></help-tip></summary>
                         <setting-note setting="features" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
@@ -5221,7 +5221,7 @@
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
                                                     {{ t('Label Placement') }}
-                                                    <help-tip id="help-label-label-placement" :text="t('Auto follows track direction (Above/Middle: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).')"></help-tip>
+                                                    <help-tip id="help-label-label-placement" :text="t('Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).')"></help-tip>
                                                 </span>
                                                 <select
                                                     v-model="adv.label_placement"
@@ -5551,7 +5551,7 @@
                             </div>
 
                             <div>
-                                <span class="input-label text-[10px]">{{ t('GC Content Mode') }} <help-tip id="help-gc-gc-content-mode" :text="t('Deviation centers the track around the window mean. Percent draws absolute GC percentage from a baseline.')"></help-tip></span>
+                                <span class="input-label text-[10px]">{{ t('GC Content Mode') }} <help-tip id="help-gc-gc-content-mode" :text="t('Deviation centers the track around the mean of all windows. Percent draws absolute GC percentage from a baseline.')"></help-tip></span>
                                 <select v-model="adv.gc_content_mode" :aria-label="t('GC Content Mode')" aria-describedby="help-gc-gc-content-mode" class="form-select form-input-compact" :disabled="!semanticMutationAvailable">
                                     <option value="deviation">{{ t('Deviation') }}</option>
                                     <option value="percent">{{ t('Percent') }}</option>

@@ -148,7 +148,7 @@ files and raw-result names do not reactivate an edge.
 
 A selected or mixed plan can use LOSATN, TLOSATX, or LOSATP Pairwise matches.
 When **LOSAT Mode** is LOSATP, its **Similarity groups** and **Collinear
-blocks** presentation options are disabled and marked **(all pairs only)**.
+blocks** presentation options are disabled and marked **(all adjacent pairs only)**.
 Select **Run LOSAT** at the top of the Comparison card, or **Run LOSAT for all
 pairs** in its issue list, to change to the compatible all-adjacent topology; opening or closing
 **Settings** does not change the plan.

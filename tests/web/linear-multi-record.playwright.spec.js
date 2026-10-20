@@ -4110,7 +4110,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await expect(runs.locator('option:checked')).toContainText('1 effective');
   await expect(threads.locator('option:checked')).toContainText('4 effective');
   await total.selectOption('32');
-  await expect(runs.locator('option:checked')).toHaveText('2 runs');
+  await expect(runs.locator('option:checked')).toHaveText('2 parallel jobs');
   await expect(threads.locator('option:checked')).toHaveText('8');
   await runs.selectOption({ index: 0 });
   await threads.selectOption('auto');
