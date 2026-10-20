@@ -87,9 +87,8 @@ class LabelsGroup:
                 group.add(self._part(bend, feature, label))
             return group
 
-        if style.protection == "box":
-            for label, ink, _contact, _line in drawn:
-                assert ink is not None
+        for label, ink, _contact, _line in drawn:
+            if ink is not None and ink.draws_box(style):
                 group.add(feature_label_box(ink, label["feature_id"]))
         drawer = LabelDrawer(profile=self.render_context.profile)
         feature_anchor_radius = float(self.geometry.radius)

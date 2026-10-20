@@ -59,7 +59,6 @@ class FeatureLabelInk:
     y (label frame) of its underline and of its leader's stop above the
     letters; None without an underline. ``join_at_end``: the leader meets the
     line at the end on the side where it ends today, never inside it.
-    ``turned``: drawn turned (a Linear label given a rotation, a Circular radial label).
     ``feature_edge_y``: for a label drawn on its feature without a leader (Linear ``above_feature``), the y
     (drawing frame) of the feature edge it faces; its box stops there. None otherwise.
     """
@@ -72,15 +71,12 @@ class FeatureLabelInk:
     under_y: float | None = None
     stop_y: float | None = None
     join_at_end: bool = False
-    turned: bool = False
     feature_edge_y: float | None = None
 
     def draws_box(self, style: FeatureLabelStyle) -> bool:
         """Whether ``style`` draws this label's white box (``FeatureLabelStyle.draws_box``)."""
 
-        return style.draws_box(
-            has_leader=bool(self.leader), beside_feature=self.feature_edge_y is not None, turned=self.turned
-        )
+        return style.draws_box(has_leader=bool(self.leader), beside_feature=self.feature_edge_y is not None)
 
     def _turned(self, point: Point, degrees: float) -> Point:
         if degrees == 0.0:
@@ -191,7 +187,6 @@ def feature_label_ink(
         under_y=under_y,
         stop_y=stop_y,
         join_at_end=join_at_end,
-        turned=turned,
         feature_edge_y=feature_edge_y,
     )
 
