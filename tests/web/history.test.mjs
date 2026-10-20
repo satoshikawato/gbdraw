@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
@@ -129,6 +130,56 @@ const createLayoutPreferences = () => ({
   assert.deepEqual(await history.redo(), busy);
   assert.equal(value, 0);
   assert.equal(history.getRedoCount(), 1);
+}
+
+// OV-1339: the enabled state reads the availability the action reads. While
+// the top step is busy, Undo (or Redo) and its label are off; they come back,
+// reactively and without another History change, when the busy state ends.
+// The header buttons' computed is built as app-setup.js builds it, over the
+// vendored Vue.
+{
+  const vueContext = vm.createContext({});
+  vm.runInContext(
+    await readFile(join(repoRoot, 'gbdraw', 'web', 'vendor', 'vue', 'vue.global.prod.js'), 'utf8'),
+    vueContext
+  );
+  const Vue = vm.runInContext('Vue', vueContext);
+  let value = 0;
+  const busySource = Vue.ref(false);
+  const busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => { value = snapshot.value; };
+  const history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState,
+    makeRef: Vue.ref,
+    stepAvailability: (step) => (step.type === 'intent' && busySource.value ? busy : null)
+  });
+  const canUndoHistory = Vue.computed(() => { void history.revision.value; return history.canUndo(); });
+  const canRedoHistory = Vue.computed(() => { void history.revision.value; return history.canRedo(); });
+  await history.captureBaseline('initial');
+  await history.runUndoable('Increment', () => { value = 1; });
+  assert.equal(canUndoHistory.value, true);
+  busySource.value = true;
+  assert.equal(history.canUndo(), false);
+  assert.equal(history.undoLabel(), '');
+  assert.equal(canUndoHistory.value, false);
+  assert.deepEqual(await history.undo(), busy);
+  assert.equal(history.getUndoCount(), 1);
+  busySource.value = false;
+  assert.equal(canUndoHistory.value, true);
+  assert.equal(history.undoLabel(), 'Increment');
+  assert.equal(await history.undo(), true);
+  assert.equal(canRedoHistory.value, true);
+  busySource.value = true;
+  assert.equal(history.canRedo(), false);
+  assert.equal(history.redoLabel(), '');
+  assert.equal(canRedoHistory.value, false);
+  busySource.value = false;
+  assert.equal(canRedoHistory.value, true);
+  assert.equal(history.redoLabel(), 'Increment');
 }
 
 {

@@ -206,12 +206,10 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   await switchMode(page, 'linear');
   // Each Undo is waited for by the History stacks it changes.
   const stacks = () => page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()].join('/'));
-  const historyBusy = () => page.evaluate(async () => Boolean((await import('./js/state.js')).sessionOperationAvailability('history')));
   for (let step = 0; step < 8 && await undoCount() >= removedAt; step += 1) {
     const before = await stacks();
-    // Undo of a mode switch is refused while a rerender or binding runs, but the
-    // button stays enabled (OV-1339): click only once History is free.
-    await expect.poll(historyBusy, { timeout: 60_000 }).toBe(false);
+    // Undo of a mode switch waits while a rerender or binding runs, and its
+    // button is disabled for that time (OV-1339): the click waits for it.
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect.poll(stacks, { timeout: 60_000 }).not.toBe(before);
   }

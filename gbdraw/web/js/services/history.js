@@ -318,7 +318,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
  * @property {(step: { type: string, changes?: unknown }) => HistoryBusy | null} [stepAvailability]
  *   The composition root's busy answer for one Undo or Redo step (E1: a step
- *   that switches the diagram mode waits as the mode buttons do).
+ *   that switches the diagram mode waits as the mode buttons do). Undo, Redo,
+ *   and their enabled state read it for the top step, so it must read
+ *   reactive state.
  */
 
 /** @param {HistoryManagerOptions} options */
@@ -1689,6 +1691,13 @@ export const createHistoryManager = ({
     return historyAvailability();
   };
 
+  // OV-1339: the busy answer for the step an Undo (or Redo) takes next, the
+  // top of its stack. The action and its enabled state read this one check.
+  /** @param {HistoryEntry[]} stack */
+  const topStepAvailability = (stack) => (
+    stack.length > 0 ? stepAvailability(stack[stack.length - 1]) : null
+  );
+
   /** @param {() => Promise<unknown>} step */
   const traverse = async (step) => {
     traversals.value += 1;
@@ -1703,9 +1712,9 @@ export const createHistoryManager = ({
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || undoStack.length === 0) return false;
-    const entry = undoStack[undoStack.length - 1];
-    const stepBusy = stepAvailability(entry);
+    const stepBusy = topStepAvailability(undoStack);
     if (stepBusy) return stepBusy;
+    const entry = undoStack[undoStack.length - 1];
     if (entry.type === 'command') {
       const reverted = await applyCommandWithFlag(entry, 'undo');
       if (!reverted) {
@@ -1731,9 +1740,9 @@ export const createHistoryManager = ({
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || redoStack.length === 0) return false;
-    const entry = redoStack[redoStack.length - 1];
-    const stepBusy = stepAvailability(entry);
+    const stepBusy = topStepAvailability(redoStack);
     if (stepBusy) return stepBusy;
+    const entry = redoStack[redoStack.length - 1];
     if (entry.type === 'command') {
       const applied = await applyCommandWithFlag(entry, 'redo');
       if (!applied) {
@@ -1755,8 +1764,12 @@ export const createHistoryManager = ({
     return true;
   });
 
-  const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
-  const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
+  /** @param {HistoryEntry[]} stack */
+  const canTraverse = (stack) => (
+    stack.length > 0 && !restoring.value && !historyAvailability() && !topStepAvailability(stack)
+  );
+  const canUndo = () => canTraverse(undoStack);
+  const canRedo = () => canTraverse(redoStack);
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 

@@ -826,11 +826,16 @@ test('an Undo of a mode switch waits for a label rerender', async ({ page }) => 
     }
     const rerendering = state.labelReflowProcessing.value;
     const undo = await owner.undo();
-    return { rerendering, undo, mode: state.mode.value };
+    // OV-1339: the Undo button is disabled while its step waits.
+    await window.Vue.nextTick();
+    const undoButtonDisabled = document.querySelector('button[aria-label="Undo"]').disabled;
+    return { rerendering, undo, undoButtonDisabled, mode: state.mode.value };
   });
-  expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, mode: 'circular' });
+  expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, undoButtonDisabled: true, mode: 'circular' });
   await settleLive(page);
-  await history(page, 'undo');
+  // The button comes back when the rerender ends, with no other History change.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await settleLive(page);
   expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
 });
 
