@@ -5113,7 +5113,7 @@
                                 <div v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) !== 'none'">
                                     <h4 class="group-heading mb-2" :aria-label="t('LABEL FILTERING')">{{ t('LABEL FILTERING') }} <help-tip :text="t('Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics.')"></help-tip></h4>
                                     <div class="flex gap-2 mb-2">
-                                        <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="setLabelFilterMode(m)" :disabled="!semanticMutationAvailable" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
+                                        <button v-for="[m, name] in [['None', t('None')], ['Blacklist', t('Blacklist')], ['Whitelist', t('Whitelist')]]" @click="setLabelFilterMode(m)" :disabled="!semanticMutationAvailable" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{ name }}</button>
                                     </div>
 
                                     <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
@@ -6208,7 +6208,8 @@
                          @pointercancel="endPan"
                          @lostpointercapture="endPan"
                          @mouseleave="endPan">
-                        <div v-if="svgContent" v-preview-markup="svgContent" ref="svgContainer"
+                        <!-- The figure's text is English in every UI language: its fonts are chosen for English (lang="en"). -->
+                        <div v-if="svgContent" v-preview-markup="svgContent" ref="svgContainer" lang="en"
                             :key="`svg-${mode}-${selectedResultIndex}-${svgResultIdentity}`"
                             v-preview-transform
                             class="gbdraw-preview-surface shadow-xl bg-white m-auto origin-top">

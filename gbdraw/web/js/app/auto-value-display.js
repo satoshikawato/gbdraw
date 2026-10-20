@@ -562,7 +562,7 @@ const autoTextByKey = (state, drawing, key, context = null) => {
       return String(state?.mode?.value || state?.mode || 'circular') === 'circular'
         ? lengthDependentPx(state, drawing, DEFAULTS.circular.labelFontSizePx)
         : linearLabelFontSizeText(state, drawing);
-    case 'labelRendering': return 'per label';
+    case 'labelRendering': return t('per label');
     case 'linearLabelPlacement': return linearLabelPlacementText(drawing);
     case 'circularLabelSpacing': return withAuto(formatPx(DEFAULTS.labels.spacingPx));
     case 'linearLabelSpacing': return withAuto(formatPx(DEFAULTS.labels.spacingPx));

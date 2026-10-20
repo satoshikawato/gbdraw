@@ -5,7 +5,6 @@
 // a saved Session are the same bytes in every language. English comes back
 // exactly. Storage that fails, or a catalog that fails to load, leaves English.
 const { test, expect } = require('@playwright/test');
-const { createHash } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -28,12 +27,18 @@ const history = (page) => page.evaluate(() => ({
   redo: window.__GBDRAW_HISTORY__.getRedoCount(),
   undoEnabled: !document.querySelector('header .app-history-actions button').disabled
 }));
-// The figure as drawn: its markup and its pixels.
+// The figure as drawn: its markup and the computed style of its text (the
+// pane around it may move, so its pixels are not compared).
 const figure = async (page) => {
   const svg = page.locator('.result-pane svg[data-gbdraw-composition]').first();
   await expect(svg).toBeVisible();
-  const pixels = createHash('sha256').update(await svg.screenshot()).digest('hex');
-  return { markup: await svg.evaluate((element) => element.outerHTML), pixels };
+  return svg.evaluate((root) => ({
+    markup: root.outerHTML,
+    text: Array.from(root.querySelectorAll('text, tspan'), (element) => {
+      const style = getComputedStyle(element);
+      return [style.fontFamily, style.fontSize, style.fontWeight, style.letterSpacing, style.textTransform, element.closest('[lang]')?.getAttribute('lang')].join('|');
+    })
+  }));
 };
 // The UI text a reader sees and hears: every text node and accessible attribute
 // of the app. A notice keeps the language it was shown in (D-16), so it is
@@ -56,15 +61,17 @@ const loadSession = async (page) => {
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
 };
 
-// Save Session's bytes without its time stamp; the title prompt is answered by its field, in any language.
+// Save Session's bytes without its time stamp. The loaded Session has a
+// title, so Save asks for none; a second Save asks whether to download the
+// same file again, and its primary action (in any language) does.
 const savedSession = async (page, testInfo, name) => {
-  const pending = page.waitForEvent('download');
+  const pending = page.waitForEvent('download', { timeout: 120_000 });
   await page.locator('header button[aria-describedby="session-save-help"]').click();
-  const field = page.locator('[data-choice-prompt] input[type="text"]');
-  await expect(field).toBeFocused({ timeout: 120_000 });
-  await field.fill('language check');
-  await field.press('Enter');
-  const download = await pending;
+  const again = page.locator('[data-choice-prompt] button.btn-primary[data-choice-prompt-action]');
+  const download = await Promise.race([pending, again.waitFor({ timeout: 120_000 }).then(async () => {
+    await again.click();
+    return pending;
+  }, () => pending)]);
   const path = testInfo.outputPath(name);
   await download.saveAs(path);
   const bytes = readFileSync(path);
@@ -83,7 +90,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   // A first visit is English although the browser's language is Japanese.
   await openApp(page);
   expect(await page.evaluate(() => navigator.language)).toBe('ja-JP');
-  expect(await pageLanguage(page)).toBe('en');
+  await expect.poll(() => pageLanguage(page)).toBe('en');
   await expect(menu(page)).toHaveValue('en');
   await expect(menu(page)).toHaveAccessibleName('Language');
   await expect(menu(page).locator('option')).toHaveText(['English', '日本語', '简体中文', '繁體中文']);
@@ -97,16 +104,14 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   const englishSession = await savedSession(page, testInfo, 'en.json');
 
   await menu(page).selectOption('ja');
-  expect(await pageLanguage(page)).toBe('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
   await expect(loadButton(page)).toHaveAccessibleName(ja['Load Session']);
   await expect(loadButton(page)).toContainText(ja['Load Session']);
   await expect(menu(page)).toHaveAccessibleName(ja.Language);
   await expect(page.getByRole('navigation', { name: ja['Settings sections'] })
     .getByRole('button', { name: ja['Go to {section}'].replace('{section}', ja.Labels), exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: ja['Generate Diagram'], exact: true })).toBeVisible();
-  // The label of the Record Size Mode option is its own key (OV-1387); the diagram mode keeps 'Linear'.
-  expect(await page.locator('select[aria-describedby="help-circular-record-size-mode"] option[value="linear"]').textContent())
-    .toBe(ja['size scaling\u0004Linear']);
+  // The diagram mode keeps the key 'Linear'; the Record Size Mode option has its own (OV-1387, i18n-catalogs.test.mjs).
   await expect(page.locator('header .mode-switch')).toContainText(ja.Linear);
   // No upper-casing or tracking in Japanese.
   expect(await page.locator('header .app-session-label').evaluate((element) => {
@@ -122,14 +127,16 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await page.addInitScript(() => {
     window.__firstNames = [];
     const read = () => {
+      // The page holds the template until Vue mounts it (v-cloak).
+      const mounted = window.__GBDRAW_APP__ && !document.getElementById('app')?.hasAttribute('v-cloak');
       const button = document.querySelector('header button[aria-describedby="session-save-help"]');
-      if (button) window.__firstNames.push(button.getAttribute('aria-label'));
+      if (mounted && button) window.__firstNames.push(button.getAttribute('aria-label'));
       if (window.__firstNames.length < 2) requestAnimationFrame(read);
     };
     requestAnimationFrame(read);
   });
   await openApp(page);
-  expect(await pageLanguage(page)).toBe('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
   await expect(menu(page)).toHaveValue('ja');
   expect(await page.evaluate(() => window.__firstNames)).toEqual([ja['Save Session'], ja['Save Session']]);
   await loadSession(page);
@@ -137,7 +144,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
 
   for (const [tag, catalog] of [['zh-Hans', zhHans], ['zh-Hant', zhHant]]) {
     await menu(page).selectOption(tag);
-    expect(await pageLanguage(page)).toBe(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
     await expect(loadButton(page)).toHaveAccessibleName(catalog['Load Session']);
     await expect(page.getByRole('button', { name: catalog['Generate Diagram'], exact: true })).toBeVisible();
     expect(await page.locator('body').evaluate((body) => getComputedStyle(body).fontFamily)).not.toMatch(/^'?Inter'?, "?Noto Sans JP/);
@@ -147,7 +154,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
 
   // English comes back exactly.
   await menu(page).selectOption('en');
-  expect(await pageLanguage(page)).toBe('en');
+  await expect.poll(() => pageLanguage(page)).toBe('en');
   expect(await uiText(page)).toEqual(english.ui);
   expect(await figure(page)).toEqual(english.figure);
   expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'en']]);
@@ -170,11 +177,11 @@ test('storage that fails, or a catalog that cannot load, leaves English and the 
       });
     });
     await openApp(blocked);
-    expect(await pageLanguage(blocked)).toBe('en');
+    await expect.poll(() => pageLanguage(blocked)).toBe('en');
     await menu(blocked).selectOption('ja');
     await expect(loadButton(blocked)).toHaveAccessibleName(ja['Load Session']);
     await openApp(blocked);
-    expect(await pageLanguage(blocked)).toBe('en');
+    await expect.poll(() => pageLanguage(blocked)).toBe('en');
     await expect(loadButton(blocked)).toHaveAccessibleName('Load Session');
     expect(errors).toEqual([]);
 
@@ -185,13 +192,13 @@ test('storage that fails, or a catalog that cannot load, leaves English and the 
     await offline.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
     await offline.evaluate((key) => localStorage.setItem(key, 'ja'), LANGUAGE_KEY);
     await openApp(offline, { checkErrors: false });
-    expect(await pageLanguage(offline)).toBe('en');
+    await expect.poll(() => pageLanguage(offline)).toBe('en');
     await expect(menu(offline)).toHaveValue('en');
     await expect(loadButton(offline)).toHaveAccessibleName('Load Session');
     // Choosing it again keeps English and the menu shows English.
     await menu(offline).selectOption('zh-Hans');
     await expect(menu(offline)).toHaveValue('en');
-    expect(await pageLanguage(offline)).toBe('en');
+    await expect.poll(() => pageLanguage(offline)).toBe('en');
     expect(await offline.evaluate((key) => localStorage.getItem(key), LANGUAGE_KEY)).toBe('ja');
     expect(errors).toEqual([]);
   } finally {
