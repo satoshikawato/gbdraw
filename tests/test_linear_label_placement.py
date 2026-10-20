@@ -41,6 +41,7 @@ from gbdraw.layout.spatial import Aabb, AabbIndex, IntervalIndex, candidate_aabb
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
+    _label_corners,
     _linear_label_aabb,
     _rotated_label_rects_intersect,
     calculate_label_bounds,
@@ -1526,6 +1527,59 @@ def test_linear_above_feature_label_moves_off_a_keep_clear_box() -> None:
     _left, _right, _top, placed_bottom = calculate_label_bounds(placed)
     assert placed_bottom < header.min_y
     assert placed["leader_line"] is True
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("track_layout", ("above", "below"))
+def test_linear_auto_label_over_a_keep_clear_box_takes_the_next_row(track_layout: str) -> None:
+    """OV-1398: an ``auto`` label whose row would put it over its record's definition text (a
+    ``keep_clear`` box) takes the next row, as off another label (render-stage L2 with
+    ``--region``: "baculoviral IAP repeat-containing protein" over "LC738868.1"). A box that the
+    row leaves clear moves nothing."""
+
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    record = SeqRecord(Seq("A" * 1000), id="r", name="r", description="r")
+    record.features = [SeqFeature(FeatureLocation(0, 40, strand=1), type="CDS", qualifiers={"product": ["a long first label"]})]
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {"labels.linear.scope": "all", "canvas.linear.track_layout": track_layout},
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
+    canvas_cfg = LinearCanvasConfigurator(num_of_entries=1, longest_genome=1000, profile=profile, legend="none")
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    feature_dict, _ = create_feature_dict(
+        record, color_table, cfg.objects.features.features_drawn, default_colors,
+        canvas_cfg.strandedness, canvas_cfg.resolve_overlaps,
+        preprocess_label_filtering(cfg.labels.filtering.as_dict()),
+    )
+    record_labels = linear_record_labels(
+        feature_dict, 1000, canvas_cfg.alignment_width, 1.0, canvas_cfg.cds_height,
+        canvas_cfg.strandedness, canvas_cfg.track_layout, canvas_cfg.track_axis_gap, profile,
+    )
+    (alone,) = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout=canvas_cfg.track_layout)[0]
+    assert alone["track_id"] == "track_1" and not alone["is_embedded"]
+    left, _right, top, bottom = calculate_label_bounds(alone)
+    assert left < 0.0
+
+    def box_polygon(box: Aabb) -> tuple[tuple[float, float], ...]:
+        return ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
+
+    # The definition text beside the features, reaching 1 px into the first row's letters.
+    toward_axis = (bottom - 1.0, bottom + 40.0) if track_layout == "above" else (top - 40.0, top + 1.0)
+    header = Aabb(left - 50.0, toward_axis[0], -5.0, toward_axis[1])
+    (placed,) = place_linear_label_row(
+        [(record_labels._replace(keep_clear=(header,)), 0.0)], profile=profile, track_layout=canvas_cfg.track_layout
+    )[0]
+    assert placed["track_id"] == "track_2"
+    assert not convex_polygons_intersect(_label_corners(placed), box_polygon(header), touching=False)
+
+    clear = Aabb(left - 50.0, bottom + 1.0, -5.0, bottom + 40.0) if track_layout == "above" else Aabb(left - 50.0, top - 40.0, -5.0, top - 1.0)
+    (unmoved,) = place_linear_label_row(
+        [(record_labels._replace(keep_clear=(clear,)), 0.0)], profile=profile, track_layout=canvas_cfg.track_layout
+    )[0]
+    assert unmoved["track_id"] == "track_1" and unmoved["middle_y"] == alone["middle_y"]
 
 
 @pytest.mark.linear

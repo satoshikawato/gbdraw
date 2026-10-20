@@ -118,11 +118,16 @@ def _find_lowest_available_track_indexed(
     track_indexes: dict[str, IntervalIndex],
     label_by_id: dict[int, dict],
     label: dict,
+    blocked: Callable[[int], bool] | None = None,
 ) -> int:
-    """Find the lowest non-overlapping external label track using index candidates."""
+    """Find the lowest non-overlapping external label track using index candidates, skipping the
+    tracks ``blocked`` refuses (a keep-clear box in the label's place there)."""
     label_interval = _linear_label_interval(label)
     track_num = 1
     while True:
+        if blocked is not None and blocked(track_num):
+            track_num += 1
+            continue
         track_id = f"track_{track_num}"
         if track_id not in track_dict or not track_dict[track_id]:
             return track_num
@@ -231,6 +236,23 @@ def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
     """Return absolute top/bottom y coordinates for a label after rotation."""
     _, _, top_y, bottom_y = calculate_label_bounds(label)
     return top_y, bottom_y
+
+
+def _label_covers_keep_clear(label: Mapping[str, object], boxes: Sequence[Aabb]) -> bool:
+    """Whether a label's box intersects one of ``boxes`` (in the label's coordinates): the one test of a
+    label over the definition text, for the packers and the fit count (OV-1395, OV-1398)."""
+
+    if not boxes:
+        return False
+    corners = _label_corners(dict(label))
+    return any(
+        convex_polygons_intersect(
+            corners,
+            ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)),
+            touching=False,
+        )
+        for box in boxes
+    )
 
 
 def _label_corners(label: dict, shift_y: float = 0.0) -> list[tuple[float, float]]:
@@ -854,8 +876,18 @@ def place_linear_label_row(
     bottom_feature_y = max((record.bottom_feature_y for record in labelled), default=0.0)
     bucket_size = _external_label_bucket_size(max(record.alignment_width for record, _x in records))
     track_height = max_height + spacing_px
+    # The records' keep-clear boxes (definition text) in row coordinates.
+    keep_clear = [box.translated(x, 0.0) for record, x in records for box in record.keep_clear]
 
-    # The external labels in row coordinates: the packer reads only their x span.
+    def side(label: Mapping[str, object]) -> tuple[float, float]:
+        """The origin and pitch of the rows of a label's side."""
+
+        if below or label["secondary_below"]:
+            return bottom_feature_y, track_height
+        return top_feature_y, -track_height
+
+    # The external labels in row coordinates: the packer reads their x span, and their box in a row
+    # where a keep-clear box lies (OV-1398).
     track_dict: defaultdict[str, list[dict]] = defaultdict(list)
     track_indexes: dict[str, IntervalIndex] = {}
     framed_by_id: dict[int, dict] = {}
@@ -864,7 +896,8 @@ def place_linear_label_row(
             if label["is_embedded"]:
                 continue
             framed = {**label, "start": float(label["start"]) + x, "end": float(label["end"]) + x}
-            track_id = f"track_{_find_lowest_available_track_indexed(track_dict, track_indexes, framed_by_id, framed)}"
+            blocked = _keep_clear_rows(label, x, side(label), keep_clear) if keep_clear else None
+            track_id = f"track_{_find_lowest_available_track_indexed(track_dict, track_indexes, framed_by_id, framed, blocked)}"
             label["track_id"] = framed["track_id"] = track_id
             track_dict[track_id].append(framed)
             framed_id = len(framed_by_id)
@@ -886,11 +919,7 @@ def place_linear_label_row(
             }
             for label, x in on_features
         ]
-        _resolve_above_feature_label_overlaps(
-            framed_labels,
-            max(1.0, max_height * 0.05),
-            [box.translated(x, 0.0) for record, x in records for box in record.keep_clear],
-        )
+        _resolve_above_feature_label_overlaps(framed_labels, max(1.0, max_height * 0.05), keep_clear)
         for (label, _x), framed in zip(on_features, framed_labels):
             label["middle_y"] = framed["middle_y"]
             if framed["leader_line"]:
@@ -905,13 +934,21 @@ def place_linear_label_row(
         for label in external:
             # Compact vertical positioning for external labels: row N of its side
             # (``linear_label_in_row`` moves a label to another row of it).
-            if below or label["secondary_below"]:
-                label["row_origin_y"], label["row_pitch"] = bottom_feature_y, track_height
-            else:
-                label["row_origin_y"], label["row_pitch"] = top_feature_y, -track_height
+            label["row_origin_y"], label["row_pitch"] = side(label)
             label["middle_y"] = linear_row_y(label["row_origin_y"], label["row_pitch"], linear_label_row(label))
         placed.append([label for label in record.labels if label["is_embedded"]] + external)
     return placed
+
+
+def _keep_clear_rows(
+    label: Mapping[str, object], x: float, side: tuple[float, float], keep_clear: Sequence[Aabb]
+) -> Callable[[int], bool]:
+    """Whether ``label`` of the record at ``x``, in a row of its ``side`` (origin, pitch), would lie over
+    one of the row's ``keep_clear`` boxes (row coordinates)."""
+
+    in_row = {**label, "middle_x": float(str(label["middle_x"])) + x}
+    origin, pitch = side
+    return lambda row: _label_covers_keep_clear({**in_row, "middle_y": linear_row_y(origin, pitch, row)}, keep_clear)
 
 
 def linear_row_y(origin_y: float, pitch: float, row: int) -> float:
@@ -1057,14 +1094,7 @@ def _linear_row_label_fits(
     for left, right in crossing_pairs([shape.leader for shape in shapes]):
         counts[max(owners[left], owners[right])][1] += 1
     for position, ((record_labels, _x), boxes) in enumerate(zip(row, definition_boxes or [()] * len(row), strict=True)):
-        polygons = [
-            ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
-            for box in boxes
-        ]
-        counts[position][2] += sum(
-            any(convex_polygons_intersect(_label_corners(label), polygon, touching=False) for polygon in polygons)
-            for label in record_labels
-        )
+        counts[position][2] += sum(_label_covers_keep_clear(label, boxes) for label in record_labels)
     embedded_overlap = any(labels[left]["is_embedded"] or labels[right]["is_embedded"] for left, right in overlaps)
     return [LabelFit(overlap, crossing, covered) for overlap, crossing, covered in counts], embedded_overlap
 
