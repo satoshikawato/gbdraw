@@ -315,7 +315,8 @@ Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.
 replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
 `e8b460772` drew (equal to `main`'s replay); the BGC replay was redrawn after the
 Linear label packing changed its record rows and again after the label boxes
-added white boxes to its turned labels, whose text is unchanged (`.v47.provenance.json`), and `tests/test_api_session.py`
+added white boxes to its turned labels, whose text is unchanged, and once more for float last bits when one
+owner placed the Linear records (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
 `BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
