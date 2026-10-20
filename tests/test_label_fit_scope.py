@@ -117,7 +117,7 @@ def test_overlapping_inner_labels_are_not_drawn(tmp_path: Path, monkeypatch: pyt
 @pytest.mark.circular
 @pytest.mark.slow
 def test_inner_font_row_is_the_largest_font_that_fits(tmp_path: Path) -> None:
-    """INNER-3: P1 at 14 pt; with the local repair (LP-D57) the largest font that fits is 12.5 pt (12 pt without it)."""
+    """INNER-3: P1 at 14 pt; with the local repair (LP-D57) the largest font that fits is 13 pt (inner labels stay in cyclic order since OV-1366)."""
 
     with pytest.raises(LabelsDoNotFitError) as raised:
         _draw(tmp_path, _both_args("NC_005856.1.gb", "--label_font_size", "14"))
@@ -129,7 +129,7 @@ def test_inner_font_row_is_the_largest_font_that_fits(tmp_path: Path) -> None:
         assert search is not None
         font = search.row("smaller_font")
     assert font.status == "found"
-    assert font.values == {path: 12.5 for path in FONT_SIZE_PATHS}
+    assert font.values == {path: 13.0 for path in FONT_SIZE_PATHS}
 
 
 @pytest.mark.circular
