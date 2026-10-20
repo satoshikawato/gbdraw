@@ -118,6 +118,7 @@ import {
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { readHostedBuild } from '../utils/hosted-build.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
@@ -6784,6 +6785,7 @@ export const createAppSetup = () => {
   });
 
   return {
+    hostedBuild: readHostedBuild(document),
     fontSettings,
     defaultColorGroups,
     recordDisplayControls,
