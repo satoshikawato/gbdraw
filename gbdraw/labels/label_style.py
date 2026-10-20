@@ -71,6 +71,13 @@ class FeatureLabelStyle:
 
         return self.line == "under" and not turned
 
+    def draws_box(self, *, has_leader: bool, beside_feature: bool, turned: bool) -> bool:
+        """Whether a feature label gets this style's white box (``protection = box``): a label with a leader,
+        and a turned Linear label drawn on its feature without one (``beside_feature``), so that another
+        label's leader passing through its letters is faded there (OV-1361, LP-D119)."""
+
+        return self.protection == "box" and (has_leader or (beside_feature and turned))
+
     @property
     def draws_from_ink(self) -> bool:
         """Whether this style draws a part placed from a label's letters (an underline or a box)."""

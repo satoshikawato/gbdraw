@@ -4,6 +4,7 @@ text of a figure with halos."""
 
 from __future__ import annotations
 
+import math
 import re
 import xml.etree.ElementTree as ET
 import zlib
@@ -465,3 +466,70 @@ def test_a_cairosvg_pdf_carries_each_haloed_label_once(tmp_path: Path, monkeypat
     with_halos = _svg(tmp_path, monkeypatch, "linear", *base, "--label_protection", "halo", fmt="pdf")
     without = _svg(tmp_path, monkeypatch, "linear", *base, "--label_protection", "none", fmt="pdf")
     assert _pdf_text_runs(with_halos) == _pdf_text_runs(without) > 0
+
+
+def _feature_y_extent(root: ET.Element, feature: str | None) -> tuple[float, float]:
+    """The top and bottom y of a feature's drawn shapes: their path points and half their outline."""
+
+    tops, bottoms = [], []
+    for element, _ in _walk(root):
+        if element.get("data-gbdraw-feature-id") == feature and element.tag == f"{SVG}path":
+            numbers = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?(?:e-?\d+)?", element.get("d", ""))]
+            half = 0.5 * float(element.get("stroke-width", "0") or 0)
+            tops.append(min(numbers[1::2]) - half)
+            bottoms.append(max(numbers[1::2]) + half)
+    assert tops, feature
+    return min(tops), max(bottoms)
+
+
+def _box_corners(box: ET.Element) -> list[tuple[float, float]]:
+    """The four corners of a ``rect``, turned by its ``rotate(angle,cx,cy)`` transform."""
+
+    x, y, width, height = (float(box.get(key, "")) for key in ("x", "y", "width", "height"))
+    corners = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
+    match = re.fullmatch(r"rotate\(([-\d.e]+),([-\d.e]+),([-\d.e]+)\)", box.get("transform", "") or "rotate(0,0,0)")
+    assert match is not None, box.get("transform")
+    angle, cx, cy = (float(value) for value in match.groups())
+    cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    return [(cx + (px - cx) * cos - (py - cy) * sin, cy + (px - cx) * sin + (py - cy) * cos) for px, py in corners]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("--show_labels", "--label_rotation", "45"),
+        ("--show_labels", "all", "--label_rotation", "30", "--separate_strands"),
+        ("--show_labels", "all", "--label_rotation", "-60", "--label_font_size", "24"),
+    ],
+    ids=["45", "all-30-separate-strands", "all-minus-60-large"],
+)
+def test_a_turned_label_on_its_feature_gets_its_box_which_stays_off_the_feature(
+    argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1361 (LP-D119): a turned Linear label drawn on its feature (no leader) also gets its box, so another
+    label's leader that passes through its letters is faded there. The box stays on the label's side of the
+    feature's outline, and every box lies under every label's letters."""
+
+    root = ET.parse(
+        _svg(tmp_path, monkeypatch, "linear", "--gbk", str(LAMBDA), "--label_placement", "above_feature", *argv)
+    ).getroot()
+    order = {id(element): index for index, (element, _) in enumerate(_walk(root))}
+    boxes = {
+        element.get(FEATURE): element
+        for element, _ in _walk(root)
+        if element.tag == f"{SVG}rect" and element.get("fill-opacity") == str(BOX_OPACITY)
+    }
+    texts = _label_texts(root)
+    turned = [text for text in texts if "rotate(" in text.get("transform", "")]
+    on_feature = [text for text in turned if not _lines_of(root, text.get(FEATURE))]
+    assert len(on_feature) > 2
+    assert sorted(boxes) == sorted(text.get(FEATURE) for text in turned)
+    for text in on_feature:
+        feature = text.get(FEATURE)
+        top, bottom = _feature_y_extent(root, feature)
+        ys = [y for _x, y in _box_corners(boxes[feature])]
+        if float(text.get("y", "")) < top:
+            assert max(ys) <= top + 1e-6, text.text
+        else:
+            assert min(ys) >= bottom - 1e-6, text.text
+    assert max(order[id(box)] for box in boxes.values()) < min(order[id(text)] for text in texts)

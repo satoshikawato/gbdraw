@@ -51,7 +51,7 @@ def segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
 
 @dataclass(frozen=True)
 class FeatureLabelInk:
-    """One feature label with a leader, in its record's drawing frame.
+    """One drawn feature label, in its record's drawing frame.
 
     ``ink`` is the box of its letters before the ``rotation_deg`` turn about
     ``center`` (the point its text is drawn at); ``leader`` is the leader the
@@ -59,6 +59,9 @@ class FeatureLabelInk:
     y (label frame) of its underline and of its leader's stop above the
     letters; None without an underline. ``join_at_end``: the leader meets the
     line at the end on the side where it ends today, never inside it.
+    ``turned``: drawn turned (a Linear label given a rotation, a Circular radial label).
+    ``feature_edge_y``: for a label drawn on its feature without a leader (Linear ``above_feature``), the y
+    (drawing frame) of the feature edge it faces; its box stops there. None otherwise.
     """
 
     ink: Aabb
@@ -69,6 +72,15 @@ class FeatureLabelInk:
     under_y: float | None = None
     stop_y: float | None = None
     join_at_end: bool = False
+    turned: bool = False
+    feature_edge_y: float | None = None
+
+    def draws_box(self, style: FeatureLabelStyle) -> bool:
+        """Whether ``style`` draws this label's white box (``FeatureLabelStyle.draws_box``)."""
+
+        return style.draws_box(
+            has_leader=bool(self.leader), beside_feature=self.feature_edge_y is not None, turned=self.turned
+        )
 
     def _turned(self, point: Point, degrees: float) -> Point:
         if degrees == 0.0:
@@ -144,6 +156,7 @@ def feature_label_ink(
     leader: Sequence[Point],
     style: FeatureLabelStyle,
     join_at_end: bool = False,
+    feature_edge_y: float | None = None,
 ) -> FeatureLabelInk:
     """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it), with an underline
     when ``style`` draws one under it and the label is not ``turned``."""
@@ -178,13 +191,17 @@ def feature_label_ink(
         under_y=under_y,
         stop_y=stop_y,
         join_at_end=join_at_end,
+        turned=turned,
+        feature_edge_y=feature_edge_y,
     )
 
 
 def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], style: FeatureLabelStyle) -> FeatureLabelInk:
-    """A drawn Linear feature label (``dominant-baseline=central``); turned when given a rotation."""
+    """A drawn Linear feature label (``dominant-baseline=central``); turned when given a rotation. A label
+    drawn on its feature without a leader (``above_feature``) faces the feature edge its contact starts at."""
 
     rotation_deg = float(str(label.get("rotation_deg", 0.0)))
+    beside_feature = not leader and "above_feature_place_above" in label
     return feature_label_ink(
         str(label["label_text"]),
         str(label["font_family"]),
@@ -196,6 +213,7 @@ def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], style
         turned=rotation_deg % 360.0 != 0.0,
         leader=leader,
         style=style,
+        feature_edge_y=float(str(label["leader_start_y"])) if beside_feature else None,
     )
 
 

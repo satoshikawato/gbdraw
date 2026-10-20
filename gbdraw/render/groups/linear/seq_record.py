@@ -213,10 +213,14 @@ class SeqRecordGroup:
         """A label's drawn parts in the style of its mode (``FeatureLabelStyle``)."""
 
         style = self.profile.label_style
-        if not leader or not style.draws_from_ink:
+        if not style.draws_from_ink:
             return _LabelParts(bool(leader), leader)
         ink = linear_label_ink(label, leader, style)
         feature_id = label["feature_id"]
+        box = feature_label_box(ink, feature_id) if ink.draws_box(style) else None
+        if not leader:
+            # A turned label on its feature has its box too (OV-1361).
+            return _LabelParts(False, leader, box=box)
         width = label_leader_width_px(label)
         underline = casing = tail = None
         line = ink.underline
@@ -231,9 +235,7 @@ class SeqRecordGroup:
                 casing = cased.element(feature_id)
                 tail = self._leader_part(entry, line[0], feature_id, width)
                 leader_layer = () if entry == leader[0] else (leader[0], entry)
-                box = feature_label_box(ink, feature_id) if style.protection == "box" else None
                 return _LabelParts(True, leader_layer, tail, casing, underline, box)
-        box = feature_label_box(ink, feature_id) if style.protection == "box" else None
         return _LabelParts(True, leader, None, None, None, box)
 
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:

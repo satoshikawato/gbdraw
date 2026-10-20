@@ -168,7 +168,7 @@ def feature_label_backing(label: FeatureLabelInk) -> Aabb:
         edge = line_y - gap if line_y > label.ink.max_y else line_y + gap
         return backing_box(label.ink, label.font_size, edge_y=edge)
     if not label.leader:
-        return backing_box(label.ink, label.font_size)
+        return _box_off_feature(label) if label.feature_edge_y is not None else backing_box(label.ink, label.font_size)
     end_x, end_y = label.to_label_frame(line[0] if line is not None else label.leader[-1])
     ink = label.ink
     out_x = max(ink.min_x - end_x, end_x - ink.max_x)
@@ -180,6 +180,28 @@ def feature_label_backing(label: FeatureLabelInk) -> Aabb:
     return backing_box(ink, label.font_size, edge_y=edge)
 
 
+def _box_off_feature(label: FeatureLabelInk) -> Aabb:
+    """The box of a label drawn on its feature without a leader: padded as any box, except that the sides
+    that face the feature (turned with the letters) stop at the letters. The label sits a small gap off the
+    feature's edge, and the feature's outline is drawn across that edge, so the box never reaches past what
+    the letters already cover toward the feature."""
+
+    assert label.feature_edge_y is not None
+    pad = BACKING_PADDING_EM * label.font_size
+    toward = 1.0 if label.feature_edge_y > label.center[1] else -1.0
+    angle = math.radians(label.rotation_deg)
+    # A side faces the feature when its outward normal, turned with the letters, points toward it.
+    faces = {
+        "left": -math.sin(angle) * toward > 1e-9,
+        "right": math.sin(angle) * toward > 1e-9,
+        "top": -math.cos(angle) * toward > 1e-9,
+        "bottom": math.cos(angle) * toward > 1e-9,
+    }
+    side = {name: 0.0 if facing else pad for name, facing in faces.items()}
+    ink = label.ink
+    return Aabb(ink.min_x - side["left"], ink.min_y - side["top"], ink.max_x + side["right"], ink.max_y + side["bottom"])
+
+
 def _corners(box: Aabb) -> tuple[Point, Point, Point, Point]:
     return ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
 
@@ -187,14 +209,14 @@ def _corners(box: Aabb) -> tuple[Point, Point, Point, Point]:
 def feature_label_drawn_parts(label: FeatureLabelInk, style: FeatureLabelStyle) -> tuple[tuple[Point, ...], ...]:
     """What ``style`` draws with a feature label's letters besides them, as convex polygons in the drawing
     frame: its underline with its stroke (``line = under``, a horizontal label only) and its white box turned
-    with the letters (``protection = box``). ``label`` is its ink in ``style``. Both modes' region labels keep
+    with the letters (``FeatureLabelStyle.draws_box``). ``label`` is its ink in ``style``. Both modes' region labels keep
     off these as off the letters (OV-1357, OV-1358)."""
 
     parts: list[tuple[Point, ...]] = []
     line = label.underline_box
     if line is not None:
         parts.append(_corners(line))
-    if style.protection == "box":
+    if label.draws_box(style):
         parts.append(tuple(label.from_label_frame(corner) for corner in _corners(feature_label_backing(label))))
     return tuple(parts)
 
