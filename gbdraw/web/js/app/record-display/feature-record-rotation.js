@@ -100,8 +100,8 @@ export const createFeatureRecordRotationAction = ({
     // The bound input can differ before the popup opens (a File replaced
     // after Generate, or a Session that needs one Generate), not only after.
     if (typeof isCurrentFeature === 'function' && !isCurrentFeature(resolved)) {
-      throw new Error(t("This feature's input file differs from the one the current Result was drawn from.")
-        + ' ' + t('Generate Diagram to use the current file.'));
+      throw new Error(joinSentences(t("This feature's input file differs from the one the current Result was drawn from."),
+        t('Generate Diagram to use the current file.')));
     }
     return resolved;
   };

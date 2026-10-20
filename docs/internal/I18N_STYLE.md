@@ -186,10 +186,11 @@ possible; rail short names within 5 (Features is the known exception).
   高级, 布局, 选项卡, 字段, 缓存, 线程, 串行 / 并行.
 - Biology: 基因组, 链 (strand), 氨基酸, 细胞器, 登录号, 遗传密码表.
 - Terms settled in rounds 1 and 2 (see the glossary): 子轨道 (Lane), 指定参考
-  (Exact reference), 共线性 (Collinear), 运行环境 (Runtime), 软件包, 几何参数,
-  片段 (feature part), 单元 (Collinear unit), 测序深度 / 深度, 比例尺 for
-  scale bar and length bar. Round 3 (D-32) may change zh terms; the glossary
-  holds the current value.
+  (Exact reference), 共线性 (Collinear), 软件包, 几何参数, 片段 (feature
+  part), 单元 (Collinear unit), 测序深度 / 深度, 比例尺 for scale bar and
+  length bar. Round 3 (D-33): GC偏斜 (GC skew), 运行时 (Runtime), 部分
+  (Section), 成比例 (the Record Size Mode option Linear). The glossary holds
+  the current value.
 
 ### 3.2 Buttons and sentences
 
@@ -350,9 +351,9 @@ before relying on the list; segmentation may differ in a few places.
 
 ### 4.5 Linear and Collinear
 
-The diagram mode Linear is 線性 for now (D-28): the key is shared with the
-Record Size Mode option, and 線狀 is wrong there. Revisit it after the key
-split (OV-1387, D-32). Collinear is 共線性 (R2).
+The diagram mode Linear is 線狀 (D-33). The Record Size Mode option Linear
+has its own key, `tx('size scaling', 'Linear')`, and is 線性 (proportional
+to record length). Collinear is 共線性 (R2).
 
 ### 4.6 Length
 

@@ -25,7 +25,7 @@ Arrow	矢印	箭头	箭頭	Feature rendering Arrow | Rectangle | Underlay; Arrow
 Arrow head	矢じり	箭头头部	箭頭頭部	[medium] Head Length Ratio (Arrow Geometry).
 Arrow shaft	矢印の軸	箭身	箭身	[medium] Shaft Width Ratio. ja alternative 軸 would collide with Axis; 本体 is a plainer alternative. [R2] 矢柄 is archery jargon.
 AT	AT	AT	AT	[seed; split] As in AT skew; any two-letter dinucleotide code (GC, AT) stays Latin.
-AT skew	AT skew	AT skew	AT skew	Latin in all locales, as GC skew.
+AT skew	AT skew	AT skew	AT skew	Latin in all locales.
 Auto	自動	自动	自動	Auto option and Auto ({value}); Auto Reflow; blank fields mean Auto.
 Available	利用可能	可用	可用	Available ({n}) threads; Available after a LOSAT comparison has run.
 Axis	軸	轴	軸	Record axis, depth axis, percent axis (Axis Gap, Axis Stroke Color, Move above Axis, Track on Axis).
@@ -47,7 +47,7 @@ Cancel	キャンセル	取消	取消	Every dialog's Cancel.
 Candidate	候補	候选	候選	Alignment candidates (Several candidates, No usable candidate). Group representative: 代表 / 代表 / 代表.
 Canvas	キャンバス	画布	畫布	Multi-Record Canvas, Canvas padding, the preview canvas.
 CDS	CDS	CDS	CDS	Latin in all locales: an INSDC feature type, like every other feature type.
-Checkpoint	チェックポイント	检查点	檢查點	History checkpoints (memo I2); rare in visible text.
+Checkpoint	チェックポイント	检查点	檢查點	History checkpoints; rare in visible text.
 Choose	選択	选择	選擇	Choose records…, Choose file, Choose a fix. ja and zh-Hans share the word of Select.
 Circular	環状	环状	環狀	[seed; split from Circular / Linear] [medium] Diagram mode as a noun (mode switch, Diagram: Circular.). ja: docs/internal also writes 円形; keep the seed. Circular record (topology checkbox) uses the same word. [R2] ja diagram-mode modifier: 環状図の.
 Clear	クリア	清除	清除	Clear, Clear All, Clear Cache, Clear comparison, Clear search, Clear alignment.
@@ -131,13 +131,13 @@ Font family	フォントファミリー	字体系列	字型家族	[medium] Insta
 Font size	フォントサイズ	字体大小	字型大小	Font size, Label Font Size, Default font size.
 Foreground	前景	前景	前景	Annotation layer Underlay | Foreground.
 Forward strand	+鎖	正链	正股	[medium] Show this feature on the forward strand. ja alternatives +鎖, フォワード鎖. [R1] Body text writes +鎖 / −鎖.
-Gallery	ギャラリー	示例库	範例庫	[medium] The gbdraw.app example gallery (Interactive Gallery, Gallery example, Gallery Session). Example titles from tutorial-data stay English (memo §1.2).
+Gallery	ギャラリー	示例库	範例庫	[medium] The gbdraw.app example gallery (Interactive Gallery, Gallery example, Gallery Session). Example titles from tutorial-data stay English.
 Gap	ギャップ	间隙	間隙	inner gap, outer gap, Axis Gap, Record gap (px), Ring Gap, lane gap, Column Gap Ratio, Max unit gap. ja ギャップ keeps Gap apart from Spacing and Interval (間隔).
 gbdraw	gbdraw	gbdraw	gbdraw	Product name, always lower case; Latin in all locales.
 GC	GC	GC	GC	[seed; split] As in GC content (GC含量), GC skew (Latin), GC Min %, GC window.
 GC / skew (rail short name)	二塩基	GC/偏斜	GC/偏斜	[review] Rail short name of Dinucleotide content/skew. The 52 px button holds about 5 CJK glyphs at 10 px, so ja GC / スキュー does not fit; skew is English and outside the I5 allowlist.
 GC content	GC含量	GC含量	GC含量	Show GC Content, Hide GC Content, GC Content Mode, GC Content Width. GC Content Mode Deviation | Percent: 偏差 | パーセント / 偏差 | 百分比 / 偏差 | 百分比.
-GC skew	GC skew	GC skew	GC skew	Latin in all locales (memo §6). Show GC Skew: GC skewを表示 / 显示GC skew / 顯示GC skew.
+GC skew	GC skew	GC偏斜	GC skew	Latin in ja and zh-Hant. Show GC Skew: GC skewを表示 / 显示GC偏斜 / 顯示GC skew. [R3, D-33] zh-Hans GC偏斜, as mainland papers write it (skew alone is already 偏斜); ja and zh-Hant keep the Latin GC skew.
 GenBank	GenBank	GenBank	GenBank	Latin in all locales (GenBank/DDBJ File, GenBank / DDBJ File).
 Gene	遺伝子	基因	基因	Min block genes, gene order, Choose the gene to line up.
 Generate	生成	生成	產生	[seed] The button and the verb; 產生 is natural in Taiwan. s2twp keeps 生成, so fix every occurrence in zh-Hant.
@@ -186,8 +186,8 @@ Length	長さ	长度	長度	Length / Coordinates; record length.
 Length bar	スケールバー			[R2] ja: scale bar. zh-Hans uses 比例尺 (see Scale).
 License	ライセンス	许可证	授權條款	MIT License: MITライセンス / MIT许可证 / MIT授權條款; a font license that forbids embedding.
 Line	線	线条	線條	Annotation mark Line, Line color, intron lines (Line Stroke Color), scale Line Width. ja Line Stroke Color collapses to 線の色.
-Linear	直鎖状	线性	線性	[Owner 2026-10-20: ja 直鎖状, not 線状] [seed; split from Circular / Linear] [medium] Diagram mode as a noun. ja: docs/internal also writes 線形図; keep the seed. Not the Record Size Mode option; see Linear (size scaling). [R2] ja diagram-mode modifier: 直鎖状図の. [D-20] 線状 is not used. [R2, D-28] zh-Hant stays 線性: round 2 proposed 線狀 (NAER linear = 線狀的) for the diagram mode, reverted because the key Linear is shared with the Record Size Mode option. Revisit after the key split (OV-1387, D-32).
-Linear (size scaling)	線形	线性	線性	Record Size Mode option Linear (radius scaled with record length): Auto (Default) | Linear | Equal. ja 線形 (proportional), unlike the mode name 直鎖状. [D-28] zh-Hant 線性; see Linear.
+Linear	直鎖状	线性	線狀	[Owner 2026-10-20: ja 直鎖状, not 線状] [seed; split from Circular / Linear] [medium] Diagram mode as a noun. ja: docs/internal also writes 線形図; keep the seed. Not the Record Size Mode option; see Linear (size scaling). [R2] ja diagram-mode modifier: 直鎖状図の. [D-20] 線状 is not used. [R2, D-28] zh-Hant kept 線性 while the key Linear was shared with the Record Size Mode option. [R3, D-33] zh-Hant diagram mode 線狀 (NAER biology: linear = 線狀的), now that the Record Size Mode option has its own key; Linear (size scaling) stays 線性.
+Linear (size scaling)	線形	成比例	線性	Record Size Mode option Linear (radius scaled with record length): Auto (Default) | Linear | Equal. ja 線形 (proportional), unlike the mode name 直鎖状. [D-28] zh-Hant 線性; see Linear. [R3, D-33] zh-Hans 成比例 (proportional to record length), so it does not repeat the mode name 线性.
 Live edit	ライブ編集	实时编辑	即時編輯	Live edit applying / Live edit failed; help texts of the Editor tabs. s2twp already yields 即時.
 Load	読み込む	加载	載入	Load Session, Load font file…, Load Label TSV. ja noun form 読み込み (読み込み中…). Not Import.
 Load example	サンプルを読み込む	加载示例	載入範例	Header button and Load an example (empty Preview).
@@ -314,7 +314,7 @@ Rule (color rule)	ルール	规则	規則	[seed] Specific color rules, visibilit
 Ruler	ルーラー	标尺	尺規	[review] zh-Hant: Microsoft Taiwan Word uses 尺規; s2twp yields 標尺, also understood. Scale Style: Bar (Simple) | Ruler (Ticks); Ruler on Axis; Ruler Label Color.
 Run	実行	运行	執行	Run LOSAT, Run time, Parallel runs, Threads per run. s2twp already yields 執行.
 Run info	実行情報	运行信息	執行資訊	Run Info panel of the successful Result (Mode, Run time, Results, CLI rerun, Search runtime). s2twp already yields 執行資訊. CLI rerun: CLIでの再実行 / CLI重新运行 / CLI重新執行.
-Runtime	ランタイム	运行环境	執行階段	Diagram runtime, search runtime, LOSAT runtime. Microsoft Taiwan 執行階段; s2twp yields 執行時. [R2] run-info program/kind/version rows. Run time (运行时间) is a separate row.
+Runtime	ランタイム	运行时	執行階段	Diagram runtime, search runtime, LOSAT runtime. Microsoft Taiwan 執行階段; s2twp yields 執行時. [R2] run-info program/kind/version rows. Run time (运行时间) is a separate row. [R3, D-33] zh-Hans 运行时, the mainland UI and developer-docs term; Run time stays 运行时间.
 Save	保存	保存	儲存	Save stores the current Result. Taiwan 儲存; s2twp already yields it.
 Save Session	セッションを保存	保存会话	儲存工作階段	Header button.
 Saving session…	セッションを保存中…	正在保存会话…	正在儲存工作階段…	Header status. Busy reason Saving session. Retry after saving finishes.: セッションを保存中です。保存が終わってから再試行してください。. Other progress forms: 適用中… / 正在应用… / 正在套用…; 読み込み中… / 正在加载… / 正在載入…; 準備中… / 正在准备… / 正在準備….
@@ -322,7 +322,7 @@ Scale	スケール	比例尺	比例尺	Coordinate scale (Show Coordinate Scale, 
 Schema	スキーマ	架构	結構描述	[review] zh: Session and Custom Track Slots schema (Recreate Custom Track Slots with the current schema). zh-Hans alternatives 模式, schema; Microsoft Taiwan 結構描述, alternative 綱要; s2twp yields 架構.
 Score			分數	[R2] zh-Hant only. Bitscore stays Latin (see Bitscore).
 Search	検索	搜索	搜尋	Feature search (Search features) and LOSAT search (Search between, Search limits, Search runtime). Taiwan 搜尋; s2twp already yields it. Task and program values stay Latin; LOSAT cache: LOSATキャッシュ / LOSAT缓存 / LOSAT快取.
-Section	セクション	栏目	區段	[review] zh: a card of the settings pane (Go to <title>, Close section, Settings sections). zh-Hans alternatives 部分, 设置组; 分区 would become 分割槽 (disk partition) under s2twp.
+Section	セクション	部分	區段	[review] zh: a card of the settings pane (Go to <title>, Close section, Settings sections). zh-Hans alternatives 部分, 设置组; 分区 would become 分割槽 (disk partition) under s2twp. [R3, D-33] zh-Hans 部分 (关闭此部分, 设置各部分), as mainland UIs write it.
 Select	選択	选择	選取	Select all, Select none, Select diagnostics, Select anchor. Microsoft Taiwan 選取; s2twp yields 選擇.
 Separate strands	鎖を分けて表示	分链显示	分股顯示	Separate Strands checkbox (Layout); Display features on separate strands.
 Sequence	配列	序列	序列	Add sequence, comparison sequence files, Sequence tab, Sequence {n} (error locator).
