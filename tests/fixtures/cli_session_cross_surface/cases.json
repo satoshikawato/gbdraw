@@ -36,7 +36,10 @@
       "mode": "linear",
       "args": ["--records_table", "tests/fixtures/cli_session_cross_surface/records_linear.tsv",
         "--show_labels", "all",
-        "--label_blacklist", "tests/fixtures/cli_session_cross_surface/blacklist.txt"]
+        "--label_blacklist", "tests/fixtures/cli_session_cross_surface/blacklist.txt"],
+      "legacySessions": {
+        "v47": "tests/fixtures/sessions/cli-linear-blacklist-file.v47.gbdraw-session.json.gz"
+      }
     },
     {
       "id": "linear_blast",

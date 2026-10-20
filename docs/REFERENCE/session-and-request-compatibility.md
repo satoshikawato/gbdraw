@@ -27,7 +27,10 @@ were marked so already, and Remove takes them back. Rows that a built-in
 **Preset scheme** added count as yours, and Remove keeps them; an older Session
 stored them like a rules file's rows, so there Remove takes them back. In a Session 48 that the
 CLI or the Python API writes, the settings read from its color, priority,
-blacklist, and whitelist files count as those files' cards.
+and whitelist files count as those files' cards. `--label_blacklist` takes
+keywords, so a CLI Session records it as keywords only; a CLI Session written
+by gbdraw 0.13.0 stored an existing path given to it as a Blacklist File, and a
+CLI replay keeps that card.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 48,

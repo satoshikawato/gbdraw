@@ -598,7 +598,7 @@ with materialize_session(document, output_directory=directory / 'out') as materi
 // loads it. Load gives the drawing every table the request holds, so the next
 // Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
 // replay and Python save again (no Web draft either) load the same way, and so
-// do a case's Sessions 40 to 44 from older CLI writers (`legacySessions`,
+// do a case's Sessions 40 to 47 from older CLI writers (`legacySessions`,
 // OV-269). The CLI and Python cells of the matrix are
 // tests/test_cli_session_cross_surface.py.
 const crossSurface = (...args) => JSON.parse(execFileSync('python', [
@@ -731,9 +731,14 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
             assert.deepEqual(values, values.map(() => (marked ? CARD_MARKS[option] : null)), `${entry.id}, ${source}: ${option} card`);
           }
         }
-        // The CLI reads `--label_blacklist` as keywords, a path too (OV-1338), so no Session binds it as a Blacklist
-        // File: the card stays empty and the keyword box holds the text the CLI drew with.
-        assert.equal(drawing.fileImports.blacklist, undefined, `${entry.id}, ${source}: blacklist card`);
+        // The CLI reads `--label_blacklist` as keywords, a path too (OV-1338), so a CLI Session no longer binds it as
+        // a Blacklist File: the card stays empty and the keyword box holds the text the CLI drew with. An older CLI
+        // Session (`id@v47`) that bound it keeps that binding through a CLI re-save, whose card holds the same text
+        // (OV-1380); the figure is the CLI's either way.
+        const blacklist = entry.args[entry.args.indexOf('--label_blacklist') + 1];
+        const keptBinding = source === 'CLI re-save' && entry.id.includes('@') && entry.args.includes('--label_blacklist');
+        assert.deepEqual(drawing.fileImports.blacklist?.words, keptBinding ? [blacklist] : undefined,
+          `${entry.id}, ${source}: blacklist card`);
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });
