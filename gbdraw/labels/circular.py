@@ -3660,6 +3660,8 @@ def _keep_cyclic_order(angles: list[float], min_gap: float) -> bool:
 
     A forward pass lifts each label above the one before it; a backward pass then lowers the labels
     that passed the first label's place one turn later, so the chain spans less than a full circle.
+    The backward pass ignores overshoots below 1e-9 degrees: ``(a + gap) - gap`` can round below ``a``,
+    and lowering by that rounding would undo the forward pass on every call.
     """
     changed = False
     last = len(angles) - 1
@@ -3670,7 +3672,7 @@ def _keep_cyclic_order(angles: list[float], min_gap: float) -> bool:
             changed = True
     for idx in range(last, 0, -1):
         _, upper = _cyclic_order_bounds(angles, idx, min_gap)
-        if angles[idx] > upper:
+        if angles[idx] > upper + 1e-9:
             angles[idx] = upper
             changed = True
     return changed

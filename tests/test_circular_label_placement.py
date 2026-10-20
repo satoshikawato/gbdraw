@@ -3852,3 +3852,16 @@ def test_dense_inner_labels_keep_feature_order_across_the_origin(
     order = _clockwise_label_order(labels)
     assert _is_cyclic_rotation(order, _feature_order(labels)), order
     assert "do not fit" not in stderr
+
+
+def test_cyclic_order_is_stable_once_kept() -> None:
+    """A chain already in cyclic order reports no move, so the label optimizer can stop early."""
+    angles = [0.9, 0.9, 0.9, 30.9]
+    assert circular_labels_module._keep_cyclic_order(angles, 0.05) is True
+    assert [circular_labels_module._keep_cyclic_order(angles, 0.05) for _ in range(3)] == [False, False, False]
+
+    wrapped = [10.0, 200.0, 365.0, 369.98]
+    circular_labels_module._keep_cyclic_order(wrapped, 0.05)
+    circular_labels_module._keep_cyclic_order(wrapped, 0.05)
+    assert circular_labels_module._keep_cyclic_order(wrapped, 0.05) is False
+    assert wrapped[-1] <= wrapped[0] + 360.0 - 0.05 + 1e-9
