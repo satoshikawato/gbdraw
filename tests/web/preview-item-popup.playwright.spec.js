@@ -5,6 +5,8 @@
 const { test, expect } = require('@playwright/test');
 const { HMMT_SESSION, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
 
 test.describe.configure({ retries: 0 });
 
@@ -155,6 +157,71 @@ test('a default-colored Legend row popup Color sets the type\'s default color', 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   await settle(page);
   await expect.poll(state, 'Generate draws the same').toEqual({ fills: ['#c026d3'], swatch: '#c026d3', defaultColor: '#c026d3', overrides: before.overrides });
+});
+
+// OV-1386, the Owner's choice of 2026-10-20: a Legend row of color None shows like the Palette pane's None, an
+// empty swatch and None, never a stale color or a black input; its popup Color still makes the Legend color edit.
+test('a Legend row of color None shows empty and None; its popup Color still colors it', async ({ page }) => {
+  test.setTimeout(300_000);
+  const inputWarnings = [];
+  page.on('console', (message) => { if (/does not conform/.test(message.text())) inputWarnings.push(message.text()); });
+  await openFresh(page);
+  const genome = (name) => readFileSync(resolve(__dirname, '../../examples', name), 'utf8');
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setDiagramMode('linear');
+    await window.Vue.nextTick();
+    if (app.linearSeqs.length < 2) app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
+    app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));
+  }, { first: genome('MjeNMV.gb'), second: genome('MelaMJNV.gb') });
+  await settle(page);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  await settle(page);
+  await page.locator('summary[aria-label="Colors"]').click();
+  await page.getByRole('combobox', { name: 'CDS feature color mode', exact: true }).selectOption('none');
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  await settle(page);
+  const paletteCds = await page.evaluate(async () => {
+    const { state: s } = await import('./js/state.js');
+    return s.paletteDefinitions.value[s.appliedPaletteName.value].CDS.toLowerCase();
+  });
+
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+  const drawerSwatch = page.locator('[data-legend-drawer-row]')
+    .filter({ has: page.getByLabel('Legend entry CDS name', { exact: true }) }).locator('.w-5.h-5');
+  const swatchShown = () => drawerSwatch.evaluate((element) => [getComputedStyle(element).backgroundColor, element.title]);
+  await expect.poll(swatchShown, 'the drawer keeps no stale color').toEqual(['rgba(0, 0, 0, 0)', 'None']);
+  await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
+
+  // The swatch of a None row paints nothing to click; its name opens the popup.
+  await clickCentre(legendRow(page, 'CDS').locator('text').first());
+  const dialog = page.getByRole('dialog', { name: 'Legend item: CDS', exact: true });
+  await expect(dialog).toBeVisible();
+  const color = dialog.getByLabel('Color of CDS', { exact: true });
+  await expect(color, 'no black input: it opens at the palette color').toHaveValue(paletteCds);
+  await expect(color).toHaveClass(/color-input-none/);
+  await expect(color).toHaveAccessibleDescription('None');
+  await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText('Replaces your CDS default color None.');
+
+  const fills = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const svg = app.svgContainer.querySelector('svg');
+    const cds = app.extractedFeatures.filter((feature) => feature.type === 'CDS').map((feature) => {
+      const element = svg.querySelector(`[id="${CSS.escape(feature.svg_id)}"]`);
+      const shape = element?.matches('path, rect, polygon') ? element : element?.querySelector('path, rect, polygon');
+      return shape?.getAttribute('fill') || null;
+    }).filter(Boolean);
+    return { features: [...new Set(cds)], legend: svg.querySelector('g[data-legend-key="CDS"] path[fill]')?.getAttribute('fill') || null };
+  });
+  await color.fill('#c026d3');
+  await settle(page);
+  await expect.poll(fills).toEqual({ features: ['#c026d3'], legend: '#c026d3' });
+  await expect(color).toHaveValue('#c026d3');
+  await expect(color).not.toHaveClass(/color-input-none/);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+  await expect.poll(swatchShown).toEqual(['rgb(192, 38, 211)', '#c026d3']);
+  expect(inputWarnings, 'no color input warns about "none"').toEqual([]);
 });
 
 test('a record definition opens its popup; its edits write the record settings', async ({ page }) => {

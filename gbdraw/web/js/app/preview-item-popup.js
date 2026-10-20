@@ -13,6 +13,7 @@ import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
+import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
 import { msg, t, tn, tm } from '../utils/i18n.js';
 
 /**
@@ -53,6 +54,8 @@ import { msg, t, tn, tm } from '../utils/i18n.js';
  * @property {LinearSeq[]} linearSeqs
  * @property {{ value: ReadonlyArray<{ type?: unknown }> }} extractedFeatures
  * @property {() => DrawingState} activeDrawing
+ * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
+ * @property {{ value: string }} appliedPaletteName The palette of the displayed Result.
  */
 
 /**
@@ -158,10 +161,13 @@ export const defaultColorScopeLine = (type, replacedColor) => (
  * The legend-entry popup view.
  * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
  *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null,
- *   defaultColorType: string | null, replacedDefaultColor: string | null }} input
+ *   defaultColorType: string | null, replacedDefaultColor: string | null, pickerFallback: string }} input
  *   `name`: the name the Legend draws. `trackKind`: the kind of the track whose row it is; null: a feature row.
+ *   `pickerFallback`: where the Color input starts on a row of color none.
  */
-const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType, replacedDefaultColor }) => {
+const buildLegendEntryView = ({
+  entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType, replacedDefaultColor, pickerFallback
+}) => {
   const key = text(legendEntryKey(entry));
   const ruleLines = trackKind ? [] : rules.map(colorRuleText);
   const defaultColorLine = trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor);
@@ -182,6 +188,7 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
     index,
     name,
     color,
+    swatch: colorSwatchView(color, pickerFallback),
     title: name,
     subtitle: trackKind
       ? tm(TRACK_ROW_SUBTITLE[trackKind])
@@ -341,7 +348,11 @@ export const createPreviewItemPopup = ({
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
       entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes,
-      trackKind, defaultColorType, replacedDefaultColor
+      trackKind, defaultColorType, replacedDefaultColor,
+      // OV-1386: a row of color none opens the Color input at its type's palette color, as the Palette pane does.
+      pickerFallback: appliedFeatureColorOf(
+        { paletteDefinitions: state.paletteDefinitions, appliedPaletteName: state.appliedPaletteName }, defaultColorType ?? undefined
+      ) || '#cccccc'
     });
   };
 

@@ -81,7 +81,8 @@ const createPopup = ({
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
   countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {}, userDefaultColors = {},
-  readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null
+  readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null,
+  palettes = {}, appliedPalette = 'default'
 } = {}) => {
   const steps = [];
   const form = {
@@ -94,6 +95,8 @@ const createPopup = ({
     mode: { value: mode },
     linearSeqs: [sequence],
     extractedFeatures: { value: featureTypes.map((type) => ({ type })) },
+    paletteDefinitions: { value: palettes },
+    appliedPaletteName: { value: appliedPalette },
     activeDrawing: () => ({ form, legendEntries: { value: entries } })
   };
   const popup = createPreviewItemPopup({
@@ -320,6 +323,18 @@ test('the legend-entry view names the rule behind the color and the feature coun
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');
   assert.equal(single.colorSource, 'Set on individual features');
+});
+
+test('a legend-entry view of color none shows None; its picker starts at the palette color (OV-1386)', () => {
+  const none = (matchesReady) => openView(createPopup({
+    entries: [{ caption: 'CDS', originalCaption: 'CDS', color: 'none' }], featureTypes: ['CDS'],
+    defaultColorTypes: { CDS: 'CDS' }, userDefaultColors: { CDS: 'none' }, palettes: { default: { CDS: '#54BCF8' } }
+  }), { kind: 'legend-entry', key: 'CDS' }, matchesReady);
+  assert.deepEqual(none(true).swatch, { none: true, fill: 'transparent', picker: '#54bcf8', label: 'None' });
+  assert.deepEqual(none(false).swatch, { none: true, fill: 'transparent', picker: '#cccccc', label: 'None' },
+    'before the matches are ready the type is unknown: the Palette pane\'s last fallback');
+  assert.deepEqual(openView(createPopup(), { kind: 'legend-entry', key: 'tRNA' }).swatch,
+    { none: false, fill: '#ff0000', picker: '#ff0000', label: '#ff0000' });
 });
 
 test('the legend-entry view of a track row names its plot, not features (OV-1272)', () => {

@@ -1,6 +1,7 @@
 // @ts-check
 import { state } from './state.js';
 import {
+  colorSwatchView,
   colorValueForMode,
   colorValueMode,
   toNativeColorInputValue
@@ -670,13 +671,31 @@ export const ActionMenu = {
   `
 };
 
+/**
+ * The swatch of one color, by `colorSwatchView`: a color of none shows empty (OV-1386). Its size and border are
+ * the parent's classes.
+ */
+export const ColorSwatch = {
+  props: { color: { type: String, default: '' } },
+  /** @param {{ color: string }} props */
+  setup(props) {
+    return { swatch: computed(() => colorSwatchView(props.color)) };
+  },
+  template: `<span :class="{ 'color-swatch-none': swatch.none }" :style="{ backgroundColor: swatch.fill }" :title="swatch.label" :data-color-none="swatch.none ? '' : null"></span>`
+};
+
 /** The OIC-029 line from `defaultColorScopeLine`: the sentence for a Legend item choice that sets a type's default color. */
 export const DefaultColorScopeLine = {
+  components: { ColorSwatch },
   props: { line: { type: Object, required: true } },
+  /** @param {{ line: { color: string | null } }} props */
+  setup(props) {
+    return { swatch: computed(() => colorSwatchView(props.line.color)) };
+  },
   template: `
     <span data-default-color-scope-sentence>
       <i18n-text v-if="line.kind === 'replaces'" :text="t('Replaces your {type} default color {color}.')" :params="{ type: line.type }">
-        <template #color><span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span><span class="font-mono">{{ line.color }}</span></template>
+        <template #color><color-swatch class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :color="line.color"></color-swatch><span :class="{ 'font-mono': !swatch.none }">{{ swatch.label }}</span></template>
       </i18n-text>
       <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
     </span>
