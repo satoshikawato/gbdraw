@@ -573,7 +573,6 @@ def linear_record_labels(
     feature_dict,
     genome_length,
     alignment_width,
-    genome_size_normalization_factor,
     cds_height,
     strandedness,
     track_layout,
@@ -721,10 +720,10 @@ def linear_record_labels(
         # `position` is only used in arithmetic but is declared int in layout/linear_coords.py,
         # while display fragments are floats (F-s5-1).
         normalized_start = normalize_position_to_linear_track(
-            cast(int, longest_segment_start), genome_length, alignment_width, genome_size_normalization_factor
+            cast(int, longest_segment_start), genome_length, alignment_width
         )
         normalized_end = normalize_position_to_linear_track(
-            cast(int, longest_segment_end), genome_length, alignment_width, genome_size_normalization_factor
+            cast(int, longest_segment_end), genome_length, alignment_width
         )
         longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
 

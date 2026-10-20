@@ -115,7 +115,6 @@ class FeatureDrawer:
         genome_length: int,
         cds_height: float,
         alignment_width: float,
-        normalization_factor: float,
         feature_strand: str,
         separate_strands: bool,
         arrow_length: float,
@@ -130,7 +129,6 @@ class FeatureDrawer:
             genome_length=genome_length,
             alignment_width=alignment_width,
             cds_height=cds_height,
-            genome_size_normalization_factor=normalization_factor,
             feature_strand=feature_strand,
             separate_strands=separate_strands,
             arrow_length=arrow_length,
@@ -224,7 +222,6 @@ class FeaturePathGenerator:
         genome_length: int,
         alignment_width: float,
         cds_height: float,
-        genome_size_normalization_factor: float,
         feature_strand: str,
         separate_strands: bool,
         arrow_length: float,
@@ -237,7 +234,6 @@ class FeaturePathGenerator:
         self.genome_length = genome_length
         self.alignment_width = alignment_width
         self.cds_height = cds_height
-        self.genome_size_normalization_factor = genome_size_normalization_factor
         self.feature_strand = feature_strand
         self.separate_strands = separate_strands
         self.arrow_length = arrow_length
@@ -278,7 +274,6 @@ class FeaturePathGenerator:
                     coord_dict=coord_dict,
                     genome_length=self.genome_length,
                     alignment_width=self.alignment_width,
-                    genome_size_normalization_factor=self.genome_size_normalization_factor,
                     cds_height=self.cds_height,
                     feature_strand=self.feature_strand,
                     separate_strands=self.separate_strands,
@@ -302,7 +297,6 @@ class FeaturePathGenerator:
                         feature_strand=self.feature_strand,
                         genome_length=self.genome_length,
                         alignment_width=self.alignment_width,
-                        genome_size_normalization_factor=self.genome_size_normalization_factor,
                         separate_strands=self.separate_strands,
                         feature_track_id=feature_track_id,
                         track_layout=self.track_layout,
@@ -320,7 +314,6 @@ class FeaturePathGenerator:
                         coord_dict=coord_dict,
                         genome_length=self.genome_length,
                         alignment_width=self.alignment_width,
-                        genome_size_normalization_factor=self.genome_size_normalization_factor,
                         cds_height=self.cds_height,
                         feature_strand=self.feature_strand,
                         separate_strands=self.separate_strands,
@@ -335,7 +328,6 @@ class FeaturePathGenerator:
                         coord_dict=coord_dict,
                         genome_length=self.genome_length,
                         alignment_width=self.alignment_width,
-                        genome_size_normalization_factor=self.genome_size_normalization_factor,
                         cds_height=self.cds_height,
                         feature_strand=self.feature_strand,
                         separate_strands=self.separate_strands,

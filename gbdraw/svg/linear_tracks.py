@@ -18,12 +18,11 @@ def calculate_corrdinate(
     max_diff: float,
     record_len: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     track_height: float,
 ):
     diff: float = value - mean
     x_corrdinate: float = normalize_position_to_linear_track(
-        index, record_len, alignment_width, genome_size_normalization_factor
+        index, record_len, alignment_width
     )
     # If the series is completely flat, avoid division by zero and draw a flat line.
     if max_diff == 0:
@@ -40,7 +39,6 @@ def calculate_gc_content_path_desc(
     gc_df: DataFrame,
     record_len: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     track_height: float,
     dinucleotide: str,
     record_transform: RecordDisplayTransform | None = None,
@@ -61,7 +59,7 @@ def calculate_gc_content_path_desc(
     for index, value in samples:
         value = float(value)
         corrdinate, x_corrdinate = calculate_corrdinate(
-            index, value, mean, max_diff, record_len, alignment_width, genome_size_normalization_factor, track_height
+            index, value, mean, max_diff, record_len, alignment_width, track_height
         )
         coodinates_list.append(corrdinate)
     penultimate_coordinate: str = "L{} {}".format(str(x_corrdinate), str(start_y))
@@ -79,7 +77,6 @@ def calculate_gc_skew_path_desc(
     skew_df: DataFrame,
     record_len: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     track_height: float,
     record_transform: RecordDisplayTransform | None = None,
 ) -> str:
@@ -100,7 +97,7 @@ def calculate_gc_skew_path_desc(
     for index, value in samples:
         value = float(value)
         corrdinate, x_corrdinate = calculate_corrdinate(
-            index, value, mean, max_diff, record_len, alignment_width, genome_size_normalization_factor, track_height
+            index, value, mean, max_diff, record_len, alignment_width, track_height
         )
         coodinates_list.append(corrdinate)
 
@@ -119,7 +116,6 @@ def calculate_linear_scalar_area_path_desc(
     scalar_df: DataFrame,
     record_len: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     track_height: float,
     *,
     value_column: str = "value_normalized",
@@ -145,7 +141,7 @@ def calculate_linear_scalar_area_path_desc(
         value = max(0.0, min(1.0, float(value)))
         x_value = normalize_position_to_linear_track(
             # The helper is annotated int but computes with floats; projected positions are float.
-            cast(int, position), record_len, alignment_width, genome_size_normalization_factor
+            cast(int, position), record_len, alignment_width
         )
         y_value = baseline_y - (float(track_height) * value)
         x_values.append(float(x_value))
@@ -155,7 +151,7 @@ def calculate_linear_scalar_area_path_desc(
         return ""
 
     final_x = normalize_position_to_linear_track(
-        record_len, record_len, alignment_width, genome_size_normalization_factor
+        record_len, record_len, alignment_width
     )
     path_segments = [f"M{start_x} {baseline_y}", f"L{x_values[0]} {y_values[0]}"]
     path_segments.extend(
@@ -173,7 +169,6 @@ def calculate_depth_path_desc(
     depth_df: DataFrame,
     record_len: int,
     alignment_width: float,
-    genome_size_normalization_factor: float,
     track_height: float,
     record_transform: RecordDisplayTransform | None = None,
 ) -> str:
@@ -185,7 +180,6 @@ def calculate_depth_path_desc(
         depth_df,
         record_len,
         alignment_width,
-        genome_size_normalization_factor,
         track_height,
         value_column="depth_normalized",
         record_transform=record_transform,

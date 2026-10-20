@@ -225,7 +225,6 @@ def _precalculate_label_dimensions(
                 if sequence_widths is not None
                 else canvas_config.record_sequence_width(record_length)
             ),
-            1.0,
             canvas_config.cds_height,
             profile.strandedness,
             render_context.feature_track_layout,

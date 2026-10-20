@@ -29,7 +29,6 @@ class SkewDrawer:
         gc_df: DataFrame,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -38,7 +37,7 @@ class SkewDrawer:
         record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         skew_desc: str = calculate_gc_skew_path_desc(
-            start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height,
+            start_x, start_y, gc_df, record_len, alignment_width, track_height,
             record_transform=record_transform,
         )
         if not skew_desc:
@@ -51,7 +50,6 @@ class SkewDrawer:
             dinucleotide,
             record_len,
             alignment_width,
-            genome_size_normalization_factor,
             track_height,
             start_x,
             start_y,
@@ -62,8 +60,8 @@ class SkewDrawer:
             Path(
                 d=(
                     f"M{start_x},{start_y} "
-                    f"L{alignment_width * genome_size_normalization_factor},{start_y} "
-                    f"L{alignment_width * genome_size_normalization_factor},{start_y + track_height} "
+                    f"L{alignment_width},{start_y} "
+                    f"L{alignment_width},{start_y + track_height} "
                     f"L{start_x},{start_y + track_height} z"
                 ),
                 fill="white",

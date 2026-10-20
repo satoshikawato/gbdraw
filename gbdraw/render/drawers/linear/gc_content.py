@@ -58,7 +58,6 @@ class GcContentDrawer:
         group: Group,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -68,7 +67,6 @@ class GcContentDrawer:
             record_len,
             record_len,
             alignment_width,
-            genome_size_normalization_factor,
         )
         width = max(0.0, float(final_x) - float(start_x))
         group.add(
@@ -111,7 +109,6 @@ class GcContentDrawer:
         group: Group,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -125,7 +122,6 @@ class GcContentDrawer:
             record_len,
             record_len,
             alignment_width,
-            genome_size_normalization_factor,
         )
         axis_group = Group(id=axis_group_id)
         axis_group.add(
@@ -200,7 +196,6 @@ class GcContentDrawer:
         gc_df: DataFrame,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -221,7 +216,6 @@ class GcContentDrawer:
                 plot_df,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 record_transform=record_transform,
             )
@@ -232,7 +226,6 @@ class GcContentDrawer:
                 gc_df,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 dinucleotide,
                 record_transform=record_transform,
@@ -244,7 +237,6 @@ class GcContentDrawer:
                 group,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 start_x,
                 start_y,
@@ -268,7 +260,6 @@ class GcContentDrawer:
                 record_len,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
             )
             self._add_percent_border(
                 group,
@@ -282,7 +273,6 @@ class GcContentDrawer:
                 group,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 start_x,
                 start_y,

@@ -203,7 +203,6 @@ def _labels_alone(
         feature_dict,
         record_length,
         canvas_cfg.alignment_width,
-        1.0,
         canvas_cfg.cds_height,
         canvas_cfg.strandedness,
         canvas_cfg.track_layout,
@@ -1513,7 +1512,7 @@ def test_linear_above_feature_label_moves_off_a_keep_clear_box() -> None:
         preprocess_label_filtering(cfg.labels.filtering.as_dict()),
     )
     record_labels = linear_record_labels(
-        feature_dict, 1000, canvas_cfg.alignment_width, 1.0, canvas_cfg.cds_height,
+        feature_dict, 1000, canvas_cfg.alignment_width, canvas_cfg.cds_height,
         canvas_cfg.strandedness, canvas_cfg.track_layout, canvas_cfg.track_axis_gap, profile,
     )
     (alone,) = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout=canvas_cfg.track_layout)[0]
@@ -1555,7 +1554,7 @@ def test_linear_auto_label_over_a_keep_clear_box_takes_the_next_row(track_layout
         preprocess_label_filtering(cfg.labels.filtering.as_dict()),
     )
     record_labels = linear_record_labels(
-        feature_dict, 1000, canvas_cfg.alignment_width, 1.0, canvas_cfg.cds_height,
+        feature_dict, 1000, canvas_cfg.alignment_width, canvas_cfg.cds_height,
         canvas_cfg.strandedness, canvas_cfg.track_layout, canvas_cfg.track_axis_gap, profile,
     )
     (alone,) = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout=canvas_cfg.track_layout)[0]

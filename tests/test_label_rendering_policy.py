@@ -56,7 +56,7 @@ def _linear_policy_labels(label_rendering: str) -> list[dict]:
         "external": _feature("external", 500, 510, "very long label that cannot fit inside a ten base feature"),
     }
     profile = LinearRenderProfile(cfg)
-    record_labels = linear_record_labels(features, 1000, 1000, 1.0, 20, False, "middle", None, profile)
+    record_labels = linear_record_labels(features, 1000, 1000, 20, False, "middle", None, profile)
     return place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout="middle")[0]
 
 
@@ -121,7 +121,7 @@ def test_linear_label_goes_inside_its_feature_only_with_a_quarter_em_to_spare() 
     }
     profile = LinearRenderProfile(cfg)
     record_labels = linear_record_labels(
-        features, 1000, 1000, 1.0, 20, False, "middle", None, profile, label_font_size=font_size
+        features, 1000, 1000, 20, False, "middle", None, profile, label_font_size=font_size
     )
     labels = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout="middle")[0]
 

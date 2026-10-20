@@ -89,7 +89,6 @@ class GcContentGroup:
             self.gc_df,
             self.record_len,
             self.sequence_width,
-            1.0,
             self.track_height,
             self.start_x,
             self.start_y,

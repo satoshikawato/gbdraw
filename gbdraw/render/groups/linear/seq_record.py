@@ -143,18 +143,17 @@ class SeqRecordGroup:
     def axis_ruler_enabled(self) -> bool:
         return self._axis_ruler_enabled
 
-    def draw_linear_axis(self, alignment_width: float, genome_size_normalization_factor: float) -> Line:
+    def draw_linear_axis(self, alignment_width: float) -> Line:
         """
         Draws a linear axis for the genomic record visualization.
 
         Args:
             alignment_width (float): Width of the alignment area.
-            genome_size_normalization_factor (float): Normalization factor based on the genome size.
 
         Returns:
             Line: An SVG line element representing the linear axis.
         """
-        bar_length: float = alignment_width * genome_size_normalization_factor
+        bar_length: float = alignment_width
         linear_axis_stroke_color: str = self._cfg.objects.axis.linear.stroke_color
         start_x: float = 0
         start_y: float = 0
@@ -315,16 +314,15 @@ class SeqRecordGroup:
         record_length: int,
         cds_height: float,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         separate_strands: bool,
         arrow_length: float,
         group: Group,
         label_list: list,
     ) -> Group:
         """Draws the genomic features onto the provided SVG group."""
-        bar_length: float = alignment_width * genome_size_normalization_factor
+        bar_length: float = alignment_width
         # Draw the axis
-        axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
+        axis_path = self.draw_linear_axis(alignment_width)
         group.add(axis_path)
         self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
 
@@ -375,7 +373,6 @@ class SeqRecordGroup:
                     genome_length=record_length,
                     cds_height=cds_height,
                     alignment_width=alignment_width,
-                    normalization_factor=genome_size_normalization_factor,
                     feature_strand=feature_strand,
                     separate_strands=separate_strands,
                     arrow_length=arrow_length,
@@ -445,9 +442,6 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
-        # The width is the record's own, so positions scale by it alone.
-        genome_size_normalization_factor: float = 1.0
-
         feature_dict = self.feature_layers.foreground_features
         label_list = []
         if self.show_labels and self.draw_features_enabled:
@@ -458,7 +452,6 @@ class SeqRecordGroup:
                     feature_dict,
                     record_length,
                     alignment_width,
-                    genome_size_normalization_factor,
                     cds_height,
                     separate_strands,
                     self.track_layout,
@@ -482,7 +475,6 @@ class SeqRecordGroup:
             record_length,
             cds_height,
             alignment_width,
-            genome_size_normalization_factor,
             separate_strands,
             arrow_length,
             record_group,
