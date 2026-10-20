@@ -105,6 +105,7 @@
     "tests/web/specific-color-pattern-drafts.playwright.spec.js": 1.13,
     "tests/web/track-layout-transition.playwright.spec.js": 0.25,
     "tests/web/ui-component-styles.playwright.spec.js": 0.38,
+    "tests/web/ui-language.playwright.spec.js": 1.0,
     "tests/web/unmanaged-config-overrides.playwright.spec.js": 0.18,
     "tests/web/visual-state-regressions.playwright.spec.js": 0.88
   },
@@ -184,7 +185,8 @@
       "tests/web/losat-display-pair-reuse.playwright.spec.js",
       "tests/web/record-display-discovery.playwright.spec.js",
       "tests/web/result-element-settings.playwright.spec.js",
-      "tests/web/specific-color-pattern-drafts.playwright.spec.js"
+      "tests/web/specific-color-pattern-drafts.playwright.spec.js",
+      "tests/web/ui-language.playwright.spec.js"
     ],
     [
       "tests/web/color-captions.playwright.spec.js",
