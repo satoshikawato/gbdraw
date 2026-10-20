@@ -16,7 +16,9 @@ import { join, relative, sep } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-import { CONTEXT_SEPARATOR, SOURCE_LOCALE, msg, setUiLocale, t, textParts, tm, tn, tx, uiLocale } from '../../gbdraw/web/js/utils/i18n.js';
+import {
+  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale, uiLocaleOf
+} from '../../gbdraw/web/js/utils/i18n.js';
 import { errorTextKeys } from './helpers/error-text-keys.mjs';
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
@@ -561,4 +563,72 @@ test('the hosted analytics notice of the About section is in the key list', () =
     'The hosted {site} deployment uses Google Analytics 4 for aggregate page-usage metrics.',
     'Uploaded genome files and generated diagrams are still processed locally in your browser and are not sent to Google Analytics by gbdraw.'
   ]) assert.ok(keys.has(key), key);
+});
+
+test('the UI languages are English, Japanese, Simplified and Traditional Chinese, each named in itself', () => {
+  assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
+    ['en', 'English'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文']
+  ]);
+  assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
+  for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'fr', null, undefined, 3, '../x']) {
+    assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
+  }
+});
+
+test('a locale outside the UI languages is refused', async () => {
+  await assert.rejects(setUiLocale('fr', async () => ({ default: {} })), /Unknown UI locale/);
+  assert.equal(uiLocale.value, SOURCE_LOCALE);
+});
+
+test('two sentences are joined with a space in English and with nothing in Japanese and Chinese', async () => {
+  assert.equal(sentenceSeparator(), ' ');
+  assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
+  try {
+    for (const tag of ['ja', 'zh-Hans', 'zh-Hant']) {
+      await setUiLocale(tag, async () => ({ default: {} }));
+      assert.equal(sentenceSeparator(), '', tag);
+      assert.equal(joinSentences('保存しました。', 'ダウンロードを確認してください。'), '保存しました。ダウンロードを確認してください。', tag);
+    }
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+test('a list keeps today\'s English and uses the locale\'s list pattern in Japanese and Chinese', async () => {
+  assert.equal(listText([]), '');
+  assert.equal(listText(['A']), 'A');
+  assert.equal(listText(['A', 'B']), 'A and B');
+  assert.equal(listText(['A', 'B', 'C']), 'A, B, and C');
+  assert.equal(listText(['A', 'B', 'C', '2 more']), 'A, B, C, and 2 more');
+  try {
+    for (const tag of ['ja', 'zh-Hans', 'zh-Hant']) {
+      await setUiLocale(tag, async () => ({ default: {} }));
+      const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
+      assert.equal(listText(['A']), 'A', tag);
+      assert.equal(listText(['A', 'B']), expected.format(['A', 'B']), tag);
+      assert.equal(listText(['A', 'B', 'C']), expected.format(['A', 'B', 'C']), tag);
+      assert.doesNotMatch(listText(['A', 'B', 'C']), /\band\b/, tag);
+    }
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+test('the shown locale sets the page language, and only a switch that applies does', async () => {
+  const root = { lang: 'en', setAttribute(name, value) { assert.equal(name, 'lang'); this.lang = value; } };
+  const previous = globalThis.document;
+  globalThis.document = { documentElement: root };
+  try {
+    await setUiLocale('zh-Hant', async () => ({ default: {} }));
+    assert.equal(root.lang, 'zh-Hant');
+    await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
+    assert.equal(root.lang, 'zh-Hant', 'a catalog that fails to load changes nothing');
+    assert.equal(uiLocale.value, 'zh-Hant');
+    await setUiLocale(SOURCE_LOCALE);
+    assert.equal(root.lang, 'en');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+    globalThis.document = previous;
+  }
 });

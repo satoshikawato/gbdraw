@@ -24,7 +24,7 @@ import {
   ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
-import { t } from '../../utils/i18n.js';
+import { joinSentences, t } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -1704,11 +1704,11 @@ export const createFeatureLabelActions = ({
           : !rulePreparation.isCurrent(before)
             ? t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: RULE_INPUT_CHANGE_WORDS }) : '';
       if (changed) {
-        showNotice({ text: `${loadedRowsText} ${changed}`, tone: 'warning' });
+        showNotice({ text: joinSentences(loadedRowsText, changed), tone: 'warning' });
         return;
       }
       if (!svg) {
-        showNotice({ text: `${loadedRowsText} ${t('No diagram is shown, so nothing was applied.')}`, tone: 'warning' });
+        showNotice({ text: joinSentences(loadedRowsText, t('No diagram is shown, so nothing was applied.')), tone: 'warning' });
         return;
       }
       // A `location` or `record_location` row cannot be decided for a label
@@ -1722,7 +1722,7 @@ export const createFeatureLabelActions = ({
         && (row.featureType === '*' || row.featureType === String(/** @type {LabelFeature} */ (feature).type ?? ''))
       ))).length;
       if (undecided > 0) {
-        showNotice({ text: `${loadedRowsText} ${t('Not applied.')}`, items: [
+        showNotice({ text: joinSentences(loadedRowsText, t('Not applied.')), items: [
           t('location and record_location rows cannot be matched to {count} label(s) on cropped, reverse-complemented, or rotated records until the diagram records where it drew them. Generate the diagram again, then load the table.', { count: undecided })
         ] });
         return;
@@ -1746,7 +1746,7 @@ export const createFeatureLabelActions = ({
         return [{ entry, matchedRow, tracked }];
       });
       if (applicable.length === 0) {
-        showNotice({ text: `${loadedRowsText} ${t('Not applied; the existing label edits were kept.')}`, items: [
+        showNotice({ text: joinSentences(loadedRowsText, t('Not applied; the existing label edits were kept.')), items: [
           skippedNonTrackableCount > 0
             ? t('The {count} matched label(s) lacked a feature key.', { count: skippedNonTrackableCount })
             : t('No row matched a label of the diagram.')
@@ -1768,7 +1768,7 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      const message = `${loadedRowsText} ${t('Applied to {count} label(s).', { count: applicable.length })}`;
+      const message = joinSentences(loadedRowsText, t('Applied to {count} label(s).', { count: applicable.length }));
       const skipped = skippedNonTrackableCount > 0
         ? [t('{count} match(es) lacked a feature key and were not applied.', { count: skippedNonTrackableCount })]
         : [];
@@ -1801,7 +1801,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      showNotice({ text: `${t('There are no label rules to export.')} ${t('Export Feature Edits TSV writes per-feature label edits.')}` });
+      showNotice({ text: joinSentences(t('There are no label rules to export.'), t('Export Feature Edits TSV writes per-feature label edits.')) });
       return;
     }
     const selectedIdx = selectedResultIndex.value;

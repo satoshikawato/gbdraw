@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { FontFamilyName } from './font-families.js' */
-import { t, tn } from '../utils/i18n.js';
+import { joinSentences, listText, t, tn } from '../utils/i18n.js';
 import { customFontFamilies, isGenericFamily, parseFontFamilyList, resolveWebFontFamily } from './font-families.js';
 
 // What a Session says about its fonts (custom fonts D-02, D-03; Product
@@ -17,12 +17,6 @@ export const SESSION_FONT_ACTIONS = Object.freeze({
   SUBSTITUTE: 'substitute'
 });
 
-/** @param {readonly string[]} names "A", "A and B", "A, B, and C" */
-const nameList = (names) => {
-  if (names.length < 2) return names.join('');
-  if (names.length === 2) return t('{first} and {second}', { first: names[0], second: names[1] });
-  return t('{list}, and {last}', { list: names.slice(0, -1).join(', '), last: String(names.at(-1)) });
-};
 
 /** @template T @param {readonly T[]} values @returns {T[]} */
 const unique = (values) => [...new Set(values)];
@@ -75,21 +69,22 @@ export const missingSessionFonts = (fontFamilies, registeredFamilies) => {
  *   `loadedFamily`: the family of the font just loaded, when it is not the one the Session names.
  */
 export const sessionFontQuestion = ({ missing, nearest }, { installedFontsSupported, loadedFamily }) => {
-  const names = nameList(missing);
-  const substitutes = nameList(nearest);
+  const names = listText(missing);
+  const substitutes = listText(nearest);
   return {
     title: t('This Session uses a font that is not available'),
     description: tn(missing.length,
       'Its text is set in {names}, which is not part of gbdraw and is not loaded in this page.',
       'Its text is set in {names}, which are not part of gbdraw and are not loaded in this page.', { names }),
     items: loadedFamily ? [t('The loaded font is {loaded}, not {names}.', { loaded: loadedFamily, names })] : [],
-    note: tn(nearest.length,
-      'Load with {substitutes}: the Session opens and its text is drawn in {substitutes}, the nearest available font.',
-      'Load with {substitutes}: the Session opens and its text is drawn in {substitutes}, the nearest available fonts.', { substitutes })
-      + ' ' + tn(missing.length,
+    note: joinSentences(
+      tn(nearest.length,
+        'Load with {substitutes}: the Session opens and its text is drawn in {substitutes}, the nearest available font.',
+        'Load with {substitutes}: the Session opens and its text is drawn in {substitutes}, the nearest available fonts.', { substitutes }),
+      tn(missing.length,
         'The Font setting keeps the name {names}, so the font is used again once it is loaded.',
-        'The Font setting keeps the names {names}, so the fonts are used again once they are loaded.', { names })
-      + ' ' + t('The saved preview keeps its look until you Generate.'),
+        'The Font setting keeps the names {names}, so the fonts are used again once they are loaded.', { names }),
+      t('The saved preview keeps its look until you Generate.')),
     actions: [
       { id: SESSION_FONT_ACTIONS.FILE, label: t('Load font file…'), tone: /** @type {const} */ ('primary') },
       ...(installedFontsSupported

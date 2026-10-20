@@ -15,10 +15,21 @@
 // (History step labels, `:key` values, `data-*`, ids), file and biological
 // names. Keys are literal arguments of `t`, `tn`, `tx` and `msg`, so
 // tests/web/i18n-catalogs.test.mjs can list them.
+//
+// The catalogs are generated, never edited by hand; their wording follows
+// docs/internal/I18N_STYLE.md and docs/internal/I18N_GLOSSARY.tsv.
 
 /**
- * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module.
- * @typedef {string} UiLocale
+ * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module. It is
+ * also the page's `lang`.
+ * @typedef {'en' | 'ja' | 'zh-Hans' | 'zh-Hant'} UiLocale
+ */
+/**
+ * A language the Web UI can be shown in (PD-OI-106).
+ * @typedef {object} UiLocaleOption
+ * @property {UiLocale} tag
+ * @property {string} name The language's name in itself (an endonym); never translated.
+ * @property {string} sentenceSeparator What separates two sentences shown one after the other.
  */
 /**
  * A locale's translations, keyed by the English text (`t`, and the `other`
@@ -39,17 +50,38 @@
  * @typedef {(locale: UiLocale) => Promise<{ default: TranslationCatalog }>} CatalogLoader
  */
 
+/** @type {UiLocale} */
 export const SOURCE_LOCALE = 'en';
+/**
+ * The languages of the header Language menu, in its order. Japanese and
+ * Chinese put no space between sentences.
+ * @type {readonly Readonly<UiLocaleOption>[]}
+ */
+export const UI_LOCALES = Object.freeze([
+  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '' })
+]);
 // Separates the context of `tx` from its text in a catalog key.
 export const CONTEXT_SEPARATOR = '\u0004';
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-const LOCALE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 
 // The vendored Vue is a global of the page; a unit test without a page gets
 // a plain holder, which is not reactive.
 const vueRef = globalThis.window?.Vue?.ref;
 /** @type {{ value: UiLocale }} */
 const locale = vueRef ? vueRef(SOURCE_LOCALE) : { value: SOURCE_LOCALE };
+
+/**
+ * The UI locale a stored or chosen value names, or null for any other value.
+ * @param {unknown} value
+ * @returns {UiLocale | null}
+ */
+export const uiLocaleOf = (value) => UI_LOCALES.find((option) => option.tag === value)?.tag ?? null;
+
+/** The shown locale's entry of UI_LOCALES; reading it makes a render depend on the locale. */
+const shownLocale = () => UI_LOCALES.find((option) => option.tag === locale.value) ?? UI_LOCALES[0];
 /** @type {TranslationCatalog} */
 let catalog = Object.freeze({});
 
@@ -135,6 +167,34 @@ export const msg = (text) => text;
 export const tm = (text, params) => substitute(lookup(text, text), params);
 
 /**
+ * What separates two sentences shown one after the other in the shown locale:
+ * a space in English, nothing in Japanese and Chinese (after 。). Templates
+ * put it between two keys: `{{ t('A.') }}{{ sentenceSeparator() }}{{ t('B.') }}`.
+ * @returns {string}
+ */
+export const sentenceSeparator = () => shownLocale().sentenceSeparator;
+
+/**
+ * Sentences shown one after the other, each already a shown text.
+ * @param {...string} sentences
+ * @returns {string}
+ */
+export const joinSentences = (...sentences) => sentences.join(sentenceSeparator());
+
+/**
+ * Shown texts as one list: "A", "A and B", "A, B, and C" in English, the
+ * locale's own list pattern (Intl.ListFormat) in the other locales.
+ * @param {readonly string[]} items
+ * @returns {string}
+ */
+export const listText = (items) => {
+  const tag = shownLocale().tag;
+  if (tag !== SOURCE_LOCALE) return new Intl.ListFormat(tag, { type: 'conjunction' }).format(items);
+  if (items.length < 3) return items.join(' and ');
+  return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
+};
+
+/**
  * Splits a shown text at the placeholders that `slots` names. Another
  * placeholder takes its value from `params`, or stays as written. The values
  * are filled after the split, so a value never becomes a slot.
@@ -172,20 +232,25 @@ const importCatalog = (tag) => import(`./i18n-catalogs/${tag}.js`);
 let latestRequest = 0;
 
 /**
- * Shows the UI in `next`: loads its catalog, then switches. `en` needs no
- * catalog. When calls overlap, only the latest one applies. Nothing in the UI
- * calls it yet (PD-OI-106 decides the menu).
- * @param {UiLocale} next
+ * Shows the UI in `next`: loads its catalog, then switches, and sets the
+ * page's `lang` (the one writer of `<html lang>`). `en` needs no catalog. When
+ * calls overlap, only the latest one applies; a catalog that fails to load
+ * rejects and changes nothing. The header Language menu and the stored
+ * language at boot call it (app/ui-language.js).
+ * @param {string} next
  * @param {CatalogLoader} [load] the catalog source; tests pass an in-memory one
  * @returns {Promise<boolean>} whether this call switched the locale
  */
 export const setUiLocale = async (next, load = importCatalog) => {
-  if (!LOCALE_TAG.test(next)) throw new Error(`Unknown UI locale: ${next}`);
+  const tag = uiLocaleOf(next);
+  if (!tag) throw new Error(`Unknown UI locale: ${next}`);
   latestRequest += 1;
   const request = latestRequest;
-  const loaded = next === SOURCE_LOCALE ? {} : (await load(next)).default;
+  const loaded = tag === SOURCE_LOCALE ? {} : (await load(tag)).default;
   if (request !== latestRequest) return false;
   catalog = Object.freeze({ ...loaded });
-  locale.value = next;
+  locale.value = tag;
+  // A unit test without a page has no document.
+  globalThis.document?.documentElement.setAttribute('lang', tag);
   return true;
 };

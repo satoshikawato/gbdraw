@@ -102,6 +102,12 @@
             --ui-danger-line: #fca5a5;
         }
         body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: var(--ui-page); color: var(--ui-text-2); }
+        /* Chinese UI text: system Chinese fonts, never Noto Sans JP's Japanese glyph shapes. The figure keeps the English stack. */
+        :root:lang(zh-Hans) body { font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans SC', 'Source Han Sans SC', sans-serif; }
+        :root:lang(zh-Hant) body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', sans-serif; }
+        :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
+        /* Japanese and Chinese have no letter case, and letter spacing breaks up their text: no upper-casing or tracking in the UI (the figure keeps its own). */
+        :root:lang(ja) :not(svg, svg *), :root:lang(zh-Hans) :not(svg, svg *), :root:lang(zh-Hant) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -1456,6 +1462,10 @@
                 margin-left: auto !important;
             }
 
+            .app-language {
+                order: 1 !important;
+            }
+
             .app-mode-button {
                 padding: 0.35rem 0.55rem !important;
                 font-size: 0.75rem !important;
@@ -2078,6 +2088,13 @@
                 <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
                     <button type="button" :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
                     <button type="button" :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
+                </div>
+                <!-- PD-OI-106: the UI language. A globe and each language's own name keep it findable in any language; a choice is no History step. -->
+                <div class="app-language flex items-center gap-1 text-slate-500" :title="t('Language')">
+                    <i class="ph ph-globe text-base" aria-hidden="true"></i>
+                    <select data-ui-language data-history-ignore :value="uiLocale.value" @change="chooseUiLanguage" :aria-label="t('Language')" class="app-language-select text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded px-1 py-0.5 cursor-pointer hover:border-slate-300">
+                        <option v-for="option in UI_LOCALES" :key="option.tag" :value="option.tag" :lang="option.tag">{{ option.name }}</option>
+                    </select>
                 </div>
             </div>
         </div>
@@ -2897,7 +2914,7 @@
                                 <p>{{ tm(importedComparisonIntent.message) }}</p>
                                 <p>{{ t('The controls below are a replacement draft. The saved comparison and last successful Result remain unchanged until Generate succeeds.') }}</p>
                                 <p v-if="importedComparisonIntent.action" class="font-semibold">
-                                    {{ t('Selected action: {action}', { action: importedComparisonIntent.action }) }}
+                                    {{ t('Selected action: {action}', { action: importedComparisonActionText }) }}
                                 </p>
                                 <div class="flex flex-wrap gap-1.5" role="group" :aria-label="t('Resolve saved comparison')">
                                     <button
@@ -2906,20 +2923,20 @@
                                         data-history-ignore
                                         @click="inheritImportedComparison"
                                         class="btn btn-secondary text-[10px]"
-                                     :disabled="!semanticMutationAvailable">{{ t('Inherit saved comparison') }}</button>
+                                     :disabled="!semanticMutationAvailable">{{ tm(importedComparisonActionLabels.INHERIT) }}</button>
                                     <button
                                         type="button"
                                         data-history-ignore
                                         :disabled="!semanticMutationAvailable || (!importedComparisonCanReplace)"
                                         @click="replaceImportedComparison"
                                         class="btn btn-secondary text-[10px] disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >{{ t('Replace with current controls') }}</button>
+                                    >{{ tm(importedComparisonActionLabels.REPLACE) }}</button>
                                     <button
                                         type="button"
                                         data-history-ignore
                                         @click="clearImportedComparison"
                                         class="btn btn-secondary text-[10px]"
-                                     :disabled="!semanticMutationAvailable">{{ t('Clear comparison') }}</button>
+                                     :disabled="!semanticMutationAvailable">{{ tm(importedComparisonActionLabels.CLEAR) }}</button>
                                 </div>
                             </div>
                             <div role="group" :aria-label="t('Set all adjacent comparisons')" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
@@ -3007,7 +3024,7 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
-                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text> {{ t('A missing active TLOSATX code is shown on the closed record summary.') }}
+                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text>{{ sentenceSeparator() + t('A missing active TLOSATX code is shown on the closed record summary.') }}
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
@@ -3986,7 +4003,7 @@
                                                         </div>
                                                     </div>
                                                     <div v-if="entry.slot.depth_binding_error" class="rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] text-amber-700">
-                                                        {{ entry.slot.depth_binding_error }} {{ t('Select an available series or delete this slot.') }}
+                                                        {{ joinSentences(entry.slot.depth_binding_error, t('Select an available series or delete this slot.')) }}
                                                     </div>
                                                     <div v-if="linearTrackSlotIssue(entry.slot, entry.index)" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
                                                         {{ linearTrackSlotIssue(entry.slot, entry.index) }}
@@ -4469,7 +4486,7 @@
                                         <span class="input-label text-[10px] mb-1">{{ t('Record Size Mode') }} <help-tip id="help-circular-record-size-mode" :text="t('Scale circles by record length on multi-record canvas.')"></help-tip></span>
                                         <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" :aria-label="t('Record Size Mode')" aria-describedby="help-circular-record-size-mode" :disabled="!semanticMutationAvailable">
                                             <option value="auto">{{ t('Auto (Default)') }}</option>
-                                            <option value="linear">{{ t('Linear') }}</option>
+                                            <option value="linear">{{ tx('size scaling', 'Linear') }}</option>
                                             <option value="equal">{{ t('Equal') }}</option>
                                         </select>
                                     </div>
@@ -4726,7 +4743,7 @@
                                         <span v-else>{{ t('Apply') }}</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'bakta'">{{ ' ' }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'bakta'">{{ sentenceSeparator() }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
                             </div>
 
                             <div>
@@ -5657,7 +5674,7 @@
 
                             <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> {{ t('Privacy & Security') }}</strong>
-                                <i18n-text :text="t('This tool runs {where} using WebAssembly (Pyodide).')"><template #where><strong>{{ t('entirely in your browser') }}</strong></template></i18n-text> {{ t('Uploaded genomic data is processed locally and never leaves your device.') }}
+                                <i18n-text :text="t('This tool runs {where} using WebAssembly (Pyodide).')"><template #where><strong>{{ t('entirely in your browser') }}</strong></template></i18n-text>{{ sentenceSeparator() + t('Uploaded genomic data is processed locally and never leaves your device.') }}
                             </div>
                             <div v-if="hostedBuild.googleAnalytics" class="bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-chart-line" aria-hidden="true"></i> {{ t('Hosted Site Analytics') }}</strong>
@@ -7279,7 +7296,7 @@
                                 </button>
                                 <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" id="feature-style-scope-default-color" data-default-color-scope-line class="choice-option-note">
                                     <default-color-scope-line :line="defaultColorScopeLine(featureStyleScopeDialog.defaultColorType, featureStyleScopeDialog.replacedDefaultColor)"></default-color-scope-line>
-                                    <template v-if="hasPendingPaletteDraft">{{ ' ' }}{{ t('Applies now, also over the queued palette.') }}</template>
+                                    <template v-if="hasPendingPaletteDraft">{{ sentenceSeparator() }}{{ t('Applies now, also over the queued palette.') }}</template>
                                 </p>
 
                                 <button v-if="featureStyleScopeLabelOptions.displayLabel"
@@ -7675,7 +7692,7 @@
                                     <template v-else-if="card.kind === 'several'">
                                         <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
                                         <p v-if="card.needsChoice || record.recommendedKey" class="alignment-review-note" data-similarity-alignment-reason>
-                                            <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }}{{ ' ' }}</b>
+                                            <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }}{{ sentenceSeparator() }}</b>
                                             <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name, reason: record.recommendationReasonLabel }) }}</template>
                                         </p>
                                         <div class="alignment-review-candidates">
