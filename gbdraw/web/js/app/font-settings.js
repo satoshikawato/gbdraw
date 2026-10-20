@@ -14,6 +14,7 @@ import {
 import { SESSION_FONT_ACTIONS, missingSessionFonts, sessionFontQuestion } from '../services/session-fonts.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { msg, t } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 
 const { ref, reactive, computed } = window.Vue;
 
@@ -208,8 +209,10 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
   };
 
   /** @param {unknown} error A caught failure: a diagnostic or a Worker error. */
-  const loadErrorSummary = (error) => normalizeUserFacingError(/** @type {Record<string, unknown>} */ (error), { code: 'INPUT_INVALID', operation: 'registerFonts' })?.summary
-    || t('The font could not be loaded.');
+  const loadErrorSummary = (error) => {
+    const model = normalizeUserFacingError(/** @type {Record<string, unknown>} */ (error), { code: 'INPUT_INVALID', operation: 'registerFonts' });
+    return (model && errorText(model.summaryParts)) || t('The font could not be loaded.');
+  };
 
   /**
    * Read and load fonts, then select the family of the first one as one

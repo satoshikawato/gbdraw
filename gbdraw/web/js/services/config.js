@@ -2,6 +2,7 @@
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import { t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { specificRulesFileCaptions } from './file-imports.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
@@ -302,7 +303,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
-/** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
+/** @import { DiagnosticContext, ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
 /** @import { ProteinIdentityManifest } from './losat-cache.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
@@ -5062,12 +5063,16 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
 /**
  * @param {DrawingState} drawing
  * @param {{ status?: string, recoveredFeatureState?: SavedFeatureFields | null,
- *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null } | null | undefined} plan
- *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds).
+ *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null,
+ *   warningParts?: readonly ErrorTextPart[] } | null | undefined} plan
+ *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds:
+ *   its warning is a normalized failure, `warningParts`).
  * @param {{ generationId?: string }} [options]
  */
 const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
+  // A plan's warning is a marked text (`msg`) or the parts of a normalized failure.
+  const shownWarning = plan?.warningParts ? errorText(plan.warningParts) : plan?.warning ? tm(plan.warning) : null;
 
   if (plan?.status === 'recovered' || plan?.status === 'aligned') {
     if (plan.recoveredFeatureState) applyFeatureStateData(drawing, plan.recoveredFeatureState);
@@ -5076,7 +5081,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'summary-ready',
       generationId,
-      error: plan.warning ? tm(plan.warning) : null,
+      error: shownWarning,
       // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
       summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
         ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
@@ -5086,7 +5091,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   }
 
   if (plan?.status === 'unrecoverable' || plan?.status === 'failed') {
-    const warning = plan.warning ? tm(plan.warning) : t('Feature metadata recovery failed. The SVG preview remains available.');
+    const warning = shownWarning || t('Feature metadata recovery failed. The SVG preview remains available.');
     state.featureExtractionError.value = { summary: warning, details: [] };
     setFeatureEditorStatusData({
       status: 'failed',
@@ -5941,7 +5946,7 @@ const importSessionDocument = async (e, options = {}) => {
           )
         }));
       } catch (error) {
-        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeCaughtError(error).summary };
+        legacyFeatureRecoveryPlan = { status: 'failed', warningParts: normalizeCaughtError(error).summaryParts };
       }
       // The Features card says why after the Load (`applySessionFeatureRecoveryPlan`).
       if (legacyFeatureRecoveryPlan?.status === 'unrecoverable' || legacyFeatureRecoveryPlan?.status === 'failed') {

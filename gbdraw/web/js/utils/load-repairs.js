@@ -1,7 +1,7 @@
 // @ts-check
 
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
-import { t, tn } from './i18n.js';
+import { t, tm, tn } from './i18n.js';
 
 /**
  * What Load did with a value it could not restore as stored. `kept`: the
@@ -169,7 +169,8 @@ const overwrittenLegendEdits = (repairs) => repairs.map((repair) => {
  */
 const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => path))].map((table) => {
   const lines = repairs.filter((repair) => repair.path === table).map(({ line }) => line);
-  return describe(SESSION_TABLE_LABELS[table] ?? table, cappedList(lines), lines.length);
+  // A table's label is a key of the error wording owner; an unknown table is shown by its name.
+  return describe(Object.hasOwn(SESSION_TABLE_LABELS, table) ? tm(SESSION_TABLE_LABELS[table]) : table, cappedList(lines), lines.length);
 });
 
 /**
