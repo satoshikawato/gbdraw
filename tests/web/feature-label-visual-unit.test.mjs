@@ -804,8 +804,8 @@ for (const preparationFollowsRows of [false, true]) {
     const { state } = harness;
     const input = target();
     await load(input, () => { setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' }); });
-    assert.deepEqual(messages, [{ text: 'Loaded 1 row(s). Not applied: a label or feature visibility edit was made while '
-      + 'the table loaded. The edit was kept. Load the table again.', tone: 'warning' }]);
+    assert.deepEqual(messages, [{ text: 'Loaded 1 row(s). Not applied: label text, label visibility, or feature visibility changed while '
+      + 'the table loaded. The changes were kept. Load the table again.', tone: 'warning' }]);
     assert.deepEqual(state.featureOverrides, { [keyFor('fa')]: rowFor('fa', { labelText: 'EDITED', labelSourceText: 'alpha' }) });
     assert.deepEqual(state.labelTextBulkOverrides, {});
     assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');

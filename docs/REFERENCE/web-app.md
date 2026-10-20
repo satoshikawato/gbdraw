@@ -747,7 +747,7 @@ the **LOSATP mode** menu selects
 **Similarity groups**, **Collinear blocks**, or **Pairwise matches**. Selected
 or mixed pair plans allow LOSATN, TLOSATX, and LOSATP Pairwise matches.
 Similarity groups and Collinear blocks require all-adjacent LOSAT; with
-selected pairs those options read **(all pairs only)** and cannot be chosen.
+selected pairs those options read **(all adjacent pairs only)** and cannot be chosen.
 
 Problems in the pair plan appear once, in the **Fix before Generate** list under
 the Comparison commands. Each entry names its cause and offers the action that
@@ -1452,7 +1452,7 @@ Session saved and every Similarity group name, including the saved names of
 groups that the current results do not show. The **Default colors file**,
 **Specific rules file**, **Blacklist File**, **Whitelist File**, and **Priority
 File (TSV)** cards are removed with the settings they loaded; the input files
-(genome, Depth, and Circular conservation files) stay. **Remove** on one of these
+(genome, Depth, and comparison files for circular diagrams) stay. **Remove** on one of these
 cards takes back what its file loaded in both modes and keeps your own edits,
 including the rows a **Preset scheme** added; one **Undo** brings both back. In Linear the reset also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan, and turns the

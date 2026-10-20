@@ -134,7 +134,7 @@ const profileCapability = (profile) => {
     || !['single', 'join', 'order', 'unknown'].includes(profile.operator)
     || !['biological', 'source-forward', 'ambiguous'].includes(profile.partOrder)
     || !['+', '-', 'unstranded', 'mixed'].includes(profile.strand)) {
-    return unavailable('location-profile-invalid', t('Feature source-location capabilities are unavailable.'));
+    return unavailable('location-profile-invalid', t('Cannot determine which operations the feature\'s location in the source record allows.'));
   }
   if (profile.precision === 'unavailable') {
     return unavailable(
@@ -184,7 +184,7 @@ const partsCapability = (parts, profile, recordLength) => {
   for (const part of parts) {
     if (!part || !Number.isSafeInteger(part.start) || !Number.isSafeInteger(part.end)
       || part.start < 0 || part.end <= part.start || part.end > recordLength) {
-      return unavailable('location-parts-invalid', t('Feature source-location parts are outside the record.'));
+      return unavailable('location-parts-invalid', t('Feature-part coordinates are invalid or outside the source record.'));
     }
     if (!partStrandMatches(part.strand, profile.strand)) {
       return unavailable('location-strand-mismatch', t('Feature part strands disagree with the source profile.'));
@@ -221,10 +221,10 @@ const positionalCapability = (record, profileState, partsState, profile) => {
     return unavailable('location-fuzzy', t('This operation requires exact feature coordinates.'));
   }
   if (profile.operator === 'order') {
-    return unavailable('location-order-ambiguous', t('Ordered feature parts do not define an exact traversal path.'));
+    return unavailable('location-order-ambiguous', t('Feature parts joined with order() do not define an exact path.'));
   }
   if (profile.operator === 'unknown') {
-    return unavailable('location-operator-unknown', t('Feature part traversal semantics are unavailable.'));
+    return unavailable('location-operator-unknown', t('Cannot determine how the feature parts are connected.'));
   }
   if (profile.partOrder === 'ambiguous' || profile.strand === 'mixed') {
     return unavailable('location-traversal-ambiguous', t('Feature part order or strand is ambiguous.'));
@@ -266,13 +266,13 @@ const intentCapability = (intent) => {
     return unavailable('anchor-not-applicable', t('Feature-start and feature-end placements do not use an anchor.'));
   }
   if (!Number.isSafeInteger(intent.offsetBp)) {
-    return unavailable('offset-invalid', t('Offset must be a safe integer number of base pairs.'));
+    return unavailable('offset-invalid', t('Offset must be a whole number of base pairs within the supported range.'));
   }
   if (intent.placement === 'feature-start' && intent.offsetBp !== 0) {
     return unavailable('offset-not-applicable', t('Feature-start placement does not use an offset.'));
   }
   if (intent.orientForward !== true && intent.orientForward !== false) {
-    return unavailable('orient-forward-invalid', t('Orient-forward intent must be true or false.'));
+    return unavailable('orient-forward-invalid', t('The "Show this feature on the forward strand" setting must be true or false.'));
   }
   return available();
 };

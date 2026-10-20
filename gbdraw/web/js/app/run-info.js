@@ -1981,7 +1981,7 @@ export const formatElapsedMs = (elapsedMs) => {
 export const reproducibilityLabel = (level) => {
   const normalized = String(level || '').trim();
   if (normalized === 'source-unavailable') return t('Source recipe unavailable');
-  if (normalized === 'canonical-request') return t('Exact typed request');
+  if (normalized === 'canonical-request') return t('Exact replay request (keeps parameter types)');
   if (normalized === 'exact-uploaded-files') return t('Source recipe ready');
   if (normalized === 'requires-helper-files') return t('Source recipe needs helper files');
   if (normalized === 'session-recommended') return t('Source recipe needs helper files');

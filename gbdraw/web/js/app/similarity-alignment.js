@@ -256,7 +256,7 @@ const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t
 const evidenceLabels = Object.freeze({
   rbh: msg('reciprocal best hit'),
   coortholog: msg('near-reciprocal hit'),
-  record_local_paralog: msg('local paralog hit')
+  record_local_paralog: msg('within-record paralog hit')
 });
 
 // Why a candidate is recommended, as a clause after its name ("Recommended: livU, …").
