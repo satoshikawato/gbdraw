@@ -38,6 +38,7 @@ from gbdraw.labels.circular import (
     y_overlap,
 )
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
+from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_types import CircularLabelCandidate
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
@@ -553,6 +554,11 @@ def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]
         for name, original in originals.items():
             setattr(circular_labels_module, name, original)
     return loaded, calls
+
+
+# The crowded MjeNMV inner fixture keeps one overlapping pair (hypothetical protein / tyrosine
+# recombinase next to the origin) since OV-1366: it may no longer spread by wrapping past the origin.
+MJENMV_INNER_TUCKIN_OVERLAPS = 1
 
 
 @pytest.fixture(scope="module")
@@ -1811,7 +1817,7 @@ def test_mjenmv_inner_dense_keeps_y_overlap_calls_under_regression_cap(
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.DENSE_INNER_RELAX_MIN_LABELS
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
     assert y_overlap_calls < 8000000
 
 
@@ -1835,7 +1841,7 @@ def test_mjenmv_inner_dense_wsv209_stays_near_wsv267_after_refine(
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     wsv267 = next((label for label in inner_labels if label.get("label_text") == "wsv267-like protein"), None)
     wsv209 = next((label for label in inner_labels if label.get("label_text") == "wsv209-like protein"), None)
@@ -1852,15 +1858,21 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_hemisphere_mismatch_cap(
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     mismatch_count, _ = circular_labels_module._hemisphere_mismatch_metrics(inner_labels, total_length)
-    assert mismatch_count <= 9
+    # 9 before OV-1366: labels that reached their preferred half by wrapping past the origin keep their order now.
+    assert mismatch_count <= 14
 
 
-def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap(
+def test_mjenmv_inner_wsv136_wsv192_keep_feature_order_with_current_min_gap_overlap(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
+    """Before OV-1366 the pair had room because labels next to the origin wrapped past their neighbours.
+
+    With every label kept between its neighbours across the origin, this crowded inner fixture keeps
+    wsv136 before wsv192 and leaves them closer than the minimum gap (the CLI stops this figure before
+    and after the fix)."""
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
@@ -1876,7 +1888,8 @@ def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap(
         wsv136,
         minimum_margin=min_gap_px,
     )
-    assert not overlap
+    assert overlap
+    assert _angle_of_label(wsv136) < _angle_of_label(wsv192)
 
 
 def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
@@ -1891,8 +1904,9 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
 
     unwrapped_angles = [_label_unwrapped_angle_for_order_test(label, total_length) for label in inner_labels]
     deltas = [unwrapped_angles[idx + 1] - unwrapped_angles[idx] for idx in range(len(unwrapped_angles) - 1)]
-    assert sum(delta <= 0.0 for delta in deltas) == 6
-    assert min(deltas) == pytest.approx(-1.8091384182670334, abs=1e-6)
+    # 6 and -1.809 before OV-1366, when labels next to the origin could wrap past their neighbours.
+    assert sum(delta <= 0.0 for delta in deltas) == 3
+    assert min(deltas) == pytest.approx(-2.490733043411851, abs=1e-6)
 
 
 def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
@@ -1929,7 +1943,7 @@ def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
         key=lambda label: float(label["middle"]),
     )
     assert inner_labels
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     wsv209 = next((label for label in inner_labels if label.get("label_text") == "wsv209-like protein"), None)
     assert wsv209 is not None
@@ -3700,3 +3714,115 @@ def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytes
         gaps[spacing] = _smallest_row_gap_px(drawn[-1], total_length)
 
     assert gaps[3.0] > gaps[0.5] + 1.0
+
+
+_METAZOAN_MITOCHONDRIA = Path(__file__).parent.parent / "gbdraw" / "web" / "tutorial-data" / "metazoan-mitochondria-four"
+
+
+def _cli_outer_labels(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    gbk: Path,
+    *extra: str,
+) -> tuple[list[dict], str]:
+    """Run ``gbdraw circular --labels out`` in-process; return the drawn outer labels and stderr."""
+
+    import sys
+
+    from gbdraw import cli
+
+    drawn = _drawn_outer_labels(monkeypatch)
+    output = tmp_path / gbk.stem
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["gbdraw", "circular", "--gbk", str(gbk), "--labels", "out", *extra, "-o", str(output), "-f", "svg"],
+    )
+    cli.main()
+    return drawn[-1], capsys.readouterr().err
+
+
+def _clockwise_label_order(labels: list[dict]) -> list[str]:
+    """Label texts in the order their anchors appear clockwise from the top of the circle."""
+
+    def clockwise_from_top(label: dict) -> float:
+        return (math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"]))) + 90.0) % 360.0
+
+    return [str(label["label_text"]) for label in sorted(labels, key=clockwise_from_top)]
+
+
+def _is_cyclic_rotation(order: list[str], expected: list[str]) -> bool:
+    return len(order) == len(expected) and any(order[i:] + order[:i] == expected for i in range(len(order)))
+
+
+def _feature_order(labels: list[dict]) -> list[str]:
+    return [str(label["label_text"]) for label in sorted(labels, key=lambda label: float(label["middle"]))]
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("font_size", [None, "16"])
+def test_drosophila_outer_labels_keep_feature_order_across_the_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    font_size: str | None,
+) -> None:
+    """OV-1366 (Owner D-25 A): tRNA-Ile, the first feature after the origin, keeps its place before
+    tRNA-Gln and tRNA-Met; it was moved past ND2, its leader crossed three others, and the CLI warned."""
+
+    extra = () if font_size is None else ("--label_font_size", font_size)
+    labels, stderr = _cli_outer_labels(
+        monkeypatch, capsys, tmp_path, _METAZOAN_MITOCHONDRIA / "NC_024511.2.gb", *extra
+    )
+
+    order = _clockwise_label_order(labels)
+    assert _is_cyclic_rotation(order, _feature_order(labels)), order
+    ile = order.index("tRNA-Ile")
+    assert order[(ile + 1) % len(order)] == "tRNA-Gln"
+    assert order[(ile + 2) % len(order)] == "tRNA-Met"
+    total_length = len(SeqIO.read(str(_METAZOAN_MITOCHONDRIA / "NC_024511.2.gb"), "genbank").seq)
+    shapes = circular_labels_module.circular_label_shapes(labels, total_length)
+    assert crossing_pairs([shape.leader for shape in shapes]) == []
+    assert "do not fit" not in stderr
+
+
+def _clockwise_descents(labels: list[dict]) -> int:
+    """How often a label in list (feature) order sits counter-clockwise of the one before it, cyclically."""
+
+    angles = [(math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"]))) + 90.0) % 360.0 for label in labels]
+    return sum(1 for index, angle in enumerate(angles) if angle > angles[(index + 1) % len(angles)])
+
+
+@pytest.mark.circular
+def test_zebrafish_outer_labels_near_the_origin_stay_at_their_features(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """OV-1366 (Owner D-25 A): the hemisphere pass moved tRNA-Pro, the last label, across the origin
+    and out of order; the later passes restored the order by pushing tRNA-Thr and tRNA-Pro 10-17 degrees
+    counter-clockwise of their features. The pass now keeps the cyclic order, so both stay at their features."""
+
+    refine = circular_labels_module._refine_labels_to_preferred_hemisphere
+    added_descents: list[int] = []
+
+    def checked_refine(labels, *args, **kwargs):
+        before = _clockwise_descents(labels)
+        refined = refine(labels, *args, **kwargs)
+        added_descents.append(_clockwise_descents(refined) - before)
+        return refined
+
+    monkeypatch.setattr(circular_labels_module, "_refine_labels_to_preferred_hemisphere", checked_refine)
+    gbk = _METAZOAN_MITOCHONDRIA / "NC_002333.2.gb"
+    labels, _ = _cli_outer_labels(monkeypatch, capsys, tmp_path, gbk)
+
+    assert added_descents and max(added_descents) <= 0
+    order = _clockwise_label_order(labels)
+    assert _is_cyclic_rotation(order, _feature_order(labels)), order
+    assert order[(order.index("tRNA-Thr") + 1) % len(order)] == "tRNA-Pro"
+    total_length = len(SeqIO.read(str(gbk), "genbank").seq)
+    for label in labels:
+        if label["label_text"] in {"tRNA-Thr", "tRNA-Pro"}:
+            anchor = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"])))
+            assert _angle_diff(anchor, angle_from_middle(float(label["middle"]), total_length)) < 2.0, label["label_text"]
