@@ -48,7 +48,7 @@ assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sess
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
   context: { reason: 'SELECTED_PAIRS_NEED_PAIRWISE' } });
-assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all pairs, or choose Pairwise matches\.$/);
+assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all adjacent pairs, or choose Pairwise matches\.$/);
 assert.doesNotMatch(selectedPairs.summary, /does not run LOSAT/);
 // A PNG export never names the SVG embedding opt-out, which does not change PNG.
 const pngFont = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'helper', context: { reason: 'FONT_RASTER' } });
@@ -495,25 +495,27 @@ test('a Circular placement limited by the center reservation names that cause', 
 // `_InsideFitError`); the summary names them and offers their controls.
 test('a Circular placement names the room the GC rows keep inside it and their remedy', () => {
   const layout = (context) => roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context });
-  const gcWidths = 'or reduce GC Content Width or GC Skew Width \\(with Custom Track Slots on, the row widths\\)\\.';
+  // OV-1274 review item 6: each remedy is one whole sentence, after the sentence that introduces them.
+  const gcRemedies = 'To make room, do one of the following\\. Select Hide GC Content, or reduce GC Content Width \\(with Custom Track Slots'
+    + ' on, the row width\\)\\. Select Hide GC Skew, or reduce GC Skew Width \\(with Custom Track Slots on, the row width\\)\\.';
   const both = layout({ reason: 'DEFINITION_RESERVED', innerPx: 190, outerPx: 386, keptInsidePx: 67, keptInsideTracks: 'gc_content,gc_skew' });
   assert.equal(both.context.keptInsideTracks, 'gc_content,gc_skew');
   assert.match(both.summary, new RegExp('^A circular track does not fit\\. The center definition text limits the inside tracks\\. .* Available band: 190–386 px\\. '
     + 'Below it, 67 px are kept for the tracks inside it, among them GC content and GC skew\\. '
-    + `To make room, select Hide GC Content or Hide GC Skew, ${gcWidths}$`));
+    + `${gcRemedies}$`));
   // Review N-1: the Depth row that shares the room (tests/test_circular_definition_fit.py, lambda + Depth) is not
   // a named row, so the sentence does not give all of the room to the GC rows.
   const depth = layout({ reason: 'DEFINITION_RESERVED', innerPx: 213, outerPx: 386, keptInsidePx: 91, keptInsideTracks: 'gc_content,gc_skew' });
   assert.match(depth.summary, / Below it, 91 px are kept for the tracks inside it, among them GC content and GC skew\. To make room, /);
   const skew = layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34, keptInsideTracks: 'gc_skew' });
-  assert.match(skew.summary, / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it, among them GC skew\. To make room, select Hide GC Skew, or reduce GC Skew Width \(with Custom Track Slots on, the row width\)\.$/);
+  assert.match(skew.summary, / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it, among them GC skew\. To make room, do one of the following\. Select Hide GC Skew, or reduce GC Skew Width \(with Custom Track Slots on, the row width\)\.$/);
   // Room kept for other rows is a fact, without a remedy.
   assert.match(layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34 }).summary,
     / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it\.$/);
   // OV-1276: scale ticks that do not fit beside the definition text offer the scale's control.
   const ticks = layout({ reason: 'DEFINITION_RESERVED', innerPx: 123, outerPx: 386, slotTrack: 'ticks' });
   assert.equal(ticks.context.slotTrack, 'ticks');
-  assert.match(ticks.summary, / Available band: 123–386 px\. To make room, clear Show Coordinate Scale \(with Custom Track Slots on, remove the Ticks row\)\.$/);
+  assert.match(ticks.summary, / Available band: 123–386 px\. To make room, do the following\. Clear Show Coordinate Scale \(with Custom Track Slots on, remove the Ticks row\)\.$/);
   // Unknown or repeated names are dropped; nothing is left of a list without a known name.
   assert.equal(layout({ reason: 'CANNOT_FIT', keptInsideTracks: 'gc_skew,PRIVATE,gc_skew' }).context.keptInsideTracks, 'gc_skew');
   for (const keptInsideTracks of ['PRIVATE', '', ['gc_content'], 7]) {

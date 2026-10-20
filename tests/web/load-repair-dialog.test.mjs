@@ -1777,3 +1777,18 @@ test('the font question of a lossy Session comes after the repair dialog', async
   assert.deepEqual(await answered(true, true), { status: 'ok', asked: ['repairs', fonts] });
   assert.equal(state.drawings.linear.adv.font_family, "'Missing Probe Font'");
 });
+
+// Review L3 (D-17): a Session table's label in a repair line is a key of the error wording
+// owner (`SESSION_TABLE_LABELS`) and is shown in the UI language, inside the translated line.
+test('a table repair line shows the table label in the UI language', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+  try {
+    await setUiLocale('ja', async () => ({ default: { 'Specific colors': '«Specific colors»' } }));
+    const dialog = describeLoadRepairs([loadRepair({ code: 'table-row-joined', path: 'specific-colors', effect: 'changed', line: 3 }),
+      loadRepair({ code: 'table-row-dropped', path: 'unknown-table', effect: 'dropped', line: 2 })]);
+    assert.deepEqual(dialog.items, ['«Specific colors»: line 3 had extra cells, joined into the last column with one space.',
+      'unknown-table: line 2 lacked a required column and was dropped.']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});

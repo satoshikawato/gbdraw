@@ -34,9 +34,9 @@ const REASONS = Object.freeze({
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
   ANNOTATION_SET: 'Select an existing annotation set.', ANNOTATION_MARKS: 'Use supported annotation mark filters.',
   OVERFLOW: 'Choose error, compress, or clip.', LAYER: 'Choose foreground or underlay.',
-  OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an Overlay annotation track.',
+  OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an annotation track placed Overlay anchor (Circular) or On axis (Linear).',
   OVERLAY_SPAN: 'For Extend to, select an eligible enabled slot other than the anchor, or None.',
-  OVERLAY_SIDE: 'Use Overlay when an anchor or an Extend to slot is selected.',
+  OVERLAY_SIDE: 'Choose the placement Overlay anchor (Circular) or On axis (Linear) when an anchor or an Extend to slot is selected.',
   DRAW_ORDER: 'Place underlay annotations below the anchor and the Extend to slot, and foreground annotations above them.',
   TRACK_RENDERER: 'Choose a renderer supported by the current diagram mode.', TRACK_SIDE: 'Choose a side supported by the current diagram mode and renderer.',
   TRACK_PARAMS: 'Use the parameters supported by the selected renderer.', TRACK_AXIS: 'Select one eligible enabled feature track as the axis.',
@@ -81,11 +81,11 @@ const REASONS = Object.freeze({
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
   // A Selected plan with a LOSATP mode that compares every adjacent pair.
-  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
+  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all adjacent pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
   // The LOSATP converter named another derived identity than Generate looked up (run-analysis.js).
   DERIVED_KEY_MISMATCH: 'The converted LOSATP comparison does not match the settings it was looked up with. If Retry fails the same way, save the Session and report the problem.',
-  RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
+  RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for comparison rings.',
   RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',
   SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',
   UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
@@ -259,14 +259,14 @@ export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default c
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // OV-1274, OV-1276: the Circular track rows with an off control that a failed
 // placement names (`keptInsideTracks`, `slotTrack`; gbdraw/diagrams/circular/radial_layout.py
-// `SWITCHED_TRACK_IDS`), the control that turns each off, and the setting that narrows it.
-// `verb` is the phrase that turns the control off; tracks with the same verb in a row share it.
-/** @typedef {{ name: string, verb: string, control: string, width?: string }} SwitchedTrack */
+// `SWITCHED_TRACK_IDS`), and the remedy: one sentence that names the control that turns it
+// off and the setting that narrows it, with the number of choices it offers.
+/** @typedef {{ name: string, remedy: string, options: number }} SwitchedTrack */
 /** @type {Readonly<Record<string, SwitchedTrack>>} */
 const SWITCHED_TRACKS = Object.freeze({
-  gc_content: { name: 'GC content', verb: 'select {control}', control: 'Hide GC Content', width: 'GC Content Width' },
-  gc_skew: { name: 'GC skew', verb: 'select {control}', control: 'Hide GC Skew', width: 'GC Skew Width' },
-  ticks: { name: 'the scale', verb: 'clear {control}', control: 'Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row)' }
+  gc_content: { name: 'GC content', remedy: 'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).', options: 2 },
+  gc_skew: { name: 'GC skew', remedy: 'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).', options: 2 },
+  ticks: { name: 'the scale', remedy: 'Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).', options: 1 }
 });
 // The sentences of a summary other than the table rows above: each is one part
 // (`ErrorTextPart`) and a catalog key; `{name}` takes the part's value.
@@ -280,10 +280,9 @@ const PHRASES = Object.freeze({
   sessionUnsupported: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
   keptBelow: 'Below it, {px} px are kept for the tracks inside it.',
   keptBelowAmong: 'Below it, {px} px are kept for the tracks inside it, among them {tracks}.',
-  makeRoom: 'To make room, {actions}.',
-  makeRoomWidth: 'To make room, {actions}, or reduce {widths} (with Custom Track Slots on, the row width).',
-  makeRoomWidths: 'To make room, {actions}, or reduce {widths} (with Custom Track Slots on, the row widths).',
-  and: '{first} and {second}', or: '{first} or {second}',
+  // OV-1389 review item 6: each remedy is a whole sentence of `SWITCHED_TRACKS`, after one of these.
+  makeRoom: 'To make room, do the following.', makeRoomAny: 'To make room, do one of the following.',
+  and: '{first} and {second}',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a supported Session file or recreate it with the current writer.',
@@ -330,12 +329,32 @@ const renderPart = (part, translate) => {
 export const renderErrorText = (parts, translate = (text) => text, separator = ' ') =>
   parts.map((part) => renderPart(part, translate)).join(separator);
 /**
- * Joins parts with `and` or `or` as English does: "A or B or C".
+ * The leading whole parts whose English text fits in `limit` characters, so the
+ * summary and the shown text are one cut; a first part longer than `limit` is
+ * cut as English text, shown as written.
+ * @param {readonly ErrorTextPart[]} parts
+ * @param {number} limit
+ * @returns {ErrorTextPart[]}
+ */
+const capParts = (parts, limit) => {
+  /** @type {ErrorTextPart[]} */
+  const kept = [];
+  let length = -1;
+  for (const part of parts) {
+    length += 1 + renderPart(part, (text) => text).length;
+    if (length > limit) break;
+    kept.push(part);
+  }
+  if (kept.length || !parts.length) return kept;
+  const cut = renderErrorText(parts).slice(0, limit);
+  return cut ? [{ text: cut, verbatim: true }] : [];
+};
+/**
+ * Joins parts with `and` as English does: "A and B and C".
  * @param {ErrorTextPart[]} items at least one
- * @param {'and' | 'or'} conjunction
  * @returns {ErrorTextPart}
  */
-const listPart = (items, conjunction) => items.reduce((first, second) => ({ text: PHRASES[conjunction], params: { first, second } }));
+const andPart = (items) => items.reduce((first, second) => ({ text: PHRASES.and, params: { first, second } }));
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
@@ -686,23 +705,12 @@ const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   const kept = keptInsidePx !== undefined && keptInsideTracks ? keptInsideTracks.split(',') : [];
   /** @type {ErrorTextPart[]} */
   const parts = keptInsidePx === undefined ? [] : [kept.length
-    ? { text: PHRASES.keptBelowAmong, params: { px: keptInsidePx, tracks: listPart(kept.map((track) => ({ text: SWITCHED_TRACKS[track].name })), 'and') } }
+    ? { text: PHRASES.keptBelowAmong, params: { px: keptInsidePx, tracks: andPart(kept.map((track) => ({ text: SWITCHED_TRACKS[track].name }))) } }
     : { text: PHRASES.keptBelow, params: { px: keptInsidePx } }];
   const tracks = [...new Set([...(slotTrack ? [slotTrack] : []), ...kept])].map((track) => SWITCHED_TRACKS[track]);
   if (!tracks.length) return parts;
-  // Tracks in a row with the same verb share it: "select A or B or clear C".
-  /** @type {{ verb: string, controls: ErrorTextPart[] }[]} */
-  const groups = [];
-  for (const track of tracks) {
-    const last = groups[groups.length - 1];
-    if (last?.verb === track.verb) last.controls.push({ text: track.control });
-    else groups.push({ verb: track.verb, controls: [{ text: track.control }] });
-  }
-  const actions = listPart(groups.map(({ verb, controls }) => ({ text: verb, params: { control: listPart(controls, 'or') } })), 'or');
-  const widths = tracks.flatMap((track) => (track.width ? [{ text: track.width }] : []));
-  parts.push(widths.length
-    ? { text: widths.length > 1 ? PHRASES.makeRoomWidths : PHRASES.makeRoomWidth, params: { actions, widths: listPart(widths, 'or') } }
-    : { text: PHRASES.makeRoom, params: { actions } });
+  const options = tracks.reduce((count, track) => count + track.options, 0);
+  parts.push({ text: options > 1 ? PHRASES.makeRoomAny : PHRASES.makeRoom }, ...tracks.map((track) => ({ text: track.remedy })));
   return parts;
 };
 
@@ -776,10 +784,10 @@ export const normalizeUserFacingError = (value, {
   // every other Session reason keeps its correction.
   const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
     && field === 'schema' && reason === 'JSON_FORMAT';
-  result.summaryParts = notASession ? [{ text: PHRASES.notASession }]
-    : pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece));
-  result.summary = renderErrorText(result.summaryParts)
-    .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
+  result.summaryParts = capParts(notASession ? [{ text: PHRASES.notASession }]
+    : pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece)),
+  Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
+  result.summary = renderErrorText(result.summaryParts);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
     ...result.secondary.map((item) => `Secondary: ${item.code} / ${item.stage}`)].join('\n');

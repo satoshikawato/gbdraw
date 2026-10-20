@@ -12,7 +12,7 @@ import test from 'node:test';
 import { diagnosticError, generationRecoveryGuidance, liveEditFailure, normalizeUserFacingError, operationErrorTitle, renderErrorText }
   from '../../gbdraw/web/js/utils/error-normalization.js';
 import { errorText } from '../../gbdraw/web/js/utils/error-text.js';
-import { SOURCE_LOCALE, setUiLocale, tm } from '../../gbdraw/web/js/utils/i18n.js';
+import { SOURCE_LOCALE, setUiLocale, t, tm } from '../../gbdraw/web/js/utils/i18n.js';
 import { errorTextKeys, errorVocabulary } from './helpers/error-text-keys.mjs';
 
 const vocabulary = await errorVocabulary();
@@ -94,18 +94,19 @@ test('a locale translates each part and the labels inside it; values stay as wri
     const room = normalizeUserFacingError({ code: 'TRACK_LAYOUT',
       context: { reason: 'CANNOT_FIT', keptInsidePx: 34, keptInsideTracks: 'gc_content,gc_skew', slotTrack: 'ticks',
         labelFitCounts: 'Overlapping label pairs: 2.' } });
+    const remedies = ['Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).',
+      'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).',
+      'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).'];
     assert.equal(room.summary, 'A circular track does not fit. Move the track, reduce widths, disable conflicting labels,'
       + ' or place it on the other side of the Axis. Below it, 34 px are kept for the tracks inside it, among them GC content'
-      + ' and GC skew. To make room, clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row) or select'
-      + ' Hide GC Content or Hide GC Skew, or reduce GC Content Width or GC Skew Width (with Custom Track Slots on, the row'
-      + ' widths). Overlapping label pairs: 2.');
-    // Lists are nested `{first} and {second}` / `{first} or {second}` parts; tracks in a row
-    // with the same verb share one verb part. Python's label fit counts are shown as sent.
+      + ` and GC skew. To make room, do one of the following. ${remedies.join(' ')} Overlapping label pairs: 2.`);
+    // A list of names is nested `{first} and {second}` parts. Each remedy is a whole sentence with
+    // its control names inside it, so a translator never gets a fragment (review item 6).
+    // Python's label fit counts are shown as sent.
     assert.equal(errorText(room.summaryParts), '«A circular track does not fit.» «Move the track, reduce widths, disable'
       + ' conflicting labels, or place it on the other side of the Axis.» «Below it, 34 px are kept for the tracks inside it,'
-      + ' among them ««GC content» and «GC skew»».» «To make room, ««clear «Show Coordinate Scale (with Custom Track Slots on,'
-      + ' remove the Ticks row)»» or «select ««Hide GC Content» or «Hide GC Skew»»»», or reduce ««GC Content Width» or'
-      + ' «GC Skew Width»» (with Custom Track Slots on, the row widths).» Overlapping label pairs: 2.');
+      + ` among them ««GC content» and «GC skew»».» «To make room, do one of the following.» ${remedies.map((text) => `«${text}»`).join(' ')}`
+      + ' Overlapping label pairs: 2.');
     const table = normalizeUserFacingError({ code: 'TABLE_INVALID', context: { sessionTable: 'default-colors', row: 2 } });
     assert.match(errorText(table.summaryParts), /«Session table: «Default colors».»/);
     const live = liveEditFailure(normalizeUserFacingError({ code: 'WORKER_INIT' }));
@@ -126,4 +127,65 @@ test('a template shows an error model through errorText, never its English summa
   assert.deepEqual(bindings, []);
   assert.match(html, /errorText\(labelReflowLastError\.noteParts\)/);
   assert.match(html, /errorText\(model\.summaryParts\)/);
+});
+
+// Review L4: i18n.js `t` / `tm` and the normalizer's `renderErrorText` fill `{name}` placeholders
+// the same way, in English and in a locale that moves them, for the same vectors.
+test('i18n substitution and the error text renderer fill the same placeholders the same way', async () => {
+  const vectors = [
+    ['Line {row}.', { row: 3 }], ['Pair: #{query} to #{subject}.', { query: 1, subject: 2 }], ['Sequence {n}.', { n: 0 }],
+    ['Field: {field}.', {}], ['{a} and {a}', { a: 'x' }], ['Feature: {feature}.', { feature: '{row} $& $1' }],
+    ['At {0} and { row } and {row}.', { row: 1 }], ['Value {toString}.', {}]
+  ];
+  const catalog = Object.freeze(Object.fromEntries(vectors.map(([text]) => [text, `[${[...text.matchAll(/\{[^}]*\}/g)].reverse().join('|')}]`])));
+  for (const [text, params] of vectors) assert.equal(renderErrorText([{ text, params }]), t(text, params), text);
+  try {
+    await setUiLocale('ja', async () => ({ default: catalog }));
+    for (const [text, params] of vectors) {
+      assert.ok(tm(text, params).startsWith('['), 'the locale catalog is read');
+      assert.equal(renderErrorText([{ text, params }], tm), tm(text, params), text);
+    }
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// L2: the 1000-character cap keeps whole parts, so the English summary, the shown text, and the
+// live-edit note are one cut and no sentence ends in the middle.
+test('a summary above the cap keeps whole sentences and its display equals it', () => {
+  const context = { reason: 'DERIVED_KEY_MISMATCH', field: 'window', inputOrdinal: 2, row: 3, column: 4, slotIndex: 0, seriesIndex: 1,
+    diagramMode: 'circular', sessionTable: 'label-overrides', queryRecordIndex: 0, subjectRecordIndex: 1, featureCount: 3,
+    featureCaption: 'dnaA chromosomal replication initiator protein DnaA, ATPase domain (CDS) [1]',
+    innerPx: 181, outerPx: 209, keptInsidePx: 34, keptInsideTracks: 'gc_content,gc_skew', slotTrack: 'ticks',
+    labelFitCounts: 'Overlapping label pairs: 12. Crossing leader pairs: 30. Labels outside: 4.',
+    exceptionType: 'ValueError', positionUnit: 'python-character', position: 4, columnCount: 5, recordCount: 2 };
+  const model = normalizeUserFacingError({ code: 'TRACK_LAYOUT', context });
+  const dropped = ' Python exception: ValueError.';
+  assert.ok(model.summary.length <= 1000 && model.summary.length + dropped.length > 1000, `${model.summary.length}`);
+  assert.ok(model.summary.endsWith(' Loaded records: 2.'), model.summary.slice(-40));
+  assert.equal(errorText(model.summaryParts), model.summary);
+  const live = liveEditFailure(model);
+  assert.equal(errorText(live.noteParts), live.note);
+  const short = normalizeUserFacingError({ code: 'TRACK_LAYOUT', context }, { summaryLimit: 90 });
+  assert.equal(short.summary, 'A circular track does not fit. Diagram: Circular. Session table: Label overrides.');
+  assert.equal(errorText(short.summaryParts), short.summary);
+  // A first sentence longer than the limit is cut as English text and shown as written.
+  const cut = normalizeUserFacingError({ code: 'TRACK_LAYOUT' }, { summaryLimit: 8 });
+  assert.deepEqual(cut.summaryParts, [{ text: 'A circul', verbatim: true }]);
+  assert.equal(cut.summary, 'A circul');
+});
+
+// OV-1389: the overlay corrections name the placement options a track row offers, as the
+// template labels them, and the LOSAT ring correction uses the UI's name of the rings.
+test('the overlay and ring corrections name the options and rings the UI shows', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<option value="overlay">\{\{ t\('Overlay anchor'\) \}\}<\/option>/, 'Circular annotation placement');
+  assert.match(html, /<option value="overlay">\{\{ t\('On axis'\) \}\}<\/option>/, 'Linear track placement');
+  assert.match(html, /comparison rings/);
+  const summary = (reason) => normalizeUserFacingError({ code: 'TRACK_INVALID', context: { reason } }).summary;
+  for (const reason of ['OVERLAY_SIDE', 'OVERLAY_ANCHOR']) {
+    assert.match(summary(reason), /Overlay anchor \(Circular\) or On axis \(Linear\)/, reason);
+    assert.doesNotMatch(summary(reason), /Use Overlay|an Overlay annotation/, reason);
+  }
+  assert.match(summary('RING_LOSAT_PROGRAM'), /for comparison rings\.$/);
 });
