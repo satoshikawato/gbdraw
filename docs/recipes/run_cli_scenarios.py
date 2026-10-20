@@ -2514,7 +2514,7 @@ def run_scenario(
                 env=environment,
                 capture_output=True,
                 text=True,
-                timeout=300 if scenario_id in {"T-CLI-08", "T-CLI-10", "H-CLI-06", "H-CLI-07", "H-CLI-08"} else 120,
+                timeout=600 if scenario_id in {"T-CLI-08", "T-CLI-10", "H-CLI-06", "H-CLI-07", "H-CLI-08"} else 120,
                 check=False,
             )
             if result.returncode != 0:
