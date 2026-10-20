@@ -12,7 +12,7 @@ import {
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
-import { t } from '../../utils/i18n.js';
+import { joinSentences, t } from '../../utils/i18n.js';
 /** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from '../../services/feature-placement.js' */
 /** @import { CanonicalFeatureOverride } from '../../contracts/request.generated.js' */
@@ -153,7 +153,7 @@ export const createFeatureEditTableActions = ({
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
       showNotice({
-        text: `${t('Loaded {count} row(s).', { count: rows.length + unmatchedRows.length })} ${t('Applied {count} feature edit(s).', { count: rows.length })}`,
+        text: joinSentences(t('Loaded {count} row(s).', { count: rows.length + unmatchedRows.length }), t('Applied {count} feature edit(s).', { count: rows.length })),
         items: unmatchedRows.length > 0
           ? [t('{count} row(s) were not applied: no matching record, or no matching feature in that record.', { count: unmatchedRows.length })]
           : []

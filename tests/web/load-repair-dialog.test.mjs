@@ -21,8 +21,8 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-// Save Session downloads through a link (G2 saves the loaded Session).
-globalThis.document = { createElement: () => ({ click: () => {} }) };
+// Save Session downloads through a link (G2 saves the loaded Session); setUiLocale sets the page's lang.
+globalThis.document = { createElement: () => ({ click: () => {} }), documentElement: { setAttribute: () => {} } };
 installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
@@ -435,7 +435,9 @@ test('no module outside utils/load-repairs.js words what Load could not restore 
     'had a color the table does not accept',
     'cannot be fully restored'
   ];
-  const owners = modules('').filter((path) => texts.some((text) => readFileSync(new URL(path, root), 'utf8').includes(text)));
+  // The generated translation catalogs repeat the English as their keys; they word nothing.
+  const owners = modules('').filter((path) => !path.startsWith('utils/i18n-catalogs/'))
+    .filter((path) => texts.some((text) => readFileSync(new URL(path, root), 'utf8').includes(text)));
   assert.deepEqual(owners, ['utils/load-repairs.js']);
 });
 

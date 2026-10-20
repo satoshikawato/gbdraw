@@ -1,7 +1,7 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
-import { msg, t, tm } from '../../utils/i18n.js';
+import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 /** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
 /** @import { SessionBusy } from '../../state.js' */
@@ -100,8 +100,8 @@ export const createFeatureRecordRotationAction = ({
     // The bound input can differ before the popup opens (a File replaced
     // after Generate, or a Session that needs one Generate), not only after.
     if (typeof isCurrentFeature === 'function' && !isCurrentFeature(resolved)) {
-      throw new Error(t("This feature's input file differs from the one the current Result was drawn from.")
-        + ' ' + t('Generate Diagram to use the current file.'));
+      throw new Error(joinSentences(t("This feature's input file differs from the one the current Result was drawn from."),
+        t('Generate Diagram to use the current file.')));
     }
     return resolved;
   };
@@ -610,10 +610,10 @@ export const createFeatureRecordRotationWorkflow = ({
       draft.status = t('Record rotation applied and regenerated.');
       draft.statusKind = 'success';
     } else if (outcome?.status === 'canceled') {
-      draft.status = `${t('Record rotation canceled.')} ${kept}`;
+      draft.status = joinSentences(t('Record rotation canceled.'), kept);
       draft.statusKind = 'idle';
     } else {
-      draft.status = `${unlessShown(failure, t('Record rotation failed.'))} ${kept}`;
+      draft.status = joinSentences(unlessShown(failure, t('Record rotation failed.')), kept);
       draft.statusKind = 'error';
     }
     return outcome;

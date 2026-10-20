@@ -16,7 +16,7 @@ import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { t, tn } from '../utils/i18n.js';
+import { joinSentences, t, tn } from '../utils/i18n.js';
 
 // The editor keeps every id valid: an empty id takes the default and a used
 // one a numbered suffix. The panel notice names the id it stored (FL-14).
@@ -260,8 +260,8 @@ export const createAnnotationEditor = ({
   /** @param {number} setCount */
   const askReplaceAll = (setCount) => askChoice({
     title: t('Remove all annotation sets?'),
-    description: t('The imported table has no annotation rows.') + ' '
-      + tn(setCount, 'Importing it removes all {count} annotation set.', 'Importing it removes all {count} annotation sets.'),
+    description: joinSentences(t('The imported table has no annotation rows.'),
+      tn(setCount, 'Importing it removes all {count} annotation set.', 'Importing it removes all {count} annotation sets.')),
     actions: [{ id: 'remove', label: t('Remove all sets'), tone: 'danger' }]
   });
   /** @param {string} text */
@@ -284,10 +284,10 @@ export const createAnnotationEditor = ({
       encodeAnnotationTableWithNotice(drawing.annotationSets, { drawnPlacement })
     );
     downloadTextFile('annotations.tsv', text);
-    const notice = [
+    const notice = joinSentences(...[
       placed > 0 ? t('{count} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.', { count: placed }) : '',
       skipped > 0 ? t('{count} annotation(s) of selected features that the current diagram does not draw were not exported.', { count: skipped }) : ''
-    ].filter(Boolean).join(' ');
+    ].filter(Boolean));
     onImportNotice?.(notice);
   };
   /** @param {{ target?: HTMLInputElement | null } | null | undefined} event The change event of the file input. */

@@ -1,0 +1,386 @@
+en	ja	zh-Hans	zh-Hant	note
+1-based, inclusive	1始まり、両端を含む	从1开始，包含两端	從1開始，包含兩端	Region and annotation coordinates (Use 1-based inclusive coordinates).
+About & Citation	概要と引用	关于与引用	關於與引用	[medium] Rail-only section (privacy, how to cite, license). Rail short name About: 概要 / 关于 / 關於. ja alternative 情報と引用.
+Above	上側	上方	上方	Linear track layout: Above | Features on axis | Below; Above axis; Above Feature (label placement).
+Accession	アクセッション番号	登录号	登錄號	Record Labels: Accession; record popup fact. s2twp yields 登入號 (login). [R2] DDBJ term.
+Action (rule table)			動作	[R2] Only the Action column of the rule table; Row actions and operation stay 操作.
+Add	追加	添加	新增	Add, Add track, Add sequence, + Add Rule, Add Seq. s2twp already yields 新增.
+Advanced	詳細設定	高级	進階	Advanced comparison and layout; rail short name Advanced. ja: not 詳細, which is Details. Taiwan 進階; s2twp yields 高級.
+Advanced comparison and layout	比較とレイアウトの詳細設定	高级比较与布局	進階比較與版面配置	Linear section title (rail short name Advanced: 詳細設定 / 高级 / 進階).
+Align	整列	对齐	對齊	Button Align… and Align records to this group; the verb of Alignment (Similarity group).
+Aligned length	合計アラインメント長（LOSATPアンカー）			[R2] ja: LOSATP anchor total, a different concept from 整列 (Similarity group). Block column: 合計アラインメント長.
+Alignment (sequence)	アラインメント	比对	比對	BLAST or LOSAT alignments, Alignment length. ja follows Japanese textbooks (配列アラインメント). Alignment length: アラインメント長 / 比对长度 / 比對長度.
+Alignment (Similarity group)	整列	对齐	對齊	Similarity Group alignment in Linear view: Review alignment, Reset alignment, Clear alignment, Similarity alignment applied. docs/internal writes 整列.
+Ambiguous	複数のレコードに一致	匹配多条记录	不明確	Record selector matched multiple records; ambiguity opens review. ja: Microsoft style writes あいまい; docs/internal writes 曖昧. [R2] State the cause in a sentence (matches several records or sources) instead of 曖昧. [R2] Record selector / ID matched several records.
+Amino acid	アミノ酸配列	氨基酸序列	胺基酸序列	Popup tab and search field Amino acid. Taiwan 胺基酸; s2twp already yields it.
+Anchor	アンカー	锚点	錨點	[seed] The drawable slot an Overlay annotation track sits on (Select anchor, Cover anchor); also the gene a record is aligned on in Review alignment. See Anchor (collinear).
+Anchor (collinear)	アンカー	锚点	錨點	Hit pairs that seed Collinear blocks (Anchor mode, Collinear minimum anchors); same words as Anchor.
+Annotation	アノテーション	注释	註解	[seed] [medium] Region Annotations; 註解 in Taiwan, 註釋 elsewhere, and s2twp yields 註釋. ja: docs/internal also writes 注釈; keep the seed.
+Annotation set	アノテーションセット	注释集	註解集	Add set, Duplicate set, Select annotation set.
+Applied	適用済み	已应用	已套用	Similarity alignment applied.
+Applies on Generate	生成時に適用	生成时应用	產生時套用	Operation label beside settings.
+Apply	適用	应用	套用	Apply, Apply Label, Apply and Generate, Apply when I Generate. Microsoft Taiwan 套用; s2twp yields 應用.
+Apply required	適用が必要	需要应用	需要套用	Review alignment header label.
+Arrow	矢印	箭头	箭頭	Feature rendering Arrow | Rectangle | Underlay; Arrow Geometry; Arrow direction in Review alignment.
+Arrow head	矢じり	箭头头部	箭頭頭部	[medium] Head Length Ratio (Arrow Geometry).
+Arrow shaft	矢印の軸	箭身	箭身	[medium] Shaft Width Ratio. ja alternative 軸 would collide with Axis; 本体 is a plainer alternative. [R2] 矢柄 is archery jargon.
+AT	AT	AT	AT	[seed; split] As in AT skew; any two-letter dinucleotide code (GC, AT) stays Latin.
+AT skew	AT skew	AT skew	AT skew	Latin in all locales.
+Auto	自動	自动	自動	Auto option and Auto ({value}); Auto Reflow; blank fields mean Auto.
+Available	利用可能	可用	可用	Available ({n}) threads; Available after a LOSAT comparison has run.
+Axis	軸	轴	軸	Record axis, depth axis, percent axis (Axis Gap, Axis Stroke Color, Move above Axis, Track on Axis).
+Axis & Scale	軸とスケール	轴与比例尺	軸與比例尺	Section title, one card per mode (rail short name Axis: 軸 / 轴 / 軸).
+Bakta	Bakta	Bakta	Bakta	Annotation tool and preset scheme name; Latin in all locales. The gloss Bakta (COG via note) keeps its parenthesis as written.
+Band	帯	带区	帶區	[review] zh: annotation mark Band (annotation lane), feature band, Available band (px). zh alternatives 带, 条带 (taken by Ribbon).
+Basic	基本	基本	基本	Card docked under Input (Output Prefix, Species, Strain, Rich Feature Popup).
+Batch output	一括出力	批量输出	批次輸出	All records (separate diagrams) batch output. ja: docs/internal writes 一括 33 times, バッチ 8. s2twp already yields 批次.
+Below	下側	下方	下方	Linear track layout and slot side.
+Bitscore	Bitscore	Bitscore	Bitscore	Latin in all locales (BLAST column bitscore). Practitioners also write ビットスコア and 比特分数; Latin matches the table column.
+BLAST	BLAST	BLAST	BLAST	[seed; split] Includes NCBI BLAST+, BLAST TSV and BLAST outfmt 6/7, which stay as written. Upload BLAST TSV: BLAST TSVをアップロード / 上传BLAST TSV / 上傳BLAST TSV.
+blastn/blastp	blastn/blastp	blastn/blastp	blastn/blastp	Latin in all locales; program and task names (LOSATN task blastn, Protein BLASTP).
+Block	ブロック	区块	區塊	Collinear blocks, Min block genes, block span, block popup.
+bp	bp	bp	bp	Unit; Latin in all locales; keep the source spacing (100 bp, Feature overlap tolerance (bp)).
+Browse	参照	浏览	瀏覽	Click to Browse (upload zone): クリックして参照 / 点击浏览 / 點選以瀏覽. Windows ja uses 参照.
+Browser	ブラウザ	浏览器	瀏覽器	Long-vowel rule (docs/internal mostly writes ブラウザ). [R1] Written without the long vowel mark, like docs/internal.
+Busy	処理中	处理中	處理中	Busy reasons (Undo or Redo in progress. Retry after it finishes.); aria-busy dialogs.
+Cancel	キャンセル	取消	取消	Every dialog's Cancel.
+Candidate	候補	候选	候選	Alignment candidates (Several candidates, No usable candidate). Group representative: 代表 / 代表 / 代表.
+Canvas	キャンバス	画布	畫布	Multi-Record Canvas, Canvas padding, the preview canvas.
+CDS	CDS	CDS	CDS	Latin in all locales: an INSDC feature type, like every other feature type.
+Checkpoint	チェックポイント	检查点	檢查點	History checkpoints; rare in visible text.
+Choose	選択	选择	選擇	Choose records…, Choose file, Choose a fix. ja and zh-Hans share the word of Select.
+Circular	環状	环状	環狀	[seed; split from Circular / Linear] [medium] Diagram mode as a noun (mode switch, Diagram: Circular.). ja: docs/internal also writes 円形; keep the seed. Circular record (topology checkbox) uses the same word. [R2] ja diagram-mode modifier: 環状図の.
+Clear	クリア	清除	清除	Clear, Clear All, Clear Cache, Clear comparison, Clear search, Clear alignment.
+Click	クリック	点击	點選	Click to Browse; click Generate. s2twp already yields 點選.
+Clip (overflow)	クリップ	裁剪	裁剪	Overflow option clip: drawing is cut at the reserved extent. Not Crop.
+Clipping (value range)	クリッピング	截断	截斷	Depth or GC values limited to min/max (Minimum depth for clipping and normalization).
+Close	閉じる	关闭	關閉	Close, Close section, Close editor; also Dismiss notice.
+Collapse	折りたたむ	折叠	摺疊	Collapse settings to icons. s2twp already yields 摺疊.
+Collinear	Collinear	共线性	共線性	[seed; split] [R2] zh: 共线性 / 共線性 in every key; collinear_* identifiers stay Latin. ja stays Collinear (Collinearブロック).
+Color	色	颜色	顏色	Color, Line color, Color mode, Color rule.
+Color table	カラーテーブル	颜色表	顏色表	The TSV of feature-type colors (-d, -t color table); Default colors table.
+Colors	色	颜色	顏色	Section title Colors (rail short name Colors); same words as Color.
+Column	列	列	欄	Table column (Required columns: {n}), Lock Definition Column, Column Gap Ratio. Taiwan column = 欄; s2twp keeps 列.
+Command	コマンド	命令	指令	Copy command, Copy exact replay command, CLI command. Taiwan 指令; s2twp keeps 命令.
+Compare (rail short name)	比較	比较	比較	Rail short name of Comparison (Linear) and Pairwise Comparisons (Circular).
+Comparison	比較	比较	比較	[seed] Comparison section and the links between records (No comparison, Clear comparison, comparison ring).
+Compress	圧縮	压缩	壓縮	Overflow option; rows compressed to fit.
+Confidence			信賴度	[R2] zh-Hant only.
+Configuration	構成	配置	組態	[medium] Configuration overrides and paths (Remove unknown configuration overrides); the paths stay Latin. ja: not 設定, which is Settings. Microsoft Taiwan 組態; s2twp yields 配置.
+Conservation	保存性	保守性	保守性	[seed] Conservation rings in Circular; conservation_* setting names stay Latin.
+Coordinates	座標	坐标	座標	Target kind Coordinates, Table coordinates, Length / Coordinates. s2twp already yields 座標.
+Copy	コピー	复制	複製	Copy, Copy details, Copy diagnostics, Copy table, Copy command.
+Coverage	深度	深度	深度	Read-depth coverage (depth coverage axis, x coverage units such as 10x). [R1] depth coverage and x coverage are 深度; a quantity inside a sentence is リード深度. [R1] depth coverage -> 深度. [R1] depth coverage -> 深度.
+Crop	切り出し	截取	擷取	Displayed sub-region of a record (Single-record crop, orientation and titles). Not Clip. s2twp already yields 擷取.
+Cross-origin isolated	クロスオリジン分離	跨源隔离	跨來源隔離	This page is not cross-origin isolated (threaded LOSAT). Taiwan MDN 跨來源; s2twp keeps 跨源.
+Curve	曲線	曲线	曲線	Match style Curve.
+Custom	カスタム	自定义	自訂	Custom badge, Custom position, Custom direction choice. Taiwan 自訂; s2twp yields 自定義.
+Custom Track Slots	カスタムトラックスロット	自定义轨道槽位	自訂軌道槽位	Layout panel; Help: Custom Track Slots.
+Data	データ	数据	資料	ja: established form without the long vowel. Taiwan 資料, Hong Kong 數據; s2twp already yields 資料.
+DDBJ	DDBJ	DDBJ	DDBJ	Latin in all locales.
+Decoration	装飾	装饰元素	裝飾元素	[medium] Legend, plot title or Linear scale placed on the canvas (decoration placement). docs/internal writes 装飾.
+Default	既定	默认	預設	[seed changed by Owner D-13, 2026-10-19: 既定, not デフォルト; docs/internal writes 既定 or 既定値 366 times, as Windows does] Reset to default: 既定に戻す / 恢复默认 / 恢復預設. Auto (Default): 自動（既定）.
+Default colors	既定の色	默认颜色	預設顏色	DEFAULT COLORS heading; one color per feature type.
+Definition	定義文	定义	定義	[medium] Organism and strain lines of a record (Lock Definition Column, Definition text, Default definition for file). docs/internal writes 定義文 and 定義.
+Delete	削除	删除	刪除	Delete rule, Delete set, Delete settings, Deleted items.
+Depth (coverage)	深度	深度	深度	[seed] Read depth: Depth TSV, Depth series, Depth Window, Depth Axis, Show Depth. [R1, D-27] ja: the Depth input file (Depth TSV / Depth file) is リード深度TSV; every other Depth (track, axis, series, window) is 深度.
+Details	詳細	详细信息	詳細資訊	Details disclosure of an error and the Details tab of the feature popup. Technical details: 技術的な詳細 / 技术详情 / 技術詳細資訊.
+Diagnostics	診断情報	诊断信息	診斷資訊	Copy diagnostics, Select diagnostics, Safe diagnostics. The diagnostics text itself stays English.
+Diagram	図	图谱	圖譜	[medium] The generated genome map (Generate Diagram, diagram mode, Displayed Result). zh alternatives 图, 示意图; 图谱 follows 基因组图谱.
+Diagram engine	描画エンジン	绘图引擎	繪圖引擎	Python renderer behind the Worker (The diagram engine failed while drawing this diagram).
+Dialog	ダイアログ	对话框	對話方塊	Choice dialogs (Remove the whole file?, Labels do not fit). s2twp already yields 對話方塊.
+Dinucleotide	二塩基	二核苷酸	二核苷酸	Dinucleotide field (GC, AT) and slot setting. ja alternative ジヌクレオチド; the seed uses 二塩基含量. [R2] Not changed. The English side does not match the implementation (see the round-2 source_issues); change both together.
+Dinucleotide content / skew	二塩基含量 / スキュー	二核苷酸含量 / 偏斜	二核苷酸含量 / 偏斜	[seed] Section title (written Dinucleotide content/skew). GC skew itself stays Latin in all locales. Rail short name: see GC / skew (rail short name).
+Direction	方向	方向	方向	Display direction in Review alignment (Arrow direction: Keep | Right → | Left ←; Reset directions).
+Disable	無効にする	禁用	停用	Verb; as a state label see Disabled. Taiwan 停用; s2twp already yields it.
+Disabled	無効	已禁用	已停用	Slot state; disabled controls.
+Display start	表示開始位置	显示起始位置	顯示起始位置	The base drawn at 12 o'clock (Circular) or at the left edge; Reset start; Record starts at.
+Dock	ドッキング	停靠	停駐	A settings section shown beside the icon column (internal today). Microsoft Taiwan 停駐; s2twp keeps 停靠.
+Download	ダウンロード	下载	下載	Download TSV, Download reproducibility files.
+Draft	下書き	草稿	草稿	[medium] Settings draft, replacement draft, review draft, Unplaced draft. ja: docs/internal mostly writes draft in English, then 下書き (5) and ドラフト (2).
+Drag	ドラッグ	拖动	拖曳	Drag to resize, Drag a record, legend, title, or Linear scale. Taiwan 拖曳; s2twp keeps 拖動.
+Duplicate	複製	创建副本	建立副本	Duplicate set, slot Duplicate. Not Copy.
+E-value	E-value	E-value	E-value	Latin in all locales (BLAST column evalue). ja papers also write E値; zh 期望值 is a possible gloss.
+Edit	編集	编辑	編輯	Edit, Edit pattern, feature edits, Layout edit.
+Editor	エディター	编辑器	編輯器	Right drawer with the Legend, Features and Similarity groups tabs (Open editor, Close editor). Long-vowel rule: not エディタ.
+Eligible	対象となる	符合条件的	符合條件的	Select an eligible enabled anchor; each eligible record.
+Embed	埋め込む	嵌入	內嵌	Embed font in exported SVG; label rendering Embedded Only. Microsoft Taiwan 內嵌; s2twp keeps 嵌入.
+Enable	有効にする	启用	啟用	Verb; as a state label see Enabled.
+Enabled	有効	已启用	已啟用	Slot state Enabled | Disabled; eligible enabled anchor.
+Entry / item	項目（保存データの1件）		項目	[R2] A list item or one saved record. ja: the input-field entry このエントリ is kept.
+Error	エラー	错误	錯誤	Generation Error, Input error, Operation error, SVG export error.
+Exact reference	参照フィーチャー	指定参考	指定參考	[medium] The exact clicked feature used as the alignment reference (Select exact reference…). [R1] The feature the user picked as the alignment reference (not 厳密). [R1] The feature the user picked. [R1] The feature the user picked.
+Exact replay file	完全再現ファイル	精确重现文件	精確重現檔案	[medium] Run info: replay from the saved Session and analysis files. The row label Exact replay: 完全再現 / 精确重现 / 精確重現. Download reproducibility files: 再現用ファイルをダウンロード / 下载重现用文件 / 下載重現用檔案.
+Example	サンプル	示例	範例	Load example, Load an example, Choose an example (Gallery Sessions). Taiwan 範例; s2twp keeps 示例.
+Execution	実行方式	执行方式	執行方式	LOSAT Execution: Auto | Serial | Threaded. Total threads: 合計スレッド数 / 总线程数 / 總執行緒數.
+Expand	展開	展开	展開	Expand settings.
+Export	エクスポート	导出	匯出	[medium] SVG, PNG and PDF export; Export Label TSV. ja: docs/internal writes 書き出し 23 times and エクスポート never; Microsoft ja uses エクスポート.
+FASTA	FASTA	FASTA	FASTA	Latin in all locales (FASTA File, FASTA menu, FASTA of <member>).
+Feature	フィーチャー	特征	特徵	[seed] Annotation feature (CDS, gene, tRNA ...). Never 特徴 or 機能 in ja. Feature popup, Feature placement and Feature edits reuse it.
+Feature placement	フィーチャーの配置	特征放置	特徵放置	Popup Layout group; Selected feature placements; Reset {n} placements to Auto.
+Feature type	フィーチャータイプ	特征类型	特徵類型	[seed] Values (CDS, tRNA, rRNA) stay Latin. Features > Feature Types; the rows of Default colors. s2twp yields 特徵型別 (型別 = programming data type); keep 類型.
+Feature visibility	フィーチャーの表示状態	特征可见性	特徵可見性	Popup field and the Feature Visibility rules (Off hides the feature and leaves it out of protein comparisons).
+Features (section)	フィーチャー	特征	特徵	[review] ja: section title, rail short name and Editor tab. In the 60 px icon column the ja short name (6 glyphs at 10 px) overflows the 52 px button; PR-1 screenshots decide between a CSS adjustment and a shorter label.
+Field	フィールド	字段	欄位	Form field and BLAST outfmt field (# Fields: line); the error locator Field: <label>. s2twp already yields 欄位.
+File	ファイル	文件	檔案	File card (File 1, Remove File, File order, Move File up). Taiwan 檔案; s2twp already yields 檔案.
+Fill	塗り	填充	填色	Fill Color: 塗りの色 / 填充颜色 / 填色; Reset Fill Color.
+Filter	フィルター	筛选条件	篩選條件	Result filters, label filters, Default (feature filters). Microsoft zh uses 筛选 / 篩選.
+Fix	修正	修复	修正	[medium] Fix before Generate, Choose a fix, Fix (Labels do not fit dialog). s2twp yields 修復.
+Font	フォント	字体	字型	Font section. Taiwan 字型; s2twp already yields 字型.
+Font family	フォントファミリー	字体系列	字型家族	[medium] Installed font families; font_family stays Latin. s2twp yields 字型系列.
+Font size	フォントサイズ	字体大小	字型大小	Font size, Label Font Size, Default font size.
+Foreground	前景	前景	前景	Annotation layer Underlay | Foreground.
+Forward strand	+鎖	正链	正股	[medium] Show this feature on the forward strand. ja alternatives +鎖, フォワード鎖. [R1] Body text writes +鎖 / −鎖.
+Gallery	ギャラリー	示例库	範例庫	[medium] The gbdraw.app example gallery (Interactive Gallery, Gallery example, Gallery Session). Example titles from tutorial-data stay English.
+Gap	ギャップ	间隙	間隙	inner gap, outer gap, Axis Gap, Record gap (px), Ring Gap, lane gap, Column Gap Ratio, Max unit gap. ja ギャップ keeps Gap apart from Spacing and Interval (間隔).
+gbdraw	gbdraw	gbdraw	gbdraw	Product name, always lower case; Latin in all locales.
+GC	GC	GC	GC	[seed; split] As in GC content (GC含量), GC skew (Latin), GC Min %, GC window.
+GC / skew (rail short name)	二塩基	GC/偏斜	GC/偏斜	[review] Rail short name of Dinucleotide content/skew. The 52 px button holds about 5 CJK glyphs at 10 px, so ja GC / スキュー does not fit; skew is English and outside the I5 allowlist.
+GC content	GC含量	GC含量	GC含量	Show GC Content, Hide GC Content, GC Content Mode, GC Content Width. GC Content Mode Deviation | Percent: 偏差 | パーセント / 偏差 | 百分比 / 偏差 | 百分比.
+GC skew	GC skew	GC偏斜	GC skew	Latin in ja and zh-Hant. Show GC Skew: GC skewを表示 / 显示GC偏斜 / 顯示GC skew. [R3, D-33] zh-Hans GC偏斜, as mainland papers write it (skew alone is already 偏斜); ja and zh-Hant keep the Latin GC skew.
+GenBank	GenBank	GenBank	GenBank	Latin in all locales (GenBank/DDBJ File, GenBank / DDBJ File).
+Gene	遺伝子	基因	基因	Min block genes, gene order, Choose the gene to line up.
+Generate	生成	生成	產生	[seed] The button and the verb; 產生 is natural in Taiwan. s2twp keeps 生成, so fix every occurrence in zh-Hant.
+Generate Diagram	図を生成	生成图谱	產生圖譜	The main button; beside the icon column it reads Generate (生成 / 生成 / 產生).
+Generating diagram…	図を生成中…	正在生成图谱…	正在產生圖譜…	Overlay Generating Diagram... and busy reason Generating diagram. Retry after generation finishes. The source writes ... or …; the catalogs write one …
+Genetic code	遺伝暗号表	遗传密码表	遺傳密碼表	The translation table number labelled Gencode (LOSAT Gencode, Reference gencode, Gencode required); gencode identifiers stay Latin. s2twp yields 遺傳密碼錶 (錶 = watch).
+Genome	ゲノム	基因组	基因體	[medium] Input Genomes; tagline A genome diagram generator. Taiwan 基因體; s2twp yields 基因組 (mainland and Hong Kong).
+Geometry	寸法設定／配置	几何参数		[R2] Arrow / Label / Custom stack geometry. ja: (a) 寸法設定 for widths and radii, (b) 配置 or 形状や配置. zh-Hant: no decision.
+GFF3	GFF3	GFF3	GFF3	Latin in all locales (GFF3 + FASTA, GFF3 File).
+Help	ヘルプ	帮助	說明	Accessible name of every ? help tip (a11y.help); Help: Custom Track Slots. Microsoft Taiwan uses 說明.
+Hide	非表示	隐藏	隱藏	Hide, Hide GC Content, Keep hidden.
+Highlight	ハイライト	高亮	醒目提示	[review] zh-Hant: annotation mark Highlight (behind features) and the Highlight action of a Similarity group. Microsoft Taiwan 醒目提示; alternative 強調顯示; s2twp keeps 高亮.
+History	履歴	历史记录	歷史記錄	Undo history (one History step per change). A History step: 履歴の1操作 / 一个历史步骤 / 一個歷史步驟.
+Hit	ヒット	命中	命中	Max hits, All hits, Member hits per protein, reverse hits.
+Identity (record or feature)	識別情報	标识	識別資訊	[medium] Stable record identity, feature identity in errors (does not identify a record). s2twp yields 標識.
+Identity (sequence)	一致率	一致性	一致性	Min identity (%), Minimum Identity, Average identity color mode. [R2, D-31] Owner: 一致率 (every ja Identity row already uses it).
+Import	インポート	导入	匯入	Import TSV (annotations), Import / export menu. Not Load.
+Input	入力	输入	輸入	Input Genomes, input files; rail short name Input.
+Input Genomes	入力ゲノム	输入基因组	輸入基因體	Section title (rail short name Input: 入力 / 输入 / 輸入). Taiwan 基因體.
+Inside	内側	内侧	內側	Circular: Inside axis, Feature inside axis, Move inside Axis; also Inner gap and inner labels.
+Inspect	読み取り	读取	讀取	Inspect records, Inspecting source records…, Records not inspected: reading the source file to list its records.
+Interactive SVG	インタラクティブSVG	交互式SVG	互動式SVG	Export format; SVG stays Latin. s2twp already yields 互動式.
+Interface	インターフェイス	界面	介面	The Web UI (not editable in the Web UI). ja: Microsoft form インターフェイス. Taiwan 介面; s2twp already yields 介面.
+Interval	間隔	间隔	間隔	Tick and scale interval (Scale Interval, large tick interval). ja shares 間隔 with Spacing; no control shows both.
+Invalid	不正	无效	無效	Invalid: <anchor>, An input value is invalid. ja 不正 leaves 無効 for Disabled.
+Italic	斜体	斜体	斜體	<i>…</i> markup draws italics.
+kb	kb	kb	kb	Unit; Latin in all locales (1kb, 10kb, 300 kbp as written).
+Keep	保持	保留	保留	Keep, Keep both, Keep hidden, Keep current layout, Keep Label On.
+Label	ラベル	标签	標籤	[seed] Feature label on the figure; also Record label, legend label, Label visibility.
+Label filtering	ラベルのフィルター	标签筛选	標籤篩選	LABEL FILTERING (Blacklist or Whitelist). Whitelist File: ホワイトリスト / 白名单 / 白名單; Blacklist File: ブラックリスト / 黑名单 / 黑名單.
+Label visibility	ラベルの表示状態	标签可见性	標籤可見性	Popup field: Default (Show Labels) | On (always show) | Off (always hide).
+Labels (section)	ラベル	标签	標籤	Section title, rail short name, Import / export group.
+Lane	レーン	子轨道	子軌道	[review] zh: feature lane and annotation lane (lane gap, Outward lane 1, Annotation lane). zh alternatives 子轨道, 层. [R1] 泳道 is an electrophoresis lane. [R1] 泳道 is an electrophoresis lane.
+Language	言語	语言	語言	Header Language menu. Its entries are native names (English, 日本語, 简体中文, 繁體中文) and are never translated.
+Large tick	主目盛り	主刻度	主刻度	Large Tick (depth, GC content); Excel terms rather than 大目盛り.
+Last successful Result	最後に成功した結果	上次成功的结果	上次成功的結果	Last Successful Result; Showing the last successful result.
+Layer	レイヤー	图层	圖層	Annotation layer.
+Layout	レイアウト	布局	版面配置	[review] zh-Hant: Microsoft Taiwan uses 版面配置; 佈局 (the s2twp output) is common among developers. Layout section, Layout edit, Reset Layout, Record Layout.
+Layout edit	レイアウト編集	布局编辑	版面配置編輯	Toggle in the lower control row (Turn on Layout edit to move a legend, title, or Linear scale).
+Legend	凡例	图例	圖例	[seed] Legend section and the legend drawn on the figure; Legend item and Legend name reuse it.
+Legend caption	凡例キャプション	图例说明文字	圖例說明文字	Color rule field Legend caption (optional). Caption alone (other features with the caption ...): キャプション / 说明文字 / 說明文字.
+Legend item	凡例項目	图例项	圖例項目	Legend item popup, Rename legend item. s2twp yields 圖例項.
+Legend label	凡例ラベル	图例标签	圖例標籤	Track and series field legend label; Set legend label.
+Legend name	凡例名	图例名称	圖例名稱	Popup field Legend name; Legend Name Conflict.
+Length	長さ	长度	長度	Length / Coordinates; record length.
+Length bar	スケールバー			[R2] ja: scale bar. zh-Hans uses 比例尺 (see Scale).
+License	ライセンス	许可证	授權條款	MIT License: MITライセンス / MIT许可证 / MIT授權條款; a font license that forbids embedding.
+Line	線	线条	線條	Annotation mark Line, Line color, intron lines (Line Stroke Color), scale Line Width. ja Line Stroke Color collapses to 線の色.
+Linear	直鎖状	线性	線狀	[Owner 2026-10-20: ja 直鎖状, not 線状] [seed; split from Circular / Linear] [medium] Diagram mode as a noun. ja: docs/internal also writes 線形図; keep the seed. Not the Record Size Mode option; see Linear (size scaling). [R2] ja diagram-mode modifier: 直鎖状図の. [D-20] 線状 is not used. [R2, D-28] zh-Hant kept 線性 while the key Linear was shared with the Record Size Mode option. [R3, D-33] zh-Hant diagram mode 線狀 (NAER biology: linear = 線狀的), now that the Record Size Mode option has its own key; Linear (size scaling) stays 線性.
+Linear (size scaling)	線形	成比例	線性	Record Size Mode option Linear (radius scaled with record length): Auto (Default) | Linear | Equal. ja 線形 (proportional), unlike the mode name 直鎖状. [D-28] zh-Hant 線性; see Linear. [R3, D-33] zh-Hans 成比例 (proportional to record length), so it does not repeat the mode name 线性.
+Live edit	ライブ編集	实时编辑	即時編輯	Live edit applying / Live edit failed; help texts of the Editor tabs. s2twp already yields 即時.
+Load	読み込む	加载	載入	Load Session, Load font file…, Load Label TSV. ja noun form 読み込み (読み込み中…). Not Import.
+Load example	サンプルを読み込む	加载示例	載入範例	Header button and Load an example (empty Preview).
+Load Session	セッションを読み込む	加载会话	載入工作階段	Header button.
+Loading session…	セッションを読み込み中…	正在加载会话…	正在載入工作階段…	Header status; busy reason Loading session. Retry after loading finishes.
+Location	位置情報	位置	位置	[medium] INSDC feature location (3901..4000, 1..200 (+)); feature list column Location. zh shares 位置 with Position. [R2] DDBJ defines Location as 位置情報; used across the UI.
+Log scale	対数スケール	对数刻度	對數刻度	Log Scale checkbox (IGV-style log10 depth).
+LOSAT	LOSAT	LOSAT	LOSAT	[seed; split] Search tool name. Run LOSAT: LOSATを実行 / 运行LOSAT / 執行LOSAT. LOSAT Mode, LOSAT cache, Raw LOSAT TSV keep it Latin.
+LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	Latin in all locales: LOSAT Mode buttons and program names.
+losatn/losatp	losatn/losatp	losatn/losatp	losatn/losatp	Latin in all locales; CLI and setting names (losatp_max_hits).
+Mark (annotation)	マーク	标记	標記	Annotation mark (Marks filter: Highlight | Band | Line | Bracket). Bracket: ブラケット / 括号 / 括號; hatch: ハッチング / 斜线填充 / 斜線填色.
+Markup	マークアップ	格式标记	格式標記	The <i>…</i> markup in names; the tags stay literal.
+Match (comparison)	マッチ	匹配	比對	A drawn pairwise hit (Match style, Match height, Pairwise matches, match popup). [R2] BLAST/LOSAT alignment: 比對連線 in the figure, 比對結果 for counts and lists.
+Match (search)	一致	匹配	符合	Feature search and rule matching (2 of 5 matches, No matches, Previous match, the first match wins). Microsoft Taiwan 符合.
+Mb	Mb	Mb	Mb	Unit; Latin in all locales.
+Member	メンバー	成员	成員	Similarity group members (Copy or download the members).
+Merge	マージ	合并	合併	[medium] Merge into <name>, Merge orientation, Merge conflicts. ja: docs/internal writes マージ 79 times; 統合 is the alternative.
+Metadata	メタデータ	元数据	中繼資料	[medium] Feature metadata, composition metadata. Microsoft Taiwan 中繼資料; s2twp yields 後設資料, also used in Taiwan academia.
+Missing	欠落	缺失	缺少	[medium] BLAST TSV missing, missing FASTA, missing resource. ja prose prefers 〜がありません. s2twp keeps 缺失.
+Mode	モード	模式	模式	Diagram mode (Circular, Linear), LOSAT Mode, LOSATP mode, Label Mode, Color mode, Unit mode, Anchor mode.
+Move down	下へ移動	下移	下移	Move rule down, Move down within side.
+Move up	上へ移動	上移	上移	Move rule up, Move up within side, Move File up.
+Multi-record	複数レコード	多记录	多記錄	Multi-Record Canvas: 複数レコードキャンバス / 多记录画布 / 多記錄畫布.
+None	なし	无	無	None option (legend position, label mode); Select none: すべて選択解除 / 全不选 / 全部不選.
+Normalize	正規化	归一化	正規化	Normalize Record Lengths; depth clipping and normalization. s2twp yields 歸一化.
+Not applied	未適用	未应用	未套用	Rejected Color rule pattern draft (Not applied — Checking color rule…); Current changes were not applied.
+Note (/note)	備考			[R2] The /note qualifier.
+Notice	通知	通知	通知	The dismissible notice above the Result (Dismiss notice); status lines are notices too.
+Nucleotide	塩基配列	核苷酸序列	核苷酸序列	Popup tab and search field Nucleotide; Copy nucleotide sequence.
+Off	オフ	关	關	Toggles and the OFF badge; Off (hide; leave out of protein search).
+Offset	オフセット	偏移	位移	Outer X Offset, label offsets, rotation offset (shifted by). Microsoft Taiwan 位移; s2twp keeps 偏移.
+On	オン	开	開	Toggles; Label visibility On (always show); the OFF badge of a record is Off.
+On axis	軸上	轴上	軸上	Features on axis (Linear track layout middle), On axis (slot side overlay), Feature on axis (Circular preset).
+Open	開く	打开	開啟	Open, Open active feature, Open Custom Track Slots.
+Open source	オープンソース	开源	開放原始碼	[medium] Open Source Notices: オープンソースに関する通知 / 开源声明 / 開放原始碼聲明. Microsoft Taiwan 開放原始碼; s2twp yields 開源, also common. [R2] ja Open Source Notices: ライセンス・著作権表示.
+Open source notices / Disclaimer	ライセンス・著作権表示	开源声明	聲明／免責聲明	[R2] zh-Hant body text had 宣告 (the s2twp output); use 聲明.
+Operation	操作	操作	操作	Operation error, Retry the operation, The operation failed.
+Optional	任意	可选	選填	Region (optional), Record (optional): 領域（任意） / 区域（可选） / 區域（選填）. Taiwan 選填; s2twp yields 可選.
+Organelle	オルガネラ	细胞器	胞器	Tagline: for microbes and organelles. Taiwan 胞器; s2twp yields 細胞器. ja alternative 細胞小器官. microbes: 微生物 / 微生物 / 微生物.
+Organism	生物名	生物名称	生物名稱	Organism / strain field; the /organism qualifier stays Latin.
+Orientation	向き	方向	方向	Record orientation (crop, orientation and titles), Merge orientation, Orientation color mode.
+Orthogroup	orthogroup	orthogroup	orthogroup	[seed; split from Orthogroup, Collinear, LOSAT, BLAST, GC, AT] Latin in all locales, not オーソグループ or 直系同源群: it names a LOSATP option and CLI settings (collinear_infer_orthogroups, orthogroup_membership_mode), and practitioners write it in English. A zh help text may gloss it once: orthogroup（直系同源群）. Capitalize as the English position does.
+Output	出力	输出	輸出	Output Prefix, batch output, search output.
+Outside	外側	外侧	外側	Circular: Outside axis, Labels outside / ticks inside; also Outer gap and outer labels.
+Overflow	オーバーフロー	溢出	溢出	[review] zh-Hant: annotation track overflow (overflow=error | compress | clip; Overflow behavior). s2twp yields 溢位, which reads as arithmetic overflow in Taiwan. Option Error on overflow: オーバーフロー時はエラー / 溢出时报错 / 溢出時報錯.
+Overlay	オーバーレイ	叠加	疊加	[seed] Annotation track placement (side overlay, Overlay anchor). The option label On axis is translated as words, not as Overlay.
+Override	上書き	覆盖	覆寫	Configuration overrides, label overrides, Override the center-label reserved radius. Microsoft Taiwan 覆寫; s2twp keeps 覆蓋.
+Package		软件包	套件	[R2] Python package; 安装包 and 包 read as installer. zh-Hant 套件.
+Padding	余白	边距	邊距	[medium] Canvas Padding (space around the diagram, px) and annotation padding. ja: docs/internal writes 余白, never パディング.
+Pair	ペア	配对	配對	Selected pairs, Adjacent pairs, record pairs, gene pairs (Show pair). Adjacent pairs: 隣接ペア / 相邻配对 / 相鄰配對.
+Pairwise	ペアワイズ	成对	成對	[seed] Pairwise Comparisons (Circular section), Pairwise matches (LOSATP mode), Pairwise display max hits.
+Pairwise Comparisons	ペアワイズ比較	成对比较	成對比較	Circular section title (rail short name Compare).
+Palette	パレット	调色板	調色盤	[seed] Colors > Palette. s2twp already yields 調色盤.
+Parallel	並列	并行	平行	Parallel runs. Taiwan 平行; s2twp yields 並行.
+Part (feature location part)	区間	片段		[R2] One part of a joined feature location. zh-Hant: no decision.
+Paste	貼り付け	粘贴	貼上	Help text: Paste 20px or 65%. s2twp already yields 貼上.
+Pattern	パターン	匹配模式	匹配模式	Regex pattern of a color rule (Edit pattern, value regex). zh: not 模式 alone, which is Mode.
+PDF	PDF	PDF	PDF	Latin in all locales (PDF fonts, PDF export).
+Pending	適用待ち	待应用	待套用	Changes pending Generate; Pending for Generate: 生成時に適用予定： / 下次生成时应用： / 待產生時套用：
+Pharokka	Pharokka	Pharokka	Pharokka	Annotation tool and preset scheme name; Latin in all locales (Pharokka (function/phrog/vfdb)).
+Pin	ピン留め	固定	釘選	Not in the UI yet; for a pinned panel or entry. Microsoft Taiwan 釘選.
+Placement	配置	放置	放置	[medium] Feature placement (lane choice), Label Placement, Track placement, Placement…. zh alternative 摆放; 位置 is Position.
+Plot title	図のタイトル	图表标题	圖表標題	[medium] Plot Title subsection. zh: 图标题 would become 圖示題 (icon title) under s2twp.
+PNG	PNG	PNG	PNG	Latin in all locales (PNG DPI, PNG export error).
+Popup	ポップアップ	弹出窗口	彈出視窗	Feature popup, record popup, Legend item popup, match popup (Close feature popup, Resize popup).
+Position	位置	位置	位置	Legend position, Plot Title Position, Reset position, Positions only.
+Prefix	プレフィックス	前缀	前綴	[medium] Output Prefix (file-name prefix). ja alternative 接頭辞. s2twp yields 字首; Microsoft Taiwan uses 前置詞, and 前綴 is also common. [R2] Suffix is 後綴.
+Preserved session settings	保持されたセッション設定	保留的会话设置	保留的工作階段設定	Validated settings without a Web control, active until reset.
+Preset	プリセット	预设	預設組	[seed] [review] zh-Hant: 預設 already means Default, so Preset must differ; alternative 預設集. s2twp turns 预设 into 預設, so fix every occurrence. Track Preset, PRESET SCHEMES, Select preset..., Reset to preset.
+Preview	プレビュー	预览	預覽	Result Preview, Palette instant preview, preview zoom and pan. Result Preview: 結果のプレビュー / 结果预览 / 結果預覽; Palette instant preview: 即時プレビュー / 即时预览 / 即時預覽.
+Product	遺伝子産物	产物	產物	/product value; feature list column Product. [R2] Matches the DDBJ /product definition.
+Protein	タンパク質	蛋白质	蛋白質	Protein ID, protein search (Leave out of protein search), Member hits per protein.
+pt	pt	pt	pt	Unit; Latin in all locales (font sizes in Labels do not fit).
+px	px	px	px	Unit; Latin in all locales (px optional, Record gap (px)).
+Pyodide	Pyodide	Pyodide	Pyodide	Product name; Latin in all locales (WebAssembly (Pyodide)).
+Qualifier	クオリファイア	限定符	限定符	[seed] [review] zh: GenBank qualifier (/gene, /product); keys stay Latin with their slash. zh alternatives 限定词, 修饰符. ja keeps the seed although the long-vowel rule would give クオリファイアー.
+Qualifier priority	クオリファイア優先順位	限定符优先级	限定符優先順序	QUALIFIER PRIORITY; Taiwan 優先順序.
+Query	クエリ	查询序列	查詢序列	[review] zh: BLAST query (Reference side: Auto | Query | Subject; Query location, Query product). zh alternative: keep query in Latin. ja: Microsoft form クエリ.
+Radial	放射状（ラベルの向き）／半径方向（トラックの位置）	径向	徑向	Circular Label Placement Radial; Radial track stack. Horizontal: 水平 / 水平 / 水平. [R2] Split by sense: label orientation vs track position.
+Radius	半径	半径	半徑	Center Reserved Radius, Min Radius Ratio, GC Content Radius; R in ×R stays Latin.
+RBH	RBH	RBH	RBH	Latin in all locales: abbreviation of Reciprocal best hit.
+Read depth	リード深度	测序深度		[R1, R2] zh-Hans short label 深度. ja リード深度 only for the Depth input file and quantities in sentences (D-27). zh-Hant: use Depth (coverage).
+Ready	準備完了	就绪	就緒	Source recipe ready.
+Reciprocal best hit	相互ベストヒット	双向最佳命中	雙向最佳命中	Anchor mode Reciprocal best hits; RBH stays Latin.
+Recommended	推奨	推荐	建議	[medium] Recommended chip and Recommended: line in Review alignment. s2twp yields 推薦.
+Record	レコード	记录	記錄	[seed] A GenBank LOCUS entry, or one sequence of a GFF3 + FASTA pair. Never 記録 or 配列 in ja. Record label, Record ID and Record options reuse it.
+Record ID	レコードID	记录ID	記錄ID	Search record IDs; Record ID A to Z. The ID values stay as written.
+Record label	レコードラベル	记录标签	記錄標籤	Circular Record label field; Record Labels block (Linear).
+Record options	レコードオプション	记录选项	記錄選項	Linear record disclosure (crop, reverse complement, LOSAT Gencode, record names).
+Recovery	回復	恢复	恢復	Recovery line of a Generate error (No successful Result is available yet; Showing the last successful Result). zh shares the word of Restore.
+Rectangle	長方形	矩形	矩形	Feature rendering. ja: docs/internal writes 矩形; 長方形 reads better as a shape name.
+Redo	やり直し	重做	重做	Header button, Ctrl+Shift+Z or Ctrl+Y. Office terms.
+Reference	参照	参考	參考	Reference side, Reference gencode, Reference card, reference line.
+Reflow	再配置	重排	重排	Auto Reflow: 自動再配置 / 自动重排 / 自動重排; Reflowing label placement...
+Regenerate	再生成	重新生成	重新產生	Regenerate it before editing the legend. s2twp keeps 生成, so fix.
+Region	領域	区域	區域	Region (optional) crop and Region Annotations.
+Region Annotations	領域アノテーション	区域注释	區域註解	Section title (rail short name Regions: 領域 / 区域 / 區域).
+Regular expression	正規表現	正则表达式	正規表示式	[medium] Python regex in rules, JavaScript regex in feature search. Microsoft Taiwan 規則運算式; s2twp already yields 正規表示式.
+Remove	削除	移除	移除	[medium] Remove, Remove file, Remove series, Remove from legend. ja shares 削除 with Delete; use 除外 where a string contrasts them.
+Rename	名前を変更	重命名	重新命名	Rename legend item; Rename this similarity group. s2twp already yields 重新命名.
+Renderer	レンダラー	渲染器	繪製器	[medium] What a track slot draws (Renderer, New linear track renderer); renderer ids (features, ticks, dinucleotide_content, depth, annotations) stay Latin. Microsoft Taiwan translates render as 轉譯. [R2] 渲染 is not the NAER term for rendering.
+Rendering	描画	渲染	繪製方式（名詞）／繪製（動詞）	[medium] Feature rendering (Arrow | Rectangle | Underlay), Label Rendering (Auto | Embedded Only | External Only). Microsoft Taiwan translates render as 轉譯. [R2] See Renderer.
+Replace	置き換え	替换	取代	Replace with current controls; Replaces the specific rules. Taiwan 取代; s2twp keeps 替換.
+Request	リクエスト	请求	要求	Render request, diagram generation request. Microsoft Taiwan 要求; s2twp yields 請求.
+Required	必須	必需	必要	Required badge, Apply required, Gencode required (遺伝暗号表が必要 / 需要遗传密码表 / 需要遺傳密碼表). A form-field badge may read 必填 in zh.
+Reserved	確保	预留	預留	[medium] Center Reserved Radius: 中心の確保半径 / 中心预留半径 / 中心預留半徑; reserved feature band. Circle center: 中心 / 中心 / 中心; Align to Center (page): 中央揃え / 居中对齐 / 置中對齊.
+Reset	リセット	重置	重設	Reset, Reset Layout, Reset start, Reset position. Microsoft Taiwan 重設; s2twp keeps 重置.
+Reset Settings	設定をリセット	重置设置	重設設定	[seed] Header button. Its dialog button Reset all settings: すべての設定をリセット / 重置所有设置 / 重設所有設定.
+Restore	復元	恢复	恢復	Restore, Restore all (deleted legend items), Restore and merge.
+Result	結果	结果	結果	[seed] The generated diagram and its catalog (Result Preview, Last Successful Result, Displayed Result).
+Retry	再試行	重试	重試	Retry, Retry Generate, Retry PNG export, Retry source inspection.
+Reuse	再利用	重用	重複使用	Reuse TSV, Reuse name, Reuse name and LOSAT. Microsoft Taiwan 重複使用.
+Reverse complement	逆相補変換	反向互补	反向互補	Reverse complement checkbox; displayed orientation only, the source is unchanged. [R2] Matches the operation and checkbox label (D-31 row a8ea2b620d9b).
+Revert	元の値に戻す	还原	還原	[medium] Link under a rejected Color rule pattern: restores the accepted pattern. Not Undo (元に戻す / 撤销 / 復原).
+Reverted	元の値に戻しました	已还原	已還原	Notice form only; the UI has no Reverted label today.
+Review	確認	检查	檢查	[medium] Review alignment, Review alignment options…, Review the inputs.
+Ribbon	リボン	条带	條帶	Match style Ribbon | Curve; comparison and Collinear ribbons.
+Ring	リング	环	環	Circular comparison ring (Ring Width, Ring Gap, one ring per comparison file). zh alternative 圈. Comparison ring: 比較リング / 比较环 / 比較環.
+Rotate	回転	旋转	旋轉	Rotate record using this feature.
+Rotation	回転	旋转	旋轉	Record rotation, Label Rotation (degrees).
+Row	行	行	列	Table row (Line {n}, Track row {n}) and Linear display row (Arrange in rows, Row Gap Ratio, Record Order rows). Taiwan row = 列; s2twp keeps 行.
+rRNA	rRNA	rRNA	rRNA	Latin in all locales: an INSDC feature type.
+Rule (color rule)	ルール	规则	規則	[seed] Specific color rules, visibility rules, priority rules (+ Add Rule, Move rule up, Delete rule).
+Ruler	ルーラー	标尺	尺規	[review] zh-Hant: Microsoft Taiwan Word uses 尺規; s2twp yields 標尺, also understood. Scale Style: Bar (Simple) | Ruler (Ticks); Ruler on Axis; Ruler Label Color.
+Run	実行	运行	執行	Run LOSAT, Run time, Parallel runs, Threads per run. s2twp already yields 執行.
+Run info	実行情報	运行信息	執行資訊	Run Info panel of the successful Result (Mode, Run time, Results, CLI rerun, Search runtime). s2twp already yields 執行資訊. CLI rerun: CLIでの再実行 / CLI重新运行 / CLI重新執行.
+Runtime	ランタイム	运行时	執行階段	Diagram runtime, search runtime, LOSAT runtime. Microsoft Taiwan 執行階段; s2twp yields 執行時. [R2] run-info program/kind/version rows. Run time (运行时间) is a separate row. [R3, D-33] zh-Hans 运行时, the mainland UI and developer-docs term; Run time stays 运行时间.
+Save	保存	保存	儲存	Save stores the current Result. Taiwan 儲存; s2twp already yields it.
+Save Session	セッションを保存	保存会话	儲存工作階段	Header button.
+Saving session…	セッションを保存中…	正在保存会话…	正在儲存工作階段…	Header status. Busy reason Saving session. Retry after saving finishes.: セッションを保存中です。保存が終わってから再試行してください。. Other progress forms: 適用中… / 正在应用… / 正在套用…; 読み込み中… / 正在加载… / 正在載入…; 準備中… / 正在准备… / 正在準備….
+Scale	スケール	比例尺	比例尺	Coordinate scale (Show Coordinate Scale, Scale Style, Scale Interval, Linear scale). Log Scale is a separate row. Show Coordinate Scale: 座標スケールを表示 / 显示坐标比例尺 / 顯示座標比例尺. [R2] zh-Hans also covers scale bar / length bar: 比例尺, never 比例尺条 or 长度条.
+Schema	スキーマ	架构	結構描述	[review] zh: Session and Custom Track Slots schema (Recreate Custom Track Slots with the current schema). zh-Hans alternatives 模式, schema; Microsoft Taiwan 結構描述, alternative 綱要; s2twp yields 架構.
+Score			分數	[R2] zh-Hant only. Bitscore stays Latin (see Bitscore).
+Search	検索	搜索	搜尋	Feature search (Search features) and LOSAT search (Search between, Search limits, Search runtime). Taiwan 搜尋; s2twp already yields it. Task and program values stay Latin; LOSAT cache: LOSATキャッシュ / LOSAT缓存 / LOSAT快取.
+Section	セクション	部分	區段	[review] zh: a card of the settings pane (Go to <title>, Close section, Settings sections). zh-Hans alternatives 部分, 设置组; 分区 would become 分割槽 (disk partition) under s2twp. [R3, D-33] zh-Hans 部分 (关闭此部分, 设置各部分), as mainland UIs write it.
+Select	選択	选择	選取	Select all, Select none, Select diagnostics, Select anchor. Microsoft Taiwan 選取; s2twp yields 選擇.
+Separate strands	鎖を分けて表示	分链显示	分股顯示	Separate Strands checkbox (Layout); Display features on separate strands.
+Sequence	配列	序列	序列	Add sequence, comparison sequence files, Sequence tab, Sequence {n} (error locator).
+Serial	逐次	串行	循序	[medium] LOSAT Execution option Serial. s2twp yields 序列 (sequence), wrong here.
+Session	セッション	会话	工作階段	[seed] Taiwan usage; Hong Kong uses 會話. s2twp yields 會話, so fix every occurrence in zh-Hant.
+Settings	設定	设置	設定	The settings pane (Expand settings, Collapse settings to icons, Show in settings).
+Settings draft	設定の下書き	设置草稿	設定草稿	Edited settings not yet applied by Generate (Save stores the current Result and settings draft).
+SharedArrayBuffer	SharedArrayBuffer	SharedArrayBuffer	SharedArrayBuffer	JavaScript API name; Latin in all locales.
+Show	表示	显示	顯示	Show, Show Labels, Show Depth, Show in Comparison, Show in settings.
+Side	側	侧	側	Slot side (Linear above | below | overlay; Circular outside | inside); Move up within side.
+Similarity	類似性	相似性	相似性	Similarity alignment; similarity rings.
+Similarity group	類似性グループ	相似性组	相似性組	[medium] LOSATP mode Similarity groups and the Editor tab. gbdraw's own term, so it is translated, unlike Collinear.
+Skew	スキュー	偏斜	偏斜	Skew alone (Positive skew color, content/skew track). GC skew and AT skew stay Latin.
+Skip	スキップ	跳过	略過	Skip, Skip this record, Skip these comparisons and Generate. Microsoft Taiwan 略過; s2twp yields 跳過.
+Slot (File card)	欄	位置	位置	[medium] The place of a Linear File card in Empty this slot (keeps a blank File card). Not a track slot; do not reuse スロット / 槽位.
+Slot (track slot)	スロット	槽位	槽位	[seed] One row of Custom Track Slots (slot id, Duplicate, Enable linear track slot). Not the File card of Empty this slot; see Slot (File card).
+Small tick	補助目盛り	次刻度	次刻度	Small Tick; Leave blank to hide small ticks.
+Source recipe	ソース再現手順	源文件重现方案	來源檔案重現方案	[review] Run info: the CLI command that rebuilds the Result from the original input files; the command is never translated. ja avoids ソースレシピ (reads as sauce recipe). zh alternative 源文件配方 (as for conda recipes). s2twp turns 源文件 into 原始檔 (source-code file).
+Spacing	間隔	间距	間距	Circular Label Spacing, Linear Label Spacing, Linear slot Spacing.
+Species	種名	物种	物種	Circular Basic Species field.
+Specific rule	個別ルール	特定规则	特定規則	[medium] SPECIFIC RULES heading: color rules matched by a qualifier pattern (Specific rules file). ja alternative 特定ルール.
+Stack	スタック	堆叠	堆疊	Custom stack, Linear track stack, Radial track stack, Use custom stack.
+Stale	古い	过时	過時	A stale reference or target in Review alignment (requires Reselect or Clear).
+Start position	開始位置	起始位置	起始位置	Region Start; Start of the record. As a short field label: 開始 / 起始 / 起始. End: 終了位置 / 结束位置 / 結束位置.
+Step	ステップ	步长	步長	Sliding-window step (Step, Depth Step). Not a History step.
+Strain	株名	菌株	菌株	[medium] Strain field; Organism / strain: 生物名 / 株名. zh 菌株 fits bacteria and archaea; a virus isolate would be 毒株.
+Strand	鎖	链	股	[review] DNA strand (+/−, strand pool). Taiwan textbooks say 股 (雙股DNA); mainland and Hong Kong 链 / 鏈, and s2twp yields 鏈. ja alternative ストランド.
+Stroke	線	描边	筆畫	[medium] Outline of feature blocks and legend entries (Stroke, Reset strokes, stroke options). Adobe and Figma use ja 線, zh-CN 描边, zh-TW 筆畫.
+Subject	サブジェクト	目标序列	目標序列	[review] zh: BLAST subject (Subject record, Subject location). zh alternatives subject (Latin), 数据库序列.
+Subtitle	サブタイトル	副标题	副標題	Circular Subtitle; Subtitle / title (optional).
+SVG	SVG	SVG	SVG	Latin in all locales; Interactive SVG is its own row.
+Swatch	色見本	色块	色塊	[medium] Legend swatch size. ja alternative スウォッチ (Adobe).
+Tab	タブ	选项卡	分頁	[medium] Editor tabs (Legend, Features, Similarity groups) and feature popup tabs (Details, Qualifiers, Sequence). Microsoft Taiwan uses 索引標籤 for Office ribbons; 分頁 is the web usage. s2twp yields 選項卡.
+Table	表	表格	表格	Copy table, gene-pair table, comparison table rows, Session table: <name>. Not Color table (カラーテーブル).
+Task	タスク	任务	任務	LOSATN task: megablast | blastn | dc-megablast (the values stay Latin).
+Threaded	マルチスレッド	多线程	多執行緒	LOSAT Execution option Threaded; Threaded (unavailable here). s2twp already yields 多執行緒.
+Threshold	しきい値	阈值	閾值	[medium] Comparison thresholds (E-value, Bitscore, Identity, Alignment length). ja: Microsoft form しきい値; 閾値 is common in papers.
+Tick	目盛り	刻度	刻度	Ticks slot, tick marks, Ticks only. Tick Font: 目盛りフォント / 刻度字体 / 刻度字型. Tick label: 目盛りラベル / 刻度标签 / 刻度標籤.
+Title	タイトル	标题	標題	Titles (rail short name of Titles & Record Labels), title lines, Plot Title.
+Titles & Record Labels	タイトルとレコードラベル	标题与记录标签	標題與記錄標籤	Section title (rail short name Titles: タイトル / 标题 / 標題).
+Track	トラック	轨道	軌道	[seed] A ring (Circular) or band (Linear) of the figure: features, GC content, depth, comparison.
+Track layout	トラックレイアウト	轨道布局	軌道版面配置	Linear track layout: Above | Features on axis | Below.
+Track Preset	トラックプリセット	轨道预设	軌道預設組	Circular preset (Tuckin | Middle | Spreadout); Reset to preset.
+tRNA	tRNA	tRNA	tRNA	Latin in all locales: an INSDC feature type.
+TSV	TSV	TSV	TSV	Latin in all locales (Depth TSV, BLAST TSV, Label TSV, Feature Edits TSV).
+Tuckin / Middle / Spreadout	Tuckin / Middle / Spreadout	Tuckin / Middle / Spreadout	Tuckin / Middle / Spreadout	Circular Track Preset names; also CLI values (tuckin, middle, spreadout), so they stay Latin as a set.
+Unavailable	利用不可	不可用	無法使用	Threaded (unavailable here), Source recipe unavailable, Unavailable record. Taiwan 無法使用; s2twp keeps 不可用.
+Underlay	アンダーレイ	底层	底層	[review] zh: feature rendering and annotation layer drawn behind features; pairs with Foreground. zh alternatives 背景层, 衬底.
+Undo	元に戻す	撤销	復原	Header button and Ctrl+Z. Office terms; s2twp yields 撤銷.
+Unit (Collinear unit)		单元	單元	[R1] Collinear unit (CDS or locus). zh-Hant from R1 term change unit -> 單元.
+Unknown	不明	未知	未知	Unknown configuration overrides, unknown direction.
+Unsupported	非対応	不支持	不支援	Unsupported fields, unsupported representation. Supported: 対応 / 支持 / 支援 (s2twp already yields 支援).
+Upload	アップロード	上传	上傳	Upload BLAST TSV, Upload a sequence file. Files stay in the browser; the word follows the UI.
+Visibility	表示状態	可见性	可見性	Feature visibility, Label visibility, Feature Visibility rules. ja: docs/internal writes 可視性 14, 表示状態 8.
+Warning	警告	警告	警告	Layout warning, comparison warnings.
+Web Workers	Web Workers	Web Workers	Web Workers	API name; Latin in all locales. A bare Worker in error text also stays Latin.
+Weight	太さ	粗细	粗細	Definition-line Weight: Normal | Bold. Normal | Bold: 標準 | 太字 / 常规 | 粗体 / 標準 | 粗體.
+Width	幅	宽度	寬度	Feature Track Width, Ring Width, Stroke width, Width and Radius: px or ×R.
+Window	ウィンドウ	窗口	視窗	Sliding window for GC content/skew and depth (Window, Depth Window, window size). Taiwan 視窗 also names sliding windows (滑動視窗).
+Zoom	ズーム	缩放	縮放	Zoom in: 拡大 / 放大 / 放大; Zoom out: 縮小 / 缩小 / 縮小; Reset zoom. Fit (Fit to preview): 全体表示 / 适应预览 / 符合預覽.
+×R	×R	×R	×R	Unit selector of Circular Width and Radius; R is the base circle radius.

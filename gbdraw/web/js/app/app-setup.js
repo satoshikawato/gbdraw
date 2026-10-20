@@ -272,7 +272,7 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
-import { msg, t, tm, tn } from '../utils/i18n.js';
+import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
@@ -2415,7 +2415,7 @@ export const createAppSetup = () => {
   });
   const linearLabelAutoDisclosure = computed(() => {
     if (!linearLabelAutoFields.value.length) return '';
-    const fields = linearLabelAutoFields.value.map((/** @type {{ label: string }} */ row) => row.label).join(' and ');
+    const fields = listText(linearLabelAutoFields.value.map((/** @type {{ label: string }} */ row) => row.label));
     const shown = resolveLinearLabelVisibility('auto', {
       hasSharedRow: linearLabelHasSharedRow.value
     });
@@ -2429,8 +2429,8 @@ export const createAppSetup = () => {
         : t('Auto will hide these fields throughout the diagram on the next successful Generate'));
     return shown
       ? t('{fields}: {effect} because no rendered row contains multiple records.', { fields, effect })
-      : t('{fields}: {effect} because at least one rendered row contains multiple records.', { fields, effect })
-        + ' ' + t('Choose Show in Record Labels to keep a field visible.');
+      : joinSentences(t('{fields}: {effect} because at least one rendered row contains multiple records.', { fields, effect }),
+        t('Choose Show in Record Labels to keep a field visible.'));
   });
   /** @param {string} key */
   const focusLinearLabelVisibility = async (key) => {
@@ -3633,8 +3633,8 @@ export const createAppSetup = () => {
   const confirmSessionReplacement = async (actionLabel, proceed) => {
     if (await history.hasChangesSinceSavePoint() && await askChoice({
       title: t('Replace the current work?'),
-      description: t('Loading a Session replaces the current settings and Results and clears Undo history.')
-        + ' ' + t('Changes since the last Save Session or Load Session are lost.'),
+      description: joinSentences(t('Loading a Session replaces the current settings and Results and clears Undo history.'),
+        t('Changes since the last Save Session or Load Session are lost.')),
       actions: [{ id: 'load', label: actionLabel, tone: 'primary' }]
     }) !== 'load') return;
     // `proceed` may open the file picker: the user activation of the click that
@@ -4892,6 +4892,22 @@ export const createAppSetup = () => {
   const importedComparisonNeedsResolution = computed(() => (
     state.activeDrawing().importedComparisonIntent.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
   ));
+  // The buttons that choose what happens to a saved comparison, and the line
+  // that names the chosen one. English names it as the Session stores it
+  // (INHERIT, REPLACE, CLEAR; PD-OI-106 keeps the English text); another
+  // language names it by its button.
+  /** @type {Readonly<Record<string, string>>} */
+  const importedComparisonActionLabels = Object.freeze({
+    [IMPORTED_COMPARISON_ACTIONS.INHERIT]: msg('Inherit saved comparison'),
+    [IMPORTED_COMPARISON_ACTIONS.REPLACE]: msg('Replace with current controls'),
+    [IMPORTED_COMPARISON_ACTIONS.CLEAR]: msg('Clear comparison')
+  });
+  const importedComparisonActionText = computed(() => {
+    /** @type {string | null} */
+    const action = state.activeDrawing().importedComparisonIntent.action;
+    if (!action || uiLocale.value === SOURCE_LOCALE || !Object.hasOwn(importedComparisonActionLabels, action)) return action ?? '';
+    return tm(importedComparisonActionLabels[action]);
+  });
   const importedComparisonCanInherit = computed(() => (
     state.activeDrawing().importedComparisonIntent.disposition
       === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY
@@ -5302,7 +5318,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
       title: t('Reset all settings?'),
-      description: t('Circular and Linear both return to their default settings.') + ' ' + t('This also removes your edits:'),
+      description: joinSentences(t('Circular and Linear both return to their default settings.'), t('This also removes your edits:')),
       items: [
         t('Colors, color rules, and the palette'),
         t('Labels, Feature visibility, and Feature placements'),
@@ -5311,7 +5327,7 @@ export const createAppSetup = () => {
         t('Linear comparisons, which turn off; their uploaded tables stay'),
         t('The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded')
       ],
-      note: t('Input files (genome, Depth, and comparison files for circular diagrams), the records you chose, and File defaults stay.') + ' ' + t('Undo brings the settings back.'),
+      note: joinSentences(t('Input files (genome, Depth, and comparison files for circular diagrams), the records you chose, and File defaults stay.'), t('Undo brings the settings back.')),
       actions: [{ id: 'reset', label: t('Reset all settings'), tone: 'danger' }],
       cancelLabel: t('Keep settings')
     });
@@ -5801,7 +5817,7 @@ export const createAppSetup = () => {
       const result = await exportMethod(snapshot, fontPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
-        showNotice({ text: t('Exported {file}.', { file: result.filename }) + ' ' + t('Find it in your browser\'s downloads.'), items: result.fontWarnings });
+        showNotice({ text: joinSentences(t('Exported {file}.', { file: result.filename }), t('Find it in your browser\'s downloads.')), items: result.fontWarnings });
       }
       return result;
     } catch (error) {
@@ -5913,7 +5929,7 @@ export const createAppSetup = () => {
       history.markSavePoint();
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
       showNotice({
-        text: t('Session saved: {file}.', { file: filename }) + ' ' + t('Find it in your browser\'s downloads.'),
+        text: joinSentences(t('Session saved: {file}.', { file: filename }), t('Find it in your browser\'s downloads.')),
         // Each drawing's font, and the font of the shown Result, whose committed
         // request the Session saves too (OV-742).
         items: customFontSaveWarnings(
@@ -6848,6 +6864,8 @@ export const createAppSetup = () => {
     generationFailureRecovery,
     importedComparisonIntent: drawingMember('importedComparisonIntent'),
     importedComparisonNeedsResolution,
+    importedComparisonActionLabels,
+    importedComparisonActionText,
     importedComparisonCanInherit,
     importedComparisonCanReplace,
     inheritImportedComparison,

@@ -1,15 +1,18 @@
-// The one thing the app keeps in browser storage is the display of the
-// settings pane (services/browser-preferences.js). A storage that is absent,
-// throws, or holds another value gives the default, a failed write is silent,
-// and no other module touches browser storage.
+// What the app keeps in browser storage: the display of the settings pane and
+// the UI language (services/browser-preferences.js, PD-OI-093 and PD-OI-106).
+// A storage that is absent, throws, or holds another value gives the default,
+// a failed write is silent, and no other module touches browser storage.
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import test from 'node:test';
 
-import { readSettingsPaneDisplay, writeSettingsPaneDisplay } from '../../gbdraw/web/js/services/browser-preferences.js';
+import {
+  readSettingsPaneDisplay, readUiLanguage, writeSettingsPaneDisplay, writeUiLanguage
+} from '../../gbdraw/web/js/services/browser-preferences.js';
 
 const KEY = 'gbdraw.settings-pane-display';
+const LANGUAGE_KEY = 'gbdraw.ui-language';
 const storageWith = (entries = {}) => {
   const values = new Map(Object.entries(entries));
   return {
@@ -48,6 +51,33 @@ test('a write stores the display, and a write that throws changes nothing and re
   assert.equal(writeSettingsPaneDisplay('rail', () => undefined), undefined);
 });
 
+test('the UI language is read under its own key, and anything else gives English', () => {
+  for (const tag of ['en', 'ja', 'zh-Hans', 'zh-Hant']) {
+    assert.equal(readUiLanguage(() => storageWith({ [LANGUAGE_KEY]: tag })), tag);
+  }
+  // A first visit has nothing stored: English, whatever the browser's language.
+  assert.equal(readUiLanguage(() => storageWith()), 'en');
+  assert.equal(readUiLanguage(() => storageWith({ [KEY]: 'ja' })), 'en', 'the display key is not the language');
+  for (const value of ['', 'JA', 'ja-JP', 'zh', 'zh-CN', 'zh-TW', 'fr', ' ja', '{"tag":"ja"}']) {
+    assert.equal(readUiLanguage(() => storageWith({ [LANGUAGE_KEY]: value })), 'en', JSON.stringify(value));
+  }
+  assert.equal(readUiLanguage(failing('The operation is insecure.')), 'en');
+  assert.equal(readUiLanguage(() => ({ getItem: failing('read refused') })), 'en');
+  assert.equal(readUiLanguage(() => undefined), 'en');
+});
+
+test('a written UI language is kept beside the display, and a write that throws is silent', () => {
+  const storage = storageWith({ [KEY]: 'rail' });
+  writeUiLanguage('zh-Hant', () => storage);
+  assert.deepEqual([...storage.values], [[KEY, 'rail'], [LANGUAGE_KEY, 'zh-Hant']]);
+  writeUiLanguage('en', () => storage);
+  assert.equal(storage.values.get(LANGUAGE_KEY), 'en');
+  assert.equal(readSettingsPaneDisplay(() => storage), 'rail');
+  assert.equal(writeUiLanguage('ja', failing('The operation is insecure.')), undefined);
+  assert.equal(writeUiLanguage('ja', () => ({ setItem: failing('QuotaExceededError') })), undefined);
+  assert.equal(writeUiLanguage('ja', () => undefined), undefined);
+});
+
 // The app's own modules and its page; vendored libraries are not the app's code.
 const WEB = join(process.cwd(), 'gbdraw', 'web');
 const sources = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -66,5 +96,7 @@ test('browser storage is touched in the preferences module only', () => {
   // The owner names local storage and nothing else.
   const owner = readFileSync(join(WEB, OWNER), 'utf8');
   assert.equal(/\b(?:sessionStorage|indexedDB)\b|document\s*\.\s*cookie/.test(owner), false);
-  assert.equal(owner.split(KEY).length - 1, 1, 'one storage key');
+  assert.equal(owner.split(`'${KEY}'`).length - 1, 1, 'one display key');
+  assert.equal(owner.split(`'${LANGUAGE_KEY}'`).length - 1, 1, 'one language key');
+  assert.deepEqual(owner.match(/'gbdraw\.[^']*'/g), [`'${KEY}'`, `'${LANGUAGE_KEY}'`], 'no other key');
 });

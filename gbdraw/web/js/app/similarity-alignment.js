@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, msg, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -2247,21 +2247,21 @@ export const createSimilarityAlignmentActions = ({
         : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
           'Reverses {records} so all {count} chosen features point right.', { records: reversedText });
     } else if (sameAfter) {
-      effect = t('No record is reversed.') + ' ' + (sameAfter === 'left'
+      effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
         ? tn(eligible.length, 'The chosen feature already points left.', 'All {count} chosen features already point left.')
         : tn(eligible.length, 'The chosen feature already points right.', 'All {count} chosen features already point right.'));
     } else {
-      effect = t('No record is reversed.') + ' '
-        + tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.');
+      effect = joinSentences(t('No record is reversed.'),
+        tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));
     }
     // Verb agreement lives in the two forms of one key.
     if (excluded) {
-      effect += ' ' + tn(excluded, '{count} record stays unchanged; the reason is in its card.',
-        '{count} records stay unchanged; the reason is in their cards.');
+      effect = joinSentences(effect, tn(excluded, '{count} record stays unchanged; the reason is in its card.',
+        '{count} records stay unchanged; the reason is in their cards.'));
     }
     if (unknownStrand) {
-      effect += ' ' + tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
-        '{count} records keep their direction; the reason is in their cards.');
+      effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
+        '{count} records keep their direction; the reason is in their cards.'));
     }
     // D-11: the reference feature centre stays fixed; its record's left edge may move.
     const shift = Math.round(projected.reference.deltaX);

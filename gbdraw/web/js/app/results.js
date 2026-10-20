@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { PaletteColorsDialog } from '../state.js' */
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
+import { listText, t } from '../utils/i18n.js';
 import { withImportedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
 /** @import { FileImports } from '../services/file-imports.js' */
 
@@ -8,9 +9,7 @@ import { withImportedDefaultColors, withoutImportedDefaultColors } from '../serv
 /** @param {string[]} keys */
 const describeKeys = (keys) => {
   const rest = keys.length - 3;
-  const parts = rest > 0 ? [...keys.slice(0, 3), `${rest} more`] : keys;
-  if (parts.length <= 2) return parts.join(' and ');
-  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+  return listText(rest > 0 ? [...keys.slice(0, 3), t('{count} more', { count: rest })] : keys);
 };
 
 /**

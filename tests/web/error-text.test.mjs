@@ -3,7 +3,8 @@
 // it is composed of; `errorText` (utils/error-text.js) is the one display of
 // those parts. These tests check that the English display equals the composed
 // English, that every part text is a catalog key the catalog check knows, and
-// that a locale translates each part, nested labels included, while values
+// that a locale translates each part, nested labels included, and joins the
+// parts with its sentence separator (none in Japanese and Chinese), while values
 // (identifiers, counts, Python's words) stay as written.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -86,10 +87,10 @@ test('a locale translates each part and the labels inside it; values stay as wri
       context: { field: 'window', reason: 'POSITIVE', row: 3, configPath: 'objects.scale.interval' } });
     assert.equal(model.summary, 'An input value is invalid. Line 3. Setting: objects.scale.interval. Field: Window.'
       + ' Use a finite value greater than zero.', 'the summary stays English in every locale');
-    assert.equal(errorText(model.summaryParts), '«An input value is invalid.» «Line 3.» «Setting: objects.scale.interval.»'
-      + ' «Field: «Window».» «Use a finite value greater than zero.»');
+    assert.equal(errorText(model.summaryParts), '«An input value is invalid.»«Line 3.»«Setting: objects.scale.interval.»'
+      + '«Field: «Window».»«Use a finite value greater than zero.»', 'Japanese puts no space between the parts');
     const unlabelled = normalizeUserFacingError({ code: 'INPUT_INVALID', context: { field: 'record_selector' } });
-    assert.equal(errorText(unlabelled.summaryParts), '«An input value is invalid.» «Field: record_selector.»',
+    assert.equal(errorText(unlabelled.summaryParts), '«An input value is invalid.»«Field: record_selector.»',
       'a field without a label is an identifier');
     const room = normalizeUserFacingError({ code: 'TRACK_LAYOUT',
       context: { reason: 'CANNOT_FIT', keptInsidePx: 34, keptInsideTracks: 'gc_content,gc_skew', slotTrack: 'ticks',
@@ -103,17 +104,19 @@ test('a locale translates each part and the labels inside it; values stay as wri
     // A list of names is nested `{first} and {second}` parts. Each remedy is a whole sentence with
     // its control names inside it, so a translator never gets a fragment (review item 6).
     // Python's label fit counts are shown as sent.
-    assert.equal(errorText(room.summaryParts), '«A circular track does not fit.» «Move the track, reduce widths, disable'
-      + ' conflicting labels, or place it on the other side of the Axis.» «Below it, 34 px are kept for the tracks inside it,'
-      + ` among them ««GC content» and «GC skew»».» «To make room, do one of the following.» ${remedies.map((text) => `«${text}»`).join(' ')}`
-      + ' Overlapping label pairs: 2.');
+    assert.equal(errorText(room.summaryParts), '«A circular track does not fit.»«Move the track, reduce widths, disable'
+      + ' conflicting labels, or place it on the other side of the Axis.»«Below it, 34 px are kept for the tracks inside it,'
+      + ` among them ««GC content» and «GC skew»».»«To make room, do one of the following.»${remedies.map((text) => `«${text}»`).join('')}`
+      + 'Overlapping label pairs: 2.');
     const table = normalizeUserFacingError({ code: 'TABLE_INVALID', context: { sessionTable: 'default-colors', row: 2 } });
     assert.match(errorText(table.summaryParts), /«Session table: «Default colors».»/);
     const live = liveEditFailure(normalizeUserFacingError({ code: 'WORKER_INIT' }));
     assert.equal(live.note, 'Live edit failed: direct edits already applied are kept; geometry may still need updating.'
       + ' The diagram runtime could not start. Save a Session and reload before retrying. Retry the live edit or use Generate.');
     assert.equal(errorText(live.noteParts), '«Live edit failed: direct edits already applied are kept; geometry may still need updating.»'
-      + ' «The diagram runtime could not start. Save a Session and reload before retrying.» «Retry the live edit or use Generate.»');
+      + '«The diagram runtime could not start. Save a Session and reload before retrying.»«Retry the live edit or use Generate.»');
+    await setUiLocale('zh-Hans', async () => ({ default: catalog }));
+    assert.equal(errorText(unlabelled.summaryParts), '«An input value is invalid.»«Field: record_selector.»', 'so does Chinese');
     assert.equal(tm(operationErrorTitle('generate')), '«Generation Error»');
     assert.equal(tm(generationRecoveryGuidance('preserved')), '«Showing the last successful Result; your changes were not applied.»');
   } finally {
