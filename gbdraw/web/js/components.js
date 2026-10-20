@@ -21,7 +21,7 @@ import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
 /** @import { SettingsPaneView } from './app/settings-pane.js' */
 
-const { ref, reactive, computed, inject, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
+const { h, ref, reactive, computed, inject, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
 /** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | SVGElement | null }} FocusScope */
 /** @type {FocusScope[]} */
@@ -125,15 +125,23 @@ const helpTipName = (tip) => {
 // A sentence with elements inside it, kept as one translation key (D-04 of the
 // translation work): `text` is the shown text of the key, `t('…')` without
 // values; a `{name}` placeholder with a slot of that name shows the slot, and
-// `params` fill the others (`textParts`). Registered globally in app.js.
+// `params` fill the others (`textParts`). With `textClass`, the text around
+// the slots is in spans of that class (`sr-only`: only the slots are seen).
+// Registered globally in app.js.
 export const I18nText = {
-  props: { text: { type: String, required: true }, params: { type: Object, default: null } },
+  props: {
+    text: { type: String, required: true },
+    params: { type: Object, default: null },
+    textClass: { type: String, default: null }
+  },
   /**
-   * @param {{ text: string, params: TranslationParams | null }} props
+   * @param {{ text: string, params: TranslationParams | null, textClass: string | null }} props
    * @param {{ slots: Readonly<Record<string, (() => unknown[]) | undefined>> }} context
    */
   setup: (props, { slots }) => () => textParts(props.text, Object.keys(slots), props.params ?? undefined)
-    .flatMap((part) => ('slot' in part ? (slots[part.slot]?.() ?? []) : [part.text]))
+    .flatMap((part) => ('slot' in part
+      ? (slots[part.slot]?.() ?? [])
+      : [props.textClass ? h('span', { class: props.textClass }, part.text) : part.text]))
 };
 
 // Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the

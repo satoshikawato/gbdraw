@@ -7589,7 +7589,7 @@
                                 class="focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{{ t('Review alignment') }}</h2>
                             <span class="alignment-review-group" aria-hidden="true">{{ similarityAlignmentDraft?.response.groupId }}</span>
                             <span id="similarity-alignment-application-help" data-alignment-application-help
-                                  class="alignment-review-chip is-apply">{{ t('Apply required') }}<span class="sr-only">{{ t(': nothing changes until Apply succeeds. Cancel keeps the current Result.') }}</span></span>
+                                  class="alignment-review-chip is-apply"><i18n-text :text="t('{label}: nothing changes until Apply succeeds. Cancel keeps the current Result.')" text-class="sr-only"><template #label>{{ t('Apply required') }}</template></i18n-text></span>
                             <button type="button"
                                     @click="cancelSimilarityAlignmentDialog"
                                     :aria-label="t('Cancel similarity alignment')"
