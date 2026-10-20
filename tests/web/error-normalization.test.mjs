@@ -623,12 +623,23 @@ test('a preserved setting of the other diagram mode names the setting and the wa
 // the committed Session with the current editor tables, so repeating the edit
 // sends the same request. The note above the Result comes from the failure's
 // normalized model and offers Retry only for a failure that changes no input.
+// The note is shown as the model's `note`, or (D-17, translated error text) through
+// the display helper from the parts the note is composed of; in English the parts
+// render to the same note.
 test('a live edit failure note offers Retry only when the same request can succeed (B11)', async () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const note = html.match(/<p v-if="labelReflowProcessing \|\| labelReflowLastError"[^>]*>([^<]*)<\/p>/)[1];
   assert.doesNotMatch(note, /Retry the live edit/, 'the failure note is not fixed text');
-  assert.match(note, /: labelReflowLastError\.note \}\}/);
-  const { liveEditFailure } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  assert.match(note, /: (?:labelReflowLastError\.note|errorText\(labelReflowLastError\.noteParts\)) \}\}/);
+  const { liveEditFailure, renderErrorText } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  // The English the note shows: its parts rendered without translation, which equals `note`.
+  const shown = (model) => {
+    if (!model.noteParts) return model.note;
+    assert.equal(typeof renderErrorText, 'function', 'a note with parts has the parts renderer');
+    const text = renderErrorText(model.noteParts);
+    assert.equal(text, model.note, model.code);
+    return text;
+  };
   assert.equal(liveEditFailure(null), null);
   const prefix = /^Live edit failed: direct edits already applied are kept; geometry may still need updating\. /;
   const repeating = [
@@ -640,10 +651,10 @@ test('a live edit failure note offers Retry only when the same request can succe
   for (const error of repeating) {
     const model = liveEditFailure(error);
     assert.deepEqual([model.code, model.actions], [error.code, ['generate']], error.code);
-    assert.match(model.note, prefix);
-    assert.ok(model.note.includes(error.summary), error.code);
-    assert.doesNotMatch(model.note, /Retry the live edit/, error.code);
-    assert.match(model.note, / Change the edit, or change the settings and use Generate\.$/);
+    assert.match(shown(model), prefix);
+    assert.ok(shown(model).includes(error.summary), error.code);
+    assert.doesNotMatch(shown(model), /Retry the live edit/, error.code);
+    assert.match(shown(model), / Change the edit, or change the settings and use Generate\.$/);
   }
   const transient = [
     normalizeUserFacingError(new Error('PRIVATE_ worker transport failure'), { operation: 'generate', stage: 'render' }),
@@ -653,14 +664,14 @@ test('a live edit failure note offers Retry only when the same request can succe
   for (const error of transient) {
     const model = liveEditFailure(error);
     assert.deepEqual([model.code, model.actions], [error.code, ['retry', 'generate']], error.code);
-    assert.match(model.note, prefix);
-    assert.match(model.note, new RegExp(` Retry the live edit or use Generate\\.$`));
+    assert.match(shown(model), prefix);
+    assert.match(shown(model), new RegExp(` Retry the live edit or use Generate\\.$`));
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
   }
   assert.equal(transient[0].code, 'UNKNOWN');
   const generate = liveEditFailure(normalizeUserFacingError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
   assert.deepEqual(generate.actions, ['generate']);
-  assert.equal(generate.note, 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
+  assert.equal(shown(generate), 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
 });
 
 // OV-05..OV-07, OV-13 (R6): a Label visibility On that the diagram does not
