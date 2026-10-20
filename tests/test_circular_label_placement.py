@@ -1861,8 +1861,8 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_hemisphere_mismatch_cap(
     assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     mismatch_count, _ = circular_labels_module._hemisphere_mismatch_metrics(inner_labels, total_length)
-    # 9 before OV-1366: labels that reached their preferred half by wrapping past the origin keep their order now.
-    assert mismatch_count <= 14
+    # 9 before OV-1366; 0 since the solver chain also keeps the labels within one turn (OV-1376).
+    assert mismatch_count == 0
 
 
 def test_mjenmv_inner_wsv136_wsv192_keep_feature_order_with_current_min_gap_overlap(
@@ -1892,7 +1892,7 @@ def test_mjenmv_inner_wsv136_wsv192_keep_feature_order_with_current_min_gap_over
     assert _angle_of_label(wsv136) < _angle_of_label(wsv192)
 
 
-def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
+def test_mjenmv_inner_labels_keep_feature_order(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1904,9 +1904,8 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
 
     unwrapped_angles = [_label_unwrapped_angle_for_order_test(label, total_length) for label in inner_labels]
     deltas = [unwrapped_angles[idx + 1] - unwrapped_angles[idx] for idx in range(len(unwrapped_angles) - 1)]
-    # 6 and -1.809 before OV-1366, when labels next to the origin could wrap past their neighbours.
-    assert sum(delta <= 0.0 for delta in deltas) == 3
-    assert min(deltas) == pytest.approx(-2.490733043411851, abs=1e-6)
+    # 6 backtracking steps before OV-1366 and OV-1376, when labels next to the origin could wrap past their neighbours.
+    assert min(deltas) > 0.0
 
 
 def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
@@ -1934,7 +1933,7 @@ def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
     )
 
 
-def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
+def test_mjenmv_wsv209_sits_in_its_preferred_left_hemisphere(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1953,8 +1952,9 @@ def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
         float(wsv209["start_x"]),
         axis_eps_px=circular_labels_module.HEMISPHERE_AXIS_EPS_PX,
     )
+    # Right half before OV-1376, when the solver chain could span more than a full circle.
     assert preferred_half == -1
-    assert current_half == 1
+    assert current_half == -1
 
 
 def test_nc001879_outer_only_dense_skips_improved_solver_and_keeps_plain_overlaps_zero() -> None:
@@ -3600,8 +3600,8 @@ def _tobacco_cli_default_cfg(label_font_size: float) -> GbdrawConfig:
     return GbdrawConfig.from_dict(config_dict)
 
 
-def _drawn_outer_labels(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
-    """Capture the external label list each assembly hands to the label drawer."""
+def _drawn_external_labels(monkeypatch: pytest.MonkeyPatch, *, inner: bool = False) -> list[list[dict]]:
+    """Capture the outer (or ``inner``) label list each assembly hands to the label drawer."""
 
     drawn: list[list[dict]] = []
     original = circular_assemble_module.add_labels_group_on_canvas
@@ -3612,7 +3612,7 @@ def _drawn_outer_labels(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
                 [
                     label
                     for label in kwargs["precalculated_labels"]
-                    if not label.get("is_embedded") and not label.get("is_inner")
+                    if not label.get("is_embedded") and bool(label.get("is_inner")) == inner
                 ]
             )
         return original(canvas, *args, **kwargs)
@@ -3698,7 +3698,7 @@ def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytes
 
     record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"), "genbank")
     total_length = len(record.seq)
-    drawn = _drawn_outer_labels(monkeypatch)
+    drawn = _drawn_external_labels(monkeypatch)
     gaps: dict[float, float] = {}
     for spacing in (0.5, 3.0):
         config_dict = modify_config_dict(
@@ -3719,25 +3719,27 @@ def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytes
 _METAZOAN_MITOCHONDRIA = Path(__file__).parent.parent / "gbdraw" / "web" / "tutorial-data" / "metazoan-mitochondria-four"
 
 
-def _cli_outer_labels(
+def _cli_external_labels(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
     gbk: Path,
     *extra: str,
+    scope: str = "out",
+    inner: bool = False,
 ) -> tuple[list[dict], str]:
-    """Run ``gbdraw circular --labels out`` in-process; return the drawn outer labels and stderr."""
+    """Run ``gbdraw circular --labels <scope>`` in-process; return the drawn outer (or ``inner``) labels and stderr."""
 
     import sys
 
     from gbdraw import cli
 
-    drawn = _drawn_outer_labels(monkeypatch)
+    drawn = _drawn_external_labels(monkeypatch, inner=inner)
     output = tmp_path / gbk.stem
     monkeypatch.setattr(
         sys,
         "argv",
-        ["gbdraw", "circular", "--gbk", str(gbk), "--labels", "out", *extra, "-o", str(output), "-f", "svg"],
+        ["gbdraw", "circular", "--gbk", str(gbk), "--labels", scope, *extra, "-o", str(output), "-f", "svg"],
     )
     cli.main()
     return drawn[-1], capsys.readouterr().err
@@ -3772,7 +3774,7 @@ def test_drosophila_outer_labels_keep_feature_order_across_the_origin(
     tRNA-Gln and tRNA-Met; it was moved past ND2, its leader crossed three others, and the CLI warned."""
 
     extra = () if font_size is None else ("--label_font_size", font_size)
-    labels, stderr = _cli_outer_labels(
+    labels, stderr = _cli_external_labels(
         monkeypatch, capsys, tmp_path, _METAZOAN_MITOCHONDRIA / "NC_024511.2.gb", *extra
     )
 
@@ -3815,7 +3817,7 @@ def test_zebrafish_outer_labels_near_the_origin_stay_at_their_features(
 
     monkeypatch.setattr(circular_labels_module, "_refine_labels_to_preferred_hemisphere", checked_refine)
     gbk = _METAZOAN_MITOCHONDRIA / "NC_002333.2.gb"
-    labels, _ = _cli_outer_labels(monkeypatch, capsys, tmp_path, gbk)
+    labels, _ = _cli_external_labels(monkeypatch, capsys, tmp_path, gbk)
 
     assert added_descents and max(added_descents) <= 0
     order = _clockwise_label_order(labels)
@@ -3826,3 +3828,27 @@ def test_zebrafish_outer_labels_near_the_origin_stay_at_their_features(
         if label["label_text"] in {"tRNA-Thr", "tRNA-Pro"}:
             anchor = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"])))
             assert _angle_diff(anchor, angle_from_middle(float(label["middle"]), total_length)) < 2.0, label["label_text"]
+
+
+_EXAMPLES = Path(__file__).parent.parent / "examples"
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("genome", ["MelaMJNV", "MellatMJNV"])
+def test_dense_inner_labels_keep_feature_order_across_the_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    genome: str,
+) -> None:
+    """OV-1376 (D-26): the label solver kept the inner labels in a straight chain from the seam, which
+    could span more than a full circle; with every pass bounded across the origin, both figures draw
+    with the inner labels in feature order and nothing that needs a notice."""
+
+    labels, stderr = _cli_external_labels(
+        monkeypatch, capsys, tmp_path, _EXAMPLES / f"{genome}.gb", scope="both", inner=True
+    )
+
+    order = _clockwise_label_order(labels)
+    assert _is_cyclic_rotation(order, _feature_order(labels)), order
+    assert "do not fit" not in stderr
