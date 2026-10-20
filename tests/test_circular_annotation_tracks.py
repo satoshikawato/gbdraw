@@ -1430,6 +1430,51 @@ def test_circular_span_label_room_past_the_axis_moves_the_outside_rows(style: Re
     assert letters and all(bands["o1"][0] - far >= 4.0 - 1e-3 for _near, far in letters), letters
 
 
+@pytest.mark.parametrize(
+    ("slots", "ring"),
+    [
+        # OV-1360: a span over split feature lanes holds its room past them, so the automatic ring outside moves out.
+        (
+            (
+                "features:features@lane_direction=split",
+                "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
+                "gc:dinucleotide_content@side=outside",
+            ),
+            "gc",
+        ),
+        # OV-1360: a span from split feature lanes to an inside ring keys its room to the features, where its labels go.
+        (
+            (
+                "o1:dinucleotide_content@side=outside",
+                "features:features@lane_direction=split",
+                "gc:dinucleotide_content@side=inside",
+                "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,to_slot=gc,z=5",
+            ),
+            "o1",
+        ),
+        # OV-1359: an overlay that spans nothing measures its room from its own band and keeps it past its anchor.
+        (
+            (
+                "o2:dinucleotide_skew@side=outside",
+                "o1:dinucleotide_content@side=outside",
+                "features:features",
+                "gc:dinucleotide_content@side=inside",
+                "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=false,z=5",
+            ),
+            "o1",
+        ),
+    ],
+    ids=["span-over-split-features", "span-from-split-features", "overlay-spanning-nothing"],
+)
+def test_circular_overlay_labels_keep_their_room_from_the_automatic_ring_outside(
+    slots: tuple[str, ...], ring: str
+) -> None:
+    drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
+    bands = _slot_bands(drawing)
+    letters = _annotation_letter_radii(drawing)
+    assert len(letters) == 2 and all(bands[ring][0] - far >= 4.0 - 1e-3 for _near, far in letters), (letters, bands)
+
+
 def test_circular_rings_that_cannot_make_one_sides_label_room_keep_the_other_sides_room() -> None:
     # REVIEW-1192 delta D4: the pinned GC ring inside cannot make the inside slot's room (OV-1207); the outside
     # annotation slot still keeps its room, so the automatic ring beyond it keeps label_offset from its letters.
@@ -1493,8 +1538,17 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
         ("features:features", "skew:dinucleotide_skew@side=inside,r=0.86,w=18px",
          "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=skew,to_slot=ov,z=5"),
+        # A span over split feature lanes keeps its room past them, so a ring set on the letters takes it (OV-1360).
+        ("features:features@lane_direction=split",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
+         "gc:dinucleotide_content@side=outside,r=1.16"),
+        # An overlay that spans nothing keeps its room past its anchor, so a ring set on the letters takes it when the
+        # set ring inside holds the features on the axis (OV-1359).
+        ("o1:dinucleotide_content@side=outside,r=1.11", "features:features", "gc:dinucleotide_content@side=inside,r=0.85",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=false,z=5"),
     ],
-    ids=["split-features", "tick-labels", "span-to-an-overlay-plot"],
+    ids=["split-features", "tick-labels", "span-to-an-overlay-plot", "span-over-split-features",
+         "overlay-spanning-nothing"],
 )
 def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str, ...]) -> None:
     with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
@@ -1511,8 +1565,7 @@ def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str,
         ("ticks:ticks@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
         ("features:features", "skew:dinucleotide_skew@side=inside,w=18px", "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=skew,to_slot=ov,z=5"),
-        # An overlay that spans nothing, or covers split feature lanes, keeps no room; its labels are drawn over the
-        # tracks around it whatever the radii (OV-1359, OV-1360).
+        # An overlay that spans nothing, or covers split feature lanes, keeps a room past its anchor (OV-1359, OV-1360).
         ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=false,z=5"),
         ("features:features@lane_direction=split",
