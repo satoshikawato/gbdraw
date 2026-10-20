@@ -430,8 +430,10 @@ export const createHistoryManager = ({
 
   // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
   // that still owns its intent commit, owns the current state. Undo, Redo, and
-  // their buttons and shortcuts share this one reactive availability; the
-  // Session owner words a Generate or diagram update in progress.
+  // their buttons and shortcuts share this one reactive availability; Undo,
+  // Redo, and their enabled state also read the top step's check
+  // (`topStepAvailability`, OV-1339). The Session owner words a Generate or
+  // diagram update in progress.
   const historyAvailability = () => {
     void transactionRevision.value;
     const busy = mutationAvailability();
