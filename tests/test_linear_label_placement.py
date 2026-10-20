@@ -818,6 +818,73 @@ def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overl
     assert livp["leader_line"] is False
 
 
+
+@pytest.mark.linear
+@pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
+def test_linear_above_feature_horizontal_labels_take_the_auto_first_row_with_a_leader(separate_strands: bool) -> None:
+    """LP-D120 (OV-1396): a horizontal above-feature label keeps the clearance off its feature that the auto
+    placement keeps for its first row, with a leader from the feature edge to the label, as in auto; the
+    lowest row is that first row (mirrored below the feature for a negative-strand label with separate
+    strands). Before, the lowest row sat on the features without a leader."""
+
+    spacing = 3.0
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        input_filename="NC_001416.gb",
+        linear_label_spacing=spacing,
+        separate_strands=separate_strands,
+    )
+    pitch = max(float(label["height_px"]) for label in labels) + spacing
+    lowest = {True: 0, False: 0}
+    for label in labels:
+        above = bool(label["above_feature_place_above"])
+        edge = float(label["feature_top_y"] if above else label["feature_bottom_y"])
+        first_row_y = edge - pitch if above else edge + pitch
+        middle_y = float(label["middle_y"])
+        assert (middle_y <= first_row_y + 1e-6) if above else (middle_y >= first_row_y - 1e-6), label["label_text"]
+        lowest[above] += middle_y == pytest.approx(first_row_y)
+        assert label["leader_line"] is True, label["label_text"]
+        assert (float(label["leader_start_x"]), float(label["leader_start_y"])) == pytest.approx(
+            (float(label["feature_anchor_x"]), edge)
+        )
+        contact_y = middle_y + (0.5 if above else -0.5) * float(label["height_px"])
+        assert (float(label["leader_end_x"]), float(label["leader_end_y"])) == pytest.approx(
+            (float(label["feature_anchor_x"]), contact_y)
+        )
+    assert lowest[True] > 5
+    assert (lowest[False] > 5) is separate_strands
+    if not separate_strands:
+        auto = _prepare_linear_labels(
+            label_placement="auto", input_filename="NC_001416.gb", linear_label_spacing=spacing
+        )
+        auto_first_row = [float(label["middle_y"]) for label in auto if label["track_id"] == "track_1"]
+        first_row_y = min(float(label["feature_top_y"]) for label in labels) - pitch
+        assert auto_first_row and auto_first_row == pytest.approx([first_row_y] * len(auto_first_row))
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
+def test_linear_above_feature_turned_labels_keep_their_place_on_the_feature(separate_strands: bool) -> None:
+    """LP-D120: a turned above-feature label keeps its place on its feature (no leader, the small gap) unless
+    it moves off another label; the first-row clearance is only for horizontal labels."""
+
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=45.0,
+        input_filename="NC_001416.gb",
+        separate_strands=separate_strands,
+    )
+    on_feature = [label for label in labels if not label["leader_line"]]
+    assert len(on_feature) > 5
+    for label in on_feature:
+        assert float(label["middle_y"]) == pytest.approx(_feature_adjacent_label_y(label))
+    for label in labels:
+        if label["leader_line"]:
+            assert abs(float(label["middle_y"]) - float(label["feature_middle_y"])) > abs(
+                _feature_adjacent_label_y(label) - float(label["feature_middle_y"])
+            )
+
+
 @pytest.mark.linear
 def test_linear_above_feature_shifted_labels_get_leader_lines() -> None:
     labels = _prepare_linear_labels(
@@ -1450,7 +1517,7 @@ def test_linear_above_feature_label_moves_off_a_keep_clear_box() -> None:
     )
     (alone,) = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout=canvas_cfg.track_layout)[0]
     left, _right, top, bottom = calculate_label_bounds(alone)
-    assert left < 0.0 and alone["leader_line"] is False
+    assert left < 0.0
 
     header = Aabb(left - 50.0, top - 2.0, -5.0, bottom + 30.0)
     (placed,) = place_linear_label_row(

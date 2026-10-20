@@ -794,6 +794,8 @@ def linear_record_labels(
                 # Keep rotated label bottom edge above the feature top.
                 label_y = feature_top_y - label_vertical_gap - y_max_offset
                 label_leader_start_y = feature_top_y
+            # A horizontal label moves to the first row off its feature when its row is placed
+            # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
             label_entry.update(
                 {
                     "middle_y": label_y,
@@ -835,8 +837,9 @@ def place_linear_label_row(
     row (records in row order), so that no two labels of the row overlap (OV-1188).
 
     The external labels take the lowest row free where the row draws them, in record order, and the
-    rows of a side are one row pitch apart from the outermost feature of the row; labels drawn above
-    their features (``above_feature``) move away from the axis off each other. A record's labels keep
+    rows of a side are one row pitch apart from the outermost feature of the row. ``above_feature``
+    labels start at their own feature: a horizontal one in the first row off it, with a leader, a turned
+    one on it (LP-D120); then they move away from the axis off each other. A record's labels keep
     record coordinates, and the first record's external labels take the rows they take alone. Returns
     each record's labels: those on their features first, then the external ones by row.
     """
@@ -850,6 +853,7 @@ def place_linear_label_row(
     top_feature_y = min((record.top_feature_y for record in labelled), default=0.0)
     bottom_feature_y = max((record.bottom_feature_y for record in labelled), default=0.0)
     bucket_size = _external_label_bucket_size(max(record.alignment_width for record, _x in records))
+    track_height = max_height + spacing_px
 
     # The external labels in row coordinates: the packer reads only their x span.
     track_dict: defaultdict[str, list[dict]] = defaultdict(list)
@@ -868,7 +872,11 @@ def place_linear_label_row(
             _insert_external_label_index(track_indexes, track_id, framed_id, framed, bucket_size)
 
     if profile.label_placement == "above_feature":
-        # Every label is on its feature here; the resolver reads their anchor and box x.
+        for record, _x in records:
+            for label in record.labels:
+                if float(label["rotation_deg"]) == 0.0:
+                    _above_feature_label_in_first_row(label, track_height)
+        # Every label is at its feature here; the resolver reads their anchor and box x.
         on_features = [(label, x) for record, x in records for label in record.labels]
         framed_labels = [
             {
@@ -889,7 +897,6 @@ def place_linear_label_row(
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
 
-    track_height = max_height + spacing_px
     placed: list[list[dict]] = []
     for record, _x in records:
         external = sorted(
@@ -902,9 +909,30 @@ def place_linear_label_row(
                 label["row_origin_y"], label["row_pitch"] = bottom_feature_y, track_height
             else:
                 label["row_origin_y"], label["row_pitch"] = top_feature_y, -track_height
-            label["middle_y"] = label["row_origin_y"] + label["row_pitch"] * linear_label_row(label)
+            label["middle_y"] = linear_row_y(label["row_origin_y"], label["row_pitch"], linear_label_row(label))
         placed.append([label for label in record.labels if label["is_embedded"]] + external)
     return placed
+
+
+def linear_row_y(origin_y: float, pitch: float, row: int) -> float:
+    """The y of a label in row ``row`` of a side that starts at ``origin_y`` (the features' edge) and steps
+    ``pitch`` (the tallest label plus ``labels.spacing.linear``, away from the axis): the one owner of
+    a Linear label row's position, for the auto rows and the first row of horizontal ``above_feature``
+    labels (LP-D120)."""
+
+    return origin_y + pitch * row
+
+
+def _above_feature_label_in_first_row(label: dict, track_height: float) -> None:
+    """Put a horizontal ``above_feature`` label in the first row off its own feature, where the auto
+    placement puts its first row, with a leader from the feature edge, as an auto label in its rows has
+    (LP-D120). A turned label stays on its feature."""
+
+    above = bool(label["above_feature_place_above"])
+    edge_y = float(label["leader_start_y"])
+    label["middle_y"] = linear_row_y(edge_y, -track_height if above else track_height, 1)
+    label["leader_line"] = True
+    _update_linear_label_leader_end(label)
 
 
 def linear_label_row(label: Mapping[str, object]) -> int:
@@ -932,7 +960,7 @@ def linear_label_in_row(label: dict, side: tuple[float, float], row: int) -> dic
     (LP-D82 ``RGN-YIELD-ROW``)."""
 
     origin, pitch = side
-    return {**label, "middle_y": origin + pitch * row, "track_id": f"track_{row}"}
+    return {**label, "middle_y": linear_row_y(origin, pitch, row), "track_id": f"track_{row}"}
 
 
 class FeatureLabelRow(NamedTuple):

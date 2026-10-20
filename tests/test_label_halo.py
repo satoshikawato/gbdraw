@@ -533,3 +533,44 @@ def test_a_turned_label_on_its_feature_gets_its_box_which_stays_off_the_feature(
         else:
             assert min(ys) >= bottom - 1e-6, text.text
     assert max(order[id(box)] for box in boxes.values()) < min(order[id(text)] for text in texts)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("--show_labels",), ("--show_labels", "all", "--separate_strands")],
+    ids=["one-side", "all-separate-strands"],
+)
+def test_a_horizontal_above_feature_label_has_its_leader_underline_and_box_as_in_auto(
+    argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LP-D120 (OV-1396): every horizontal ``above_feature`` label, the lowest row too, is drawn as an auto
+    label in its rows: a leader from its feature, the underline it ends on (a label below its feature: the
+    leader stops above the letters, no line), and its white box. Before, the lowest row had none of the
+    three (lambda: "terminase small subunit", "head decoration")."""
+
+    root = ET.parse(
+        _svg(tmp_path, monkeypatch, "linear", "--gbk", str(LAMBDA), "--label_placement", "above_feature", *argv)
+    ).getroot()
+    boxes = {
+        element.get(FEATURE)
+        for element, _ in _walk(root)
+        if element.tag == f"{SVG}rect" and element.get("fill-opacity") == str(BOX_OPACITY)
+    }
+    texts = _label_texts(root)
+    assert {"terminase small subunit", "head decoration"} <= {text.text for text in texts}
+    above = below = 0
+    for text in texts:
+        feature = text.get(FEATURE)
+        lines = _lines_of(root, feature)
+        leaders = [line for line in lines if _is_leader(line)]
+        unders = [line for line in lines if _is_underline(line)]
+        top, bottom = _feature_y_extent(root, feature)
+        assert leaders and feature in boxes, text.text
+        start_y = float(leaders[0].get("y1", ""))
+        if float(text.get("y", "")) < top:
+            above += 1
+            assert start_y == pytest.approx(top, abs=1.0) and len(unders) == 1, text.text
+        else:
+            below += 1
+            assert start_y == pytest.approx(bottom, abs=1.0) and not unders, text.text
+    assert above > 5 and (below > 5) is ("--separate_strands" in argv)
