@@ -18,9 +18,8 @@ class GcContentGroup:
 
     Attributes:
         gb_record (SeqRecord): GenBank record containing genomic data.
-        longest_record_len (int): Length of the longest record for normalization.
         track_height (float): Height of the GC content track.
-        alignment_width (float): Width of the alignment area.
+        sequence_width (float): The record's drawn axis width, from its placement.
         gc_config (GcContentConfigurator): Configuration for GC content visualization.
         start_x (float): Starting x-coordinate for the GC content visualization.
         start_y (float): Starting y-coordinate for the GC content visualization.
@@ -29,17 +28,14 @@ class GcContentGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        longest_record_len: int,
         track_height: float,
-        alignment_width: float,
         gc_config: GcContentConfigurator,
         *,
-        normalize_length: bool,
+        sequence_width: float,
         start_x: float = 0,
         start_y: float = 0,
         gc_df: DataFrame | None = None,
         group_id: str = "gc_content",
-        sequence_width: float | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         """
@@ -47,9 +43,8 @@ class GcContentGroup:
 
         Args:
             gb_record (SeqRecord): GenBank record containing genomic data.
-            longest_record_len (int): Length of the longest record for normalization.
             track_height (float): Height of the GC content track.
-            alignment_width (float): Width of the alignment area.
+            sequence_width (float): The record's drawn axis width, from its placement.
             gc_config (GcContentConfigurator): Configuration for GC content visualization.
             start_x (float): Starting x-coordinate for the GC content visualization.
             start_y (float): Starting y-coordinate for the GC content visualization.
@@ -59,37 +54,16 @@ class GcContentGroup:
         self.gc_group: Group = Group(id=self.group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
-        self.longest_record_len: int = longest_record_len
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
         self.window: int = self.gc_config.window
         self.step: int = self.gc_config.step
         self.dinucleotide: str = self.gc_config.dinucleotide
         self.track_height: float = track_height
-        self.alignment_width: float = (
-            float(sequence_width) if sequence_width is not None else alignment_width
-        )
-        self.sequence_width = sequence_width
-        self.bool_normalize_length = normalize_length
-        self.normalize_length()
+        self.sequence_width: float = float(sequence_width)
+        self.record_len: int = len(self.gb_record.seq)
         self.generate_gc_df(gc_df)
         self.add_elements_to_group()
-
-    def normalize_length(self) -> None:
-        """
-        Normalizes the length of the genomic record relative to the longest record.
-
-        This method calculates the normalization factor based on the length of the current
-        genomic record and the length of the longest record in the dataset. This factor is used
-        to scale the visualization appropriately.
-        """
-        self.record_len: int = len(self.gb_record.seq)
-        if self.sequence_width is not None:
-            self.genome_size_normalization_factor: float = 1.0
-        elif self.bool_normalize_length:
-            self.genome_size_normalization_factor = 1.0
-        else:
-            self.genome_size_normalization_factor = self.record_len / self.longest_record_len
 
     def generate_gc_df(self, gc_df: DataFrame | None = None) -> None:
         """
@@ -114,8 +88,8 @@ class GcContentGroup:
             self.gc_group,
             self.gc_df,
             self.record_len,
-            self.alignment_width,
-            self.genome_size_normalization_factor,
+            self.sequence_width,
+            1.0,
             self.track_height,
             self.start_x,
             self.start_y,

@@ -114,9 +114,12 @@ from ...layout.composition import (
 )
 from ...layout.spatial import Aabb, union_aabbs
 from ...layout.linear_multi_record import (
+    LinearHorizontalLayout,
     LinearRecordMeasurement,
     LinearRecordPlacement,
     RecordKey,
+    place_record_vertically,
+    solve_linear_horizontal_layout,
     solve_linear_layout,
     stable_record_keys,
 )
@@ -2371,33 +2374,40 @@ def assemble_linear_diagram(
             record_transforms=record_transforms,
             record_presentations=presentations,
         )
-    record_offsets_x: list[float] = []
-    # A record alone in its row has its horizontal place before its labels: its x, width and scale,
-    # with zero vertical extents that the row solve fills in.
+    # Every record has its horizontal place before its labels, solved once: its x, width and
+    # scale, with zero vertical extents that the row stacking fills in.
     horizontal_placements: dict[int, LinearRecordPlacement] = {}
-    if not multi_record_enabled:
-        for record_index, record in enumerate(records):
-            if canvas_config.normalize_length:
-                record_offset_x = 0.0
-            elif canvas_config.align_center:
-                record_offset_x = (
-                    canvas_config.alignment_width
-                    * (
-                        (canvas_config.longest_genome - len(record.seq))
-                        / canvas_config.longest_genome
-                    )
-                    / 2
+    horizontal_layout: LinearHorizontalLayout | None = None
+    if multi_record_enabled:
+        horizontal_layout = solve_linear_horizontal_layout(
+            [
+                LinearRecordMeasurement(
+                    record_index=index,
+                    record_key=RecordKey(str(record_keys[index])),
+                    sequence_length=len(record.seq),
                 )
-            else:
-                record_offset_x = 0.0
-            record_offsets_x.append(record_offset_x)
+                for index, record in enumerate(records)
+            ],
+            rows_by_record,
+            available_width=float(canvas_config.alignment_width),
+            record_gap_px=(
+                linear_layout.record_gap_px if linear_layout is not None else 24.0
+            ),
+            align_center=bool(canvas_config.align_center),
+            record_order=ordered_record_indices,
+        )
+        horizontal_placements = {
+            index: horizontal_layout.placement_for_index(index) for index in range(len(records))
+        }
+    else:
+        for record_index, record in enumerate(records):
             sequence_width = canvas_config.record_sequence_width(len(record.seq))
             horizontal_placements[record_index] = LinearRecordPlacement(
                 record_index=record_index,
                 record_key=RecordKey(str(record_keys[record_index])),
                 row=rows_by_record[record_index],
                 column=0,
-                x=record_offset_x,
+                x=canvas_config.record_x(len(record.seq)),
                 axis_y=0.0,
                 sequence_width=sequence_width,
                 left_inset=0.0,
@@ -2455,13 +2465,9 @@ def assemble_linear_diagram(
         ]
         return translations, column_left, keep_clear
 
-    # A record sharing its row is placed by the row solve, which reads its labels' heights: its
-    # first labels are stacked without keep-clear boxes, and only its second labels are drawn.
-    label_keep_clear: list[tuple[Aabb, ...]] | None = None
-    if not multi_record_enabled:
-        final_translations, definition_column_left, label_keep_clear = resolve_horizontal_frame(
-            horizontal_placements
-        )
+    final_translations, definition_column_left, label_keep_clear = resolve_horizontal_frame(
+        horizontal_placements
+    )
     _unused_label_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
         records,
         feature_config,
@@ -2476,7 +2482,9 @@ def assemble_linear_diagram(
             else [horizontal_placements[index].sequence_width for index in range(len(records))]
         ),
         record_transforms=record_transforms,
-        label_keep_clear=label_keep_clear,
+        # A record sharing its row is stacked by the row solve, which reads its labels' heights:
+        # its first labels are stacked without keep-clear boxes, and only its second labels are drawn.
+        label_keep_clear=None if multi_record_enabled else label_keep_clear,
     )
     if feature_label_rows is not None:
         all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
@@ -2595,19 +2603,17 @@ def assemble_linear_diagram(
 
     definition_column_width = max_def_width
 
-    def drawn_collision_bands(
-        placements: Mapping[int, LinearRecordPlacement],
-    ) -> list[tuple[CollisionBand, ...]]:
+    def drawn_collision_bands() -> list[tuple[CollisionBand, ...]]:
         """Each record's collision bands where the drawing puts them (OV-1400): at the record's
         final translation, with the definition column's left and the text anchor the drawing uses.
-        The row solves read these, so the gap between rows is solved from the drawn boxes."""
+        The row stacking reads these, so the gap between rows is solved from the drawn boxes."""
 
         return [
             _record_collision_bands(
                 plan=record_vertical_plans[index],
                 definition_geometry=record_definition_geometries[index],
-                sequence_width=placements[index].sequence_width,
-                record_x=placements[index].x + final_translations[index][0],
+                sequence_width=horizontal_placements[index].sequence_width,
+                record_x=horizontal_placements[index].x + final_translations[index][0],
                 multi_record_enabled=multi_record_enabled,
                 text_anchor=cfg.objects.definition.linear.text_anchor,
                 keep_definition_left_aligned=bool(canvas_config.keep_definition_left_aligned),
@@ -2620,6 +2626,7 @@ def assemble_linear_diagram(
         ]
 
     record_offsets: list[float] = [0.0 for _record in records]
+    record_offsets_x: list[float] = [0.0 for _record in records]
     record_collision_bands: list[tuple[CollisionBand, ...]]
     boundary_gap_resolutions: list[AxisGapResolution] = []
     multi_record_plan = None
@@ -2635,81 +2642,14 @@ def assemble_linear_diagram(
     current_y = resolve_first_axis_y()
 
     if multi_record_enabled:
-        def build_measurements(
-            horizontal_plan=None,
-            drawn_bands: Sequence[tuple[CollisionBand, ...]] = (),
-        ) -> list[LinearRecordMeasurement]:
-            measurements: list[LinearRecordMeasurement] = []
-            for index, record in enumerate(records):
-                record_plan = record_vertical_plans[index]
-                placement = (
-                    horizontal_plan.placement_for_index(index)
-                    if horizontal_plan is not None
-                    else None
-                )
-                collision_bands: tuple[CollisionBand, ...] = ()
-                if placement is not None:
-                    # The drawn bands, from the record's x in the solve, which adds it back.
-                    collision_bands = tuple(
-                        band.translate(x=-placement.x)
-                        for band in drawn_bands[index]
-                    )
-                measurements.append(
-                    LinearRecordMeasurement(
-                        record_index=index,
-                        record_key=RecordKey(str(record_keys[index])),
-                        sequence_length=len(record.seq),
-                        left_inset=0.0,
-                        right_inset=0.0,
-                        top_extent=record_plan.canvas_top_extent,
-                        bottom_extent=record_plan.canvas_bottom_extent,
-                        comparison_top_extent=record_plan.comparison_top_extent,
-                        comparison_bottom_extent=record_plan.comparison_bottom_extent,
-                        collision_bands=collision_bands,
-                    )
-                )
-            return measurements
-
-        def solve_measurements(
-            measurements: list[LinearRecordMeasurement],
-            *,
-            first_axis_y: float,
-        ):
-            return solve_linear_layout(
-                measurements,
-                rows_by_record,
-                available_width=float(canvas_config.alignment_width),
-                record_gap_px=(
-                    linear_layout.record_gap_px if linear_layout is not None else 24.0
-                ),
-                align_center=bool(canvas_config.align_center),
-                first_axis_y=first_axis_y,
-                row_gap_px=float(canvas_config.cds_padding) * 1.5,
-                comparison_height=float(canvas_config.configured_comparison_height),
-                comparison_endpoint_gap_px=comparison_endpoint_gap_px,
-                definition_clear_gap=definition_clear_gap,
-                comparison_record_indices_by_boundary=comparison_boundary_records,
-                record_order=ordered_record_indices,
-            )
-
-        multi_record_plan = solve_measurements(
-            build_measurements(),
-            first_axis_y=current_y,
-        )
-        # Horizontal widths are independent of vertical extents. Re-resolve all
-        # width-sensitive lanes before the authoritative vertical solve.
+        assert horizontal_layout is not None
         final_sequence_widths = [
-            multi_record_plan.placement_for_index(index).sequence_width
-            for index in range(len(records))
+            horizontal_placements[index].sequence_width for index in range(len(records))
         ]
         label_frames = [
-            LinearLabelFrame(rows_by_record[index], multi_record_plan.placement_for_index(index).x)
+            LinearLabelFrame(rows_by_record[index], horizontal_placements[index].x)
             for index in range(len(records))
         ]
-        # The row solve places records from their lengths alone; the second solve keeps these places.
-        final_translations, definition_column_left, label_keep_clear = resolve_horizontal_frame(
-            {index: multi_record_plan.placement_for_index(index) for index in range(len(records))}
-        )
         if annotation_track_layouts:
             linear_track_slots, annotation_track_layouts = (
                 _layout_linear_annotation_tracks(
@@ -2789,25 +2729,41 @@ def assemble_linear_diagram(
             canvas_config,
         )
         current_y = resolve_first_axis_y()
-        record_collision_bands = drawn_collision_bands(
-            {index: multi_record_plan.placement_for_index(index) for index in range(len(records))}
-        )
-        multi_record_plan = solve_measurements(
-            build_measurements(multi_record_plan, record_collision_bands),
+        record_collision_bands = drawn_collision_bands()
+        multi_record_plan = solve_linear_layout(
+            [
+                LinearRecordMeasurement(
+                    record_index=index,
+                    record_key=RecordKey(str(record_keys[index])),
+                    sequence_length=len(record.seq),
+                    top_extent=record_vertical_plans[index].canvas_top_extent,
+                    bottom_extent=record_vertical_plans[index].canvas_bottom_extent,
+                    comparison_top_extent=record_vertical_plans[index].comparison_top_extent,
+                    comparison_bottom_extent=record_vertical_plans[index].comparison_bottom_extent,
+                    # The drawn bands, local to the record's x, which the solve adds back.
+                    collision_bands=tuple(
+                        band.translate(x=-horizontal_placements[index].x)
+                        for band in record_collision_bands[index]
+                    ),
+                )
+                for index, record in enumerate(records)
+            ],
+            horizontal_layout,
             first_axis_y=current_y,
+            row_gap_px=ordinary_row_gap,
+            comparison_height=float(canvas_config.configured_comparison_height),
+            comparison_endpoint_gap_px=comparison_endpoint_gap_px,
+            definition_clear_gap=definition_clear_gap,
+            comparison_record_indices_by_boundary=comparison_boundary_records,
         )
         record_offsets = [
             multi_record_plan.placement_for_index(index).axis_y
             for index in range(len(records))
         ]
-        record_offsets_x = [
-            multi_record_plan.placement_for_index(index).x
-            for index in range(len(records))
-        ]
         boundary_gap_resolutions = list(multi_record_plan.row_gap_resolutions)
         current_y = max(record_offsets)
     else:
-        record_collision_bands = drawn_collision_bands(horizontal_placements)
+        record_collision_bands = drawn_collision_bands()
 
         ordered_rows = tuple(ordered_record_indices)
         for row_position, record_index in enumerate(ordered_rows):
@@ -2857,23 +2813,15 @@ def assemble_linear_diagram(
                 record_index
             )
             continue
-        axis_y = record_offsets[record_index]
         record_plan = record_vertical_plans[record_index]
-        record_placements[record_index] = replace(
+        record_placements[record_index] = place_record_vertically(
             horizontal_placements[record_index],
-            axis_y=axis_y,
+            axis_y=record_offsets[record_index],
             top_extent=record_plan.canvas_top_extent,
             bottom_extent=record_plan.canvas_bottom_extent,
-            comparison_top_y=(
-                axis_y
-                - record_plan.comparison_top_extent
-                - comparison_endpoint_gap_px
-            ),
-            comparison_bottom_y=(
-                axis_y
-                + record_plan.comparison_bottom_extent
-                + comparison_endpoint_gap_px
-            ),
+            comparison_top_extent=record_plan.comparison_top_extent,
+            comparison_bottom_extent=record_plan.comparison_bottom_extent,
+            comparison_endpoint_gap=comparison_endpoint_gap_px,
         )
     # Keep raw layout placements available to the existing alignment helper.
     # They exclude canonical translations and composition/viewBox fitting.
@@ -2977,7 +2925,7 @@ def assemble_linear_diagram(
             "length_bar_content",
             build_group_content,
             LengthBarGroup,
-            canvas_config.alignment_width,
+            canvas_config.record_sequence_width(canvas_config.longest_genome),
             canvas_config.longest_genome,
             canvas_config.length_param,
             scale=cfg.objects.scale,

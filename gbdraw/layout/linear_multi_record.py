@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Mapping, NewType, Sequence
 
@@ -142,22 +142,64 @@ def record_pairs_between_adjacent_rows(
     )
 
 
-def solve_linear_layout(
+@dataclass(frozen=True)
+class LinearHorizontalLayout:
+    """Where each record sits along its row: x, width and the shared bp scale.
+
+    Its placements carry zero vertical fields; ``solve_linear_layout`` places them vertically.
+    The labels, the definition keep-clear boxes and the collision bands read these places before
+    the rows are stacked, so the drawing and the vertical solve read the same horizontal frame.
+    """
+
+    placements: tuple[LinearRecordPlacement, ...]
+    rows: tuple[tuple[int, ...], ...]
+    px_per_bp: float
+    content_left: float
+    content_right: float
+
+    def placement_for_index(self, record_index: int) -> LinearRecordPlacement:
+        for placement in self.placements:
+            if placement.record_index == record_index:
+                return placement
+        raise KeyError(record_index)
+
+
+def place_record_vertically(
+    horizontal: LinearRecordPlacement,
+    *,
+    axis_y: float,
+    top_extent: float,
+    bottom_extent: float,
+    comparison_top_extent: float,
+    comparison_bottom_extent: float,
+    comparison_endpoint_gap: float,
+) -> LinearRecordPlacement:
+    """A record's final placement: its horizontal place on the row whose axis is ``axis_y``."""
+
+    return replace(
+        horizontal,
+        axis_y=axis_y,
+        top_extent=top_extent,
+        bottom_extent=bottom_extent,
+        comparison_top_y=axis_y - comparison_top_extent - comparison_endpoint_gap,
+        comparison_bottom_y=axis_y + comparison_bottom_extent + comparison_endpoint_gap,
+    )
+
+
+def solve_linear_horizontal_layout(
     measurements: Sequence[LinearRecordMeasurement],
     rows_by_record: Sequence[int],
     *,
     available_width: float,
     record_gap_px: float = 24.0,
     align_center: bool = True,
-    first_axis_y: float = 0.0,
-    row_gap_px: float = 0.0,
-    comparison_height: float = 0.0,
-    comparison_endpoint_gap_px: float = 0.0,
-    definition_clear_gap: float = 0.0,
-    comparison_record_indices_by_boundary: Mapping[int, Sequence[int]] | None = None,
     record_order: Sequence[int] | None = None,
-) -> LinearLayoutPlan:
-    """Resolve one shared bp scale and record placements without creating SVG."""
+) -> LinearHorizontalLayout:
+    """Resolve one shared bp scale and each record's x and width in its row.
+
+    It reads only the records' lengths and horizontal insets, never their vertical extents or
+    collision bands, so it runs once per drawing, before the labels are placed.
+    """
 
     items = tuple(measurements)
     if not items:
@@ -170,19 +212,6 @@ def solve_linear_layout(
         raise ValidationError("available_width must be a finite positive number.")
     if not math.isfinite(gap) or gap < 0:
         raise ValidationError("record_gap_px must be a finite non-negative number.")
-    ordinary_gap = float(row_gap_px)
-    comparison_gap = float(comparison_height)
-    comparison_endpoint_gap = float(comparison_endpoint_gap_px)
-    definition_gap = float(definition_clear_gap)
-    for name, value in (
-        ("row_gap_px", ordinary_gap),
-        ("comparison_height", comparison_gap),
-        ("comparison_endpoint_gap_px", comparison_endpoint_gap),
-        ("definition_clear_gap", definition_gap),
-    ):
-        if not math.isfinite(value) or value < 0:
-            raise ValidationError(f"{name} must be a finite non-negative number.")
-    comparison_clearance = comparison_gap + (2.0 * comparison_endpoint_gap)
     if any(not isinstance(row, int) or isinstance(row, bool) or row < 0 for row in rows_by_record):
         raise ValidationError("Linear rows must be non-negative integers.")
     if len({item.record_index for item in items}) != len(items):
@@ -218,7 +247,7 @@ def solve_linear_layout(
     if not math.isfinite(px_per_bp) or px_per_bp <= 0:
         raise ValidationError("Linear layout did not produce a positive shared bp scale.")
 
-    horizontal_rows: list[list[tuple[LinearRecordMeasurement, float, float]]] = []
+    placements: list[LinearRecordPlacement] = []
     content_left = 0.0
     content_right = 0.0
     for row_index, row_items in enumerate(grouped):
@@ -230,94 +259,154 @@ def solve_linear_layout(
         row_width = compensated_sum(sequence_widths) + compensated_sum(effective_gaps)
         cursor = 0.5 * (width - row_width) if align_center else 0.0
         content_left = min(content_left, cursor - row_items[0].left_inset)
-        horizontal_row: list[tuple[LinearRecordMeasurement, float, float]] = []
-        column = 0
-        for item, sequence_width_value in zip(row_items, sequence_widths):
-            horizontal_row.append((item, cursor, sequence_width_value))
+        for column, (item, sequence_width_value) in enumerate(zip(row_items, sequence_widths)):
+            placements.append(
+                LinearRecordPlacement(
+                    record_index=item.record_index,
+                    record_key=item.record_key,
+                    row=row_index,
+                    column=column,
+                    x=cursor,
+                    axis_y=0.0,
+                    sequence_width=sequence_width_value,
+                    left_inset=item.left_inset,
+                    right_inset=item.right_inset,
+                    top_extent=0.0,
+                    bottom_extent=0.0,
+                    comparison_top_y=0.0,
+                    comparison_bottom_y=0.0,
+                    px_per_bp=px_per_bp,
+                )
+            )
             content_right = max(
                 content_right,
                 cursor + sequence_width_value + item.right_inset,
             )
             if column < len(effective_gaps):
                 cursor += sequence_width_value + effective_gaps[column]
-            column += 1
-        horizontal_rows.append(horizontal_row)
+
+    return LinearHorizontalLayout(
+        placements=tuple(placements),
+        rows=tuple(tuple(item.record_index for item in row_items) for row_items in grouped),
+        px_per_bp=px_per_bp,
+        content_left=content_left,
+        content_right=content_right,
+    )
+
+
+def solve_linear_layout(
+    measurements: Sequence[LinearRecordMeasurement],
+    horizontal: LinearHorizontalLayout,
+    *,
+    first_axis_y: float = 0.0,
+    row_gap_px: float = 0.0,
+    comparison_height: float = 0.0,
+    comparison_endpoint_gap_px: float = 0.0,
+    definition_clear_gap: float = 0.0,
+    comparison_record_indices_by_boundary: Mapping[int, Sequence[int]] | None = None,
+) -> LinearLayoutPlan:
+    """Stack the rows of ``horizontal`` from the records' vertical extents and collision bands.
+
+    The records keep the horizontal places ``horizontal`` gave them; their bands are local to
+    their x, which this adds back.
+    """
+
+    items = tuple(measurements)
+    if len(items) != len(horizontal.placements):
+        raise ValidationError("Linear layout needs one measurement for every placed record.")
+    by_index = {item.record_index: item for item in items}
+    if len(by_index) != len(items):
+        raise ValidationError("Linear layout record indices must be unique.")
+    for placement in horizontal.placements:
+        item = by_index.get(placement.record_index)
+        if item is None or (
+            item.record_key,
+            item.left_inset,
+            item.right_inset,
+        ) != (placement.record_key, placement.left_inset, placement.right_inset):
+            raise ValidationError(
+                "Linear layout measurements must match the records' horizontal places."
+            )
+    ordinary_gap = float(row_gap_px)
+    comparison_gap = float(comparison_height)
+    comparison_endpoint_gap = float(comparison_endpoint_gap_px)
+    definition_gap = float(definition_clear_gap)
+    for name, value in (
+        ("row_gap_px", ordinary_gap),
+        ("comparison_height", comparison_gap),
+        ("comparison_endpoint_gap_px", comparison_endpoint_gap),
+        ("definition_clear_gap", definition_gap),
+    ):
+        if not math.isfinite(value) or value < 0:
+            raise ValidationError(f"{name} must be a finite non-negative number.")
+    comparison_clearance = comparison_gap + (2.0 * comparison_endpoint_gap)
+    rows = horizontal.rows
 
     boundary_records: dict[int, frozenset[int]] = {}
     if comparison_record_indices_by_boundary is None:
         if comparison_clearance > 0.0:
-            for boundary in range(max(0, len(grouped) - 1)):
-                boundary_records[boundary] = frozenset(
-                    item.record_index
-                    for row_index in (boundary, boundary + 1)
-                    for item in grouped[row_index]
-                )
+            for boundary in range(max(0, len(rows) - 1)):
+                boundary_records[boundary] = frozenset((*rows[boundary], *rows[boundary + 1]))
     else:
         for raw_boundary, raw_indices in comparison_record_indices_by_boundary.items():
             boundary = int(raw_boundary)
-            if boundary < 0 or boundary >= len(grouped) - 1:
+            if boundary < 0 or boundary >= len(rows) - 1:
                 raise ValidationError(
                     "comparison boundary indices must identify adjacent resolved rows."
                 )
             indices = frozenset(int(index) for index in raw_indices)
-            valid_indices = {
-                item.record_index
-                for row_index in (boundary, boundary + 1)
-                for item in grouped[row_index]
-            }
-            if not indices <= valid_indices:
+            if not indices <= {*rows[boundary], *rows[boundary + 1]}:
                 raise ValidationError(
                     "comparison boundary record indices must belong to its adjacent rows."
                 )
             if indices:
                 boundary_records[boundary] = indices
 
+    def comparison_extents(item: LinearRecordMeasurement) -> tuple[float, float]:
+        return (
+            item.top_extent if item.comparison_top_extent is None else item.comparison_top_extent,
+            item.bottom_extent
+            if item.comparison_bottom_extent is None
+            else item.comparison_bottom_extent,
+        )
+
     collision_bands_by_record: dict[int, tuple[CollisionBand, ...]] = {}
-    for horizontal_row in horizontal_rows:
-        for item, x, sequence_width_value in horizontal_row:
-            local_bands = item.collision_bands
-            if not local_bands:
-                comparison_top_extent = (
-                    item.top_extent
-                    if item.comparison_top_extent is None
-                    else item.comparison_top_extent
-                )
-                comparison_bottom_extent = (
-                    item.bottom_extent
-                    if item.comparison_bottom_extent is None
-                    else item.comparison_bottom_extent
-                )
-                local_bands = (
-                    CollisionBand(
-                        "body",
-                        0.0,
-                        sequence_width_value,
-                        -float(item.top_extent),
-                        float(item.bottom_extent),
-                    ),
-                    CollisionBand(
-                        "comparison",
-                        0.0,
-                        sequence_width_value,
-                        -float(comparison_top_extent),
-                        float(comparison_bottom_extent),
-                    ),
-                )
-            collision_bands_by_record[item.record_index] = tuple(
-                band.translate(x=x) for band in local_bands
+    for placement in horizontal.placements:
+        item = by_index[placement.record_index]
+        local_bands = item.collision_bands
+        if not local_bands:
+            comparison_top_extent, comparison_bottom_extent = comparison_extents(item)
+            local_bands = (
+                CollisionBand(
+                    "body",
+                    0.0,
+                    placement.sequence_width,
+                    -float(item.top_extent),
+                    float(item.bottom_extent),
+                ),
+                CollisionBand(
+                    "comparison",
+                    0.0,
+                    placement.sequence_width,
+                    -float(comparison_top_extent),
+                    float(comparison_bottom_extent),
+                ),
             )
+        collision_bands_by_record[item.record_index] = tuple(
+            band.translate(x=placement.x) for band in local_bands
+        )
 
     row_gap_resolutions: list[AxisGapResolution] = []
     row_axis_y: list[float] = [float(first_axis_y)]
-    for boundary in range(max(0, len(grouped) - 1)):
+    for boundary in range(max(0, len(rows) - 1)):
         active_records = boundary_records.get(boundary, frozenset())
 
         def boundary_bands(row_index: int) -> tuple[CollisionBand, ...]:
             return tuple(
                 band
-                for item in grouped[row_index]
-                for band in collision_bands_by_record[item.record_index]
-                if band.kind != "comparison" or item.record_index in active_records
+                for record_index in rows[row_index]
+                for band in collision_bands_by_record[record_index]
+                if band.kind != "comparison" or record_index in active_records
             )
 
         resolution = resolve_axis_gap(
@@ -332,55 +421,30 @@ def solve_linear_layout(
         row_axis_y.append(row_axis_y[-1] + resolution.axis_gap)
 
     placements: list[LinearRecordPlacement] = []
-    for row_index, horizontal_row in enumerate(horizontal_rows):
-        column = 0
-        for item, cursor, sequence_width_value in horizontal_row:
-            comparison_top_extent = (
-                item.top_extent
-                if item.comparison_top_extent is None
-                else item.comparison_top_extent
-            )
-            comparison_bottom_extent = (
-                item.bottom_extent
-                if item.comparison_bottom_extent is None
-                else item.comparison_bottom_extent
-            )
-            placement = LinearRecordPlacement(
-                record_index=item.record_index,
-                record_key=item.record_key,
-                row=row_index,
-                column=column,
-                x=cursor,
-                axis_y=row_axis_y[row_index],
-                sequence_width=sequence_width_value,
-                left_inset=item.left_inset,
-                right_inset=item.right_inset,
+    for placement in horizontal.placements:
+        item = by_index[placement.record_index]
+        comparison_top_extent, comparison_bottom_extent = comparison_extents(item)
+        placements.append(
+            place_record_vertically(
+                placement,
+                axis_y=row_axis_y[placement.row],
                 top_extent=item.top_extent,
                 bottom_extent=item.bottom_extent,
-                comparison_top_y=(
-                    row_axis_y[row_index]
-                    - comparison_top_extent
-                    - comparison_endpoint_gap
-                ),
-                comparison_bottom_y=(
-                    row_axis_y[row_index]
-                    + comparison_bottom_extent
-                    + comparison_endpoint_gap
-                ),
-                px_per_bp=px_per_bp,
+                comparison_top_extent=comparison_top_extent,
+                comparison_bottom_extent=comparison_bottom_extent,
+                comparison_endpoint_gap=comparison_endpoint_gap,
             )
-            placements.append(placement)
-            column += 1
+        )
 
     placements.sort(key=lambda item: item.record_index)
     content_top = min(item.axis_y - item.top_extent for item in placements)
     content_bottom = max(item.axis_y + item.bottom_extent for item in placements)
     return LinearLayoutPlan(
         placements=tuple(placements),
-        px_per_bp=px_per_bp,
-        row_count=len(grouped),
-        content_left=content_left,
-        content_right=content_right,
+        px_per_bp=horizontal.px_per_bp,
+        row_count=len(rows),
+        content_left=horizontal.content_left,
+        content_right=horizontal.content_right,
         content_top=content_top,
         content_bottom=content_bottom,
         row_gap_resolutions=tuple(row_gap_resolutions),
@@ -388,12 +452,15 @@ def solve_linear_layout(
 
 
 __all__ = [
+    "LinearHorizontalLayout",
     "LinearLayoutPlan",
     "LinearRecordMeasurement",
     "LinearRecordPlacement",
     "RecordKey",
     "parse_record_row_position",
+    "place_record_vertically",
     "resolve_record_row_positions",
+    "solve_linear_horizontal_layout",
     "solve_linear_layout",
     "record_key_at",
     "stable_record_keys",

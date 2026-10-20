@@ -67,11 +67,12 @@ class SeqRecordGroup:
         record_index: int = 0,
         record_count: int = 1,
         group_id: str | None = None,
-        sequence_width: float | None = None,
         record_local_ruler: bool = False,
         feature_offset_y: float = 0.0,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_transform: RecordDisplayTransform | None = None,
+        *,
+        sequence_width: float,
     ) -> None:
         self.record_transform = record_transform
         self.gb_record = gb_record
@@ -96,7 +97,8 @@ class SeqRecordGroup:
                 record_count=self.record_count,
             )
         )
-        self.sequence_width = float(sequence_width) if sequence_width is not None else None
+        # The record's drawn axis width, from its placement (``record_sequence_width`` or the row solve).
+        self.sequence_width = float(sequence_width)
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)
         self.feature_lane_geometry = feature_lane_geometry
@@ -109,7 +111,6 @@ class SeqRecordGroup:
         self.show_labels = profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
-        self.normalize_length = geometry.normalize_length
         scale_cfg = cfg.objects.scale
         self.scale_style = str(scale_cfg.style).strip().lower()
         self.scale_stroke_color = scale_cfg.stroke_color
@@ -425,13 +426,8 @@ class SeqRecordGroup:
         Returns:
             Group: The SVG group prepared for SeqRecord visualization.
         """
-        alignment_width: float = (
-            self.sequence_width
-            if self.sequence_width is not None
-            else self.geometry.alignment_width
-        )
+        alignment_width: float = self.sequence_width
         cds_height: float = self.geometry.cds_height
-        longest_genome: int = self.geometry.longest_genome
         arrow_length: float = self.geometry.arrow_length
 
         separate_strands = self.separate_strands
@@ -449,12 +445,8 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
-        if self.sequence_width is not None:
-            genome_size_normalization_factor: float = 1.0
-        elif self.normalize_length:
-            genome_size_normalization_factor = 1.0
-        else:
-            genome_size_normalization_factor = record_length / longest_genome
+        # The width is the record's own, so positions scale by it alone.
+        genome_size_normalization_factor: float = 1.0
 
         feature_dict = self.feature_layers.foreground_features
         label_list = []

@@ -1667,6 +1667,58 @@ def test_linear_label_keep_clear_box_is_the_drawn_definition_box(
 
 
 @pytest.mark.linear
+def test_linear_shared_rows_solve_the_horizontal_places_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Records sharing rows get their x and width from one horizontal solve, which the labels, the
+    keep-clear boxes, the collision bands and the drawing all read; the row stacking keeps them
+    (OV-1400: the keep-clear boxes used to read a first full row solve, the drawing a second)."""
+
+    import gbdraw.diagrams.linear.assemble as assemble_module
+    from gbdraw.api.options import LinearMultiRecordOptions
+
+    horizontal: list[object] = []
+    stacked: list[object] = []
+
+    def counting(calls: list[object], original):
+        def solve(*args: object, **kwargs: object):
+            result = original(*args, **kwargs)
+            calls.append(result)
+            return result
+
+        return solve
+
+    monkeypatch.setattr(
+        assemble_module,
+        "solve_linear_horizontal_layout",
+        counting(horizontal, getattr(assemble_module, "solve_linear_horizontal_layout", None)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        assemble_module, "solve_linear_layout", counting(stacked, assemble_module.solve_linear_layout)
+    )
+    records = [
+        _synthetic_label_record("first", 2000, "alpha"),
+        _synthetic_label_record("second", 1500, "beta"),
+        _synthetic_label_record("third", 1200, "gamma"),
+    ]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assemble_linear_diagram_from_records(
+            records,
+            cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+            legend="none",
+            layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2", "#3@2")),
+        )
+
+    assert len(horizontal) == 1
+    assert len(stacked) == 1
+    places = horizontal[0].placements  # type: ignore[attr-defined]
+    drawn = stacked[0].placements  # type: ignore[attr-defined]
+    assert [(p.record_index, p.x, p.sequence_width, p.px_per_bp) for p in places] == [
+        (p.record_index, p.x, p.sequence_width, p.px_per_bp) for p in drawn
+    ]
+
+
+@pytest.mark.linear
 @pytest.mark.parametrize("shared_row", (False, True))
 @pytest.mark.parametrize("translation_x", (-240.0, 160.0))
 def test_linear_row_gap_reads_the_drawn_collision_bands(
@@ -1689,19 +1741,13 @@ def test_linear_row_gap_reads_the_drawn_collision_bands(
         read.extend((*current, *following))
         return resolve_axis_gap(current, following, **kwargs)  # type: ignore[arg-type]
 
-    def solving(*args: object, **kwargs: object):
-        read.clear()  # Only the last solve places the rows; the first reads no definition bands.
-        return original_solve(*args, **kwargs)
-
     def placing(*args: object, **kwargs: object):
         drawn.extend(band for bands in kwargs["collision_bands"] for band in bands)  # type: ignore[attr-defined]
         return original_place(*args, **kwargs)
 
-    original_solve = assemble_module.solve_linear_layout
     original_place = assemble_module._place_linear_annotation_labels_by_record
     monkeypatch.setattr(multi_record_module, "resolve_axis_gap", reading_gap)
     monkeypatch.setattr(assemble_module, "resolve_axis_gap", reading_gap)
-    monkeypatch.setattr(assemble_module, "solve_linear_layout", solving)
     monkeypatch.setattr(assemble_module, "_place_linear_annotation_labels_by_record", placing)
     records = [
         _synthetic_label_record("first", 2000, "alpha"),

@@ -18,40 +18,29 @@ class DepthGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        longest_record_len: int,
         track_height: float,
-        alignment_width: float,
         depth_config: DepthConfigurator,
         *,
-        normalize_length: bool,
+        sequence_width: float,
         depth_table: DataFrame | None = None,
         start_x: float = 0,
         start_y: float = 0,
         depth_df: DataFrame | None = None,
         group_id: str = "depth",
         axis_group_id: str = "depth_axis",
-        sequence_width: float | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         self.record_transform = record_transform
         self.depth_group = Group(id=group_id)
         self.start_x = float(start_x)
         self.start_y = float(start_y)
-        self.longest_record_len = int(longest_record_len)
         self.depth_config = depth_config
         self.gb_record = gb_record
         self.track_height = float(track_height)
-        self.alignment_width = (
-            float(sequence_width) if sequence_width is not None else float(alignment_width)
-        )
-        self.bool_normalize_length = normalize_length
+        # The record's drawn axis width, from its placement.
+        self.sequence_width = float(sequence_width)
         self.record_len = len(self.gb_record.seq)
         self.axis_group_id = str(axis_group_id)
-        self.genome_size_normalization_factor = (
-            1.0
-            if sequence_width is not None or self.bool_normalize_length
-            else self.record_len / self.longest_record_len
-        )
         if depth_df is not None:
             self.depth_df = depth_df
         elif depth_table is not None:
@@ -73,8 +62,8 @@ class DepthGroup:
             self.depth_group,
             self.depth_df,
             self.record_len,
-            self.alignment_width,
-            self.genome_size_normalization_factor,
+            self.sequence_width,
+            1.0,
             self.track_height,
             self.start_x,
             self.start_y,

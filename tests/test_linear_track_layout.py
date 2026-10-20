@@ -222,7 +222,7 @@ def _build_bottom_ruler_fragment(
         legend="none",
     )
     return LengthBarGroup(
-        canvas_config.alignment_width,
+        canvas_config.record_sequence_width(longest_genome),
         longest_genome,
         canvas_config.length_param,
         scale=cfg.objects.scale,
