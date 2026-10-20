@@ -446,6 +446,9 @@ const prepareSvgForPdf = (svg) => {
   }
 
   const staging = document.createElement('div');
+  // The figure's text is English in every UI language: the browser measures
+  // it, and picks fallback fonts, as English (as the preview does).
+  staging.lang = 'en';
   staging.style.position = 'absolute';
   staging.style.left = '-10000px';
   staging.style.top = '-10000px';

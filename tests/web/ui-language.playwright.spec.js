@@ -1,15 +1,26 @@
-// The header Language menu (PD-OI-106). A first visit shows English whatever
-// the browser's language; a choice shows the UI in that language at once,
-// without a reload, sets <html lang>, and is remembered per browser. It is no
-// History step and changes no Result, setting, or Session: the drawn figure and
-// a saved Session are the same bytes in every language. English comes back
-// exactly. Storage that fails, or a catalog that fails to load, leaves English.
+// The header Language menu (PD-OI-106), with the browser's language set to
+// Japanese. Checked here:
+// - a first visit shows English; the menu lists each language in itself, with its lang;
+// - a choice of 日本語 shows Japanese at once (header, settings index, Generate),
+//   sets <html lang>, drops upper-casing and tracking, and is stored; a reload
+//   keeps it and its first mounted frames are already Japanese;
+// - in ja, zh-Hans and zh-Hant: the Undo and Redo counts, the preview figure
+//   (markup, and the computed font and spacing of every text) and the
+//   downloaded SVG export equal those of English; so does a saved Session
+//   (createdAt and random row ids aside) in ja and zh-Hans; the PDF export measures the figure as
+//   English (its staging element inherits lang="en"; checked in ja);
+// - English comes back with the same UI text and accessible names;
+// - a Generate in ja and in zh-Hans writes the same Source recipe and Exact
+//   replay as one in English;
+// - storage that throws, or a catalog that fails to load, leaves English.
+// Not checked here: PNG and PDF bytes, the shown Run Info text, and the
+// diagnostics text.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 
 test.use({ actionTimeout: 20_000, locale: 'ja-JP', viewport: { width: 1280, height: 800 } });
 
@@ -55,13 +66,44 @@ const uiText = async (page) => {
   });
 };
 
+// The SVG export as downloaded.
+const exportedSvg = async (page, testInfo, name) => {
+  const pending = page.waitForEvent('download', { timeout: 120_000 });
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadSVG());
+  const path = testInfo.outputPath(name);
+  await (await pending).saveAs(path);
+  return readFileSync(path, 'utf8');
+};
+// The lang that the PDF export's staging copy of the figure inherits.
+const pdfStagingLang = async (page) => {
+  await page.evaluate(() => {
+    window.__pdfStaging = [];
+    window.__pdfObserver = new MutationObserver((records) => records.forEach((record) => record.addedNodes.forEach((node) => {
+      if (node.nodeType === 1 && node.querySelector('svg')) window.__pdfStaging.push(node.closest('[lang]')?.getAttribute('lang') ?? null);
+    })));
+    window.__pdfObserver.observe(document.body, { childList: true });
+  });
+  const pending = page.waitForEvent('download', { timeout: 120_000 });
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
+  await pending;
+  return page.evaluate(() => { window.__pdfObserver.disconnect(); return window.__pdfStaging; });
+};
+// Generate, then the Run Info's Source recipe and Exact replay.
+const generatedRecipes = async (page) => {
+  await generateAndWaitForResult(page);
+  return page.evaluate(() => {
+    const { sourceRecipe, exactReplay } = window.__GBDRAW_APP__.lastRunInfo;
+    return JSON.stringify({ sourceRecipe, exactReplay });
+  });
+};
+
 const loadSession = async (page) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', SESSION));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
 };
 
-// Save Session's bytes without its time stamp. The loaded Session has a
+// Save Session's bytes without its time stamp and random ids. The loaded Session has a
 // title, so Save asks for none; a second Save asks whether to download the
 // same file again, and its primary action (in any language) does.
 const savedSession = async (page, testInfo, name) => {
@@ -77,7 +119,8 @@ const savedSession = async (page, testInfo, name) => {
   const bytes = readFileSync(path);
   const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
   delete session.createdAt;
-  return JSON.stringify(session);
+  // A load makes new random row ids; the zh-Hans save follows a reload.
+  return JSON.stringify(session).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<uuid>');
 };
 
 test('a choice shows the UI in that language at once and changes no Result, History, or Session', async ({ page }, testInfo) => {
@@ -102,6 +145,8 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await loadSession(page);
   const english = { figure: await figure(page), history: await history(page), ui: await uiText(page) };
   const englishSession = await savedSession(page, testInfo, 'en.json');
+  const englishSvg = await exportedSvg(page, testInfo, 'en.svg');
+  expect(englishSvg).toContain('<svg');
 
   await menu(page).selectOption('ja');
   await expect.poll(() => pageLanguage(page)).toBe('ja');
@@ -121,6 +166,8 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   expect(await history(page)).toEqual(english.history);
   expect(await figure(page)).toEqual(english.figure);
   expect(await savedSession(page, testInfo, 'ja.json')).toBe(englishSession);
+  expect(await exportedSvg(page, testInfo, 'ja.svg')).toBe(englishSvg);
+  expect(await pdfStagingLang(page)).toEqual(['en']);
   expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'ja']]);
 
   // A reload keeps Japanese, and the first frame the app paints is already Japanese.
@@ -150,6 +197,8 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     expect(await page.locator('body').evaluate((body) => getComputedStyle(body).fontFamily)).not.toMatch(/^'?Inter'?, "?Noto Sans JP/);
     expect(await history(page)).toEqual(japanese);
     expect(await figure(page)).toEqual(english.figure);
+    expect(await exportedSvg(page, testInfo, `${tag}.svg`)).toBe(englishSvg);
+    if (tag === 'zh-Hans') expect(await savedSession(page, testInfo, `${tag}.json`)).toBe(englishSession);
   }
 
   // English comes back exactly.
@@ -158,6 +207,15 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   expect(await uiText(page)).toEqual(english.ui);
   expect(await figure(page)).toEqual(english.figure);
   expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'en']]);
+
+  // Generate writes the same Source recipe and Exact replay in every language.
+  const englishRecipes = await generatedRecipes(page);
+  expect(englishRecipes).toContain('gbdraw');
+  for (const tag of ['ja', 'zh-Hans']) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    expect(await generatedRecipes(page)).toBe(englishRecipes);
+  }
   expect(errors).toEqual([]);
 });
 

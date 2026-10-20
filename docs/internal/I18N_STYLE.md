@@ -1,7 +1,6 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant
 
-Revision 2, 2026-10-20. Companion of `I18N_GLOSSARY.tsv` and of the design
-memo `WEB_I18N_DESIGN_2026-10-19.md` (§1, §6, §7). Translators and LLM drafts
+Revision 2, 2026-10-20. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
 follow this file and the glossary together. The glossary decides words; this
 file decides how sentences are written around them. Where the two disagree,
 the glossary wins and this file is corrected.
@@ -14,7 +13,7 @@ the glossary wins and this file is corrected.
   PNG, PDF) keep their English legend words, axis labels, titles, and popup
   script. So do the Source recipe command, the Exact replay file, Session
   JSON, the diagnostics text inside the Details block, console output, and
-  `data-*` hooks (memo §1.2, I1–I3).
+  `data-*` hooks.
 - **Identifiers.** Setting names and paths (`large_tick_interval`,
   `record_selector`, `losatp_max_hits`, `config.form.keep_definition_left_aligned`),
   CLI options (`--feature_override_table`), option values shown as code
@@ -39,7 +38,7 @@ the glossary wins and this file is corrected.
 - **The Language menu entries** (English, 日本語, 简体中文, 繁體中文) are
   endonyms and are not translated; the menu's own label is (言語 / 语言 /
   語言). Gallery example titles from `tutorial-data/manifest.json` stay
-  English too (memo §1.2).
+  English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
 
@@ -67,7 +66,7 @@ the glossary wins and this file is corrected.
   never translated, never added or dropped. They may move inside the
   sentence.
 - A `tn` key has one string per locale: `ja`, `zh-Hans` and `zh-Hant` have no
-  plural forms (memo §3.1).
+  plural forms.
 - One key is one sentence or label. Never build a sentence from translated
   fragments; ask for a key with placeholders instead. A sentence with an
   inline element (`<strong>`, a swatch, a bound name) is one key; the
@@ -89,7 +88,8 @@ the glossary wins and this file is corrected.
 - Title Case, ALL CAPS headings (PRESET SCHEMES, DEFAULT COLORS, SPECIFIC
   RULES, LABEL FILTERING, QUALIFIER PRIORITY, LABEL GEOMETRY, ADD KEY) and
   letter spacing carry no meaning in CJK; translate them as ordinary
-  headings. The CSS of memo §3.7 neutralizes `uppercase` and `tracking-*`.
+  headings. Outside the figure, the CJK rules in `gbdraw/web/index.html` turn off
+  `uppercase` and `tracking-*`.
 - A word that the source capitalizes as a name of a control (Generate,
   Apply, Save Session) is written as that control's translated label, so a
   reader can find it: 「生成」をクリック / 点击“生成” / 點選「產生」.
@@ -173,8 +173,7 @@ the glossary wins and this file is corrected.
 
 Japanese is usually 0.5–0.8× the English character count, which is about
 the same pixel width. Buttons stay within 8 full-width glyphs where
-possible; rail short names within 5 (Features is the known exception; see
-`REVIEW_NOTES.md`).
+possible; rail short names within 5 (Features is the known exception).
 
 ## 3. Simplified Chinese (`zh-Hans`, mainland usage)
 
@@ -229,8 +228,7 @@ Usually 0.4–0.6× the English character count. Rail short names 2–4 glyphs.
 
 - The Language menu shows plain **繁體中文**, with no 台灣 suffix (Owner
   decision, 2026-10-19). The vocabulary is nevertheless Taiwan usage
-  throughout; a Hong Kong catalog would be a separate `zh-Hant-HK` later
-  (memo §9).
+  throughout; a Hong Kong catalog would be a separate `zh-Hant-HK` later.
 - Required words: 設定 (Settings), 預設 (Default), and therefore **預設組**
   (Preset), 工作階段 (Session), 產生 (Generate), 檔案 (File), 資料 (data),
   介面 (interface), 執行 (run), 載入 (Load), 儲存 (Save), 匯入 / 匯出
@@ -274,7 +272,7 @@ The catalog follows the Taiwan column. Hong Kong readers will notice:
 
 1. Start from the `zh-Hans` catalog and convert it with OpenCC
    **`s2twp`** (script plus Taiwan phrases). Never `s2t` (characters only),
-   and never the reverse direction (memo §7).
+   and never the reverse direction.
 2. Correct the output against this file: the table of §4.4.1 lists every
    glossary term whose `zh-Hant` value differs from the `s2twp` output of its
    `zh-Hans` value. Replace each by hand, in context, and check any term the

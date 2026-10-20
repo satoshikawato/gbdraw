@@ -2256,12 +2256,12 @@ export const createSimilarityAlignmentActions = ({
     }
     // Verb agreement lives in the two forms of one key.
     if (excluded) {
-      effect += ' ' + tn(excluded, '{count} record stays unchanged; the reason is in its card.',
-        '{count} records stay unchanged; the reason is in their cards.');
+      effect = joinSentences(effect, tn(excluded, '{count} record stays unchanged; the reason is in its card.',
+        '{count} records stay unchanged; the reason is in their cards.'));
     }
     if (unknownStrand) {
-      effect += ' ' + tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
-        '{count} records keep their direction; the reason is in their cards.');
+      effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
+        '{count} records keep their direction; the reason is in their cards.'));
     }
     // D-11: the reference feature centre stays fixed; its record's left edge may move.
     const shift = Math.round(projected.reference.deltaX);
