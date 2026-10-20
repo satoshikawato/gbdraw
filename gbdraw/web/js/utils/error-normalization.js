@@ -34,7 +34,7 @@ const REASONS = Object.freeze({
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
   ANNOTATION_SET: 'Select an existing annotation set.', ANNOTATION_MARKS: 'Use supported annotation mark filters.',
   OVERFLOW: 'Choose error, compress, or clip.', LAYER: 'Choose foreground or underlay.',
-  OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an annotation track placed Overlay anchor (Circular) or On axis (Linear).',
+  OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an annotation track whose placement is Overlay anchor (Circular) or On axis (Linear).',
   OVERLAY_SPAN: 'For Extend to, select an eligible enabled slot other than the anchor, or None.',
   OVERLAY_SIDE: 'Choose the placement Overlay anchor (Circular) or On axis (Linear) when an anchor or an Extend to slot is selected.',
   DRAW_ORDER: 'Place underlay annotations below the anchor and the Extend to slot, and foreground annotations above them.',
