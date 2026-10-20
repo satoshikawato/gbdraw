@@ -131,6 +131,27 @@ def test_shared_scale_and_fixed_gap_for_two_by_two_layout() -> None:
     assert plan.placement_for_index(2).sequence_width == pytest.approx(1600 / 3)
 
 
+@pytest.mark.parametrize(
+    "stacked",
+    [
+        pytest.param(lambda items: items[:1], id="missing"),
+        pytest.param(lambda items: items + items[:1], id="duplicate"),
+        pytest.param(
+            lambda items: (items[0], LinearRecordMeasurement(1, RecordKey("other"), 500)), id="other-record"
+        ),
+    ],
+)
+def test_row_stacking_takes_exactly_the_horizontally_placed_records(stacked) -> None:
+    measurements = (
+        LinearRecordMeasurement(0, RecordKey("key-0"), 1000),
+        LinearRecordMeasurement(1, RecordKey("key-1"), 500),
+    )
+    horizontal = solve_linear_horizontal_layout(measurements, (0, 1), available_width=1024)
+
+    with pytest.raises(ValueError, match="horizontal places"):
+        solve_linear_layout(stacked(measurements), horizontal)
+
+
 def test_non_contiguous_rows_and_token_column_order_are_normalized() -> None:
     records = _records(100, 100, 100)
     ordered, rows = resolve_record_row_positions(

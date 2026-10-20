@@ -333,21 +333,13 @@ def solve_linear_layout(
     """
 
     items = tuple(measurements)
-    if len(items) != len(horizontal.placements):
-        raise ValidationError("Linear layout needs one measurement for every placed record.")
+    # One measurement per placed record, the same record and insets: a caller error, not input.
+    if sorted((item.record_index, item.record_key, item.left_inset, item.right_inset) for item in items) != sorted(
+        (place.record_index, place.record_key, place.left_inset, place.right_inset)
+        for place in horizontal.placements
+    ):
+        raise ValueError("Linear layout measurements must match the records' horizontal places.")
     by_index = {item.record_index: item for item in items}
-    if len(by_index) != len(items):
-        raise ValidationError("Linear layout record indices must be unique.")
-    for placement in horizontal.placements:
-        item = by_index.get(placement.record_index)
-        if item is None or (
-            item.record_key,
-            item.left_inset,
-            item.right_inset,
-        ) != (placement.record_key, placement.left_inset, placement.right_inset):
-            raise ValidationError(
-                "Linear layout measurements must match the records' horizontal places."
-            )
     ordinary_gap = float(row_gap_px)
     comparison_gap = float(comparison_height)
     comparison_endpoint_gap = float(comparison_endpoint_gap_px)
