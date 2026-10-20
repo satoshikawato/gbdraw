@@ -1,6 +1,6 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant
 
-Revision 2, 2026-10-20. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
+Revision 3, 2026-10-21. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
 follow this file and the glossary together. The glossary decides words; this
 file decides how sentences are written around them. Where the two disagree,
 the glossary wins and this file is corrected.
@@ -151,7 +151,7 @@ the glossary wins and this file is corrected.
 - Prose uses full-width 、。（）「」：. No space follows 。 between two
   sentences (D-18). Parentheses are full-width when they
   hold Japanese (領域（任意）, 自動（既定）) and half-width, with no
-  space, when they hold Latin, a number or a unit (許容値(bp), 最小同一性(%)).
+  space, when they hold Latin, a number or a unit (許容値(bp), 最低一致率(%)).
   A label colon is full-width (状態：) unless Latin follows it directly. The spaced slash of
   the source stays: 生物名 / 株名, as in the seed 二塩基含量 / スキュー.
 - **No half-width space between Latin or digits and Japanese**, matching the

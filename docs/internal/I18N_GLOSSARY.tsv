@@ -1,18 +1,18 @@
 en	ja	zh-Hans	zh-Hant	note
 1-based, inclusive	1始まり、両端を含む	从1开始，包含两端	從1開始，包含兩端	Region and annotation coordinates (Use 1-based inclusive coordinates).
 About & Citation	概要と引用	关于与引用	關於與引用	[medium] Rail-only section (privacy, how to cite, license). Rail short name About: 概要 / 关于 / 關於. ja alternative 情報と引用.
-Above	上側	上方	上方	Linear track layout: Above | Features on axis | Below; Above axis; Above Feature (label placement).
+Above	上側	上方	上方	Linear track layout: Above | Features on axis | Below; Above axis; Above Feature (label placement). [R4] ja: The z-order sense (annotation layer above the anchor) is 前面. [R4] zh-Hans: 描画の重なり順の above は「前方」。 [R4] zh-Hant: radial Below in the Circular error text is 內側.
 Accession	アクセッション番号	登录号	登錄號	Record Labels: Accession; record popup fact. s2twp yields 登入號 (login). [R2] DDBJ term.
-Action (rule table)			動作	[R2] Only the Action column of the rule table; Row actions and operation stay 操作.
+Action (rule table)	動作	操作	動作	[R2] Only the Action column of the rule table; Row actions and operation stay 操作. [R4] ja: Column of the rule table (97c89a4d6630, 7e7a11809e86). Row actions and operation stay 操作. [R4] zh-Hans: UI は行操作と同じ「操作」。zh-Hant の「動作」のような書き分けはしていない。
 Add	追加	添加	新增	Add, Add track, Add sequence, + Add Rule, Add Seq. s2twp already yields 新增.
 Advanced	詳細設定	高级	進階	Advanced comparison and layout; rail short name Advanced. ja: not 詳細, which is Details. Taiwan 進階; s2twp yields 高級.
 Advanced comparison and layout	比較とレイアウトの詳細設定	高级比较与布局	進階比較與版面配置	Linear section title (rail short name Advanced: 詳細設定 / 高级 / 進階).
 Align	整列	对齐	對齊	Button Align… and Align records to this group; the verb of Alignment (Similarity group).
-Aligned length	合計アラインメント長（LOSATPアンカー）			[R2] ja: LOSATP anchor total, a different concept from 整列 (Similarity group). Block column: 合計アラインメント長.
+Aligned length	合計アラインメント長（LOSATPアンカー）	总比对长度	總比對長度	[R2] ja: LOSATP anchor total, a different concept from 整列 (Similarity group). Block column: 合計アラインメント長. [R4] zh-Hans: ブロック（LOSATPアンカー）の合計。単独マッチの Alignment length には「总」を付けない。 [R4] zh-Hant: LOSATP anchor total.
 Alignment (sequence)	アラインメント	比对	比對	BLAST or LOSAT alignments, Alignment length. ja follows Japanese textbooks (配列アラインメント). Alignment length: アラインメント長 / 比对长度 / 比對長度.
-Alignment (Similarity group)	整列	对齐	對齊	Similarity Group alignment in Linear view: Review alignment, Reset alignment, Clear alignment, Similarity alignment applied. docs/internal writes 整列.
+Alignment (Similarity group)	整列	对齐	對齊	Similarity Group alignment in Linear view: Review alignment, Reset alignment, Clear alignment, Similarity alignment applied. docs/internal writes 整列. [R4] ja: Alignment plan = 整列の設定; The plan of anchors and Skip choices that Align applies; not 計画 (the Owner wrote 比較の設定).
 Ambiguous	複数のレコードに一致	匹配多条记录	不明確	Record selector matched multiple records; ambiguity opens review. ja: Microsoft style writes あいまい; docs/internal writes 曖昧. [R2] State the cause in a sentence (matches several records or sources) instead of 曖昧. [R2] Record selector / ID matched several records.
-Amino acid	アミノ酸配列	氨基酸序列	胺基酸序列	Popup tab and search field Amino acid. Taiwan 胺基酸; s2twp already yields it.
+Amino acid	アミノ酸配列	氨基酸序列	胺基酸序列	Popup tab and search field Amino acid. Taiwan 胺基酸; s2twp already yields it. [R4] ja: This value is for the sequence-type tabs and search fields; the general noun is アミノ酸.
 Anchor	アンカー	锚点	錨點	[seed] The drawable slot an Overlay annotation track sits on (Select anchor, Cover anchor); also the gene a record is aligned on in Review alignment. See Anchor (collinear).
 Anchor (collinear)	アンカー	锚点	錨點	Hit pairs that seed Collinear blocks (Anchor mode, Collinear minimum anchors); same words as Anchor.
 Annotation	アノテーション	注释	註解	[seed] [medium] Region Annotations; 註解 in Taiwan, 註釋 elsewhere, and s2twp yields 註釋. ja: docs/internal also writes 注釈; keep the seed.
@@ -34,7 +34,7 @@ Bakta	Bakta	Bakta	Bakta	Annotation tool and preset scheme name; Latin in all loc
 Band	帯	带区	帶區	[review] zh: annotation mark Band (annotation lane), feature band, Available band (px). zh alternatives 带, 条带 (taken by Ribbon).
 Basic	基本	基本	基本	Card docked under Input (Output Prefix, Species, Strain, Rich Feature Popup).
 Batch output	一括出力	批量输出	批次輸出	All records (separate diagrams) batch output. ja: docs/internal writes 一括 33 times, バッチ 8. s2twp already yields 批次.
-Below	下側	下方	下方	Linear track layout and slot side.
+Below	下側	下方	下方	Linear track layout and slot side. [R4] ja: The z-order sense is 背面; the radial sense in Circular error text is 内側. [R4] zh-Hans: 重なり順の below は「后方」、環状の半径方向の below it は「内侧」。 [R4] zh-Hant: radial Below in the Circular error text is 內側.
 Bitscore	Bitscore	Bitscore	Bitscore	Latin in all locales (BLAST column bitscore). Practitioners also write ビットスコア and 比特分数; Latin matches the table column.
 BLAST	BLAST	BLAST	BLAST	[seed; split] Includes NCBI BLAST+, BLAST TSV and BLAST outfmt 6/7, which stay as written. Upload BLAST TSV: BLAST TSVをアップロード / 上传BLAST TSV / 上傳BLAST TSV.
 blastn/blastp	blastn/blastp	blastn/blastp	blastn/blastp	Latin in all locales; program and task names (LOSATN task blastn, Protein BLASTP).
@@ -47,6 +47,7 @@ Cancel	キャンセル	取消	取消	Every dialog's Cancel.
 Candidate	候補	候选	候選	Alignment candidates (Several candidates, No usable candidate). Group representative: 代表 / 代表 / 代表.
 Canvas	キャンバス	画布	畫布	Multi-Record Canvas, Canvas padding, the preview canvas.
 CDS	CDS	CDS	CDS	Latin in all locales: an INSDC feature type, like every other feature type.
+Center Reserved Radius	中心ラベルの確保半径	中心预留半径	中心預留半徑	[R4] Radius reserved for the center label.
 Checkpoint	チェックポイント	检查点	檢查點	History checkpoints; rare in visible text.
 Choose	選択	选择	選擇	Choose records…, Choose file, Choose a fix. ja and zh-Hans share the word of Select.
 Circular	環状	环状	環狀	[seed; split from Circular / Linear] [medium] Diagram mode as a noun (mode switch, Diagram: Circular.). ja: docs/internal also writes 円形; keep the seed. Circular record (topology checkbox) uses the same word. [R2] ja diagram-mode modifier: 環状図の.
@@ -63,14 +64,14 @@ Colors	色	颜色	顏色	Section title Colors (rail short name Colors); same wor
 Column	列	列	欄	Table column (Required columns: {n}), Lock Definition Column, Column Gap Ratio. Taiwan column = 欄; s2twp keeps 列.
 Command	コマンド	命令	指令	Copy command, Copy exact replay command, CLI command. Taiwan 指令; s2twp keeps 命令.
 Compare (rail short name)	比較	比较	比較	Rail short name of Comparison (Linear) and Pairwise Comparisons (Circular).
-Comparison	比較	比较	比較	[seed] Comparison section and the links between records (No comparison, Clear comparison, comparison ring).
+Comparison	比較	比较	比較	[seed] Comparison section and the links between records (No comparison, Clear comparison, comparison ring). [R4] ja: Linear and Circular sequence comparison screens, buttons and thresholds use 配列比較 (Clear comparison = 配列比較をクリア). The section name stays 比較.
 Compress	圧縮	压缩	壓縮	Overflow option; rows compressed to fit.
-Confidence			信賴度	[R2] zh-Hant only.
+Confidence	信頼度	置信度	信賴度	[R2] zh-Hant only. [R4] ja: Used in 1077e8513148, 60dd55e17eab, 3d01f46a6f7e. [R4] zh-Hans
 Configuration	構成	配置	組態	[medium] Configuration overrides and paths (Remove unknown configuration overrides); the paths stay Latin. ja: not 設定, which is Settings. Microsoft Taiwan 組態; s2twp yields 配置.
 Conservation	保存性	保守性	保守性	[seed] Conservation rings in Circular; conservation_* setting names stay Latin.
 Coordinates	座標	坐标	座標	Target kind Coordinates, Table coordinates, Length / Coordinates. s2twp already yields 座標.
 Copy	コピー	复制	複製	Copy, Copy details, Copy diagnostics, Copy table, Copy command.
-Coverage	深度	深度	深度	Read-depth coverage (depth coverage axis, x coverage units such as 10x). [R1] depth coverage and x coverage are 深度; a quantity inside a sentence is リード深度. [R1] depth coverage -> 深度. [R1] depth coverage -> 深度.
+Coverage	深度	深度	深度	Read-depth coverage (depth coverage axis, x coverage units such as 10x). [R1] depth coverage and x coverage are 深度; a quantity inside a sentence is リード深度. [R1] depth coverage -> 深度. [R1] depth coverage -> 深度. [R4] zh-Hans: x coverage units は「深度倍数」（覆盖倍数ではない）。 [R4] zh-Hant: x coverage units are 深度倍數 (three strings were 覆蓋倍數).
 Crop	切り出し	截取	擷取	Displayed sub-region of a record (Single-record crop, orientation and titles). Not Clip. s2twp already yields 擷取.
 Cross-origin isolated	クロスオリジン分離	跨源隔离	跨來源隔離	This page is not cross-origin isolated (threaded LOSAT). Taiwan MDN 跨來源; s2twp keeps 跨源.
 Curve	曲線	曲线	曲線	Match style Curve.
@@ -91,7 +92,7 @@ Diagram engine	描画エンジン	绘图引擎	繪圖引擎	Python renderer behi
 Dialog	ダイアログ	对话框	對話方塊	Choice dialogs (Remove the whole file?, Labels do not fit). s2twp already yields 對話方塊.
 Dinucleotide	二塩基	二核苷酸	二核苷酸	Dinucleotide field (GC, AT) and slot setting. ja alternative ジヌクレオチド; the seed uses 二塩基含量. [R2] Not changed. The English side does not match the implementation (see the round-2 source_issues); change both together.
 Dinucleotide content / skew	二塩基含量 / スキュー	二核苷酸含量 / 偏斜	二核苷酸含量 / 偏斜	[seed] Section title (written Dinucleotide content/skew). GC skew itself stays Latin in all locales. Rail short name: see GC / skew (rail short name).
-Direction	方向	方向	方向	Display direction in Review alignment (Arrow direction: Keep | Right → | Left ←; Reset directions).
+Direction	向き	方向	方向	Display direction in Review alignment (Arrow direction: Keep | Right → | Left ←; Reset directions). [R4] ja 向き, as Orientation; 方向付き (directional hits) is a different sense.
 Disable	無効にする	禁用	停用	Verb; as a state label see Disabled. Taiwan 停用; s2twp already yields it.
 Disabled	無効	已禁用	已停用	Slot state; disabled controls.
 Display start	表示開始位置	显示起始位置	顯示起始位置	The base drawn at 12 o'clock (Circular) or at the left edge; Reset start; Record starts at.
@@ -107,7 +108,7 @@ Eligible	対象となる	符合条件的	符合條件的	Select an eligible enab
 Embed	埋め込む	嵌入	內嵌	Embed font in exported SVG; label rendering Embedded Only. Microsoft Taiwan 內嵌; s2twp keeps 嵌入.
 Enable	有効にする	启用	啟用	Verb; as a state label see Enabled.
 Enabled	有効	已启用	已啟用	Slot state Enabled | Disabled; eligible enabled anchor.
-Entry / item	項目（保存データの1件）		項目	[R2] A list item or one saved record. ja: the input-field entry このエントリ is kept.
+Entry / item	項目（保存データの1件）	项	項目	[R2] A list item or one saved record. ja: the input-field entry このエントリ is kept. [R4] zh-Hans: 文脈で「项／条目／图例项」を使い分ける。
 Error	エラー	错误	錯誤	Generation Error, Input error, Operation error, SVG export error.
 Exact reference	参照フィーチャー	指定参考	指定參考	[medium] The exact clicked feature used as the alignment reference (Select exact reference…). [R1] The feature the user picked as the alignment reference (not 厳密). [R1] The feature the user picked. [R1] The feature the user picked.
 Exact replay file	完全再現ファイル	精确重现文件	精確重現檔案	[medium] Run info: replay from the saved Session and analysis files. The row label Exact replay: 完全再現 / 精确重现 / 精確重現. Download reproducibility files: 再現用ファイルをダウンロード / 下载重现用文件 / 下載重現用檔案.
@@ -123,7 +124,7 @@ Feature visibility	フィーチャーの表示状態	特征可见性	特徵可�
 Features (section)	フィーチャー	特征	特徵	[review] ja: section title, rail short name and Editor tab. In the 60 px icon column the ja short name (6 glyphs at 10 px) overflows the 52 px button; PR-1 screenshots decide between a CSS adjustment and a shorter label.
 Field	フィールド	字段	欄位	Form field and BLAST outfmt field (# Fields: line); the error locator Field: <label>. s2twp already yields 欄位.
 File	ファイル	文件	檔案	File card (File 1, Remove File, File order, Move File up). Taiwan 檔案; s2twp already yields 檔案.
-Fill	塗り	填充	填色	Fill Color: 塗りの色 / 填充颜色 / 填色; Reset Fill Color.
+Fill	塗りつぶし	填充	填色	Fill Color: 塗りつぶしの色 / 填充颜色 / 填色; Reset Fill Color. [R4, Owner] The Owner's edits use 塗りつぶし; Microsoft Japanese docs write 塗りつぶし.
 Filter	フィルター	筛选条件	篩選條件	Result filters, label filters, Default (feature filters). Microsoft zh uses 筛选 / 篩選.
 Fix	修正	修复	修正	[medium] Fix before Generate, Choose a fix, Fix (Labels do not fit dialog). s2twp yields 修復.
 Font	フォント	字体	字型	Font section. Taiwan 字型; s2twp already yields 字型.
@@ -135,7 +136,7 @@ Gallery	ギャラリー	示例库	範例庫	[medium] The gbdraw.app example gall
 Gap	ギャップ	间隙	間隙	inner gap, outer gap, Axis Gap, Record gap (px), Ring Gap, lane gap, Column Gap Ratio, Max unit gap. ja ギャップ keeps Gap apart from Spacing and Interval (間隔).
 gbdraw	gbdraw	gbdraw	gbdraw	Product name, always lower case; Latin in all locales.
 GC	GC	GC	GC	[seed; split] As in GC content (GC含量), GC skew (Latin), GC Min %, GC window.
-GC / skew (rail short name)	二塩基	GC/偏斜	GC/偏斜	[review] Rail short name of Dinucleotide content/skew. The 52 px button holds about 5 CJK glyphs at 10 px, so ja GC / スキュー does not fit; skew is English and outside the I5 allowlist.
+GC / skew (rail short name)	GC / skew	GC/偏斜	GC/偏斜	[review] Rail short name of Dinucleotide content/skew. The 52 px button holds about 5 CJK glyphs at 10 px, so ja GC / スキュー does not fit; skew is English and outside the I5 allowlist. [R4] ja shows the English label "GC / skew" (it fits the 52 px button like the English one); the Dinucleotide terms stay (D-34).
 GC content	GC含量	GC含量	GC含量	Show GC Content, Hide GC Content, GC Content Mode, GC Content Width. GC Content Mode Deviation | Percent: 偏差 | パーセント / 偏差 | 百分比 / 偏差 | 百分比.
 GC skew	GC skew	GC偏斜	GC skew	Latin in ja and zh-Hant. Show GC Skew: GC skewを表示 / 显示GC偏斜 / 顯示GC skew. [R3, D-33] zh-Hans GC偏斜, as mainland papers write it (skew alone is already 偏斜); ja and zh-Hant keep the Latin GC skew.
 GenBank	GenBank	GenBank	GenBank	Latin in all locales (GenBank/DDBJ File, GenBank / DDBJ File).
@@ -145,7 +146,7 @@ Generate Diagram	図を生成	生成图谱	產生圖譜	The main button; beside 
 Generating diagram…	図を生成中…	正在生成图谱…	正在產生圖譜…	Overlay Generating Diagram... and busy reason Generating diagram. Retry after generation finishes. The source writes ... or …; the catalogs write one …
 Genetic code	遺伝暗号表	遗传密码表	遺傳密碼表	The translation table number labelled Gencode (LOSAT Gencode, Reference gencode, Gencode required); gencode identifiers stay Latin. s2twp yields 遺傳密碼錶 (錶 = watch).
 Genome	ゲノム	基因组	基因體	[medium] Input Genomes; tagline A genome diagram generator. Taiwan 基因體; s2twp yields 基因組 (mainland and Hong Kong).
-Geometry	寸法設定／配置	几何参数		[R2] Arrow / Label / Custom stack geometry. ja: (a) 寸法設定 for widths and radii, (b) 配置 or 形状や配置. zh-Hant: no decision.
+Geometry	寸法設定／配置	几何参数	幾何參數	[R2] Arrow / Label / Custom stack geometry. ja: (a) 寸法設定 for widths and radii, (b) 配置 or 形状や配置. zh-Hant: no decision. [R4] zh-Hant: 幾何參數 for Arrow / Label / Custom stack geometry; 幾何資訊 and 幾何形狀 stay for the live-edit texts.
 GFF3	GFF3	GFF3	GFF3	Latin in all locales (GFF3 + FASTA, GFF3 File).
 Help	ヘルプ	帮助	說明	Accessible name of every ? help tip (a11y.help); Help: Custom Track Slots. Microsoft Taiwan uses 說明.
 Hide	非表示	隐藏	隱藏	Hide, Hide GC Content, Keep hidden.
@@ -153,7 +154,7 @@ Highlight	ハイライト	高亮	醒目提示	[review] zh-Hant: annotation mark 
 History	履歴	历史记录	歷史記錄	Undo history (one History step per change). A History step: 履歴の1操作 / 一个历史步骤 / 一個歷史步驟.
 Hit	ヒット	命中	命中	Max hits, All hits, Member hits per protein, reverse hits.
 Identity (record or feature)	識別情報	标识	識別資訊	[medium] Stable record identity, feature identity in errors (does not identify a record). s2twp yields 標識.
-Identity (sequence)	一致率	一致性	一致性	Min identity (%), Minimum Identity, Average identity color mode. [R2, D-31] Owner: 一致率 (every ja Identity row already uses it).
+Identity (sequence)	一致率	一致性	一致性	Min identity (%), Minimum Identity, Average identity color mode. [R2, D-31] Owner: 一致率 (every ja Identity row already uses it). [R4, Owner] Thresholds read 最低一致率 (Min identity, Minimum Identity), average 平均一致率. Fix STYLE §2.3 example 最小同一性(%) to 最低一致率(%).
 Import	インポート	导入	匯入	Import TSV (annotations), Import / export menu. Not Load.
 Input	入力	输入	輸入	Input Genomes, input files; rail short name Input.
 Input Genomes	入力ゲノム	输入基因组	輸入基因體	Section title (rail short name Input: 入力 / 输入 / 輸入). Taiwan 基因體.
@@ -183,10 +184,10 @@ Legend item	凡例項目	图例项	圖例項目	Legend item popup, Rename legend
 Legend label	凡例ラベル	图例标签	圖例標籤	Track and series field legend label; Set legend label.
 Legend name	凡例名	图例名称	圖例名稱	Popup field Legend name; Legend Name Conflict.
 Length	長さ	长度	長度	Length / Coordinates; record length.
-Length bar	スケールバー			[R2] ja: scale bar. zh-Hans uses 比例尺 (see Scale).
+Length bar	スケールバー	比例尺	比例尺	[R2] ja: scale bar. zh-Hans uses 比例尺 (see Scale). [R4] zh-Hans: Scale と同じ。 [R4] zh-Hant: 比例尺, as Scale.
 License	ライセンス	许可证	授權條款	MIT License: MITライセンス / MIT许可证 / MIT授權條款; a font license that forbids embedding.
 Line	線	线条	線條	Annotation mark Line, Line color, intron lines (Line Stroke Color), scale Line Width. ja Line Stroke Color collapses to 線の色.
-Linear	直鎖状	线性	線狀	[Owner 2026-10-20: ja 直鎖状, not 線状] [seed; split from Circular / Linear] [medium] Diagram mode as a noun. ja: docs/internal also writes 線形図; keep the seed. Not the Record Size Mode option; see Linear (size scaling). [R2] ja diagram-mode modifier: 直鎖状図の. [D-20] 線状 is not used. [R2, D-28] zh-Hant kept 線性 while the key Linear was shared with the Record Size Mode option. [R3, D-33] zh-Hant diagram mode 線狀 (NAER biology: linear = 線狀的), now that the Record Size Mode option has its own key; Linear (size scaling) stays 線性.
+Linear	直鎖状	线性	線狀	[Owner 2026-10-20: ja 直鎖状, not 線状] [seed; split from Circular / Linear] [medium] Diagram mode as a noun. ja: docs/internal also writes 線形図; keep the seed. Not the Record Size Mode option; see Linear (size scaling). [R2] ja diagram-mode modifier: 直鎖状図の. [D-20] 線状 is not used. [R2, D-28] zh-Hant kept 線性 while the key Linear was shared with the Record Size Mode option. [R3, D-33] zh-Hant diagram mode 線狀 (NAER biology: linear = 線狀的), now that the Record Size Mode option has its own key; Linear (size scaling) stays 線性. [R4] zh-Hant: before a noun that names an input (File, sequence, record), write 線狀圖.
 Linear (size scaling)	線形	成比例	線性	Record Size Mode option Linear (radius scaled with record length): Auto (Default) | Linear | Equal. ja 線形 (proportional), unlike the mode name 直鎖状. [D-28] zh-Hant 線性; see Linear. [R3, D-33] zh-Hans 成比例 (proportional to record length), so it does not repeat the mode name 线性.
 Live edit	ライブ編集	实时编辑	即時編輯	Live edit applying / Live edit failed; help texts of the Editor tabs. s2twp already yields 即時.
 Load	読み込む	加载	載入	Load Session, Load font file…, Load Label TSV. ja noun form 読み込み (読み込み中…). Not Import.
@@ -194,6 +195,7 @@ Load example	サンプルを読み込む	加载示例	載入範例	Header button
 Load Session	セッションを読み込む	加载会话	載入工作階段	Header button.
 Loading session…	セッションを読み込み中…	正在加载会话…	正在載入工作階段…	Header status; busy reason Loading session. Retry after loading finishes.
 Location	位置情報	位置	位置	[medium] INSDC feature location (3901..4000, 1..200 (+)); feature list column Location. zh shares 位置 with Position. [R2] DDBJ defines Location as 位置情報; used across the UI.
+Locus ID	遺伝子座ID	基因座ID	基因座ID	[R4] Identifier of the Collinear locus unit; Locus is 遺伝子座; Locus tag stays ローカスタグ.
 Log scale	対数スケール	对数刻度	對數刻度	Log Scale checkbox (IGV-style log10 depth).
 LOSAT	LOSAT	LOSAT	LOSAT	[seed; split] Search tool name. Run LOSAT: LOSATを実行 / 运行LOSAT / 執行LOSAT. LOSAT Mode, LOSAT cache, Raw LOSAT TSV keep it Latin.
 LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	Latin in all locales: LOSAT Mode buttons and program names.
@@ -214,9 +216,9 @@ Multi-record	複数レコード	多记录	多記錄	Multi-Record Canvas: 複数�
 None	なし	无	無	None option (legend position, label mode); Select none: すべて選択解除 / 全不选 / 全部不選.
 Normalize	正規化	归一化	正規化	Normalize Record Lengths; depth clipping and normalization. s2twp yields 歸一化.
 Not applied	未適用	未应用	未套用	Rejected Color rule pattern draft (Not applied — Checking color rule…); Current changes were not applied.
-Note (/note)	備考			[R2] The /note qualifier.
+Note (/note)	備考	备注	備註	[R2] The /note qualifier. [R4] zh-Hans: /note 自体は訳さない。 [R4] zh-Hant: 備註, the /note label.
 Notice	通知	通知	通知	The dismissible notice above the Result (Dismiss notice); status lines are notices too.
-Nucleotide	塩基配列	核苷酸序列	核苷酸序列	Popup tab and search field Nucleotide; Copy nucleotide sequence.
+Nucleotide	塩基配列	核苷酸序列	核苷酸序列	Popup tab and search field Nucleotide; Copy nucleotide sequence. [R4] ja: This value is for the sequence-type tabs and search fields; the general noun is ヌクレオチド.
 Off	オフ	关	關	Toggles and the OFF badge; Off (hide; leave out of protein search).
 Offset	オフセット	偏移	位移	Outer X Offset, label offsets, rotation offset (shifted by). Microsoft Taiwan 位移; s2twp keeps 偏移.
 On	オン	开	開	Toggles; Label visibility On (always show); the OFF badge of a record is Off.
@@ -235,16 +237,16 @@ Outside	外側	外侧	外側	Circular: Outside axis, Labels outside / ticks insi
 Overflow	オーバーフロー	溢出	溢出	[review] zh-Hant: annotation track overflow (overflow=error | compress | clip; Overflow behavior). s2twp yields 溢位, which reads as arithmetic overflow in Taiwan. Option Error on overflow: オーバーフロー時はエラー / 溢出时报错 / 溢出時報錯.
 Overlay	オーバーレイ	叠加	疊加	[seed] Annotation track placement (side overlay, Overlay anchor). The option label On axis is translated as words, not as Overlay.
 Override	上書き	覆盖	覆寫	Configuration overrides, label overrides, Override the center-label reserved radius. Microsoft Taiwan 覆寫; s2twp keeps 覆蓋.
-Package		软件包	套件	[R2] Python package; 安装包 and 包 read as installer. zh-Hant 套件.
+Package	パッケージ	软件包	套件	[R2] Python package; 安装包 and 包 read as installer. zh-Hant 套件. [R4] ja: Python package; the installer is パッケージインストーラー (830b629eb70c).
 Padding	余白	边距	邊距	[medium] Canvas Padding (space around the diagram, px) and annotation padding. ja: docs/internal writes 余白, never パディング.
 Pair	ペア	配对	配對	Selected pairs, Adjacent pairs, record pairs, gene pairs (Show pair). Adjacent pairs: 隣接ペア / 相邻配对 / 相鄰配對.
 Pairwise	ペアワイズ	成对	成對	[seed] Pairwise Comparisons (Circular section), Pairwise matches (LOSATP mode), Pairwise display max hits.
 Pairwise Comparisons	ペアワイズ比較	成对比较	成對比較	Circular section title (rail short name Compare).
 Palette	パレット	调色板	調色盤	[seed] Colors > Palette. s2twp already yields 調色盤.
 Parallel	並列	并行	平行	Parallel runs. Taiwan 平行; s2twp yields 並行.
-Part (feature location part)	区間	片段		[R2] One part of a joined feature location. zh-Hant: no decision.
+Part (feature location part)	区間	片段	區段	[R2] One part of a joined feature location. zh-Hant: no decision. [R4] zh-Hant: 區段, as the feature-part rows already use.
 Paste	貼り付け	粘贴	貼上	Help text: Paste 20px or 65%. s2twp already yields 貼上.
-Pattern	パターン	匹配模式	匹配模式	Regex pattern of a color rule (Edit pattern, value regex). zh: not 模式 alone, which is Mode.
+Pattern	パターン	匹配模式	比對模式	Regex pattern of a color rule (Edit pattern, value regex). zh: not 模式 alone, which is Mode. [R4] zh-Hant: 比對模式 (Microsoft Learn zh-tw: regex pattern = 模式, match = 比對); a search match stays 符合. zh-Hans keeps 匹配模式.
 PDF	PDF	PDF	PDF	Latin in all locales (PDF fonts, PDF export).
 Pending	適用待ち	待应用	待套用	Changes pending Generate; Pending for Generate: 生成時に適用予定： / 下次生成时应用： / 待產生時套用：
 Pharokka	Pharokka	Pharokka	Pharokka	Annotation tool and preset scheme name; Latin in all locales (Pharokka (function/phrog/vfdb)).
@@ -269,11 +271,11 @@ Query	クエリ	查询序列	查詢序列	[review] zh: BLAST query (Reference si
 Radial	放射状（ラベルの向き）／半径方向（トラックの位置）	径向	徑向	Circular Label Placement Radial; Radial track stack. Horizontal: 水平 / 水平 / 水平. [R2] Split by sense: label orientation vs track position.
 Radius	半径	半径	半徑	Center Reserved Radius, Min Radius Ratio, GC Content Radius; R in ×R stays Latin.
 RBH	RBH	RBH	RBH	Latin in all locales: abbreviation of Reciprocal best hit.
-Read depth	リード深度	测序深度		[R1, R2] zh-Hans short label 深度. ja リード深度 only for the Depth input file and quantities in sentences (D-27). zh-Hant: use Depth (coverage).
+Read depth	リード深度	测序深度	深度	[R1, R2] zh-Hans short label 深度. ja リード深度 only for the Depth input file and quantities in sentences (D-27). zh-Hant: use Depth (coverage). [R4] zh-Hant: 深度 (Depth (coverage)).
 Ready	準備完了	就绪	就緒	Source recipe ready.
 Reciprocal best hit	相互ベストヒット	双向最佳命中	雙向最佳命中	Anchor mode Reciprocal best hits; RBH stays Latin.
 Recommended	推奨	推荐	建議	[medium] Recommended chip and Recommended: line in Review alignment. s2twp yields 推薦.
-Record	レコード	记录	記錄	[seed] A GenBank LOCUS entry, or one sequence of a GFF3 + FASTA pair. Never 記録 or 配列 in ja. Record label, Record ID and Record options reuse it.
+Record	レコード	记录	記錄	[seed] A GenBank LOCUS entry, or one sequence of a GFF3 + FASTA pair. Never 記録 or 配列 in ja. Record label, Record ID and Record options reuse it. [R4] ja: source record = ソースレコード (error text); original record = 元のレコード.
 Record ID	レコードID	记录ID	記錄ID	Search record IDs; Record ID A to Z. The ID values stay as written.
 Record label	レコードラベル	记录标签	記錄標籤	Circular Record label field; Record Labels block (Linear).
 Record options	レコードオプション	记录选项	記錄選項	Linear record disclosure (crop, reverse complement, LOSAT Gencode, record names).
@@ -314,13 +316,13 @@ Rule (color rule)	ルール	规则	規則	[seed] Specific color rules, visibilit
 Ruler	ルーラー	标尺	尺規	[review] zh-Hant: Microsoft Taiwan Word uses 尺規; s2twp yields 標尺, also understood. Scale Style: Bar (Simple) | Ruler (Ticks); Ruler on Axis; Ruler Label Color.
 Run	実行	运行	執行	Run LOSAT, Run time, Parallel runs, Threads per run. s2twp already yields 執行.
 Run info	実行情報	运行信息	執行資訊	Run Info panel of the successful Result (Mode, Run time, Results, CLI rerun, Search runtime). s2twp already yields 執行資訊. CLI rerun: CLIでの再実行 / CLI重新运行 / CLI重新執行.
-Runtime	ランタイム	运行时	執行階段	Diagram runtime, search runtime, LOSAT runtime. Microsoft Taiwan 執行階段; s2twp yields 執行時. [R2] run-info program/kind/version rows. Run time (运行时间) is a separate row. [R3, D-33] zh-Hans 运行时, the mainland UI and developer-docs term; Run time stays 运行时间.
+Runtime	ランタイム	运行时	執行階段	Diagram runtime, search runtime, LOSAT runtime. Microsoft Taiwan 執行階段; s2twp yields 執行時. [R2] run-info program/kind/version rows. Run time (运行时间) is a separate row. [R3, D-33] zh-Hans 运行时, the mainland UI and developer-docs term; Run time stays 运行时间. [R4] zh-Hans: D-33 を維持。実行ファイルを指す文は「搜索运行时的可执行文件」。
 Save	保存	保存	儲存	Save stores the current Result. Taiwan 儲存; s2twp already yields it.
 Save Session	セッションを保存	保存会话	儲存工作階段	Header button.
 Saving session…	セッションを保存中…	正在保存会话…	正在儲存工作階段…	Header status. Busy reason Saving session. Retry after saving finishes.: セッションを保存中です。保存が終わってから再試行してください。. Other progress forms: 適用中… / 正在应用… / 正在套用…; 読み込み中… / 正在加载… / 正在載入…; 準備中… / 正在准备… / 正在準備….
 Scale	スケール	比例尺	比例尺	Coordinate scale (Show Coordinate Scale, Scale Style, Scale Interval, Linear scale). Log Scale is a separate row. Show Coordinate Scale: 座標スケールを表示 / 显示坐标比例尺 / 顯示座標比例尺. [R2] zh-Hans also covers scale bar / length bar: 比例尺, never 比例尺条 or 长度条.
-Schema	スキーマ	架构	結構描述	[review] zh: Session and Custom Track Slots schema (Recreate Custom Track Slots with the current schema). zh-Hans alternatives 模式, schema; Microsoft Taiwan 結構描述, alternative 綱要; s2twp yields 架構.
-Score			分數	[R2] zh-Hant only. Bitscore stays Latin (see Bitscore).
+Schema	スキーマ	数据格式	結構描述	[review] zh: Session and Custom Track Slots schema (Recreate Custom Track Slots with the current schema). zh-Hans alternatives 模式, schema; Microsoft Taiwan 結構描述, alternative 綱要; s2twp yields 架構. [R4] zh-Hans: 使用は Recreate Custom Track Slots の1件のみ。「架构」は利用者に通じにくいため「数据格式」。
+Score	スコア	得分	分數	[R2] zh-Hant only. Bitscore stays Latin (see Bitscore). [R4] ja: Used in a28d4587f9d2 and 12864df30e39. Bitscore stays Latin. [R4] zh-Hans: Bitscore は Latin のまま。
 Search	検索	搜索	搜尋	Feature search (Search features) and LOSAT search (Search between, Search limits, Search runtime). Taiwan 搜尋; s2twp already yields it. Task and program values stay Latin; LOSAT cache: LOSATキャッシュ / LOSAT缓存 / LOSAT快取.
 Section	セクション	部分	區段	[review] zh: a card of the settings pane (Go to <title>, Close section, Settings sections). zh-Hans alternatives 部分, 设置组; 分区 would become 分割槽 (disk partition) under s2twp. [R3, D-33] zh-Hans 部分 (关闭此部分, 设置各部分), as mainland UIs write it.
 Select	選択	选择	選取	Select all, Select none, Select diagnostics, Select anchor. Microsoft Taiwan 選取; s2twp yields 選擇.
@@ -372,7 +374,7 @@ Tuckin / Middle / Spreadout	Tuckin / Middle / Spreadout	Tuckin / Middle / Spread
 Unavailable	利用不可	不可用	無法使用	Threaded (unavailable here), Source recipe unavailable, Unavailable record. Taiwan 無法使用; s2twp keeps 不可用.
 Underlay	アンダーレイ	底层	底層	[review] zh: feature rendering and annotation layer drawn behind features; pairs with Foreground. zh alternatives 背景层, 衬底.
 Undo	元に戻す	撤销	復原	Header button and Ctrl+Z. Office terms; s2twp yields 撤銷.
-Unit (Collinear unit)		单元	單元	[R1] Collinear unit (CDS or locus). zh-Hant from R1 term change unit -> 單元.
+Unit (Collinear unit)	ユニット	单元	單元	[R1] Collinear unit (CDS or locus). zh-Hant from R1 term change unit -> 單元. [R4] ja: The CDS or locus counted by Collinear (bf4f0a26ef02, e864a0e490da). A measurement unit (px) is 単位.
 Unknown	不明	未知	未知	Unknown configuration overrides, unknown direction.
 Unsupported	非対応	不支持	不支援	Unsupported fields, unsupported representation. Supported: 対応 / 支持 / 支援 (s2twp already yields 支援).
 Upload	アップロード	上传	上傳	Upload BLAST TSV, Upload a sequence file. Files stay in the browser; the word follows the UI.
