@@ -61,10 +61,10 @@ def _leader_widths(svg: str) -> set[str]:
 
 
 def test_each_mode_has_its_packaged_label_style() -> None:
-    # Linear: an underline on a white box at 0.8; Circular: a halo (LP-D106).
+    # Linear: an underline on a white box at 0.8; Circular: neither (a halo can be chosen, LP-D110).
     config = GbdrawConfig.from_dict(load_default_config())
     assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "box")
-    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "halo")
+    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "none")
     assert BOX_OPACITY == 0.8
     packaged = load_config_toml("gbdraw.data", "config.toml")["labels"]
     for mode in ("linear", "circular"):
@@ -139,6 +139,64 @@ def test_each_leader_keeps_its_own_width_clear_in_a_figure_with_two_label_sizes(
         clearance=3.0,
     )
     assert _ObstacleIndex(obstacles).conflicts(SimpleNamespace(parts=(square,))) == 1
+
+
+def test_only_a_horizontal_label_gets_the_underline_and_its_obstacles_agree() -> None:
+    """LP-D112: a feature label drawn turned gets no underline; its leader ends at its letters and what the region
+    labels keep off is what ``line = none`` draws. A horizontal label with the same style keeps its underline."""
+
+    from types import SimpleNamespace
+
+    from gbdraw.diagrams.linear.annotation_labels import linear_feature_label_obstacles
+    from gbdraw.labels.label_ink import linear_label_ink
+    from gbdraw.labels.linear import linear_leader_polyline
+    from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
+
+    under, plain = FeatureLabelStyle(line="under", protection="box"), FeatureLabelStyle(line="none", protection="box")
+    assert under.draws_underline(turned=False) and not under.draws_underline(turned=True)
+    assert not plain.draws_underline(turned=False)
+    flat = _linear_label_with_leader(10.0, 0.0, -14.0)
+    turned = {**flat, "rotation_deg": -45.0, "text_anchor": "start"}
+    flat_ink = linear_label_ink(flat, linear_leader_polyline(flat), under)
+    assert flat_ink.underline is not None and flat_ink.underline_box is not None
+    # A full turn draws the label horizontal again, so it keeps the underline.
+    assert linear_label_ink({**flat, "rotation_deg": -360.0}, linear_leader_polyline(flat), under).underline is not None
+    ink = linear_label_ink(turned, leader := linear_leader_polyline(turned), under)
+    assert ink.underline is None and ink.underline_box is None
+    assert ink == linear_label_ink(turned, leader, plain)
+    assert feature_label_drawn_parts(ink, under) == feature_label_drawn_parts(ink, plain)
+    plan = SimpleNamespace(slots=())
+    assert linear_feature_label_obstacles([turned], plan, 0, label_style=under) == linear_feature_label_obstacles(
+        [turned], plan, 0, label_style=plain
+    )
+    assert linear_feature_label_obstacles([flat], plan, 0, label_style=under) != linear_feature_label_obstacles(
+        [flat], plan, 0, label_style=plain
+    )
+
+
+@pytest.mark.parametrize("angle", [90.0, 270.0])
+def test_a_circular_radial_label_gets_no_underline_even_where_it_reads_horizontally(angle: float) -> None:
+    """LP-D112: a Circular radial label is turned whatever its angle; at 3 and 9 o'clock its rotation is 0 (it
+    reads horizontally) and it still gets no underline, while a horizontal (arc) label there gets one."""
+
+    from gbdraw.labels.circular_radial import radial_text_orientation
+    from gbdraw.labels.label_ink import circular_label_ink
+
+    under = FeatureLabelStyle(line="under", protection="none")
+    rotation, anchor, baseline = radial_text_orientation(angle, is_inner=False)
+    point = {"start_x": 100.0, "start_y": 0.0, "middle_x": 90.0, "middle_y": 0.0, "feature_middle_x": 80.0}
+    label = {
+        "label_text": "orf",
+        "font_family": "'Liberation Sans', sans-serif",
+        "font_size": 10.0,
+        "middle": 1000,
+        "is_inner": False,
+        **point,
+    }
+    radial = {**label, "placement": "radial", "rotation_deg": rotation, "text_anchor": anchor, "dominant_baseline": baseline}
+    assert rotation == 0.0
+    assert circular_label_ink(radial, 4000, under).underline is None
+    assert circular_label_ink(label, 4000, under).underline is not None
 
 
 @pytest.mark.parametrize(

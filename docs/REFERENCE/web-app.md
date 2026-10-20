@@ -344,8 +344,9 @@ feature label with a leader line is drawn, as `--label_line` and
 `--label_protection` do on the
 [command line](command-line.md#tracks-annotations-and-presentation). Circular
 and Linear each have their own pair (Linear **Underline** and **Box**, Circular
-**None** and **Halo** by default), which applies on Generate and is saved in
-Sessions. **Box** is a white box at 80 % opacity behind the letters. The PDF
+**None** and **None** by default; **Halo** can be chosen), which applies on Generate and is saved in
+Sessions. **Underline** is drawn under horizontal labels only; a turned label
+gets no line, and its leader ends at the letters. **Box** is a white box at 80 % opacity behind the letters. When **Halo** is chosen, the PDF
 export draws labels without their halos; SVG, Interactive SVG and PNG keep
 them. A box is drawn in every format.
 

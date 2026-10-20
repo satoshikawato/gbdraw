@@ -17,8 +17,10 @@ write-up of a release.
   `--label_line {none,under}` and `--label_protection {none,halo,box}`
   (config `labels.<mode>.line` and `.protection`; web app **Label Line** and
   **Label Protection** under **Labels**). Linear draws an underline joined to
-  the leader and a white box at 80 % opacity behind the letters by default;
-  Circular draws a white halo around the letters. Leaders and underlines are
+  the leader, under horizontal labels only (a turned label gets no underline and
+  keeps its vertical leader, as before), and a white box at 80 % opacity behind the letters by default;
+  Circular draws neither by default, and a white halo around the letters
+  can be chosen. Leaders and underlines are
   0.07 em wide, at least 1 px, in both modes.
   - In Linear the underline takes no room in its label row, so labels keep
     their rows and the figure its size.
@@ -32,7 +34,7 @@ write-up of a release.
   - Neighbouring Linear feature labels in one label row keep at least 0.25 em
     apart, so two names no longer read as one word; a label that would come
     closer takes another row at the same position.
-  - The web app's PDF export draws labels without their halos, so each label
+  - The web app's PDF export draws labels without their halos (when a halo is chosen), so each label
     is drawn and extracted once, and draws centred and end-aligned text where
     the SVG draws it (it was shifted right).
   - `labels.stroke_width` is removed. An override of it fails with the

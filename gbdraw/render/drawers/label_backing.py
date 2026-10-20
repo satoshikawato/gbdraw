@@ -186,12 +186,12 @@ def _corners(box: Aabb) -> tuple[Point, Point, Point, Point]:
 
 def feature_label_drawn_parts(label: FeatureLabelInk, style: FeatureLabelStyle) -> tuple[tuple[Point, ...], ...]:
     """What ``style`` draws with a feature label's letters besides them, as convex polygons in the drawing
-    frame: its underline with its stroke (``line = under``) and its white box turned with the letters
-    (``protection = box``). ``label`` is its ink with the style's underline. Both modes' region labels keep off
-    these as off the letters (OV-1357, OV-1358)."""
+    frame: its underline with its stroke (``line = under``, a horizontal label only) and its white box turned
+    with the letters (``protection = box``). ``label`` is its ink in ``style``. Both modes' region labels keep
+    off these as off the letters (OV-1357, OV-1358)."""
 
     parts: list[tuple[Point, ...]] = []
-    line = label.underline_box if style.underline else None
+    line = label.underline_box
     if line is not None:
         parts.append(_corners(line))
     if style.protection == "box":

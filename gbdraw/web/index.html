@@ -5155,7 +5155,7 @@
                                         <div>
                                             <span class="input-label text-[10px] mb-0">
                                                 {{ t('Label Line') }}
-                                                <help-tip id="help-label-label-line" :text="t('Underline draws a line under each label with a leader, joined to its leader. None draws no line.')"></help-tip>
+                                                <help-tip id="help-label-label-line" :text="t('Underline draws a line under each horizontal label with a leader, joined to its leader; a turned label gets none. None draws no line.')"></help-tip>
                                             </span>
                                             <select v-model="adv.label_line" :aria-label="t('Label Line')" aria-describedby="help-label-label-line" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                                 <option value="none">{{ t('None') }}</option>

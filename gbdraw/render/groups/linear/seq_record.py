@@ -213,9 +213,9 @@ class SeqRecordGroup:
         """A label's drawn parts in the style of its mode (``FeatureLabelStyle``)."""
 
         style = self.profile.label_style
-        if not leader or (not style.underline and style.protection != "box"):
+        if not leader or not style.draws_from_ink:
             return _LabelParts(bool(leader), leader)
-        ink = linear_label_ink(label, leader, underline=style.underline)
+        ink = linear_label_ink(label, leader, style)
         feature_id = label["feature_id"]
         width = label_leader_width_px(label)
         underline = casing = tail = None

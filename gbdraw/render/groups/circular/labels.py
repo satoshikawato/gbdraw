@@ -11,7 +11,7 @@ from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
-from ....labels.label_ink import circular_label_ink
+from ....labels.label_ink import FeatureLabelInk, circular_label_ink
 from ....labels.label_style import label_leader_width_px
 from ....layout.circular import CircularRecordRenderContext
 from ....svg.ids import stable_svg_id
@@ -68,15 +68,16 @@ class LabelsGroup:
         # The record assembly places every drawn label (and checks their fit) once.
         labels = [label for label in self.precalculated_labels or [] if not label.get("is_embedded")]
         style = self.render_context.profile.label_style
-        drawn: list[tuple[CircularLabel, Point, tuple[Point, Point, Point] | None]] = []
+        drawn: list[tuple[CircularLabel, FeatureLabelInk | None, Point, tuple[Point, Point, Point] | None]] = []
         for label in labels:
             contact: Point = (label.get("leader_start_x", label["start_x"]), label.get("leader_start_y", label["start_y"]))
-            line = circular_label_ink(label, self.record_length, underline=True).underline if style.underline else None
+            ink = circular_label_ink(label, self.record_length, style) if style.draws_from_ink else None
+            line = ink.underline if ink is not None else None
             # The leader ends on its underline, which continues it (LP-D88), or stops above the letters.
-            drawn.append((label, line[0] if line is not None else contact, line))
+            drawn.append((label, ink, line[0] if line is not None else contact, line))
 
         if self.phase == "leaders":
-            for label, contact, _line in drawn:
+            for label, _ink, contact, _line in drawn:
                 bend = (label["middle_x"], label["middle_y"])
                 group.add(self._part(bend, contact, label))
                 feature = (
@@ -87,18 +88,18 @@ class LabelsGroup:
             return group
 
         if style.protection == "box":
-            for label, contact, _line in drawn:
-                ink = circular_label_ink(label, self.record_length, underline=style.underline)
+            for label, ink, _contact, _line in drawn:
+                assert ink is not None
                 group.add(feature_label_box(ink, label["feature_id"]))
         drawer = LabelDrawer(profile=self.render_context.profile)
         feature_anchor_radius = float(self.geometry.radius)
         letters = Group()
-        for label, _contact, _line in drawn:
+        for label, _ink, _contact, _line in drawn:
             drawer.draw(label, letters, self.record_length, feature_anchor_radius, self.geometry.track_ratio)
         if style.protection == "halo":
-            for (label, _contact, _line), text in zip(drawn, letters.elements):
+            for (label, _ink, _contact, _line), text in zip(drawn, letters.elements):
                 group.add(label_halo(text, stable_svg_id("label_text", label["stable_id"], label["input_order"])))
-        for label, _contact, line in drawn:
+        for label, _ink, _contact, line in drawn:
             if line is not None and line[1] != line[2]:
                 group.add(self._part(line[1], line[2], label))
         group.elements.extend(letters.elements)

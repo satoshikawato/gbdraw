@@ -288,7 +288,7 @@ test('Label Line and Label Protection draw in their mode and survive Save and Lo
   try {
     const loaded = await readDrawings(fresh, fields);
     expect(loaded.linear, 'Linear after Load').toEqual({ line: 'none', protection: 'halo' });
-    expect(loaded.circular, 'Circular after Load').toEqual({ line: 'none', protection: 'halo' });
+    expect(loaded.circular, 'Circular after Load').toEqual({ line: 'none', protection: 'none' });
   } finally {
     await fresh.context().close();
   }
