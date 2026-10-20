@@ -4,7 +4,7 @@ import math
 import re
 import warnings
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ParamSpec, TypeVar
@@ -37,7 +37,7 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.layout.spatial import AabbIndex, IntervalIndex, candidate_aabb_pairs
+from gbdraw.layout.spatial import Aabb, AabbIndex, IntervalIndex, candidate_aabb_pairs
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
@@ -50,7 +50,7 @@ from gbdraw.labels.linear import (
     linear_record_labels,
     place_linear_label_row,
 )
-from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_svg_bbox_dimensions, text_ink_offsets
+from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_bbox_dimensions, calculate_svg_bbox_dimensions, text_ink_offsets
 from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 from tests.utils.linear_render_context import make_linear_record_render_context
@@ -859,12 +859,12 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     resolve = linear_labels_module._resolve_above_feature_label_overlaps
 
-    def counted_resolve(labels: list[dict], min_gap_px: float) -> None:
+    def counted_resolve(labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()) -> None:
         nonlocal resolved_labels, inside_resolver
         resolved_labels += len(labels)
         inside_resolver = True
         try:
-            resolve(labels, min_gap_px)
+            resolve(labels, min_gap_px, keep_clear)
         finally:
             inside_resolver = False
 
@@ -1343,3 +1343,138 @@ def test_linear_labels_of_records_in_one_row_are_packed_together() -> None:
     assert any(
         moved["track_id"] != kept["track_id"] for moved, kept in zip(packed[1], alone[1], strict=True)
     )
+
+
+def _svg_translation(element: ET.Element) -> tuple[float, float]:
+    """The sum of the ``translate(...)`` steps in an element's ``transform``."""
+
+    dx = dy = 0.0
+    for tx, ty in re.findall(r"translate\(([-\d.e]+)[ ,]+([-\d.e]+)\)", element.attrib.get("transform", "")):
+        dx += float(tx)
+        dy += float(ty)
+    return dx, dy
+
+
+def _svg_text_boxes(svg: str, cfg: GbdrawConfig) -> tuple[list[list[tuple[float, float]]], list[list[tuple[float, float]]]]:
+    """The drawn feature labels and definition lines of a one-record Linear SVG as polygons in canvas
+    coordinates: each text's advance by its font box, anchored and turned as the SVG draws it."""
+
+    font_family = cfg.objects.text.font_family
+    dpi = cfg.canvas.dpi
+    labels: list[list[tuple[float, float]]] = []
+    definitions: list[list[tuple[float, float]]] = []
+
+    def walk(element: ET.Element, offset: tuple[float, float], in_definition: bool) -> None:
+        dx, dy = _svg_translation(element)
+        offset = (offset[0] + dx, offset[1] + dy)
+        in_definition = in_definition or element.attrib.get("data-gbdraw-role") == "record-definition"
+        if element.tag.endswith("}text"):
+            text = "".join(element.itertext()).strip()
+            is_label = "data-label-feature-id" in element.attrib
+            if text and (is_label or in_definition):
+                size = float(element.attrib["font-size"])
+                width, _ = calculate_svg_bbox_dimensions(text, font_family, size, dpi)
+                _, height = calculate_bbox_dimensions(text, font_family, size, dpi)
+                x, y = float(element.attrib.get("x", 0.0)), float(element.attrib.get("y", 0.0))
+                left = {"start": 0.0, "end": -width}.get(element.attrib.get("text-anchor", "start"), -0.5 * width)
+                corners = [(left, -0.5 * height), (left + width, -0.5 * height), (left + width, 0.5 * height), (left, 0.5 * height)]
+                turn = re.search(r"rotate\(([-\d.e]+)", element.attrib.get("transform", ""))
+                angle = math.radians(float(turn.group(1))) if turn else 0.0
+                polygon = [
+                    (offset[0] + x + cx * math.cos(angle) - cy * math.sin(angle), offset[1] + y + cx * math.sin(angle) + cy * math.cos(angle))
+                    for cx, cy in corners
+                ]
+                (labels if is_label else definitions).append(polygon)
+        for child in element:
+            walk(child, offset, in_definition)
+
+    walk(ET.fromstring(svg), (0.0, 0.0), False)
+    return labels, definitions
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("label_rotation", (0.0, 45.0))
+def test_linear_above_feature_labels_keep_clear_of_the_definition_text(label_rotation: float) -> None:
+    """OV-1395: the lowest row of above-feature labels left the first label over the record's
+    definition text (lambda: "terminase small subunit" over "NC_001416.1")."""
+
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "NC_001416.gb"), "genbank")
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {
+            "labels.linear.scope": "all",
+            "labels.linear.placement": "above_feature",
+            "labels.linear.rotation": label_rotation,
+        },
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = assemble_linear_diagram_from_records([record], cfg=cfg, legend="none")
+    labels, definitions = _svg_text_boxes(drawing.tostring(), cfg)
+
+    assert labels and len(definitions) == 2
+    covering = [
+        label for label in labels if any(convex_polygons_intersect(label, line, touching=False) for line in definitions)
+    ]
+    assert covering == []
+    assert sum(record.fit.definition_overlaps for record in drawing._gbdraw_linear_label_fit.records) == 0
+
+
+@pytest.mark.linear
+def test_linear_above_feature_label_moves_off_a_keep_clear_box() -> None:
+    """A record's ``keep_clear`` box (its definition text) is placed before its labels: an
+    above-feature label over it moves away from the axis with a leader, as off another label."""
+
+
+    record = SeqRecord(Seq("A" * 1000), id="r", name="r", description="r")
+    record.features = [SeqFeature(FeatureLocation(0, 40, strand=1), type="CDS", qualifiers={"product": ["a long first label"]})]
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {"labels.linear.scope": "all", "labels.linear.placement": "above_feature"},
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
+    canvas_cfg = LinearCanvasConfigurator(num_of_entries=1, longest_genome=1000, profile=profile, legend="none")
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    feature_dict, _ = create_feature_dict(
+        record, color_table, cfg.objects.features.features_drawn, default_colors,
+        canvas_cfg.strandedness, canvas_cfg.resolve_overlaps,
+        preprocess_label_filtering(cfg.labels.filtering.as_dict()),
+    )
+    record_labels = linear_record_labels(
+        feature_dict, 1000, canvas_cfg.alignment_width, 1.0, canvas_cfg.cds_height,
+        canvas_cfg.strandedness, canvas_cfg.track_layout, canvas_cfg.track_axis_gap, profile,
+    )
+    (alone,) = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout=canvas_cfg.track_layout)[0]
+    left, _right, top, bottom = calculate_label_bounds(alone)
+    assert left < 0.0 and alone["leader_line"] is False
+
+    header = Aabb(left - 50.0, top - 2.0, -5.0, bottom + 30.0)
+    (placed,) = place_linear_label_row(
+        [(record_labels._replace(keep_clear=(header,)), 0.0)], profile=profile, track_layout=canvas_cfg.track_layout
+    )[0]
+    _left, _right, _top, placed_bottom = calculate_label_bounds(placed)
+    assert placed_bottom < header.min_y
+    assert placed["leader_line"] is True
+
+
+@pytest.mark.linear
+def test_linear_label_fit_counts_a_label_over_the_definition_text() -> None:
+    """The fit count sees a feature label the placement could not keep off the definition text: it
+    warns ("labels cover the definition text"), it does not stop."""
+
+
+    label = {
+        "label_text": "x", "middle_x": 10.0, "middle_y": -20.0, "width_px": 40.0, "height_px": 10.0,
+        "rotation_deg": 0.0, "text_anchor": "middle", "is_embedded": True, "font_size": 10.0,
+        "feature_middle_y": 0.0,
+    }
+    clear = linear_label_fit([("r", [label])], 10.0, definition_boxes=[(Aabb(-50.0, -30.0, -20.0, -10.0),)])
+    covered = linear_label_fit([("r", [label])], 10.0, definition_boxes=[(Aabb(-50.0, -30.0, -5.0, -10.0),)])
+
+    assert clear.records == ()
+    assert [record.fit.definition_overlaps for record in covered.records] == [1]
+    assert covered.outcome == "warn"

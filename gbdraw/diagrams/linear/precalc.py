@@ -41,6 +41,7 @@ from ...labels.linear import (
 )
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
+from ...layout.spatial import Aabb
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
 
 if TYPE_CHECKING:
@@ -159,11 +160,13 @@ def _precalculate_label_dimensions(
     feature_lane_geometries: Sequence[LinearFeatureLaneGeometry] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     label_frames: Sequence[LinearLabelFrame] | None = None,
+    label_keep_clear: Sequence[tuple[Aabb, ...]] | None = None,
 ) -> tuple[float, list[list[dict]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height.
 
     The labels of the records in one row (``label_frames``; each record alone in its row without them)
-    are stacked together (OV-1188).
+    are stacked together (OV-1188). ``label_keep_clear`` are each record's boxes its labels keep
+    clear of, in their coordinates (``LinearRecordLabels.keep_clear``).
     """
 
     profile = render_context.profile
@@ -245,6 +248,8 @@ def _precalculate_label_dimensions(
             record_transform=(record_transforms[i] if record_transforms is not None else None),
             label_filtering=label_filtering,
         )
+        if label_keep_clear is not None:
+            labels = labels._replace(keep_clear=label_keep_clear[i])
         record_labels.append(labels)
 
     placed_by_record: dict[int, list[dict]] = {}

@@ -271,9 +271,9 @@ _SHIFT_DECISION_MARGIN_PX = 1e-6
 
 
 class _PlacedLinearLabel(NamedTuple):
-    """A label that no longer moves, with the shapes the collision pass reads."""
+    """A label that no longer moves, or a box the labels keep clear of, with the shapes the collision
+    pass reads."""
 
-    label: dict
     aabb: Aabb
     corners: list[tuple[float, float]]
 
@@ -451,8 +451,11 @@ def _place_linear_label_without_overlap(
     return abs(float(label["middle_y"]) - original_y) > 0.001
 
 
-def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float) -> None:
-    """Stack rotated above-feature labels away from the axis when their bboxes collide."""
+def _resolve_above_feature_label_overlaps(
+    labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()
+) -> None:
+    """Stack rotated above-feature labels away from the axis when their bboxes collide, and off the
+    ``keep_clear`` boxes (the definition text), which are placed first."""
     if not labels:
         return
 
@@ -462,12 +465,16 @@ def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float)
             continue
         placed_by_id: dict[int, _PlacedLinearLabel] = {}
         placed_x_index = IntervalIndex(bucket_size=_above_feature_label_bucket_size(side_labels, min_gap_px))
+        for box in keep_clear:
+            corners = [(box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)]
+            placed_by_id[len(placed_by_id)] = _PlacedLinearLabel(box, corners)
+            placed_x_index.insert(len(placed_by_id) - 1, Interval(box.min_x, box.max_x))
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
             if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
-            placed = _PlacedLinearLabel(label, _linear_label_aabb(label), _label_corners(label))
+            placed = _PlacedLinearLabel(_linear_label_aabb(label), _label_corners(label))
             placed_id = len(placed_by_id)
             placed_by_id[placed_id] = placed
             placed_x_index.insert(placed_id, Interval(placed.aabb.min_x, placed.aabb.max_x))
@@ -528,13 +535,16 @@ def linear_label_rows(frames: Sequence[LinearLabelFrame] | None, record_count: i
 
 class LinearRecordLabels(NamedTuple):
     """One record's feature labels before ``place_linear_label_row`` stacks them: ``labels`` in placement
-    order (an external one has no row yet), and what the row needs of the record."""
+    order (an external one has no row yet), and what the row needs of the record. ``keep_clear`` are
+    boxes in the labels' record coordinates that no label may cover: the record's definition text
+    beside its features (OV-1395)."""
 
     labels: list[dict]
     top_feature_y: float
     bottom_feature_y: float
     max_label_height: float
     alignment_width: float
+    keep_clear: tuple[Aabb, ...] = ()
 
 
 def linear_record_labels(
@@ -868,7 +878,11 @@ def place_linear_label_row(
             }
             for label, x in on_features
         ]
-        _resolve_above_feature_label_overlaps(framed_labels, max(1.0, max_height * 0.05))
+        _resolve_above_feature_label_overlaps(
+            framed_labels,
+            max(1.0, max_height * 0.05),
+            [box.translated(x, 0.0) for record, x in records for box in record.keep_clear],
+        )
         for (label, _x), framed in zip(on_features, framed_labels):
             label["middle_y"] = framed["middle_y"]
             if framed["leader_line"]:
@@ -991,11 +1005,15 @@ def linear_label_shapes(labels: Sequence[dict], x: float = 0.0) -> list[LabelSha
     ]
 
 
-def _linear_row_label_fits(row: Sequence[tuple[Sequence[dict], float]]) -> tuple[list[LabelFit], bool]:
+def _linear_row_label_fits(
+    row: Sequence[tuple[Sequence[dict], float]],
+    definition_boxes: Sequence[Sequence[Aabb]] | None = None,
+) -> tuple[list[LabelFit], bool]:
     """The fit of each record's drawn feature labels in one Linear row (records in row order, each with
     the x of its start), counted together with the shared rule (their layout boxes and leaders): a pair
-    of labels of two records counts for the later record (OV-1188). Also whether an overlapping pair
-    has a label drawn on its feature."""
+    of labels of two records counts for the later record (OV-1188). A label whose letters cover one of
+    its record's ``definition_boxes`` (record coordinates, as its labels) counts once for its record
+    (OV-1395). Also whether an overlapping pair has a label drawn on its feature."""
 
     owners: list[int] = []
     labels: list[dict] = []
@@ -1004,14 +1022,23 @@ def _linear_row_label_fits(row: Sequence[tuple[Sequence[dict], float]]) -> tuple
         owners.extend([position] * len(record_labels))
         labels.extend(record_labels)
         shapes.extend(linear_label_shapes(record_labels, x))
-    counts = [[0, 0] for _record in row]
+    counts = [[0, 0, 0] for _record in row]
     overlaps = overlapping_pairs([shape.parts for shape in shapes], touching=False)
     for left, right in overlaps:
         counts[max(owners[left], owners[right])][0] += 1
     for left, right in crossing_pairs([shape.leader for shape in shapes]):
         counts[max(owners[left], owners[right])][1] += 1
+    for position, ((record_labels, _x), boxes) in enumerate(zip(row, definition_boxes or [()] * len(row), strict=True)):
+        polygons = [
+            ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
+            for box in boxes
+        ]
+        counts[position][2] += sum(
+            any(convex_polygons_intersect(_label_corners(label), polygon, touching=False) for polygon in polygons)
+            for label in record_labels
+        )
     embedded_overlap = any(labels[left]["is_embedded"] or labels[right]["is_embedded"] for left, right in overlaps)
-    return [LabelFit(overlap, crossing) for overlap, crossing in counts], embedded_overlap
+    return [LabelFit(overlap, crossing, covered) for overlap, crossing, covered in counts], embedded_overlap
 
 
 def linear_row_label_fit(row: Sequence[tuple[Sequence[dict], float]]) -> LabelFit:
@@ -1079,12 +1106,14 @@ def linear_label_fit(
     new_rows: FeatureLabelRows | None = None,
     *,
     frames: Sequence[LinearLabelFrame] | None = None,
+    definition_boxes: Sequence[Sequence[Aabb]] | None = None,
 ) -> LinearLabelFit:
     """Count one figure's drawn Linear labels with the shared rule (LP-D48 SCOPE-ALL-LABELS).
 
     The feature labels of the records in one row (``frames``, where their
     labels were stacked; each record alone in its row without them) are
-    counted together (OV-1188). ``region_labels`` are each record's region
+    counted together (OV-1188). ``definition_boxes`` are each record's definition text boxes in its
+    labels' record coordinates; a label over one warns (OV-1395). ``region_labels`` are each record's region
     labels as their placer counted them (LP-D68); a record whose region labels
     overlap other labels or lines gets a ``linear_region`` record, which only warns.
     """
@@ -1093,7 +1122,10 @@ def linear_label_fit(
     fits: list[LabelFit] = [FITS] * len(record_labels)
     embedded_overlap = False
     for row in linear_label_rows(frames, len(record_labels)):
-        row_fits, row_embedded_overlap = _linear_row_label_fits([(record_labels[index][1], x) for index, x in row])
+        row_fits, row_embedded_overlap = _linear_row_label_fits(
+            [(record_labels[index][1], x) for index, x in row],
+            [definition_boxes[index] for index, _x in row] if definition_boxes is not None else None,
+        )
         embedded_overlap = embedded_overlap or row_embedded_overlap
         for (index, _x), fit in zip(row, row_fits, strict=True):
             fits[index] = fit

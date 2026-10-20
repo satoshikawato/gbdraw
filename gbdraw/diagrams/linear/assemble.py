@@ -184,6 +184,7 @@ from .annotation_labels import (
     AnnotationLabelsBySlot,
     LabelObstacle,
     PlacedAnnotationLabels,
+    _features_origin_y,
     linear_annotation_label_inks,
     linear_feature_glyph_boxes,
     linear_feature_label_obstacles,
@@ -1039,6 +1040,35 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
     return VerticalBand(float(center_y) - half_height, float(center_y) + half_height)
 
 
+def _definition_geometry_beside_features(
+    feature_center_y: float,
+    *,
+    local_height: float,
+    local_width: float,
+    row_height: float,
+    row_width: float,
+    multi_record_enabled: bool,
+    split_row_definitions: bool,
+) -> _LinearRecordDefinitionGeometry:
+    """The definition text drawn beside a record's features, centered on them: a record alone in its
+    row has its own text there, and the leading record of a shared row the row's heading. Its place does
+    not depend on the feature labels, so the labels can keep clear of it (OV-1395); the record-local
+    text of a shared row is a header above the record's canvas band, added by the vertical plan."""
+
+    local_band = None if multi_record_enabled else _centered_vertical_band(feature_center_y, local_height)
+    row_band = (
+        _centered_vertical_band(feature_center_y, row_height)
+        if multi_record_enabled and split_row_definitions
+        else None
+    )
+    return _LinearRecordDefinitionGeometry(
+        local_band=local_band,
+        row_band=row_band,
+        local_width=float(local_width),
+        row_width=float(row_width),
+    )
+
+
 _ROW_ELIGIBLE_LINE_KINDS: tuple[str, ...] = ("name", "subtitle")
 _RECORD_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
 
@@ -1255,55 +1285,43 @@ def _build_linear_record_vertical_plans(
             if record_index < len(definition_heights)
             else 0.0
         )
-        row_definition_height = (
-            float(row_definition_heights[record_index])
-            if record_index < len(row_definition_heights)
-            else 0.0
+        beside = _definition_geometry_beside_features(
+            feature_center_y,
+            local_height=local_definition_height,
+            local_width=(
+                float(definition_widths[record_index])
+                if record_index < len(definition_widths)
+                else 0.0
+            ),
+            row_height=(
+                float(row_definition_heights[record_index])
+                if record_index < len(row_definition_heights)
+                else 0.0
+            ),
+            row_width=(
+                float(row_definition_widths[record_index])
+                if record_index < len(row_definition_widths)
+                else 0.0
+            ),
+            multi_record_enabled=multi_record_enabled,
+            split_row_definitions=split_row_definitions,
         )
-        if multi_record_enabled:
-            row_band = (
-                _centered_vertical_band(feature_center_y, row_definition_height)
-                if split_row_definitions
-                else None
+        if beside.row_band is not None:
+            canvas_band = canvas_band.union(beside.row_band)
+        local_band = beside.local_band
+        if multi_record_enabled and local_definition_height > 0.0:
+            header_bottom_y = (
+                canvas_band.top_y - float(canvas_config.vertical_padding)
             )
-            if row_band is not None:
-                canvas_band = canvas_band.union(row_band)
-            local_band = None
-            if local_definition_height > 0.0:
-                header_bottom_y = (
-                    canvas_band.top_y - float(canvas_config.vertical_padding)
-                )
-                local_band = VerticalBand(
-                    header_bottom_y - local_definition_height,
-                    header_bottom_y,
-                )
-        else:
-            local_band = _centered_vertical_band(
-                feature_center_y,
-                local_definition_height,
+            local_band = VerticalBand(
+                header_bottom_y - local_definition_height,
+                header_bottom_y,
             )
-            row_band = None
 
-        for definition_band in (local_band,):
-            if definition_band is not None:
-                canvas_band = canvas_band.union(definition_band)
+        if local_band is not None:
+            canvas_band = canvas_band.union(local_band)
         plans.append(replace(plan, canvas_band=canvas_band))
-        definition_geometries.append(
-            _LinearRecordDefinitionGeometry(
-                local_band=local_band,
-                row_band=row_band,
-                local_width=(
-                    float(definition_widths[record_index])
-                    if record_index < len(definition_widths)
-                    else 0.0
-                ),
-                row_width=(
-                    float(row_definition_widths[record_index])
-                    if record_index < len(row_definition_widths)
-                    else 0.0
-                ),
-            )
-        )
+        definition_geometries.append(replace(beside, local_band=local_band))
     return plans, definition_geometries
 
 
@@ -1362,6 +1380,42 @@ def _record_collision_bands(
         ),
     ]
 
+    bands.extend(
+        _record_definition_bands(
+            definition_geometry,
+            sequence_width=width,
+            record_x=x,
+            multi_record_enabled=multi_record_enabled,
+            keep_definition_left_aligned=keep_definition_left_aligned,
+            definition_column_width=definition_column_width,
+            row_definition_width=row_definition_width,
+            definition_gap=definition_gap,
+            text_anchor=text_anchor,
+            definition_column_left=definition_column_left,
+        )
+    )
+    return tuple(bands)
+
+
+def _record_definition_bands(
+    definition_geometry: _LinearRecordDefinitionGeometry,
+    *,
+    sequence_width: float,
+    record_x: float,
+    multi_record_enabled: bool,
+    keep_definition_left_aligned: bool,
+    definition_column_width: float,
+    row_definition_width: float,
+    definition_gap: float,
+    text_anchor: str = "middle",
+    definition_column_left: float = 0.0,
+) -> list[CollisionBand]:
+    """The boxes of a placed record's definition text (``place_linear_definition`` on x, the
+    definition geometry's bands on y), in the coordinates of ``record_x``."""
+
+    width = max(0.0, float(sequence_width))
+    x = float(record_x)
+    bands: list[CollisionBand] = []
     local_band = definition_geometry.local_band
     local_width = max(0.0, float(definition_geometry.local_width))
     if local_band is not None and local_width > 0.0:
@@ -1400,7 +1454,20 @@ def _record_collision_bands(
                 row_band.bottom_y,
             )
         )
-    return tuple(bands)
+    return bands
+
+
+def _definition_label_boxes(
+    bands: Sequence[CollisionBand], *, record_x: float, features_origin_y: float
+) -> tuple[Aabb, ...]:
+    """A record's definition boxes (``_record_definition_bands`` at ``record_x``) in the coordinates
+    of its feature labels: from the record's start and the features slot's origin."""
+
+    return tuple(
+        Aabb(band.x_start - record_x, band.top_y - features_origin_y, band.x_end - record_x, band.bottom_y - features_origin_y)
+        for band in bands
+        if band.kind == "definition" and band.x_end > band.x_start
+    )
 
 
 def _linear_axis_ruler_bounds(
@@ -2276,18 +2343,6 @@ def assemble_linear_diagram(
         )
         for index, feature_dict in enumerate(record_feature_dicts)
     ]
-    _unused_label_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
-        records,
-        feature_config,
-        canvas_config,
-        render_context=render_context,
-        precomputed_feature_dicts=record_feature_dicts,
-        orthogroup_label_eligibility=orthogroup_label_eligibility,
-        feature_lane_geometries=record_feature_lane_geometries,
-        record_transforms=record_transforms,
-    )
-    if feature_label_rows is not None:
-        all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
     local_definition_line_kinds: list[frozenset[str]] | None = None
     row_definition_line_kinds: list[frozenset[str]] = [
         frozenset() for _record in records
@@ -2325,6 +2380,70 @@ def assemble_linear_diagram(
             record_transforms=record_transforms,
             record_presentations=presentations,
         )
+    record_offsets_x: list[float] = []
+    if not multi_record_enabled:
+        for record_index, record in enumerate(records):
+            if cfg.canvas.linear.normalize_length:
+                record_offset_x = 0.0
+            elif canvas_config.align_center:
+                record_offset_x = (
+                    canvas_config.alignment_width
+                    * (
+                        (canvas_config.longest_genome - len(record.seq))
+                        / canvas_config.longest_genome
+                    )
+                    / 2
+                )
+            else:
+                record_offset_x = 0.0
+            record_offsets_x.append(record_offset_x)
+    # The definition text beside each record's features, which its feature labels keep clear of
+    # (OV-1395), in their coordinates. Its x comes from the record's start before the final
+    # translations, which keep a centered definition beside its record.
+    keep_clear_text_anchor = (
+        "middle" if multi_record_enabled else cfg.objects.definition.linear.text_anchor
+    )
+    label_keep_clear = [
+        _definition_label_boxes(
+            _record_definition_bands(
+                _definition_geometry_beside_features(
+                    0.5 * (geometry.occupied_band.top_y + geometry.occupied_band.bottom_y),
+                    local_height=definition_heights[index],
+                    local_width=definition_widths[index],
+                    row_height=row_definition_heights[index],
+                    row_width=row_definition_widths[index],
+                    multi_record_enabled=multi_record_enabled,
+                    split_row_definitions=split_row_definitions,
+                ),
+                # Only the header of a shared row reads the record's width; it is not beside the features.
+                sequence_width=0.0,
+                record_x=record_offsets_x[index] if record_offsets_x else 0.0,
+                multi_record_enabled=multi_record_enabled,
+                keep_definition_left_aligned=bool(canvas_config.keep_definition_left_aligned),
+                definition_column_width=max_def_width,
+                row_definition_width=row_definition_width,
+                definition_gap=float(canvas_config.definition_gap),
+                text_anchor=keep_clear_text_anchor,
+                definition_column_left=min(record_offsets_x, default=0.0),
+            ),
+            record_x=record_offsets_x[index] if record_offsets_x else 0.0,
+            features_origin_y=0.0,
+        )
+        for index, geometry in enumerate(record_feature_lane_geometries)
+    ]
+    _unused_label_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
+        records,
+        feature_config,
+        canvas_config,
+        render_context=render_context,
+        precomputed_feature_dicts=record_feature_dicts,
+        orthogroup_label_eligibility=orthogroup_label_eligibility,
+        feature_lane_geometries=record_feature_lane_geometries,
+        record_transforms=record_transforms,
+        label_keep_clear=label_keep_clear,
+    )
+    if feature_label_rows is not None:
+        all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
 
     record_depth_data: list[list[DepthTrackData]] = (
         build_depth_track_dataframes(
@@ -2438,23 +2557,6 @@ def assemble_linear_diagram(
         rows_by_record,
     )
 
-    record_offsets_x: list[float] = []
-    if not multi_record_enabled:
-        for record_index, record in enumerate(records):
-            if normalize_length:
-                record_offset_x = 0.0
-            elif canvas_config.align_center:
-                record_offset_x = (
-                    canvas_config.alignment_width
-                    * (
-                        (canvas_config.longest_genome - len(record.seq))
-                        / canvas_config.longest_genome
-                    )
-                    / 2
-                )
-            else:
-                record_offset_x = 0.0
-            record_offsets_x.append(record_offset_x)
 
     definition_column_width = max_def_width
 
@@ -2607,6 +2709,7 @@ def assemble_linear_diagram(
             sequence_widths=final_sequence_widths,
             record_transforms=record_transforms,
             label_frames=label_frames,
+            label_keep_clear=label_keep_clear,
         )
         if feature_label_rows is not None:
             all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
@@ -2960,6 +3063,15 @@ def assemble_linear_diagram(
         label_frames=label_frames,
     )
     annotation_labels_by_record = [placed.by_slot for placed in placed_annotation_labels]
+    # Each record's drawn definition text, in its feature labels' coordinates (OV-1395).
+    definition_label_boxes = [
+        _definition_label_boxes(
+            record_collision_bands[index],
+            record_x=record_placements[index].x,
+            features_origin_y=_features_origin_y(record_vertical_plans[index]),
+        )
+        for index in range(len(records))
+    ]
     label_fit = linear_label_fit(
         [(str(record.id), labels) for record, labels in zip(records, all_labels)],
         label_font_size,
@@ -2976,6 +3088,7 @@ def assemble_linear_diagram(
         if any(placed.new_rows for placed in placed_annotation_labels)
         else None,
         frames=label_frames,
+        definition_boxes=definition_label_boxes,
     )
 
     total_records = len(records)
