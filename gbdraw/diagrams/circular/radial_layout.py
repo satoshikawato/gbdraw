@@ -149,7 +149,8 @@ class _SpanLabelRoom:
 
     room: Callable[[RadialBand], float]
     extent: SpanExtent
-    # The overlay's own width, the band its labels start from when it spans nothing ("own").
+    # The overlay's own width (its intent's, never negative), the band its labels start from when it spans nothing
+    # ("own"); the final overlay loop draws the same width.
     width_px: float
 
 
@@ -799,15 +800,19 @@ def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedS
 
     The room is measured on the band the span stretches over from this slot (``_span_room_band``). A ``to_slot``
     span also covers slots further in; its letters' reach past the edge does not grow with the span's width, so this
-    slot's own band bounds it.
+    slot's own band bounds it. A span whose labels need no room (none shown) reserves nothing, even when it draws
+    wider than this slot.
     """
 
     reserved = resolved.reserved_band_px
     reach = 0.0
     for span in intent.span_label_rooms:
         band = _span_room_band(resolved, span.extent, span.width_px)
-        if band is not None:
-            reach = max(reach, float(band.outer_px) + span.room(band))
+        if band is None:
+            continue
+        room = span.room(band)
+        if room > LAYOUT_EPSILON:
+            reach = max(reach, float(band.outer_px) + room)
     if reserved is None or reach <= float(reserved.outer_px) + LAYOUT_EPSILON:
         return resolved
     return replace(
@@ -2734,10 +2739,11 @@ def _resolve_circular_radial_layout(
                 if anchor_band is not None
                 else float(anchor.anchor_radius_px or axis_radius_px)
             )
+            # The overlay's own width is the intent's, the one its labels' room is measured from (``_SpanLabelRoom``).
             width = (
                 float(anchor_band.width_px)
                 if annotation.cover_anchor and anchor_band is not None
-                else max(0.0, float(overlay_resolved.resolved_width_px or intent.width_px))
+                else float(intent.width_px)
             )
             # The same band its labels' room is measured from when the anchor holds that room.
             anchor_draw_band = _span_room_band(anchor, _span_extent(annotation), width)

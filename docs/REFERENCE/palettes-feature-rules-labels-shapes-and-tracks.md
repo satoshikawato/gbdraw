@@ -362,17 +362,21 @@ Circular keeps room for region labels beyond their annotation slot, or, for an
 annotation slot with `side=overlay`, beyond the outermost slot it covers, and
 places the other tracks outside that room. Of the slots it covers, an
 `outside` slot lies outermost, then split feature lanes
-(`lane_direction=split`), then `inside` slots in the order they are listed. An overlay that spans nothing (no `to_slot`,
-`cover_anchor=false`) keeps the room beyond its own mark on its anchor. A
-track with a set radius (`r=`) keeps it, so where set radii leave no room the
-labels are drawn on the track. Each label whose letters reach more than 0.5 px
-into the band another track takes (its drawing, with its tick or axis labels
-and its own labels' room) counts as one region label on another track
-(`1 region label on another track`). This only warns: the Web app shows
-"Region labels lie on other tracks: the set track radii leave them no room
-(N)." over the figure, with no **Choose a fix** button. Annotation overlays
-take no band. An overlay whose outer edge is another overlay (other than
-split feature lanes) keeps no room, so its labels are not counted.
+(`lane_direction=split`), then `inside` slots in the order they are listed. An
+overlay that spans nothing (no `to_slot`, `cover_anchor=false`) keeps the room
+beyond its own mark when its anchor is an `inside` or `outside` slot or split
+feature lanes. An overlay without labels (`show_labels=false`) keeps no room.
+A track with a set radius (`r=`) keeps it, so where set radii leave no room
+the labels are drawn on the track. Each
+label whose letters reach more than 0.5 px into the band another track takes
+(its drawing, with its tick or axis labels and its own labels' room) counts as
+one region label on another track (`1 region label on another track`). This
+only warns: the Web app shows "Region labels lie on other tracks: the set
+track radii leave them no room (N)." over the figure, with no **Choose a fix**
+button. Annotation overlays take no band. A span whose outer edge is another
+overlay (other than split feature lanes), and an overlay that spans nothing on
+a plot overlay (such as `ov:dinucleotide_skew@side=overlay,r=0.6,w=10px`),
+keep no room, so their labels are not counted.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its

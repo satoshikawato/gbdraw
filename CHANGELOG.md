@@ -45,8 +45,11 @@ write-up of a release.
   (no `to_slot`, `cover_anchor=false`), keep a room like other span labels:
   automatic rings move clear of the letters instead of lying under them, and
   where set radii leave no room the labels count as region labels on other
-  tracks in the warning (OV-1359, OV-1360). Figures without such a labelled
-  overlay draw as before.
+  tracks in the warning (OV-1359, OV-1360). When such an overlay lies at the
+  outer edge, the canvas grows by its labels' room even where nothing
+  overlapped before; a `to_slot` span from split feature lanes to an inside
+  slot no longer reserves its room past that slot, so the circle gets smaller.
+  Figures without such a labelled overlay draw as before.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
