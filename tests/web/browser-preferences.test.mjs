@@ -52,7 +52,7 @@ test('a write stores the display, and a write that throws changes nothing and re
 });
 
 test('the UI language is read under its own key, and anything else gives English', () => {
-  for (const tag of ['en', 'es', 'fr', 'pt', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
+  for (const tag of ['en', 'id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
     assert.equal(readUiLanguage(() => storageWith({ [LANGUAGE_KEY]: tag })), tag);
   }
   // A first visit has nothing stored: English, whatever the browser's language.

@@ -16,6 +16,9 @@
 //   catalog, the plural form the locale's rules pick (fr: `one` for 0 and 1),
 //   the Hangul font stack and line breaking of ko, and, in fr, the same saved
 //   Session and Source recipe as English;
+// - in th: the shown catalog in the header and the icon rail, the Thai font
+//   stack, and the 12 px floor of the session label and the rail names (a rail
+//   name may take two lines and stays inside its entry);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // Not checked here: PNG and PDF bytes, the shown Run Info text, and the
 // diagnostics text.
@@ -140,9 +143,11 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await expect.poll(() => pageLanguage(page)).toBe('en');
   await expect(menu(page)).toHaveValue('en');
   await expect(menu(page)).toHaveAccessibleName('Language');
-  await expect(menu(page).locator('option')).toHaveText(['English', 'Español', 'Français', 'Português', '日本語', '简体中文', '繁體中文', '한국어']);
+  await expect(menu(page).locator('option')).toHaveText([
+    'English', 'Bahasa Indonesia', 'Español', 'Français', 'Português', 'Tiếng Việt', 'ไทย', '日本語', '简体中文', '繁體中文', '한국어'
+  ]);
   expect(await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.lang)))
-    .toEqual(['en', 'es', 'fr', 'pt', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
+    .toEqual(['en', 'id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
   await expect(loadButton(page)).toHaveAccessibleName('Load Session');
   expect(await stored(page)).toEqual([]);
 
@@ -270,6 +275,37 @@ test('French and Korean show their catalogs and plural forms, and French changes
     return [style.textTransform, style.letterSpacing];
   })).toEqual(['none', 'normal']);
   expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'ko']]);
+  expect(errors).toEqual([]);
+});
+
+test('Thai shows its catalog in the header and the rail, in a Thai font and at 12 px or more', async ({ page }) => {
+  const th = await catalogOf('th');
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await openApp(page);
+  await menu(page).selectOption('th');
+  await expect.poll(() => pageLanguage(page)).toBe('th');
+  await expect(loadButton(page)).toHaveAccessibleName(th['Load Session']);
+  const session = page.locator('header .app-session-label');
+  await expect(session).toHaveText(th.Session);
+  expect(await session.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.fontSize, style.textTransform, style.letterSpacing];
+  })).toEqual(['12px', 'none', 'normal']);
+  expect(await page.locator('body').evaluate((body) => getComputedStyle(body).fontFamily)).toContain('Leelawadee UI');
+
+  await page.getByRole('button', { name: th['Collapse settings to icons'], exact: true }).click();
+  const font = page.locator('.settings-index nav > button[data-settings-entry="font"]');
+  await expect(font.locator('span')).toHaveText(th.Font);
+  expect(await font.evaluate((button) => {
+    const name = button.querySelector('span');
+    const outer = button.getBoundingClientRect();
+    const inner = name.getBoundingClientRect();
+    return {
+      size: getComputedStyle(name).fontSize,
+      inside: inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5
+    };
+  })).toEqual({ size: '12px', inside: true });
   expect(errors).toEqual([]);
 });
 
