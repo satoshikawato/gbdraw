@@ -27,6 +27,7 @@
   --font-ja: "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
   --font-hans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   --font-hant: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
+  --font-ko: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -108,6 +109,7 @@ textarea:focus { background: var(--surface); border-color: var(--accent); outlin
 textarea:lang(ja) { font-family: var(--font-ja); }
 textarea:lang(zh-Hans) { font-family: var(--font-hans); }
 textarea:lang(zh-Hant) { font-family: var(--font-hant); }
+textarea:lang(ko) { font-family: var(--font-ko); word-break: keep-all; }
 textarea[readonly] { opacity: .85; }
 .ref { font-size: 12.5px; color: var(--muted); font-family: var(--font-hans); }
 .ref b { font-family: var(--font-ui); font-weight: 500; margin-right: 4px; }
@@ -225,6 +227,10 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
     { id: 'ja', label: '日本語', lang: 'ja' },
     { id: 'zh-Hans', label: '简体中文', lang: 'zh-Hans' },
     { id: 'zh-Hant', label: '繁體中文', lang: 'zh-Hant' },
+    { id: 'es', label: 'Español', lang: 'es' },
+    { id: 'fr', label: 'Français', lang: 'fr' },
+    { id: 'pt', label: 'Português', lang: 'pt' },
+    { id: 'ko', label: '한국어', lang: 'ko' },
   ];
   const FILTERS = [
     { id: 'todo', label: 'To review' },
@@ -495,7 +501,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
   function renderRow(k) {
     const loc = state.locale;
     const lang = LOCALES.find((l) => l.id === loc).lang;
-    const gloss = (k.g || []).map((i) => state.glossary[i]).filter(Boolean)
+    const gloss = (k.g || []).map((i) => state.glossary[i]).filter((g) => g && g[loc])
       .map((g) => el('li', {}, el('b', {}, g.en), el('span', { lang }, g[loc])));
     const ta = el('textarea', { lang, id: `t-${k.id}`, rows: String(Math.min(6, Math.max(1, Math.ceil(k.en.length / 48)))), 'aria-label': `Translation of: ${k.en}`, placeholder: draftOf(loc, k.id) ? '' : 'No draft yet. Type the translation.' });
     ta.value = currentText(loc, k.id);
@@ -766,8 +772,8 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
   }
 
   // ---- export for an agent review / import its answer -----------------------
-  const LANGUAGE_NAMES = { ja: 'Japanese', 'zh-Hans': 'Simplified Chinese (mainland usage)', 'zh-Hant': 'Traditional Chinese (Taiwan usage)' };
-  const STYLE_SECTION = { ja: '2.', 'zh-Hans': '3.', 'zh-Hant': '4.' };
+  const LANGUAGE_NAMES = { ja: 'Japanese', 'zh-Hans': 'Simplified Chinese (mainland usage)', 'zh-Hant': 'Traditional Chinese (Taiwan usage)', ko: 'Korean', es: 'Spanish (international usage)', fr: 'French (France usage)', pt: 'Portuguese (Brazilian usage)' };
+  const STYLE_SECTION = { ja: '2.', 'zh-Hans': '3.', 'zh-Hant': '4.', ko: '5.', es: '6.', fr: '7.', pt: '8.' };
 
   function styleFor(md, loc) {
     const parts = md.split(/^(?=## )/m);
@@ -775,7 +781,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
   }
 
   function glossaryHint(k, loc) {
-    return (k.g || []).map((i) => state.glossary[i]).filter(Boolean).map((g) => `${g.en} = ${g[loc]}`).join('; ');
+    return (k.g || []).map((i) => state.glossary[i]).filter((g) => g && g[loc]).map((g) => `${g.en} = ${g[loc]}`).join('; ');
   }
 
   function exportMarkdown(list, loc, style) {
@@ -791,7 +797,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
       const hint = glossaryHint(k, loc); if (hint) row.glossary = hint;
       return JSON.stringify(row);
     });
-    const glossary = state.glossary.map((g) => [g.en, g[loc], g.note || ''].map((c) => String(c).replace(/[\t\n]/g, ' ')).join('\t'));
+    const glossary = state.glossary.filter((g) => g[loc]).map((g) => [g.en, g[loc], g.note || ''].map((c) => String(c).replace(/[\t\n]/g, ' ')).join('\t'));
     return [
       `# gbdraw Web UI translation review: ${language} (${loc})`, '',
       `gbdraw is a bioinformatics web app that draws publication-quality genome diagrams (circular and linear maps of bacterial, phage and organelle genomes, with GC content, feature labels and pairwise comparisons). Below are ${rows.length.toLocaleString('en-US')} strings of its user interface, translated from English into ${language}. Review the translations.`, '',
