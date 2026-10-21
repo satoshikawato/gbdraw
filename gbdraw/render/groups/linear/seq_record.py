@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from collections import Counter
 from typing import NamedTuple
 
 from Bio.SeqRecord import SeqRecord
@@ -363,13 +362,8 @@ class SeqRecordGroup:
         # Draw features
         if self.draw_features_enabled:
             feature_drawer = FeatureDrawer(self.feature_config)
-            feature_id_counts = Counter(
-                feature_drawer.get_feature_data_id(feature_object)
-                for feature_object in feature_dict.values()
-            )
             for feature_object in feature_dict.values():
                 feature_strand = feature_object.strand
-                stable_feature_id = feature_drawer.get_feature_data_id(feature_object)
                 feature_group = feature_drawer.draw(
                     feature_object=feature_object,
                     group=feature_group,
@@ -384,12 +378,7 @@ class SeqRecordGroup:
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_index=self.record_index,
                     record_count=self.record_count,
-                    feature_instance_id=(
-                        feature_object.source_feature_index
-                        if stable_feature_id
-                        and feature_id_counts[stable_feature_id] > 1
-                        else None
-                    ),
+                    feature_instance_id=feature_object.rendered_instance_index,
                 )
 
         # Add labels: in front of every leader and glyph, the boxes, the halos, the underline casings, the

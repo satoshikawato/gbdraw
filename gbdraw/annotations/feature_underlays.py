@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
@@ -85,7 +84,6 @@ def merge_feature_underlays(
             feature.feature_hash or str(feature.feature_id)
             for feature in features
         ]
-        stable_id_counts = Counter(stable_ids)
         for feature_index, feature in enumerate(features):
             segments = _feature_segments(feature)
             if not segments:
@@ -101,11 +99,8 @@ def merge_feature_underlays(
                 else stable_id
             ) or stable_id
             dom_id = (
-                instance_svg_id(
-                    rendered_id,
-                    f"{feature.feature_id}_{feature_index + 1}",
-                )
-                if stable_id_counts[stable_id] > 1
+                instance_svg_id(rendered_id, feature.rendered_instance_index)
+                if feature.rendered_instance_index is not None
                 else rendered_id
             )
             annotation_id = (

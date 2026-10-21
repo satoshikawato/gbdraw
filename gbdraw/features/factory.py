@@ -14,7 +14,7 @@ from ..core.record_metadata import (
     _feature_source_index_map,
     _source_feature_index,
 )
-from .ids import compute_source_feature_hash
+from .ids import compute_source_feature_hash, shared_source_feature_hashes
 from .objects import GeneObject, RepeatObject, FeatureObject
 from .overrides import feature_override_lookup
 from .visibility import should_render_feature
@@ -209,6 +209,7 @@ def _build_feature_layers(
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
     source_indexes = _feature_source_index_map(gb_record.features)
+    shared_hashes = shared_source_feature_hashes(gb_record)
     override_of = feature_override_lookup(
         gb_record, record_features.overrides if record_features is not None else None
     )
@@ -294,6 +295,8 @@ def _build_feature_layers(
             else source_feature_index
         )
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
+        if feature_object.feature_hash in shared_hashes:
+            feature_object.rendered_instance_index = feature_object.source_feature_index
         if record_transform is not None and record_transform.start_coordinate is not None:
             feature_object.display_parts = project_feature_parts(
                 feature.location.parts, record_transform,

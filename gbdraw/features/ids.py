@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from gbdraw.core.record_metadata import (
+    _iter_source_features,
     _mapped_feature_location_parts,
     _read_coord_map,
     _source_feature_location_parts,
@@ -180,6 +181,25 @@ def compute_source_feature_hash(
         str(getattr(feature, "type", "") or ""),
         parts,
         record_id=record_id if record_id is not None else getattr(record, "id", None),
+    )
+
+
+def shared_source_feature_hashes(record: Any) -> frozenset[str]:
+    """The source hashes that more than one feature of ``record`` has.
+
+    Identical features (the same type and location) share their hash; the
+    rendered ID of each adds its source index as an instance suffix
+    (``gbdraw.svg.ids.instance_svg_id``). The count reads every source feature
+    of the record, drawn or not, so hiding one of identical features leaves the
+    rendered ID of the other as it was (OV-1485).
+    """
+
+    counts = Counter(
+        compute_source_feature_hash(feature, record)
+        for feature in _iter_source_features(getattr(record, "features", None))
+    )
+    return frozenset(
+        feature_hash for feature_hash, count in counts.items() if feature_hash and count > 1
     )
 
 
