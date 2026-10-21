@@ -1,6 +1,6 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
-Revision 5, 2026-10-21. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
+Revision 6, 2026-10-21 (adds Indonesian, Vietnamese and Thai: §9, §10, §11, and §1 for eleven locales). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
 follow this file and the glossary together. The glossary decides words; this
 file decides how sentences are written around them. Where the two disagree,
 the glossary wins and this file is corrected.
