@@ -65,6 +65,13 @@ write-up of a release.
   labels on one line, horizontal or turned, keep the 0.25 em row gap along
   their text, and the label warning counts a pair that comes closer
   (OV-1397, OV-1363).
+- Linear `--label_placement above_feature`: a horizontal label that has to move
+  off another label now takes the next `auto` row off its own feature (the
+  tallest label plus `--linear_label_spacing` per row) instead of stopping just
+  above the label it clears, so its underline and box stay off the letters
+  below. Figures with stacked horizontal `above_feature` labels change height
+  (lambda at 24 pt: 770 to 772 px; HmmtDNA: 394 to 378 px); turned labels and
+  `auto` figures draw as before.
 - Linear definition text keeps its `definition_gap` from the tick labels of a
   depth or GC% axis drawn at a record's left, not from the axis line, so a
   definition no longer runs into a label such as `8191x` (OV-1399). The
