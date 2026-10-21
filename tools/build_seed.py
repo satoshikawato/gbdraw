@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Build the review-database seed of the translation review page.
 
+Covers the seven locales ja, zh-Hans, zh-Hant, ko, es, fr and pt; a locale with no
+snapshot folder starts empty and holds only the rows folders' rows.
+
 Usage: build_seed.py [--versions VERSIONS_JSON] SNAPSHOT_DIR OUT_DIR ROWS_DIR [ROWS_DIR ...]
   SNAPSHOT_DIR  <dir>/rev-<loc>/<chunk>.json, as ArtifactData `list` with `out_dir`
                 writes them: {"items": {<key id>: {t, s, c, by, at}}}; "__*" fields
@@ -18,7 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-LOCALES = ['ja', 'zh-Hans', 'zh-Hant']
+LOCALES = ['ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt']  # a locale without a snapshot folder starts empty
 
 
 def main() -> None:

@@ -51,12 +51,14 @@ uses its database and does not read `db/current/`.
   i18n follow-ups (PR #1258; comment starts with `[FU]`).
 - `db/ts-1259-rows/` — 53 rows per locale (ja, zh-Hans, zh-Hant) for the strings
   of #1259: the catalog text, comment `[TS] #1259 (2026-10-21): <English>`.
+- `db/r1-1266-rows/` — round-1 rows of PR #1266 for ko, es, fr and pt (83 / 231 / 132 / 193;
+  comment starts with `[R1] #1266`).
 - `db/seed-2026-10-21/` — snapshot plus D-46 rows: the state written into the
   account-owned copy of the page on 2026-10-21 (48 documents, 1,388 items).
   Kept as a record of that write; `tools/build_seed.py` reproduces it from the
   snapshot and `d46-rows`.
-- `db/current/` — snapshot plus `d46-rows`, `fu-1258-rows` and `ts-1259-rows`
-  (48 documents, 1,577 items; 22, 18 and 26 snapshot rows belong to keys that no
+- `db/current/` — snapshot plus `d46-rows`, `fu-1258-rows`, `ts-1259-rows` and `r1-1266-rows`
+  (112 documents, 2,216 items; 22, 18 and 26 snapshot rows belong to keys that no
   longer exist and are never shown). The page on GitHub Pages reads
   `db/current/rev-<locale>/<chunk>.json`; the `batch-<locale>.json` files seed
   a database with it. Rows written in the claude.ai copy after 2026-10-21 are
@@ -82,7 +84,7 @@ Outside claude.ai the page shows the read-only view described above.
 
 ```bash
 python3 -I tools/build_seed.py [--versions versions.json] db/snapshot-2026-10-21-r4 <out dir> \
-    db/d46-rows db/fu-1258-rows db/ts-1259-rows
+    db/d46-rows db/fu-1258-rows db/ts-1259-rows db/r1-1266-rows
 ```
 
 applies the rows folders in the order given (a later row wins; a row whose `by`

@@ -1,0 +1,98 @@
+[
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c0",
+  "file_path": "rev-pt/c0.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c1",
+  "file_path": "rev-pt/c1.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c2",
+  "file_path": "rev-pt/c2.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c3",
+  "file_path": "rev-pt/c3.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c4",
+  "file_path": "rev-pt/c4.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c5",
+  "file_path": "rev-pt/c5.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c6",
+  "file_path": "rev-pt/c6.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c7",
+  "file_path": "rev-pt/c7.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c8",
+  "file_path": "rev-pt/c8.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "c9",
+  "file_path": "rev-pt/c9.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "ca",
+  "file_path": "rev-pt/ca.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "cb",
+  "file_path": "rev-pt/cb.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "cc",
+  "file_path": "rev-pt/cc.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "cd",
+  "file_path": "rev-pt/cd.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "ce",
+  "file_path": "rev-pt/ce.json"
+ },
+ {
+  "op": "set",
+  "collection": "rev-pt",
+  "doc_id": "cf",
+  "file_path": "rev-pt/cf.json"
+ }
+]
