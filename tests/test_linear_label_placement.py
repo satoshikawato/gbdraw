@@ -913,6 +913,28 @@ def test_linear_above_feature_turned_labels_keep_their_place_on_the_feature(sepa
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("label_placement", ("above_feature", "auto"))
+@pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
+@pytest.mark.parametrize("label_rotation", (360.0, -360.0, 720.0))
+def test_linear_labels_given_a_whole_turn_are_placed_as_horizontal(
+    label_placement: str, separate_strands: bool, label_rotation: float
+) -> None:
+    """OV-1438: a rotation of a whole turn draws a Linear label level, with the horizontal underline and box
+    (``linear_label_ink``), so it is placed as a horizontal label too: the same rows, anchor and leader as
+    rotation 0, and no rotation is drawn. Before, placement took it as turned (start anchor, no first row)."""
+
+    def labels(rotation: float) -> list[dict]:
+        return _prepare_linear_labels(
+            label_placement=label_placement,
+            label_rotation=rotation,
+            input_filename="NC_001416.gb",
+            separate_strands=separate_strands,
+        )
+
+    assert labels(label_rotation) == labels(0.0)
+
+
+@pytest.mark.linear
 def test_linear_above_feature_shifted_labels_get_leader_lines() -> None:
     labels = _prepare_linear_labels(
         label_placement="above_feature",

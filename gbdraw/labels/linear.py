@@ -13,7 +13,7 @@ from .coordinates import display_label_segment
 
 from .filtering import get_label_text, label_filter_maps
 from .label_style import ROW_LABEL_GAP_EM
-from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label
+from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label, is_level_rotation
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
@@ -767,11 +767,14 @@ def linear_record_labels(
             # In separate-strands mode, negative strand labels are mirrored and placed below features.
             is_negative_separate = label_below_feature
             label_rotation_deg = base_rotation_deg if is_negative_separate else -base_rotation_deg
-            label_text_anchor = "start" if label_rotation_deg != 0.0 else "middle"
         else:
             # Keep auto mode horizontal regardless of configured rotation.
             label_rotation_deg = 0.0
-            label_text_anchor = "middle"
+        # A whole turn reads level: the label is horizontal and drawn without a turn (OV-1438).
+        level = is_level_rotation(label_rotation_deg)
+        if level:
+            label_rotation_deg = 0.0
+        label_text_anchor = "middle" if level else "start"
 
         feature_anchor_x = (normalized_start + normalized_end) / 2.0
         label_anchor_x = feature_anchor_x
@@ -780,7 +783,7 @@ def linear_record_labels(
         label_leader_start_y = 0.0
         if force_above_feature:
             place_above_feature = not label_below_feature
-            if label_rotation_deg == 0.0:
+            if level:
                 y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
                     bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
                 )

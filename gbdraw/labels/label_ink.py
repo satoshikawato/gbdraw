@@ -27,7 +27,7 @@ from ..layout.spatial import Aabb
 from ..layout.text_geometry import Point, TextAnchor, normalize_text_anchor
 from .circular_leaders import leader_polyline, rim_text_placement
 from .circular_types import CircularLabel
-from .linear_types import LinearLabel, is_above_feature_label
+from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label
 from .label_style import GAP_STOP_EM, UNDERLINE_GAP_EM, UNDERLINE_TRIM_EM, FeatureLabelStyle, leader_width_px
 
 
@@ -206,7 +206,7 @@ def linear_label_ink(label: LinearLabel, leader: Sequence[Point], style: Feature
         anchor=normalize_text_anchor(label["text_anchor"]),
         dominant_baseline="central",
         rotation_deg=rotation_deg,
-        turned=rotation_deg % 360.0 != 0.0,
+        turned=not is_horizontal_label(label),
         leader=leader,
         style=style,
         feature_edge_y=float(label["leader_start_y"]) if beside_feature else None,

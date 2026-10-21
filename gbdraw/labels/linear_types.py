@@ -73,11 +73,18 @@ def is_above_feature_label(label: LinearLabel) -> bool:
     return "above_feature_place_above" in label
 
 
+def is_level_rotation(rotation_deg: float) -> bool:
+    """Whether a Linear label turned by ``rotation_deg`` reads level: no turn or whole turns (360, -360,
+    720 ...), so it is placed, sized and drawn as a horizontal label, underline included."""
+
+    return rotation_deg % 360.0 == 0.0
+
+
 def is_horizontal_label(label: LinearLabel) -> bool:
-    """Whether ``label`` is drawn level (no rotation): the box, row pitch and ink tests that read only
-    its width and height apply."""
+    """Whether ``label`` is drawn level (``is_level_rotation``): the box, row pitch and ink tests that read
+    only its width and height apply."""
 
-    return label["rotation_deg"] == 0.0
+    return is_level_rotation(label["rotation_deg"])
 
 
-__all__ = ["LinearLabel", "is_above_feature_label", "is_horizontal_label"]
+__all__ = ["LinearLabel", "is_above_feature_label", "is_horizontal_label", "is_level_rotation"]
