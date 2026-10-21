@@ -6,30 +6,49 @@ without the claude.ai artifact. It is not part of the gbdraw package and never
 merges into `dev` or `main`.
 
 GitHub Pages serves this branch: https://satoshikawato.github.io/gbdraw/ opens
-the review page (`index.html` at the root forwards to `review-gui/v18/`;
+the review page (`index.html` at the root forwards to `review-gui/v19/`;
 `.nojekyll` keeps Pages from processing the files). There the page is
-view-only: it shows the drafts and notes and "Export for an agent review…"
-downloads the file, but edits are not saved (saving, reviewer names and
-"Import" persistence need the claude.ai runtime).
+read-only: it shows the drafts, the notes and the review state stored in
+`db/current/` (status, comments, stored translations, as of the branch's latest
+commit), and "Export for an agent review…" downloads a file that carries that
+state. Edits are not saved (saving, reviewer names and "Import" persistence
+need the claude.ai runtime). When the claude.ai runtime is present the page
+uses its database and does not read `db/current/`.
 
 ## Contents
 
-- `review-gui/v18/` — the page (`index.html`) and the files it loads:
+- `review-gui/v19/` — the page (`index.html`) and the files it loads:
   `data/` (string keys with context, the glossary with ja, zh-Hans, zh-Hant,
   ko, es, fr and pt columns, a draft and a draft-notes file per locale, the
   screenshot index, the style rules with one section per locale) and `shots/`
-  (114 screenshots of the Web UI, WebP). v18 reviews seven locales:
-  日本語, 简体中文, 繁體中文, Español, Français, Português, 한국어.
+  (114 screenshots of the Web UI, WebP). v19 reviews seven locales:
+  日本語, 简体中文, 繁體中文, Español, Français, Português, 한국어, with 2,735
+  strings: v18's 2,682 plus the 53 Custom Track Slots issue messages of #1259
+  (`dev` d17c0b7a8). ja, zh-Hans and zh-Hant have the catalog text as their
+  draft; es, fr, pt and ko have no draft for these 53 yet (PR-B #1261).
 - `db/snapshot-2026-10-21-r4/` — the review database of the original artifact
   as read on 2026-10-21 after review round 4: collections `rev-ja`,
   `rev-zh-Hans`, `rev-zh-Hant`, 16 chunk documents each
-  (`{"items": {<key id>: {t, s, c, by, at}}}`; `s` is `ok` for an accepted row,
-  `flag` for a flagged one; `c` carries the round's reason or the flag comment).
+  (`{"items": {<key id>: {t, c, by, at}}}`). No row has an `s` field: nobody
+  accepted or flagged a row in the page. `t` is the stored translation, `c` the
+  round's reason (`[R2 …]`, `[R3 …]`, `[R4 …]`), and a non-empty `by` marks an
+  edit made in the page by a person.
 - `db/d46-rows/` — the rows for the strings added by decision D-46 of the
   2026-10-19 i18n campaign (PR #1254), which are not in the round-4 snapshot.
+- `db/fu-1258-rows/` — 10 rows per locale for the strings changed by the
+  i18n follow-ups (PR #1258; comment starts with `[FU]`).
+- `db/ts-1259-rows/` — 53 rows per locale (ja, zh-Hans, zh-Hant) for the strings
+  of #1259: the catalog text, comment `[TS] #1259 (2026-10-21): <English>`.
 - `db/seed-2026-10-21/` — snapshot plus D-46 rows: the state written into the
   account-owned copy of the page on 2026-10-21 (48 documents, 1,388 items).
-  `tools/build_seed.py` reproduces it from the two folders above.
+  Kept as a record of that write; `tools/build_seed.py` reproduces it from the
+  snapshot and `d46-rows`.
+- `db/current/` — snapshot plus `d46-rows`, `fu-1258-rows` and `ts-1259-rows`
+  (48 documents, 1,577 items; 22, 18 and 26 snapshot rows belong to keys that no
+  longer exist and are never shown). The page on GitHub Pages reads
+  `db/current/rev-<locale>/<chunk>.json`; the `batch-<locale>.json` files seed
+  a database with it. Rows written in the claude.ai copy after 2026-10-21 are
+  not here until someone exports them and adds a snapshot.
 
 ## Artifacts
 
@@ -40,20 +59,23 @@ downloads the file, but edits are not saved (saving, reviewer names and
 
 ## Republish the page
 
-From Claude Code, with the Artifact tool: publish `review-gui/v18/index.html`
-with `root` = `review-gui/v18`, `files` = every path under `data/` and
+From Claude Code, with the Artifact tool: publish `review-gui/v19/index.html`
+with `root` = `review-gui/v19`, `files` = every path under `data/` and
 `shots/` (132 files, 12 MB), and
 `capabilities` = `{"db": {}, "user": {"scopes": ["profile"]}, "downloads": true}`.
 Pass `url` to update an existing artifact; omit it to create a new one.
-The page shows a database-less, read-only view when opened outside claude.ai.
+Outside claude.ai the page shows the read-only view described above.
 
 ## Seed or restore the database
 
 ```bash
-python3 -I tools/build_seed.py db/snapshot-2026-10-21-r4 db/d46-rows <out dir> [versions.json]
+python3 -I tools/build_seed.py [--versions versions.json] db/snapshot-2026-10-21-r4 <out dir> \
+    db/d46-rows db/fu-1258-rows db/ts-1259-rows
 ```
 
-writes `<out dir>/rev-<locale>/<chunk>.json` and `<out dir>/batch-<locale>.json`.
+applies the rows folders in the order given (a later row wins; a row whose `by`
+is set, edited in the page, is never overwritten) and writes `<out dir>/rev-<locale>/<chunk>.json` and `<out dir>/batch-<locale>.json`
+(`db/current/` is this output).
 Then run one ArtifactData `batch` per locale with the 16 `set` entries, giving
 each entry's `file_path` as an absolute path. For a database that already holds
 the documents, first `list` each collection and pass their versions as
@@ -62,10 +84,12 @@ the documents, first `list` each collection and pass their versions as
 ## Provenance
 
 - Page: `review/index.html` (v16/v17) of the 2026-10-19 i18n campaign, extended
-  on 2026-10-21 with the four locales of v0.15.0 (v18).
+  on 2026-10-21 with the four locales of v0.15.0 (v18) and the 53 keys of #1259 (v19).
 - Keys: the strings of the Web UI on branch `feat/web-i18n-0150-locales`
   (commit 7f0657edf, on top of `dev` 8fec90d4f), 2,682 including the 50 singular
-  forms of the plural strings (`sense` names them).
+  forms of the plural strings (`sense` names them), plus the 53 keys of #1259
+  from `dev` d17c0b7a8 (2,735). Three v18 keys that `dev` no longer has and the
+  50 singular forms stay: they belong to the ko / es / fr / pt branch.
 - `data/draft-ja|zh-Hans|zh-Hant.json` are the drafts the ja / zh review started
   from (strings added since then carry the catalog text); `data/draft-ko|es|fr|pt.json`
   are the catalogs of that branch. The shipped catalogs are
@@ -73,6 +97,6 @@ the documents, first `list` each collection and pass their versions as
 - `data/notes-ko|es|fr|pt.json` say, per string, whether the independent review
   of the draft changed it (with the text before) and whether the code branch
   changed it after the review.
-- A row's `ok` status records that a reviewer accepted it in the page. This
-  branch stores that record; it makes no statement of its own about the quality
-  of a translation.
+- A row's `s` field (`ok` accepted, `flag` flagged) would record a reviewer's
+  decision in the page; no stored row has one yet. This branch makes no
+  statement of its own about the quality of a translation.

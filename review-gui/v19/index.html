@@ -250,7 +250,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
   const state = {
     keys: [], byId: new Map(), glossary: [], drafts: {}, notes: {}, edits: {},
     locale: 'ja', filter: 'todo', area: '', query: '', shown: PAGE, view: [],
-    db: null, user: null, me: null, canWrite: null, names: {},
+    db: null, branchDocs: 0, user: null, me: null, canWrite: null, names: {},
     shots: { scale: 1, shots: [], keys: {} }, showShots: true, lastBulk: null, sugs: {}, downloads: null,
   };
   for (const l of LOCALES) { state.drafts[l.id] = {}; state.notes[l.id] = {}; state.edits[l.id] = new Map(); state.sugs[l.id] = new Map(); }
@@ -352,22 +352,35 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
     writeQueues.set(ref.path, next);
   }
 
+  // One chunk document of rev-<locale> into the page state; adds the ids that changed to `touched`.
+  function ingestDoc(loc, data, touched) {
+    for (const [id, rec] of Object.entries(data.items || {})) {
+      const old = state.edits[loc].get(id);
+      if (!old || old.at !== rec.at || old.t !== rec.t || old.s !== rec.s || old.c !== rec.c) {
+        state.edits[loc].set(id, rec); touched.add(id);
+      }
+    }
+    for (const [id, bySource] of Object.entries(data.sug || {})) {
+      if (JSON.stringify(state.sugs[loc].get(id)) !== JSON.stringify(bySource)) { state.sugs[loc].set(id, bySource); touched.add(id); }
+    }
+  }
+
+  // Without the claude.ai runtime (GitHub Pages, a local copy) the stored state is read from the branch's db/current,
+  // two folders up from this page: ../../db/current/rev-<locale>/c<hex>.json. Locales without documents there stay empty.
+  async function loadBranchState() {
+    const found = await Promise.all(LOCALES.flatMap((l) => [...'0123456789abcdef'].map(async (c) => {
+      const data = await loadJson(`../../db/current/rev-${l.id}/c${c}.json`, null);
+      if (data) ingestDoc(l.id, data, new Set());
+      return data ? 1 : 0;
+    })));
+    state.branchDocs = found.reduce((a, b) => a + b, 0);
+  }
+
   function subscribe() {
     for (const l of LOCALES) {
       state.db.collection(`rev-${l.id}`).onSnapshot((snap) => {
         const touched = new Set();
-        for (const doc of snap.docs) {
-          const data = doc.data() || {};
-          for (const [id, rec] of Object.entries(data.items || {})) {
-            const old = state.edits[l.id].get(id);
-            if (!old || old.at !== rec.at || old.t !== rec.t || old.s !== rec.s || old.c !== rec.c) {
-              state.edits[l.id].set(id, rec); touched.add(id);
-            }
-          }
-          for (const [id, bySource] of Object.entries(data.sug || {})) {
-            if (JSON.stringify(state.sugs[l.id].get(id)) !== JSON.stringify(bySource)) { state.sugs[l.id].set(id, bySource); touched.add(id); }
-          }
-        }
+        for (const doc of snap.docs) ingestDoc(l.id, doc.data() || {}, touched);
         refreshCounts();
         if (l.id === state.locale) touched.forEach((id) => updateRowFromStore(id));
         resolveNames();
@@ -390,7 +403,8 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
     const box = $('#access');
     if (!state.db) {
       box.hidden = false; box.className = 'notice warn';
-      box.textContent = 'Saving is not available here. Open this page on claude.ai while signed in to save translations.';
+      box.textContent = 'Saving is not available here. Open this page on claude.ai while signed in to save translations.'
+        + (state.branchDocs ? ' The review state shown (status, comments, stored translations) comes from db/current on the translation-review branch as of its latest commit; nothing is saved.' : '');
     } else if (state.canWrite === false) {
       box.hidden = false; box.className = 'notice warn';
       box.textContent = 'You can read this review but not save changes. Ask the owner for Contributor access.';
@@ -930,6 +944,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
       window.claude ? window.claude.use('downloads') : Promise.resolve(null),
     ]);
     state.db = db; state.user = user; state.downloads = downloads;
+    if (!db) { await loadBranchState(); refreshCounts(); rebuild(); }
     if (user) { state.me = await user.id(); const can = await user.can('data.write'); state.canWrite = can === null ? null : can; }
     showAccess();
     if (db) { subscribe(); setSaveState(state.canWrite === false ? 'Read only' : 'Live'); }
