@@ -240,7 +240,7 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   assert.deepEqual(shownRows(state.drawings.circular), kept);
   assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
   assert.deepEqual(loadDialogs.map(({ items }) => items),
-    [['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']]);
+    [['Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.']]);
   assert.deepEqual(loaded.notices, []);
   assert.deepEqual(alerts, []);
 

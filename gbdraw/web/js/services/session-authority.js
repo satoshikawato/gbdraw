@@ -1328,7 +1328,7 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
       const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (other)?.renderRequest?.mode;
       repairs.push(loadRepair({
         code: 'other-result-set-dropped', path: 'otherModeResult.renderRequest', effect: 'dropped',
-        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+        ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
       }));
       data = rest;
     } else if (faults.some(({ kind }) => !['receipt', 'receipt-missing'].includes(kind))) {

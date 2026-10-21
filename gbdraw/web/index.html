@@ -3385,7 +3385,7 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Require compatible strand, gene order, or either orientation when merging Collinear anchors.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Require compatible strand, gene order, or accept either orientation when merging Collinear anchors.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearMergeOrientation" :aria-label="t('Collinear merge orientation')" aria-describedby="help-comparison-merge-orientation" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="strand">{{ t('Strand') }}</option>
                                             <option value="order">{{ t('Gene order') }}</option>
@@ -6292,10 +6292,10 @@
                                        :value="clickedFeature.color || '#cccccc'"
                                        @change="updateClickedFeatureColor($event.target.value)"
                                        data-history-managed
-                                       :disabled="!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
-                                       :title="canEditFeatureColor(clickedFeature.feat) ? t('Change fill color') : t('The color of this feature cannot be changed.')"
+                                       :disabled="!semanticMutationAvailable"
+                                       :title="t('Change fill color')"
                                        :aria-label="t('Feature fill color')"
-                                       :class="['w-12 h-10 border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed']">
+                                       class="w-12 h-10 border-2 border-slate-200 rounded-lg cursor-pointer">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button :aria-label="t('Reset fill color to default')" @click="resetClickedFeatureFillColor"
                                         data-history-managed
@@ -7953,10 +7953,10 @@
                                     <input type="color"
                                            :value="getFeatureColor(feat)"
                                            @change="requestFeatureColorChange(feat, $event.target.value)"
-                                           :disabled="!semanticMutationAvailable || (!canEditFeatureColor(feat))"
-                                           :title="canEditFeatureColor(feat) ? t('Change fill color') : t('The color of this feature cannot be changed.')"
+                                           :disabled="!semanticMutationAvailable"
+                                           :title="t('Change fill color')"
                                            :aria-label="t('Fill color for {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
-                                           :class="['w-5 h-5 rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                           class="w-5 h-5 rounded shrink-0 cursor-pointer">
                                     <button type="button" data-history-ignore
                                             class="flex-1 min-w-0 flex items-center gap-1.5 text-left text-slate-700 rounded hover:text-blue-700"
                                             :aria-expanded="featureListExpandedId === feat.id ? 'true' : 'false'"

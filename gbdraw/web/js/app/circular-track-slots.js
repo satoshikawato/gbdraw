@@ -28,7 +28,7 @@ import {
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
-import { msg, t, tm, tn } from '../utils/i18n.js';
+import { listText, msg, t, tm, tn } from '../utils/i18n.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
   nextCopyId,
@@ -1887,17 +1887,17 @@ export const createCircularTrackSlotEditor = ({
       if (ratio !== null) (ratio < 1 ? inside : outside).push(name);
     };
     if (Boolean(drawing.form.show_depth)) {
-      place('depth', getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing));
+      place(tm(RENDERER_LABELS.depth), getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_gc)) {
-      place(`${nt} content`, getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
+      place(t('{nt} content', { nt }), getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_skew)) {
-      place(`${nt} skew`, getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
+      place(t('{nt} skew', { nt }), getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
     }
     return {
       label: formatPresetName(preset),
-      detail: [laneDirectionLabel(lane), inside.length ? t('{tracks} inside', { tracks: inside.join(', ') }) : '', outside.length ? t('{tracks} outside', { tracks: outside.join(', ') }) : '']
+      detail: [laneDirectionLabel(lane), inside.length ? t('{tracks} inside', { tracks: listText(inside) }) : '', outside.length ? t('{tracks} outside', { tracks: listText(outside) }) : '']
         .filter(Boolean).join(' · ')
     };
   };

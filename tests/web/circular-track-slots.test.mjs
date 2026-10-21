@@ -194,14 +194,16 @@ test('the slot options summary names the dinucleotide the slot is drawn with', (
 });
 
 // The default tracks draw the drawing's dinucleotide, so the preset summary
-// names it too.
+// names it too. The tracks are a list (`listText`) of translated names.
 test('the preset summary names the default tracks by the dinucleotide of the drawing', () => {
   const state = createState();
   state.form.suppress_skew = false;
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-  assert.match(editor.circularTrackPresetSummary().detail, /GC content, GC skew inside$/);
+  assert.match(editor.circularTrackPresetSummary().detail, /GC content and GC skew inside$/);
   state.adv.nt = ' at ';
-  assert.match(editor.circularTrackPresetSummary().detail, /AT content, AT skew inside$/);
+  assert.match(editor.circularTrackPresetSummary().detail, /AT content and AT skew inside$/);
+  state.form.show_depth = true;
+  assert.match(editor.circularTrackPresetSummary().detail, /Depth, AT content, and AT skew inside$/);
 });
 
 test('Circular placement actions preserve the Axis boundary and radial sides', () => {

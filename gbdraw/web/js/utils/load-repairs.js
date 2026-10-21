@@ -1,7 +1,7 @@
 // @ts-check
 
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
-import { t, tm, tn } from './i18n.js';
+import { listText, t, tm, tn } from './i18n.js';
 
 /**
  * What Load did with a value it could not restore as stored. `kept`: the
@@ -54,6 +54,7 @@ import { t, tm, tn } from './i18n.js';
  * @property {string} [used] The value used instead.
  * @property {number} [count] When one record stands for several values.
  * @property {string} [label] The name the app shows for the place (a Legend caption), bounded.
+ * @property {'circular' | 'linear'} [mode] The drawing a record names (`other-result-set-dropped`).
  * @property {number} [line] The line of a table.
  */
 /**
@@ -127,12 +128,12 @@ export const loadRepair = (repair) => ({
 });
 
 /**
- * The first five items, then how many more.
+ * The first five items, then how many more, as one list (`listText`).
  * @param {readonly unknown[]} items
  */
 const cappedList = (items) => {
-  const head = items.slice(0, 5).join(', ');
-  return items.length > 5 ? t('{list}, and {count} more', { list: head, count: items.length - 5 }) : head;
+  const head = items.slice(0, 5).map(String);
+  return listText(items.length > 5 ? [...head, t('{count} more', { count: items.length - 5 })] : head);
 };
 /** @param {readonly LoadRepair[]} repairs */
 const total = (repairs) => repairs.reduce((sum, repair) => sum + (repair.count ?? 1), 0);
@@ -193,14 +194,18 @@ const WORDING = {
       'Session file: the field {items} could not be read and was left out.',
       'Session file: the fields {items} could not be read and were left out.', { items })];
   },
-  'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
-    t('Saved {label} diagram: its settings ({path}) could not be read; that diagram and its Results are left out.', { label: label ?? t('other'), path }))),
-  'request-part-dropped': (repairs) => repairs.map(({ path, label, effect }) => (
+  // One sentence per drawing; a record without a readable mode names the other one.
+  'other-result-set-dropped': (repairs) => repairs.map(({ path, mode }) => {
+    if (mode === 'circular') return t('Saved Circular diagram: its settings ({path}) could not be read; that diagram and its Results are left out.', { path });
+    if (mode === 'linear') return t('Saved Linear diagram: its settings ({path}) could not be read; that diagram and its Results are left out.', { path });
+    return t('Saved other diagram: its settings ({path}) could not be read; that diagram and its Results are left out.', { path });
+  }),
+  'request-part-dropped': (repairs) => repairs.map(({ path, effect }) => (
     effect === 'defaulted'
-      ? t('Settings: {label} ({path}) could not be read; its default is used.', { label: label ?? t('a part'), path })
-      : t('Settings: {label} ({path}) could not be read and was left out, with the settings inside it.', { label: label ?? t('a part'), path }))),
-  'request-reference-dropped': (repairs) => repairs.map(({ path, label }) => (
-    t('Settings: {path} names a file or record this Session does not hold; {label} is left out.', { path, label: label ?? t('it') }))),
+      ? t('Settings: a part ({path}) could not be read; its default is used.', { path })
+      : t('Settings: a part ({path}) could not be read and was left out, with the settings inside it.', { path }))),
+  'request-reference-dropped': (repairs) => repairs.map(({ path }) => (
+    t('Settings: {path} names a file or record this Session does not hold; it is left out.', { path }))),
   // Free text is named by its place only (a changed one, such as an ID made
   // unique, names neither value); a value replaced by a list or an object
   // names no value used.
@@ -298,7 +303,7 @@ const WORDING = {
  * @returns {LoadRepair[]}
  */
 export const distinctLoadRepairs = (repairs) => [...new Map(repairs.map((repair) => [
-  JSON.stringify([repair.code, repair.path, repair.effect, repair.stored, repair.used, repair.count, repair.label, repair.line]), repair
+  JSON.stringify([repair.code, repair.path, repair.effect, repair.stored, repair.used, repair.count, repair.label, repair.mode, repair.line]), repair
 ])).values()];
 
 /**

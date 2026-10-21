@@ -2105,7 +2105,7 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
         : { origin: 'homology-comparison', sourceIndex: span.sourceIndex };
     },
     unavailableReasonForSpan: (span) => (
-      span.identityValid ? '' : t('The sequence identity metadata for this match is invalid.')
+      span.identityValid ? '' : t('The sequence identifier metadata for this match is invalid.')
     )
   });
   // The span rows show input-file coordinates, as the Interval rows and the

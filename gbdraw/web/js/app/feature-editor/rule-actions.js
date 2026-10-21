@@ -974,8 +974,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       : override;
   };
 
-  const canEditFeatureColor = () => true;
-
   // Python matches a single-feature color rule only by the stable generation
   // hash, so duplicate record instances that share one hash share the rule.
   /** @param {ColorFeature} feat */
@@ -1116,7 +1114,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     removePriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
-    canEditFeatureColor,
     clearAllSpecificRules: () => {
       const drawing = state.activeDrawing();
       return commitPrepared(drawing, () => [], msg('Clear specific color rules'));

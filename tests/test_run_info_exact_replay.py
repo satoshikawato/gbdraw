@@ -135,7 +135,7 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
             assert second["committed"] == generated["committed"]
             edit = page.evaluate("""async () => {
                 const a = window.__GBDRAW_APP__;
-                const feature = a.extractedFeatures.find(f => a.canEditFeatureColor(f));
+                const feature = a.extractedFeatures[0];
                 const color = String(a.getFeatureColorValue(feature) || '').toLowerCase()
                     === '#123456' ? '#654321' : '#123456';
                 return { color, applied: await a.setFeatureColorValue(feature, color) };
