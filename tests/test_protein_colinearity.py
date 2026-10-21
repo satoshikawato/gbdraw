@@ -64,10 +64,9 @@ from gbdraw.api.options import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
-from tests.utils.comparison_tables import converted_pair_rows, ribbon_placement
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
-from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
 MG1655_START_CODON_SUBSET = (
@@ -4152,33 +4151,21 @@ def test_pairwise_match_group_places_each_end_through_its_record_placement() -> 
             }
         ]
     )
-    blast_config = type(
-        "BlastConfig",
-        (),
-        {
-            "fill_color": "#cccccc",
-            "identity": 0,
-            "min_color": "#eeeeee",
-            "max_color": "#111111",
-            "fill_opacity": 0.5,
-            "stroke_color": "#000000",
-            "stroke_width": 0.1,
-        },
-    )()
-
-    group = PairWiseMatchGroup(
-        {"record_a": 1000, "record_b": 1000},
-        comparison,
-        100.0,
-        1,
-        blast_config,
+    group = ribbon_group(
         records,
-        query_placement=ribbon_placement(0, px_per_bp=1.0),
-        subject_placement=ribbon_placement(1, px_per_bp=1.0, x=-300.0),
+        comparison,
+        height=100.0,
+        subject_x=-300.0,
+        fill_color="#cccccc",
+        min_color="#eeeeee",
+        max_color="#111111",
+        fill_opacity=0.5,
+        stroke_color="#000000",
+        stroke_width=0.1,
     ).get_group()
 
     path = group.elements[0]
-    assert 'd="M 100.0,0L200.0,0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
+    assert 'd="M 100.0,0.0L200.0,0.0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
 
 
 @pytest.mark.linear

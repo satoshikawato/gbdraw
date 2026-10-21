@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `76`
+- Contract revision: `77`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2570,6 +2570,65 @@ Status: active Product authority
     catalogs, the Thai and Vietnamese type handling) follows in a later pull
     request after the 0.14.0 tag; this record supplies no runtime acceptance
     evidence.
+- Revision 77 changes: `PD-OI-097` is replaced for scenario revision `16`
+  (concern `product.circular-outer-label-fit`). In Linear `above_feature`, a
+  horizontal label that has to move off another label now stacks in the rows of
+  `auto`, counted from its own feature at the `auto` row pitch (the tallest
+  label plus `labels.spacing.linear`), instead of just above the label it
+  clears; turned labels stack as before. It comes from the Product Decision
+  Owner `satoshikawato`'s replies of `2026-10-21` on an Owner page that showed
+  the rows above the first. Each quotation below is the part of a reply that
+  carries the answer; Replies 1 to 62 are those of the Revision 50, 53, 66, 67,
+  68, 69, 71, 72, and 73 entries.
+  - Reply 63 (scenario revision `16`, `2026-10-21`), to the question
+    「Q-G3　2 段目から上の間隔をどうしますか」
+    with the options
+    「P おすすめ。auto と同じ段に置きます。上の受領文の改訂を、整理の PR（refactor/linear-label-cleanup）と一緒に出します。」
+    and
+    「K 今のままにします。下線と白い背景が下の文字にかかることは残ります。」:
+    「Q-G3：P にする」
+    (`AF-ROW-PITCH`)
+  - Reply 64 (`2026-10-21`), approving the record's receipt changes, to the
+    question
+    「Q-G3r　P の場合、この受領文の改訂を承認しますか」
+    with the receipt text
+    「PD-OI-097 の受領文：最新の受領文（scenario revision 15）に、次の変更を加えた改訂（その次の scenario revision）を承認しますか？Choice に AF-ROW-PITCH を加える。Rationale の「Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。」の後に、「2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。」を足す。Must preserve の「ただし Linear の above_feature の水平のラベルは、auto の 1 段目と同じ間をフィーチャーから取る（LP-D120）。」を、「ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。」に置き換える。May retire に「Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。」を足す。Accepted residual risk の「Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。」の後に、「2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。」を足す。Decision date はお答えの日。ほかの欄はそのままです。」
+    the answer:
+    「Q-G3r：承認する」
+    The record's scenario revision `16` receipt is the approved text. Against
+    scenario revision `15` it appends `AF-ROW-PITCH` to the Choice; it adds to
+    the Rationale the sentence on the rows above the first, right after the
+    sentence on the first row of horizontal `above_feature` labels; it replaces
+    the Must preserve exception for the first row of horizontal
+    `above_feature` labels with the exception for all their rows, which keeps
+    the stacking of turned labels; it appends to the May retire the stacking of
+    horizontal `above_feature` labels just above the label they clear; and it
+    adds to the Accepted residual risk, after the sentence on the first row,
+    the sentences on the height of figures with several rows and on figures
+    that become lower. Its decision date is that of the reply.
+  - The receipt of this change, which serializes the choice of Reply 63
+    (SHA-256, UTF-8, excluding the final newline: `963e44911eea4ec5de63dab040cc7581adad8f0556ebc8b22b15f0dc5cb1ddc5`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 16
+    Choice: AF-ROW-PITCH
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: the record's receipt for scenario revision `16` is recorded below;
+    the scenario revision `7` to `15` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -7269,8 +7328,12 @@ Decision date: 2026-10-16
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `15`
-- Supersedes: `PD-OI-097`, scenario revision `14`. Scenario revision `15`
+- Scenario revision: `16`
+- Supersedes: `PD-OI-097`, scenario revision `15`. Scenario revision `16`
+  keeps every outcome of scenario revision `15` except the rows above the
+  first of horizontal `above_feature` labels, and adds `AF-ROW-PITCH`; Reply 64
+  of the Revision 77 entry approves its changes to the Rationale, the Must
+  preserve, the May retire, and the Accepted residual risk. Scenario revision `15`
   keeps every outcome and field of scenario revision `14` and adds
   `LEADERLESS-BOX` and `AF-AUTO-ROW`; Reply 62 of the Revision 73 entry approves
   its changes to the Rationale, the Must preserve, the May retire, and the
@@ -7305,10 +7368,10 @@ Decision date: 2026-10-16
   the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
   and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW`
-- Normative outcome: exactly the complete approved scenario revision `15`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH`
+- Normative outcome: exactly the complete approved scenario revision `16`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7` to `14` receipts are kept as they were approved.
+  scenario revision `7` to `15` receipts are kept as they were approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -7388,6 +7451,13 @@ Decision date: 2026-10-16
   Contract co-change); this record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `15`; UTF-8, excluding the final newline):
   `03dcf6b3fcf686508217fc697dc644118e5b186dd886185070ba926b060c534b`.
+- Decision source (scenario revision `16`): the Owner replies of `2026-10-21`
+  quoted verbatim in the Revision 77 entry above; Reply 64 approves the tenth
+  receipt and JSON below, without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `16`; UTF-8, excluding the final newline):
+  `e0fc664c2fc41f544337579f991c1997cd9508d5dbeb345d8f2f7e96e6226d01`.
 
 ```text
 PRODUCT_DECISION
@@ -7645,6 +7715,35 @@ Decision date: 2026-10-20
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-20"
+}
+```
+
+Scenario revision `16` receipt, approved by `satoshikawato` on `2026-10-21` (Reply 64 of the Revision 77 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 16
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。
+Owner: satoshikawato
+Decision date: 2026-10-21
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 16,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-21"
 }
 ```
 

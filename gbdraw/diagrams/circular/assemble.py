@@ -277,8 +277,23 @@ def _prepare_circular_annotation_tracks(
         return slots, bundle, {}
     # The planner generates the slot list whenever annotations are present.
     assert slots is not None
-    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
+    updated, layouts = _layout_circular_annotation_tracks(
+        gb_record, slots, bundle, canvas_config=canvas_config, record_index=record_index
+    )
+    return updated, bundle, layouts
 
+
+def _layout_circular_annotation_tracks(
+    gb_record: SeqRecord,
+    slots: list[CircularTrackSlot],
+    bundle: ResolvedAnnotationBundle,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    record_index: int,
+) -> tuple[list[CircularTrackSlot], dict[str, ResolvedAnnotationTrack]]:
+    """Resolve the lanes of each annotation slot; a slot without a width takes its required extent."""
+
+    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
     record_lengths = {record_index: len(gb_record.seq)}
     bp_per_px = {
         record_index: len(gb_record.seq) / max(1.0, 2.0 * math.pi * float(canvas_config.radius))
@@ -307,7 +322,7 @@ def _prepare_circular_annotation_tracks(
             if slot.width is not None
             else replace(slot, width=ScalarSpec(layout.required_extent_px, "px"))
         )
-    return updated, bundle, layouts
+    return updated, layouts
 
 
 def _add_circular_feature_underlays(
@@ -315,14 +330,10 @@ def _add_circular_feature_underlays(
     underlay_features: Sequence,
     slots: list[CircularTrackSlot],
     bundle: ResolvedAnnotationBundle,
+    layouts: dict[str, ResolvedAnnotationTrack],
     *,
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
-    show_ticks: bool,
-    show_depth: bool,
-    show_gc: bool,
-    show_skew: bool,
-    depth_track_count: int,
 ) -> tuple[
     list[CircularTrackSlot],
     ResolvedAnnotationBundle,
@@ -336,7 +347,7 @@ def _add_circular_feature_underlays(
         record_indices=[record_index],
     )
     if set_id is None:
-        return slots, bundle, {}
+        return slots, bundle, layouts
     anchor_id = feature_underlay_anchor_slot_id(slots)
     anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
     slot_id = feature_underlay_slot_id(slots)
@@ -355,19 +366,11 @@ def _add_circular_feature_underlays(
             "show_labels": False,
         },
     )
-    updated, merged, layouts = _prepare_circular_annotation_tracks(
-        gb_record,
-        merged,
-        [underlay_slot, *slots],
-        canvas_config=canvas_config,
-        record_index=record_index,
-        show_ticks=show_ticks,
-        show_depth=show_depth,
-        show_gc=show_gc,
-        show_skew=show_skew,
-        depth_track_count=depth_track_count,
+    # The underlay set is new (collision-safe id), so the slots laid out before keep their layouts.
+    sized_underlay, underlay_layouts = _layout_circular_annotation_tracks(
+        gb_record, [underlay_slot], merged, canvas_config=canvas_config, record_index=record_index
     )
-    return list(updated or []), merged, layouts
+    return [*sized_underlay, *slots], merged, {**underlay_layouts, **layouts}
 
 
 def _circular_preset_for_layout(
@@ -2392,7 +2395,6 @@ def add_record_on_circular_canvas(
     depth_config: DepthConfigurator | None = None,
     depth_df: DataFrame | None = None,
     depth_tracks: Sequence[DepthTrackData] | None = None,
-    depth_track_count_value: int | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
     circular_track_slots: list[CircularTrackSlot] | None = None,
@@ -2404,7 +2406,8 @@ def add_record_on_circular_canvas(
     definition_profile: str = "full",
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
-    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
+    annotations: ResolvedAnnotationBundle,
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
@@ -2434,28 +2437,13 @@ def add_record_on_circular_canvas(
         if depth_tracks is not None
         else None
     )
-    resolved_depth_track_count = (
-        int(depth_track_count_value)
-        if depth_track_count_value is not None
-        else depth_track_data_count([depth_tracks or ()])
-    )
 
     show_labels_base = profile.labels_enabled
     depth_enabled = bool(profile.show_depth and depth_config is not None)
     simple_show_ticks = bool(cfg.objects.scale.show)
-    effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
-        gb_record,
-        annotations,
-        circular_track_slots,
-        canvas_config=canvas_config,
-        record_index=annotation_record_index,
-        show_ticks=simple_show_ticks,
-        show_depth=depth_enabled,
-        show_gc=profile.show_gc,
-        show_skew=profile.show_skew,
-        depth_track_count=max(1, resolved_depth_track_count),
-        record_transform=record_transform,
-    )
+    # The caller planned and laid out the annotation slots (_prepare_circular_annotation_tracks).
+    effective_circular_track_slots = circular_track_slots
+    resolved_annotations = annotations
     user_slot_mode = effective_circular_track_slots is not None
     user_active_slot_renderers = {
         str(slot.renderer)
@@ -2583,13 +2571,9 @@ def add_record_on_circular_canvas(
             feature_layers.underlay_features,
             layout_slots,
             resolved_annotations,
+            annotation_track_layouts,
             canvas_config=canvas_config,
             record_index=annotation_record_index,
-            show_ticks=show_ticks_track,
-            show_depth=show_depth_track,
-            show_gc=profile.show_gc,
-            show_skew=profile.show_skew,
-            depth_track_count=max(1, resolved_depth_track_count),
         )
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
@@ -3261,7 +3245,7 @@ def _assemble_circular_diagram_result(
         if depth_track_count_value is not None
         else depth_track_data_count([depth_tracks or ()])
     )
-    effective_circular_track_slots, resolved_annotations, _annotation_layouts = _prepare_circular_annotation_tracks(
+    effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
         gb_record,
         annotations,
         circular_track_slots,
@@ -3323,7 +3307,6 @@ def _assemble_circular_diagram_result(
         depth_config=depth_config,
         depth_df=depth_df,
         depth_tracks=depth_tracks,
-        depth_track_count_value=resolved_depth_track_count,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=conservation_min_identity,
         circular_track_slots=effective_circular_track_slots,
@@ -3336,6 +3319,7 @@ def _assemble_circular_diagram_result(
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
         annotations=resolved_annotations,
+        annotation_track_layouts=annotation_track_layouts,
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
         record_transform=record_transform,

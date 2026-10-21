@@ -673,6 +673,7 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
             "start": start, "middle": start + 20.0, "middle_x": start + 20.0, "width_px": 40.0,
             "height_px": 10.0, "middle_y": middle_y, "feature_middle_y": 50.0,
             "is_embedded": embedded, "leader_line": False, "font_size": 8.0,
+            "rotation_deg": 0.0, "text_anchor": "middle",
         }
 
     stacked = [label(0.0, 50.0, embedded=True), label(10.0, 50.0, embedded=True), label(80.0, 20.0, embedded=False)]
@@ -755,7 +756,7 @@ def test_overlapping_feature_labels_stop_and_name_the_region_count_too() -> None
         return {
             "start": start, "middle": start + 20.0, "middle_x": start + 20.0, "width_px": 40.0, "height_px": 10.0,
             "middle_y": 20.0, "feature_middle_y": 50.0, "is_embedded": False, "leader_line": False,
-            "font_size": 8.0,
+            "font_size": 8.0, "rotation_deg": 0.0, "text_anchor": "middle",
         }
 
     label_fit = linear_label_fit([("rec", [label(0.0), label(10.0)])], 8.0, [RecordRegionLabels((10.0,), 2)])

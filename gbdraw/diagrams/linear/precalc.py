@@ -30,6 +30,7 @@ from ...features.factory import (
 from ...features.objects import FeatureObject
 from ...render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 from ...labels.filtering import label_filter_maps
+from ...labels.linear_types import LinearLabel
 from ...render_stages import render_stage
 from ...labels.linear import (
     LinearLabelFrame,
@@ -162,7 +163,7 @@ def _precalculate_label_dimensions(
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     label_frames: Sequence[LinearLabelFrame] | None = None,
     label_keep_clear: Sequence[tuple[Aabb, ...]] | None = None,
-) -> tuple[float, list[list[dict]], list[float]]:
+) -> tuple[float, list[list[LinearLabel]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height.
 
     The labels of the records in one row (``label_frames``; each record alone in its row without them)
@@ -185,7 +186,7 @@ def _precalculate_label_dimensions(
     )
     max_required_height: float = 0
     record_labels: list[LinearRecordLabels | None] = []
-    all_labels_by_record: list[list[dict]] = []
+    all_labels_by_record: list[list[LinearLabel]] = []
     record_label_heights: list[float] = []
     label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
@@ -242,7 +243,7 @@ def _precalculate_label_dimensions(
             labels = labels._replace(keep_clear=label_keep_clear[i])
         record_labels.append(labels)
 
-    placed_by_record: dict[int, list[dict]] = {}
+    placed_by_record: dict[int, list[LinearLabel]] = {}
     for row in linear_label_rows(label_frames, len(records)):
         members = [(i, x, unplaced) for i, x in row if (unplaced := record_labels[i]) is not None]
         placed = place_linear_label_row(
@@ -262,11 +263,8 @@ def _precalculate_label_dimensions(
         min_y_coord_record = 0.0
         for label in label_list:
             label_top_y, _ = calculate_label_y_bounds(label)
-            is_above_feature_embedded = (
-                bool(label.get("is_embedded"))
-                and label_top_y < float(label.get("feature_top_y", 0.0))
-            )
-            if bool(label.get("is_embedded")) and not is_above_feature_embedded:
+            is_above_feature_embedded = label["is_embedded"] and label_top_y < float(label["feature_top_y"])
+            if label["is_embedded"] and not is_above_feature_embedded:
                 continue
             if label_top_y < min_y_coord_record:
                 min_y_coord_record = label_top_y

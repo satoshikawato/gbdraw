@@ -174,7 +174,7 @@ above_feature`, Linear draws each label over its own feature (below a
 negative-strand feature with `--separate_strands`): a horizontal label starts
 one row off its feature with a leader, as with `auto`, and a turned label sits
 on its feature; labels move away from the axis off each other and off the
-record's definition text. In both modes region labels keep
+record's definition text, a horizontal label by whole `auto` rows. In both modes region labels keep
 off a feature label's underline and box as off its letters.
 
 `--font_family` sets the font of all diagram text: one family name such as

@@ -13,6 +13,7 @@ from ._immutable import freeze_layout_mapping
 
 if TYPE_CHECKING:
     from ..config.models import LinearRenderProfile
+    from ..labels.linear_types import LinearLabel
 
 
 CollisionBandKind = Literal["body", "comparison", "definition"]
@@ -680,7 +681,7 @@ def measure_linear_feature_lanes(
     return LinearFeatureLaneGeometry(lanes=lanes, occupied_band=occupied_band)
 
 
-def measure_linear_label_band(labels: Sequence[dict]) -> VerticalBand | None:
+def measure_linear_label_band(labels: Sequence[LinearLabel]) -> VerticalBand | None:
     """Measure the vertical paint extent of prepared Linear labels and leaders (each leader at its label's
     own width)."""
 

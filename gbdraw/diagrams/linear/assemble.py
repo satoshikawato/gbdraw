@@ -150,6 +150,7 @@ from ...layout.scalar_axis import (
     scalar_axis_tick_values,
 )
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
+from ...labels.linear_types import LinearLabel
 from ...labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
     FeatureLabelRows,
@@ -190,7 +191,6 @@ from .annotation_labels import (
     AnnotationLabelsBySlot,
     LabelObstacle,
     PlacedAnnotationLabels,
-    _features_origin_y,
     linear_annotation_label_inks,
     linear_feature_glyph_boxes,
     linear_feature_label_obstacles,
@@ -417,23 +417,21 @@ def _add_linear_feature_underlays(
             "show_labels": False,
         },
     )
-    updated_slots = [underlay_slot, *slots]
-    private_prefix_count = len(updated_slots) - len(slots)
-    updated_auto_ids = frozenset((*auto_slot_ids, slot_id))
-    updated_slots, updated_layouts = _layout_linear_annotation_tracks(
+    # The underlay set is new (collision-safe id), so the slots laid out before keep their layouts.
+    sized_underlay, underlay_layouts = _layout_linear_annotation_tracks(
         records,
-        updated_slots,
+        [underlay_slot],
         merged,
-        auto_slot_ids=updated_auto_ids,
+        auto_slot_ids=frozenset((slot_id,)),
         label_font_size=label_font_size,
         sequence_widths=sequence_widths,
     )
     return (
-        updated_slots,
+        [*sized_underlay, *slots],
         merged,
-        updated_layouts,
-        updated_auto_ids,
-        private_prefix_count,
+        {**underlay_layouts, **layouts},
+        frozenset((*auto_slot_ids, slot_id)),
+        len(sized_underlay),
     )
 
 
@@ -856,7 +854,7 @@ def _linear_slot_footprints_for_record(
     layout: LinearTrackLayout,
     feature_dict: FeatureDict,
     feature_geometry: LinearFeatureLaneGeometry,
-    labels: list[dict],
+    labels: list[LinearLabel],
     canvas_config: LinearCanvasConfigurator,
     gc_config_of: LinearGcConfigOf,
     skew_config: GcSkewConfigurator,
@@ -1188,7 +1186,7 @@ def _build_linear_record_vertical_plans(
     layout: LinearTrackLayout,
     feature_dicts: list[FeatureDict],
     feature_geometries: list[LinearFeatureLaneGeometry],
-    labels_by_record: list[list[dict]],
+    labels_by_record: list[list[LinearLabel]],
     canvas_config: LinearCanvasConfigurator,
     gc_config_of: LinearGcConfigOf,
     skew_config: GcSkewConfigurator,
@@ -1676,7 +1674,7 @@ def _place_linear_annotation_labels_by_record(
     placements: Mapping[int, LinearRecordPlacement],
     plans: Sequence[LinearRecordVerticalPlan],
     collision_bands: Sequence[tuple[CollisionBand, ...]],
-    feature_labels: list[list[dict]],
+    feature_labels: list[list[LinearLabel]],
     feature_dicts: Sequence[FeatureDict],
     feature_geometries: Sequence[LinearFeatureLaneGeometry],
     separate_strands: bool,
@@ -1687,10 +1685,12 @@ def _place_linear_annotation_labels_by_record(
     gap: float,
     new_rows: bool,
     label_frames: Sequence[LinearLabelFrame] | None,
-) -> tuple[list[PlacedAnnotationLabels], list[list[dict]]]:
+    definition_boxes: Sequence[tuple[Aabb, ...]],
+) -> tuple[list[PlacedAnnotationLabels], list[list[LinearLabel]]]:
     """Each record's annotation labels, placed along their spans in record order, and every
     record's feature labels after the moves made for them (LP-D82), which the label fit of their
-    row (``label_frames``, as ``linear_label_fit`` reads them) counts no larger.
+    row (``label_frames``, as ``linear_label_fit`` reads them, with each record's ``definition_boxes``)
+    counts no larger.
 
     Obstacles are the record's own feature labels and leaders, every record's
     name and definition text, and, from the other records of the same row,
@@ -1700,7 +1700,7 @@ def _place_linear_annotation_labels_by_record(
     The record's feature glyphs bound the empty area inside a filled mark (LP-D75).
     """
 
-    def labels_of(index: int) -> list[dict]:
+    def labels_of(index: int) -> list[LinearLabel]:
         # Read when used: an earlier record's region labels may have moved its feature labels.
         return feature_labels[index] if index < len(feature_labels) else []
 
@@ -1755,6 +1755,7 @@ def _place_linear_annotation_labels_by_record(
                 new_rows=new_rows,
                 label_x=next(x for other, x in label_row if other == index),
                 row_labels=[(labels_of(other), x) for other, x in label_row if other != index],
+                definition_boxes=definition_boxes[index],
             )
         )
         feature_labels = with_feature_label_rows(feature_labels, placed[-1].rows)
@@ -1767,7 +1768,7 @@ def _collect_linear_primary_bounds(
     record_placements: dict[int, LinearRecordPlacement],
     record_plans: list[LinearRecordVerticalPlan],
     record_collision_bands: list[tuple[CollisionBand, ...]],
-    labels_by_record: list[list[dict]],
+    labels_by_record: list[list[LinearLabel]],
     record_scalar_axis_rooms: Sequence[LinearScalarAxisLeftRoom],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_labels_by_record: Sequence[AnnotationLabelsBySlot],
@@ -1827,14 +1828,7 @@ def _collect_linear_primary_bounds(
                 )
             )
 
-        feature_origin_y = next(
-            (
-                float(slot.origin_y)
-                for slot in plan.slots
-                if slot.renderer == "features"
-            ),
-            0.0,
-        )
+        feature_origin_y = plan.features_origin_y
         for label in labels_by_record[record_index]:
             left, right, top, bottom = calculate_label_bounds(label)
             bounds.append(
@@ -1845,17 +1839,15 @@ def _collect_linear_primary_bounds(
                     placement.axis_y + feature_origin_y + bottom,
                 )
             )
-            leader_points = [
-                (
-                    float(label[name_x]),
-                    float(label[name_y]),
-                )
-                for name_x, name_y in (
-                    ("leader_start_x", "leader_start_y"),
-                    ("leader_end_x", "leader_end_y"),
-                )
-                if label.get(name_x) is not None and label.get(name_y) is not None
-            ]
+            # An ``above_feature`` label carries both ends of its leader.
+            leader_points = (
+                [
+                    (float(label["leader_start_x"]), float(label["leader_start_y"])),
+                    (float(label["leader_end_x"]), float(label["leader_end_y"])),
+                ]
+                if "leader_start_x" in label
+                else []
+            )
             if leader_points:
                 label_half_stroke = 0.5 * label_leader_width_px(label)
                 bounds.append(
@@ -2886,6 +2878,15 @@ def assemble_linear_diagram(
             record_keys=record_keys,
         )
 
+    # Each record's drawn definition text, in its feature labels' coordinates (OV-1395).
+    definition_label_boxes = [
+        _definition_label_boxes(
+            record_collision_bands[index],
+            record_x=record_placements[index].x,
+            features_origin_y=record_vertical_plans[index].features_origin_y,
+        )
+        for index in range(len(records))
+    ]
     # The API checks the drawn labels and offers the rows (LP-D48, LP-D52).
     # Annotation labels move along their spans off the feature labels and leaders (OV-845).
     placed_annotation_labels, all_labels = _place_linear_annotation_labels_by_record(
@@ -2905,17 +2906,9 @@ def assemble_linear_diagram(
         # One assembly more at most: one that places proposed rows proposes none.
         new_rows=feature_label_rows is None,
         label_frames=label_frames,
+        definition_boxes=definition_label_boxes,
     )
     annotation_labels_by_record = [placed.by_slot for placed in placed_annotation_labels]
-    # Each record's drawn definition text, in its feature labels' coordinates (OV-1395).
-    definition_label_boxes = [
-        _definition_label_boxes(
-            record_collision_bands[index],
-            record_x=record_placements[index].x,
-            features_origin_y=_features_origin_y(record_vertical_plans[index]),
-        )
-        for index in range(len(records))
-    ]
     label_fit = linear_label_fit(
         [(str(record.id), labels) for record, labels in zip(records, all_labels)],
         label_font_size,

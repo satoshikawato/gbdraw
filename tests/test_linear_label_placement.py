@@ -865,6 +865,32 @@ def test_linear_above_feature_horizontal_labels_take_the_auto_first_row_with_a_l
 
 @pytest.mark.linear
 @pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
+def test_linear_above_feature_horizontal_labels_stack_at_the_auto_row_pitch(separate_strands: bool) -> None:
+    """A horizontal above-feature label that moves off another label goes to a whole auto row off its
+    own feature (row k at ``linear_row_y(edge, pitch, k)``, AF-ROW-PITCH, LP-D124), not the tallest
+    label's height plus the packer's stacking gap; and the rows stay free of overlaps."""
+
+    spacing = 3.0
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        input_filename="NC_001416.gb",
+        linear_label_spacing=spacing,
+        separate_strands=separate_strands,
+    )
+    pitch = max(float(label["height_px"]) for label in labels) + spacing
+    rows = []
+    for label in labels:
+        above = bool(label["above_feature_place_above"])
+        edge = float(label["feature_top_y"] if above else label["feature_bottom_y"])
+        row = abs(float(label["middle_y"]) - edge) / pitch
+        assert row == pytest.approx(round(row), abs=1e-6), label["label_text"]
+        rows.append(round(row))
+    assert max(rows) > 2
+    _assert_no_label_bounds_overlap(labels)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
 def test_linear_above_feature_turned_labels_keep_their_place_on_the_feature(separate_strands: bool) -> None:
     """LP-D120: a turned above-feature label keeps its place on its feature (no leader, the small gap) unless
     it moves off another label; the first-row clearance is only for horizontal labels."""
@@ -884,6 +910,28 @@ def test_linear_above_feature_turned_labels_keep_their_place_on_the_feature(sepa
             assert abs(float(label["middle_y"]) - float(label["feature_middle_y"])) > abs(
                 _feature_adjacent_label_y(label) - float(label["feature_middle_y"])
             )
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("label_placement", ("above_feature", "auto"))
+@pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
+@pytest.mark.parametrize("label_rotation", (360.0, -360.0, 720.0))
+def test_linear_labels_given_a_whole_turn_are_placed_as_horizontal(
+    label_placement: str, separate_strands: bool, label_rotation: float
+) -> None:
+    """OV-1438: a rotation of a whole turn draws a Linear label level, with the horizontal underline and box
+    (``linear_label_ink``), so it is placed as a horizontal label too: the same rows, anchor and leader as
+    rotation 0, and no rotation is drawn. Before, placement took it as turned (start anchor, no first row)."""
+
+    def labels(rotation: float) -> list[dict]:
+        return _prepare_linear_labels(
+            label_placement=label_placement,
+            label_rotation=rotation,
+            input_filename="NC_001416.gb",
+            separate_strands=separate_strands,
+        )
+
+    assert labels(label_rotation) == labels(0.0)
 
 
 @pytest.mark.linear
@@ -927,12 +975,12 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     resolve = linear_labels_module._resolve_above_feature_label_overlaps
 
-    def counted_resolve(labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()) -> None:
+    def counted_resolve(labels: list[dict], min_gap_px: float, row_pitch: float, keep_clear: Sequence[Aabb]) -> None:
         nonlocal resolved_labels, inside_resolver
         resolved_labels += len(labels)
         inside_resolver = True
         try:
-            resolve(labels, min_gap_px, keep_clear)
+            resolve(labels, min_gap_px, row_pitch, keep_clear)
         finally:
             inside_resolver = False
 
@@ -1177,7 +1225,7 @@ def test_linear_external_label_track_index_matches_legacy_scan() -> None:
     # At 10 px each label keeps 1.25 px free on each side: the last one, 1 px after its neighbour,
     # takes another row.
     labels = [
-        {"start": start, "end": end, "font_size": 10.0}
+        {"start": start, "end": end, "font_size": 10.0, "is_embedded": False}
         for start, end in ((0.0, 50.0), (20.0, 70.0), (80.0, 110.0), (45.0, 90.0), (112.0, 140.0), (141.0, 160.0))
     ]
     legacy_tracks: dict[str, list[dict]] = {}
@@ -1657,6 +1705,55 @@ def test_linear_auto_label_over_a_keep_clear_box_takes_the_next_row(track_layout
         [(record_labels._replace(keep_clear=(clear,)), 0.0)], profile=profile, track_layout=canvas_cfg.track_layout
     )[0]
     assert unmoved["track_id"] == "track_1" and unmoved["middle_y"] == alone["middle_y"]
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("line", "protection", "definition_font_size", "overlay_height"),
+    (("under", "box", 40, 100), ("none", "none", 50, 150)),
+    ids=("default-style", "bare-letters"),
+)
+def test_a_region_label_moves_no_feature_label_over_the_definition_text(
+    line: str, protection: str, definition_font_size: int, overlay_height: int
+) -> None:
+    """OV-1436: a region label made a feature label ("acme", row 2) move to row 1 over its record's large
+    definition text, because the move was checked with the label's drawn letters (which met the
+    definition box already, or missed it by 1 px) and not with the keep-clear rule the packer and the
+    fit count read (OV-1395). A move that covers the definition text is refused."""
+
+    from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation, RegionAnnotationStyle
+    from gbdraw.api.config import apply_config_overrides
+
+    record = SeqRecord(Seq("ACGT" * 1500), id="rec1", name="rec1", description="rec1")
+    record.features = [SeqFeature(FeatureLocation(10, 40, strand=1), type="CDS", qualifiers={"product": ["acme"]})]
+    region = RegionAnnotation(
+        "tint", CoordinateSpan(None, 1, 60), label="Region label here", mark="highlight",
+        style=RegionAnnotationStyle(label_font_size=10.0),
+    )
+    cfg = apply_config_overrides(None, {
+        "labels.linear.scope": "all",
+        "labels.linear.line": line,
+        "labels.linear.protection": protection,
+        "objects.definition.linear.font_size.short": definition_font_size,
+        "objects.definition.linear.font_size.long": definition_font_size,
+    })
+    slots = [
+        "features:features@side=overlay",
+        f"regions:annotations@side=overlay,h={overlay_height}px,set_id=regions,show_labels=true,padding_px=0,"
+        "anchor_slot=features,layer=underlay,z=-1",
+    ]
+
+    def definition_overlaps(annotations: AnnotationOptions | None) -> int:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            drawing = assemble_linear_diagram_from_records(
+                [record], cfg=cfg, legend="none", selected_features_set=["CDS"], linear_track_slots=slots,
+                annotation_options=annotations,
+            )
+        return sum(item.fit.definition_overlaps for item in drawing._gbdraw_linear_label_fit.records)
+
+    assert definition_overlaps(None) == 0
+    assert definition_overlaps(AnnotationOptions(sets=(AnnotationSet("regions", (region,)),))) == 0
 
 
 @pytest.mark.linear
