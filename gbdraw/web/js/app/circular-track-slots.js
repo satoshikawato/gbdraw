@@ -765,12 +765,8 @@ export const createCircularTrackSlotEditor = ({
       .flatMap((issue) => issue.parts));
   };
 
-  const circularTrackGlobalIssues = () => {
-    const drawing = state.drawings.circular;
-    return (
-      circularTrackValidationPlan(drawing).globalIssues.map((issue) => errorText(issue.parts))
-    );
-  };
+  /** The plan's issues, each shown as `errorText(issue.parts)` and keyed by its code (codes do not repeat). */
+  const circularTrackGlobalIssues = () => circularTrackValidationPlan(state.drawings.circular).globalIssues;
 
   /**
    * The slots an Overlay annotation row may name: for its anchor, every

@@ -571,6 +571,9 @@ test('Linear editor shows the row issue after a File clear keeps the series', ()
 // worded for the row it sits in; `message` stays the English that Generate throws.
 test('Linear editor shows row and global issues in the UI language (D-51)', async () => {
   const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  const { errorText } = await import(pathToFileURL(join(tempRoot, 'utils', 'error-text.js')));
+  // OV-1409: a global issue keeps its identity (its code) for the list's key.
+  const shownGlobal = () => editor.linearTrackGlobalIssues().map((issue) => [issue.code, errorText(issue.parts)]);
   const spacer = (id) => ({ id, renderer: 'spacer', enabled: true, side: 'below', z: 0, params: {} });
   const slots = [feature(), spacer('gap'), spacer('gap')];
   const state = withDrawings({
@@ -584,11 +587,11 @@ test('Linear editor shows row and global issues in the UI language (D-51)', asyn
   assert.deepEqual(plan.rowIssues.get(2).map((issue) => issue.message), ["Linear track ID 'gap' is used by more than one enabled row."]);
   assert.deepEqual(plan.globalIssues.map((issue) => issue.message), ['Linear Axis boundary must be an integer from 0 to 3.']);
   assert.equal(editor.linearTrackSlotIssue(slots[2], 2), "Track ID 'gap' is used by more than one enabled row.");
-  assert.deepEqual(editor.linearTrackGlobalIssues(), ['The Axis boundary must be an integer from 0 to 3.']);
+  assert.deepEqual(shownGlobal(), [['axis_out_of_range', 'The Axis boundary must be an integer from 0 to 3.']]);
   await setUiLocale('ja');
   try {
     assert.equal(editor.linearTrackSlotIssue(slots[2], 2), 'トラックID「gap」が、複数の有効な行で使われています。');
-    assert.deepEqual(editor.linearTrackGlobalIssues(), ['軸の境界は0から3までの整数にしてください。']);
+    assert.deepEqual(shownGlobal(), [['axis_out_of_range', '軸の境界は0から3までの整数にしてください。']]);
   } finally {
     await setUiLocale('en');
   }

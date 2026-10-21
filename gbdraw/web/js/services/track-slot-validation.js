@@ -221,6 +221,19 @@ export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure
   return { value: resolved, unit: isPx ? 'px' : 'factor' };
 };
 
+/** A Circular row's Width or Radius field. @typedef {'width' | 'radius'} CircularMeasureField */
+const CIRCULAR_MEASURE_INVALID = Object.freeze({
+  radius: msg('Radius must be a number greater than 0, in px or ×R.'),
+  width: msg('Width must be a number greater than 0, in px or ×R.')
+});
+/**
+ * The shown sentence of an invalid Circular Width or Radius: the row issue
+ * and the row's own field show it (TK-12).
+ * @param {CircularMeasureField} field
+ * @returns {ErrorTextPart[]}
+ */
+export const circularMeasureInvalidParts = (field) => sentence(CIRCULAR_MEASURE_INVALID[field]);
+
 const ANNOTATION_OVERFLOWS = ['error', 'compress', 'clip'];
 /**
  * An annotation slot's params as both stacks read them, edited in place. What
@@ -472,11 +485,8 @@ const slotGeometryFaults = (slot, id, layoutKind) => {
     error: new Error(`Circular track slot '${id}' uses obsolete field '${key}'. ${CIRCULAR_GAPS_HINT}`),
     parts: obsoleteFieldParts(key)
   }));
-  for (const [field, text] of [
-    ['radius', msg('Radius must be a number greater than 0, in px or ×R.')],
-    ['width', msg('Width must be a number greater than 0, in px or ×R.')]
-  ]) {
-    checkLeaf(faults, { field, parts: sentence(text) }, () => {
+  for (const field of /** @type {const} */ (['radius', 'width'])) {
+    checkLeaf(faults, { field, parts: circularMeasureInvalidParts(field) }, () => {
       try {
         parseOptionalCircularScalar(slot[field], `Circular track slot '${id}' ${field}`);
       } catch (error) {
