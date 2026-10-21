@@ -517,3 +517,55 @@ def test_linear_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest
     assert _underlay_shapes(drawing.tostring())
     assert sorted(calls) == sorted(set(calls))
     assert PRIVATE_SLOT_ID in calls and len(calls) >= 2
+
+
+@pytest.mark.circular
+def test_circular_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Circular twin of the Linear case: the underlay pass lays out only the underlay slot and keeps the
+    layouts of the annotation tracks laid out before it."""
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
+
+    calls: list[str] = []
+    original = assemble_module.layout_annotation_track
+
+    def counting(slot_id, *args, **kwargs):
+        calls.append(str(slot_id))
+        return original(slot_id, *args, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "layout_annotation_track", counting)
+    drawing = assemble_circular_diagram_from_record(
+        _record(),
+        cfg=_DEFAULT_CFG,
+        selected_features_set=["repeat_region", "CDS"],
+        annotation_options=AnnotationOptions(
+            sets=(AnnotationSet("regions", (RegionAnnotation("r1", CoordinateSpan(None, 10, 90), label="R"),)),)
+        ),
+        legend="none",
+    )
+
+    assert _underlay_shapes(drawing.tostring())
+    assert sorted(calls) == sorted(set(calls))
+    assert PRIVATE_SLOT_ID in calls and len(calls) >= 2
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_annotation_slot_without_sets_draws_the_same_with_underlays(mode: str) -> None:
+    """With no annotation sets, an annotation slot is not laid out; feature underlays do not change that
+    (Circular raised "unknown set_id" only when features had underlays)."""
+
+    slots = ["genes:features", "a:annotations@set_id=x"]
+    for features in (["CDS"], ["repeat_region", "CDS"]):
+        drawing = (
+            assemble_circular_diagram_from_record(
+                _record(), cfg=_DEFAULT_CFG, selected_features_set=features, legend="none",
+                circular_track_slots=slots,
+            )
+            if mode == "circular"
+            else assemble_linear_diagram_from_records(
+                [_record()], cfg=_LINEAR_CFG, selected_features_set=features, legend="none",
+                linear_track_slots=slots,
+            )
+        )
+        assert 'data-gbdraw-slot-id="a"' not in drawing.tostring()
