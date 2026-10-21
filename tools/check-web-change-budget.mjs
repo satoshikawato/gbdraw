@@ -363,10 +363,6 @@ const productionTotals = productionPaths.reduce((totals, path) => {
 const productionGrossChurn = productionTotals.additions + productionTotals.deletions;
 const productionNetAdditions = productionTotals.additions - productionTotals.deletions;
 
-const addedBinaryRuntimePaths = productionPaths.filter((path) => {
-  const counts = numstat.get(path);
-  return changed.get(path) === 'A' && counts?.additions === '-' && counts?.deletions === '-';
-});
 const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbdraw/web/vendor/'));
 const policyPath = 'tools/web-change-policy.json';
 const architectureRulesPath = 'tools/web-architecture-rules.json';
@@ -1553,6 +1549,14 @@ const vendorChanges = changedVendorPaths.map((path) => {
 });
 const unlistedVendorChanges = vendorChanges.filter(({ reason }) => reason);
 const listedVendorChanges = vendorChanges.filter(({ reason }) => !reason);
+// An added binary runtime file fails unless it is a listed vendored add: the trusted base
+// lists its path as add and its head bytes hash to the listed sha256.
+const listedVendorPaths = new Set(listedVendorChanges.map(({ path }) => path));
+const addedBinaryRuntimePaths = productionPaths.filter((path) => {
+  const counts = numstat.get(path);
+  return changed.get(path) === 'A' && counts?.additions === '-' && counts?.deletions === '-'
+    && !listedVendorPaths.has(path);
+});
 
 // Persisted contract co-change (WEB_CHANGE_POLICY.md). The generated modules under
 // contractModuleRoot equal their Python owners (tools/generate_web_contracts.py --check), so a

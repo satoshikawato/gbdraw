@@ -4452,6 +4452,37 @@ test('a listed vendored runtime change fails on a hash or kind mismatch', () => 
   assertVendorGateFailure(kind, /library\.js: listed as replace, but the change is remove/, 'kind');
 });
 
+test('an added binary vendored file passes only when the trusted base lists it as add with its bytes', () => {
+  const fontPath = 'gbdraw/web/vendor/fonts/latin.woff2';
+  const fontBytes = Buffer.from([0x77, 0x4f, 0x46, 0x32, 0, 1, 2, 3]);
+  const entry = vendorChangeEntry({ path: fontPath, change: 'add', sha256: sha256Hex(fontBytes) });
+  const addedBinarySection = (output) => output.split('## Added binary runtime files')[1].split('\n## ')[0];
+
+  const listed = runListedVendorChangeCase([entry], (write) => write(fontPath, fontBytes));
+  assert.equal(listed.status, 0, `listed\n${listed.output}`);
+  assert.match(listed.output, /Gate: \*\*PASS\*\*/);
+  assert.match(listed.output, /Review: \*\*REQUIRED\*\*/);
+  assert.doesNotMatch(listed.output, /added binary runtime files are not allowed/);
+  assert.ok(
+    listed.output.includes(`Vendored runtime: listed add of ${fontPath} (library 1.0.1)`),
+    listed.output
+  );
+  assert.equal(addedBinarySection(listed.output).trim(), '- None', listed.output);
+
+  const otherBytes = runListedVendorChangeCase([entry], (write) => write(fontPath, Buffer.from([0, 9, 9, 9])));
+  assertVendorGateFailure(otherBytes, /added binary runtime files are not allowed/, 'other bytes');
+  assert.match(otherBytes.output, UNLISTED_VENDOR_CHANGE);
+  assert.match(otherBytes.output, /latin\.woff2: sha256 [0-9a-f]{64} does not match the listed/);
+  assert.ok(addedBinarySection(otherBytes.output).includes(`- ${fontPath}`), otherBytes.output);
+
+  const unlisted = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/other.js', change: 'add' })],
+    (write) => write(fontPath, fontBytes)
+  );
+  assertVendorGateFailure(unlisted, /added binary runtime files are not allowed/, 'unlisted');
+  assert.match(unlisted.output, /latin\.woff2: not listed/);
+});
+
 test('a vendored runtime listing in the pull request head authorizes nothing', () => {
   // The candidate lists its own change: the trusted base has no entry, so the vendored
   // file stays unlisted, and the listing beside runtime is a guard co-change as well.
