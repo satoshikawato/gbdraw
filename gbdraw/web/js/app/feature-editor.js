@@ -69,7 +69,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
- * @property {WriteLegendRowColorPort} [writeLegendRowColor]
+ * @property {WriteLegendRowColorPort} writeLegendRowColor
  * @property {ShownLegendNamePort} [shownLegendName]
  * @property {AskChoice} askChoice The root's choice dialog.
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.

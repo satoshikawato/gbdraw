@@ -131,7 +131,8 @@ import { msg } from '../../utils/i18n.js';
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
- * @property {WriteLegendRowColorPort} [writeLegendRowColor]
+ * @property {WriteLegendRowColorPort} writeLegendRowColor The Legend owner's writer of a row's own color: a type's
+ *   default color releases the row's own color through it.
  */
 
 /**
@@ -214,8 +215,7 @@ export const createFeatureColorActions = ({
     return found ? legendEntryKey(found) : null;
   },
   keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false }),
-  // Without a Legend owner (a test of this owner), no Legend color is written.
-  writeLegendRowColor = () => {}
+  writeLegendRowColor
 }) => {
   const {
     extractedFeatures,
