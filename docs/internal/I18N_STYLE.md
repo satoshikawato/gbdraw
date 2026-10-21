@@ -1,6 +1,6 @@
-# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt
+# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
-Revision 5, 2026-10-21. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
+Revision 6, 2026-10-21 (adds Indonesian, Vietnamese and Thai: §9, §10, §11, and §1 for eleven locales). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
 follow this file and the glossary together. The glossary decides words; this
 file decides how sentences are written around them. Where the two disagree,
 the glossary wins and this file is corrected.
@@ -35,11 +35,12 @@ the glossary wins and this file is corrected.
   BLAST outfmt 6/7, DPI, CLI, Python, JavaScript, WebAssembly, Pyodide,
   SharedArrayBuffer, Web Workers, IGV, Bakta, Pharokka, Liberation Sans /
   Serif / Mono, and the Circular presets Tuckin, Middle, Spreadout.
-- **The Language menu entries** (English, Español, Français, Português,
-  日本語, 简体中文, 繁體中文, 한국어) are endonyms and are not translated; the
-  menu's own label is (言語 / 语言 / 語言 / 언어 / Idioma / Langue / Idioma
-  for ja / zh-Hans / zh-Hant / ko / es / fr / pt). Gallery example titles from `tutorial-data/manifest.json` stay
-  English too.
+- **The Language menu entries** (English, Bahasa Indonesia, Español, Français,
+  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu
+  order) are endonyms and are not translated; the menu's own label is
+  (言語 / 语言 / 語言 / 언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ /
+  ภาษา for ja / zh-Hans / zh-Hant / ko / es / fr / pt / id / vi / th). Gallery
+  example titles from `tutorial-data/manifest.json` stay English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
 
@@ -68,17 +69,22 @@ the glossary wins and this file is corrected.
   sentence.
 - A `tn` key has one string in `ja`, `zh-Hans`, `zh-Hant` and `ko`, which have
   no plural forms (`Intl.PluralRules` returns `other`), and a `one` and an
-  `other` string in `es`, `fr` and `pt` (§5.5 to §8.5).
+  `other` string in `es`, `fr` and `pt` (§5.5 to §11.5). `th`, `id` and `vi`
+  have no plural forms either: `Intl.PluralRules` selects `other` for every
+  count, so their `one` rows are never shown (they carry the `other` text or a
+  natural singular; §9.5, §10.5, §11.5).
 - One key is one sentence or label. Never build a sentence from translated
   fragments; ask for a key with placeholders instead. A sentence with an
   inline element (`<strong>`, a swatch, a bound name) is one key; the
   `<i18n-text>` component places the element at its `{name}` slot (D-04).
 - Two sentences shown together are two keys. The code joins them with a
-  language-dependent separator: a space in English, none after 。 in `ja` and
-  `zh-*` (D-18). Do not add a trailing space to a value.
+  language-dependent separator: a space in English and in `ko`, `es`,
+  `fr`, `pt`, `id`, `vi` and `th`, none after 。 in `ja` and `zh-*` (D-18). Do
+  not add a trailing space to a value.
 - Quotes follow the English: a `{name}` that the English key quotes is quoted
   in the target language's quotes (`ja` 「」, `zh-Hans` “ ”, `zh-Hant` 「」,
-  `ko` ‘ ’, `es` and `pt` “ ”, `fr` « »);
+  `ko` ‘ ’, `es` and `pt` “ ”, `fr` « », `id` straight double
+  quotes "…", `vi` “ ”, `th` “ ” with nested ‘ ’);
   one the English leaves bare stays bare (D-25). English double quotes never
   appear in `ja` or `zh-*` prose.
 
@@ -91,8 +97,10 @@ the glossary wins and this file is corrected.
 - Title Case, ALL CAPS headings (PRESET SCHEMES, DEFAULT COLORS, SPECIFIC
   RULES, LABEL FILTERING, QUALIFIER PRIORITY, LABEL GEOMETRY, ADD KEY) and
   letter spacing carry no meaning in CJK; translate them as ordinary
-  headings. Outside the figure, the CJK rules in `gbdraw/web/index.html` turn off
-  `uppercase` and `tracking-*`.
+  headings. The same rules cover `th` (Thai has no letter case) and `vi`
+  (capitals with stacked tone marks collide). Outside the figure, the CJK,
+  `th` and `vi` rules in `gbdraw/web/index.html` turn off `uppercase` and
+  `tracking-*`.
 - A word that the source capitalizes as a name of a control (Generate,
   Apply, Save Session) is written as that control's translated label, so a
   reader can find it: 「生成」をクリック / 点击“生成” / 點選「產生」.
@@ -108,6 +116,11 @@ the glossary wins and this file is corrected.
 - Help texts and notices may be as long as needed; they wrap.
 - `es`, `fr` and `pt` labels run 15 to 35% longer than English; their length
   rules are §6.6, §7.6 and §8.6.
+- `id` and `vi` short verbs and phrases can run up to twice the English width;
+  see §9.6 and §10.6.
+- Thai UI text has a 12 px floor, also for the rail names, the hints and the
+  header buttons; a rail name may take two lines and its entry grows to fit
+  (§11.6).
 
 ## 2. Japanese (`ja`)
 
@@ -945,3 +958,501 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - Inside 10 px rows use the short glossary form: marca principal (not marca
   de escala principal), fundo (not plano de fundo), Automático (never Auto).
   Abbreviate only where English does (Mín. / Máx.). Help texts wrap.
+
+## 9. Indonesian (`id`)
+
+Standard Indonesian in the register of Indonesian software and lecture notes
+(WordPress, Proton and Google), not maximal Badan Bahasa coinage, never Malay.
+Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
+
+### 9.1 Vocabulary
+
+- **Provisional** (PD-OI-106; the vendors differ and the choice is to be
+  reconsidered): Pengaturan (Settings), default, file, Unduh / Unggah,
+  Urungkan (Undo), Atur ulang (Reset), Lanjutan (Advanced), penjajaran
+  (alignment), strain, sekuens. The glossary marks each row.
+- **Field terms** (spelling fixed): genom, gen, sekuens, nukleotida, asam
+  amino, organel, lokus, anotasi, fitur (Feature; jenis fitur), untai (Strand;
+  untai forward, untai +/−), komplemen balik, kode genetik, nomor aksesi,
+  kandungan GC, dinukleotida, kedalaman / kedalaman baca (Depth, read depth,
+  coverage), identitas, kemiripan, ortolog, penjajaran (sequence alignment),
+  kecocokan (comparison match), sirkular, linear, Kueri / Subjek, Kolinear.
+- **Kept in English** : E-value, Bitscore, hit,
+  RBH, reciprocal best hit, orthogroup, synteny, GC skew, AT skew, skew,
+  qualifier, record, track, tick, ribbon, preset, offset, padding, thread,
+  runtime and the names of §1.1: lower case in prose, no English plural
+  ({count} record, Hit maksimum), no Indonesian affix. A help text may gloss
+  once: qualifier (atribut fitur), Strain (galur), default (bawaan). Adapted
+  loanwords, no italics: sesi, galeri, pratinjau, kueri, fitur, kustom, draf,
+  filter, font, file, browser, pop-up, templat.
+- **Diagram terms**: lajur (Lane), posisi (File card slot), bilah skala,
+  penggaris (Ruler), celah (Gap), jarak (Spacing), pita (Band), tanda
+  (annotation mark), latar belakang (Underlay), garis tepi (Stroke), isian
+  (Fill), legenda, tumpukan, jangkar (anchor), perataan / Ratakan (Similarity
+  group alignment), grafik (plot), gambar (Session drawing).
+- **Command words**: Simpan, Muat (Load), Impor, Ekspor, Unduh, Unggah, Buat
+  (Generate), Terapkan, Atur ulang, Urungkan, Ulangi, Batal, Hapus (Delete,
+  Remove, Clear), Tambahkan, Pilih (Select, Choose), Telusuri (Browse), Cari
+  (Search), Lewati (Skip), Kecualikan (Omit), Kembalikan (Revert), Periksa
+  (Inspect); states Aktif / Nonaktif, Otomatis.
+- **Never use** (checked in 9.7): Malay (muat turun, muat naik, fail, tetapan,
+  pelayar, peranti, pangkalan data, perisian, boleh, bila, kerana); galat,
+  peramban, prasetel, tetikus, utas; Setelan, Setel ulang, Tingkat lanjut, Download; sekuen, sirkuler,
+  linier, unting, eror; khusus for Custom, rekaman for record, nilai E.
+
+### 9.2 Buttons and sentences
+
+- Register: formal, impersonal, subject omitted where possible; **Anda**
+  (capital A) where a person is needed; never kamu, kau, gak, udah; no kami or
+  saya.
+- Buttons, menu commands, links: the bare base verb or its -kan imperative,
+  sentence case, no period, no Silakan (Simpan sesi, Muat contoh, Terapkan);
+  never nominalized (Penyimpanan sesi) and never a meN- form.
+- Labels, headings, tabs, column headers: noun phrases, head noun first (Ukuran
+  font label), impersonal (Pemberitahuan, not Beri tahu saya); a heading may be
+  a pe-…-an noun (Pemfilteran label). A dialog title that asks: verb + object +
+  ? (Hapus seluruh file?).
+- Instructions: imperative without a subject (Pilih record. Klik Buat.
+  Kosongkan untuk otomatis.). Descriptions: an active verb, subject implied
+  (Menampilkan kedalaman baca.), or a di- passive. Progress: meN- verb + object
+  + one … (Menyimpan sesi…). Completion: di- passive with a period (Sesi
+  disimpan.).
+- Failure: Gagal + verb (Gagal memuat sesi.) or Tidak dapat + verb (Tidak dapat
+  membaca file.), never Gagal untuk or Tidak bisa; also … tidak tersedia /
+  tidak valid / tidak didukung. Chips Kesalahan:, Peringatan:, Catatan:. Busy:
+  Membuat diagram. Coba lagi setelah pembuatan selesai.
+- Required, optional, recommended: Wajib ("… wajib diisi" in a sentence),
+  Opsional and "(opsional)" after a field name, Direkomendasikan. Generate as
+  an event: saat diagram dibuat, sebelum diagram dibuat, pembuatan diagram
+  berikutnya; a cited button is Buat (klik Buat).
+
+### 9.3 Punctuation and spacing
+
+- A period ends each sentence of help texts, notices, dialogs and errors;
+  labels, buttons, headings, options and links take none; no "!". Straight
+  double quotes wherever the English quotes a name or a UI word, also for its
+  'Bar' style (Pilih "Bilah" atau "Penggaris"); straight single quotes only for
+  a gloss (EYD); never “ ”, ‘ ’ or « ».
+- Colon: no space before, one after (Bidang: {path}); keep a label colon; no
+  NBSP. Spacing around Latin terms, digits, placeholders and units is as in
+  English; a placeholder takes no affix. Lists: no comma before dan / atau
+  joining two items, a comma before the last dan of three or more (A, B, dan C;
+  PUEBI); "&" is dan; e.g. is misalnya.
+- ASCII digits, English point and grouping (0.65, 1,000), not 0,65 /
+  1.000; units as the source (100 bp, 20px); bp, never pb.
+- Parentheses, slashes and ranges as the source (Daerah (opsional), Baris 3–4,
+  Kanan →); one … (U+2026), no space before it. di and ke as prepositions stand
+  apart (di atas, ke bawah); the prefix di- attaches (dihapus). Hyphens: huruf
+  besar-kecil, tumpang-tindih; prefixes attach (nonaktif) except before English
+  (multi-record); never di-reset.
+
+### 9.4 Words and capitals
+
+- Sentence case for every label, button, heading, tab, option and column header
+  (Slot track kustom, Atur ulang pengaturan), never Title Case (Simpan Sesi).
+  Slash alternatives follow the English capitals (Atas / Bawah, Organisme /
+  strain).
+- A key the English writes in capitals stays in capitals (TAMBAHKAN KUNCI,
+  WARNA DEFAULT, SKEMA PRESET, ATURAN SPESIFIK; OFF is NONAKTIF).
+- Lower case in prose: sesi, hasil, record, track, file, gbdraw. A cited
+  control or section keeps its label and capital without quotes (klik Buat; di
+  Slot track kustom); where the English quotes it, straight double quotes.
+  One exception: the LOSATP mode name is quoted ("Kecocokan berpasangan") when
+  help or message prose cites it (di mode "Kecocokan berpasangan"), because the
+  bare phrase is also the ordinary noun phrase "pairwise matches". On option
+  labels, headings and buttons it stays bare (Gunakan Kecocokan berpasangan).
+  Other cited controls stay unquoted.
+- Head noun first: TSV kedalaman, TSV BLAST, cache LOSAT, ID record, lebar slot
+  track linear {id}, warna default. Never split or abbreviate a fixed compound
+  (tata letak, atur ulang, ambang batas, asam amino, kandungan GC, komplemen
+  balik, kedalaman baca).
+
+### 9.5 Placeholders and counts
+
+- No inflection or agreement: a placeholder sits like a noun, after its class
+  noun (record {record}, file "{file}").
+- The count precedes an unchanged noun ({count} record, {count} pasangan gen):
+  no reduplication after a number ({count} fitur-fitur), no English plural, no
+  classifier (buah); {current} dari {count}, {drawn}/{total}.
+- tn: no plural forms; the `one` string repeats the `other` and must
+  read well for 1. Locators: Baris {n}, File {n}; ke-{n} only for "the nth".
+- Worked pairs (`one` = `other`):
+  1. ({count} records) → ({count} record)
+  2. From these {count} color rules: → Dari {count} aturan warna ini:
+  3. Reset {count} placements to Auto → Atur ulang {count} penempatan ke
+     Otomatis
+  4. {current} of {count} matches → {current} dari {count} hasil
+  5. Input files: {count} entries of {path} could not be read and were dropped.
+     → File input: {count} entri dari {path} tidak dapat dibaca dan dibuang.
+
+### 9.6 Length
+
+- About 1.05–1.15× English overall, but short verbs grow
+  1.4–2.25× (Terapkan 1.65×, Urungkan 2.0×) and meN- progress forms run 8–12
+  letters: allow +50% for labels of up to 10 characters, +15–20% for sentences.
+- Rail short names (52 px buttons, 10 px semibold, no wrap) hold about nine
+  letters; Pengaturan (54 px) already overflows. Use Input, Banding, Lanjutan,
+  Daerah, Tata letak, Font, Judul, Legenda, Warna, Label, Sumbu, GC / skew,
+  Fitur, Tentang; Buat beside the rail.
+- Header buttons within about 1.5× the English: check Atur ulang pengaturan (21
+  letters for 14) and Urungkan at 1,024 px. To shorten, drop yang, untuk and
+  the subject; never switch terms; abbreviate only after a screenshot shows
+  overflow.
+
+### 9.7 Machine checks
+
+The rule lists live in `tests/web/i18n-lint/id.tsv` and run in
+`tests/web/i18n-catalogs.test.mjs` on every catalog value, never on the
+key, after each `{name}` placeholder is masked (as `{X}`); `error`
+fails the test and `warn` is printed. Each rule flags:
+
+- Malay and vendor forms: `id-malay-download` (error) muat turun / muat naik;
+  `id-malay-words` (error) the other Malay words (fail, tetapan, pelayar,
+  boleh, kerana …) and -iti forms (identiti, kualiti);
+  `id-official-coinage` (warn) galat, peramban, bawaan, prasetel, utas;
+  `id-d05-terms` (error) the rejected forms of the provisional terms (Setelan,
+  Setel ulang, Tingkat lanjut, Download, Upload); `id-d05-file` (warn) berkas.
+- Spelling and register: `id-spelling` (error) sekuen, sirkuler, linier,
+  unting, eror, histori, penyejajaran; `id-anda-case` (error) lower-case anda;
+  `id-informal` (error) kamu, gak, udah; `id-register-phrases` (warn) tidak
+  bisa, gagal untuk, silakan.
+- Word forms: `id-di-ke-preposition` (error) diatas, kebawah;
+  `id-di-prefix-split` (error) di hapus; `id-men-assimilation` (warn)
+  mensimpan; `id-affixed-loanword` (error) di-reset; `id-nominalized-command`
+  (warn) a short value opening with Penyimpanan and the like;
+  `id-progress-ellipsis` (warn) a bare meN- phrase without … or period;
+  `id-title-case` (warn) Title Case; `id-english-plural` (warn) records,
+  tracks; `id-count-reduplication` (warn) {count} fitur-fitur.
+- Punctuation, numbers and script: `id-ellipsis` (error) ... and a space before
+  …; `id-decimal-comma` (error) 0,65; `id-thousands-dot` (warn) 1.000;
+  `id-unit-pb` (error) pb; `id-curly-quotes` (error) “ ” ‘ ’ « »;
+  `id-foreign-letter` (error) accented letters and other scripts;
+  `id-unexpected-char` (warn) other non-ASCII, NBSP included.
+
+## 10. Vietnamese (`vi`)
+
+Standard northern written Vietnamese: the UI chrome in the Web-app register
+of Firefox, Google and Android, help texts in the register of Vietnamese
+journals (English in parentheses at a term's first use). The Language menu
+entry is **Tiếng Việt**. **Every value is NFC** (`normalize('NFC')`, also
+for text pasted from PDFs): decomposed tone marks look the same but break
+search and the lint (`vi-nfc`). The UI shows Vietnamese in Inter: the five vendored
+Inter `vietnamese` subset files (the `unicode-range` blocks in
+`gbdraw/web/index.html`) carry the Vietnamese letters, so a word never mixes
+typefaces.
+
+### 10.1 Vocabulary
+
+- **New orthography** (rule QĐ 1989/QĐ-BGDĐT of 2018, 2024 Sinh học 12
+  textbooks): gene, DNA, RNA, mRNA, nucleotide, dinucleotide, amino acid,
+  protein, enzyme, codon, allele, plasmid; never gen, ADN, ARN, nuclêôtit,
+  axit amin, prôtêin, enzim, côđon. No plural `-s`.
+- **Field terms** (the glossary decides; never swap them): **hệ gen**
+  (genome; the one place `gen` stays), trình tự (sequence; never chuỗi), bản
+  ghi (record), **mạch** (strand: mạch xuôi (+), mạch ngược), bổ sung ngược,
+  **chú thích** (annotation) and **chú giải** (legend), **sắp gióng cột
+  (alignment)** for sequences ("(alignment)" once per string) and **căn
+  chỉnh** for aligning records, **độ đồng nhất (identity)** and **độ tương
+  đồng** (similarity), hàm lượng GC, độ sâu / độ sâu đọc / độ bao phủ, vạch
+  chia, thang đo, sơ đồ dạng vòng / dạng thẳng, bảng mã di truyền, chủng,
+  mã số (accession), đoạn khớp (a drawn match), kết quả phù hợp (a search result).
+- **Kept in English**, lower case inside a phrase, after the head noun,
+  no plural: feature, qualifier, track, query, subject, hit, E-value,
+  Bitscore, RBH, orthogroup, ortholog, paralog, synteny, Collinear, GC skew,
+  AT skew, skew, locus, locus tag, runtime, seed (loại feature, bố cục track,
+  số hit tối đa). A help text may gloss one once, never a label: feature
+  (thành phần chú thích), qualifier (thuộc tính), track (dải / vòng), query
+  (trình tự truy vấn), subject (trình tự đích), GC skew (độ lệch GC).
+- **Command words** (Firefox, Google, Android): Cài đặt, Mặc định, Cài đặt
+  sẵn (Preset), Phiên, Tạo, Lưu, Tải (Load; Mở phiên), Nhập / Xuất, Tải lên /
+  Tải xuống, Hoàn tác / Làm lại, Áp dụng, Đặt lại, **Huỷ**, Đóng, Xoá (Delete,
+  Clear), Gỡ bỏ (Remove), Nhân bản, Bỏ qua, **tệp**, Thẻ, Bật / Tắt, Nhấp.
+- **Loanwords**: Vietnamese where Firefox, Google or the journals have a word
+  (tệp, bộ nhớ đệm); ID, web, pixel, pipeline, intron as written; never a
+  phonetic respelling (pích-xen, lô-cút).
+- **Never** (beyond the lint of §10.7): biểu đồ for the map, chuỗi for a
+  sequence, đặc điểm for a feature, tuỳ chọn for "optional".
+
+### 10.2 Buttons and sentences
+
+- **Register**: bạn when a pronoun is needed, usually none; của tôi only
+  where the English speaks as the user (Giữ {count} màu của tôi).
+- **Buttons, menu commands, tabs, chips**: bare verb or verb + object, no
+  period, no Vui lòng or hãy: Lưu, Huỷ, Áp dụng, Lưu phiên, Thử tạo lại.
+- **Labels, headings, column headers, options**: noun phrases, head first:
+  Cỡ chữ nhãn, Bố cục track, Độ đồng nhất tối thiểu (%).
+- **Help and instructions**: full sentences with a period; an English
+  imperative is a bare verb (Chọn một bản ghi.); Hãy may open an instruction
+  after a reason; Vui lòng only opens a request in a blocking or error
+  message, once at most.
+- **Progress** Đang + verb + … (Đang lưu phiên…); busy reasons Đang tạo sơ
+  đồ. Hãy thử lại sau khi tạo xong. **Completion** Đã + verb (Đã sao chép).
+- **Errors, "cannot"**: active Không thể + verb (Không thể tải tệp.) or
+  Không + verb + được (Không đọc được tệp.); Không tìm thấy {name}.; generic
+  Đã xảy ra lỗi khi …. Never "… không được tìm thấy", "… thất bại", "được …
+  bởi". A short error label has no period (Lỗi không xác định); no "!".
+- **Active voice**: Đã lưu tệp., not Tệp đã được lưu.; được without an agent
+  stays where it is the natural adjective (được hỗ trợ, được giữ lại).
+- **Required / optional / recommended**: Bắt buộc, Cần … (Cần áp dụng),
+  (không bắt buộc) after a field name, Khuyến nghị. Quote a control: “Tạo”.
+
+### 10.3 Punctuation and spacing
+
+- Syllables are space-separated, so Latin terms, digits, placeholders and
+  units take one ordinary space (Chạy LOSAT, Trình tự {n}, 100 bp); no extra
+  rule at script boundaries.
+- No space before `, . ; : ! ?`, one after. A label colon follows the word:
+  Nhãn:, Trường: {label}. Sentences end with a period; labels, buttons,
+  headings and chips do not; a dialog title keeps the English question mark.
+- Quotes “ ” for user-typed names and quoted labels; a `{name}` the
+  English quotes is quoted, a bare one stays bare (STYLE §1.3). Straight
+  quotes only in literal code (`/key="value"`).
+- Parentheses: no inner spaces, one space before (Vùng (không bắt buộc)).
+  Ranges and symbols as the source (Hàng 3–4; → ← × −); in prose an em dash
+  becomes a comma or colon.
+- One `…`. Numbers keep the English format: 1,000 and 0.65, never
+  1.000 or 0,65. `&` in a title becomes và (Trục và thang đo).
+
+### 10.4 Words and capitals
+
+- **Sentence case** for labels, buttons, headings, menu items, tabs and
+  options: Cài đặt nâng cao, Tải xuống TSV. No Title Case (Cài Đặt Nâng Cao),
+  no ALL CAPS (stacked tone marks collide). The English capital headings
+  become sentence case: Bộ màu cài đặt sẵn (PRESET SCHEMES), Màu mặc định,
+  Quy tắc riêng, Lọc nhãn, Thứ tự ưu tiên qualifier, Kích thước nhãn, Thêm
+  khoá (ADD KEY). `:lang(vi)` turns off `uppercase` and `tracking-*`.
+- Names keep their capitals (GenBank, LOSAT); gbdraw stays lower case. A
+  common noun kept in English is capitalized only at the start of a label
+  (Feature, Track).
+- **Tone marks in the new position** in every string (2018 textbooks,
+  Google): hoà, hoá, xoá, khoá, toạ, khoẻ, tuỳ, huỷ, thuỷ, so Xoá, Huỷ, Tuỳ
+  chỉnh, Tuỳ chọn, Toạ độ, Chuẩn hoá, Mã hoá. Only open syllables in oa, oe,
+  uy change; closed ones are the same in both systems (hoàn, khoảng, thuyết).
+  Cancel is Huỷ: not Hủy bỏ, and not Hủy (old position).
+- **i / y** as Google and Firefox: tỷ lệ, lý do, kỹ thuật, ký tự, ký hiệu.
+
+### 10.5 Placeholders and counts
+
+- Count before the noun, no plural marker, and these nouns need no
+  classifier: {count} bản ghi, {count} feature, {count} luồng. các / những
+  only without a number; "all {count}" is tất cả {count} ….
+- No plural forms: the `one` row repeats the `other` text.
+- "Records: {n}" becomes {n} bản ghi or Số bản ghi: {n}; locators put the
+  number last (Trình tự {n}, Dòng {n}); an ordinal is bản ghi thứ {n}.
+- Placeholders stay verbatim at the end of their noun phrase; identifiers take
+  plain spaces, no quotes: Dùng large_tick_interval thay cho tick_interval.
+- Worked examples (both rows get the same text):
+  1. `{count} record` / `{count} records` → `{count} bản ghi`
+  2. `{count} gene pair` / `… pairs` → `{count} cặp gene`
+  3. `{current} of {count} match` / `… matches` → `{current} trên {count} kết quả phù hợp`
+  4. `{count} feature updating...` / `… features …` → `Đang cập nhật {count} feature…`
+  5. `Reset {count} placement to Auto` / `… placements …` → `Đặt lại {count} bố trí về Tự động`
+
+### 10.6 Length
+
+- Letters are Latin-width, so character counts are a fair guide: the core
+  words measured 0.98× the English width in Inter 10 px; a word rendered as a
+  phrase reaches 1.5–1.7× (Áp dụng 1.47×, Cài đặt sẵn 1.74×).
+- Rail short names (52 px buttons at 9–10 px), about 9 characters: Đầu vào,
+  Feature, Nhãn, Màu, Trục, Vùng, So sánh, Nâng cao, Tiêu đề, Bố cục, GC /
+  skew. Phông chữ and Giới thiệu are the widest and fit on one line at 1,024
+  and 1,280 px; the short form Phông is not used.
+- Header and bar buttons: within about 1.3× the English (Lưu phiên, Tải ví
+  dụ, Đặt lại cài đặt); Huỷ, not Huỷ bỏ. No abbreviations with periods
+  (Trình đ.khiển). Help texts wrap. Headings need line-height ≥ 1.4 and no
+  negative letter-spacing, or Ấ, Ổ, Ữ clip.
+
+### 10.7 Machine checks
+
+The rule lists live in `tests/web/i18n-lint/vi.tsv` and run in
+`tests/web/i18n-catalogs.test.mjs` on every catalog value, never on the
+key, after each `{name}` placeholder is masked (as `{X}`); `error`
+fails the test and `warn` is printed. Each rule flags:
+
+- `vi-old-gen` (error): the word gen anywhere but in hệ gen.
+- `vi-old-adn-arn` (error): ADN, ARN, mARN, tARN or rARN instead of DNA / RNA.
+- `vi-old-acid` (error): axit amin, acid amin or axit nuclêic.
+- `vi-old-loanword` (error): nuclêôtit, prôtêin, côđon, enzim, pôlipeptit, ribôxôm, plasmit, alen.
+- `vi-genome-term` (error): bộ gen, bộ gene or hệ gene instead of hệ gen.
+- `vi-tap-tin` (error): tập tin instead of tệp.
+- `vi-huy-bo` (error): Hủy bỏ or Huỷ bỏ instead of Huỷ.
+- `vi-tai-ve` (error): Tải về instead of Tải xuống.
+- `vi-thiet-dat` (error): Thiết đặt instead of Cài đặt.
+- `vi-that-bai` (error): thất bại instead of Không thể … or không thành công.
+- `vi-passive-not-found` (error): … không được tìm thấy instead of Không tìm thấy ….
+- `vi-passive-by` (warn): được … bởi with up to six words between (bởi vì excluded).
+- `vi-tone-old-position` (error): a tone mark on the o of a final oa / oe or the u of a final uy (Hòa, Xóa, Tùy, Hủy, Tọa).
+- `vi-y-spelling` (warn): tỉ lệ, tỉ số, lí do, kĩ thuật, kí tự, kí hiệu.
+- `vi-nfc` (error): a combining mark U+0300–U+036F, so the value is not NFC.
+- `vi-ascii-word` (error): one of 28 common UI words without diacritics (khong, cai dat, luu, tep, …).
+- `vi-all-caps` (error): an upper-case word of two or more letters with a Vietnamese capital (CÀI ĐẶT, TẮT); ASCII acronyms such as LOSAT pass.
+- `vi-title-case` (warn): two capitalized words in a row, the second with a Vietnamese letter (Tải Xuống); Tiếng Việt is the known exception.
+- `vi-register` (error): xin vui lòng, quý vị, quý khách or chúng tôi.
+- `vi-vui-long-label` (warn): a value that starts with Vui lòng and has no sentence punctuation.
+- `vi-straight-quote` (error): a straight " that opens a quoted word or placeholder.
+- `vi-space-before-punct` (warn): a space between a word and `, . ; : ! ?`.
+- `vi-decimal-comma` (warn): a decimal comma (0,65) where the English format keeps 0.65.
+- `vi-english-plural` (warn): features, tracks, hits, queries, subjects, qualifiers, orthogroups, genes, reads or loci.
+- `vi-ellipsis` (error): three periods instead of one ….
+
+## 11. Thai (`th`)
+
+Neutral written Thai as Google software writes it (Chromium, AOSP, Flutter)
+for command words, IPST / NSTDA usage for biology, and English for the BLAST
+and comparative-genomics words Thai papers leave in English. Royal Institute
+coinages appear only as alternatives in glossary notes. The Language menu shows
+**ไทย**. No Thai font file is bundled: Thai uses the OS font stack (a bare
+Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
+`line-height` 1.5 or more.
+
+### 11.1 Vocabulary
+
+- **Field terms**: จีโนม, ยีน, ลำดับ, นิวคลีโอไทด์, กรดอะมิโน, สาย (strand),
+  สายพันธุ์ (strain), สิ่งมีชีวิต (organism), ออร์แกเนลล์, แอนโนเทชัน, ฟีเจอร์,
+  ระเบียน (record), บริเวณ (region), ปริมาณ GC, การเทียบลำดับ (sequence
+  alignment), การจัดแนว (Similarity-group alignment), ความคล้าย, แผนภาพ, แทร็ก.
+- **Kept in English**, no plural s: E-value, Bitscore, Query,
+  Subject, hit, RBH, orthogroup, Collinear, GC skew, AT skew, coverage,
+  qualifier, accession (หมายเลข accession), locus tag, identity, LOCUS, the
+  §1.1 names, units. Help may gloss one once: ค่า E, ร้อยละความเหมือน.
+- **Command words** (Google): บันทึก, โหลด, ยกเลิก, เพิ่ม, ลบ (Delete), นำออก
+  (Remove), ล้าง (Clear), ทำสำเนา, แก้ไข, นำไปใช้, เลิกทำ / ทำซ้ำ, เปลี่ยนกลับ,
+  กู้คืน, รีเซ็ต, นำเข้า / ส่งออก, อัปโหลด, สร้าง (Generate), เรียกใช้ (Run).
+- **UI nouns** (Google): การตั้งค่า, ค่าเริ่มต้น, ค่าที่ตั้งไว้ล่วงหน้า / พรีเซ็ต,
+  เซสชัน, ไฟล์, ตัวอย่าง (Example), ภาพตัวอย่าง (Preview), แกลเลอรี, ขั้นสูง,
+  เลย์เอาต์, แบบอักษร, ชุดสี, ป้ายกำกับ, ประกาศ (Notice; หมายเหตุ is /note).
+- **Loanwords**: only those the glossary lists, in the Google spelling
+  (§11.4); otherwise a native word. Prefer แบบอักษร to ฟอนต์.
+- **Never** (official coinages and known mistranslations): ค่าโดยปริยาย, บรรณนิทัศน์, เอกลักษณ์,
+  การปรับแนว, จีน for gene, อินทรีย์, ภูมิภาค, ข้อคำถาม, บรรจุลง / บรรจุขึ้น,
+  แฟ้ม, สายโยงใย, ช่วงเวลาสื่อสาร, ทำกลับ, จุดตั้งระยะ, คะแนนบิต, ความเบ้.
+
+### 11.2 Buttons and sentences
+
+- **Register**: neutral, as in Chromium; no particles (ครับ, ค่ะ, นะ), no ท่าน
+  or เรา. Leave the subject out, or write คุณ (user) or ระบบ (app) if needed.
+- **Buttons, menu commands, toggles**: a bare verb or verb + object (บันทึก,
+  บันทึกเซสชัน, นำไฟล์ออก); a command that opens a further step keeps `…`.
+- **Headings, tabs, column headers**: nouns; an action becomes a การ- noun
+  (การส่งออก, การแก้ไขเลย์เอาต์). The key's kind decides ส่งออก or การส่งออก.
+- **Instructions and help**: complete sentences with no final period; an
+  imperative is a bare verb (เลือกระเบียนที่จะครอบตัด). "Please" is โปรด, at
+  most once per message, never กรุณา.
+- **Status "…ing"**: กำลัง + verb + `…`: กำลังโหลด…, กำลังสร้างแผนภาพ…
+- **Completion**: …แล้ว (บันทึกแล้ว); "not yet" is ยังไม่ได้… (ยังไม่ได้นำไปใช้).
+- **Cannot, failed, errors**: verb phrase + ไม่ได้ (อ่านไฟล์ไม่ได้); X +
+  ไม่สำเร็จ for a failed operation (ส่งออก PNG ไม่สำเร็จ); เกิดข้อผิดพลาด,
+  ไม่ถูกต้อง (invalid), ไม่พร้อมใช้งาน (unavailable), ไม่รองรับ (unsupported).
+- **Required, optional, recommended**: the badge จำเป็น, or ต้องระบุ X in a
+  sentence; the tags (ไม่บังคับ), (แนะนำ), (ค่าเริ่มต้น).
+- **Questions** end with หรือไม่ and no `?`; no `!` anywhere.
+- **Active voice**: avoid the adverse passive ถูก…; leave the agent out or
+  name ระบบ (ทิ้งบรรทัด {lines} แล้ว, not บรรทัด {lines} ถูกทิ้ง).
+- A control named in a sentence is its Thai label in “ ”: คลิก “สร้าง”.
+
+### 11.3 Punctuation and spacing
+
+- **Sentence ends**: no period, comma or semicolon after Thai text. One space
+  separates clauses and sentences; keys shown together join with `' '`. Periods stay inside Latin names, numbers and ranges (0.65, 1..200).
+- **Lists**: Thai items are separated by spaces, with และ / หรือ before the last
+  item (ฟีเจอร์ ป้ายกำกับ และคำอธิบายสัญลักษณ์). Latin-only lists (formats,
+  identifiers, code values) keep commas: A, B หรือ C. Run-time
+  `Intl.ListFormat('th')` output stays as it is ("A B และC", no comma).
+- **Latin, digits, placeholders, units**: one space between a Thai letter and
+  a Latin letter, digit or `{placeholder}`, on either side: ปริมาณ GC,
+  {count} ระเบียน, ไฟล์ {name} ไม่ถูกต้อง. Units keep the source spacing
+  (100 bp, 20px); % attaches to its number. No NBSP or ZWSP.
+- **Colon** in a label: attached, one space after: สถานะ: {state}.
+- **Parentheses**: one space outside, none inside: บริเวณ (ไม่บังคับ).
+- **Quotes**: “ ”, nested ‘ ’; never ASCII quotes.
+- **Ellipsis**: one `…`, attached. **ๆ** attaches to its word and takes one
+  space after it (ต่างๆ ที่ใช้).
+- **Ranges and symbols** keep the source form (3–4, GC / skew, → × −).
+- **Digits**: ASCII only, never ๐–๙; English decimal point and grouping.
+
+### 11.4 Spelling of transliterations
+
+- Thai has no case: Title Case and ALL CAPS headings become ordinary text
+  (PRESET SCHEMES ชุดสีที่ตั้งไว้ล่วงหน้า); `:lang(th)` turns off `uppercase`
+  and `tracking-*`. Latin words keep their own case.
+- **No tone marks** in transliterations, as Google spells them: เซสชัน,
+  เวอร์ชัน, อัปโหลด, อัปเดต, แกลเลอรี, เลย์เอาต์, ไฮไลต์, รีเซ็ต, คลิก, ลิงก์,
+  ไอคอน, อีเมล, อินเทอร์เฟซ. Never เซสชั่น, เวอร์ชั่น, อัพโหลด, อัพเดท,
+  แกลเลอรี่, ไฮไลท์, ลิ้งค์. The one exception is Chromium's ป๊อปอัป.
+- Mai taikhu ็ is not a tone mark and stays: บล็อก, แท็บ, พาราล็อก. Biology
+  follows IPST / NSTDA: จีโนม, ยีน, นิวคลีโอไทด์, โครโมโซม, ออร์แกเนลล์.
+- **Storage order**: consonant, upper or lower vowel, tone mark, then ำ
+  (น้ำ). แ and ำ are one character each, never เเ or ํา.
+- **Compounds** put the head noun first and reuse glossary words:
+  ป้ายกำกับระเบียน (Record label), พรีเซ็ตแทร็ก (Track Preset). One English
+  word keeps one Thai word (Remove นำออก, Delete ลบ, Clear ล้าง).
+
+### 11.5 Placeholders and counts
+
+- `{name}` is copied verbatim, placed in Thai order, with one space on each
+  side except next to `( ) : “ ” /` or the edge of the value.
+- **No plural forms**: `Intl.PluralRules('th')` selects `other`, and the
+  `one` row repeats it.
+- **Counts**: number + classifier. In labels a noun that is its own
+  classifier follows the number ({count} ระเบียน, {count} ไฟล์); in sentences
+  the noun comes first (ฟีเจอร์ {count} รายการ, สี {count} สี). รายการ counts
+  features, entries, matches, rules and issues. An ordinal is ที่ + number.
+- Examples:
+  1. `{count} record` → {count} ระเบียน
+  2. `{count} feature` → ฟีเจอร์ {count} รายการ
+  3. `{count} gene pair` → ยีน {count} คู่
+  4. `{current} of {count} match` → รายการที่ {current} จาก {count}
+  5. `Keep your {count} changed color from the "{palette}" palette ({keys})?`
+     → เก็บสีที่เปลี่ยนแปลง {count} สีจากชุดสี “{palette}” ({keys}) ไว้หรือไม่
+
+### 11.6 Length
+
+- Thai rarely widens a label: in Chromium EN→TH the median rendered width is
+  0.85–0.92× the English. The risk is a short label whose English word
+  becomes a phrase: Legend → คำอธิบายสัญลักษณ์, Preset → ค่าที่ตั้งไว้ล่วงหน้า
+  (about 2.4×).
+- **Code points overstate width**: about a fifth of Thai code points are
+  zero-width marks (ค่าที่ตั้งไว้ล่วงหน้า: 21 code points, 13 base glyphs).
+  Measure, or count base glyphs; never apply CJK character limits. Thai
+  needs about 150% of the Latin line height.
+- **Rail** (52 px buttons): rail names are 12 px and may take two lines; the
+  entry grows to fit. แบบอักษร, คำอธิบาย, ป้ายกำกับ and GC / skew take two lines
+  and fit the entry at 1,024 and 1,280 px (Chromium on Linux, Loma), so ฟอนต์
+  and ป้าย are not used. Compare is เทียบ, not เปรียบเทียบ. The inline button
+  รีเซ็ตตำแหน่งเริ่มแสดงผล (Reset start) keeps the glossary form.
+- **Header buttons** come out narrower than English: สร้างแผนภาพ is 72 px
+  against 105 px for Generate Diagram.
+- **Short forms** (the glossary's "long / short" cells) go on buttons, the
+  rail and option rows: คำอธิบาย, พรีเซ็ต. Titles and help use the long form.
+
+### 11.7 Machine checks
+
+The rule lists live in `tests/web/i18n-lint/th.tsv` and run in
+`tests/web/i18n-catalogs.test.mjs` on every catalog value, never on the
+key, after each `{name}` placeholder is masked (as `{X}`); `error`
+fails the test and `warn` is printed. Each rule flags:
+
+- `th-final-period` (error): a value ends with a period right after a Thai letter.
+- `th-period` (warn): a period ends a Thai sentence inside a value, or ends a Thai value after a Latin word.
+- `th-thai-digit` (error): a Thai digit ๐–๙.
+- `th-comma-thai` (error): a comma between two Thai words.
+- `th-comma-after-thai` (warn): any other comma right after a Thai letter.
+- `th-space-thai-latin` (error): a Thai letter directly before a Latin letter, a digit or `{`.
+- `th-space-latin-thai` (error): a Latin letter, a digit, `%` or `}` directly before a Thai letter.
+- `th-translit-tone` (error): a tone-marked transliteration (…ชั่น, แกลเลอรี่, ลิ้งค์, คลิ้ก, ไอค่อน).
+- `th-translit-spelling` (error): a transliteration spelled against Google (อัพ…, อัปเดท, เลย์เอาท์, ไฮไลท์).
+- `th-coinage` (error): a banned coinage or known mistranslation (ค่าโดยปริยาย, บรรณนิทัศน์, เอกลักษณ์, แฟ้ม …).
+- `th-gene-china` (error): จีน, which means China, written for gene.
+- `th-kept-english` (warn): a Thai rendering of a kept-English term, or ฟอนต์ for แบบอักษร.
+- `th-polite` (error): ครับ, ค่ะ or กรุณา.
+- `th-pronoun` (warn): ท่าน, ข้าพเจ้า, กระผม, ดิฉัน or พวกเรา.
+- `th-tone-before-vowel` (error): a tone mark U+0E48–0E4B stored before U+0E31, U+0E34–0E37 or U+0E47.
+- `th-mark-order` (error): any other misordered, doubled or orphaned mark, เเ for แ, or ํา for ำ.
+- `th-maiyamok` (warn): a space before ๆ, or a Thai letter right after it.
+- `th-question-exclaim` (warn): `?` or `!` after Thai text.
+- `th-punct-space` (warn): no space around `( )` between Thai words, a space before a colon or `…`, or none after a colon.
+- `th-foreign-script` (error): Arabic, Devanagari, Lao, Myanmar, Khmer, CJK, kana, Hangul or full-width letters.
+- `th-ellipsis` (error): three periods instead of `…`.
+- `th-quotes` (warn): an ASCII quote instead of “ ” or ‘ ’.
+- `th-long-run` (warn): 60 or more Thai characters without a space.
+- `th-whitespace` (warn): a leading, trailing or doubled space, or NBSP, ZWSP, ZWNJ, ZWJ, WJ or BOM.

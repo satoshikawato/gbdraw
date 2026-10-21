@@ -1,0 +1,25 @@
+id	regex	flags	message	severity
+th-final-period	[ก-ฮะ-ฺเ-ๅ็-๎]\.$	u	Sentence-final period after Thai text: delete the period; Thai sentences end without punctuation (D-07).	error
+th-period	[ก-ฮะ-ฺเ-ๅ็-๎]\.(?=\s)|^(?=[\s\S]*[ก-ฮะ-ฺเ-ๅ็-๎])[\s\S]*[A-Za-z0-9)}”]\.$	u	Period ending a Thai sentence inside the value, or ending a Thai value after a Latin word: separate sentences with one space and drop the period.	warn
+th-thai-digit	[๐-๙]	u	Thai digit: write ASCII digits 0-9 (D-04).	error
+th-comma-thai	[ก-ฮะ-ฺเ-ๅ็-๎],\s?[ก-ฮะ-ฺเ-ๅ็-๎]	u	Comma between Thai words: Thai separates clauses and list items with one space, with และ / หรือ before the last item.	error
+th-comma-after-thai	[ก-ฮะ-ฺเ-ๅ็-๎],(?!\s?[ก-ฮะ-ฺเ-ๅ็-๎])	u	Comma after Thai text: drop it and separate with one space.	warn
+th-space-thai-latin	[ก-ฮะ-ฺเ-ๅ็-๎][A-Za-z0-9{]	u	Thai letter directly before a Latin letter, a digit or a {placeholder}: insert one space (ปริมาณ GC, ไฟล์ {name}).	error
+th-space-latin-thai	[A-Za-z0-9}%][ก-ฮะ-ฺเ-ๅ็-๎]	u	Latin letter, digit, % or {placeholder} directly before a Thai letter: insert one space ({count} ระเบียน, 35% ของ).	error
+th-translit-tone	ชั่น|แกลเลอรี่|โฮสติ้ง|ลิ้งค์|ลิ้งก์|คลิ้ก|คลิ๊ก|ไอค่อน|เซ็ตติ้ง	u	Tone-marked transliteration: write it without the tone mark, as Google does (เซสชัน, เวอร์ชัน, แกลเลอรี, ลิงก์, คลิก, ไอคอน, การโฮสต์, การตั้งค่า).	error
+th-translit-spelling	อัพ|อัปเดท|เลย์เอาท์|ไฮไลท์|รีเซ็ท|พรีเซ็ท|ลิงค์|เว็บไซท์|ซอฟท์แวร์|อีเมล์|บราวเซอร์|เบราเซอร์|อินเตอร์|แท็ค|บุ๊คมาร์ค|เทมเพลท|แพ็คเกจ|แพคเกจ	u	Transliteration spelled against the Google corpus: write อัปโหลด, อัปเดต, เลย์เอาต์, ไฮไลต์, รีเซ็ต, พรีเซ็ต, ลิงก์, เว็บไซต์, ซอฟต์แวร์, อีเมล, เบราว์เซอร์, อินเทอร์-, แท็ก, บุ๊กมาร์ก, เทมเพลต, แพ็กเกจ.	error
+th-coinage	ค่าโดยปริยาย|บรรณนิทัศน์|เอกลักษณ์|ปรับแนว|ภูมิภาค|บรรจุลง|บรรจุขึ้น|แฟ้ม|ช่วงเวลาสื่อสาร|สายโยงใย|โปรแกรมค้นดู|จุดตั้งระยะ|ทำกลับ|อินทรีย์|ยีโนม|เลขทะเบียน|ข้อความบอกขนาด	u	Official coinage or known mistranslation the field does not use (study §2(b) traps): default ค่าเริ่มต้น, annotation แอนโนเทชัน, identity identity / ข้อมูลระบุ, alignment การเทียบลำดับ / การจัดแนว, region บริเวณ, download / upload ดาวน์โหลด / อัปโหลด, file ไฟล์, session เซสชัน, thread เธรด, browser เบราว์เซอร์, tab แท็บ, undo เลิกทำ, organism สิ่งมีชีวิต, genome จีโนม, accession หมายเลข accession, legend คำอธิบายสัญลักษณ์.	error
+th-gene-china	จีน	u	จีน means China (the medical coinage for gene): write ยีน.	error
+th-kept-english	คะแนนบิต|ควอลิไฟเออร์|ข้อคำถาม|ลำดับค้นหา|ลำดับเป้าหมาย|ความเบ้|ออร์โธกรุ๊ป|ฮิต|คัฟเวอเรจ|ฟอนต์	u	Not the glossary word: Bitscore, qualifier, Query, Subject, skew, orthogroup, hit and coverage stay in English (D-08); Font is แบบอักษร.	warn
+th-polite	ครับ|ค่ะ|กรุณา	u	Polite particle or กรุณา: the UI uses no ครับ / ค่ะ, and "please" is โปรด, at most once per message.	error
+th-pronoun	(?<!เ)ท่าน|ข้าพเจ้า|กระผม|ดิฉัน|พวกเรา	u	Pronoun the UI does not use: leave the subject out, or write คุณ for the user and ระบบ for the app.	warn
+th-tone-before-vowel	[่-๋][ัิ-ื็]	u	Tone mark stored before an above vowel or mai taikhu: store the vowel first, then the tone mark (ตั้ง is ต + ั + ้ + ง).	error
+th-mark-order	[่-์][ุ-ฺ]|ำ[่-์]|[่-์]{2}|[ัิ-ื็]{2}|[ุ-ฺ]{2}|เเ|ํา|(?:^|[^ก-ฮัิ-ฺ็-๎])[ัิ-ฺ็-๎]	u	Thai marks in the wrong order, doubled or orphaned: below vowel before the tone mark (ปู่), tone mark before SARA AM (น้ำ), แ not เเ, ำ not ํา, and every mark on a consonant.	error
+th-maiyamok	 ๆ|ๆ[ก-ฮะ-ฺเ-ๅ็-๎]	u	Mai yamok ๆ attaches to the word it repeats and takes one space after it (ต่างๆ ที่).	warn
+th-question-exclaim	[ก-ฮะ-ฺเ-ๅ็-๎]\s?[?!]	u	Question or exclamation mark after Thai: end a question with หรือไม่ and no mark; do not use !	warn
+th-punct-space	[ก-ฮะ-ฺเ-ๅ็-๎]\(|\)[ก-ฮะ-ฺเ-ๅ็-๎]|[ก-ฮะ-ฺเ-ๅ็-๎]\s:|:[ก-ฮะ-ฺเ-ๅ็-๎]|[ก-ฮะ-ฺเ-ๅ็-๎]\s…	u	Spacing around ( ) : …: one space before ( and after ) between Thai words; a colon attaches to its label and takes one space after it; … attaches to the word before it.	warn
+th-foreign-script	[؀-ۿऀ-ॿ຀-໿က-႟ក-៿぀-ヿ㐀-䶿一-鿿가-힯豈-﫿！-｠]	u	Letters of another script (Arabic, Devanagari, Lao, Myanmar, Khmer, CJK, kana, Hangul, full-width forms) in a Thai value: a model token leak; rewrite in Thai.	error
+th-ellipsis	\.\.\.	u	Three periods: write one … (U+2026) attached to the word before it (STYLE §1.2).	error
+th-quotes	["']	u	ASCII quote in a Thai value: use “ ” (nested ‘ ’).	warn
+th-long-run	[ก-๎]{60,}	u	60 or more Thai characters without a space: put a phrase space where a clause ends so the reader can parse it and the line can wrap.	warn
+th-whitespace	^\s|\s$|\s{2,}|[ ​-‍⁠﻿]	u	Leading, trailing or doubled space, or an invisible character (NBSP, ZWSP, ZWNJ, ZWJ, WJ, BOM): use single ordinary spaces only.	warn

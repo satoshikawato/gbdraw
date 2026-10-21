@@ -489,6 +489,79 @@ test('every catalog matches the keys and placeholders of the sources', async () 
   console.log(`${english.size} keys in the sources; catalogs: ${catalogFiles().join(', ') || 'none'}`);
 });
 
+// A locale's lint list (tests/web/i18n-lint/<locale>.tsv, docs/internal/I18N_STYLE.md):
+// patterns of its style and glossary rules that a translation must not match.
+const lintRoot = join(process.cwd(), 'tests', 'web', 'i18n-lint');
+const LINT_COLUMNS = 'id\tregex\tflags\tmessage\tseverity';
+
+/**
+ * One row of a lint list: an `error` match fails the catalog test, a `warn` match is printed.
+ * @typedef {object} LintRule
+ * @property {string} id
+ * @property {RegExp} pattern the `regex` and `flags` columns
+ * @property {string} message
+ * @property {'error' | 'warn'} severity
+ */
+/**
+ * A value of a catalog that a lint rule matches.
+ * @typedef {object} LintMatch
+ * @property {LintRule} rule
+ * @property {string} key
+ * @property {string} value
+ */
+
+/**
+ * @param {string} text the TSV: the header row, then one rule per row
+ * @returns {LintRule[]}
+ */
+const parseLintRules = (text) => {
+  const [header, ...rows] = text.split('\n').filter((line) => line !== '');
+  assert.equal(header, LINT_COLUMNS);
+  return rows.map((row) => {
+    const cells = row.split('\t');
+    assert.equal(cells.length, 5, row);
+    const [id, regex, flags, message, severity] = cells;
+    assert.ok(severity === 'error' || severity === 'warn', `${id}: severity ${severity}`);
+    return { id, pattern: new RegExp(regex, flags), message, severity };
+  });
+};
+
+/**
+ * Every value that a rule matches, with each `{name}` placeholder masked as
+ * `{X}` first: a rule reads the translation, never the placeholder names.
+ * @param {readonly LintRule[]} rules
+ * @param {Readonly<Record<string, string>>} catalog
+ * @returns {LintMatch[]}
+ */
+const lintMatches = (rules, catalog) => Object.entries(catalog).flatMap(([key, value]) => {
+  const masked = value.replace(PLACEHOLDER, '{X}');
+  return rules.filter((rule) => rule.pattern.test(masked)).map((rule) => ({ rule, key, value }));
+});
+
+test('lint check: placeholder names are masked; a match reports its rule and key', () => {
+  const rules = parseLintRules(`${LINT_COLUMNS}\nx-upload\t\\bupload\\b\tui\tWrite Unggah.\terror\nx-dots\t\\.\\.\\.\tu\tWrite one ….\twarn\n`);
+  assert.deepEqual(lintMatches(rules, { 'Upload {upload}': 'Unggah {upload}', 'Upload': 'Upload', 'Wait...': 'Tunggu...' })
+    .map(({ rule, key }) => [rule.id, rule.severity, key]), [['x-upload', 'error', 'Upload'], ['x-dots', 'warn', 'Wait...']]);
+  assert.throws(() => parseLintRules('id\tregex\n'));
+  assert.throws(() => parseLintRules(`${LINT_COLUMNS}\nx\ta\tu\tm\tinfo\n`));
+});
+
+test('every catalog with a lint list matches none of its error rules', async () => {
+  const lists = readdirSync(lintRoot).filter((name) => name.endsWith('.tsv')).sort();
+  assert.ok(lists.length > 0);
+  for (const list of lists) {
+    const locale = list.slice(0, -'.tsv'.length);
+    assert.ok(catalogFiles().includes(`${locale}.js`), `${list} names a catalog`);
+    const rules = parseLintRules(readFileSync(join(lintRoot, list), 'utf8'));
+    assert.equal(new Set(rules.map(({ id }) => id)).size, rules.length, `${list}: rule ids are unique`);
+    const { default: catalog } = await import(pathToFileURL(join(catalogRoot, `${locale}.js`)).href);
+    const matches = lintMatches(rules, catalog);
+    const format = ({ rule, key, value }) => `${locale} ${rule.id} ${JSON.stringify(key)} -> ${JSON.stringify(value)}: ${rule.message}`;
+    for (const match of matches.filter(({ rule }) => rule.severity === 'warn')) console.log(`warn: ${format(match)}`);
+    assert.deepEqual(matches.filter(({ rule }) => rule.severity === 'error').map(format), [], list);
+  }
+});
+
 test('English passes through with its placeholders filled', () => {
   assert.equal(uiLocale.value, SOURCE_LOCALE);
   assert.equal(t('Save Session'), 'Save Session');
@@ -609,14 +682,14 @@ test('OV-1387: the Record Size Mode option Linear is its own key; the diagram mo
   assert.match(html, /@click="setDiagramMode\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
 });
 
-test('the UI languages are the eight of the Language menu, Latin script first, each named in itself', () => {
+test('the UI languages are the eleven of the Language menu, Latin script first, then Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
-    ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],
-    ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
+    ['en', 'English'], ['id', 'Bahasa Indonesia'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],
+    ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
-  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'de', null, undefined, 3, '../x']) {
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
 });
@@ -626,11 +699,11 @@ test('a locale outside the UI languages is refused', async () => {
   assert.equal(uiLocale.value, SOURCE_LOCALE);
 });
 
-test('two sentences are joined with a space in English, Spanish, French, Portuguese and Korean and with nothing in Japanese and Chinese', async () => {
+test('two sentences are joined with a space in English, the other Latin-script languages, Thai and Korean and with nothing in Japanese and Chinese', async () => {
   assert.equal(sentenceSeparator(), ' ');
   assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
   try {
-    for (const tag of ['es', 'fr', 'pt', 'ko']) {
+    for (const tag of ['id', 'es', 'fr', 'pt', 'vi', 'th', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.equal(sentenceSeparator(), ' ', tag);
       assert.equal(joinSentences('A.', 'B.'), 'A. B.', tag);
@@ -652,13 +725,18 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
   assert.equal(listText(['A', 'B', 'C']), 'A, B, and C');
   assert.equal(listText(['A', 'B', 'C', '2 more']), 'A, B, C, and 2 more');
   try {
-    for (const tag of ['es', 'fr', 'pt', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
+    for (const tag of ['id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
       assert.equal(listText(['A']), 'A', tag);
       assert.equal(listText(['A', 'B']), expected.format(['A', 'B']), tag);
       assert.equal(listText(['A', 'B', 'C']), expected.format(['A', 'B', 'C']), tag);
       assert.doesNotMatch(listText(['A', 'B', 'C']), /\band\b/, tag);
+    }
+    // Thai separates the items with spaces and no comma, and writes และ against the last one (STYLE 11.3).
+    for (const [tag, two, three] of [['id', 'A dan B', 'A, B, dan C'], ['vi', 'A và B', 'A, B và C'], ['th', 'AและB', 'A B และC']]) {
+      await setUiLocale(tag, async () => ({ default: {} }));
+      assert.deepEqual([listText(['A', 'B']), listText(['A', 'B', 'C'])], [two, three], tag);
     }
   } finally {
     await setUiLocale(SOURCE_LOCALE);
@@ -697,7 +775,11 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
       ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],
-      ['ko', ['other:0', 'other:1', 'other:2', 'other:1000000']]
+      ['ko', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      // Indonesian, Vietnamese and Thai have no plural forms; their `one` rows repeat the `other` text.
+      ['id', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      ['vi', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      ['th', ['other:0', 'other:1', 'other:2', 'other:1000000']]
     ]) {
       await setUiLocale(tag, async () => ({ default: catalog }));
       assert.deepEqual(forms([0, 1, 2, 1000000]), expected, tag);
