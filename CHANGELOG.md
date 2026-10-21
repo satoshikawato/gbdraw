@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
+
+- Added circular-record display-start rotation and manual feature lane placement.
+- Improved Run Info / Exact replay, Save Session resource preservation, preview
+  navigation, and Generate processing-stage feedback.
+- Includes the beta's package-root Python API and current session/request
+  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
 - Feature label style (CLI, Python, web app): a feature label with a leader
   line has a line setting and a protection setting per diagram mode,
   `--label_line {none,under}` and `--label_protection {none,halo,box}`
@@ -87,14 +94,33 @@ write-up of a release.
   before. A GC% track beside a depth axis reserves vertical room for its tick
   labels at the size they are drawn, the depth axis font size, so such
   figures can change height by about a pixel.
-
-## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
-
-- Added circular-record display-start rotation and manual feature lane placement.
-- Improved Run Info / Exact replay, Save Session resource preservation, preview
-  navigation, and Generate processing-stage feedback.
-- Includes the beta's package-root Python API and current session/request
-  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
+- Web app: a header **Language** menu switches the interface text at once,
+  without a reload, between English, Bahasa Indonesia, Español, Français,
+  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어. English is
+  shown on a first visit whatever the browser's language; the choice is kept
+  per browser and is not part of the Session, History, or any export. The
+  figure, every export, and the Session are the same in every language, and
+  numbers keep the English format. Warnings from Python, the Gallery tutorials,
+  and the documentation stay English. The translations are drafted and checked
+  without a native-speaker reviewer, so some wording may be corrected later.
+- Circular labels keep the features' order across the origin (the seam of the
+  circle), outer and inner, so fewer leaders cross and inner labels stay in
+  order. Some figures that stopped with "labels do not fit" now draw.
+- Circular region labels that lie on a track with a set radius (`r=`) are
+  reported in the label warning ("N region labels on other tracks"); the figure
+  is unchanged.
+- Web app, Legend: a Legend row of color None shows an empty struck-through
+  swatch and **None** in the Legend drawer and the Legend item popup, and later
+  live color edits of such a row no longer fail (OV-1385, OV-1386).
+- Web app, History: the notice about discarded Undo history appears only when
+  the memory limit drops steps, not for the routine 30-step window.
+- Web app: **Undo** and **Redo** are disabled while their mode-switch step
+  waits for a label rerender or **Generate Diagram**, instead of a click that
+  does nothing.
+- A CLI Session records `--label_blacklist` as keywords, not as a Blacklist
+  File; older CLI Sessions keep their binding.
+- Documentation: the GUI images, the `examples/` figures, and the Gallery
+  tutorial media were retaken for the feature label style.
 - See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
