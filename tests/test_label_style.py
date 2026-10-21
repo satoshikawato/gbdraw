@@ -122,7 +122,7 @@ def test_each_leader_keeps_its_own_width_clear_in_a_figure_with_two_label_sizes(
     style = FeatureLabelStyle(line="none", protection="none")
     leaders = {
         obstacle.owner[2]: obstacle.box.max_x - obstacle.box.min_x
-        for obstacle in linear_feature_label_obstacles([big, small], SimpleNamespace(slots=()), 0, label_style=style)
+        for obstacle in linear_feature_label_obstacles([big, small], SimpleNamespace(slots=(), features_origin_y=0.0), 0, label_style=style)
         if obstacle.leader
     }
     assert leaders == {0: pytest.approx(1.68), 1: pytest.approx(1.0)}
@@ -165,7 +165,7 @@ def test_only_a_horizontal_label_gets_the_underline_and_its_obstacles_agree() ->
     assert ink.underline is None and ink.underline_box is None
     assert ink == linear_label_ink(turned, leader, plain)
     assert feature_label_drawn_parts(ink, under) == feature_label_drawn_parts(ink, plain)
-    plan = SimpleNamespace(slots=())
+    plan = SimpleNamespace(slots=(), features_origin_y=0.0)
     assert linear_feature_label_obstacles([turned], plan, 0, label_style=under) == linear_feature_label_obstacles(
         [turned], plan, 0, label_style=plain
     )

@@ -150,6 +150,7 @@ from ...layout.scalar_axis import (
     scalar_axis_tick_values,
 )
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
+from ...labels.linear_types import LinearLabel
 from ...labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
     FeatureLabelRows,
@@ -853,7 +854,7 @@ def _linear_slot_footprints_for_record(
     layout: LinearTrackLayout,
     feature_dict: FeatureDict,
     feature_geometry: LinearFeatureLaneGeometry,
-    labels: list[dict],
+    labels: list[LinearLabel],
     canvas_config: LinearCanvasConfigurator,
     gc_config_of: LinearGcConfigOf,
     skew_config: GcSkewConfigurator,
@@ -1185,7 +1186,7 @@ def _build_linear_record_vertical_plans(
     layout: LinearTrackLayout,
     feature_dicts: list[FeatureDict],
     feature_geometries: list[LinearFeatureLaneGeometry],
-    labels_by_record: list[list[dict]],
+    labels_by_record: list[list[LinearLabel]],
     canvas_config: LinearCanvasConfigurator,
     gc_config_of: LinearGcConfigOf,
     skew_config: GcSkewConfigurator,
@@ -1673,7 +1674,7 @@ def _place_linear_annotation_labels_by_record(
     placements: Mapping[int, LinearRecordPlacement],
     plans: Sequence[LinearRecordVerticalPlan],
     collision_bands: Sequence[tuple[CollisionBand, ...]],
-    feature_labels: list[list[dict]],
+    feature_labels: list[list[LinearLabel]],
     feature_dicts: Sequence[FeatureDict],
     feature_geometries: Sequence[LinearFeatureLaneGeometry],
     separate_strands: bool,
@@ -1684,7 +1685,7 @@ def _place_linear_annotation_labels_by_record(
     gap: float,
     new_rows: bool,
     label_frames: Sequence[LinearLabelFrame] | None,
-) -> tuple[list[PlacedAnnotationLabels], list[list[dict]]]:
+) -> tuple[list[PlacedAnnotationLabels], list[list[LinearLabel]]]:
     """Each record's annotation labels, placed along their spans in record order, and every
     record's feature labels after the moves made for them (LP-D82), which the label fit of their
     row (``label_frames``, as ``linear_label_fit`` reads them) counts no larger.
@@ -1697,7 +1698,7 @@ def _place_linear_annotation_labels_by_record(
     The record's feature glyphs bound the empty area inside a filled mark (LP-D75).
     """
 
-    def labels_of(index: int) -> list[dict]:
+    def labels_of(index: int) -> list[LinearLabel]:
         # Read when used: an earlier record's region labels may have moved its feature labels.
         return feature_labels[index] if index < len(feature_labels) else []
 
@@ -1764,7 +1765,7 @@ def _collect_linear_primary_bounds(
     record_placements: dict[int, LinearRecordPlacement],
     record_plans: list[LinearRecordVerticalPlan],
     record_collision_bands: list[tuple[CollisionBand, ...]],
-    labels_by_record: list[list[dict]],
+    labels_by_record: list[list[LinearLabel]],
     record_scalar_axis_rooms: Sequence[LinearScalarAxisLeftRoom],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_labels_by_record: Sequence[AnnotationLabelsBySlot],
@@ -1835,17 +1836,15 @@ def _collect_linear_primary_bounds(
                     placement.axis_y + feature_origin_y + bottom,
                 )
             )
-            leader_points = [
-                (
-                    float(label[name_x]),
-                    float(label[name_y]),
-                )
-                for name_x, name_y in (
-                    ("leader_start_x", "leader_start_y"),
-                    ("leader_end_x", "leader_end_y"),
-                )
-                if label.get(name_x) is not None and label.get(name_y) is not None
-            ]
+            # An ``above_feature`` label carries both ends of its leader.
+            leader_points = (
+                [
+                    (float(label["leader_start_x"]), float(label["leader_start_y"])),
+                    (float(label["leader_end_x"]), float(label["leader_end_y"])),
+                ]
+                if "leader_start_x" in label
+                else []
+            )
             if leader_points:
                 label_half_stroke = 0.5 * label_leader_width_px(label)
                 bounds.append(

@@ -19,7 +19,7 @@ feature) draws no line and stops ``GAP_STOP_EM`` above the letters.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ..core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink_offsets
@@ -27,6 +27,7 @@ from ..layout.spatial import Aabb
 from ..layout.text_geometry import Point, TextAnchor, normalize_text_anchor
 from .circular_leaders import leader_polyline, rim_text_placement
 from .circular_types import CircularLabel
+from .linear_types import LinearLabel, is_above_feature_label
 from .label_style import GAP_STOP_EM, UNDERLINE_GAP_EM, UNDERLINE_TRIM_EM, FeatureLabelStyle, leader_width_px
 
 
@@ -191,24 +192,24 @@ def feature_label_ink(
     )
 
 
-def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], style: FeatureLabelStyle) -> FeatureLabelInk:
+def linear_label_ink(label: LinearLabel, leader: Sequence[Point], style: FeatureLabelStyle) -> FeatureLabelInk:
     """A drawn Linear feature label (``dominant-baseline=central``); turned when given a rotation. A label
     drawn on its feature without a leader (``above_feature``) faces the feature edge its contact starts at."""
 
-    rotation_deg = float(str(label.get("rotation_deg", 0.0)))
-    beside_feature = not leader and "above_feature_place_above" in label
+    rotation_deg = float(label["rotation_deg"])
+    beside_feature = not leader and is_above_feature_label(label)
     return feature_label_ink(
-        str(label["label_text"]),
-        str(label["font_family"]),
-        float(str(label["font_size"])),
-        at=(float(str(label["middle_x"])), float(str(label["middle_y"]))),
-        anchor=normalize_text_anchor(label.get("text_anchor", "middle")),
+        label["label_text"],
+        label["font_family"],
+        float(label["font_size"]),
+        at=(float(label["middle_x"]), float(label["middle_y"])),
+        anchor=normalize_text_anchor(label["text_anchor"]),
         dominant_baseline="central",
         rotation_deg=rotation_deg,
         turned=rotation_deg % 360.0 != 0.0,
         leader=leader,
         style=style,
-        feature_edge_y=float(str(label["leader_start_y"])) if beside_feature else None,
+        feature_edge_y=float(label["leader_start_y"]) if beside_feature else None,
     )
 
 

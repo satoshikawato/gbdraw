@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from collections import Counter
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Line, Rect, Text
@@ -16,6 +16,7 @@ from ...drawers.linear.labels import LabelDrawer
 from ....labels.label_ink import linear_label_ink
 from ....labels.label_style import label_leader_width_px
 from ....labels.linear import linear_leader_polyline, linear_record_labels, place_linear_label_row
+from ....labels.linear_types import LinearLabel
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
@@ -59,7 +60,7 @@ class SeqRecordGroup:
         feature_track_layout: LinearFeatureTrackLayout,
         axis_ruler_enabled: bool,
         feature_dom_index: LinearFeatureDomIndex,
-        precalculated_labels: Optional[list] = None,
+        precalculated_labels: list[LinearLabel] | None = None,
         draw_features: bool = True,
         label_font_size: float | None = None,
         orthogroup_label_member_ids: set[str | int] | None = None,
@@ -209,7 +210,7 @@ class SeqRecordGroup:
         bind_label_part(part, feature_id)
         return part
 
-    def _label_style_parts(self, label: dict, leader: tuple[tuple[float, float], ...]) -> _LabelParts:
+    def _label_style_parts(self, label: LinearLabel, leader: tuple[tuple[float, float], ...]) -> _LabelParts:
         """A label's drawn parts in the style of its mode (``FeatureLabelStyle``)."""
 
         style = self.profile.label_style
@@ -317,7 +318,7 @@ class SeqRecordGroup:
         separate_strands: bool,
         arrow_length: float,
         group: Group,
-        label_list: list,
+        label_list: list[LinearLabel],
     ) -> Group:
         """Draws the genomic features onto the provided SVG group."""
         bar_length: float = alignment_width
@@ -335,11 +336,13 @@ class SeqRecordGroup:
         # copy: the prepared labels are this content's arguments.
         styled: list[_LabelParts] = []
         if self.show_labels and self.draw_features_enabled:
-            bound_labels = []
+            bound_labels: list[LinearLabel] = []
             for label in label_list:
-                source_feature_index = label.get("source_feature_index")
-                feature_id = self.feature_dom_index.by_source_index.get(
-                    (self.record_index, source_feature_index)
+                source_feature_index = label["source_feature_index"]
+                feature_id = (
+                    None
+                    if source_feature_index is None
+                    else self.feature_dom_index.by_source_index.get((self.record_index, source_feature_index))
                 )
                 if not feature_id:
                     raise ValueError(
@@ -443,7 +446,7 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         feature_dict = self.feature_layers.foreground_features
-        label_list = []
+        label_list: list[LinearLabel] = []
         if self.show_labels and self.draw_features_enabled:
             if self.precalculated_labels is not None:
                 label_list = self.precalculated_labels

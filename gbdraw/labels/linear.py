@@ -13,6 +13,7 @@ from .coordinates import display_label_segment
 
 from .filtering import get_label_text, label_filter_maps
 from .label_style import ROW_LABEL_GAP_EM
+from .linear_types import LinearLabel, is_above_feature_label
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
@@ -55,24 +56,24 @@ from .fit import (
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
-def _row_label_margin_px(label: Mapping[str, Any]) -> float:
+def _row_label_margin_px(label: LinearLabel) -> float:
     """The room a label keeps free at both ends of its text in its label row: half of
     ``ROW_LABEL_GAP_EM`` of its own font size, so neighbours on one line keep the gap between them
     (LP-D104), horizontal or turned. The rows are the auto rows and the rows ``above_feature``
     labels stack in; a label drawn inside its feature is in no row."""
 
-    if label.get("is_embedded") and "above_feature_place_above" not in label:
+    if label["is_embedded"] and not is_above_feature_label(label):
         return 0.0
-    return 0.5 * ROW_LABEL_GAP_EM * float(label["font_size"])
+    return 0.5 * ROW_LABEL_GAP_EM * label["font_size"]
 
 
-def check_label_overlap(label1, label2):
+def check_label_overlap(label1: LinearLabel, label2: LinearLabel) -> bool:
     """Check if two labels overlap horizontally, with the room each keeps beside it in its row"""
     margin1, margin2 = _row_label_margin_px(label1), _row_label_margin_px(label2)
     return not (label1["end"] + margin1 < label2["start"] - margin2 or label2["end"] + margin2 < label1["start"] - margin1)
 
 
-def find_lowest_available_track(track_dict, label):
+def find_lowest_available_track(track_dict: Mapping[str, Sequence[LinearLabel]], label: LinearLabel) -> int:
     """Find the lowest track (closest to track_1) where the label can be placed without overlap"""
     track_num = 1
     while True:
@@ -90,7 +91,7 @@ def find_lowest_available_track(track_dict, label):
         track_num += 1
 
 
-def _linear_label_interval(label: dict) -> Interval:
+def _linear_label_interval(label: LinearLabel) -> Interval:
     margin = _row_label_margin_px(label)
     return Interval(float(label["start"]) - margin, float(label["end"]) + margin)
 
@@ -99,21 +100,21 @@ def _external_label_bucket_size(alignment_width: float) -> float:
     return max(16.0, float(alignment_width) / 256.0)
 
 
-def _above_feature_label_bucket_size(labels: list[dict], min_gap_px: float) -> float:
+def _above_feature_label_bucket_size(labels: list[LinearLabel], min_gap_px: float) -> float:
     """Bucket width of the above-feature broad phase on x: a few label heights.
 
     A bucket sized by the widest label puts most of a dense record in a few
     buckets, which made the collision pass quadratic (OV-695).
     """
-    max_height = max((float(label.get("height_px", 0.0)) for label in labels), default=0.0)
+    max_height = max((float(label["height_px"]) for label in labels), default=0.0)
     return max(16.0, 4.0 * max_height + float(min_gap_px))
 
 
 def _find_lowest_available_track_indexed(
-    track_dict: dict,
+    track_dict: Mapping[str, Sequence[LinearLabel]],
     track_indexes: dict[str, IntervalIndex],
-    label_by_id: dict[int, dict],
-    label: dict,
+    label_by_id: dict[int, LinearLabel],
+    label: LinearLabel,
     blocked: Callable[[int], bool] | None = None,
 ) -> int:
     """Find the lowest non-overlapping external label track using index candidates, skipping the
@@ -144,7 +145,7 @@ def _insert_external_label_index(
     track_indexes: dict[str, IntervalIndex],
     track_id: str,
     label_id: int,
-    label: dict,
+    label: LinearLabel,
     bucket_size: float,
 ) -> None:
     index = track_indexes.setdefault(track_id, IntervalIndex(bucket_size=bucket_size))
@@ -198,12 +199,12 @@ def _rotated_extreme_y_point_from_anchor(
     return max(points, key=lambda point: point[1]) if choose_max else min(points, key=lambda point: point[1])
 
 
-def calculate_label_bounds(label: dict) -> tuple[float, float, float, float]:
+def calculate_label_bounds(label: LinearLabel) -> tuple[float, float, float, float]:
     """Return absolute left/right/top/bottom coordinates for a label after rotation."""
     width_px = float(label["width_px"])
     height_px = float(label["height_px"])
-    rotation_deg = float(label.get("rotation_deg", 0.0))
-    text_anchor = str(label.get("text_anchor", "middle"))
+    rotation_deg = float(label["rotation_deg"])
+    text_anchor = label["text_anchor"]
     middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"])
     if rotation_deg == 0.0:
@@ -229,19 +230,19 @@ def calculate_label_bounds(label: dict) -> tuple[float, float, float, float]:
     )
 
 
-def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
+def calculate_label_y_bounds(label: LinearLabel) -> tuple[float, float]:
     """Return absolute top/bottom y coordinates for a label after rotation."""
     _, _, top_y, bottom_y = calculate_label_bounds(label)
     return top_y, bottom_y
 
 
-def _label_covers_keep_clear(label: Mapping[str, object], boxes: Sequence[Aabb]) -> bool:
+def _label_covers_keep_clear(label: LinearLabel, boxes: Sequence[Aabb]) -> bool:
     """Whether a label's box intersects one of ``boxes`` (in the label's coordinates): the one test of a
     label over the definition text, for the packers and the fit count (OV-1395, OV-1398)."""
 
     if not boxes:
         return False
-    corners = _label_corners(dict(label))
+    corners = _label_corners(label)
     return any(
         convex_polygons_intersect(
             corners,
@@ -252,7 +253,7 @@ def _label_covers_keep_clear(label: Mapping[str, object], boxes: Sequence[Aabb])
     )
 
 
-def _label_corners(label: dict, shift_y: float = 0.0, along_text_px: float = 0.0) -> list[tuple[float, float]]:
+def _label_corners(label: LinearLabel, shift_y: float = 0.0, along_text_px: float = 0.0) -> list[tuple[float, float]]:
     """A label's box moved ``shift_y`` down, with ``along_text_px`` added at both ends of its text."""
 
     middle_x = float(label["middle_x"])
@@ -262,8 +263,8 @@ def _label_corners(label: dict, shift_y: float = 0.0, along_text_px: float = 0.0
             _rotated_corner_offsets(
                 float(label["width_px"]),
                 float(label["height_px"]),
-                float(label.get("rotation_deg", 0.0)),
-                str(label.get("text_anchor", "middle")),
+                float(label["rotation_deg"]),
+                label["text_anchor"],
                 along_text_px,
             ),
             middle_x,
@@ -277,13 +278,13 @@ def _project_polygon(points: Sequence[tuple[float, float]], axis_x: float, axis_
     return min(projections), max(projections)
 
 
-def _rotated_label_rects_intersect(label1: dict, label2: dict, label1_shift_y: float = 0.0) -> bool:
+def _rotated_label_rects_intersect(label1: LinearLabel, label2: LinearLabel, label1_shift_y: float = 0.0) -> bool:
     return _shifted_label_overlaps(label1, _label_corners(label2), label1_shift_y, None, 0.0)
 
 
-def _update_linear_label_leader_end(label: dict) -> None:
-    contact_x_offset = float(label.get("label_contact_x_offset", 0.0))
-    contact_y_offset = float(label.get("label_contact_y_offset", 0.0))
+def _update_linear_label_leader_end(label: LinearLabel) -> None:
+    contact_x_offset = float(label["label_contact_x_offset"])
+    contact_y_offset = float(label["label_contact_y_offset"])
     label["leader_end_x"] = float(label["middle_x"]) + contact_x_offset
     label["leader_end_y"] = float(label["middle_y"]) + contact_y_offset
 
@@ -344,7 +345,7 @@ def _vertical_overlap_shift_range(
 
 
 def _shifted_label_overlaps(
-    label: dict,
+    label: LinearLabel,
     other_corners: Sequence[tuple[float, float]],
     shift: float,
     overlap_range: tuple[float, float] | None,
@@ -368,7 +369,7 @@ def _shifted_label_overlaps(
 
 
 def _vertical_label_shift_to_clear(
-    label: dict,
+    label: LinearLabel,
     other_corners: Sequence[tuple[float, float]],
     overlap_range: tuple[float, float] | None,
     direction: float,
@@ -394,7 +395,7 @@ def _vertical_label_shift_to_clear(
 
 
 def _place_linear_label_without_overlap(
-    label: dict,
+    label: LinearLabel,
     placed_x_index: IntervalIndex,
     placed_by_id: dict[int, _PlacedLinearLabel],
     min_gap_px: float,
@@ -484,7 +485,7 @@ def _place_linear_label_without_overlap(
 
 
 def _resolve_above_feature_label_overlaps(
-    labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()
+    labels: list[LinearLabel], min_gap_px: float, keep_clear: Sequence[Aabb] = ()
 ) -> None:
     """Stack above-feature labels away from the axis when their boxes, each with its row gap along its
     text, collide, and off the ``keep_clear`` boxes (the definition text), which are placed first."""
@@ -492,7 +493,7 @@ def _resolve_above_feature_label_overlaps(
         return
 
     for place_above in (True, False):
-        side_labels = [label for label in labels if bool(label.get("above_feature_place_above", True)) is place_above]
+        side_labels = [label for label in labels if label["above_feature_place_above"] is place_above]
         if not side_labels:
             continue
         placed_by_id: dict[int, _PlacedLinearLabel] = {}
@@ -502,7 +503,7 @@ def _resolve_above_feature_label_overlaps(
             placed_by_id[len(placed_by_id)] = _PlacedLinearLabel(box, corners, keeps_row_gap=False)
             placed_x_index.insert(len(placed_by_id) - 1, Interval(box.min_x, box.max_x))
         direction = -1.0 if place_above else 1.0
-        for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
+        for label in sorted(side_labels, key=lambda item: float(item["feature_anchor_x"])):
             if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
@@ -572,7 +573,7 @@ class LinearRecordLabels(NamedTuple):
     boxes in the labels' record coordinates that no label may cover: the record's definition text
     beside its features (OV-1395)."""
 
-    labels: list[dict]
+    labels: list[LinearLabel]
     top_feature_y: float
     bottom_feature_y: float
     max_label_height: float
@@ -606,7 +607,7 @@ def linear_record_labels(
     anchors the text on (OV-1294).
     """
     cfg = profile.config
-    labels: list[dict] = []
+    labels: list[LinearLabel] = []
     feature_track_positions = {}  # Store feature track positions
     axis_gap_factor = (
         (float(track_axis_gap) / float(cds_height))
@@ -787,8 +788,33 @@ def linear_record_labels(
         feature_top_y = feature_position["top_y"]
         feature_bottom_y = feature_position["bottom_y"]
 
-        # Create base label entry
-        label_entry = {
+        # Where the label is drawn: beside its feature (``above_feature``), inside it, or in a row
+        # placed later (external).
+        if force_above_feature:
+            y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
+                bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
+            )
+            label_vertical_gap = max(1.0, bbox_height_px * 0.05)
+            if is_negative_separate:
+                # Keep rotated label top edge below the feature bottom.
+                label_y = feature_bottom_y + label_vertical_gap - y_min_offset
+                label_leader_start_y = feature_bottom_y
+            else:
+                # Keep rotated label bottom edge above the feature top.
+                label_y = feature_top_y - label_vertical_gap - y_max_offset
+                label_leader_start_y = feature_top_y
+            is_embedded = True
+        elif (
+            label_rendering != "external_only"
+            and bbox_width_px + _EMBEDDED_LABEL_MARGIN_EM * font_size < longest_segment_length_in_pixels
+        ):
+            label_y, is_embedded = feature_y, True
+        elif label_rendering != "embedded_only":
+            label_y, is_embedded = 0, False
+        else:
+            continue
+
+        label_entry: LinearLabel = {
             "label_text": feature_label_text,
             "source_feature_index": feature_object.source_feature_index,
             "middle": label_anchor_x,
@@ -809,29 +835,14 @@ def linear_record_labels(
             "font_family": font_family,
             "rotation_deg": label_rotation_deg,
             "text_anchor": label_text_anchor,
+            "middle_y": label_y,
+            "is_embedded": is_embedded,
         }
-
-        # Determine if label should be embedded
         if force_above_feature:
-            y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
-                bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
-            )
-            label_vertical_gap = max(1.0, bbox_height_px * 0.05)
-            is_negative_separate = label_below_feature
-            if is_negative_separate:
-                # Keep rotated label top edge below the feature bottom.
-                label_y = feature_bottom_y + label_vertical_gap - y_min_offset
-                label_leader_start_y = feature_bottom_y
-            else:
-                # Keep rotated label bottom edge above the feature top.
-                label_y = feature_top_y - label_vertical_gap - y_max_offset
-                label_leader_start_y = feature_top_y
             # A horizontal label moves to the first row off its feature when its row is placed
             # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
             label_entry.update(
                 {
-                    "middle_y": label_y,
-                    "is_embedded": True,
                     "track_id": "track_0",
                     "above_feature_place_above": not is_negative_separate,
                     "label_contact_x_offset": label_contact_x_offset,
@@ -843,16 +854,9 @@ def linear_record_labels(
                     "leader_end_y": label_y + label_contact_y_offset,
                 }
             )
-            labels.append(label_entry)
-        elif (
-            label_rendering != "external_only"
-            and bbox_width_px + _EMBEDDED_LABEL_MARGIN_EM * font_size < longest_segment_length_in_pixels
-        ):
-            label_entry.update({"middle_y": feature_y, "is_embedded": True, "track_id": "track_0"})
-            labels.append(label_entry)
-        elif label_rendering != "embedded_only":
-            label_entry.update({"middle_y": 0, "is_embedded": False})
-            labels.append(label_entry)
+        elif is_embedded:
+            label_entry["track_id"] = "track_0"
+        labels.append(label_entry)
 
     return LinearRecordLabels(
         labels, top_feature_y_limit, bottom_feature_y_limit, max_bbox_height, float(alignment_width)
@@ -864,7 +868,7 @@ def place_linear_label_row(
     *,
     profile: LinearRenderProfile,
     track_layout: str,
-) -> list[list[dict]]:
+) -> list[list[LinearLabel]]:
     """Stack the feature labels of the records in one Linear row, each with the x of its start in the
     row (records in row order), so that no two labels of the row overlap (OV-1188).
 
@@ -889,7 +893,7 @@ def place_linear_label_row(
     # The records' keep-clear boxes (definition text) in row coordinates.
     keep_clear = [box.translated(x, 0.0) for record, x in records for box in record.keep_clear]
 
-    def side(label: Mapping[str, object]) -> tuple[float, float]:
+    def side(label: LinearLabel) -> tuple[float, float]:
         """The origin and pitch of the rows of a label's side."""
 
         if below or label["secondary_below"]:
@@ -898,14 +902,14 @@ def place_linear_label_row(
 
     # The external labels in row coordinates: the packer reads their x span, and their box in a row
     # where a keep-clear box lies (OV-1398).
-    track_dict: defaultdict[str, list[dict]] = defaultdict(list)
+    track_dict: defaultdict[str, list[LinearLabel]] = defaultdict(list)
     track_indexes: dict[str, IntervalIndex] = {}
-    framed_by_id: dict[int, dict] = {}
+    framed_by_id: dict[int, LinearLabel] = {}
     for record, x in records:
         for label in record.labels:
             if label["is_embedded"]:
                 continue
-            framed = {**label, "start": float(label["start"]) + x, "end": float(label["end"]) + x}
+            framed: LinearLabel = {**label, "start": float(label["start"]) + x, "end": float(label["end"]) + x}
             blocked = _keep_clear_rows(label, x, side(label), keep_clear) if keep_clear else None
             track_id = f"track_{_find_lowest_available_track_indexed(track_dict, track_indexes, framed_by_id, framed, blocked)}"
             label["track_id"] = framed["track_id"] = track_id
@@ -917,11 +921,11 @@ def place_linear_label_row(
     if profile.label_placement == "above_feature":
         for record, _x in records:
             for label in record.labels:
-                if float(label["rotation_deg"]) == 0.0:
+                if label["rotation_deg"] == 0.0:
                     _above_feature_label_in_first_row(label, track_height)
         # Every label is at its feature here; the resolver reads their anchor and box x.
         on_features = [(label, x) for record, x in records for label in record.labels]
-        framed_labels = [
+        framed_labels: list[LinearLabel] = [
             {
                 **label,
                 "middle_x": float(label["middle_x"]) + x,
@@ -936,7 +940,7 @@ def place_linear_label_row(
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
 
-    placed: list[list[dict]] = []
+    placed: list[list[LinearLabel]] = []
     for record, _x in records:
         external = sorted(
             (label for label in record.labels if not label["is_embedded"]), key=lambda label: label["track_id"]
@@ -951,12 +955,12 @@ def place_linear_label_row(
 
 
 def _keep_clear_rows(
-    label: Mapping[str, object], x: float, side: tuple[float, float], keep_clear: Sequence[Aabb]
+    label: LinearLabel, x: float, side: tuple[float, float], keep_clear: Sequence[Aabb]
 ) -> Callable[[int], bool]:
     """Whether ``label`` of the record at ``x``, in a row of its ``side`` (origin, pitch), would lie over
     one of the row's ``keep_clear`` boxes (row coordinates)."""
 
-    in_row = {**label, "middle_x": float(str(label["middle_x"])) + x}
+    in_row: LinearLabel = {**label, "middle_x": float(label["middle_x"]) + x}
     origin, pitch = side
     return lambda row: _label_covers_keep_clear({**in_row, "middle_y": linear_row_y(origin, pitch, row)}, keep_clear)
 
@@ -970,7 +974,7 @@ def linear_row_y(origin_y: float, pitch: float, row: int) -> float:
     return origin_y + pitch * row
 
 
-def _above_feature_label_in_first_row(label: dict, track_height: float) -> None:
+def _above_feature_label_in_first_row(label: LinearLabel, track_height: float) -> None:
     """Put a horizontal ``above_feature`` label in the first row off its own feature, where the auto
     placement puts its first row, with a leader from the feature edge, as an auto label in its rows has
     (LP-D120). A turned label stays on its feature."""
@@ -982,27 +986,27 @@ def _above_feature_label_in_first_row(label: dict, track_height: float) -> None:
     _update_linear_label_leader_end(label)
 
 
-def linear_label_row(label: Mapping[str, object]) -> int:
+def linear_label_row(label: LinearLabel) -> int:
     """The row of a label (0: on its feature, or a label that is not in a row)."""
 
-    return int(str(label.get("track_id", "track_0")).split("_")[1])
+    return int(label["track_id"].split("_")[1])
 
 
-def linear_label_side(label: Mapping[str, object]) -> tuple[float, float] | None:
+def linear_label_side(label: LinearLabel) -> tuple[float, float] | None:
     """The rows an external, horizontal label stacks in (``None`` for a label that has no rows to
     move to: embedded, above-feature mode, or without a source feature)."""
 
     if (
-        label.get("is_embedded")
-        or label.get("leader_line")
-        or label.get("source_feature_index") is None
+        label["is_embedded"]
+        or label.get("leader_line", False)
+        or label["source_feature_index"] is None
         or "row_pitch" not in label
     ):
         return None
-    return float(cast(float, label["row_origin_y"])), float(cast(float, label["row_pitch"]))
+    return label["row_origin_y"], label["row_pitch"]
 
 
-def linear_label_in_row(label: dict, side: tuple[float, float], row: int) -> dict:
+def linear_label_in_row(label: LinearLabel, side: tuple[float, float], row: int) -> LinearLabel:
     """A copy of an external label in row ``row`` of its ``side`` (``linear_label_side``), at the same x
     (LP-D82 ``RGN-YIELD-ROW``)."""
 
@@ -1019,23 +1023,24 @@ class FeatureLabelRow(NamedTuple):
     row: int
 
 
-def with_feature_label_rows(all_labels: Sequence[list[dict]], rows: Sequence[FeatureLabelRow]) -> list[list[dict]]:
+def with_feature_label_rows(all_labels: Sequence[list[LinearLabel]], rows: Sequence[FeatureLabelRow]) -> list[list[LinearLabel]]:
     """Each record's labels with the listed feature labels moved to their rows."""
 
     moved = {(row.record_index, row.source_feature_index): row.row for row in rows}
 
-    def placed(record_index: int, label: dict) -> dict:
+    def placed(record_index: int, label: LinearLabel) -> LinearLabel:
         side = linear_label_side(label)
-        row = moved.get((record_index, cast(int, label.get("source_feature_index"))))
+        source_feature_index = label["source_feature_index"]
+        row = None if source_feature_index is None else moved.get((record_index, source_feature_index))
         return label if side is None or row is None else linear_label_in_row(label, side, row)
 
     return [[placed(record_index, label) for label in labels] for record_index, labels in enumerate(all_labels)]
 
 
-def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
+def linear_leader_polyline(label: LinearLabel) -> tuple[Point, ...]:
     """The leader the record drawer draws for a Linear label (empty for an embedded label)."""
 
-    if label.get("leader_line"):
+    if label.get("leader_line", False):
         return (
             (label["leader_start_x"], label["leader_start_y"]),
             (label["leader_end_x"], label["leader_end_y"]),
@@ -1053,18 +1058,18 @@ def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
     return ((label["middle"], label["feature_middle_y"]), (label["middle"], label_edge_y))
 
 
-def _row_label_corners(label: dict) -> list[tuple[float, float]]:
+def _row_label_corners(label: LinearLabel) -> list[tuple[float, float]]:
     """The corners of a label's box with the room it keeps at both ends of its text in its row: the one
     shape of a row label for the packer, the above-feature resolver and the fit count."""
 
     return _label_corners(label, along_text_px=_row_label_margin_px(label))
 
 
-def _row_label_aabb(label: dict) -> Aabb:
+def _row_label_aabb(label: LinearLabel) -> Aabb:
     return Aabb(*aabb_from_points(_row_label_corners(label)))
 
 
-def linear_label_shapes(labels: Sequence[dict], x: float = 0.0) -> list[LabelShape]:
+def linear_label_shapes(labels: Sequence[LinearLabel], x: float = 0.0) -> list[LabelShape]:
     """One record's drawn Linear labels as the fit count sees them, moved ``x`` right (the record's
     start in its row): each row label with the room it keeps beside it, so a pair the rows separate
     for their gap counts as an overlap."""
@@ -1080,7 +1085,7 @@ def linear_label_shapes(labels: Sequence[dict], x: float = 0.0) -> list[LabelSha
 
 
 def _linear_row_label_fits(
-    row: Sequence[tuple[Sequence[dict], float]],
+    row: Sequence[tuple[Sequence[LinearLabel], float]],
     definition_boxes: Sequence[Sequence[Aabb]] | None = None,
 ) -> tuple[list[LabelFit], bool]:
     """The fit of each record's drawn feature labels in one Linear row (records in row order, each with
@@ -1090,7 +1095,7 @@ def _linear_row_label_fits(
     (OV-1395). Also whether an overlapping pair has a label drawn on its feature."""
 
     owners: list[int] = []
-    labels: list[dict] = []
+    labels: list[LinearLabel] = []
     shapes: list[LabelShape] = []
     for position, (record_labels, x) in enumerate(row):
         owners.extend([position] * len(record_labels))
@@ -1108,7 +1113,7 @@ def _linear_row_label_fits(
     return [LabelFit(overlap, crossing, covered) for overlap, crossing, covered in counts], embedded_overlap
 
 
-def linear_row_label_fit(row: Sequence[tuple[Sequence[dict], float]]) -> LabelFit:
+def linear_row_label_fit(row: Sequence[tuple[Sequence[LinearLabel], float]]) -> LabelFit:
     """The drawn feature labels of one Linear row (each record's labels with the x of its start, its
     ``LinearLabelFrame``) counted together, as ``linear_label_fit`` counts them."""
 
@@ -1167,7 +1172,7 @@ class LinearLabelFit:
 
 
 def linear_label_fit(
-    record_labels: Sequence[tuple[str, Sequence[dict]]],
+    record_labels: Sequence[tuple[str, Sequence[LinearLabel]]],
     font_size: float,
     region_labels: Sequence[RecordRegionLabels] | None = None,
     new_rows: FeatureLabelRows | None = None,

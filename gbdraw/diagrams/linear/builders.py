@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection
-from typing import TYPE_CHECKING, Optional, Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -14,6 +14,7 @@ from svgwrite import Drawing
 
 from ...canvas import LinearCanvasConfigurator
 from ...features.factory import FeatureBuildResult
+from ...labels.linear_types import LinearLabel
 from ...layout.linear_multi_record import LinearRecordPlacement
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
 from ...linear_comparison import LinearComparison
@@ -65,7 +66,7 @@ def add_record_group(
     feature_layers: FeatureBuildResult,
     render_context: LinearRecordRenderContext,
     feature_dom_index: LinearFeatureDomIndex,
-    precalculated_labels: Optional[list],
+    precalculated_labels: list[LinearLabel] | None,
     draw_features: bool = True,
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str | int] | None = None,

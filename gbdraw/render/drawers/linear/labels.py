@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from ....labels.linear_types import LinearLabel
+from ....svg.elements import Group
 from ....svg.text_path import generate_text_path
 from ...label_binding import bind_label_part
 
 
 class LabelDrawer:
-    def add_label(self, label_entry, group):
+    def add_label(self, label_entry: LinearLabel, group: Group) -> Group:
         feature_label_text = label_entry["label_text"]
         middle_x = label_entry["middle_x"]
         middle_y = label_entry["middle_y"]
-        rotation_deg = float(label_entry.get("rotation_deg", 0.0))
+        rotation_deg = float(label_entry["rotation_deg"])
         label_path = generate_text_path(
             text=feature_label_text,
             title_x=middle_x,
@@ -20,7 +22,7 @@ class LabelDrawer:
             font_weight="normal",
             font=label_entry["font_family"],
             dominant_baseline="central",
-            text_anchor=label_entry.get("text_anchor", "middle"),
+            text_anchor=label_entry["text_anchor"],
         )
         if rotation_deg != 0.0:
             label_path.rotate(rotation_deg, center=(middle_x, middle_y))
@@ -28,7 +30,7 @@ class LabelDrawer:
         group.add(label_path)
         return group
 
-    def draw(self, label_entry, group):
+    def draw(self, label_entry: LinearLabel, group: Group) -> Group:
         return self.add_label(label_entry, group)
 
 

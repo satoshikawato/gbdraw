@@ -1177,7 +1177,7 @@ def test_linear_external_label_track_index_matches_legacy_scan() -> None:
     # At 10 px each label keeps 1.25 px free on each side: the last one, 1 px after its neighbour,
     # takes another row.
     labels = [
-        {"start": start, "end": end, "font_size": 10.0}
+        {"start": start, "end": end, "font_size": 10.0, "is_embedded": False}
         for start, end in ((0.0, 50.0), (20.0, 70.0), (80.0, 110.0), (45.0, 90.0), (112.0, 140.0), (141.0, 160.0))
     ]
     legacy_tracks: dict[str, list[dict]] = {}

@@ -30,7 +30,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import NamedTuple, TypeAlias, cast
+from typing import NamedTuple, TypeAlias
 
 from gbdraw.annotations import ResolvedAnnotationTrack, annotation_track_params_from_mapping
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
@@ -39,6 +39,7 @@ from gbdraw.features.objects import FeatureObject
 from gbdraw.labels.fit import LabelFit
 from gbdraw.labels.label_ink import linear_label_ink
 from gbdraw.labels.label_style import FeatureLabelStyle, label_leader_width_px
+from gbdraw.labels.linear_types import LinearLabel
 from gbdraw.labels.linear import (
     FeatureLabelRow,
     RecordRegionLabels,
@@ -82,7 +83,7 @@ class PlacedAnnotationLabels(NamedTuple):
     proposers: tuple[int, ...] = ()
 
 
-def _feature_label_box(label: Mapping[str, object]) -> Aabb:
+def _feature_label_box(label: LinearLabel) -> Aabb:
     """A feature label's painted letters as ``LabelDrawer`` draws them (central baseline); its layout box
     when it is rotated or the font cannot be measured."""
 
@@ -90,24 +91,24 @@ def _feature_label_box(label: Mapping[str, object]) -> Aabb:
         text_ink_offsets(
             str(label["label_text"]),
             str(label["font_family"]),
-            float(cast(float, label["font_size"])),
+            float(label["font_size"]),
             dominant_baseline="central",
-            text_anchor=str(label.get("text_anchor", "middle")),
+            text_anchor=label["text_anchor"],
         )
-        if float(cast(float, label.get("rotation_deg", 0.0))) == 0.0
+        if label["rotation_deg"] == 0.0
         else None
     )
     if offsets is None:
-        left, right, top, bottom = calculate_label_bounds(dict(label))
+        left, right, top, bottom = calculate_label_bounds(label)
         return Aabb(left, top, right, bottom)
     left, right, top, bottom = offsets
-    x = float(cast(float, label["middle_x"]))
-    y = float(cast(float, label["middle_y"]))
+    x = float(label["middle_x"])
+    y = float(label["middle_y"])
     return Aabb(x + left, y + top, x + right, y + bottom)
 
 
 def _feature_label_obstacles(
-    label: Mapping[str, object],
+    label: LinearLabel,
     owner: ObstacleOwner,
     origin_y: float,
     *,
@@ -118,7 +119,7 @@ def _feature_label_obstacles(
     the letters, not to the leader: a region label keeps off it, and a backed one may not cover it."""
 
     letters = _feature_label_box(label)
-    leader = linear_leader_polyline(dict(label))
+    leader = linear_leader_polyline(label)
     if label_style.draws_from_ink:
         drawn = feature_label_drawn_parts(linear_label_ink(label, leader, label_style), label_style)
         points = [point for part in drawn for point in part]
@@ -137,7 +138,7 @@ def _feature_label_obstacles(
 
 
 def linear_feature_label_obstacles(
-    feature_labels: Sequence[dict[str, object]],
+    feature_labels: Sequence[LinearLabel],
     plan: LinearRecordVerticalPlan,
     record_index: int,
     *,
@@ -327,14 +328,14 @@ class _Record(NamedTuple):
     row's other records, each with its x (``LinearLabelFrame``)."""
 
     record_index: int
-    labels: list[dict[str, object]]
+    labels: list[LinearLabel]
     origin_y: float
     label_style: FeatureLabelStyle
     inks: tuple[LabelObstacle, ...]
     label_x: float = 0.0
-    row_labels: tuple[tuple[Sequence[dict[str, object]], float], ...] = ()
+    row_labels: tuple[tuple[Sequence[LinearLabel], float], ...] = ()
 
-    def label_fit(self, labels: Sequence[dict[str, object]]) -> LabelFit:
+    def label_fit(self, labels: Sequence[LinearLabel]) -> LabelFit:
         """The label fit's count of the row's feature labels with the record's labels ``labels``."""
 
         return linear_row_label_fit([*self.row_labels, (labels, self.label_x)])
@@ -344,7 +345,7 @@ class _Way(NamedTuple):
     """The other labels making way for a region label (LP-D82)."""
 
     label: LinearAnnotationLabel
-    labels: list[dict[str, object]]
+    labels: list[LinearLabel]
     obstacles: list[LabelObstacle]
     rows: tuple[FeatureLabelRow, ...]
     new_row: bool
@@ -358,12 +359,12 @@ def _another_row(
     owner: ObstacleOwner,
     region: Aabb,
     record: _Record,
-    labels: Sequence[dict[str, object]],
+    labels: Sequence[LinearLabel],
     obstacles: Sequence[LabelObstacle],
     *,
     gap: float,
     new_rows: bool,
-) -> tuple[int, bool, dict[str, object], list[LabelObstacle]] | None:
+) -> tuple[int, bool, LinearLabel, list[LabelObstacle]] | None:
     """The row the feature label ``owner`` moves to, off the region label's letters ``region``:
     another row of its side, the nearest first (the outer one on a tie), then, when ``new_rows``,
     one new row beyond them. A move into an existing row makes no new overlap with the ink and
@@ -382,7 +383,7 @@ def _another_row(
     before = _owners_met(before_boxes, owner, others)
     fit = record.label_fit(labels)
     for row in [*rows, *([top + 1] if new_rows else [])]:
-        moved = linear_label_in_row(dict(label), side, row)
+        moved = linear_label_in_row(label, side, row)
         boxes = _feature_label_obstacles(
             moved, owner, record.origin_y, label_style=record.label_style
         )
@@ -435,7 +436,10 @@ def _make_way(
         row, room, moved, boxes = found
         labels[owner[2]] = moved
         obstacles = [*(item for item in obstacles if item.owner != owner), *boxes]
-        rows.append(FeatureLabelRow(record.record_index, cast(int, moved["source_feature_index"]), row))
+        source_feature_index = moved["source_feature_index"]
+        # A label that moves rows has a source feature (``linear_label_side``).
+        assert source_feature_index is not None
+        rows.append(FeatureLabelRow(record.record_index, source_feature_index, row))
         new_row = new_row or room
     if new_row or not _hits(ink, obstacles):
         return _Way(label, labels, obstacles, tuple(rows), new_row)
@@ -463,14 +467,14 @@ def place_linear_annotation_labels(
     plan: LinearRecordVerticalPlan,
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
     obstacles: Sequence[LabelObstacle],
-    feature_labels: Sequence[dict[str, object]] = (),
+    feature_labels: Sequence[LinearLabel] = (),
     glyphs: Sequence[Aabb] = (),
     font_family: str,
     label_style: FeatureLabelStyle,
     gap: float,
     new_rows: bool = True,
     label_x: float = 0.0,
-    row_labels: Sequence[tuple[Sequence[dict[str, object]], float]] = (),
+    row_labels: Sequence[tuple[Sequence[LinearLabel], float]] = (),
 ) -> PlacedAnnotationLabels:
     """Each annotation slot's labels on one record, placed along their spans (slot-local y).
 
