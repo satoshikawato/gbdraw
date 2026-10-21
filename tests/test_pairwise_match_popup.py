@@ -129,10 +129,15 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "utils" / "i18n.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (tmp_path / "schema.generated.mjs").write_text(
+        (WEB_ROOT / "js" / "contracts" / "schema.generated.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
         source_path.read_text(encoding="utf-8")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs")
         .replace("../services/record-source-coordinates.js", "./record-source-coordinates.mjs")
         .replace("../services/feature-utils.js", "./feature-utils.mjs")
         .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
