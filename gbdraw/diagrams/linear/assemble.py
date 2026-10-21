@@ -416,23 +416,21 @@ def _add_linear_feature_underlays(
             "show_labels": False,
         },
     )
-    updated_slots = [underlay_slot, *slots]
-    private_prefix_count = len(updated_slots) - len(slots)
-    updated_auto_ids = frozenset((*auto_slot_ids, slot_id))
-    updated_slots, updated_layouts = _layout_linear_annotation_tracks(
+    # The underlay set is new (collision-safe id), so the slots laid out before keep their layouts.
+    sized_underlay, underlay_layouts = _layout_linear_annotation_tracks(
         records,
-        updated_slots,
+        [underlay_slot],
         merged,
-        auto_slot_ids=updated_auto_ids,
+        auto_slot_ids=frozenset((slot_id,)),
         label_font_size=label_font_size,
         sequence_widths=sequence_widths,
     )
     return (
-        updated_slots,
+        [*sized_underlay, *slots],
         merged,
-        updated_layouts,
-        updated_auto_ids,
-        private_prefix_count,
+        {**underlay_layouts, **layouts},
+        frozenset((*auto_slot_ids, slot_id)),
+        len(sized_underlay),
     )
 
 

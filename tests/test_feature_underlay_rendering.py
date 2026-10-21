@@ -486,3 +486,34 @@ def test_explicit_repeat_rectangle_disables_private_underlay(mode: str) -> None:
     assert PRIVATE_SLOT_ID not in svg
     assert not _underlay_shapes(svg)
     assert compute_feature_hash(record.features[0], record_id=record.id) in svg
+
+
+@pytest.mark.linear
+def test_linear_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With feature underlays, the annotation tracks laid out before the underlay slot keep their
+    layout: each slot is laid out once (the underlay set is a new set no other slot reads)."""
+
+    import gbdraw.diagrams.linear.assemble as assemble_module
+    from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
+
+    calls: list[str] = []
+    original = assemble_module.layout_annotation_track
+
+    def counting(slot_id, *args, **kwargs):
+        calls.append(str(slot_id))
+        return original(slot_id, *args, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "layout_annotation_track", counting)
+    drawing = assemble_linear_diagram_from_records(
+        [_record()],
+        cfg=_LINEAR_CFG,
+        selected_features_set=["repeat_region", "CDS"],
+        annotation_options=AnnotationOptions(
+            sets=(AnnotationSet("regions", (RegionAnnotation("r1", CoordinateSpan(None, 10, 90), label="R"),)),)
+        ),
+        legend="none",
+    )
+
+    assert _underlay_shapes(drawing.tostring())
+    assert sorted(calls) == sorted(set(calls))
+    assert PRIVATE_SLOT_ID in calls and len(calls) >= 2
