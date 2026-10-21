@@ -1,9 +1,9 @@
 id	regex	flags	message	severity
-vi-old-gen	(?<![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])(?<!hệ )gen(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])	iu	Old spelling gen: write gene (2018 orthography, D-07); genome is hệ gen, the only place gen stays.	error
+vi-old-gen	(?<![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])gen(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])	iu	Old spelling gen: write gene (2018 orthography, D-07), also in hệ gene (genome).	error
 vi-old-adn-arn	(?<![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])(?:ADN|ARN|mARN|tARN|rARN)(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])	u	Old abbreviation ADN / ARN: write DNA / RNA (mRNA, tRNA, rRNA) (2018 orthography, D-07).	error
 vi-old-acid	(?:ax[iíì]t|acid)\s+(?:amin|nucl[eê]ic)	iu	Old spelling axit amin / acid amin / axit nuclêic: write amino acid / nucleic acid (D-07).	error
 vi-old-loanword	(?<![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])(?:nucl[eê][oô]tit|pr(?:ôt[eê]|otê)in|c[oô]đ[oô]n|enzim|p[oô]lip[eê]ptit|rib[oô]x[oô]m|plasmit|alen)(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])	iu	Old Vietnamized spelling: write nucleotide, protein, codon, enzyme, polypeptide, ribosome, plasmid, allele (2018 orthography, D-07).	error
-vi-genome-term	(?:bộ\s+gene?|hệ\s+gene)(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])	iu	Genome is hệ gen in this UI (D-07): not bộ gen, bộ gene or hệ gene.	error
+vi-genome-term	bộ\s+gene?(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ])	iu	Genome is hệ gene in this UI (D-07): not bộ gen or bộ gene.	error
 vi-tap-tin	tập\s+tin	iu	tập tin: write tệp (D-07).	error
 vi-huy-bo	h(?:ủy|uỷ)\s+bỏ	iu	Hủy bỏ / Huỷ bỏ: Cancel is Huỷ (D-07).	error
 vi-tai-ve	tải\s+về	iu	Tải về: Download is Tải xuống (D-07).	error
@@ -24,3 +24,4 @@ vi-space-before-punct	(?<=[A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õù�
 vi-decimal-comma	(?<![\d,.])\d+,\d{1,2}(?!\d)	u	Decimal comma: numbers keep the English format in every locale (0.65, 44.4%; D-04).	warn
 vi-english-plural	(?<![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ_])(?:features|tracks|hits|queries|subjects|qualifiers|orthogroups|genes|reads|loci)(?![A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ_])	iu	English plural on a word kept in English: Vietnamese marks no plural (các feature, 3 hit, các locus).	warn
 vi-ellipsis	\.\.\.	u	Three periods: write one … (U+2026), for progress and for more-input labels.	error
+vi-preset-term	cài\s+đặt\s+sẵn	iu	Preset is đặt sẵn after a head noun, as Microsoft and Google write it: Chế độ track đặt sẵn, Bộ màu đặt sẵn; not cài đặt sẵn (reads as pre-installed).	error
