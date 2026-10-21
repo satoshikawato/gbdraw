@@ -86,6 +86,13 @@ class LinearRecordVerticalPlan:
     def canvas_bottom_extent(self) -> float:
         return max(0.0, self.canvas_band.bottom_y)
 
+    @property
+    def features_origin_y(self) -> float:
+        """The origin of the record's features slot (0 without one): the y its feature labels are placed
+        from (record coordinates)."""
+
+        return next((float(slot.origin_y) for slot in self.slots if slot.renderer == "features"), 0.0)
+
     def slot_by_id(self, slot_id: str) -> LinearResolvedSlot:
         for slot in self.slots:
             if slot.id == slot_id:

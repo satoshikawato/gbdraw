@@ -136,10 +136,6 @@ def _feature_label_obstacles(
     return obstacles
 
 
-def _features_origin_y(plan: LinearRecordVerticalPlan) -> float:
-    return next((float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), 0.0)
-
-
 def linear_feature_label_obstacles(
     feature_labels: Sequence[dict[str, object]],
     plan: LinearRecordVerticalPlan,
@@ -150,7 +146,7 @@ def linear_feature_label_obstacles(
     """A record's feature label boxes (with what ``label_style`` draws with their letters) and leader lines,
     from its bar start and axis."""
 
-    origin_y = _features_origin_y(plan)
+    origin_y = plan.features_origin_y
     return [
         obstacle
         for index, label in enumerate(feature_labels)
@@ -494,7 +490,7 @@ def place_linear_annotation_labels(
     record = _Record(
         record_index,
         list(feature_labels),
-        _features_origin_y(plan),
+        plan.features_origin_y,
         label_style,
         tuple(
             LabelObstacle(box, (record_index, "ink", index))

@@ -190,7 +190,6 @@ from .annotation_labels import (
     AnnotationLabelsBySlot,
     LabelObstacle,
     PlacedAnnotationLabels,
-    _features_origin_y,
     linear_annotation_label_inks,
     linear_feature_glyph_boxes,
     linear_feature_label_obstacles,
@@ -1827,14 +1826,7 @@ def _collect_linear_primary_bounds(
                 )
             )
 
-        feature_origin_y = next(
-            (
-                float(slot.origin_y)
-                for slot in plan.slots
-                if slot.renderer == "features"
-            ),
-            0.0,
-        )
+        feature_origin_y = plan.features_origin_y
         for label in labels_by_record[record_index]:
             left, right, top, bottom = calculate_label_bounds(label)
             bounds.append(
@@ -2912,7 +2904,7 @@ def assemble_linear_diagram(
         _definition_label_boxes(
             record_collision_bands[index],
             record_x=record_placements[index].x,
-            features_origin_y=_features_origin_y(record_vertical_plans[index]),
+            features_origin_y=record_vertical_plans[index].features_origin_y,
         )
         for index in range(len(records))
     ]
