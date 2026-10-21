@@ -210,7 +210,7 @@ for (const [mode, adapter] of Object.entries(MODES)) {
       assert.deepEqual(otherRows(editor.slots()), before, 'non-Depth rows keep their order and contents');
       if (testCase.issueFor) {
         const index = editor.slots().findIndex((slot) => slot.id === testCase.issueFor);
-        assert.match(editor.issue(index), /Depth track 'my_depth' has no logical Depth source\./);
+        assert.equal(editor.issue(index), 'This row has no Depth source.');
       }
     });
   }
@@ -240,7 +240,7 @@ for (const [mode, adapter] of Object.entries(MODES)) {
     editor.change([], 1);
     assert.deepEqual(depthRows(editor.slots()), ['my_depth:0:on', 'my_depth_2:0:on']);
     const index = editor.slots().findIndex((slot) => slot.id === 'my_depth_2');
-    assert.match(editor.issue(index), /Depth track 'my_depth_2' has no logical Depth source\./);
+    assert.equal(editor.issue(index), 'This row has no Depth source.');
   });
 }
 

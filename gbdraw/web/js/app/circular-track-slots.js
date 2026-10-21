@@ -29,6 +29,7 @@ import {
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { listText, msg, t, tm, tn } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
   nextCopyId,
@@ -758,17 +759,16 @@ export const createCircularTrackSlotEditor = ({
       ? Number(index)
       : drawing.adv.circular_track_slots.findIndex((/** @type {CircularTrackSlot} */ candidate) => candidate === slot);
     if (resolvedIndex < 0) return '';
-    return (circularTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
+    return errorText((circularTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
       // The Width and Radius fields show their own invalid value (TK-12).
       .filter((issue) => !(issue.code === 'geometry_invalid' && ['width', 'radius'].includes(issue.field)))
-      .map((issue) => issue.message)
-      .join(' ');
+      .flatMap((issue) => issue.parts));
   };
 
   const circularTrackGlobalIssues = () => {
     const drawing = state.drawings.circular;
     return (
-      circularTrackValidationPlan(drawing).globalIssues.map((issue) => issue.message)
+      circularTrackValidationPlan(drawing).globalIssues.map((issue) => errorText(issue.parts))
     );
   };
 
