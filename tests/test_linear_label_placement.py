@@ -865,6 +865,32 @@ def test_linear_above_feature_horizontal_labels_take_the_auto_first_row_with_a_l
 
 @pytest.mark.linear
 @pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
+def test_linear_above_feature_horizontal_labels_stack_at_the_auto_row_pitch(separate_strands: bool) -> None:
+    """Study option P (row pitch above the first row): a horizontal above-feature label that moves off
+    another label goes to a whole auto row off its own feature (row k at ``linear_row_y(edge, pitch, k)``),
+    not the tallest label's height plus the packer's stacking gap; and the rows stay free of overlaps."""
+
+    spacing = 3.0
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        input_filename="NC_001416.gb",
+        linear_label_spacing=spacing,
+        separate_strands=separate_strands,
+    )
+    pitch = max(float(label["height_px"]) for label in labels) + spacing
+    rows = []
+    for label in labels:
+        above = bool(label["above_feature_place_above"])
+        edge = float(label["feature_top_y"] if above else label["feature_bottom_y"])
+        row = abs(float(label["middle_y"]) - edge) / pitch
+        assert row == pytest.approx(round(row), abs=1e-6), label["label_text"]
+        rows.append(round(row))
+    assert max(rows) > 2
+    _assert_no_label_bounds_overlap(labels)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("separate_strands", (False, True), ids=["one-side", "separate-strands"])
 def test_linear_above_feature_turned_labels_keep_their_place_on_the_feature(separate_strands: bool) -> None:
     """LP-D120: a turned above-feature label keeps its place on its feature (no leader, the small gap) unless
     it moves off another label; the first-row clearance is only for horizontal labels."""
@@ -927,12 +953,14 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     resolve = linear_labels_module._resolve_above_feature_label_overlaps
 
-    def counted_resolve(labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()) -> None:
+    def counted_resolve(
+        labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = (), row_pitch: float | None = None
+    ) -> None:
         nonlocal resolved_labels, inside_resolver
         resolved_labels += len(labels)
         inside_resolver = True
         try:
-            resolve(labels, min_gap_px, keep_clear)
+            resolve(labels, min_gap_px, keep_clear, row_pitch)
         finally:
             inside_resolver = False
 

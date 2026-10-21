@@ -399,8 +399,13 @@ def _place_linear_label_without_overlap(
     placed_by_id: dict[int, _PlacedLinearLabel],
     min_gap_px: float,
     direction: float,
+    row_pitch: float | None = None,
 ) -> bool:
     """Move one linear label away from the axis until its bbox clears placed labels.
+
+    With ``row_pitch`` (a horizontal ``above_feature`` label, which starts in the first row off its own
+    feature), the label moves by whole rows: row k off its feature edge at ``linear_row_y``, the rows
+    of the auto placement, instead of by the clearing shift plus ``min_gap_px``.
 
     The label moves only vertically (OV-841), so the work that does not depend on
     its height is done once per label instead of once per round:
@@ -413,6 +418,7 @@ def _place_linear_label_without_overlap(
       far below ``_SHIFT_DECISION_MARGIN_PX``, inside which the polygon test decides.
     """
     original_y = float(label["middle_y"])
+    row = 1
     row_gap = _row_label_margin_px(label)
     # The label's box at its start, bare (against keep-clear boxes) and with its row gap (against labels).
     original_corners = {0.0: _label_corners(label), row_gap: _label_corners(label, along_text_px=row_gap)}
@@ -478,16 +484,23 @@ def _place_linear_label_without_overlap(
         if required_shift == 0.0:
             return abs(float(label["middle_y"]) - original_y) > 0.001
 
-        label["middle_y"] = float(label["middle_y"]) + required_shift
+        if row_pitch is None:
+            label["middle_y"] = float(label["middle_y"]) + required_shift
+        else:
+            # The clearing shift without the stacking gap, rounded up to whole rows.
+            clear = abs(required_shift) - float(min_gap_px)
+            row += max(1, math.ceil(clear / row_pitch - _SHIFT_DECISION_MARGIN_PX))
+            label["middle_y"] = linear_row_y(float(label["leader_start_y"]), direction * row_pitch, row)
 
     return abs(float(label["middle_y"]) - original_y) > 0.001
 
 
 def _resolve_above_feature_label_overlaps(
-    labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = ()
+    labels: list[dict], min_gap_px: float, keep_clear: Sequence[Aabb] = (), row_pitch: float | None = None
 ) -> None:
     """Stack above-feature labels away from the axis when their boxes, each with its row gap along its
-    text, collide, and off the ``keep_clear`` boxes (the definition text), which are placed first."""
+    text, collide, and off the ``keep_clear`` boxes (the definition text), which are placed first. With
+    ``row_pitch``, a horizontal label moves by whole rows of that pitch off its feature."""
     if not labels:
         return
 
@@ -503,7 +516,8 @@ def _resolve_above_feature_label_overlaps(
             placed_x_index.insert(len(placed_by_id) - 1, Interval(box.min_x, box.max_x))
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
-            if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction):
+            pitch = row_pitch if float(label.get("rotation_deg", 0.0)) == 0.0 else None
+            if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction, pitch):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
             corners = _row_label_corners(label)
@@ -929,7 +943,7 @@ def place_linear_label_row(
             }
             for label, x in on_features
         ]
-        _resolve_above_feature_label_overlaps(framed_labels, max(1.0, max_height * 0.05), keep_clear)
+        _resolve_above_feature_label_overlaps(framed_labels, max(1.0, max_height * 0.05), keep_clear, track_height)
         for (label, _x), framed in zip(on_features, framed_labels):
             label["middle_y"] = framed["middle_y"]
             if framed["leader_line"]:
@@ -964,7 +978,7 @@ def _keep_clear_rows(
 def linear_row_y(origin_y: float, pitch: float, row: int) -> float:
     """The y of a label in row ``row`` of a side that starts at ``origin_y`` (the features' edge) and steps
     ``pitch`` (the tallest label plus ``labels.spacing.linear``, away from the axis): the one owner of
-    a Linear label row's position, for the auto rows and the first row of horizontal ``above_feature``
+    a Linear label row's position, for the auto rows and the rows of horizontal ``above_feature``
     labels (LP-D120)."""
 
     return origin_y + pitch * row
