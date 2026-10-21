@@ -693,7 +693,7 @@ test('a Label TSV record_location row applies to a catalog 4 Result drawn with s
   await loadSession(page, 'tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   await importLabelTsv(page, 'NC_001416.1\tCDS\trecord_location\t^NC_001416\\.1:190\\.\\.736:\\+$\tTSV_RL\n');
   await settle(page);
-  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Applied to 1 label(s).');
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Applied to 1 label.');
   expect(await previewLabelCount(page, /^TSV_RL$/)).toBe(1);
 });
 
@@ -716,7 +716,7 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
   await settle(page);
   await importLabelTsv(page, row);
   await settle(page);
-  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Applied to 1 label(s).');
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Applied to 1 label.');
   expect(await previewLabelCount(page, /^TSV_TRNA$/)).toBe(1);
 });
 

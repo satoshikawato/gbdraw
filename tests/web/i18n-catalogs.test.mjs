@@ -712,6 +712,16 @@ test('OV-1475: a counted sentence is a tn() call, never a plain key with (s)', (
     'Remove {count} unmatched feature edit', '{count} similarity group', '{drawn} of {count} record drawn',
     'There is {count} other feature with the legend name "{name}".', 'Loaded {count} row.', 'Applied to {count} label.'
   ]) assert.ok(keys.has(key), key);
+  // A count written into a template literal bypasses the catalogs; only an
+  // Error message (read by error-normalization.js) may still say "(s)".
+  const counted = /`[^`]*\$\{[^}]+\}[^`]*?\w\((?:s|es)\)[^`]*`/g;
+  const literals = sourceFiles().flatMap((path) => {
+    const text = readFileSync(path, 'utf8');
+    return [...text.matchAll(counted)]
+      .filter((match) => !/Error\(\s*$/.test(text.slice(Math.max(0, match.index - 40), match.index)))
+      .map((match) => `${relative(webRoot, path)} ${match[0].slice(0, 80)}`);
+  });
+  assert.deepEqual(literals, []);
 });
 
 // OV-1476: the English names only what the UI shows.

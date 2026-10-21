@@ -991,8 +991,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   {items}.
 - Worked examples (one / other):
   1. `{count} record` → {count} registro / {count} registros
-  2. `{count} needs a choice` → {count} precisa de uma escolha / {count}
-     precisam de uma escolha
+  2. `{count} record awaiting a choice` → {count} registro aguardando uma
+     escolha / {count} registros aguardando uma escolha
   3. `{count} chosen feature keeps its current direction.` → {count} feature
      escolhida mantém a direção atual. / {count} features escolhidas mantêm a
      direção atual.
