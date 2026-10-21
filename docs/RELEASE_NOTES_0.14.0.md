@@ -30,8 +30,8 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   see [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
-- Choose how feature labels with a leader line are protected: an underline
-  and a white box or halo (`--label_line`, `--label_protection`; **Label Line**
+- Draw a line under feature labels with a leader and a white box or halo
+  behind their letters (`--label_line`, `--label_protection`; **Label Line**
   and **Label Protection** in the web app).
 - Switch the web app between English, Bahasa Indonesia, Español, Français,
   Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어 with the
@@ -125,8 +125,8 @@ Each change of a setting's checkbox, radio button, or button is one **Undo**
 step. **Rich Feature Popup** and the search's **Regular expression** are not
 Undo steps, and Undo and Redo do not change them. Undo and Redo are unavailable while Generate runs, and
 the header says why. They are also disabled while a mode-switch step waits
-for a label rerender or **Generate Diagram**, instead of a click that does
-nothing. The notice about discarded Undo history appears only when the memory
+for a label rerender, **Generate Diagram**, or a Session save or load,
+instead of a click that does nothing. The notice about discarded Undo history appears only when the memory
 limit drops steps, not for the routine 30-step window. Error
 messages name the field, track row, Depth series, table line, or setting
 involved. A value gbdraw cannot use, such as a GC window of 0, is reported
@@ -135,9 +135,9 @@ has an accessible name, every **?** tip is a **Help** button that opens on
 hover, focus, click, or tap, and **Escape** closes only the top layer.
 
 A Legend row of color None shows an empty struck-through swatch and **None**
-in the Legend drawer and in the Legend item popup, as the Palette pane does,
-and later live color edits of such a row work until the next **Generate
-Diagram**.
+in the Legend tab and in the Legend item popup, as the Palette pane does,
+and later live color edits of such a row, also after a **Generate Diagram**
+that drew it, no longer fail.
 
 The header **Language** menu switches the interface text at once, without a
 reload, between English, Bahasa Indonesia, Español, Français, Português,
@@ -146,9 +146,10 @@ first visit whatever the browser's language, and the choice is remembered
 per browser. The figure, every export, the Session, History, and the command
 line text of **Run Info** are the same in every language; numbers keep the
 English format (1,000.5), and warnings from Python, the Gallery tutorials, and
-the documentation stay English. The translations were drafted and checked
-without a native-speaker reviewer, so some wording may be corrected in later
-releases.
+the documentation stay English. Translated wording may contain errors until it is
+corrected; the Bahasa Indonesia, Español, Français, Português, Tiếng Việt,
+ไทย, and 한국어 wording was drafted and checked without a native-speaker
+reviewer.
 
 Large Sessions (thousands of features) open popups and apply color choices in
 seconds instead of freezing the page.
@@ -442,10 +443,10 @@ In Linear `--label_placement above_feature`, a horizontal label now starts one
 underline and the white box as in `auto`; a label that must move off another
 takes the next `auto` row. A turned label (`--label_rotation`) keeps its place
 on its feature and, with `--label_protection box`, gets the white box. Figures
-with horizontal `above_feature` labels get taller (for example lambda at
-24 pt: 770 to 772 px; HmmtDNA: 394 to 378 px); `auto` figures change only
-where a label lay over a record's definition text, which feature labels now
-keep off. `--label_rotation` of a whole turn (360, -360, 720) places labels as
+with horizontal `above_feature` labels change height: most get taller, and a
+figure whose labels were stuck between rows can get lower; `auto` figures
+change only where a label lay over a record's definition text, which feature
+labels now keep off. `--label_rotation` of a whole turn (360, -360, 720) places labels as
 horizontal.
 
 Figure size changes: a Circular annotation overlay that spans split feature
