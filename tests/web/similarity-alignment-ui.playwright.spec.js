@@ -3241,7 +3241,7 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   await expect(dialog.locator('[data-alignment-section="choose"]'))
     .toHaveText(`Choose a gene${needKeys.length} (${needKeys.length} record${needKeys.length === 1 ? '' : 's'})`);
   await expect(dialog.locator('#similarity-alignment-dialog-description'))
-    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'needs' : 'need'} a choice`);
+    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'record' : 'records'} awaiting a choice`);
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(/Choose a candidate or Skip for \d+ record/);
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
   // No number joins a row to the figure.
