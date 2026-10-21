@@ -3282,7 +3282,7 @@
                                         <select :value="unplaced.draft.subjectUid" @change="setLinearComparisonEndpoint(unplaced.draft.id, 'subjectUid', $event.target.value)" :aria-label="t('To record for unplaced comparison {id}', { id: unplaced.draft.id })" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable"><template v-for="(seq, idx) in linearSeqs" :key="`s-${unplaced.draft.id}-${seq.uid}`"><option v-if="recordSelection.isDrawn('linear', seq.uid)" :value="seq.uid">{{ t('To #{n}', { n: idx + 1 }) }}</option></template></select>
                                     </div>
                                     <ul class="space-y-0.5 text-[9px] leading-snug text-amber-800">
-                                        <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ issue.message }}</li>
+                                        <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ tm(issue.message) }}</li>
                                     </ul>
                                     <div v-if="unplaced.draft.losatFilename" :data-linear-raw-unplaced="unplaced.draft.id" class="min-w-0 space-y-1">
                                         <label class="linear-primary-label block" :for="`linear-raw-name-unplaced-${unplaced.draft.id}`">{{ t('Retained Raw LOSAT filename') }}</label>
