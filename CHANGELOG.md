@@ -19,6 +19,10 @@ write-up of a release.
   navigation, and Generate processing-stage feedback.
 - Includes the beta's package-root Python API and current session/request
   compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
+- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
+  compatibility, and installation availability. Publication dates are recorded
+  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
+
 - Feature label style (CLI, Python, web app): a feature label with a leader
   line has a line setting and a protection setting per diagram mode,
   `--label_line {none,under}` and `--label_protection {none,halo,box}`
@@ -77,8 +81,9 @@ write-up of a release.
   tallest label plus `--linear_label_spacing` per row) instead of stopping just
   above the label it clears, so its underline and box stay off the letters
   below. Figures with stacked horizontal `above_feature` labels change height
-  (lambda at 24 pt: 770 to 772 px; HmmtDNA: 394 to 378 px); turned labels,
-  `auto` figures, and the bundled examples and Gallery figures draw as before.
+  (most get taller; one whose labels were stuck between rows can get lower);
+  turned labels, `auto` figures, and the bundled examples and Gallery figures
+  draw as before.
 - Linear: a region label no longer moves a feature label onto its record's
   definition text (OV-1436).
 - Circular: with no annotation sets, an annotation slot that names a set id
@@ -101,8 +106,10 @@ write-up of a release.
   per browser and is not part of the Session, History, or any export. The
   figure, every export, and the Session are the same in every language, and
   numbers keep the English format. Warnings from Python, the Gallery tutorials,
-  and the documentation stay English. The translations are drafted and checked
-  without a native-speaker reviewer, so some wording may be corrected later.
+  and the documentation stay English. Translated wording may contain errors until it is
+  later corrected; the Bahasa Indonesia, Español, Français, Português, Tiếng
+  Việt, ไทย, and 한국어 wording was drafted and checked without a
+  native-speaker reviewer.
 - Circular labels keep the features' order across the origin (the seam of the
   circle), outer and inner, so fewer leaders cross and inner labels stay in
   order. Some figures that stopped with "labels do not fit" now draw.
@@ -110,21 +117,17 @@ write-up of a release.
   reported in the label warning ("N region labels on other tracks"); the figure
   is unchanged.
 - Web app, Legend: a Legend row of color None shows an empty struck-through
-  swatch and **None** in the Legend drawer and the Legend item popup, and later
+  swatch and **None** in the Legend tab and the Legend item popup, and later
   live color edits of such a row no longer fail (OV-1385, OV-1386).
 - Web app, History: the notice about discarded Undo history appears only when
   the memory limit drops steps, not for the routine 30-step window.
-- Web app: **Undo** and **Redo** are disabled while their mode-switch step
-  waits for a label rerender or **Generate Diagram**, instead of a click that
-  does nothing.
+- Web app: **Undo** and **Redo** are disabled while the step they would take
+  switches the diagram mode and waits for a label rerender, **Generate
+  Diagram**, or a Session save or load, instead of a click that does nothing.
 - A CLI Session records `--label_blacklist` as keywords, not as a Blacklist
   File; older CLI Sessions keep their binding.
 - Documentation: the GUI images, the `examples/` figures, and the Gallery
   tutorial media were retaken for the feature label style.
-- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
-  compatibility, and installation availability. Publication dates are recorded
-  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
-
 - Fonts (CLI, Python, web app): diagram text can use any font, including a
   font installed on the computer or loaded from a file, and gbdraw measures
   labels, the legend, and titles with that font instead of Liberation Sans
