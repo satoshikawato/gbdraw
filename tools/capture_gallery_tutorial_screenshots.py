@@ -665,7 +665,12 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         confirm = page.get_by_role("dialog", name="Reset all settings?")
         confirm.get_by_role("button", name="Reset all settings", exact=True).click()
         confirm.wait_for(state="hidden")
-        page.wait_for_timeout(500)
+        # Reset redraws the shown Result ("Updating diagram"); the mode buttons, Undo, and
+        # other History-backed controls stay disabled until that update ends.
+        page.wait_for_function(
+            "() => { const app = window.__GBDRAW_APP__; return Boolean(app) && !app.processing && !app.labelReflowProcessing; }",
+            timeout=DEFAULT_GENERATE_TIMEOUT_MS,
+        )
     elif action_type == "generate":
         generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))
     else:
