@@ -1,4 +1,5 @@
 // @ts-check
+import { ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
@@ -21,7 +22,7 @@ import {
   textAliasStatus,
   orthogroupIdStatus
 } from '../services/feature-identity.js';
-import { msg, t, tm, tn } from '../utils/i18n.js';
+import { msg, t, tm, tmx, tn } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureLike } from '../services/feature-utils.js' */
@@ -1326,18 +1327,59 @@ const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) =>
   return `${makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
 };
 
-// Python's member defaults (OrthogroupMember in analysis/protein_colinearity.py).
-// The member table names a role or confidence only when it differs (UX-B02).
-const DEFAULT_MEMBER_ROLE = 'anchor';
-const DEFAULT_MEMBER_CONFIDENCE = 'high';
+/**
+ * A similarity group member field whose values Python owns
+ * (`OrthogroupMember.role` and `.confidence` in analysis/protein_colinearity.py).
+ * @typedef {'role' | 'confidence'} MemberValueField
+ */
+/**
+ * The generated values and default of a member field, and the translation
+ * context of their labels.
+ * @typedef {{ owner: Readonly<{ values: readonly string[], default: string }>, context: string }} MemberValueSource
+ */
+/** @type {Readonly<Record<MemberValueField, MemberValueSource>>} */
+const MEMBER_VALUE_SOURCES = Object.freeze({
+  role: Object.freeze({ owner: ORTHOGROUP_MEMBER_ROLE, context: 'member role' }),
+  confidence: Object.freeze({ owner: ORTHOGROUP_MEMBER_CONFIDENCE, context: 'member confidence' })
+});
 
+/**
+ * The English label of a member value: the value with spaces for `_`.
+ * @param {string} value
+ */
+const memberValueEnglish = (value) => value.replaceAll('_', ' ');
+
+/**
+ * How a member role or confidence value shows in the UI language. A value
+ * that Python does not list here (a newer Python) shows as written.
+ * @param {MemberValueField} field
+ * @param {string} value
+ * @returns {string}
+ */
+export const memberValueLabel = (field, value) => {
+  const { owner, context } = MEMBER_VALUE_SOURCES[field];
+  return owner.values.includes(value) ? tmx(context, memberValueEnglish(value)) : value;
+};
+
+/**
+ * The catalog keys of the member value labels, with their English text.
+ * @returns {{ context: string, english: string }[]}
+ */
+export const memberValueLabelKeys = () => Object.values(MEMBER_VALUE_SOURCES).flatMap(({ owner, context }) => (
+  owner.values.map((value) => ({ context, english: memberValueEnglish(value) }))
+));
+
+// The member table names a role or confidence only when it differs from
+// Python's default (UX-B02).
 /**
  * @param {string} role
  * @param {string} confidence
  */
 const memberRoleNote = (role, confidence) => [
-  role && role !== DEFAULT_MEMBER_ROLE ? role.replaceAll('_', ' ') : '',
-  confidence && confidence !== DEFAULT_MEMBER_CONFIDENCE ? t('{confidence} confidence', { confidence }) : ''
+  role && role !== ORTHOGROUP_MEMBER_ROLE.default ? memberValueLabel('role', role) : '',
+  confidence && confidence !== ORTHOGROUP_MEMBER_CONFIDENCE.default
+    ? t('{confidence} confidence', { confidence: memberValueLabel('confidence', confidence) })
+    : ''
 ].filter(Boolean).join(' · ');
 
 /**
@@ -2245,10 +2287,10 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, msg('Group path ID'), attr(element, 'data-ortholog-path-id'));
   addRow(alignmentRows, msg('Query group genes'), attr(element, 'data-query-orthogroup-member-count'));
   addRow(alignmentRows, msg('Subject group genes'), attr(element, 'data-subject-orthogroup-member-count'));
-  addRow(alignmentRows, msg('Query member role'), attr(element, 'data-query-orthogroup-role'));
-  addRow(alignmentRows, msg('Subject member role'), attr(element, 'data-subject-orthogroup-role'));
-  addRow(alignmentRows, msg('Query confidence'), attr(element, 'data-query-orthogroup-confidence'));
-  addRow(alignmentRows, msg('Subject confidence'), attr(element, 'data-subject-orthogroup-confidence'));
+  addRow(alignmentRows, msg('Query member role'), memberValueLabel('role', attr(element, 'data-query-orthogroup-role')));
+  addRow(alignmentRows, msg('Subject member role'), memberValueLabel('role', attr(element, 'data-subject-orthogroup-role')));
+  addRow(alignmentRows, msg('Query confidence'), memberValueLabel('confidence', attr(element, 'data-query-orthogroup-confidence')));
+  addRow(alignmentRows, msg('Subject confidence'), memberValueLabel('confidence', attr(element, 'data-subject-orthogroup-confidence')));
   addRow(alignmentRows, msg('Query assignment'), attr(element, 'data-query-orthogroup-assignment-reason'));
   addRow(alignmentRows, msg('Subject assignment'), attr(element, 'data-subject-orthogroup-assignment-reason'));
 

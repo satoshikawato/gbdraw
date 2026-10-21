@@ -105,15 +105,15 @@ Open **Settings** and choose the **LOSATP** button in **LOSAT Mode**. Choose
 **Pairwise matches** from the **LOSATP mode** menu and set **Match style** to
 **Curve** under **Comparison appearance**; Collinear blocks keeps that style but
 hides the control. Then choose **Collinear blocks** from the **LOSATP mode**
-menu, select **Infer orthogroups with self-comparisons**, clear **Max target
-seqs** so it shows **Unbounded**, and set the remaining block, Performance, and
+menu, select **Build similarity groups with within-record searches**, clear
+**Max target seqs** so it shows **Unbounded**, and set the remaining block, Performance, and
 result-filter values. Then open **Advanced
 comparison and layout** and set the advanced Collinear values.
 
-Fresh Web Collinear settings leave **Infer orthogroups with self-comparisons**
-off and set **Max target seqs** to `5`. The Gallery figure and the
-command-line and Python workflows infer orthogroups with self-comparisons from
-an unbounded search, so change both values to reproduce it. Fresh and Reset
+Fresh Web Collinear settings leave **Build similarity groups with within-record
+searches** off and set **Max target seqs** to `5`. The Gallery figure and the
+command-line and Python workflows build similarity groups with within-record
+searches from an unbounded search, so change both values to reproduce it. Fresh and Reset
 Collinear settings default **Search between** to **Adjacent pairs**, which is
 also the value used by this checked recipe and output.
 
@@ -128,7 +128,7 @@ also the value used by this checked recipe and output.
 | Settings / Performance | Threads per run | Auto |
 | Settings / Search limits | Max target seqs | Blank (**Unbounded**) |
 | Settings / Search limits | Member hits per protein | `5` |
-| Settings | Infer orthogroups with self-comparisons | Selected |
+| Settings | Build similarity groups with within-record searches | Selected |
 | Settings | Max unit gap | `0` |
 | Settings | Min block genes | `1` |
 | Settings | Color mode | Orientation + identity |

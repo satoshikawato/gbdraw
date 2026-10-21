@@ -530,7 +530,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'settings.get_by_label("Collinear search between", exact=True).select_option(',
         '"Advanced comparison and layout"',
         'if evidence_scope not in {"all", "adjacent"}',
-        'name="Infer orthogroups with self-comparisons", exact=True',
+        'name="Build similarity groups with within-record searches", exact=True',
         "infer_orthogroups.check()",
         'settings.get_by_label("LOSATP Max target seqs", exact=True)',
         'max_target_seqs.fill("")',
@@ -734,7 +734,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     } <= set(gallery_chapter["execution"]["assertions"])
     assert "does not load a Gallery session" in gallery_collinear
     assert "Search between | Adjacent pairs" in gallery_collinear
-    assert "Infer orthogroups with self-comparisons | Selected" in gallery_collinear
+    assert "Build similarity groups with within-record searches | Selected" in gallery_collinear
     assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
     assert "Advanced comparison and layout | Execution" not in gallery_collinear
     assert "Open **Selected pairs (4)**" in gallery_collinear

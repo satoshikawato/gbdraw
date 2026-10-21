@@ -272,7 +272,7 @@
     },
     {
       "title": "Compare the genomes with LOSATP Collinear blocks",
-      "body": "To see which regions the genomes share, compare their proteins. In Comparison, choose Run LOSAT. Open Settings, press LOSATP, set LOSATP mode, Color mode, Max unit gap, and Min block genes, and turn on Infer orthogroups with self-comparisons, as the command line does by default. Set Diagonal drift under Advanced comparison and layout, then click Generate Diagram. The ribbons run diagonally and wrap around the row ends, because NCBI starts each chromosome at an unrelated position.",
+      "body": "To see which regions the genomes share, compare their proteins. In Comparison, choose Run LOSAT. Open Settings, press LOSATP, set LOSATP mode, Color mode, Max unit gap, and Min block genes, and turn on Build similarity groups with within-record searches, as the command line does by default. Set Diagonal drift under Advanced comparison and layout, then click Generate Diagram. The ribbons run diagonally and wrap around the row ends, because NCBI starts each chromosome at an unrelated position.",
       "table": {
         "columns": [
           "Setting",
@@ -304,7 +304,7 @@
             "3"
           ],
           [
-            "Infer orthogroups with self-comparisons",
+            "Build similarity groups with within-record searches",
             "On"
           ],
           [
@@ -349,7 +349,7 @@
         },
         {
           "type": "check",
-          "selector": "input[aria-label='Infer orthogroups with self-comparisons']"
+          "selector": "input[aria-label='Build similarity groups with within-record searches']"
         },
         {
           "type": "evaluate",

@@ -167,6 +167,17 @@ export const msg = (text) => text;
 export const tm = (text, params) => substitute(lookup(text, text), params);
 
 /**
+ * The shown text, in `context`, of an English text derived from a value set
+ * that another owner generates, so that no literal of it is in the source:
+ * the `tx()` counterpart of `tm()`. The module that derives the text also
+ * lists its keys, which the catalog check reads.
+ * @param {string} context
+ * @param {string} text
+ * @returns {string}
+ */
+export const tmx = (context, text) => lookup(context + CONTEXT_SEPARATOR + text, text);
+
+/**
  * What separates two sentences shown one after the other in the shown locale:
  * a space in English, nothing in Japanese and Chinese (after 。). Templates
  * put it between two keys: `{{ t('A.') }}{{ sentenceSeparator() }}{{ t('B.') }}`.

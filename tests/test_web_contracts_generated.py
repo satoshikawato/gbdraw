@@ -103,6 +103,49 @@ def test_a_changed_session_field_set_makes_the_generated_module_stale(
     assert "Object.freeze(['another', 'originalColors', 'originalOrder'])" in generator.render_web_contracts_module()
 
 
+def test_the_member_role_and_confidence_values_come_from_the_python_literals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-1390: the Web shows these values in the UI language; it lists no value itself.
+    from gbdraw.analysis import protein_colinearity
+
+    generator = _generator()
+    current = generator.render_web_contracts_module()
+    assert (
+        "export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({\n"
+        "  values: /** @type {readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[]} */ "
+        "(Object.freeze(['anchor', 'coortholog', 'inparalog', 'low_confidence', 'local_paralog'])),\n"
+        "  default: 'anchor'\n"
+        "});\n"
+    ) in current
+    assert (
+        "export const ORTHOGROUP_MEMBER_CONFIDENCE = Object.freeze({\n"
+        "  values: /** @type {readonly ('high' | 'medium' | 'low')[]} */ (Object.freeze(['high', 'medium', 'low'])),\n"
+        "  default: 'high'\n"
+        "});\n"
+    ) in current
+
+    @dataclasses.dataclass(frozen=True)
+    class NextMember:
+        role: Literal["anchor", "coortholog", "inparalog", "low_confidence", "local_paralog", "next"] = "anchor"
+        confidence: Literal["high", "medium", "low"] = "medium"
+
+    monkeypatch.setattr(protein_colinearity, "OrthogroupMember", NextMember)
+    following = generator.render_web_contracts_module()
+
+    assert "'local_paralog', 'next']" in following
+    assert "(Object.freeze(['high', 'medium', 'low'])),\n  default: 'medium'\n" in following
+
+
+def test_a_member_field_default_outside_its_literal_is_refused() -> None:
+    @dataclasses.dataclass(frozen=True)
+    class Broken:
+        role: Literal["anchor"] = "other"  # type: ignore[assignment]
+
+    with pytest.raises(TypeError, match="Broken.role"):
+        _generator()._literal_field_declaration("BROKEN", Broken, "role")
+
+
 def test_the_legend_positions_of_a_mode_have_one_python_owner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

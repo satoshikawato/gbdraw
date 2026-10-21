@@ -2256,7 +2256,7 @@
                                                 <input type="checkbox" v-model="adv.depth_normalize" aria-describedby="help-circular-log-scale" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                                 <span>{{ t('Log Scale') }}</span>
                                             </label>
-                                            <help-tip id="help-circular-log-scale" :text="t('Use IGV-style log10 scaling for depth: 10x is twice the height of 1x.')"></help-tip>
+                                            <help-tip id="help-circular-log-scale" :text="t('Use IGV-style log10 scaling for depth: 1x, 10x, and 100x are evenly spaced.')"></help-tip>
                                         </div>
                                         <div class="flex items-center text-xs">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -2763,7 +2763,7 @@
                                                 <input type="checkbox" v-model="adv.depth_normalize" aria-describedby="help-linear-log-scale" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                                 <span>{{ t('Log Scale') }}</span>
                                             </label>
-                                            <help-tip id="help-linear-log-scale" :text="t('Use IGV-style log10 scaling for depth: 10x is twice the height of 1x.')"></help-tip>
+                                            <help-tip id="help-linear-log-scale" :text="t('Use IGV-style log10 scaling for depth: 1x, 10x, and 100x are evenly spaced.')"></help-tip>
                                         </div>
                                         <div class="flex items-center text-xs">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -3034,10 +3034,10 @@
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="flex items-start text-xs">
                                         <label class="flex items-start gap-2 text-xs text-slate-600">
-                                            <input type="checkbox" v-model="losat.blastp.collinearInferOrthogroups" :aria-label="t('Infer orthogroups with self-comparisons')" aria-describedby="help-comparison-infer-orthogroups" class="form-checkbox mt-0.5" :disabled="!semanticMutationAvailable">
-                                            <span>{{ t('Infer orthogroups with self-comparisons') }}</span>
+                                            <input type="checkbox" v-model="losat.blastp.collinearInferOrthogroups" :aria-label="t('Build similarity groups with within-record searches')" aria-describedby="help-comparison-infer-orthogroups" class="form-checkbox mt-0.5" :disabled="!semanticMutationAvailable">
+                                            <span>{{ t('Build similarity groups with within-record searches') }}</span>
                                         </label>
-                                        <help-tip id="help-comparison-infer-orthogroups" :text="t('Include within-record searches and infer orthogroups with paralogs before building blocks. Off by default: build blocks from between-record hits without orthogroup inference.')"></help-tip>
+                                        <help-tip id="help-comparison-infer-orthogroups" :text="t('Add within-record searches and group proteins, paralogs included, into similarity groups before blocks are built. Off by default: blocks are built from between-record hits without similarity groups.')"></help-tip>
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">

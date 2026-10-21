@@ -15,6 +15,7 @@ Ambiguous	複数のレコードに一致	匹配多条记录	不明確	Record sel
 Amino acid	アミノ酸配列	氨基酸序列	胺基酸序列	Popup tab and search field Amino acid. Taiwan 胺基酸; s2twp already yields it. [R4] ja: This value is for the sequence-type tabs and search fields; the general noun is アミノ酸.
 Anchor	アンカー	锚点	錨點	[seed] The drawable slot an Overlay annotation track sits on (Select anchor, Cover anchor); also the gene a record is aligned on in Review alignment. See Anchor (collinear).
 Anchor (collinear)	アンカー	锚点	錨點	Hit pairs that seed Collinear blocks (Anchor mode, Collinear minimum anchors); same words as Anchor.
+anchor (member role)	アンカー	锚点	錨點	Similarity group member role, shown in the member table and the match popup rows. The values come from Python (OrthogroupMember.role); catalog key context `member role`. Same words as Anchor.
 Annotation	アノテーション	注释	註解	[seed] [medium] Region Annotations; 註解 in Taiwan, 註釋 elsewhere, and s2twp yields 註釋. ja: docs/internal also writes 注釈; keep the seed.
 Annotation set	アノテーションセット	注释集	註解集	Add set, Duplicate set, Select annotation set.
 Applied	適用済み	已应用	已套用	Similarity alignment applied.
@@ -70,6 +71,7 @@ Confidence	信頼度	置信度	信賴度	[R2] zh-Hant only. [R4] ja: Used in 107
 Configuration	構成	配置	組態	[medium] Configuration overrides and paths (Remove unknown configuration overrides); the paths stay Latin. ja: not 設定, which is Settings. Microsoft Taiwan 組態; s2twp yields 配置.
 Conservation	保存性	保守性	保守性	[seed] Conservation rings in Circular; conservation_* setting names stay Latin.
 Coordinates	座標	坐标	座標	Target kind Coordinates, Table coordinates, Length / Coordinates. s2twp already yields 座標.
+coortholog (member role)	共オーソログ	共直系同源	共直系同源	Similarity group member role, shown in the member table and the match popup rows. The values come from Python (OrthogroupMember.role); catalog key context `member role`.
 Copy	コピー	复制	複製	Copy, Copy details, Copy diagnostics, Copy table, Copy command.
 Coverage	深度	深度	深度	Read-depth coverage (depth coverage axis, x coverage units such as 10x). [R1] depth coverage and x coverage are 深度; a quantity inside a sentence is リード深度. [R1] depth coverage -> 深度. [R1] depth coverage -> 深度. [R4] zh-Hans: x coverage units は「深度倍数」（覆盖倍数ではない）。 [R4] zh-Hant: x coverage units are 深度倍數 (three strings were 覆蓋倍數).
 Crop	切り出し	截取	擷取	Displayed sub-region of a record (Single-record crop, orientation and titles). Not Clip. s2twp already yields 擷取.
@@ -150,12 +152,14 @@ Geometry	寸法設定／配置	几何参数	幾何參數	[R2] Arrow / Label / Cu
 GFF3	GFF3	GFF3	GFF3	Latin in all locales (GFF3 + FASTA, GFF3 File).
 Help	ヘルプ	帮助	說明	Accessible name of every ? help tip (a11y.help); Help: Custom Track Slots. Microsoft Taiwan uses 說明.
 Hide	非表示	隐藏	隱藏	Hide, Hide GC Content, Keep hidden.
+high (member confidence)	高	高	高	Similarity group member confidence, shown in the member table ({confidence} confidence) and the match popup rows. The values come from Python (OrthogroupMember.confidence); catalog key context `member confidence`.
 Highlight	ハイライト	高亮	醒目提示	[review] zh-Hant: annotation mark Highlight (behind features) and the Highlight action of a Similarity group. Microsoft Taiwan 醒目提示; alternative 強調顯示; s2twp keeps 高亮.
 History	履歴	历史记录	歷史記錄	Undo history (one History step per change). A History step: 履歴の1操作 / 一个历史步骤 / 一個歷史步驟.
 Hit	ヒット	命中	命中	Max hits, All hits, Member hits per protein, reverse hits.
 Identity (record or feature)	識別情報	标识	識別資訊	[medium] Stable record identity, feature identity in errors (does not identify a record). s2twp yields 標識.
 Identity (sequence)	一致率	一致性	一致性	Min identity (%), Minimum Identity, Average identity color mode. [R2, D-31] Owner: 一致率 (every ja Identity row already uses it). [R4, Owner] Thresholds read 最低一致率 (Min identity, Minimum Identity), average 平均一致率. Fix STYLE §2.3 example 最小同一性(%) to 最低一致率(%).
 Import	インポート	导入	匯入	Import TSV (annotations), Import / export menu. Not Load.
+inparalog (member role)	インパラログ	内旁系同源	內旁系同源	Similarity group member role, shown in the member table and the match popup rows. The values come from Python (OrthogroupMember.role); catalog key context `member role`.
 Input	入力	输入	輸入	Input Genomes, input files; rail short name Input.
 Input Genomes	入力ゲノム	输入基因组	輸入基因體	Section title (rail short name Input: 入力 / 输入 / 輸入). Taiwan 基因體.
 Inside	内側	内侧	內側	Circular: Inside axis, Feature inside axis, Move inside Axis; also Inner gap and inner labels.
@@ -194,17 +198,21 @@ Load	読み込む	加载	載入	Load Session, Load font file…, Load Label TSV.
 Load example	サンプルを読み込む	加载示例	載入範例	Header button and Load an example (empty Preview).
 Load Session	セッションを読み込む	加载会话	載入工作階段	Header button.
 Loading session…	セッションを読み込み中…	正在加载会话…	正在載入工作階段…	Header status; busy reason Loading session. Retry after loading finishes.
+local paralog (member role)	レコード内パラログ	记录内旁系同源	記錄內旁系同源	Similarity group member role, shown in the member table and the match popup rows. The values come from Python (OrthogroupMember.role); catalog key context `member role`. A paralog within one record.
 Location	位置情報	位置	位置	[medium] INSDC feature location (3901..4000, 1..200 (+)); feature list column Location. zh shares 位置 with Position. [R2] DDBJ defines Location as 位置情報; used across the UI.
 Locus ID	遺伝子座ID	基因座ID	基因座ID	[R4] Identifier of the Collinear locus unit; Locus is 遺伝子座; Locus tag stays ローカスタグ.
 Log scale	対数スケール	对数刻度	對數刻度	Log Scale checkbox (IGV-style log10 depth).
 LOSAT	LOSAT	LOSAT	LOSAT	[seed; split] Search tool name. Run LOSAT: LOSATを実行 / 运行LOSAT / 執行LOSAT. LOSAT Mode, LOSAT cache, Raw LOSAT TSV keep it Latin.
 LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	LOSATN / LOSATP / TLOSATX	Latin in all locales: LOSAT Mode buttons and program names.
 losatn/losatp	losatn/losatp	losatn/losatp	losatn/losatp	Latin in all locales; CLI and setting names (losatp_max_hits).
+low (member confidence)	低	低	低	Similarity group member confidence, shown in the member table ({confidence} confidence) and the match popup rows. The values come from Python (OrthogroupMember.confidence); catalog key context `member confidence`.
+low confidence (member role)	低信頼度	低置信度	低信賴度	Similarity group member role, shown in the member table and the match popup rows. The values come from Python (OrthogroupMember.role); catalog key context `member role`.
 Mark (annotation)	マーク	标记	標記	Annotation mark (Marks filter: Highlight | Band | Line | Bracket). Bracket: ブラケット / 括号 / 括號; hatch: ハッチング / 斜线填充 / 斜線填色.
 Markup	マークアップ	格式标记	格式標記	The <i>…</i> markup in names; the tags stay literal.
 Match (comparison)	マッチ	匹配	比對	A drawn pairwise hit (Match style, Match height, Pairwise matches, match popup). [R2] BLAST/LOSAT alignment: 比對連線 in the figure, 比對結果 for counts and lists.
 Match (search)	一致	匹配	符合	Feature search and rule matching (2 of 5 matches, No matches, Previous match, the first match wins). Microsoft Taiwan 符合.
 Mb	Mb	Mb	Mb	Unit; Latin in all locales.
+medium (member confidence)	中	中	中	Similarity group member confidence, shown in the member table ({confidence} confidence) and the match popup rows. The values come from Python (OrthogroupMember.confidence); catalog key context `member confidence`.
 Member	メンバー	成员	成員	Similarity group members (Copy or download the members).
 Merge	マージ	合并	合併	[medium] Merge into <name>, Merge orientation, Merge conflicts. ja: docs/internal writes マージ 79 times; 統合 is the alternative.
 Metadata	メタデータ	元数据	中繼資料	[medium] Feature metadata, composition metadata. Microsoft Taiwan 中繼資料; s2twp yields 後設資料, also used in Taiwan academia.
@@ -231,7 +239,7 @@ Optional	任意	可选	選填	Region (optional), Record (optional): 領域（任
 Organelle	オルガネラ	细胞器	胞器	Tagline: for microbes and organelles. Taiwan 胞器; s2twp yields 細胞器. ja alternative 細胞小器官. microbes: 微生物 / 微生物 / 微生物.
 Organism	生物名	生物名称	生物名稱	Organism / strain field; the /organism qualifier stays Latin.
 Orientation	向き	方向	方向	Record orientation (crop, orientation and titles), Merge orientation, Orientation color mode.
-Orthogroup	orthogroup	orthogroup	orthogroup	[seed; split from Orthogroup, Collinear, LOSAT, BLAST, GC, AT] Latin in all locales, not オーソグループ or 直系同源群: it names a LOSATP option and CLI settings (collinear_infer_orthogroups, orthogroup_membership_mode), and practitioners write it in English. A zh help text may gloss it once: orthogroup（直系同源群）. Capitalize as the English position does.
+Orthogroup	orthogroup	orthogroup	orthogroup	[seed; split from Orthogroup, Collinear, LOSAT, BLAST, GC, AT] Latin in all locales, not オーソグループ or 直系同源群: it names CLI settings (collinear_infer_orthogroups, orthogroup_membership_mode), and practitioners write it in English. The Web UI no longer names a control with it: the Collinear checkbox says similarity groups (see Similarity group). A zh help text may gloss it once: orthogroup（直系同源群）. Capitalize as the English position does.
 Output	出力	输出	輸出	Output Prefix, batch output, search output.
 Outside	外側	外侧	外側	Circular: Outside axis, Labels outside / ticks inside; also Outer gap and outer labels.
 Overflow	オーバーフロー	溢出	溢出	[review] zh-Hant: annotation track overflow (overflow=error | compress | clip; Overflow behavior). s2twp yields 溢位, which reads as arithmetic overflow in Taiwan. Option Error on overflow: オーバーフロー時はエラー / 溢出时报错 / 溢出時報錯.
@@ -336,7 +344,7 @@ SharedArrayBuffer	SharedArrayBuffer	SharedArrayBuffer	SharedArrayBuffer	JavaScri
 Show	表示	显示	顯示	Show, Show Labels, Show Depth, Show in Comparison, Show in settings.
 Side	側	侧	側	Slot side (Linear above | below | overlay; Circular outside | inside); Move up within side.
 Similarity	類似性	相似性	相似性	Similarity alignment; similarity rings.
-Similarity group	類似性グループ	相似性组	相似性組	[medium] LOSATP mode Similarity groups and the Editor tab. gbdraw's own term, so it is translated, unlike Collinear.
+Similarity group	類似性グループ	相似性组	相似性組	[medium] LOSATP mode Similarity groups and the Editor tab. gbdraw's own term, so it is translated, unlike Collinear. Also the Collinear checkbox Build similarity groups with within-record searches (CLI --collinear_infer_orthogroups).
 Skew	スキュー	偏斜	偏斜	Skew alone (Positive skew color, content/skew track). GC skew and AT skew stay Latin.
 Skip	スキップ	跳过	略過	Skip, Skip this record, Skip these comparisons and Generate. Microsoft Taiwan 略過; s2twp yields 跳過.
 Slot (File card)	欄	位置	位置	[medium] The place of a Linear File card in Empty this slot (keeps a blank File card). Not a track slot; do not reuse スロット / 槽位.

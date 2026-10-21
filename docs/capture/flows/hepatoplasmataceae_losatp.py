@@ -241,7 +241,7 @@ def _configure_all_record_collinear(
     # request and the CLI/Python recipes use inference with an unbounded raw
     # search, so this Gallery reproduction selects those values explicitly.
     infer_orthogroups = settings.get_by_role(
-        "checkbox", name="Infer orthogroups with self-comparisons", exact=True
+        "checkbox", name="Build similarity groups with within-record searches", exact=True
     )
     expect(infer_orthogroups).not_to_be_checked()
     infer_orthogroups.check()
@@ -616,7 +616,7 @@ def _frame_collinear_settings(settings: Any) -> None:
             "orthogroup inference",
             settings.get_by_role(
                 "checkbox",
-                name="Infer orthogroups with self-comparisons",
+                name="Build similarity groups with within-record searches",
                 exact=True,
             ),
         ),
