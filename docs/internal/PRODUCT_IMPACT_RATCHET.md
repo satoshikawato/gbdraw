@@ -293,6 +293,25 @@ Use `IMPLEMENT_EXISTING_AUTHORITY` without a new Product Decision when:
 An incorrect test does not turn a bug into a product choice. Correct the test
 and implementation against merged authority.
 
+### What a Product Decision does not record
+
+A Product Decision, a durable decision, and a Product Contract record state
+user-visible outcomes only. They do not record:
+
+- release scope or timing: which release ships an outcome, what a release tag
+  waits for, or the order of pull requests. The release notes, `CHANGELOG.md`,
+  and the task's decision record hold these, and the Product Decision Owner
+  still decides them there;
+- terminology and translated wording: the term a language uses for a name, or
+  who decides an open term. `docs/internal/I18N_STYLE.md` and
+  `docs/internal/I18N_GLOSSARY.tsv` hold these; or
+- work process: staging, review assignment, or an implementation choice that
+  leaves the outcome unchanged.
+
+Such text in an existing record is not Product authority. A change that
+differs from it needs no Product Decision or Contract revision, and the next
+replacement of that record drops the text.
+
 ### Required procedural classification
 
 Select exactly one classification and explain why the others do not apply:
