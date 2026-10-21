@@ -170,8 +170,8 @@ already emits the final fields.
 The following are hard failures when applicable:
 
 - new production dependencies or bare production imports;
-- binary runtime additions, and vendored runtime changes that the trusted base
-  does not list (see
+- binary runtime additions that the trusted base does not list, and vendored
+  runtime changes that it does not list (see
   [Updating a vendored runtime file](#updating-a-vendored-runtime-file));
 - incomplete or cyclic first-party imports;
 - unauthorized privileged owners or importers;
@@ -615,8 +615,12 @@ for a path it lacks,
 `remove` whose hash differs from the base bytes, and `replace` with the bytes
 the base already has. The report lists every added and removed entry. A listed
 change passes with `Review: REQUIRED`. An added binary file under
-`gbdraw/web/vendor/` still fails ("added binary runtime files are not
-allowed").
+`gbdraw/web/vendor/` passes the binary rule only when the trusted base lists
+it as `add` and the head bytes hash to the entry's `sha256`; any other added
+binary runtime file still fails ("added binary runtime files are not
+allowed"). The route takes effect for a pull request only when that pull
+request's base checker implements it; a checker-only pull request follows the
+one that lists the files.
 
 An update takes two pull requests in this order:
 
