@@ -1443,7 +1443,10 @@
            aria-label and title. The tagline gives way before the toolbar, so the
            longer button labels of es, fr and pt keep the Session title and the
            Language menu in view; the logo keeps its size, and the Session title
-           narrows when the labels still do not fit. */
+           narrows when the labels still do not fit. Below 769px, where the toolbar
+           wraps, the closed Language select shrinks and clips the longer names
+           (Bahasa Indonesia, Tiếng Việt) before it pushes its row to wrap; the open
+           list still shows every name in full. */
         .app-header .app-brand { flex-shrink: 1000; min-width: min-content; }
         .app-header .app-logo-title { max-width: none; }
         @media (max-width: 1439px) {
@@ -1532,6 +1535,14 @@
 
             .app-language {
                 order: 1 !important;
+                flex: 1 1 4.5rem;
+                min-width: 0;
+                max-width: max-content;
+            }
+
+            .app-language-select {
+                min-width: 0;
+                text-overflow: ellipsis;
             }
 
             .app-mode-button {
