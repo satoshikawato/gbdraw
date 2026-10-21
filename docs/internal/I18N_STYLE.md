@@ -1,6 +1,6 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt
 
-Revision 4, 2026-10-21. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
+Revision 5, 2026-10-21. Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
 follow this file and the glossary together. The glossary decides words; this
 file decides how sentences are written around them. Where the two disagree,
 the glossary wins and this file is corrected.
@@ -383,7 +383,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   깊이 (depth), 원형 / 선형 (Circular / Linear), 주 눈금 / 보조 눈금, 범례,
   축척 (scale), 축척 막대.
 - **Kept in Latin**, as Korean papers write them: GC skew, AT skew, Bitscore,
-  E-value, orthogroup, RBH, and every §1.1 name. Skew alone is 스큐.
+  E-value, orthogroup, RBH, locus tag, and every §1.1 name. Skew alone is 스큐.
 - **Loanwords** in the standard spelling (외래어 표기법) Microsoft uses: 피처,
   레코드, 트랙, 레인, 슬롯, 앵커, 히트, 쿼리, 블록, 리본, 링, 밴드, 마크,
   레이블, 라이선스, 메타데이터, 스키마, 런타임, 렌더러, 렌더링, 오버레이,
@@ -393,8 +393,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   loanword the glossary does not list. The glossary's 0.15.0 rows add
   these, which are allowed: 템플릿, 시드, 패널, 라이브러리, 인코딩, 파이프라인,
   워크플로, 해시, 플랫 파일, 포커스, 그라데이션, 픽셀, 인트론, 레플리콘,
-  프리프린트, 캐시, 사이드바, 호스팅, 이스케이프 문자, 웹 앱, and the
-  loanword parts of 파라로그, 오솔로그 and 갭 열림 수 (rows of
+  프리프린트, 캐시, 사이드바, 호스팅, 문자 이스케이프, 웹 앱, and the
+  loanword parts of 파라로그, 오솔로그 and 갭 개시 수 (rows of
   `I18N_GLOSSARY.tsv`). The compound 소스 코드 (Source code) is allowed.
 - **Command words** (Microsoft Korean): 저장, 열기, 닫기, 취소, 추가, 삭제
   (Delete), 제거 (Remove), 지우기 (Clear), 복사 (Copy), 복제 (Duplicate),
@@ -687,7 +687,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   whose tooltip names the step (Annuler : {action}) and never sits beside a dialog Annuler.
   Rétablir means Redo only (Reset to default is Revenir à la valeur par défaut, Revert is
   Revenir à la valeur d’origine).
-- **Loanwords kept**: hit, skew (GC skew, le skew positif), orthogroup, open source, thread /
+- **Loanwords kept**: hit, skew (GC skew, le skew positif), orthogroupe (prose; option values such as
+  orthogroup stay as written), open source, thread /
   multithread, cross-origin, Bitscore, E-value, the names of 1.1, tRNA and rRNA (prose ARNt, ARNr)
   and the unit bp (prose pb).
 - **One word, one concept**: élément is Feature only (a list item is entrée, a thing on the
@@ -711,7 +712,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
   an initial article (Couleur de remplissage, Mode d’exécution LOSAT).
 - Instructions (notices, remedies, help addressed to the user): imperative with vous
   (Sélectionnez un fichier.); a help text that describes its control is in the third person
-  present (Affiche la ligne de l’axe de profondeur.).
+  present (Affiche le trait de l’axe de profondeur.).
 - Work in progress: action noun and …, no verb (Chargement de la session…, Génération du
   diagramme…, Réinitialisation…); Saving session… is Session en cours d’enregistrement… (7.1);
   in a sentence, … en cours. (Annulation ou rétablissement en cours.)
@@ -907,7 +908,9 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - Placeholders are copied verbatim and may move. A value's gender is unknown,
   so put a noun before it and make articles and adjectives agree with that
   noun: o arquivo “{file}”, o registro {record}, a fonte {names}, a
-  configuração {setting}, o valor {value}, a trilha {track}. Never put o, a,
+  configuração {setting} (when {setting} is a setting's label; a {setting} that
+  can be a button name or Esta alteração opens the sentence bare), o valor
+  {value}, a trilha {track}. Never put o, a,
   do, da, no, na, ao or à straight before such a placeholder: Mesclar em
   “{name}”, not no {name}. A user-typed name the English quotes is “{name}”.
 - `Intl.PluralRules('pt')` selects `one` for 0 and 1: write `one` in
