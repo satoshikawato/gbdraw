@@ -277,12 +277,8 @@ export const createLinearTrackSlotEditor = ({
       .flatMap((issue) => issue.parts));
   };
 
-  const linearTrackGlobalIssues = () => {
-    const drawing = state.drawings.linear;
-    return (
-      linearTrackValidationPlan(drawing).globalIssues.map((issue) => errorText(issue.parts))
-    );
-  };
+  /** The plan's issues, each shown as `errorText(issue.parts)` and keyed by its code (codes do not repeat). */
+  const linearTrackGlobalIssues = () => linearTrackValidationPlan(state.drawings.linear).globalIssues;
 
   /**
    * The slots an Overlay annotation row may name: for its anchor, every

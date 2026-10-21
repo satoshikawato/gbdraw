@@ -4082,8 +4082,8 @@
                                                 {{ t('Add track') }}
                                             </button>
                                         </div>
-                                        <div v-for="issue in linearTrackGlobalIssues()" :key="`linear-track-global-${issue}`" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
-                                            {{ issue }}
+                                        <div v-for="issue in linearTrackGlobalIssues()" :key="`linear-track-global-${issue.code}`" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
+                                            {{ errorText(issue.parts) }}
                                         </div>
                                     </div>
                                 </div>
@@ -4481,8 +4481,8 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div v-for="issue in circularTrackGlobalIssues()" :key="`circular-track-global-${issue}`" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
-                                            {{ issue }}
+                                        <div v-for="issue in circularTrackGlobalIssues()" :key="`circular-track-global-${issue.code}`" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
+                                            {{ errorText(issue.parts) }}
                                         </div>
                                     </div>
                                 </div>
@@ -8738,16 +8738,16 @@
         <label :for="controlId" class="track-slot-field-label">{{ label }}</label>
         <div class="circular-measure-controls">
             <input :id="controlId" :disabled="disabled" type="text" inputmode="decimal" v-model.trim="valueText"
-                   :aria-label="t('{name} value', { name: accessibleName })" :aria-describedby="describedBy"
-                   :aria-invalid="view.error ? 'true' : 'false'" :placeholder="t('Auto')" class="form-input">
-            <select v-model="selectedUnit" :disabled="disabled" :aria-label="t('{name} unit', { name: accessibleName })"
+                   :aria-label="valueName" :aria-describedby="describedBy"
+                   :aria-invalid="view.invalid ? 'true' : 'false'" :placeholder="t('Auto')" class="form-input">
+            <select v-model="selectedUnit" :disabled="disabled" :aria-label="unitName"
                     :aria-describedby="describedBy" class="form-input">
                 <option value="px">px</option>
                 <option value="factor">×R</option>
             </select>
         </div>
         <p v-if="view.isAuto && autoText" :id="`${controlId}-auto`" class="circular-measure-note ui-hint">{{ autoText }}</p>
-        <p v-if="view.error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ view.error }}</p>
+        <p v-if="error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ error }}</p>
     </div>
 </script>
 

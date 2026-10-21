@@ -180,6 +180,15 @@ test('the track preview estimates the records it is given', () => {
   assert.equal(featureWidthNote([]), '≈ 18.5 px (estimate)', 'long while no length is known');
 });
 
+// OV-1409: the global issue list keys each issue by its code, not its shown text.
+test('the global issues keep their codes', () => {
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(createState({ axisIndex: 9 })) });
+  assert.deepEqual(editor.circularTrackGlobalIssues().map((issue) => [issue.code, issue.parts]), [
+    ['axis_out_of_range', [{ text: 'The Axis boundary must be an integer from 0 to {max}.', params: { max: 3 } }]]
+  ]);
+  assert.deepEqual(createCircularTrackSlotEditor({ state: withDrawings(createState()) }).circularTrackGlobalIssues(), []);
+});
+
 // OV-487: Python draws a content or skew slot without a dinucleotide with the
 // drawing's, so the closed disclosure names that one, not GC.
 test('the slot options summary names the dinucleotide the slot is drawn with', () => {
