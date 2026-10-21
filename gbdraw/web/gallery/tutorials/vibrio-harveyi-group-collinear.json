@@ -652,7 +652,7 @@
     },
     {
       "title": "Start chromosome I at dnaA",
-      "body": "Start each chromosome I at its replication initiator, dnaA. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search; it finds the dnaA CDS of both species. Click Open, then in the popup open Rotate record using this feature, choose Start of the record, and click Apply when I Generate. Click > for the second match and do the same.",
+      "body": "Start each chromosome I at its replication initiator, dnaA. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search; it finds the dnaA CDS of both species. Click Open, then in the popup open Rotate record using this feature, choose Start of the record, and click Apply when I Generate. Click > for the second match; the open popup follows it. Rotate that record the same way, then close the popup.",
       "table": {
         "columns": [
           "Record",
@@ -748,14 +748,6 @@
           "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 of 2 matches'"
         },
         {
-          "type": "click",
-          "selector": "button[aria-label='Open active feature']"
-        },
-        {
-          "type": "waitForSelector",
-          "selector": ".feature-popup"
-        },
-        {
           "type": "waitForFunction",
           "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_022349.1'"
         },
@@ -778,6 +770,15 @@
         {
           "type": "wait",
           "ms": 400
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label='Close feature popup']"
+        },
+        {
+          "type": "waitForSelector",
+          "selector": ".feature-popup",
+          "state": "hidden"
         }
       ],
       "operations": [
@@ -967,7 +968,7 @@
     },
     {
       "title": "Start chromosome II at rctB",
-      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open and rotate the record to start at the feature with Apply when I Generate. Then click Clear to end the search, so the preview stops dimming the other features.",
+      "body": "Search Qualifier key product for RctB. Click Open and rotate the first match's record to start at the feature with Apply when I Generate. Click >, rotate the second record the same way in the popup, and close the popup. Then click Clear to end the search, so the preview stops dimming the other features.",
       "table": {
         "columns": [
           "Record",
@@ -1063,14 +1064,6 @@
           "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 of 2 matches'"
         },
         {
-          "type": "click",
-          "selector": "button[aria-label='Open active feature']"
-        },
-        {
-          "type": "waitForSelector",
-          "selector": ".feature-popup"
-        },
-        {
           "type": "waitForFunction",
           "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_022359.1'"
         },
@@ -1096,6 +1089,15 @@
         },
         {
           "type": "click",
+          "selector": "button[aria-label='Close feature popup']"
+        },
+        {
+          "type": "waitForSelector",
+          "selector": ".feature-popup",
+          "state": "hidden"
+        },
+        {
+          "type": "click",
           "selector": "button[aria-label='Clear search']"
         }
       ],
@@ -1118,7 +1120,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector(\"button[aria-label='Close feature popup']\")?.click(); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
               },
               {
                 "type": "select",

@@ -674,6 +674,66 @@ def test_replay_resets_then_performs_steps_through_the_named_one(
     ]
 
 
+def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
+    """Reset Settings redraws the shown Result; the mode buttons and Undo stay disabled until it ends."""
+
+    events: list[str] = []
+
+    class FakeLocator:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def click(self) -> None:
+            events.append(f"click {self.name}")
+
+        def get_by_role(self, role: str, name: str, exact: bool = False) -> FakeLocator:
+            return FakeLocator(name)
+
+        def wait_for(self, state: str) -> None:
+            events.append(f"wait_for {state}")
+
+    class FakePage:
+        def get_by_role(self, role: str, name: str, exact: bool = False) -> FakeLocator:
+            return FakeLocator(name)
+
+        def wait_for_timeout(self, ms: int) -> None:
+            events.append(f"timeout {ms}")
+
+        def wait_for_function(self, script: str, timeout: int) -> None:
+            events.append(script)
+
+    capture_tool.apply_capture_action(FakePage(), {"type": "resetSettings"})
+
+    assert events[:3] == ["click Reset Settings", "click Reset all settings", "wait_for hidden"]
+    waits = [event for event in events[3:] if "labelReflowProcessing" in event]
+    assert len(waits) == 1
+    assert "processing" in waits[0].replace("labelReflowProcessing", "")
+
+
+def test_vibrio_rotation_steps_follow_the_open_popup_and_close_it() -> None:
+    """With the popup open, > retargets it to the next match; the reader closes it before the next step."""
+
+    sample = load_ready_examples("vibrio-harveyi-group-collinear")[0]
+    steps = _load_tutorial(sample)["manualSteps"]
+    for number in (6, 7):
+        replay = steps[number - 1]["replay"]
+        selectors = [action.get("selector", "") for action in replay]
+        next_index = selectors.index("button[aria-label='Next match']")
+        assert "button[aria-label='Open active feature']" in selectors[:next_index], number
+        assert "button[aria-label='Open active feature']" not in selectors[next_index:], number
+        close_index = selectors.index("button[aria-label='Close feature popup']")
+        assert close_index > next_index, number
+        assert replay[close_index + 1] == {
+            "type": "waitForSelector",
+            "selector": ".feature-popup",
+            "state": "hidden",
+        }, number
+        assert "close the popup" in steps[number - 1]["body"], number
+    for operation in steps[6]["operations"]:
+        scripts = " ".join(action.get("script", "") for action in operation["capture"].get("actions", []))
+        assert "Close feature popup" not in scripts
+
+
 def test_capture_lets_css_transitions_end_before_the_crop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
