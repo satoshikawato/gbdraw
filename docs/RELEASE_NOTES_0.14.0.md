@@ -30,6 +30,12 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   see [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
+- Choose how feature labels with a leader line are protected: an underline
+  and a white box or halo (`--label_line`, `--label_protection`; **Label Line**
+  and **Label Protection** in the web app).
+- Switch the web app between English, Bahasa Indonesia, Español, Français,
+  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어 with the
+  header **Language** menu.
 
 ## In the web app
 
@@ -118,12 +124,31 @@ move back inside the window when you resize it.
 Each change of a setting's checkbox, radio button, or button is one **Undo**
 step. **Rich Feature Popup** and the search's **Regular expression** are not
 Undo steps, and Undo and Redo do not change them. Undo and Redo are unavailable while Generate runs, and
-the header says why. Error
+the header says why. They are also disabled while a mode-switch step waits
+for a label rerender or **Generate Diagram**, instead of a click that does
+nothing. The notice about discarded Undo history appears only when the memory
+limit drops steps, not for the routine 30-step window. Error
 messages name the field, track row, Depth series, table line, or setting
 involved. A value gbdraw cannot use, such as a GC window of 0, is reported
 instead of being replaced by a default without notice. Every visible control
 has an accessible name, every **?** tip is a **Help** button that opens on
 hover, focus, click, or tap, and **Escape** closes only the top layer.
+
+A Legend row of color None shows an empty struck-through swatch and **None**
+in the Legend drawer and in the Legend item popup, as the Palette pane does,
+and later live color edits of such a row work until the next **Generate
+Diagram**.
+
+The header **Language** menu switches the interface text at once, without a
+reload, between English, Bahasa Indonesia, Español, Français, Português,
+Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어. English is shown on a
+first visit whatever the browser's language, and the choice is remembered
+per browser. The figure, every export, the Session, History, and the command
+line text of **Run Info** are the same in every language; numbers keep the
+English format (1,000.5), and warnings from Python, the Gallery tutorials, and
+the documentation stay English. The translations were drafted and checked
+without a native-speaker reviewer, so some wording may be corrected in later
+releases.
 
 Large Sessions (thousands of features) open popups and apply color choices in
 seconds instead of freezing the page.
@@ -391,6 +416,50 @@ a warning. With 50 or more outer labels, `--circular_label_spacing` now also
 sets the gap between the packed rows when those rows fit. See [Labels that do
 not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
+Circular labels keep the features' angular order across the origin (the seam
+of the circle), for outer and inner labels, so fewer leaders cross. Some
+figures that stopped with "labels do not fit" now draw. When set track radii
+(`r=`) leave region labels on other tracks, the label warning counts them
+(`N region labels on other tracks`) and the figure is unchanged.
+
+A feature label with a leader line has a line and a protection setting per
+diagram mode: `--label_line {none,under}` and
+`--label_protection {none,halo,box}` (configuration `labels.<mode>.line` and
+`.protection`; web app **Label Line** and **Label Protection** under
+**Labels**). Linear defaults to `under` and `box`: an underline joined to the
+leader, under horizontal labels only (a turned label keeps its vertical
+leader and gets none), and a white box at 80 % opacity behind the letters.
+Circular defaults to `none` and `none`; `--label_protection halo` draws a
+white outline around the letters. Leaders and underlines are 0.07 em wide, at
+least 1 px. In Linear the underline takes no room in its label row, labels
+keep their rows, and region labels keep off the underline and box as off the
+letters. Neighbouring Linear feature labels in one row keep at least 0.25 em
+apart. The web app's PDF export draws labels without their halos and
+draws centred and end-aligned text where the SVG draws it.
+
+In Linear `--label_placement above_feature`, a horizontal label now starts one
+`auto` row off its own feature, with a leader from the feature, and gets the
+underline and the white box as in `auto`; a label that must move off another
+takes the next `auto` row. A turned label (`--label_rotation`) keeps its place
+on its feature and, with `--label_protection box`, gets the white box. Figures
+with horizontal `above_feature` labels get taller (for example lambda at
+24 pt: 770 to 772 px; HmmtDNA: 394 to 378 px); `auto` figures change only
+where a label lay over a record's definition text, which feature labels now
+keep off. `--label_rotation` of a whole turn (360, -360, 720) places labels as
+horizontal.
+
+Figure size changes: a Circular annotation overlay that spans split feature
+lanes, or spans nothing, now reserves room for its labels, so the canvas can
+grow when it lies at the outer edge (OV-1359, OV-1360), and a `to_slot` span
+from split lanes to an inside slot no longer reserves room past that slot.
+Linear definition text keeps its `definition_gap` from the tick labels of a
+depth or GC% axis drawn at a record's left (OV-1399), and the figure's left
+edge covers those labels (OV-1403): such figures are about 20 to 35 px wider,
+and a GC% track beside a depth axis can change height by about a pixel.
+
+A CLI Session records `--label_blacklist` as keywords, not as a Blacklist
+File; an older CLI Session keeps its binding.
+
 `gbdraw render --session FILE` draws the diagrams saved in a Session;
 `--list_drawings` lists them and `--drawing ID` picks one. In Python,
 `SessionDocument.drawings` lists them and `render_session_drawings()` draws
@@ -474,6 +543,7 @@ reads the file.
 | `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
 | Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
 | Linear `--label_placement on_feature` | `--label_placement above_feature` |
+| Configuration `labels.stroke_width` (leader line width) | Removed: leaders are 0.07 em wide; an override fails with the unknown-path error |
 | Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
 | Flat `show_labels` / `allow_inner_labels` configuration | Mode-specific `labels.circular.*` / `labels.linear.*` leaves |
 | Circular slot `spacing`, `strict`, `compress`, `reserve` | Explicit `inner_gap_px` / `outer_gap_px`; geometry determines reservation and compression |
@@ -658,7 +728,6 @@ each export format needs.
   listed `pairs` cannot be edited; **Inherit saved comparison** reuses it as saved.
 - A Session 31 to 39 whose Label whitelist has a row with a blank keyword loads
   in the web app, but replaying it on the command line fails.
-- A feature popup can cover header buttons such as **Undo**; close it to reach them.
 - Similarity Groups assignment reasons and path IDs can differ between the web app
   and the command line for a reverse-complemented record, because inference depends
   on the order of LOSAT hits. The drawn diagram is the same.
