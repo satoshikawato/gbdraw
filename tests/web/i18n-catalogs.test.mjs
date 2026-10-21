@@ -682,6 +682,20 @@ test('OV-1387: the Record Size Mode option Linear is its own key; the diagram mo
   assert.match(html, /@click="setDiagramMode\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
 });
 
+test('OV-1465: the Circular record selector has its own key; the topology checkbox keeps Circular record', () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  const select = html.slice(html.indexOf(':value="form.circular_record_selector"'));
+  assert.match(select.slice(0, select.indexOf('>')), /:aria-label="tx\('record selector', 'Circular record'\)"/);
+  assert.match(html, /controller\.setTopology\(row, \$event\.target\.checked\)[^\n]*> \{\{ t\('Circular record'\) \}\}<\/label>/);
+});
+
+test('OV-1447: a stroke-width placeholder has its own key; the Circular track slot Width label keeps Width', () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  const placeholders = [...html.matchAll(/:placeholder="([^"]*Width[^"]*)"/g)].map((match) => match[1]);
+  assert.deepEqual(placeholders, ["tx('stroke width', 'Width')", "tx('stroke width', 'Width')"]);
+  assert.match(readFileSync(join(jsRoot, 'app', 'circular-track-slots', 'measure-input.js'), 'utf8'), /label: msg\('Width'\)/);
+});
+
 test('the UI languages are the eleven of the Language menu, Latin script first, then Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
     ['en', 'English'], ['id', 'Bahasa Indonesia'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],

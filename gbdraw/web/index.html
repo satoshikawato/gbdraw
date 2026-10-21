@@ -2234,7 +2234,7 @@
                                     :value="form.circular_record_selector"
                                     @change="setCircularRecordPresentationSelector($event.target.value)"
                                     :disabled="!semanticMutationAvailable || (!circularRecordSelectionEnabled)"
-                                    :aria-label="t('Circular record')"
+                                    :aria-label="tx('record selector', 'Circular record')"
                                     aria-describedby="help-circular-record"
                                     class="form-select w-full px-1 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500"
                                 >
@@ -6402,7 +6402,7 @@
                                        data-history-managed
                                        :aria-label="t('Feature stroke width')"
                                        class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
-                                       :placeholder="t('Width')"
+                                       :placeholder="tx('stroke width', 'Width')"
                                        step="0.1"
                                        min="0"
                                        :title="t('Stroke width')">
@@ -7980,7 +7980,7 @@
                                         :aria-label="t('Legend stroke color for {name}', { name: shownLegendEntryName(entry) })"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :aria-label="t('Legend stroke width for {name}', { name: shownLegendEntryName(entry) })" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" :placeholder="t('Width')" step="0.5" min="0" :title="t('Stroke width')" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :aria-label="t('Legend stroke width for {name}', { name: shownLegendEntryName(entry) })" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" :placeholder="tx('stroke width', 'Width')" step="0.5" min="0" :title="t('Stroke width')" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="t('Reset stroke of {name} to default', { name: shownLegendEntryName(entry) })" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" :title="t('Reset stroke to default')" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>

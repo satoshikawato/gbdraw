@@ -1,7 +1,8 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
-Revision 7, 2026-10-21 (round-1 term audit of Indonesian, Vietnamese and
-Thai: §9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
+Revision 8, 2026-10-22 (ko, es, fr and pt round-2 revision: no coined terms, ko feature in English, es and pt
+option-name subjects, fr byte units and positive/zero wording; Revision 7 was the round-1 term audit of Indonesian,
+Vietnamese and Thai: §9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
 drafts follow this file and the glossary together. The glossary decides words;
 this file decides how sentences are written around them. Where the two
 disagree, the glossary wins and this file is corrected.
@@ -51,7 +52,8 @@ disagree, the glossary wins and this file is corrected.
   quantities. Decimal point and digit grouping stay as the English source
   shows them, because the app formats numbers with `en-US`.
 - Units stay Latin and keep the source's spacing between number and unit:
-  `100 bp`, `1kb`, `20px`, `0.65 ×R`, `8 pt`, `10x`. Never convert a unit.
+  `100 bp`, `1kb`, `20px`, `0.65 ×R`, `8 pt`, `10x`. Never convert a unit (bp, kb and Mb
+  stay in every locale; `fr` writes byte units in French, §7.3).
   Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`.
 - Keep `→ ← · × + − %` and the en dash of ranges (`Rows 3–4`) as written.
 - Ellipsis is one `…` (U+2026) whether the source writes `...` or `…`, both
@@ -95,6 +97,10 @@ disagree, the glossary wins and this file is corrected.
   including compounds: Record label is レコードラベル because Record is
   レコード and Label is ラベル. A row tagged `[review]` marks a judgment call;
   it is still the value to use until the glossary changes.
+- Do not coin a target-language term. A domain term with no established use
+  in that language's molecular biology or bioinformatics writing stays in
+  English (lower case in running text unless it is an acronym or a name); an
+  established native term or loanword stays. Example: reciprocal best hit.
 - Title Case, ALL CAPS headings (PRESET SCHEMES, DEFAULT COLORS, SPECIFIC
   RULES, LABEL FILTERING, QUALIFIER PRIORITY, LABEL GEOMETRY, ADD KEY) and
   letter spacing carry no meaning in CJK; translate them as ordinary
@@ -396,9 +402,13 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   (identity), 유사성, 보존성, 공선성 (collinear), 쌍별 (pairwise), 깊이 / 리드
   깊이 (depth), 원형 / 선형 (Circular / Linear), 주 눈금 / 보조 눈금, 범례,
   축척 (scale), 축척 막대.
-- **Kept in Latin**, as Korean papers write them: GC skew, AT skew, Bitscore,
-  E-value, orthogroup, RBH, locus tag, and every §1.1 name. Skew alone is 스큐.
-- **Loanwords** in the standard spelling (외래어 표기법) Microsoft uses: 피처,
+- **Kept in Latin**, as Korean papers write them: GC skew, AT skew, skew,
+  Bitscore, E-value, orthogroup, RBH, reciprocal best hit, near-reciprocal
+  hit, coortholog, inparalog, locus tag, and every §1.1 name.
+- **Feature** is written in English, lower case, also at the start of a label
+  (feature 유형), and its particle follows the Korean reading: feature를,
+  feature의. Never 피처 or 특징.
+- **Loanwords** in the standard spelling (외래어 표기법) Microsoft uses:
   레코드, 트랙, 레인, 슬롯, 앵커, 히트, 쿼리, 블록, 리본, 링, 밴드, 마크,
   레이블, 라이선스, 메타데이터, 스키마, 런타임, 렌더러, 렌더링, 오버레이,
   오프셋, 팔레트, 프리셋, 캔버스, 레이어, 레이아웃, 세션, 섹션, 필드, 필터,
@@ -407,7 +417,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   loanword the glossary does not list. The glossary's 0.15.0 rows add
   these, which are allowed: 템플릿, 시드, 패널, 라이브러리, 인코딩, 파이프라인,
   워크플로, 해시, 플랫 파일, 포커스, 그라데이션, 픽셀, 인트론, 레플리콘,
-  프리프린트, 캐시, 사이드바, 호스팅, 문자 이스케이프, 웹 앱, and the
+  프리프린트, 캐시, 사이드바, 호스팅, 웹 앱, 리소스, 컨트롤, and the
   loanword parts of 파라로그, 오솔로그 and 갭 개시 수 (rows of
   `I18N_GLOSSARY.tsv`). The compound 소스 코드 (Source code) is allowed.
 - **Command words** (Microsoft Korean): 저장, 열기, 닫기, 취소, 추가, 삭제
@@ -418,7 +428,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   내보내기, 불러오기 (Load), 찾아보기 (Browse), 고정, 도킹, 접기 / 펼치기,
   확대/축소, 맞춤 (Align); nouns 미리 보기, 대화 상자, 편집기, 도움말, 세부
   정보, 사용자 지정, 기본값, 재정의, 임계값, 정규식, 글꼴, 오류, 기록 (History).
-- **Never**: 게놈, 시퀀스, 스트랜드, 어노테이션, 특징 or 기능 for Feature,
+- **Never**: 게놈, 시퀀스 (except 이스케이프 시퀀스, regular-expression escape
+  sequences), 스트랜드, 어노테이션, 피처, 특징 or 기능 for Feature,
   기록 for Record, 라벨, 라이센스, 디폴트, 컬러 / 색상 (use 색), 폰트, 에러,
   리셋, 쓰레드, 끌기 (use 드래그), 소스 (also "sauce"; use 원본, except in the compound 소스 코드), 당신 / 귀하
   (leave the subject out), 유저.
@@ -444,6 +455,9 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 - **Errors** say what failed (~에 실패했습니다. / ~할 수 없습니다.), then
   what to do in ~하십시오. A control name in a sentence is its translated
   label in ‘ ’: ‘생성’을 클릭하십시오.
+- **Recurring phrasings**: Leave blank for Auto is 비워 두면 자동으로
+  설정됩니다; a label that does not fit is 배치할 공간이 부족합니다 (heading:
+  레이블 배치 공간 부족), never 들어가지 않습니다.
 
 ### 5.3 Punctuation and spacing
 
@@ -490,6 +504,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   `Remove {name}?` → {name}을(를) 제거하시겠습니까?;
   `Rename "{from}" to "{to}"?` → ‘{from}’의 이름을 ‘{to}’(으)로
   바꾸시겠습니까?; `{first} and {second}` → {first}과(와) {second}.
+- A Latin word takes the particle of its Korean reading (feature를, LOSAT을,
+  px이).
 - Prefer a known noun after the placeholder, so the particle attaches to
   Korean: {file} 파일을, {track} 트랙을, {names} 글꼴은. Use the paired form
   only when no such noun fits.
@@ -514,7 +530,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 
 - A Hangul syllable is full width; a Korean label has 0.5–0.7× the English
   character count and about the same pixel width. Count width.
-- Rail short names: at most 4 syllables, 2 preferred: 입력, 피처, 레이블,
+- Rail short names: at most 4 syllables, 2 preferred: 입력, feature, 레이블,
   범례, 색, 축, 비교, 영역, 제목, 고급, 정보, 글꼴, GC/스큐; 레이아웃 (4) is
   the longest.
 - Header and bar buttons no wider than the English label: 세션 저장, 설정
@@ -547,7 +563,8 @@ differ, take the word Microsoft uses in both markets or the RAE form
   organismo, cepa, especie, producto, gen; the tabs Nucleótidos / Aminoácidos.
 - **Alignment has two words**: alineamiento for sequences (BLAST, LOSAT,
   longitud del alineamiento), alineación for the layout action of Similarity
-  groups (Revisar alineación, Restablecer alineación).
+  groups (Revisar alineación, Restablecer alineación; Similarity alignment is
+  alineación por similitud).
 - **Diagram terms**: pista (Track), carril (Lane), ranura (track slot),
   posición (File card slot), marca de graduación (Tick; marca principal /
   secundaria), marca (annotation mark), regla graduada (Ruler; regla is a
@@ -561,7 +578,9 @@ differ, take the word Microsoft uses in both markets or the RAE form
   Acoplar (Dock), Girar, Mantener (Keep), Volver a generar; Habilitar /
   Deshabilitar (Enable / Disable); Activado / Desactivado (On / Off).
 - **Loanwords**: only hit (plural hits), query, subject, E-value, Bitscore,
-  zoom, renderizador and the names of §1.1; never track, feature, slot,
+  zoom, renderizador and the names of §1.1; also the English terms reciprocal
+  best hit, near-reciprocal hit, coortholog, inparalog and orthogroup (el
+  coortholog, masculine; plural -s); never track, feature, slot,
   preset, lane, popup, default or reset.
 - **Never use**: fichero, ordenador, computadora, salvar, remover, resetear,
   setear, chequear, clicar, pinchar, pulsar (write hacer clic), similaridad,
@@ -579,9 +598,14 @@ differ, take the word Microsoft uses in both markets or the RAE form
   ¿Quitar todo el archivo?, ¿Restablecer toda la configuración?
 - Instructions (help texts, notices, dialogs, errors): formal imperative.
   Seleccione un registro. Haga clic en Generar. Vuelva a generar el diagrama.
-  Leave blank for auto: Déjelo vacío para usar el valor automático.
+  Leave blank for auto: Déjelo vacío para usar el valor automático. Name a
+  button as an action: haga clic en Restablecer. Do not mix the third-person
+  indicative and the usted imperative in one sentence.
 - Descriptions: third person present or impersonal se (Muestra la
   profundidad de lectura como una pista. Se aplica al generar.).
+- An option, button or setting name is not the grammatical subject of a
+  sentence: Con Automático, …; Al guardar, se almacenan …, not Automático
+  elige … or Guardar almacena ….
 - Progress (…ing): gerund + … (Guardando sesión…, Generando diagrama…).
   Completion: a participle agreeing with its noun in a status line (Sesión
   guardada.), se + preterite in a sentence (Se aplicó la alineación.).
@@ -644,7 +668,8 @@ differ, take the word Microsoft uses in both markets or the RAE form
   returns one, which is the count 1 alone; 0 and 1.5 take the plural (0
   registros). Intl returns many for 1,000,000 and other exact millions; tn
   must use `other` there. A `one` string drops {count} only where the English
-  one does.
+  one does. A string without plural forms that counts things is a noun phrase
+  and a colon: Etiqueta: {count}.
 - Worked pairs, `one` / `other` (English `other` key in parentheses):
   1. ({count} records): ({count} registro) / ({count} registros)
   2. ({count} features ready): {count} característica lista / {count}
@@ -667,7 +692,7 @@ differ, take the word Microsoft uses in both markets or the RAE form
   Características, 15 letters, does not fit).
 - Header buttons stay within about 1.3× the English label; check Restablecer
   configuración at 1,024 px. Options in 10 px rows use the glossary's short forms: Automático, En serie,
-  Multihilo, Arriba / Abajo, Dentro / Fuera, Sobre el eje, Fondo, Cinta /
+  Multihilo, Arriba / Abajo, Dentro / Fuera, En el eje, Fondo, Cinta /
   Curva. To shorten a label, drop articles first (Ancho de pista, not Ancho de
   la pista); never switch terms, and abbreviate with a period only where a
   screenshot shows an overflow.
@@ -704,7 +729,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - **Loanwords kept**: hit, skew (GC skew, le skew positif), orthogroupe (prose; option values such as
   orthogroup stay as written), open source, thread /
   multithread, cross-origin, Bitscore, E-value, the names of 1.1, tRNA and rRNA (prose ARNt, ARNr)
-  and the unit bp (prose pb).
+  and the unit bp (prose pb). Byte units are French (§7.3).
 - **One word, one concept**: élément is Feature only (a list item is entrée, a thing on the
   canvas is objet); entrée is Input and Entry, saisie a typed value; enregistrement is Record
   only, never the act of saving (write enregistrer, enregistrée, en cours d’enregistrement);
@@ -734,6 +759,13 @@ entry is the endonym **Français**; the menu label itself is Langue.
   Errors: what failed, then what to do, as two sentences; Could not X is Impossible de X
   (Impossible d’importer les annotations : {reason}), X failed is X a échoué or Échec de X,
   Retry after it finishes is Réessayez une fois l’opération terminée.
+- A number that must be above 0 is strictement positif / positive; one that may be 0 is
+  positif ou nul (positif alone includes 0 in France).
+- An option or button name as the subject is quoted: « Avec « Enregistrer », … », or
+  « Auto » masque …, so it is not read as an adverb. A setting that is Enabled is réglé(e) sur
+  « Activé »; an instruction is Définissez … or Choisissez ….
+- Linear / Circular qualifying a noun is du diagramme linéaire / circulaire (étiquettes du
+  diagramme circulaire); « en mode circulaire » only for the app mode.
 - Dialog questions: infinitive (Retirer tout le fichier ?). Negation is always ne … pas. A
   control or section named in a sentence takes its French label in guillemets: Cliquez sur
   « Générer », dans « Annotations de régions ».
@@ -753,7 +785,9 @@ entry is the endonym **Français**; the menu label itself is Langue.
   ({inner}–{outer} px); in prose from … to … is de … à …. The slash keeps the source spacing:
   Organisme / souche, GenBank/DDBJ.
 - Numbers and units keep the en-US form the app prints (0.65 ×R, 1,024 px, 100 bp, 20px, 65%):
-  never 0,65, 1 024 or 65 %, because the formatter writes them and users type them back. One …
+  never 0,65, 1 024 or 65 %, because the formatter writes them and users type them back.
+  Byte units are the exception to §1.2: Mo, Go, ko (as octets), never MB, GB, kB; bp, kb
+  and Mb stay. One …
   (U+2026), never three dots. The em dash keeps the source spacing.
 - The code joins two sentences with an ordinary space. Abbreviations take a period: min., max.,
   séq. (Identité min. (%)); ID is invariable (des ID).
@@ -778,7 +812,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - A placeholder value has no known gender (record IDs, file names, setting paths, track names,
   user-typed names). Put a French noun before it and make articles, adjectives and participles
   agree with that noun: le fichier {file}, l’enregistrement {record}, la piste {track}, le
-  paramètre {setting}, la palette « {palette} ». Never elide or inflect against the placeholder
+  paramètre {setting}, la palette « {palette} ». At a sentence start or as subject: Le paramètre {setting} …, la piste « {track} ».
+  Never elide or inflect against the placeholder
   itself: de {name}, que {name}, never d’{name}. A placeholder holding a translated phrase
   ({action}, {reason}) follows a colon: Annuler : {action}.
 - None is one shared key and is always Aucun (legend position, label mode,
@@ -879,6 +914,15 @@ entry is the endonym **Français**; the menu label itself is Langue.
   follow as sentences. Busy reasons: Gerando o diagrama. Tente novamente
   quando a geração terminar. A dialog title asks with the infinitive (Remover
   o arquivo inteiro?); Deseja …? only in body text.
+- **Connective and examples**: so is por isso, not então. e.g. is
+  (por exemplo, …) inside a help sentence and ex.: in a placeholder or a short
+  field hint. Nonnegative is não negativo / não negativa, agreeing with its
+  noun, not maior ou igual a 0.
+- **Diagram mode**: Circular / Linear qualifying a noun is diagrama circular /
+  diagrama linear (registros do diagrama linear); modo stays for modo simples.
+- **An option or button name is not the sentence subject**: Ao salvar a
+  sessão, … são armazenados; Com Nenhum, …; never Salvar armazena … or
+  Desativado as centraliza.
 - **A control named in a sentence** takes its translated label with that
   label's capitals, no quotes, after em: clique em Gerar diagrama, use Salvar
   sessão, em Configurações.
@@ -923,7 +967,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   so put a noun before it and make articles and adjectives agree with that
   noun: o arquivo “{file}”, o registro {record}, a fonte {names}, a
   configuração {setting} (when {setting} is a setting's label; a {setting} that
-  can be a button name or Esta alteração opens the sentence bare), o valor
+  can be a button name or Esta alteração opens the sentence bare; at a sentence
+  start: A configuração {setting} …), o valor
   {value}, a trilha {track}. Never put o, a,
   do, da, no, na, ao or à straight before such a placeholder: Mesclar em
   “{name}”, not no {name}. A user-typed name the English quotes is “{name}”.
