@@ -151,6 +151,13 @@ corrected; the Bahasa Indonesia, Español, Français, Português, Tiếng Việt
 ไทย, and 한국어 wording was drafted and checked without a native-speaker
 reviewer.
 
+Count sentences in the web app (for example "1 source record inspected") use
+the singular and plural forms of each language, and several English texts now
+use the control names the UI shows.
+
+Documentation: the GUI images and the Gallery tutorial media show the header
+**Language** menu and the final label look.
+
 Large Sessions (thousands of features) open popups and apply color choices in
 seconds instead of freezing the page.
 

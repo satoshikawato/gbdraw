@@ -126,8 +126,14 @@ write-up of a release.
   Diagram**, or a Session save or load, instead of a click that does nothing.
 - A CLI Session records `--label_blacklist` as keywords, not as a Blacklist
   File; older CLI Sessions keep their binding.
+- Web app: count sentences (for example "1 source record inspected") use the
+  singular and plural forms of each language, and several English texts now
+  use the control names the UI shows (#1276).
 - Documentation: the GUI images, the `examples/` figures, and the Gallery
   tutorial media were retaken for the feature label style.
+- Documentation: the GUI images and the Gallery tutorial media were retaken
+  again so that they show the header **Language** menu and the final label
+  look; the `examples/` figures were checked and are unchanged.
 - Fonts (CLI, Python, web app): diagram text can use any font, including a
   font installed on the computer or loaded from a file, and gbdraw measures
   labels, the legend, and titles with that font instead of Liberation Sans
