@@ -6,6 +6,11 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
+// The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
+const legendRowColorWrites = [];
+/** @param {unknown[]} write */
+const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); };
+
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-color-actions-'));
@@ -126,7 +131,7 @@ let legendSiblings = [featureB, hashOnlyFeature];
 let matchingRegexRule = specificRule;
 const preparedRuleSets = [];
 const runWithRuleMatchesForActions = runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState);
-const actions = createFeatureColorActions({ readDrawnTracks: () => [],
+const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
   state: withDrawings({
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -814,7 +819,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     state: withDrawings({ extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
     evaluate: evaluatePythonRules
   });
-  const resetActions = createFeatureColorActions({ readDrawnTracks: () => [],
+  const resetActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state: withDrawings({
       results: ref([]),
       selectedResultIndex: ref(0),
@@ -915,7 +920,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
-    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], legendRowIsNamed, legendRowName, findLegendRowNamed, keepBothNamesOf,
+    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, findLegendRowNamed, keepBothNamesOf,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -1527,7 +1532,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const fl1Features = ref([fl1]);
   const fl1Rules = [];
   const fl1State = { extractedFeatures: fl1Features, biologicalFeatures: fl1Features, manualSpecificRules: fl1Rules };
-  const fl1Actions = createFeatureColorActions({ readDrawnTracks: () => [],
+  const fl1Actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state: withDrawings({
       results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#cccccc' }),
       manualSpecificRules: fl1Rules, extractedFeatures: fl1Features, biologicalFeatures: fl1Features,

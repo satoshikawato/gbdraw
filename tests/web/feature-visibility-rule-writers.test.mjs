@@ -85,7 +85,6 @@ export const PAINT_INTENT_WRITERS = {
     applyStrokeToLegendEntry: 'scope',
     clearFeatureStrokeOverride: 'edit',
     clearLegendRenameDialog: 'redisplay',
-    handleColorScopeChoice: 'scope',
     // Also the stroke scope choice (`applyStrokeToSelectedFeatures`).
     recordFeatureStrokeOverride: 'edit',
     renameLegendEntry: 'redisplay',

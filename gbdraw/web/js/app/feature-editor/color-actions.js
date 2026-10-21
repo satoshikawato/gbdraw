@@ -131,7 +131,8 @@ import { msg } from '../../utils/i18n.js';
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
- * @property {WriteLegendRowColorPort} [writeLegendRowColor]
+ * @property {WriteLegendRowColorPort} writeLegendRowColor The Legend owner's writer of a row's own color: a type's
+ *   default color releases the row's own color through it.
  */
 
 /**
@@ -214,8 +215,7 @@ export const createFeatureColorActions = ({
     return found ? legendEntryKey(found) : null;
   },
   keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false }),
-  // Without a Legend owner (a test of this owner), no Legend color is written.
-  writeLegendRowColor = () => {}
+  writeLegendRowColor
 }) => {
   const {
     extractedFeatures,
@@ -1233,10 +1233,12 @@ export const createFeatureColorActions = ({
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
   };
 
-  // OIC-029: a palette row's color is its type's default color; the rows merged into it (D-35) follow. The caller
-  // releases the row's own Legend color first: the scope choice writes that itself, the popup through `setTypeDefaultColor`.
+  // OIC-029: a palette row's color is its type's default color; the rows merged into it (D-35) follow. The one
+  // route of both the scope choice and the Legend popup (`setTypeDefaultColor`): the row first releases its own
+  // Legend color through the Legend owner, so it follows its type's default color again.
   /** @param {DrawingState} drawing @param {string} type @param {string} color */
   const applyDefaultColorToLegendRow = async (drawing, type, color) => {
+    writeLegendRowColor([], color, { inherit: [/** @type {PythonLegendKey} */ (type)] });
     const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (type));
     setDefaultColor(drawing, type, color);
     const merged = keys.filter((key) => key !== type);
@@ -1476,7 +1478,6 @@ export const createFeatureColorActions = ({
       const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (targetLegendName));
       // The choice does what the dialog showed: its default-color line, or rules.
       if (defaultColorType) {
-        delete drawing.legendColorOverrides[defaultColorType];
         await applyDefaultColorToLegendRow(drawing, defaultColorType, color);
         showClickedFeatureColor(feat, color);
       } else if (await applyColorToLegendSpecificRules(drawing, keys, color)) {
@@ -1934,9 +1935,6 @@ export const createFeatureColorActions = ({
     /** @param {string} key */
     legendRowDefaultColorType: (key) => legendRowDefaultColorType(state.activeDrawing(), key),
     preparedLegendRowDefaultColorType: colorAction(legendRowDefaultColorType, { targetRules: false }),
-    setTypeDefaultColor: colorAction((/** @type {DrawingState} */ drawing, /** @type {string} */ type, /** @type {string} */ color) => {
-      writeLegendRowColor([], color, { inherit: [/** @type {PythonLegendKey} */ (type)] });
-      return applyDefaultColorToLegendRow(drawing, type, color);
-    }, { targetRules: false })
+    setTypeDefaultColor: colorAction(applyDefaultColorToLegendRow, { targetRules: false })
   };
 };

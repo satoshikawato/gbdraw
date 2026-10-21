@@ -8,6 +8,11 @@ import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-edito
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
+// The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
+const legendRowColorWrites = [];
+/** @param {unknown[]} write */
+const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); };
+
 const ref = (value) => ({ value });
 
 const features = ['p0', 'p1'].map((product, index) => ({
@@ -53,7 +58,7 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     signatureFor: (value) => { stages.push('history:signature'); return JSON.stringify(value); },
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
-  const actions = createFeatureColorActions({ readDrawnTracks: () => [],
+  const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     ruleActions: {

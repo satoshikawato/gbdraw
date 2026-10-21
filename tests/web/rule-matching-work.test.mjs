@@ -11,6 +11,11 @@ import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-edito
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
+// The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
+const legendRowColorWrites = [];
+/** @param {unknown[]} write */
+const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); };
+
 const ref = (value) => ({ value });
 const hashOf = (index) => `f${index.toString(16).padStart(8, '0')}`;
 
@@ -105,7 +110,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
       skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false), hasPendingPaletteDraft: ref(false)
     });
     const caption = () => 'CDS';
-    const actions = createFeatureColorActions({ readDrawnTracks: () => [],
+    const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
       state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       getFeatureElements: () => [], getFeatureFillElements: () => [],
       readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),

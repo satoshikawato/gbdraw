@@ -17,6 +17,11 @@ import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/featu
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
+// The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
+const legendRowColorWrites = [];
+/** @param {unknown[]} write */
+const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); };
+
 /**
  * @param {typeof evaluatePythonRules} [evaluate]
  * @param {{ createHistory?: ((state: Record<string, any>) => Record<string, any>) | null } & Record<string, any>} [options]
@@ -672,6 +677,17 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
     if (defaultColorType) assert.deepEqual(defaults, [['CDS', '#ff0000']], 'the palette row\'s default color');
     else assert.deepEqual(state.legendColorOverrides, { CDS: '#ff0000' }, 'the other key\'s Legend color, in the rule commit');
   }
+  // One route sets a type's default color: the Legend popup (`setTypeDefaultColor`) ends where the scope choice does,
+  // the row's own Legend color released through the Legend owner.
+  const viaScope = fixture('CDS');
+  await viaScope.popup.handleColorScopeChoice('caption');
+  const viaPopup = fixture('CDS');
+  await viaPopup.popup.setTypeDefaultColor('CDS', '#ff0000');
+  const outcome = ({ state, committed, defaults }) => ({
+    rules: state.manualSpecificRules, overrides: { ...state.legendColorOverrides }, committed, defaults
+  });
+  assert.deepEqual(outcome(viaPopup), outcome(viaScope));
+  assert.equal('CDS' in viaScope.state.legendColorOverrides, false, 'the row follows its type\'s default color again');
   const { state, popup } = fixture(null);
   Object.assign(state.featureStyleScopeDialog, { kind: 'stroke', color: null, strokeColor: '#00aa00', strokeWidth: 2 });
   assert.equal(await popup.handleFeatureStyleScopeChoice('caption'), true);
@@ -990,7 +1006,7 @@ const popupFor=(s,ports={})=>{
     originalLegendColors:{value:{}},deletedLegendEntries:{value:[]},legendStrokeOverrides:{},featureStrokeOverrides:{},
     selectedResultIndex:{value:0},appliedPaletteColors:{value:{CDS:'#cccccc'}}});
   return createFeatureColorActions({state:s.state,ruleActions:s.actions,getFeatureElements:()=>[],getFeatureFillElements:()=>[],
-    readUserDefaultColor:()=>null,setDefaultColor:()=>{},...ports});
+    readUserDefaultColor:()=>null,setDefaultColor:()=>{},writeLegendRowColor:recordLegendRowColor,...ports});
 };
 test('a popup recolor of a rule made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
   const {s,held,table}=queuedRuleWrites();
