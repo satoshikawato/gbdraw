@@ -4,7 +4,7 @@ id-malay-words	\b(fail|tetapan|pelayar|peranti|perisian|pangkalan data|komputer 
 id-official-coinage	\b(galat|peramban|bawaan|prasetel|tetikus|pranala|utas)\b	ui	Over-formal official coinage (study 3(b)): write Kesalahan / Error, browser, default, preset, mouse, tautan, untai or thread; (bawaan) may gloss default once in help.	warn
 id-d05-terms	\b(setelan|setel ulang|disetel ulang|mereset|direset|tingkat lanjut|download(ed|s)?|upload(ed|s)?)\b	ui	Vendor form that D-05 did not choose: write Pengaturan, Atur ulang (diatur ulang), Lanjutan, Unduh, Unggah.	error
 id-d05-file	\bberkas\b	ui	The glossary term is file (D-05); berkas appears at most once, as a help gloss "(berkas)".	warn
-id-spelling	\b(sekuen|sirkuler|linier|unting|helai|eror|histori|trek|penyejajaran|persejajaran|pensejajaran)\b	ui	Variant spelling (study T1, D-05): write sekuens, sirkular, linear, untai, Kesalahan / Error, riwayat, track, penjajaran.	error
+id-spelling	\b(sekuen|sirkuler|linier|unting|helai|eror|histori|trek|penyejajaran|persejajaran|pensejajaran)\b	ui	Not the glossary form (study T1, D-05): write sekuens, sirkular, linear, untai, Kesalahan / Error, riwayat, track, penjajaran. Some are attested variants (sekuen, penyejajaran, pensejajaran), not misspellings; the catalog keeps one form.	error
 id-anda-case	\banda\b	u	Write Anda with a capital A, also inside a sentence (D-07).	error
 id-informal	\b(kamu|kau|engkau|gak|nggak|enggak|udah|aja|dong|sih)\b	ui	Informal register: use the impersonal imperative, or Anda where a person is needed (D-07).	error
 id-di-ke-preposition	\b(di(atas|bawah|dalam|luar|sini|sana|mana|samping|depan|belakang|antara)|ke(atas|bawah|dalam|kiri|kanan|depan|belakang|samping))\b	ui	The prepositions di and ke stand apart from the place word: di atas, di dalam, di luar, ke bawah, ke kiri.	error
@@ -24,3 +24,5 @@ id-title-case	^[A-Z][a-z]+( [A-Z][a-z]+)+$	u	Title Case label: use sentence case
 id-english-plural	\b(records|tracks|hits|files|presets|qualifiers|ribbons|offsets|queries|subjects)\b	ui	English plural of a kept or loan word: Indonesian nouns do not inflect ({count} record, Hit maksimum, preset track).	warn
 id-count-reduplication	\{[A-Za-z]+\} [a-z]{2,}-[a-z]{2,}\b	u	No plural reduplication after a count: {count} fitur, not {count} fitur-fitur.	warn
 id-register-phrases	\b(tidak bisa|gagal untuk|silakan|silahkan)\b	ui	Write Tidak dapat + verb and Gagal + verb (Gagal memuat sesi), and the bare imperative without Silakan (Pilih record.), study 3(c).	warn
+id-tumpang-tindih	tumpang-tindih	ui	KBBI writes tumpang tindih as two words without a hyphen (r1 term audit).	error
+id-r1-terms	\b(komplemen (ter)?balik|tag lokus|bilah skala|kueri|subjek|ke hulu|ke hilir)\b	ui	Retired term (r1 term audit): write reverse complement, locus tag, garis skala, query / subject (BLAST roles), ke arah upstream / downstream.	error
