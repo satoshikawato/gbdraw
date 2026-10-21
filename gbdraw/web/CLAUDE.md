@@ -660,7 +660,9 @@ or Reset Settings).
   current name when no action has that label.
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`) of the shown drawing's History, busy while an artifact replacement or checkpoint is
-  open or an action owns the open intent.
+  open or an action owns the open intent. Undo and Redo, and their enabled state, also read one check of the
+  step they would take, the top of their stack (`topStepAvailability`): an Undo or Redo of a mode switch is
+  busy while the mode buttons are.
 - A drawing's History intent holds, by reference (`buildIntentFilesData` in
   `services/history-snapshot.js`), the file bindings of the input slots its
   drawing uses and the auxiliary table files its own steps imported, the BLAST
