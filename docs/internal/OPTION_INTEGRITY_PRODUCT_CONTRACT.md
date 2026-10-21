@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `73`
+- Contract revision: `74`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2379,6 +2379,53 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 74 changes: `PD-OI-021` is replaced for scenario revision `2`
+  (concern `diagram-generation.collinear-optional-orthogroup-inference`). Only
+  the Web label of the Collinear checkbox changes, from **Infer orthogroups
+  with self-comparisons** to **Build similarity groups with within-record
+  searches**; the outcome does not change. It comes from the Product Decision
+  Owner `satoshikawato`'s reply of `2026-10-21` to the session's questions on
+  the English text that translation round 4 raised.
+  - The question, under the heading
+    「1. 「Infer orthogroups with self-comparisons」と Similarity group の不一致」,
+    offered option B as:
+    「**B. Web の表示名だけ直す（おすすめ）** チェックボックスとヘルプ文を「Build similarity groups with within-record searches」の方向に変えます。CLI の `--collinear_infer_orthogroups`、型付きリクエストのキー、Session の値は変えないので、互換性への影響はありません。直す必要があるもの：このラベル名を固定している Playwright spec 3件とキャプチャ契約テスト、チュートリアルとリファレンスの文言、Gallery の画面写真（次回の再生成時）。」
+    and closed with
+    「おすすめどおり（1＝B、2＝B、3＝A、4＝B）でよければ、1・2・4を1つのPRにまとめます。」
+  - The answer (`2026-10-21`): 「おすすめどおり」
+  - The receipt below serializes that choice. Its Choice ID
+    `WEB-LABEL-SIMILARITY-GROUPS` names option B, and its Must preserve
+    quotes option B's sentence on what stays the same. The reply states no
+    rationale, retirement intent, or accepted residual risk, so those fields
+    say `not stated`. The Product Decision Owner approved this receipt text on
+    `2026-10-21` (「どちらも承認します。」, in reply to the session's report
+    that named the draft receipt).
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `299ba5ed4c44c9c5814b8efff4ecb14c8281145e5c6d284662240f838d363e02`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: diagram-generation.collinear-optional-orthogroup-inference
+    Scenario revision: 2
+    Supersedes: PD-OI-021, scenario revision 1
+    Choice: B / WEB-LABEL-SIMILARITY-GROUPS
+    Rationale: not stated
+    Must preserve: CLI の `--collinear_infer_orthogroups`、型付きリクエストのキー、Session の値は変えないので、互換性への影響はありません。
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: in `PD-OI-021`, only the checkbox label in the Normative outcome
+    changes. Item 4 of the retained scenario revision `3` outcome of
+    `PD-OI-018` now names the checkbox as the Collinear checkbox of
+    `PD-OI-021` instead of repeating its label; its outcome does not change.
+    No other record is amended or retired.
+  - The runtime, tests, and documentation that show the new label merged
+    before this record, in `#1254` at
+    `3979094e2ed57a046c3eb11c0229a38b93e4f0bb`. This authority-only change
+    brings the Contract in line with them.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2990,8 +3037,8 @@ Decision date: 2026-09-30
   4. Similarity groups and Collinear with scope `all` retain every ordered
      between-record comparison, including same-row and non-adjacent pairs.
      Similarity groups always includes within-record evidence. Collinear
-     includes it only when **Infer orthogroups with self-comparisons** is ON,
-     as specified by `PD-OI-021`; OFF excludes it. Display placement, including
+     includes it only when the Collinear checkbox of `PD-OI-021` is ON;
+     OFF excludes it. Display placement, including
      a single occupied row, does not restrict the selected search scope.
   5. Explicit comparison endpoints stay explicit through decoding and
      rendering, including endpoints whose numeric indices are consecutive.
@@ -3205,10 +3252,12 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
 ### PD-OI-021: Optional Collinear self-search and orthogroup inference
 
 - Concern key: `diagram-generation.collinear-optional-orthogroup-inference`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-021`, scenario revision `1`, which labelled the checkbox
+  **Infer orthogroups with self-comparisons**.
 - Status: `ACCEPTED`
-- Normative outcome: Web Collinear exposes **Infer orthogroups with
-  self-comparisons** as a checkbox, OFF in fresh and reset state. OFF submits
+- Normative outcome: Web Collinear exposes **Build similarity groups with
+  within-record searches** as a checkbox, OFF in fresh and reset state. OFF submits
   only between-record searches and builds blocks without orthogroup or paralog
   inference. This exclusion applies even when query and subject records share
   one source file. The chosen anchor, unit, member-hit, threshold, scope, and
@@ -3230,9 +3279,28 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
 - Accepted residual risk: No additional risk waiver was supplied. ON retains
   the existing complete-evidence computation and memory allowance in `PD-OI-018`.
 - Acceptance contracts: `OIC-003`, `OIC-005`, `OIC-006`, `OIC-015`, `OIC-018`.
-- Decision source: Explicit maintainer request to make Collinear self-comparison
-  and orthogroup inference optional with default `false`/OFF.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Decision source (revision `1`): Explicit maintainer request to make Collinear
+  self-comparison and orthogroup inference optional with default `false`/OFF.
+- Owner and decision date (revision `1`): `satoshikawato`, `2026-09-14`.
+- Decision source (revision `2`): `satoshikawato`'s answer of `2026-10-21`,
+  quoted verbatim in the Revision 74 entry above. It changes only the
+  checkbox label; the rest of the record keeps its revision `1` text.
+- Receipt SHA-256 (revision `2`, UTF-8, excluding the final newline):
+  `299ba5ed4c44c9c5814b8efff4ecb14c8281145e5c6d284662240f838d363e02`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.collinear-optional-orthogroup-inference
+Scenario revision: 2
+Supersedes: PD-OI-021, scenario revision 1
+Choice: B / WEB-LABEL-SIMILARITY-GROUPS
+Rationale: not stated
+Must preserve: CLI の `--collinear_infer_orthogroups`、型付きリクエストのキー、Session の値は変えないので、互換性への影響はありません。
+May retire: not stated
+Accepted residual risk: not stated
+Owner: Satoshi Kawato
+Decision date: 2026-10-21
+```
 
 ### PD-OI-022: Reuse completed LOSAT searches after cancellation
 
