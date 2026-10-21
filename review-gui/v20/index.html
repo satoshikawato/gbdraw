@@ -1,0 +1,959 @@
+<title>gbdraw Translation Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one sticky control bar, then a single column of review rows; each row pairs the English source (left) with the editable translation (right), stacking on phones. */
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --ink: #18211f;
+  --muted: #5b6965;
+  --line: #d9e0dd;
+  --accent: #0f6b62;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f1ee;
+  --ok: #2f7d32;
+  --ok-soft: #e5f2e5;
+  --flag: #a15c00;
+  --flag-soft: #fbf0dc;
+  --err: #b42318;
+  --err-soft: #fdeceb;
+  --ph: #6941c6;
+  --focus: #0f6b62;
+  --font-ui: "IBM Plex Sans", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-ja: "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+  --font-hans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-hant: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
+  --font-ko: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111716; --surface: #18201f; --ink: #e6ecea; --muted: #9aa8a4; --line: #2c3735;
+    --accent: #4fb8aa; --accent-ink: #0b1312; --accent-soft: #173431;
+    --ok: #74c279; --ok-soft: #183019; --flag: #e3a64a; --flag-soft: #33260f;
+    --err: #f2867c; --err-soft: #3a1714; --ph: #b9a2f2; --focus: #4fb8aa;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111716; --surface: #18201f; --ink: #e6ecea; --muted: #9aa8a4; --line: #2c3735;
+  --accent: #4fb8aa; --accent-ink: #0b1312; --accent-soft: #173431;
+  --ok: #74c279; --ok-soft: #183019; --flag: #e3a64a; --flag-soft: #33260f;
+  --err: #f2867c; --err-soft: #3a1714; --ph: #b9a2f2; --focus: #4fb8aa;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-ui); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1240px; margin: 0 auto; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: grid; gap: 10px; padding-block: 12px; }
+.title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: 0; }
+h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.save-state { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.save-state.busy { color: var(--accent); }
+.save-state.bad { color: var(--err); }
+
+.locales { display: flex; flex-wrap: wrap; gap: 8px; }
+.locale { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px 10px; min-width: 180px; flex: 1 1 180px; max-width: 280px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; text-align: left; }
+.locale[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.locale .name { font-weight: 600; font-size: 15px; }
+.locale .count { justify-self: end; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; display: flex; }
+.meter i { display: block; height: 100%; }
+.meter .m-ok { background: var(--ok); }
+.meter .m-flag { background: var(--flag); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 10px; cursor: pointer; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.filters input[type="search"], .filters select { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 5px 10px; min-width: 0; }
+.filters input[type="search"] { flex: 1 1 220px; }
+.filters select { flex: 0 1 260px; }
+.notice { font-size: 13px; color: var(--muted); }
+.notice.warn { color: var(--flag); }
+
+main.wrap { padding-block: 16px 40px; display: grid; gap: 10px; }
+.empty { padding: 40px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; }
+
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px; }
+.row[data-state="ok"] { border-left-color: var(--ok); }
+.row[data-state="flag"] { border-left-color: var(--flag); }
+.row.current { box-shadow: 0 0 0 2px var(--accent-soft); }
+.src, .tgt { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.chip { display: inline-block; padding: 0 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 11.5px; line-height: 18px; color: var(--muted); white-space: nowrap; }
+.chip.kind { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.en { margin: 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ph { color: var(--ph); font-family: var(--font-mono); font-size: 13px; }
+.sense { margin: 0; font-size: 12px; color: var(--muted); }
+.sense b { font-weight: 500; color: var(--ink); }
+.ctx summary { cursor: pointer; font-size: 12px; color: var(--muted); width: max-content; }
+.ctx code { display: block; margin-top: 4px; padding: 6px 8px; background: var(--bg); border-radius: 6px; font: 11.5px/1.45 var(--font-mono); color: var(--muted); overflow-x: auto; white-space: pre; }
+.gloss { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.gloss li { font-size: 12px; padding: 1px 7px; border: 1px dashed var(--line); border-radius: 6px; }
+.gloss li b { font-weight: 500; color: var(--muted); margin-right: 4px; }
+
+textarea { width: 100%; min-height: 44px; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 15px; line-height: 1.5; }
+textarea:focus { background: var(--surface); border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea:lang(ja) { font-family: var(--font-ja); }
+textarea:lang(zh-Hans) { font-family: var(--font-hans); }
+textarea:lang(zh-Hant) { font-family: var(--font-hant); }
+textarea:lang(ko) { font-family: var(--font-ko); word-break: keep-all; }
+textarea:lang(th), [lang="th"] { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Garuda', 'Laksaman', sans-serif; line-height: 1.5; }
+textarea[readonly] { opacity: .85; }
+.ref { font-size: 12.5px; color: var(--muted); font-family: var(--font-hans); }
+.ref b { font-family: var(--font-ui); font-weight: 500; margin-right: 4px; }
+.dnote { margin: 0; font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--flag); padding-left: 8px; white-space: pre-wrap; }
+.dnote b { font-weight: 500; color: var(--flag); margin-right: 6px; }
+.rnote { border-left-color: var(--accent); }
+.rnote b { color: var(--accent); }
+.problem { font-size: 12.5px; color: var(--err); background: var(--err-soft); border-radius: 6px; padding: 3px 8px; }
+.remote { font-size: 12.5px; color: var(--flag); }
+.remote button { border: 0; background: none; color: var(--accent); text-decoration: underline; cursor: pointer; padding: 0; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.state { font-size: 12px; color: var(--muted); margin-right: auto; }
+.state.ok { color: var(--ok); }
+.state.flag { color: var(--flag); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.btn:hover { border-color: var(--accent); }
+.btn.accept { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.btn.accept[aria-pressed="true"] { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.btn.flag[aria-pressed="true"] { background: var(--flag-soft); border-color: var(--flag); color: var(--flag); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.link { border: 0; background: none; padding: 0; color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.comment { width: 100%; border: 1px solid var(--flag); border-radius: 6px; background: var(--flag-soft); padding: 5px 9px; font-size: 13px; }
+
+.more { justify-self: center; padding: 8px 18px; }
+.btn.save:not(:disabled) { border-color: var(--accent); color: var(--accent); font-weight: 500; }
+.row.dirty { border-left-color: var(--accent); }
+.state.dirty { color: var(--accent); font-weight: 500; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); font-size: 13px; }
+.bulk p { margin: 0; flex: 1 1 280px; }
+.bulk .link { color: var(--accent); font-size: 13px; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; }
+.tools .link { font-size: 13px; color: var(--accent); }
+.io textarea { min-height: 120px; font: 12px/1.45 var(--font-mono); background: var(--surface); }
+.io-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 100%; }
+.io-row input[type="text"] { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--surface); }
+.sug { border: 1px solid var(--ph); border-radius: 6px; padding: 6px 9px; display: grid; gap: 3px; font-size: 13px; }
+.sug-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.sug-head b { color: var(--ph); font-weight: 600; }
+.sev { border-radius: 999px; padding: 0 7px; font-size: 11px; background: var(--bg); border: 1px solid var(--line); }
+.sev.high { color: var(--err); border-color: var(--err); }
+.sev.medium { color: var(--flag); border-color: var(--flag); }
+.sug-x { margin: 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sug-r { margin: 0; font-size: 12.5px; color: var(--muted); }
+.sug-actions { display: flex; gap: 8px; }
+.shots { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 6px; }
+.shot { position: relative; height: 200px; overflow: hidden; container-type: inline-size; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: zoom-in; padding: 0; width: 100%; display: block; }
+.shot img { display: block; width: 100%; height: 100%; object-fit: none; object-position: var(--x) var(--y); }
+.shot .hl, .zoom .hl { position: absolute; border: 2px solid #e8590c; border-radius: 4px; background: rgba(232, 89, 12, .12); box-shadow: 0 0 0 9999px rgba(15, 23, 22, .18); pointer-events: none; }
+.shot .hl { left: calc(var(--x) + var(--bx) - 4px); top: calc(var(--y) + var(--by) - 4px); width: calc(var(--bw) + 8px); height: calc(var(--bh) + 8px); }
+.shot-tabs { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.shot-tabs button { border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 0 6px; font-size: 12px; cursor: pointer; }
+.shot-tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+dialog.zoom { width: min(1320px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+dialog.zoom::backdrop { background: rgba(0, 0, 0, .55); }
+.zoom figure { position: relative; margin: 0; }
+.zoom img { display: block; width: 100%; height: auto; border-radius: 4px; }
+.zoom .hl { box-shadow: none; }
+.zoom-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+footer.wrap { padding-block: 0 32px; color: var(--muted); font-size: 12.5px; }
+kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); }
+
+@media (max-width: 720px) {
+  .bar { position: static; }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .locale { min-width: 0; max-width: none; flex: 1 1 0; padding: 6px 8px; grid-template-columns: minmax(0, 1fr); }
+  .locale .count { justify-self: start; }
+  .seg { max-width: 100%; overflow-x: auto; }
+  .seg button { white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="title-row">
+      <h1>gbdraw Translation Review <small id="key-count">loading strings…</small></h1>
+      <span id="save-state" class="save-state" aria-live="polite"></span>
+    </div>
+    <div class="locales" role="tablist" aria-label="Language" id="locales"></div>
+    <div class="filters">
+      <div class="seg" role="group" aria-label="Show" id="status-filter"></div>
+      <input type="search" id="search" placeholder="Search English or translation" aria-label="Search English or translation">
+      <select id="area" aria-label="Part of the app"></select>
+      <label class="toggle"><input type="checkbox" id="show-shots" checked> Screenshots</label>
+    </div>
+    <div class="tools">
+      <button class="link" type="button" id="bulk-open">Accept all…</button>
+      <button class="link" type="button" id="export-open">Export for an agent review…</button>
+      <button class="link" type="button" id="import-open">Import an agent review…</button>
+    </div>
+    <div id="bulk" class="bulk" hidden></div>
+    <div id="io" class="bulk io" hidden></div>
+    <div id="access" class="notice" hidden></div>
+  </div>
+</header>
+
+<main class="wrap" id="list" aria-live="off">
+  <div class="empty">Loading the strings of the gbdraw Web UI…</div>
+</main>
+
+<dialog class="zoom" id="zoom" aria-label="Screenshot">
+  <div class="zoom-bar"><span id="zoom-caption"></span><button class="btn" type="button" id="zoom-close">Close</button></div>
+  <figure><img id="zoom-img" alt=""><div class="hl" id="zoom-hl"></div></figure>
+</dialog>
+
+<footer class="wrap">
+  Edits save when you press Save (<kbd>Ctrl</kbd>+<kbd>S</kbd>) or leave the field; Save keeps the row unaccepted. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> accepts the row and moves to the next one; <kbd>Alt</kbd>+<kbd>↓</kbd> / <kbd>↑</kbd> moves without accepting. Keep every <span class="ph">{name}</span> placeholder. The glossary hints come from the project glossary; ask with Flag when a hint looks wrong.
+</footer>
+
+<script>
+(() => {
+  'use strict';
+  const LOCALES = [
+    { id: 'ja', label: '日本語', lang: 'ja' },
+    { id: 'zh-Hans', label: '简体中文', lang: 'zh-Hans' },
+    { id: 'zh-Hant', label: '繁體中文', lang: 'zh-Hant' },
+    { id: 'ko', label: '한국어', lang: 'ko' },
+    { id: 'es', label: 'Español', lang: 'es' },
+    { id: 'fr', label: 'Français', lang: 'fr' },
+    { id: 'pt', label: 'Português', lang: 'pt' },
+    { id: 'id', label: 'Bahasa Indonesia', lang: 'id' },
+    { id: 'vi', label: 'Tiếng Việt', lang: 'vi' },
+    { id: 'th', label: 'ไทย', lang: 'th' },
+  ];
+  const FILTERS = [
+    { id: 'todo', label: 'To review' },
+    { id: 'flag', label: 'Flagged' },
+    { id: 'note', label: 'Draft notes' },
+    { id: 'sug', label: 'Suggestions' },
+    { id: 'changed', label: 'Changed' },
+    { id: 'r2', label: 'Round 2' },
+    { id: 'r3', label: 'Round 3' },
+    { id: 'r4', label: 'Round 4' },
+    { id: 'ok', label: 'Accepted' },
+    { id: 'all', label: 'All' },
+  ];
+  const PAGE = 60;
+  const PH = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+  const state = {
+    keys: [], byId: new Map(), glossary: [], drafts: {}, notes: {}, edits: {},
+    locale: 'ja', filter: 'todo', area: '', query: '', shown: PAGE, view: [],
+    db: null, branchDocs: 0, user: null, me: null, canWrite: null, names: {},
+    shots: { scale: 1, shots: [], keys: {} }, showShots: true, lastBulk: null, sugs: {}, downloads: null,
+  };
+  for (const l of LOCALES) { state.drafts[l.id] = {}; state.notes[l.id] = {}; state.edits[l.id] = new Map(); state.sugs[l.id] = new Map(); }
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const el = (tag, props = {}, ...kids) => {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') node.className = v;
+      else if (k === 'dataset') Object.assign(node.dataset, v);
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+      else if (v === true) node.setAttribute(k, '');
+      else if (v !== false && v != null) node.setAttribute(k, v);
+    }
+    for (const kid of kids.flat()) if (kid != null) node.append(kid);
+    return node;
+  };
+
+  const storeGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const storeSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* per-viewer convenience only */ } };
+
+  const placeholders = (text) => [...new Set([...String(text).matchAll(PH)].map((m) => m[1]))].sort();
+  const sameSet = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const draftOf = (loc, id) => state.drafts[loc][id] ?? '';
+  const editOf = (loc, id) => state.edits[loc].get(id);
+  const currentText = (loc, id) => { const e = editOf(loc, id); return e && typeof e.t === 'string' ? e.t : draftOf(loc, id); };
+  const statusOf = (loc, id) => { const e = editOf(loc, id); return e && (e.s === 'ok' || e.s === 'flag') ? e.s : ''; };
+  // Agent suggestions live in the same chunk documents: sug.{keyId}.{source} = {x, r, v, at, by, d}.
+  const activeSugs = (loc, id) => Object.entries(state.sugs[loc].get(id) || {}).filter(([, g]) => g && !g.d && typeof g.x === 'string');
+  const changed = (loc, id) => { const e = editOf(loc, id); return !!e && typeof e.t === 'string' && e.t !== draftOf(loc, id); };
+  // A review round writes its reason into the comment field, prefixed "[R2 ...]".
+  const roundIs = (loc, id, n) => { const e = editOf(loc, id); return !!e && typeof e.c === 'string' && e.c.startsWith(`[R${n}`); };
+
+  // ---- data ---------------------------------------------------------------
+  async function loadJson(path, fallback) {
+    try { const r = await fetch(path); if (!r.ok) return fallback; return await r.json(); }
+    catch { return fallback; }
+  }
+
+  async function loadData() {
+    const [keys, glossary, ...perLocale] = await Promise.all([
+      loadJson('data/keys.json', []), loadJson('data/glossary.json', []),
+      ...LOCALES.map((l) => loadJson(`data/draft-${l.id}.json`, {})),
+      ...LOCALES.map((l) => loadJson(`data/notes-${l.id}.json`, {})),
+      loadJson('data/shots.json', null),
+    ]);
+    const shots = perLocale.pop();
+    if (shots && Array.isArray(shots.shots) && shots.keys) state.shots = shots;
+    state.keys = keys; state.glossary = glossary;
+    keys.forEach((k) => state.byId.set(k.id, k));
+    LOCALES.forEach((l, i) => { state.drafts[l.id] = perLocale[i] || {}; state.notes[l.id] = perLocale[LOCALES.length + i] || {}; });
+    $('#key-count').textContent = `${keys.length.toLocaleString('en-US')} strings`;
+    const areas = [...new Set(keys.map((k) => k.area))].sort();
+    const sel = $('#area');
+    sel.replaceChildren(el('option', { value: '' }, 'All parts of the app'), ...areas.map((a) => el('option', { value: a }, a)));
+    sel.value = state.area;
+  }
+
+  // ---- shared store -------------------------------------------------------
+  const writeQueues = new Map();
+  let pending = 0;
+  function setSaveState(text, cls = '') { const s = $('#save-state'); s.textContent = text; s.className = 'save-state ' + cls; }
+
+  function persist(loc, id, record) { persistMany(loc, [[id, record]]); }
+
+  // One write per chunk document: a bulk accept of hundreds of rows is at most 16 writes.
+  function persistMany(loc, entries) {
+    if (state.canWrite === false || !entries.length) return;
+    const at = new Date().toISOString();
+    const byChunk = new Map();
+    for (const [id, record] of entries) {
+      const local = { ...(editOf(loc, id) || {}), ...record, by: state.me || '', at };
+      state.edits[loc].set(id, local);
+      const chunk = `c${id[0]}`;
+      if (!byChunk.has(chunk)) byChunk.set(chunk, {});
+      byChunk.get(chunk)[id] = local;
+    }
+    refreshCounts(); entries.forEach(([id]) => updateRowState(id));
+    if (!state.db) return;
+    for (const [chunk, items] of byChunk) writeChunk(loc, chunk, { items });
+  }
+
+  function writeChunk(loc, chunk, patch) {
+    const ref = state.db.doc(`rev-${loc}/${chunk}`);
+    const prev = writeQueues.get(ref.path) || Promise.resolve();
+    pending += 1; setSaveState('Saving…', 'busy');
+    const next = prev.then(() => ref.update(patch))
+      .catch(async (error) => {
+        // update() rejects invalid_argument when the chunk document is missing; create it once.
+        if (error && error.code === 'invalid_argument' && !(await ref.get()).exists) {
+          await ref.set(patch);
+          return;
+        }
+        if (error && (error.code === 'not_granted' || error.code === 'revoked')) { state.canWrite = false; showAccess(); }
+        throw error;
+      })
+      .then(() => { pending -= 1; if (!pending) setSaveState('All changes saved'); })
+      .catch(() => { pending -= 1; setSaveState('Not saved. Check your connection and edit the field again.', 'bad'); });
+    writeQueues.set(ref.path, next);
+  }
+
+  // One chunk document of rev-<locale> into the page state; adds the ids that changed to `touched`.
+  function ingestDoc(loc, data, touched) {
+    for (const [id, rec] of Object.entries(data.items || {})) {
+      const old = state.edits[loc].get(id);
+      if (!old || old.at !== rec.at || old.t !== rec.t || old.s !== rec.s || old.c !== rec.c) {
+        state.edits[loc].set(id, rec); touched.add(id);
+      }
+    }
+    for (const [id, bySource] of Object.entries(data.sug || {})) {
+      if (JSON.stringify(state.sugs[loc].get(id)) !== JSON.stringify(bySource)) { state.sugs[loc].set(id, bySource); touched.add(id); }
+    }
+  }
+
+  // Without the claude.ai runtime (GitHub Pages, a local copy) the stored state is read from the branch's db/current,
+  // two folders up from this page: ../../db/current/rev-<locale>/c<hex>.json. Locales without documents there stay empty.
+  async function loadBranchState() {
+    const found = await Promise.all(LOCALES.flatMap((l) => [...'0123456789abcdef'].map(async (c) => {
+      const data = await loadJson(`../../db/current/rev-${l.id}/c${c}.json`, null);
+      if (data) ingestDoc(l.id, data, new Set());
+      return data ? 1 : 0;
+    })));
+    state.branchDocs = found.reduce((a, b) => a + b, 0);
+  }
+
+  function subscribe() {
+    for (const l of LOCALES) {
+      state.db.collection(`rev-${l.id}`).onSnapshot((snap) => {
+        const touched = new Set();
+        for (const doc of snap.docs) ingestDoc(l.id, doc.data() || {}, touched);
+        refreshCounts();
+        if (l.id === state.locale) touched.forEach((id) => updateRowFromStore(id));
+        resolveNames();
+      }, () => setSaveState('Live updates stopped. Reload the page to continue.', 'bad'));
+    }
+  }
+
+  async function resolveNames() {
+    if (!state.user) return;
+    const ids = new Set();
+    for (const m of Object.values(state.edits)) for (const e of m.values()) if (e.by) ids.add(e.by);
+    const missing = [...ids].filter((id) => !(id in state.names));
+    if (!missing.length) return;
+    const profiles = await state.user.profiles(missing);
+    for (const id of missing) state.names[id] = (profiles[id] && profiles[id].name) || '';
+    document.querySelectorAll('.row').forEach((row) => updateRowState(row.dataset.id));
+  }
+
+  function showAccess() {
+    const box = $('#access');
+    if (!state.db) {
+      box.hidden = false; box.className = 'notice warn';
+      box.textContent = 'Saving is not available here. Open this page on claude.ai while signed in to save translations.'
+        + (state.branchDocs ? ' The review state shown (status, comments, stored translations) comes from db/current on the translation-review branch as of its latest commit; nothing is saved.' : '');
+    } else if (state.canWrite === false) {
+      box.hidden = false; box.className = 'notice warn';
+      box.textContent = 'You can read this review but not save changes. Ask the owner for Contributor access.';
+      document.querySelectorAll('textarea, .row .btn').forEach((n) => { n.disabled = true; if (n.tagName === 'TEXTAREA') n.readOnly = true; });
+    } else box.hidden = true;
+  }
+
+  // ---- view -----------------------------------------------------------------
+  function counts(loc) {
+    let ok = 0, flag = 0, changedCount = 0, r2 = 0, r3 = 0, r4 = 0;
+    for (const k of state.keys) {
+      const s = statusOf(loc, k.id);
+      if (s === 'ok') ok += 1; else if (s === 'flag') flag += 1;
+      if (changed(loc, k.id)) changedCount += 1;
+      if (roundIs(loc, k.id, 2)) r2 += 1;
+      if (roundIs(loc, k.id, 3)) r3 += 1;
+      if (roundIs(loc, k.id, 4)) r4 += 1;
+    }
+    return { ok, flag, changed: changedCount, r2, r3, r4, total: state.keys.length };
+  }
+
+  function renderLocales() {
+    const box = $('#locales');
+    box.replaceChildren(...LOCALES.map((l) => el('button', {
+      class: 'locale', role: 'tab', id: `tab-${l.id}`, 'aria-selected': String(l.id === state.locale),
+      'aria-controls': 'list', dataset: { locale: l.id }, onclick: () => setLocale(l.id),
+    }, el('span', { class: 'name', lang: l.lang }, l.label), el('span', { class: 'count' }),
+      el('span', { class: 'meter', 'aria-hidden': 'true' }, el('i', { class: 'm-ok' }), el('i', { class: 'm-flag' })))));
+    refreshCounts();
+  }
+
+  function refreshCounts() {
+    for (const l of LOCALES) {
+      const tab = document.getElementById(`tab-${l.id}`); if (!tab || !state.keys.length) continue;
+      const c = counts(l.id);
+      const drafted = Object.keys(state.drafts[l.id]).length;
+      $('.count', tab).textContent = drafted ? `${c.ok} / ${c.total} accepted` : 'no draft yet';
+      $('.m-ok', tab).style.width = `${(100 * c.ok) / c.total}%`;
+      $('.m-flag', tab).style.width = `${(100 * c.flag) / c.total}%`;
+      tab.title = `${c.ok} accepted, ${c.flag} flagged, ${c.changed} changed from the draft`;
+      if (l.id === state.locale) {
+        const labels = { todo: c.total - c.ok - c.flag, flag: c.flag, note: Object.keys(state.notes[l.id]).length, sug: [...state.sugs[l.id].keys()].filter((id) => activeSugs(l.id, id).length).length, changed: c.changed, r2: c.r2, r3: c.r3, r4: c.r4, ok: c.ok, all: c.total };
+        document.querySelectorAll('#status-filter button').forEach((b) => {
+          const f = FILTERS.find((x) => x.id === b.dataset.filter);
+          b.textContent = `${f.label} ${labels[f.id].toLocaleString('en-US')}`;
+        });
+      }
+    }
+  }
+
+  function renderFilters() {
+    $('#status-filter').replaceChildren(...FILTERS.map((f) => el('button', {
+      type: 'button', 'aria-pressed': String(f.id === state.filter), dataset: { filter: f.id },
+      onclick: () => { state.filter = f.id; storeSet('review.filter', f.id); renderFilters(); rebuild(); },
+    }, f.label)));
+    refreshCounts();
+  }
+
+  function matches(k) {
+    const loc = state.locale;
+    if (state.area && k.area !== state.area) return false;
+    const s = statusOf(loc, k.id);
+    if (state.filter === 'todo' && s) return false;
+    if (state.filter === 'flag' && s !== 'flag') return false;
+    if (state.filter === 'note' && !state.notes[loc][k.id]) return false;
+    if (state.filter === 'sug' && !activeSugs(loc, k.id).length) return false;
+    if (state.filter === 'ok' && s !== 'ok') return false;
+    if (state.filter === 'changed' && !changed(loc, k.id)) return false;
+    if (/^r[2-4]$/.test(state.filter) && !roundIs(loc, k.id, state.filter.slice(1))) return false;
+    if (state.query) {
+      const q = state.query.toLowerCase();
+      if (!k.en.toLowerCase().includes(q) && !currentText(loc, k.id).toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }
+
+  function rebuild() {
+    if (!state.lastBulk) closeBulk();
+    state.view = state.keys.filter(matches);
+    state.shown = PAGE;
+    renderList();
+  }
+
+  function renderList() {
+    const list = $('#list');
+    if (!state.view.length) {
+      list.replaceChildren(el('div', { class: 'empty' }, state.keys.length ? 'Nothing matches this view.' : 'No strings loaded.'));
+      return;
+    }
+    const rows = state.view.slice(0, state.shown).map(renderRow);
+    const rest = state.view.length - state.shown;
+    if (rest > 0) rows.push(el('button', { class: 'btn more', type: 'button', onclick: () => { state.shown += PAGE; renderList(); } }, `Show ${Math.min(PAGE, rest)} more of ${rest}`));
+    list.replaceChildren(...rows);
+    afterRender();
+    if (state.canWrite === false) showAccess();
+  }
+
+  function highlightPlaceholders(text) {
+    const parts = []; let last = 0;
+    for (const m of text.matchAll(PH)) {
+      if (m.index > last) parts.push(text.slice(last, m.index));
+      parts.push(el('span', { class: 'ph' }, m[0])); last = m.index + m[0].length;
+    }
+    if (last < text.length) parts.push(text.slice(last));
+    return parts;
+  }
+
+  function renderRow(k) {
+    const loc = state.locale;
+    const lang = LOCALES.find((l) => l.id === loc).lang;
+    const gloss = (k.g || []).map((i) => state.glossary[i]).filter((g) => g && g[loc])
+      .map((g) => el('li', {}, el('b', {}, g.en), el('span', { lang }, g[loc])));
+    const ta = el('textarea', { lang, id: `t-${k.id}`, rows: String(Math.min(6, Math.max(1, Math.ceil(k.en.length / 48)))), 'aria-label': `Translation of: ${k.en}`, placeholder: draftOf(loc, k.id) ? '' : 'No draft yet. Type the translation.' });
+    ta.value = currentText(loc, k.id);
+    ta.dataset.saved = ta.value;
+    ta.addEventListener('input', () => { checkPlaceholders(k, ta); updateRowState(k.id); });
+    ta.addEventListener('blur', () => saveText(k, ta));
+    ta.addEventListener('focus', () => markCurrent(k.id));
+    const comment = el('input', { class: 'comment', type: 'text', id: `c-${k.id}`, placeholder: 'What should be checked?', 'aria-label': 'Flag comment' });
+    comment.value = (editOf(loc, k.id) || {}).c || '';
+    comment.hidden = statusOf(loc, k.id) !== 'flag';
+    comment.addEventListener('change', () => persist(loc, k.id, { c: comment.value.trim() }));
+    const note = state.notes[loc][k.id] ? el('p', { class: 'dnote' }, el('b', {}, 'Draft note'), state.notes[loc][k.id]) : null;
+    const ref = loc === 'zh-Hant' && (currentText('zh-Hans', k.id))
+      ? el('div', { class: 'ref', lang: 'zh-Hans' }, el('b', {}, '简体'), currentText('zh-Hans', k.id)) : null;
+    return el('article', { class: 'row', dataset: { id: k.id, state: statusOf(loc, k.id) } },
+      el('div', { class: 'src' },
+        el('div', { class: 'meta' }, el('span', { class: 'chip kind' }, k.kind), el('span', {}, k.area), k.uses > 1 ? el('span', { class: 'chip' }, `used ${k.uses}×`) : null),
+        el('p', { class: 'en', lang: 'en' }, highlightPlaceholders(k.en)),
+        k.sense ? el('p', { class: 'sense' }, 'Meaning: ', el('b', {}, k.sense)) : null,
+        gloss.length ? el('ul', { class: 'gloss', 'aria-label': 'Glossary' }, gloss) : null,
+        whereItAppears(k),
+      ),
+      el('div', { class: 'tgt' },
+        ta, el('p', { class: 'dnote rnote', id: `n-${k.id}`, hidden: true }), ref, note, el('div', { class: 'sugs', id: `g-${k.id}` }),
+        el('div', { class: 'problem', hidden: true, id: `p-${k.id}` }),
+        el('div', { class: 'remote', hidden: true, id: `r-${k.id}` }),
+        el('div', { class: 'actions' },
+          el('span', { class: 'state', id: `s-${k.id}` }),
+          el('button', { class: 'link', type: 'button', id: `d-${k.id}`, hidden: true, onclick: () => useDraft(k) }, 'Use draft'),
+          el('button', { class: 'btn save', type: 'button', id: `v-${k.id}`, disabled: true, title: 'Save this text without accepting it (Ctrl+S)', onclick: () => saveText(k, ta) }, 'Save'),
+          el('button', { class: 'btn flag', type: 'button', id: `f-${k.id}`, onclick: () => toggleFlag(k) }, 'Flag'),
+          el('button', { class: 'btn accept', type: 'button', id: `a-${k.id}`, onclick: () => accept(k, false) }, 'Accept'),
+        ),
+        comment,
+      ));
+  }
+
+  function whereItAppears(k) {
+    const occ = (state.shots.keys[k.id] || []).filter((o) => state.shots.shots[o[0]]);
+    const code = el('code', {}, `${k.where}\n${k.ctx}`);
+    if (!occ.length) return el('details', { class: 'ctx' }, el('summary', {}, 'Where it appears (no screenshot)'), code);
+    const box = el('div', { class: 'shots' });
+    const show = (i) => {
+      const [si, x, y, w, h] = occ[i]; const shot = state.shots.shots[si];
+      const frame = el('button', { class: 'shot', type: 'button', title: `${shot.state}. Click to enlarge.`, onclick: () => openZoom(shot, [x, y, w, h]) },
+        el('img', { srcset: `${shot.file} ${state.shots.scale || 1}x`, alt: '', loading: 'lazy', decoding: 'async' }), el('div', { class: 'hl' }));
+      const cx = x + w / 2, cy = y + h / 2;
+      frame.style.setProperty('--x', `clamp(${100}cqw - ${shot.w}px, ${50}cqw - ${cx}px, 0px)`);
+      frame.style.setProperty('--y', `clamp(${200 - shot.h}px, ${100 - cy}px, 0px)`);
+      frame.style.setProperty('--bx', `${x}px`); frame.style.setProperty('--by', `${y}px`);
+      frame.style.setProperty('--bw', `${w}px`); frame.style.setProperty('--bh', `${h}px`);
+      const tabs = occ.length > 1 ? el('div', { class: 'shot-tabs' }, `${shot.state} ·`, ...occ.map((_, j) => el('button', { type: 'button', 'aria-pressed': String(j === i), onclick: () => show(j) }, String(j + 1)))) : el('div', { class: 'shot-tabs' }, shot.state);
+      box.replaceChildren(frame, tabs);
+    };
+    show(0);
+    return el('details', { class: 'ctx', open: state.showShots }, el('summary', {}, 'Where it appears'), box, code);
+  }
+
+  function openZoom(shot, [x, y, w, h]) {
+    const dialog = $('#zoom');
+    $('#zoom-img').src = shot.file;
+    $('#zoom-caption').textContent = shot.state;
+    Object.assign($('#zoom-hl').style, { left: `calc(${(100 * x) / shot.w}% - 4px)`, top: `calc(${(100 * y) / shot.h}% - 4px)`, width: `calc(${(100 * w) / shot.w}% + 8px)`, height: `calc(${(100 * h) / shot.h}% + 8px)` });
+    dialog.showModal();
+  }
+  $('#zoom-close').addEventListener('click', () => $('#zoom').close());
+  $('#zoom').addEventListener('click', (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
+
+  function afterRender() { document.querySelectorAll('.row').forEach((row) => { const k = state.byId.get(row.dataset.id); updateRowState(k.id); checkPlaceholders(k, $(`#t-${k.id}`)); renderSugs(k); }); }
+
+  function renderSugs(k) {
+    const box = document.getElementById(`g-${k.id}`); if (!box) return;
+    const loc = state.locale; const lang = LOCALES.find((l) => l.id === loc).lang;
+    box.replaceChildren(...activeSugs(loc, k.id).map(([src, g]) => el('div', { class: 'sug' },
+      el('div', { class: 'sug-head' }, el('b', {}, 'Suggestion'), `from ${src}`, g.v ? el('span', { class: `sev ${g.v}` }, g.v) : null,
+        sameSet(placeholders(k.en), placeholders(g.x)) ? null : el('span', { class: 'sev high' }, 'placeholder mismatch')),
+      el('p', { class: 'sug-x', lang }, g.x),
+      g.r ? el('p', { class: 'sug-r' }, g.r) : null,
+      el('div', { class: 'sug-actions' },
+        el('button', { class: 'btn', type: 'button', onclick: () => useSuggestion(k, g.x) }, 'Use'),
+        el('button', { class: 'link', type: 'button', onclick: () => writeSuggestions(loc, [[k.id, src, { d: true }]]) }, 'Dismiss')))));
+  }
+
+  function useSuggestion(k, text) {
+    const ta = document.getElementById(`t-${k.id}`); if (!ta || ta.readOnly) return;
+    ta.value = text; checkPlaceholders(k, ta); updateRowState(k.id); ta.focus();
+  }
+
+  function writeSuggestions(loc, entries) {
+    if (state.canWrite === false || !entries.length) return;
+    const at = new Date().toISOString(); const byChunk = new Map();
+    for (const [id, src, rec] of entries) {
+      const bySource = { ...(state.sugs[loc].get(id) || {}) };
+      bySource[src] = { ...(bySource[src] || {}), ...rec, by: state.me || '', at };
+      state.sugs[loc].set(id, bySource);
+      const chunk = `c${id[0]}`;
+      if (!byChunk.has(chunk)) byChunk.set(chunk, {});
+      byChunk.get(chunk)[id] = { [src]: bySource[src] };
+      if (loc === state.locale) { const k = state.byId.get(id); if (k) renderSugs(k); }
+    }
+    refreshCounts();
+    if (state.db) for (const [chunk, sug] of byChunk) writeChunk(loc, chunk, { sug });
+  }
+
+  function checkPlaceholders(k, ta) {
+    const box = document.getElementById(`p-${k.id}`); if (!box || !ta) return;
+    const want = placeholders(k.en), got = placeholders(ta.value);
+    if (!ta.value.trim()) { box.hidden = false; box.textContent = 'Empty: the English will show.'; return; }
+    if (sameSet(want, got)) { box.hidden = true; return; }
+    const missing = want.filter((p) => !got.includes(p)).map((p) => `{${p}}`);
+    const extra = got.filter((p) => !want.includes(p)).map((p) => `{${p}}`);
+    box.hidden = false;
+    box.textContent = [missing.length ? `Missing ${missing.join(' ')}` : '', extra.length ? `Not in the English: ${extra.join(' ')}` : ''].filter(Boolean).join('. ') + '.';
+  }
+
+  function updateRowState(id) {
+    const row = document.querySelector(`.row[data-id="${id}"]`); if (!row) return;
+    const loc = state.locale; const e = editOf(loc, id); const s = statusOf(loc, id);
+    row.dataset.state = s;
+    const who = e && e.by ? (state.names[e.by] || (e.by === state.me ? 'you' : 'someone')) : '';
+    const when = e && e.at ? new Date(e.at).toLocaleString('en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const label = s === 'ok' ? `Accepted${who ? ` by ${who}` : ''}` : s === 'flag' ? `Flagged${who ? ` by ${who}` : ''}` : changed(loc, id) ? `Changed${who ? ` by ${who}` : ''}, not accepted` : (draftOf(loc, id) ? 'Draft' : 'No draft');
+    const ta = document.getElementById(`t-${id}`);
+    const dirty = !!ta && !ta.readOnly && ta.value !== ta.dataset.saved;
+    row.classList.toggle('dirty', dirty);
+    document.getElementById(`v-${id}`).disabled = !dirty;
+    const st = document.getElementById(`s-${id}`);
+    if (dirty) { st.textContent = 'Unsaved changes'; st.className = 'state dirty'; }
+    else { st.textContent = when && (s || changed(loc, id)) ? `${label} · ${when}` : label; st.className = 'state ' + s; }
+    document.getElementById(`a-${id}`).setAttribute('aria-pressed', String(s === 'ok'));
+    document.getElementById(`a-${id}`).textContent = s === 'ok' ? 'Accepted' : 'Accept';
+    document.getElementById(`f-${id}`).setAttribute('aria-pressed', String(s === 'flag'));
+    document.getElementById(`d-${id}`).hidden = !changed(loc, id) || !draftOf(loc, id);
+    const comment = document.getElementById(`c-${id}`); if (comment) comment.hidden = s !== 'flag';
+    // The comment field is editable only on flagged rows; elsewhere it carries a revision's reason, shown read-only.
+    const rnote = document.getElementById(`n-${id}`);
+    if (rnote) {
+      const text = s !== 'flag' && e && typeof e.c === 'string' ? e.c : '';
+      rnote.hidden = !text;
+      if (text) rnote.replaceChildren(el('b', {}, 'Revision note'), text);
+    }
+  }
+
+  function updateRowFromStore(id) {
+    const ta = document.getElementById(`t-${id}`); if (!ta) return;
+    const stored = currentText(state.locale, id);
+    if (document.activeElement === ta && ta.value !== ta.dataset.saved) {
+      if (stored !== ta.dataset.saved) {
+        const box = document.getElementById(`r-${id}`); box.hidden = false;
+        box.replaceChildren('Someone else changed this row. ', el('button', { type: 'button', onclick: () => { ta.value = stored; ta.dataset.saved = stored; box.hidden = true; checkPlaceholders(state.byId.get(id), ta); } }, 'Show their text'));
+      }
+    } else { ta.value = stored; ta.dataset.saved = stored; checkPlaceholders(state.byId.get(id), ta); }
+    const comment = document.getElementById(`c-${id}`); if (comment && document.activeElement !== comment) comment.value = (editOf(state.locale, id) || {}).c || '';
+    renderSugs(state.byId.get(id));
+    updateRowState(id);
+  }
+
+  // ---- actions --------------------------------------------------------------
+  function saveText(k, ta) {
+    if (ta.readOnly || ta.value === ta.dataset.saved) return;
+    ta.dataset.saved = ta.value;
+    persist(state.locale, k.id, { t: ta.value });
+  }
+
+  // ---- bulk accept ----------------------------------------------------------
+  function textFor(id) {
+    const ta = document.getElementById(`t-${id}`);
+    return ta && !ta.readOnly ? ta.value : currentText(state.locale, id);
+  }
+
+  function acceptable(k) {
+    const s = statusOf(state.locale, k.id);
+    if (s === 'ok' || s === 'flag') return null;
+    const text = textFor(k.id);
+    return text.trim() && sameSet(placeholders(k.en), placeholders(text)) ? text : '';
+  }
+
+  function openBulk() {
+    const panel = $('#bulk');
+    const label = LOCALES.find((l) => l.id === state.locale).label;
+    const onScreen = state.view.slice(0, state.shown);
+    const tally = (list) => { let ok = 0, bad = 0; for (const k of list) { const t = acceptable(k); if (t) ok += 1; else if (t === '') bad += 1; } return { ok, bad }; };
+    const every = tally(state.keys), view = tally(state.view), screen = tally(onScreen);
+    panel.hidden = false;
+    if (!every.ok) { panel.replaceChildren(el('p', {}, `Nothing left to accept in ${label}.`), el('button', { class: 'btn', type: 'button', onclick: closeBulk }, 'Close')); return; }
+    const n = (v) => v.toLocaleString('en-US');
+    const buttons = [];
+    if (screen.ok && screen.ok < view.ok) buttons.push(el('button', { class: 'btn', type: 'button', onclick: () => bulkAccept(onScreen) }, `Accept the ${n(screen.ok)} shown`));
+    if (view.ok && view.ok < every.ok) buttons.push(el('button', { class: 'btn', type: 'button', onclick: () => bulkAccept(state.view) }, `Accept all ${n(view.ok)} matching this filter`));
+    buttons.push(el('button', { class: 'btn accept', type: 'button', onclick: () => bulkAccept(state.keys) }, `Accept every string in ${label} (${n(every.ok)})`));
+    const skipped = every.bad ? ` ${n(every.bad)} with an empty text or a placeholder problem stay as they are.` : '';
+    panel.replaceChildren(
+      el('p', {}, `Accept the current text of strings that are neither accepted nor flagged, including those not shown on screen? Flagged strings are never accepted in bulk.${skipped}`),
+      ...buttons,
+      el('button', { class: 'btn', type: 'button', onclick: closeBulk }, 'Cancel'));
+  }
+
+  function closeBulk() { const panel = $('#bulk'); panel.hidden = true; panel.replaceChildren(); }
+
+  function bulkAccept(list) {
+    const loc = state.locale; const entries = []; const prev = [];
+    for (const k of list) {
+      const text = acceptable(k); if (!text) continue;
+      const ta = document.getElementById(`t-${k.id}`); if (ta) ta.dataset.saved = ta.value;
+      const old = editOf(loc, k.id);
+      prev.push([k.id, old ? { t: typeof old.t === 'string' ? old.t : draftOf(loc, k.id), s: old.s || '', c: old.c || '' } : { t: draftOf(loc, k.id), s: '' }]);
+      entries.push([k.id, { t: text, s: 'ok' }]);
+    }
+    persistMany(loc, entries);
+    state.lastBulk = { loc, prev };
+    const panel = $('#bulk');
+    panel.replaceChildren(el('p', {}, `Accepted ${entries.length.toLocaleString('en-US')} rows.`),
+      el('button', { class: 'link', type: 'button', onclick: undoBulk }, 'Undo'),
+      el('button', { class: 'btn', type: 'button', onclick: closeBulk }, 'Close'));
+    rebuild();
+  }
+
+  function undoBulk() {
+    const last = state.lastBulk; if (!last) return;
+    persistMany(last.loc, last.prev);
+    state.lastBulk = null;
+    if (last.loc === state.locale) rebuild();
+    const panel = $('#bulk'); panel.hidden = false;
+    panel.replaceChildren(el('p', {}, `Restored ${last.prev.length.toLocaleString('en-US')} rows.`), el('button', { class: 'btn', type: 'button', onclick: closeBulk }, 'Close'));
+  }
+
+  function accept(k, advance) {
+    const ta = document.getElementById(`t-${k.id}`);
+    if (!ta || ta.readOnly) return;
+    ta.dataset.saved = ta.value;
+    persist(state.locale, k.id, { t: ta.value, s: statusOf(state.locale, k.id) === 'ok' && !advance ? '' : 'ok' });
+    if (advance) move(k.id, 1);
+  }
+
+  function toggleFlag(k) {
+    const ta = document.getElementById(`t-${k.id}`);
+    const flagged = statusOf(state.locale, k.id) === 'flag';
+    ta.dataset.saved = ta.value;
+    persist(state.locale, k.id, { t: ta.value, s: flagged ? '' : 'flag' });
+    if (!flagged) { const c = document.getElementById(`c-${k.id}`); c.hidden = false; c.focus(); }
+  }
+
+  function useDraft(k) {
+    const ta = document.getElementById(`t-${k.id}`);
+    ta.value = draftOf(state.locale, k.id); ta.dataset.saved = ta.value;
+    persist(state.locale, k.id, { t: ta.value });
+    checkPlaceholders(k, ta);
+  }
+
+  function markCurrent(id) {
+    document.querySelectorAll('.row.current').forEach((r) => r.classList.remove('current'));
+    const row = document.querySelector(`.row[data-id="${id}"]`); if (row) row.classList.add('current');
+  }
+
+  function move(id, step) {
+    const ids = [...document.querySelectorAll('.row')].map((r) => r.dataset.id);
+    let i = ids.indexOf(id) + step;
+    if (i >= ids.length && state.view.length > state.shown) { state.shown += PAGE; renderList(); return move(id, step); }
+    i = Math.max(0, Math.min(ids.length - 1, i));
+    const next = document.getElementById(`t-${ids[i]}`);
+    if (next) { next.focus(); next.scrollIntoView({ block: 'center' }); }
+  }
+
+  function setLocale(id) {
+    state.locale = id; storeSet('review.locale', id); state.lastBulk = null;
+    document.querySelectorAll('.locale').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.locale === id)));
+    refreshCounts(); rebuild();
+  }
+
+  // ---- export for an agent review / import its answer -----------------------
+  const LANGUAGE_NAMES = { ja: 'Japanese', 'zh-Hans': 'Simplified Chinese (mainland usage)', 'zh-Hant': 'Traditional Chinese (Taiwan usage)', ko: 'Korean', es: 'Spanish (international usage)', fr: 'French (France usage)', pt: 'Portuguese (Brazilian usage)', id: 'Indonesian', vi: 'Vietnamese', th: 'Thai' };
+  const STYLE_SECTION = { ja: '2.', 'zh-Hans': '3.', 'zh-Hant': '4.', ko: '5.', es: '6.', fr: '7.', pt: '8.', id: '9.', vi: '10.', th: '11.' };
+
+  function styleFor(md, loc) {
+    const parts = md.split(/^(?=## )/m);
+    return parts.filter((part) => !part.startsWith('## ') || part.startsWith('## 1.') || part.startsWith(`## ${STYLE_SECTION[loc]}`)).join('').trim();
+  }
+
+  function glossaryHint(k, loc) {
+    return (k.g || []).map((i) => state.glossary[i]).filter((g) => g && g[loc]).map((g) => `${g.en} = ${g[loc]}`).join('; ');
+  }
+
+  function exportMarkdown(list, loc, style) {
+    const language = LANGUAGE_NAMES[loc];
+    const rows = list.map((k) => {
+      const e = editOf(loc, k.id) || {}; const s = statusOf(loc, k.id);
+      const row = { id: k.id, en: k.en };
+      if (k.sense) row.meaning = k.sense;
+      Object.assign(row, { kind: k.kind, area: k.area, where: k.where, text: currentText(loc, k.id) });
+      if (s) row.status = s === 'ok' ? 'accepted' : 'flagged';
+      if (e.c) row.reviewer_comment = e.c;
+      if (state.notes[loc][k.id]) row.draft_note = state.notes[loc][k.id];
+      const hint = glossaryHint(k, loc); if (hint) row.glossary = hint;
+      return JSON.stringify(row);
+    });
+    const glossary = state.glossary.filter((g) => g[loc]).map((g) => [g.en, g[loc], g.note || ''].map((c) => String(c).replace(/[\t\n]/g, ' ')).join('\t'));
+    return [
+      `# gbdraw Web UI translation review: ${language} (${loc})`, '',
+      `gbdraw is a bioinformatics web app that draws publication-quality genome diagrams (circular and linear maps of bacterial, phage and organelle genomes, with GC content, feature labels and pairwise comparisons). Below are ${rows.length.toLocaleString('en-US')} strings of its user interface, translated from English into ${language}. Review the translations.`, '',
+      '## What to check', '',
+      '1. Meaning: the translation says what the English says in that place of the UI (see `kind`, `area` and `where`).',
+      '2. Terms: glossary words use the glossary translation, and the same English term is translated the same way everywhere.',
+      '3. Placeholders: every `{name}` in the English appears unchanged in the translation, and none is added.',
+      '4. The style rules below: punctuation, spacing, sentence endings, names that stay in English, length.',
+      `5. Natural wording for a ${language.split(' (')[0]}-speaking scientist using a desktop web app.`, '',
+      'Do not change wording only for taste. Strings with `status: accepted` were approved by a person; change them only for a clear error.', '',
+      '## How to answer', '',
+      'Answer with JSON Lines only, inside one ```jsonl block, one object per string you would change. Leave out strings that are fine.', '',
+      '```jsonl', '{"id": "<id from the list>", "suggestion": "<the whole corrected translation>", "reason": "<one sentence>", "severity": "high"}', '```', '',
+      '- `severity`: `high` = wrong meaning, broken placeholder or a misleading term; `medium` = a glossary or style rule is broken; `low` = wording.',
+      '- Copy `id` exactly. `suggestion` is the complete translation of the string, not a fragment or a diff.',
+      '- When the English itself prevents a good translation (a sentence fragment, an English word inserted at run time), say so in `reason` and still give your best suggestion.', '',
+      '## Fields of each string', '',
+      '`id`; `en` = English source; `meaning` = context when the English is ambiguous; `kind` = button, label, help text, screen-reader name, tooltip, option, …; `area` = part of the app; `where` = source file and line; `text` = current translation; `status`; `reviewer_comment`; `draft_note` = the translator\'s note; `glossary` = glossary terms found in the English.', '',
+      '## Style rules', '', style, '',
+      `## Glossary (English, ${loc}, note)`, '', '```tsv', ...glossary, '```', '',
+      '## Strings', '', '```jsonl', ...rows, '```', '',
+    ].join('\n');
+  }
+
+  async function openExport() {
+    const io = $('#io'); io.hidden = false; closeBulk();
+    const loc = state.locale; const label = LOCALES.find((l) => l.id === loc).label;
+    const save = async (list, scope) => {
+      const style = styleFor(await (await fetch('data/style.md')).text().catch(() => ''), loc);
+      const md = exportMarkdown(list, loc, style);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const filename = `gbdraw-ui-review-${loc}-${scope}-${list.length}-${stamp}.md`;
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const done = (...extra) => io.replaceChildren(el('p', {}, `Saved ${filename}. Give it to the reviewing agent, then paste its answer with "Import an agent review…".`), ...extra, el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close'));
+      if (state.downloads) {
+        // On claude.ai the page cannot download by itself; the viewer confirms the save.
+        try { await state.downloads.save({ filename, data: blob }); done(); }
+        catch (error) { if (!error || error.code !== 'declined') io.replaceChildren(el('p', {}, `Not saved (${(error && error.code) || 'error'}).`), el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close')); }
+        return;
+      }
+      // Anywhere else (GitHub Pages, a local copy): a plain browser download, with a link in case the automatic one was blocked.
+      const url = URL.createObjectURL(blob);
+      const link = el('a', { href: url, download: filename, class: 'link' }, 'Download again');
+      const auto = el('a', { href: url, download: filename }); document.body.append(auto); auto.click(); auto.remove();
+      done(link);
+    };
+    io.replaceChildren(
+      el('p', {}, `One Markdown file for ${label}: the review task, the answer format, the style rules, the glossary, and the strings as JSON lines. Large files are easier for agents in parts; filter by area first to export a part.`),
+      state.view.length < state.keys.length ? el('button', { class: 'btn accept', type: 'button', onclick: () => save(state.view, 'view') }, `Export ${state.view.length.toLocaleString('en-US')} in this view`) : null,
+      el('button', { class: state.view.length < state.keys.length ? 'btn' : 'btn accept', type: 'button', onclick: () => save(state.keys, 'all') }, `Export all ${state.keys.length.toLocaleString('en-US')}`),
+      el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Cancel'));
+  }
+
+  function parseSuggestions(text) {
+    const out = [];
+    const take = (o) => { if (o && typeof o === 'object' && typeof o.id === 'string') out.push(o); };
+    try { const whole = JSON.parse(text.trim()); (Array.isArray(whole) ? whole : (whole.suggestions || whole.items || [whole])).forEach(take); return out; } catch { /* JSON lines */ }
+    for (const line of text.split(/\r?\n/)) {
+      const l = line.trim().replace(/,$/, '');
+      if (l.startsWith('{') && l.endsWith('}')) { try { take(JSON.parse(l)); } catch { /* not a record */ } }
+    }
+    return out;
+  }
+
+  function openImport() {
+    const io = $('#io'); io.hidden = false; closeBulk();
+    const loc = state.locale; const label = LOCALES.find((l) => l.id === loc).label;
+    const paste = el('textarea', { 'aria-label': 'Agent answer', placeholder: 'Paste the agent\'s answer here (JSON lines with id, suggestion, reason, severity), or choose its file.' });
+    const source = el('input', { type: 'text', 'aria-label': 'Reviewer name', value: 'agent', size: '18' });
+    const file = el('input', { type: 'file', accept: '.md,.json,.jsonl,.txt', 'aria-label': 'Answer file' });
+    file.addEventListener('change', async () => { const f = file.files && file.files[0]; if (f) { paste.value = await f.text(); if (source.value === 'agent') source.value = f.name.replace(/\.[^.]+$/, '').slice(0, 40); } });
+    const run = () => {
+      const src = source.value.trim().replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'agent';
+      const found = parseSuggestions(paste.value); const entries = []; let unknown = 0, same = 0;
+      for (const o of found) {
+        const k = state.byId.get(o.id); const x = o.suggestion ?? o.translation ?? o.text;
+        if (!k || typeof x !== 'string') { unknown += 1; continue; }
+        if (x === currentText(loc, k.id)) { same += 1; continue; }
+        const rec = { x, d: false }; const why = o.reason ?? o.comment; if (typeof why === 'string' && why) rec.r = why;
+        if (['high', 'medium', 'low'].includes(o.severity)) rec.v = o.severity;
+        entries.push([k.id, src, rec]);
+      }
+      writeSuggestions(loc, entries);
+      io.replaceChildren(el('p', {}, `Imported ${entries.length} suggestions for ${label} from ${src}.${unknown ? ` ${unknown} lines had an unknown id or no suggestion.` : ''}${same ? ` ${same} matched the current text and were skipped.` : ''}`),
+        entries.length ? el('button', { class: 'btn accept', type: 'button', onclick: () => { state.filter = 'sug'; renderFilters(); rebuild(); closeIo(); } }, 'Show suggestions') : null,
+        el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close'));
+    };
+    io.replaceChildren(el('p', {}, `Suggestions go to the ${label} tab and show under each translation, with Use and Dismiss. Nothing changes until you use one.`),
+      el('div', { class: 'io-row' }, 'Reviewer name', source, file), paste,
+      el('button', { class: 'btn accept', type: 'button', onclick: run }, 'Import'), el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Cancel'));
+    paste.focus();
+  }
+
+  function closeIo() { const io = $('#io'); io.hidden = true; io.replaceChildren(); }
+
+  document.addEventListener('keydown', (event) => {
+    const ta = event.target.closest && event.target.closest('textarea');
+    if (!ta) return;
+    const id = ta.id.slice(2);
+    const k = state.byId.get(id);
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); accept(k, true); }
+    else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveText(k, ta); }
+    else if (event.altKey && event.key === 'ArrowDown') { event.preventDefault(); saveText(k, ta); move(id, 1); }
+    else if (event.altKey && event.key === 'ArrowUp') { event.preventDefault(); saveText(k, ta); move(id, -1); }
+  });
+
+  let searchTimer = 0;
+  $('#search').addEventListener('input', (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.query = e.target.value.trim(); rebuild(); }, 200); });
+  $('#area').addEventListener('change', (e) => { state.area = e.target.value; storeSet('review.area', state.area); rebuild(); });
+  $('#show-shots').addEventListener('change', (e) => { state.showShots = e.target.checked; storeSet('review.shots', state.showShots ? '1' : '0'); document.querySelectorAll('details.ctx').forEach((d) => { if (d.querySelector('.shot')) d.open = state.showShots; }); });
+  $('#bulk-open').addEventListener('click', () => { closeIo(); openBulk(); });
+  $('#export-open').addEventListener('click', openExport);
+  $('#import-open').addEventListener('click', openImport);
+
+  // ---- start ----------------------------------------------------------------
+  async function start() {
+    const savedLocale = storeGet('review.locale'); if (LOCALES.some((l) => l.id === savedLocale)) state.locale = savedLocale;
+    const savedFilter = storeGet('review.filter'); if (FILTERS.some((f) => f.id === savedFilter)) state.filter = savedFilter;
+    state.area = storeGet('review.area') || '';
+    state.showShots = storeGet('review.shots') !== '0'; $('#show-shots').checked = state.showShots;
+    renderFilters();
+    await loadData();
+    if (state.area && !state.keys.some((k) => k.area === state.area)) state.area = '';
+    $('#area').value = state.area;
+    renderLocales(); rebuild();
+    setSaveState('Connecting…');
+    const [db, user, downloads] = await Promise.all([
+      window.claude ? window.claude.use('db') : Promise.resolve(null),
+      window.claude ? window.claude.use('user') : Promise.resolve(null),
+      window.claude ? window.claude.use('downloads') : Promise.resolve(null),
+    ]);
+    state.db = db; state.user = user; state.downloads = downloads;
+    if (!db) { await loadBranchState(); refreshCounts(); rebuild(); }
+    if (user) { state.me = await user.id(); const can = await user.can('data.write'); state.canWrite = can === null ? null : can; }
+    showAccess();
+    if (db) { subscribe(); setSaveState(state.canWrite === false ? 'Read only' : 'Live'); }
+    else setSaveState('Not saving', 'bad');
+  }
+  start();
+})();
+</script>

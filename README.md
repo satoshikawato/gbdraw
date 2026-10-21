@@ -6,7 +6,7 @@ without the claude.ai artifact. It is not part of the gbdraw package and never
 merges into `dev` or `main`.
 
 GitHub Pages serves this branch: https://satoshikawato.github.io/gbdraw/ opens
-the review page (`index.html` at the root forwards to `review-gui/v19/`;
+the review page (`index.html` at the root forwards to `review-gui/v20/`;
 `.nojekyll` keeps Pages from processing the files). There the page is
 read-only: it shows the drafts, the notes and the review state stored in
 `db/current/` (status, comments, stored translations, as of the branch's latest
@@ -26,6 +26,18 @@ uses its database and does not read `db/current/`.
   strings: v18's 2,682 plus the 53 Custom Track Slots issue messages of #1259
   (`dev` d17c0b7a8). ja, zh-Hans and zh-Hant have the catalog text as their
   draft; es, fr, pt and ko have no draft for these 53 yet (PR-B #1261).
+- `review-gui/v20/` — v19's page with ten locales: 日本語, 简体中文, 繁體中文,
+  한국어, Español, Français, Português, Bahasa Indonesia, Tiếng Việt, ไทย, and
+  2,738 strings (`dev` 36ac5879a: every catalog key, including the 50 singular
+  forms; v19's 2,735 minus 2 keys `dev` no longer has plus 5 new ones). The drafts of the first seven
+  locales are the `dev` catalogs; id, vi and th come from PR #1265
+  (`feat/web-i18n-thidvi`, 3173c54f2), with a note per string that the
+  independent review changed (with the text before), 66, 31 and 50. The
+  screenshots are shared with v19 (`shots.json` points at `../v19/shots/`), and
+  `data/style.md` and `data/glossary.json` carry the id, vi and th sections and
+  columns. The three new locales have no review database rows: the page shows
+  them read-only with the drafts only. The v19 paragraph above stays as it was
+  for that folder.
 - `db/snapshot-2026-10-21-r4/` — the review database of the original artifact
   as read on 2026-10-21 after review round 4: collections `rev-ja`,
   `rev-zh-Hans`, `rev-zh-Hant`, 16 chunk documents each
