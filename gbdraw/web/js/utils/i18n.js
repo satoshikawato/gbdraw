@@ -13,8 +13,8 @@
 // Never translated: the figure and every export, Session JSON, CLI / Source
 // recipe / Exact replay text, diagnostics text, console output, identifiers
 // (History step labels, `:key` values, `data-*`, ids), file and biological
-// names. Keys are literal arguments of `t`, `tn`, `tx` and `msg`, so
-// tests/web/i18n-catalogs.test.mjs can list them.
+// names. Keys are literal arguments of `t`, `tx`, `msg` and both forms of
+// `tn`, so tests/web/i18n-catalogs.test.mjs can list them.
 //
 // The catalogs are generated, never edited by hand; their wording follows
 // docs/internal/I18N_STYLE.md and docs/internal/I18N_GLOSSARY.tsv.
@@ -22,7 +22,7 @@
 /**
  * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module. It is
  * also the page's `lang`.
- * @typedef {'en' | 'ja' | 'zh-Hans' | 'zh-Hant'} UiLocale
+ * @typedef {'en' | 'es' | 'fr' | 'pt' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
  */
 /**
  * A language the Web UI can be shown in (PD-OI-106).
@@ -32,8 +32,8 @@
  * @property {string} sentenceSeparator What separates two sentences shown one after the other.
  */
 /**
- * A locale's translations, keyed by the English text (`t`, and the `other`
- * form of `tn`) or by `context + '\u0004' + text` (`tx`).
+ * A locale's translations, keyed by the English text (`t`, and each form
+ * of `tn`) or by `context + '\u0004' + text` (`tx`).
  * @typedef {Readonly<Record<string, string>>} TranslationCatalog
  */
 /**
@@ -53,15 +53,20 @@
 /** @type {UiLocale} */
 export const SOURCE_LOCALE = 'en';
 /**
- * The languages of the header Language menu, in its order. Japanese and
- * Chinese put no space between sentences.
+ * The languages of the header Language menu, in its order: Latin script
+ * first, then East Asian (PD-OI-106). Japanese and Chinese put no space
+ * between sentences.
  * @type {readonly Readonly<UiLocaleOption>[]}
  */
 export const UI_LOCALES = Object.freeze([
   Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '' })
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ' })
 ]);
 // Separates the context of `tx` from its text in a catalog key.
 export const CONTEXT_SEPARATOR = '\u0004';
@@ -84,6 +89,10 @@ export const uiLocaleOf = (value) => UI_LOCALES.find((option) => option.tag === 
 const shownLocale = () => UI_LOCALES.find((option) => option.tag === locale.value) ?? UI_LOCALES[0];
 /** @type {TranslationCatalog} */
 let catalog = Object.freeze({});
+// The plural rules of English, for the English a missing translation shows,
+// and of the shown locale; `setUiLocale` replaces the second.
+const ENGLISH_PLURALS = new Intl.PluralRules(SOURCE_LOCALE);
+let shownPlurals = ENGLISH_PLURALS;
 
 /**
  * The shown UI locale. Templates that call `t()` read it, so they render
@@ -121,8 +130,21 @@ const lookup = (key, fallback) => {
 export const t = (text, params) => substitute(lookup(text, text), params);
 
 /**
- * The shown text of a count: `one` when `count` is 1 in English, else
- * `other`. The catalog key is `other`; `{count}` is the count unless `params`
+ * The English form of `count` under `rules`: `one` when they select the
+ * category `one`, else `other` (every other category takes `other`).
+ * @param {Intl.PluralRules} rules
+ * @param {number} count
+ * @param {string} one
+ * @param {string} other
+ */
+const pluralForm = (rules, count, one, other) => (rules.select(count) === 'one' ? one : other);
+
+/**
+ * The shown text of a count. The shown locale's plural rules
+ * (Intl.PluralRules) choose the form, and that form's English text is the
+ * catalog key: `fr` and `pt` take `one` for 0 and 1, `en` and `es` for 1
+ * only, `ja`, `zh-Hans`, `zh-Hant` and `ko` never. A missing translation
+ * shows the form English chooses. `{count}` is the count unless `params`
  * gives it.
  * @param {number} count
  * @param {string} one
@@ -131,7 +153,7 @@ export const t = (text, params) => substitute(lookup(text, text), params);
  * @returns {string}
  */
 export const tn = (count, one, other, params) => (
-  substitute(lookup(other, count === 1 ? one : other), { count, ...params })
+  substitute(lookup(pluralForm(shownPlurals, count, one, other), pluralForm(ENGLISH_PLURALS, count, one, other)), { count, ...params })
 );
 
 /**
@@ -179,7 +201,8 @@ export const tmx = (context, text) => lookup(context + CONTEXT_SEPARATOR + text,
 
 /**
  * What separates two sentences shown one after the other in the shown locale:
- * a space in English, nothing in Japanese and Chinese (after 。). Templates
+ * a space in English, Spanish, French, Portuguese and Korean, nothing in
+ * Japanese and Chinese (after 。). Templates
  * put it between two keys: `{{ t('A.') }}{{ sentenceSeparator() }}{{ t('B.') }}`.
  * @returns {string}
  */
@@ -260,6 +283,7 @@ export const setUiLocale = async (next, load = importCatalog) => {
   const loaded = tag === SOURCE_LOCALE ? {} : (await load(tag)).default;
   if (request !== latestRequest) return false;
   catalog = Object.freeze({ ...loaded });
+  shownPlurals = tag === SOURCE_LOCALE ? ENGLISH_PLURALS : new Intl.PluralRules(tag);
   locale.value = tag;
   // A unit test without a page has no document.
   globalThis.document?.documentElement.setAttribute('lang', tag);

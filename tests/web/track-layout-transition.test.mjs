@@ -17,6 +17,7 @@ import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-
 import { createLinearTrackSlotEditor } from '../../gbdraw/web/js/app/linear-track-slots.js';
 import { trackLayoutWithVisibility } from '../../gbdraw/web/js/app/track-slot-edits.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 const WEB = 'gbdraw/web';
 const MODES = ['circular', 'linear'];
@@ -88,6 +89,24 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   assert.equal(placement.layoutChange.open, false);
   assert.equal(steps.length, 1);
   assert.equal(everything(linear), linearBefore);
+});
+
+// OV-1418: the dialog names a checkbox's new value in the shown language.
+test('a checkbox edit that drops a lane names its new value in the shown language', async () => {
+  const linear = draftState('linear');
+  linear.featurePlacementOverrides.l = lane('linear', 'above');
+  const store = withModeDrawings(linear, { circular: draftState('circular'), linear });
+  const placement = createFeaturePlacementActions({ state: store, getCommittedRequest: () => null, isCurrentFeature: () => true,
+    runUndoable: async (label, fn) => { fn(); } });
+  try {
+    await setUiLocale('ja', async () => ({ default: { On: 'オン', Off: 'オフ' } }));
+    const strands = { type: 'checkbox', checked: true, getAttribute: () => 'Separate Strands' };
+    placement.changeLayoutSetting({ target: strands }, 'separate_strands');
+    assert.deepEqual({ ...placement.layoutChange }, { open: true, count: 1, setting: 'Separate Strands', value: 'オン' });
+    await placement.resolveLayoutChange('cancel');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // Each editor export runs with every call below, on a stack whose feature row

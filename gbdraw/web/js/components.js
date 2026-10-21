@@ -12,7 +12,7 @@ import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
@@ -557,7 +557,7 @@ export const SettingsSectionIndex = {
       nextTick(mark);
     });
 
-    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn };
+    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn, settingsShortText };
   }
 };
 

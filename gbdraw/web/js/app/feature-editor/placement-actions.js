@@ -215,7 +215,7 @@ export const createFeaturePlacementActions = ({
     if (!lost.length) return result;
     restoreTrackLayout(drawing, saved);
     const checkbox = control?.type === 'checkbox';
-    const value = checkbox ? (control.checked ? 'On' : 'Off') : control?.selectedOptions?.[0]?.text || '';
+    const value = checkbox ? (control.checked ? t('On') : t('Off')) : control?.selectedOptions?.[0]?.text || '';
     // The checkbox shows the kept value again; a bound select re-renders to it.
     if (checkbox) control.checked = !control.checked;
     pendingLayout = { control, apply };
