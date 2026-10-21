@@ -238,7 +238,6 @@ test('French and Korean show their catalogs and plural forms, and French changes
   await openApp(page);
   await loadSession(page);
   const englishSession = await savedSession(page, testInfo, 'en.json');
-  const englishRecipes = await generatedRecipes(page);
   expect(await recordCounts(page)).toEqual(['0 records', '1 record', '2 records']);
 
   await menu(page).selectOption('fr');
@@ -250,7 +249,12 @@ test('French and Korean show their catalogs and plural forms, and French changes
     fr['{count} record'].replace('{count}', '0'), fr['{count} record'].replace('{count}', '1'), fr['{count} records'].replace('{count}', '2')
   ]);
   expect(await savedSession(page, testInfo, 'fr.json')).toBe(englishSession);
-  expect(await generatedRecipes(page)).toBe(englishRecipes);
+  // A Generate in French writes the Source recipe and Exact replay of one in English.
+  const frenchRecipes = await generatedRecipes(page);
+  expect(frenchRecipes).toContain('gbdraw');
+  await menu(page).selectOption('en');
+  await expect.poll(() => pageLanguage(page)).toBe('en');
+  expect(await generatedRecipes(page)).toBe(frenchRecipes);
 
   await menu(page).selectOption('ko');
   await expect.poll(() => pageLanguage(page)).toBe('ko');

@@ -467,7 +467,7 @@ Move outside axis / Move inside axis					Mover fuera del eje / Mover dentro del 
 Move outside Axis / Move inside Axis							Mover para fora do eixo / Mover para dentro do eixo	[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide. pt: Help texts name the full labels; Move outward / inward = Mover para fora / para dentro.
 Near-reciprocal hit				준상호 히트				[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide. ko: [review]
 Nearest available font				가장 비슷한 글꼴				[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide.
-None (shared option key)						Aucun		[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide. fr: One key serves legend position, label protection, color value, label line, Extend to and filter mode; the masculine form is used. Feminine contexts need context keys in PR-B. None (Default) stays Aucune (par défaut) (title position).
+None (shared option key)						Aucun		[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide. fr: One key serves legend position, label protection, color value, label line, Extend to and filter mode; the masculine form is used. A feminine context needs its own context key first. None (Default) stays Aucune (par défaut) (title position).
 Omit					Excluir			[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide. es: Distinct from Skip (Omitir).
 Omit / dropped / left out				제외 / 제외했습니다				[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide.
 Ortholog				오솔로그				[0.15.0 addition] ja/zh cells not fixed here; the shipped ja/zh catalogs decide. ko: Spelling of the Orthogroup gloss (오솔로그 그룹); coortholog 공동 오솔로그 [review].

@@ -369,7 +369,7 @@ buttons 儲存工作階段 and 載入工作階段 at 1,024 px in PR-1.
 
 Standard Korean (표준어) as South Korean software writes it: Microsoft and
 Google Korean UIs for command words, Korean molecular-biology textbooks and
-papers for the science. The Language menu entry is **한국어** (D-03).
+papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 
 ### 5.1 Vocabulary
 
@@ -434,7 +434,7 @@ papers for the science. The Language menu entry is **한국어** (D-03).
 ### 5.3 Punctuation and spacing
 
 - Half-width `. , : ; ? ! ( )`. A sentence ends with `.`; two sentences are
-  separated by one space (D-06). A sentence whose English has no final period
+  separated by one space. A sentence whose English has no final period
   keeps none (help hints, tooltips, titles, and the `{effect}` fragments that
   an outer key ends).
 - **Quotes**: ‘ ’ (U+2018, U+2019) around a placeholder the English quotes
@@ -481,7 +481,7 @@ papers for the science. The Language menu entry is **한국어** (D-03).
   only when no such noun fits.
 - **Plurals**: `Intl.PluralRules('ko')` always returns `other`, so there is
   one form. Translate the `other` key; the build script gives the `one` key
-  the same string (D-05). No plural marker 들 on a counted noun; English
+  the same string. No plural marker 들 on a counted noun; English
   agreement (its / their, was / were) disappears.
 - **Counters**: noun first, counter attached to the number: 레코드 {count}개,
   not {count}개의 레코드. 개 for records, features, files, tracks, colors,
@@ -515,7 +515,7 @@ papers for the science. The Language menu entry is **한국어** (D-03).
 
 ## 6. Spanish (`es`)
 
-International Spanish (D-03): words a reader understands in Spain and in the
+International Spanish (PD-OI-106): words a reader understands in Spain and in the
 Americas; no voseo, no tuteo, no vosotros. Where Spain and Latin America
 differ, take the word Microsoft uses in both markets or the RAE form
 (archivo, not fichero; agregar; orgánulo). The Language menu entry is
@@ -648,8 +648,9 @@ differ, take the word Microsoft uses in both markets or the RAE form
   short names: at most 9 letters, about 50 px at 10 px semibold in the
   52 px button, which does not wrap: Entrada, Comparar, Avanzado, Regiones,
   Diseño, Fuente, Títulos, Leyenda, Colores, Etiquetas, Eje, GC / sesgo,
-  Acerca de; Generar beside the rail. Features shares one key with its
-  section title, and Características (15 letters) overflows; see the notes.
+  Acerca de; Generar beside the rail. The rail short name of Features has its
+  own key, `tx('rail', 'Features')`: Caract. (the section title
+  Características, 15 letters, does not fit).
 - Header buttons stay within about 1.3× the English label; check Restablecer
   configuración at 1,024 px. Options in 10 px rows use the glossary's short forms: Automático, En serie,
   Multihilo, Arriba / Abajo, Dentro / Fuera, Sobre el eje, Fondo, Cinta /
@@ -659,7 +660,7 @@ differ, take the word Microsoft uses in both markets or the RAE form
 
 ## 7. French (`fr`)
 
-Standard French of France, vouvoiement, French typography (D-03, D-06). The Language menu
+Standard French of France, vouvoiement, French typography (PD-OI-106). The Language menu
 entry is the endonym **Français**; the menu label itself is Langue.
 
 ### 7.1 Vocabulary
@@ -796,8 +797,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   Entrée, Comparer, Avancé, Régions, Disposition (about 52 px, the limit), Police, Titres,
   Légende, Couleurs, Éléments, Étiquettes (about 48 px), Axe, GC / skew, À propos, Générer.
 - The four header buttons (Réinitialiser les paramètres, Enregistrer la session, Charger une
-  session, Charger un exemple) are about 1.7× the English width: check them at 1,024 px in the
-  PR-B screenshots and fix an overflow in CSS, since the same keys name them in prose.
+  session, Charger un exemple) are about 1.7× the English width: check them at 1,024 px and
+  fix an overflow in CSS, not with a shorter key, since the same keys name them in prose.
 - Short forms: Monter / Descendre, Tout effacer, min. / max., Auto, ID, séq., no initial article
   in a label. Help texts and notices may be as long as needed.
 
@@ -807,7 +808,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
 
 - **Norm.** Brazilian Portuguese spelled to the 1990 Orthographic Agreement
   (sequência, ideia, sub-região, pré-visualização), one catalog under `pt`
-  (D-03). No slang or Brazilian-only idioms, so a reader in Portugal is not put
+  (PD-OI-106). No slang or Brazilian-only idioms, so a reader in Portugal is not put
   off. Where the norms use different words, take the Brazilian one: arquivo
   (not ficheiro), tela (ecrã), salvar (guardar), baixar (transferir), excluir
   (eliminar), registro (registo), seção (secção), aba (separador), usuário
@@ -876,7 +877,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
   sentence, continue after a colon in lower case unless a name, a control
   label or a placeholder follows.
 - No space before ; ? ! (unlike fr); no ¿ ¡. Sentences are separated by one
-  space (D-06).
+  space.
 - Parentheses, slashes and ranges as in English: Região (opcional), Espaço
   entre registros (px), Organismo / cepa, Linhas 3–4 (en dash, no spaces).
 - Numbers keep the source's decimal point and grouping (0.65, 1,000; never
@@ -909,7 +910,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
   configuração {setting}, o valor {value}, a trilha {track}. Never put o, a,
   do, da, no, na, ao or à straight before such a placeholder: Mesclar em
   “{name}”, not no {name}. A user-typed name the English quotes is “{name}”.
-- `Intl.PluralRules('pt')` selects `one` for 0 and 1 (D-05): write `one` in
+- `Intl.PluralRules('pt')` selects `one` for 0 and 1: write `one` in
   the singular and make it read right with 0 (0 registro is the CLDR pt form).
   A `one` text without {count} (From this color rule:) is shown for a single
   item only. The count is digits; noun, article, adjective and verb agree with
