@@ -333,9 +333,9 @@ class _Record(NamedTuple):
     origin_y: float
     label_style: FeatureLabelStyle
     inks: tuple[LabelObstacle, ...]
-    label_x: float = 0.0
-    row_labels: tuple[tuple[Sequence[LinearLabel], float], ...] = ()
-    definition_boxes: tuple[Aabb, ...] = ()
+    label_x: float
+    row_labels: tuple[tuple[Sequence[LinearLabel], float], ...]
+    definition_boxes: tuple[Aabb, ...]
 
     def label_fit(self, labels: Sequence[LinearLabel]) -> LabelFit:
         """The label fit's count of the row's feature labels with the record's labels ``labels``. The
@@ -485,7 +485,7 @@ def place_linear_annotation_labels(
     new_rows: bool = True,
     label_x: float = 0.0,
     row_labels: Sequence[tuple[Sequence[LinearLabel], float]] = (),
-    definition_boxes: Sequence[Aabb] = (),
+    definition_boxes: Sequence[Aabb],
 ) -> PlacedAnnotationLabels:
     """Each annotation slot's labels on one record, placed along their spans (slot-local y).
 
@@ -498,8 +498,9 @@ def place_linear_annotation_labels(
     a new row. ``label_x`` and ``row_labels`` are where the label fit
     counts the row's feature labels (the record's start and the other records'
     labels, each with its start), with the record's ``definition_boxes`` (its definition text in its
-    feature labels' coordinates); no move makes that count larger. A placed
-    label still over an obstacle counts one pair per obstacle owner.
+    feature labels' coordinates; required, as without them a move could cover that text, OV-1436); no
+    move makes that count larger. A placed label still over an obstacle counts one pair per obstacle
+    owner.
     """
 
     obstacles = list(obstacles)
