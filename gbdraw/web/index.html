@@ -105,9 +105,11 @@
         /* Chinese UI text: system Chinese fonts, never Noto Sans JP's Japanese glyph shapes. The figure keeps the English stack. */
         :root:lang(zh-Hans) body { font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans SC', 'Source Han Sans SC', sans-serif; }
         :root:lang(zh-Hant) body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', sans-serif; }
-        :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
-        /* Japanese and Chinese have no letter case, and letter spacing breaks up their text: no upper-casing or tracking in the UI (the figure keeps its own). */
-        :root:lang(ja) :not(svg, svg *), :root:lang(zh-Hans) :not(svg, svg *), :root:lang(zh-Hant) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
+        /* Korean UI text: system Hangul fonts; a line breaks between words, never inside one (a word too long for its box still wraps). */
+        :root:lang(ko) body { font-family: 'Inter', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', 'Noto Sans KR', 'Source Han Sans KR', sans-serif; word-break: keep-all; overflow-wrap: break-word; }
+        :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg, :root:lang(ko) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
+        /* Japanese, Chinese and Korean have no letter case, and letter spacing breaks up their text: no upper-casing or tracking in the UI (the figure keeps its own). */
+        :root:lang(ja) :not(svg, svg *), :root:lang(zh-Hans) :not(svg, svg *), :root:lang(zh-Hant) :not(svg, svg *), :root:lang(ko) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -8888,7 +8890,7 @@
                     :class="rail ? { 'starts-group': Boolean(section.input) !== Boolean(entries[order - 1]?.input), 'at-end': section.railOnly } : null"
                     :aria-label="t('Go to {section}', { section: tm(section.title) })" :aria-controls="controls" :aria-current="section.key === marked ? 'true' : null"
                     v-on="tipOn(tm(section.title))" @click="activate(section.key)">
-                <i class="ph" :class="section.icon" aria-hidden="true"></i><span v-if="rail">{{ tm(section.short) }}</span>
+                <i class="ph" :class="section.icon" aria-hidden="true"></i><span v-if="rail">{{ settingsShortText(section) }}</span>
             </button>
         </nav>
         <button v-if="!rail && view.switchable" type="button" class="settings-index-switch" :aria-label="t('Collapse settings to icons')" :aria-controls="controls"

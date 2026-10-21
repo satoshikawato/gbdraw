@@ -8,7 +8,7 @@
 // entry of its own (Basic, the preserved-settings notice) names the entry that
 // docks it in the rail. The list of drawn elements below names, for each
 // element of the Result that has a section, the section a click on it opens.
-import { msg } from '../utils/i18n.js';
+import { msg, tm, tmx } from '../utils/i18n.js';
 import {
   DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, LENGTH_BAR_ID, PLOT_TITLE_ID, TICK_GROUPS, trackGroupSelector
 } from './drawn-groups.js';
@@ -25,7 +25,9 @@ import {
  * @property {string} title The heading text; the entry is named "Go to <title>". English, marked
  *   with `msg`: the rail matches the sections of two modes by it; show it with `tm`.
  * @property {string} icon Phosphor icon class of the heading and of the entry.
- * @property {string} short The name under the icon of the rail entry (English, marked; shown with `tm`).
+ * @property {string} short The name under the icon of the rail entry (English, marked; shown by `settingsShortText`).
+ * @property {'rail'} [shortContext] The context of the short name's own catalog key, for a short name
+ *   whose plain translation (that of the title) is too long for the rail button (OV-1417).
  * @property {SettingsSectionModes} modes
  * @property {true} [input] An entry that chooses what is drawn; the rail sets these apart from the rest.
  * @property {true} [railOnly] An entry of the rail alone; the stacked row leaves it out.
@@ -62,7 +64,7 @@ export const SETTINGS_SECTIONS = catalog([
   { key: 'titles', title: msg('Titles & Record Labels'), icon: 'ph-textbox', short: msg('Titles'), modes: BOTH_MODES },
   { key: 'legend', title: msg('Legend'), icon: 'ph-list-bullets', short: msg('Legend'), modes: BOTH_MODES },
   { key: 'colors', title: msg('Colors'), icon: 'ph-palette', short: msg('Colors'), modes: BOTH_MODES },
-  { key: 'features', title: msg('Features'), icon: 'ph-shapes', short: msg('Features'), modes: BOTH_MODES },
+  { key: 'features', title: msg('Features'), icon: 'ph-shapes', short: msg('Features'), shortContext: 'rail', modes: BOTH_MODES },
   { key: 'labels', title: msg('Labels'), icon: 'ph-text-t', short: msg('Labels'), modes: BOTH_MODES },
   // Axis & Scale is one card per mode, each with its own icon.
   { key: 'linear-axis', title: msg('Axis & Scale'), icon: 'ph-ruler', short: msg('Axis'), modes: ['linear'] },
@@ -82,6 +84,21 @@ const hasEntry = (section) => 'short' in section;
 /** @param {'circular' | 'linear'} mode @param {SettingsPaneDisplay} display */
 export const settingsEntriesOf = (mode, display) => SETTINGS_SECTIONS.filter(hasEntry)
   .filter((entry) => entry.modes.includes(mode) && (display === 'rail' || !entry.railOnly));
+
+/**
+ * The shown name under the icon of a rail entry.
+ * @param {SettingsEntry} entry
+ * @returns {string}
+ */
+export const settingsShortText = (entry) => (entry.shortContext ? tmx(entry.shortContext, entry.short) : tm(entry.short));
+
+/**
+ * The catalog keys of the short names with a context of their own, with
+ * their English text; the catalog check reads them.
+ * @returns {{ context: string, english: string }[]}
+ */
+export const settingsShortKeys = () => SETTINGS_SECTIONS.filter(hasEntry)
+  .flatMap((entry) => (entry.shortContext ? [{ context: entry.shortContext, english: entry.short }] : []));
 
 // The entry that docks a section in the rail: its own, or the one it names.
 /** @param {SettingsSectionKey} key */

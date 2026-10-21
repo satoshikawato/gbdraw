@@ -1,7 +1,8 @@
 // The Web UI translation runtime (gbdraw/web/js/utils/i18n.js) and its
 // catalogs (gbdraw/web/js/utils/i18n-catalogs/<locale>.js). English is the
 // key: the literal first argument of `t()` and of `msg()` (a text kept until
-// it is shown, which `tm()` translates there), the `other` argument of `tn()`,
+// it is shown, which `tm()` translates there), the `one` and the `other`
+// argument of `tn()` (the shown locale's plural rules pick one of them),
 // `context + '\u0004' + text` of `tx()`, the table values of the error
 // wording owner (tests/web/helpers/error-text-keys.mjs), and the labels of
 // the similarity group member values that Python owns, which
@@ -23,6 +24,7 @@ import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale, uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { settingsShortKeys } from '../../gbdraw/web/js/services/settings-sections.js';
 import { errorTextKeys } from './helpers/error-text-keys.mjs';
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
@@ -31,13 +33,13 @@ const catalogRoot = join(jsRoot, 'utils', 'i18n-catalogs');
 // The runtime's own source and the catalogs hold no UI text of their own.
 const RUNTIME_FILES = new Set(['utils/i18n.js']);
 
-// For each function, the argument positions that are literal keys, and how
-// they make the catalog key.
+// For each function, the argument positions that are literal keys, and the
+// catalog keys they make, each with its English text.
 const CALLS = {
-  t: { literals: [0], key: ([text]) => text },
-  msg: { literals: [0], key: ([text]) => text },
-  tn: { literals: [1, 2], key: ([, , other]) => other },
-  tx: { literals: [0, 1], key: ([context, text]) => context + CONTEXT_SEPARATOR + text }
+  t: { literals: [0], keys: ([text]) => [[text, text]] },
+  msg: { literals: [0], keys: ([text]) => [[text, text]] },
+  tn: { literals: [1, 2], keys: ([, one, other]) => [[one, one], [other, other]] },
+  tx: { literals: [0, 1], keys: ([context, text]) => [[context + CONTEXT_SEPARATOR + text, text]] }
 };
 const CALL_START = /(?<![\w$.])(msg|tn|tx|t)\(/g;
 // `tm()` translates a value that `msg()` marked; a literal there is a `t()` call.
@@ -143,13 +145,12 @@ const extractCalls = (source, file) => {
       calls.push({ where, problem });
       continue;
     }
-    const key = CALLS[name].key(args);
     // An in-DOM template sees an entity decoded, an x-template does not: write the character.
     if (/&(?:[A-Za-z]+|#\d+|#x[0-9A-Fa-f]+);/.test(args.join(''))) {
       calls.push({ where, problem: `${where}: ${name}() key holds an HTML entity; write the character` });
       continue;
     }
-    calls.push({ where, key, english: name === 'tx' ? args[1] : key });
+    for (const [key, english] of CALLS[name].keys(args)) calls.push({ where, key, english });
   }
   for (const match of source.matchAll(TM_LITERAL)) {
     const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
@@ -303,7 +304,7 @@ test('extraction reads the quoting forms of templates and modules', () => {
     'tx(\'Linear (size scaling)\', \'Linear\'); foo.t(notAKey); split(\'x\');'
   ].join('\n');
   assert.deepEqual(extractCalls(source, 'sample').map((call) => call.key ?? call.problem), [
-    'Undo', 'Don\'t save', 'Say "hi"', 'Plain', 'Rows {from}–{to}', '{count} rows',
+    'Undo', 'Don\'t save', 'Say "hi"', 'Plain', 'Rows {from}–{to}', '{count} row', '{count} rows',
     `Linear (size scaling)${CONTEXT_SEPARATOR}Linear`
   ]);
 });
@@ -450,7 +451,8 @@ test('catalog check: stale keys, placeholder sets and non-string values', () => 
 // a test loads it without utils/i18n.js (copied alone or with a fixed set of
 // its imports), declares the same identity.
 const LOCAL_MARKER = 'const msg = (text) => text;';
-const MSG_IMPORT = /^import \{[^}]*\bmsg\b[^}]*\} from '(?:\.\.\/|\.\/)+utils\/i18n\.js';$/m;
+// A module in utils/ imports it as './i18n.js'.
+const MSG_IMPORT = /^import \{[^}]*\bmsg\b[^}]*\} from '(?:(?:\.\.\/|\.\/)+utils\/|\.\/)i18n\.js';$/m;
 const markerProblems = (source, file) => {
   if (!/(?<![\w$.])msg\(/.test(source)) return [];
   const local = source.split('\n').filter((line) => /^\s*(?:const|let|var|function)\s+msg\b/.test(line));
@@ -475,6 +477,8 @@ test('every catalog matches the keys and placeholders of the sources', async () 
   for (const key of await errorTextKeys()) english.set(key, key);
   // The member role and confidence labels, derived from the values Python owns (OV-1390).
   for (const { context, english: text } of memberValueLabelKeys()) english.set(context + CONTEXT_SEPARATOR + text, text);
+  // The rail short names with a context key of their own (OV-1417).
+  for (const { context, english: text } of settingsShortKeys()) english.set(context + CONTEXT_SEPARATOR + text, text);
   for (const file of catalogFiles()) {
     const { default: catalog } = await import(pathToFileURL(join(catalogRoot, file)).href);
     assert.ok(Object.isFrozen(catalog), `${file} exports a frozen object`);
@@ -605,26 +609,32 @@ test('OV-1387: the Record Size Mode option Linear is its own key; the diagram mo
   assert.match(html, /@click="setDiagramMode\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
 });
 
-test('the UI languages are English, Japanese, Simplified and Traditional Chinese, each named in itself', () => {
+test('the UI languages are the eight of the Language menu, Latin script first, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
-    ['en', 'English'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文']
+    ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],
+    ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
-  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'fr', null, undefined, 3, '../x']) {
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'de', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
 });
 
 test('a locale outside the UI languages is refused', async () => {
-  await assert.rejects(setUiLocale('fr', async () => ({ default: {} })), /Unknown UI locale/);
+  await assert.rejects(setUiLocale('de', async () => ({ default: {} })), /Unknown UI locale/);
   assert.equal(uiLocale.value, SOURCE_LOCALE);
 });
 
-test('two sentences are joined with a space in English and with nothing in Japanese and Chinese', async () => {
+test('two sentences are joined with a space in English, Spanish, French, Portuguese and Korean and with nothing in Japanese and Chinese', async () => {
   assert.equal(sentenceSeparator(), ' ');
   assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
   try {
+    for (const tag of ['es', 'fr', 'pt', 'ko']) {
+      await setUiLocale(tag, async () => ({ default: {} }));
+      assert.equal(sentenceSeparator(), ' ', tag);
+      assert.equal(joinSentences('A.', 'B.'), 'A. B.', tag);
+    }
     for (const tag of ['ja', 'zh-Hans', 'zh-Hant']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.equal(sentenceSeparator(), '', tag);
@@ -635,14 +645,14 @@ test('two sentences are joined with a space in English and with nothing in Japan
   }
 });
 
-test('a list keeps today\'s English and uses the locale\'s list pattern in Japanese and Chinese', async () => {
+test('a list keeps today\'s English and uses the locale\'s list pattern in every other locale', async () => {
   assert.equal(listText([]), '');
   assert.equal(listText(['A']), 'A');
   assert.equal(listText(['A', 'B']), 'A and B');
   assert.equal(listText(['A', 'B', 'C']), 'A, B, and C');
   assert.equal(listText(['A', 'B', 'C', '2 more']), 'A, B, C, and 2 more');
   try {
-    for (const tag of ['ja', 'zh-Hans', 'zh-Hant']) {
+    for (const tag of ['es', 'fr', 'pt', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
       assert.equal(listText(['A']), 'A', tag);
@@ -671,4 +681,45 @@ test('the shown locale sets the page language, and only a switch that applies do
     await setUiLocale(SOURCE_LOCALE);
     globalThis.document = previous;
   }
+});
+
+test('the shown locale\'s plural rules pick the form, and the English text of that form is the key', async () => {
+  const catalog = Object.freeze({ '{count} row': 'one:{count}', '{count} rows': 'other:{count}' });
+  const forms = (counts) => counts.map((count) => tn(count, '{count} row', '{count} rows'));
+  assert.deepEqual(forms([0, 1, 2]), ['0 rows', '1 row', '2 rows'], 'English is unchanged');
+  try {
+    for (const [tag, expected] of [
+      // fr and pt take `one` for 0 too; es only for 1.
+      ['fr', ['one:0', 'one:1', 'other:2', 'other:1000000']],
+      ['pt', ['one:0', 'one:1', 'other:2', 'other:1000000']],
+      // es and fr select `many` for 1000000, which takes `other`.
+      ['es', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      ['ko', ['other:0', 'other:1', 'other:2', 'other:1000000']]
+    ]) {
+      await setUiLocale(tag, async () => ({ default: catalog }));
+      assert.deepEqual(forms([0, 1, 2, 1000000]), expected, tag);
+    }
+    // A missing translation shows the form English picks.
+    await setUiLocale('fr', async () => ({ default: { '{count} rows': 'other:{count}' } }));
+    assert.deepEqual(forms([0, 1, 2]), ['0 rows', '1 row', 'other:2']);
+    await setUiLocale(SOURCE_LOCALE);
+    assert.deepEqual(forms([0, 1]), ['0 rows', '1 row'], 'English again after a switch back');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+test('every `one` text of a tn() call is a catalog key', () => {
+  const keys = new Set(sourceCalls().map((call) => call.key));
+  for (const key of ['From this color rule:', 'The chosen feature already points left.', '({count} record)']) assert.ok(keys.has(key), key);
+});
+
+test('OV-1415: the words a declined label table names as changed are a key, shown in the UI language', async () => {
+  const { RULE_INPUT_CHANGE_WORDS } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  assert.ok(new Set(sourceCalls().map((call) => call.key)).has(RULE_INPUT_CHANGE_WORDS));
+  const source = readFileSync(join(jsRoot, 'app', 'feature-editor', 'label-actions.js'), 'utf8');
+  assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
 });

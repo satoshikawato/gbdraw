@@ -24,7 +24,7 @@ import {
   ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
-import { joinSentences, t } from '../../utils/i18n.js';
+import { joinSentences, t, tm } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -1702,7 +1702,7 @@ export const createFeatureLabelActions = ({
         : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
           ? t('Not applied: the displayed diagram changed while the table loaded. Load the table again.')
           : !rulePreparation.isCurrent(before)
-            ? t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: RULE_INPUT_CHANGE_WORDS }) : '';
+            ? t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: tm(RULE_INPUT_CHANGE_WORDS) }) : '';
       if (changed) {
         showNotice({ text: joinSentences(loadedRowsText, changed), tone: 'warning' });
         return;

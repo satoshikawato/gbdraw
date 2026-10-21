@@ -1,4 +1,8 @@
 // @ts-check
+// This module has no imports (tests/web/helpers/error-text-keys.mjs loads a
+// copy of it alone), so it declares the identity of utils/i18n.js `msg`.
+/** @param {string} text */
+const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame', 'convertStoredProteinResultFrames',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
@@ -153,7 +157,8 @@ const REASONS = Object.freeze({
 });
 // What a decline names as changed under an evaluation of rule inputs (OV-447,
 // OV-449): the label table import and the Specific rules import read it here.
-export const RULE_INPUT_CHANGE_WORDS = "colors, color rules, the Legend, or the diagram's inputs";
+// A key of its own (OV-1415): the label table's notice shows it with `tm`.
+export const RULE_INPUT_CHANGE_WORDS = msg("colors, color rules, the Legend, or the diagram's inputs");
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}

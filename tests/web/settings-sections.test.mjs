@@ -193,5 +193,5 @@ test('an index entry is named "Go to <title>" in one place, so it shares no name
   assert.equal(index.split(':aria-label="t(\'Go to {section}\', { section: tm(section.title) })"').length - 1, 1, 'the entry name');
   // The hover text of an entry stays the bare title; the rail shows the short name.
   assert.ok(index.includes('tipOn(tm(section.title))'));
-  assert.ok(index.includes('{{ tm(section.short) }}'));
+  assert.ok(index.includes('{{ settingsShortText(section) }}'));
 });

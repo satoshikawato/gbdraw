@@ -12,6 +12,10 @@
 // - English comes back with the same UI text and accessible names;
 // - a Generate in ja and in zh-Hans writes the same Source recipe and Exact
 //   replay as one in English;
+// - in fr (a Latin-script language) and ko: the page language, the shown
+//   catalog, the plural form the locale's rules pick (fr: `one` for 0 and 1),
+//   the Hangul font stack and line breaking of ko, and, in fr, the same saved
+//   Session and Source recipe as English;
 // - storage that throws, or a catalog that fails to load, leaves English.
 // Not checked here: PNG and PDF bytes, the shown Run Info text, and the
 // diagnostics text.
@@ -136,9 +140,9 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await expect.poll(() => pageLanguage(page)).toBe('en');
   await expect(menu(page)).toHaveValue('en');
   await expect(menu(page)).toHaveAccessibleName('Language');
-  await expect(menu(page).locator('option')).toHaveText(['English', '日本語', '简体中文', '繁體中文']);
+  await expect(menu(page).locator('option')).toHaveText(['English', 'Español', 'Français', 'Português', '日本語', '简体中文', '繁體中文', '한국어']);
   expect(await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.lang)))
-    .toEqual(['en', 'ja', 'zh-Hans', 'zh-Hant']);
+    .toEqual(['en', 'es', 'fr', 'pt', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
   await expect(loadButton(page)).toHaveAccessibleName('Load Session');
   expect(await stored(page)).toEqual([]);
 
@@ -216,6 +220,52 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     await expect.poll(() => pageLanguage(page)).toBe(tag);
     expect(await generatedRecipes(page)).toBe(englishRecipes);
   }
+  expect(errors).toEqual([]);
+});
+
+// The app's own translation module (one instance per page): the form a count shows.
+const recordCounts = (page) => page.evaluate(async () => {
+  const { tn } = await import('./js/utils/i18n.js');
+  return [0, 1, 2].map((count) => tn(count, '{count} record', '{count} records'));
+});
+
+test('French and Korean show their catalogs and plural forms, and French changes no Session or Source recipe', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  const [fr, ko] = await Promise.all(['fr', 'ko'].map(catalogOf));
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('dialog', (dialog) => dialog.accept());
+  await openApp(page);
+  await loadSession(page);
+  const englishSession = await savedSession(page, testInfo, 'en.json');
+  const englishRecipes = await generatedRecipes(page);
+  expect(await recordCounts(page)).toEqual(['0 records', '1 record', '2 records']);
+
+  await menu(page).selectOption('fr');
+  await expect.poll(() => pageLanguage(page)).toBe('fr');
+  await expect(loadButton(page)).toHaveAccessibleName(fr['Load Session']);
+  await expect(page.getByRole('button', { name: fr['Generate Diagram'], exact: true })).toBeVisible();
+  // French takes the `one` form for 0 and 1.
+  expect(await recordCounts(page)).toEqual([
+    fr['{count} record'].replace('{count}', '0'), fr['{count} record'].replace('{count}', '1'), fr['{count} records'].replace('{count}', '2')
+  ]);
+  expect(await savedSession(page, testInfo, 'fr.json')).toBe(englishSession);
+  expect(await generatedRecipes(page)).toBe(englishRecipes);
+
+  await menu(page).selectOption('ko');
+  await expect.poll(() => pageLanguage(page)).toBe('ko');
+  await expect(loadButton(page)).toHaveAccessibleName(ko['Load Session']);
+  // Korean has one form for every count.
+  expect(await recordCounts(page)).toEqual([0, 1, 2].map((count) => ko['{count} records'].replace('{count}', String(count))));
+  expect(await page.locator('body').evaluate((body) => {
+    const style = getComputedStyle(body);
+    return [style.fontFamily.includes('Apple SD Gothic Neo'), style.wordBreak];
+  })).toEqual([true, 'keep-all']);
+  expect(await page.locator('header .app-session-label').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.textTransform, style.letterSpacing];
+  })).toEqual(['none', 'normal']);
+  expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'ko']]);
   expect(errors).toEqual([]);
 });
 
