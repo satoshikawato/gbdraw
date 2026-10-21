@@ -70,8 +70,9 @@ the glossary wins and this file is corrected.
 - A `tn` key has one string in `ja`, `zh-Hans`, `zh-Hant` and `ko`, which have
   no plural forms (`Intl.PluralRules` returns `other`), and a `one` and an
   `other` string in `es`, `fr` and `pt` (§5.5 to §11.5). `th`, `id` and `vi`
-  have no plural forms either; their `one` rows repeat the `other` text
-  (§9.5, §10.5, §11.5).
+  have no plural forms either: `Intl.PluralRules` selects `other` for every
+  count, so their `one` rows are never shown (they carry the `other` text or a
+  natural singular; §9.5, §10.5, §11.5).
 - One key is one sentence or label. Never build a sentence from translated
   fragments; ask for a key with placeholders instead. A sentence with an
   inline element (`<strong>`, a swatch, a bound name) is one key; the
@@ -1135,9 +1136,10 @@ of Firefox, Google and Android, help texts in the register of Vietnamese
 journals (English in parentheses at a term's first use). The Language menu
 entry is **Tiếng Việt**. **Every value is NFC** (`normalize('NFC')`, also
 for text pasted from PDFs): decomposed tone marks look the same but break
-search and the lint (`vi-nfc`). The UI shows Vietnamese in the system UI font
-(`:lang(vi)` in `gbdraw/web/index.html`): the vendored Inter has Latin
-letters only, and would mix typefaces inside a word.
+search and the lint (`vi-nfc`). The UI shows Vietnamese in Inter: the five vendored
+Inter `vietnamese` subset files (the `unicode-range` blocks in
+`gbdraw/web/index.html`) carry the Vietnamese letters, so a word never mixes
+typefaces.
 
 ### 10.1 Vocabulary
 

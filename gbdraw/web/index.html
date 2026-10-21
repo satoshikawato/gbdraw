@@ -163,13 +163,14 @@
         :root:lang(th) :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(svg, svg *) { font-size: 12px !important; }
         :root:lang(th) :is(.leading-none, .leading-tight, .leading-snug):not(svg, svg *) { line-height: 1.5; }
         /* The same floor for the small text styles whose size their own rule sets (css/tailwind.input.css): hints, group
-           headings, the apply note, the header buttons, and the rail. A rail name may take two lines; its entry grows to
+           headings, the apply note, the header buttons, the rail and its tooltip, and the choice-group labels. A rail name may take two lines; its entry grows to
            hold them, and the rail column scrolls when the entries do not fit. */
-        :root:lang(th) :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, [data-settings-display="rail"] > .settings-index > nav > button > span) { font-size: 12px; }
+        :root:lang(th) :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span) { font-size: 12px; }
         :root:lang(th) .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { font-size: 12px; }
         /* A Thai or Vietnamese rail name wraps at a word break instead of spilling out of its entry. */
         :root:is(:lang(th), :lang(vi)) [data-settings-display="rail"] > .settings-index > nav > button { min-height: min-content; }
         :root:is(:lang(th), :lang(vi)) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.3; white-space: normal; text-align: center; }
+        :root:lang(th) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.5; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }

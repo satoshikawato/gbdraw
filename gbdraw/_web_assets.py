@@ -68,6 +68,11 @@ UI_FONT_ASSETS = {
         "inter-latin-500-normal.woff2",
         "inter-latin-600-normal.woff2",
         "inter-latin-700-normal.woff2",
+        "inter-vietnamese-300-normal.woff2",
+        "inter-vietnamese-400-normal.woff2",
+        "inter-vietnamese-500-normal.woff2",
+        "inter-vietnamese-600-normal.woff2",
+        "inter-vietnamese-700-normal.woff2",
     ),
     "noto-sans-jp": (
         "noto-sans-jp-japanese-300-normal.woff2",
