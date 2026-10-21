@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `74`
+- Contract revision: `75`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2426,6 +2426,71 @@ Status: active Product authority
     before this record, in `#1254` at
     `3979094e2ed57a046c3eb11c0229a38b93e4f0bb`. This authority-only change
     brings the Contract in line with them.
+- Revision 75 changes: `PD-OI-106` is replaced for scenario revision `2`
+  (concern `product.web-ui-language`). The header Language menu gains Español,
+  Français, Português, and 한국어, which ship together in 0.15.0 after the
+  0.14.0 tag; Portuguese is one catalog written to the Brazilian norm; a
+  language with singular and plural forms shows the form its own plural rule
+  selects for the count. The other outcomes of scenario revision `1` do not
+  change. It comes from the Product Decision Owner `satoshikawato`'s replies
+  of `2026-10-21` in the Claude Code session.
+  - The session had reported that the translation runtime takes any catalog,
+    that `PD-OI-106` fixes the Language menu list, and that a new language is
+    therefore a Contract revision. The replies:
+    「0.15.0に入れよう。」 (on Korean), then
+    「0.15.0にポルトガル語とスペイン語、フランス語も入れよう。」
+  - The receipt's wording on the Portuguese norm, the menu order, and the
+    plural rule follows the session's Owner-delegated choices (standing
+    instruction of `2026-09-29`, restated `2026-10-07`; campaign
+    `web-i18n-0150-20261021`, D-03 to D-06), which the session listed with
+    the receipt. The Product Decision Owner approved the receipt text on
+    `2026-10-21` (「承認します。」, in reply to the full receipt shown with its
+    changes against scenario revision `1`).
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `4e7da4443562184f466f4def8f01f68d12ede65645d1699dbc3c5520404ebb4a`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.web-ui-language (language of the Web UI text)
+    Scenario revision: 2
+    Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+      (English, Español, Français, Português, 日本語, 简体中文, 繁體中文,
+      한국어) switches the Web UI text at once, without reload, and
+      without changing the Result, the settings or the History;
+      switching is not a History step. English is shown on a first
+      visit; the browser language never chooses. The chosen language
+      is remembered per browser and is not part of the Session,
+      History or any export. Names fixed in English by PD-OI-093 and
+      PD-OI-105 keep that English in the English UI and are translated
+      in the other languages. ja, zh-Hans and zh-Hant ship together in
+      0.14.0; the 0.14.0 tag waits for all three. es, fr, pt and ko
+      ship together in 0.15.0, after the 0.14.0 tag. pt follows the
+      Brazilian norm; one Portuguese catalog. A language with singular
+      and plural forms shows the form its own plural rule selects for
+      the count. No text states that the translations are reviewed.
+      ja writes Default as 既定; zh reviewers decide the open zh terms.
+    Rationale: Let users work in their own language while every
+      scientific output stays identical in all languages.
+    Must preserve: the English UI text and accessible names; the
+      figure, every export, the Session, CLI / Source recipe / Exact
+      replay text and diagnostics are identical in every language;
+      the stored settings-pane display choice of PD-OI-093.
+    May retire: PD-OI-093's limit of browser storage to one display
+      choice; storage now holds that choice and the UI language.
+    Accepted residual risk: Python-produced warnings, Gallery
+      tutorials and the docs stay English inside a translated UI;
+      translated wording may contain errors until corrected; the es,
+      fr, pt and ko wording is drafted and checked without a native
+      reviewer until one corrects it.
+    Owner: satoshikawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: only `PD-OI-106` is replaced; no other record is amended or
+    retired. `PD-OI-093` and `PD-OI-105` keep their text.
+  - This change is authority only. The runtime (the four locales, their
+    catalogs, and the plural selection) follows in a later pull request after
+    the 0.14.0 tag; this record supplies no runtime acceptance evidence.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -8014,42 +8079,53 @@ Decision date: 2026-10-13
 ### PD-OI-106: Web UI language
 
 - Concern key: `product.web-ui-language`
-- Scenario revision: `1`
-- Supersedes: none. It narrows `PD-OI-093`: that record's limit of browser
+- Scenario revision: `2`
+- Supersedes: `PD-OI-106`, scenario revision `1`. Scenario revision `2` keeps
+  every outcome and field of scenario revision `1` and adds to the Choice the
+  languages Español, Français, Português, and 한국어 (shipping together in
+  0.15.0 after the 0.14.0 tag), the single Portuguese catalog written to the
+  Brazilian norm, and the plural form chosen by the language's own plural rule;
+  it adds to the Accepted residual risk the drafting of those four languages
+  without a native reviewer. The Revision 75 entry quotes the replies. As
+  scenario revision `1`, it narrows `PD-OI-093`: that record's limit of browser
   storage to one display choice no longer holds (see the receipt's May retire);
   `PD-OI-093` keeps its text and its stored display choice.
 - Status: `ACCEPTED`
 - Selected outcome: `WEB-UI-LANGUAGE-MANUAL`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner answers of `2026-10-19` in the Claude Code
-  session, summarized in the Revision 70 entry above. The Owner approved the
-  receipt text below as written. The receipt reproduces its fields without
-  translation or additional terms. Dependent runtime requires this authority
-  merged into its base, or merged together with it through the reviewed static
-  Product Contract co-change route; this record supplies no runtime acceptance
-  evidence. The JSON `concern` holds the concern key without the receipt's
-  parenthetical description.
+- Decision source: the Owner replies of `2026-10-21` in the Claude Code
+  session, summarized in the Revision 75 entry above; scenario revision `1`
+  came from the Owner answers of `2026-10-19` (Revision 70 entry). The Owner
+  approved the receipt text below as written. The receipt reproduces its
+  fields without translation or additional terms. Dependent runtime requires
+  this authority merged into its base, or merged together with it through the
+  reviewed static Product Contract co-change route; this record supplies no
+  runtime acceptance evidence. The JSON `concern` holds the concern key
+  without the receipt's parenthetical description.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `d5d5b516fb6e7f02776262519c0ede07894904326b10c651761864fffdb9d6d1`.
+  `4e7da4443562184f466f4def8f01f68d12ede65645d1699dbc3c5520404ebb4a`.
 
 ```text
 PRODUCT_DECISION
 Concern: product.web-ui-language (language of the Web UI text)
-Scenario revision: 1
+Scenario revision: 2
 Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
-  (English, 日本語, 简体中文, 繁體中文) switches the Web UI text
-  at once, without reload, and without changing the Result,
-  the settings or the History; switching is not a History step.
-  English is shown on a first visit; the browser language never
-  chooses. The chosen language is remembered per browser and is
-  not part of the Session, History or any export. Names fixed in
-  English by PD-OI-093 and PD-OI-105 keep that English in the
-  English UI and are translated in the other languages. ja,
-  zh-Hans and zh-Hant ship together in 0.14.0; the 0.14.0 tag
-  waits for all three. No text states that the translations are
-  reviewed. ja writes Default as 既定; zh reviewers decide the
-  open zh terms.
+  (English, Español, Français, Português, 日本語, 简体中文, 繁體中文,
+  한국어) switches the Web UI text at once, without reload, and
+  without changing the Result, the settings or the History;
+  switching is not a History step. English is shown on a first
+  visit; the browser language never chooses. The chosen language
+  is remembered per browser and is not part of the Session,
+  History or any export. Names fixed in English by PD-OI-093 and
+  PD-OI-105 keep that English in the English UI and are translated
+  in the other languages. ja, zh-Hans and zh-Hant ship together in
+  0.14.0; the 0.14.0 tag waits for all three. es, fr, pt and ko
+  ship together in 0.15.0, after the 0.14.0 tag. pt follows the
+  Brazilian norm; one Portuguese catalog. A language with singular
+  and plural forms shows the form its own plural rule selects for
+  the count. No text states that the translations are reviewed.
+  ja writes Default as 既定; zh reviewers decide the open zh terms.
 Rationale: Let users work in their own language while every
   scientific output stays identical in all languages.
 Must preserve: the English UI text and accessible names; the
@@ -8060,22 +8136,24 @@ May retire: PD-OI-093's limit of browser storage to one display
   choice; storage now holds that choice and the UI language.
 Accepted residual risk: Python-produced warnings, Gallery
   tutorials and the docs stay English inside a translated UI;
-  translated wording may contain errors until corrected.
+  translated wording may contain errors until corrected; the es,
+  fr, pt and ko wording is drafted and checked without a native
+  reviewer until one corrects it.
 Owner: satoshikawato
-Decision date: 2026-10-19
+Decision date: 2026-10-21
 ```
 
 ```json
 {
   "concern": "product.web-ui-language",
-  "scenarioRevision": 1,
-  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, 日本語, 简体中文, 繁體中文) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. ja, zh-Hans and zh-Hant ship together in 0.14.0; the 0.14.0 tag waits for all three. No text states that the translations are reviewed. ja writes Default as 既定; zh reviewers decide the open zh terms.",
+  "scenarioRevision": 2,
+  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Español, Français, Português, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. ja, zh-Hans and zh-Hant ship together in 0.14.0; the 0.14.0 tag waits for all three. es, fr, pt and ko ship together in 0.15.0, after the 0.14.0 tag. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count. No text states that the translations are reviewed. ja writes Default as 既定; zh reviewers decide the open zh terms.",
   "rationale": "Let users work in their own language while every scientific output stays identical in all languages.",
   "mustPreserve": "the English UI text and accessible names; the figure, every export, the Session, CLI / Source recipe / Exact replay text and diagnostics are identical in every language; the stored settings-pane display choice of PD-OI-093.",
   "mayRetire": "PD-OI-093's limit of browser storage to one display choice; storage now holds that choice and the UI language.",
-  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected.",
+  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt and ko wording is drafted and checked without a native reviewer until one corrects it.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-19"
+  "decisionDate": "2026-10-21"
 }
 ```
 
