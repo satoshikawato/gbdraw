@@ -7,6 +7,7 @@ import test from 'node:test';
 import { createPreviewItemPopup, defaultColorScopeLine, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
 import { legendEntryKey } from '../../gbdraw/web/js/services/legend-svg.js';
 import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
+import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 class FakeElement {
   constructor(attributes = {}, { parent = null, text = '', children = [] } = {}) {
@@ -323,6 +324,25 @@ test('the legend-entry view names the rule behind the color and the feature coun
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');
   assert.equal(single.colorSource, 'Set on individual features');
+});
+
+// OV-1466: a rule for any feature is one sentence, so a locale can write the
+// words for "any feature" where and how its sentence needs them.
+test('a color rule for any feature is one whole sentence in every locale (OV-1466)', async () => {
+  const lines = () => openView(createPopup({
+    entries: [{ caption: 'Ruled', color: '#d62728' }],
+    rules: [{ feat: '', qual: '', val: '' }, { feat: '', qual: 'product', val: 'kinase' }]
+  }), { kind: 'legend-entry', key: 'Ruled' }).ruleLines;
+  assert.deepEqual(lines(), ['Any feature color rule', 'Any feature where product matches “kinase”']);
+  try {
+    await setUiLocale('ja', async () => ({ default: Object.freeze({
+      'Any feature color rule': 'A', 'Any feature where {qualifier} matches “{pattern}”': 'B {qualifier} {pattern}',
+      '{feature} color rule': '{feature} C', '{feature} where {qualifier} matches “{pattern}”': '{feature} D'
+    }) }));
+    assert.deepEqual(lines(), ['A', 'B product kinase']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 test('a legend-entry view of color none shows None; its picker starts at the palette color (OV-1386)', () => {

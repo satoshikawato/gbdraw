@@ -130,13 +130,20 @@ export const previewItemTarget = (target, svg) => {
   return { element, item: { kind: 'record-definition', recordIndex, recordId: text(element.getAttribute('data-gbdraw-record-id')) } };
 };
 
-/** @param {ColorRuleLike} rule */
+/**
+ * OV-1466: a rule without a feature type is a whole sentence of its own, so a
+ * locale writes "any feature" where and how its sentence needs it.
+ * @param {ColorRuleLike} rule
+ */
 const colorRuleText = (rule) => {
-  const feature = text(rule?.feat) || t('Any feature');
+  const feature = text(rule?.feat);
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
-  if (!qualifier && !pattern) return t('{feature} color rule', { feature });
-  return t('{feature} where {qualifier} matches “{pattern}”', { feature, qualifier: qualifier || t('a qualifier'), pattern });
+  if (!qualifier && !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
+  const params = { qualifier: qualifier || t('a qualifier'), pattern };
+  return feature
+    ? t('{feature} where {qualifier} matches “{pattern}”', { feature, ...params })
+    : t('Any feature where {qualifier} matches “{pattern}”', params);
 };
 
 // OV-1272: a track row names its plot; it lists no features, and its Color
