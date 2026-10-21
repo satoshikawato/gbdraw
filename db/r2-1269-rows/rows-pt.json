@@ -1,0 +1,1204 @@
+{
+ "c2": {
+  "264e651cacac": {
+   "t": "A rotação do registro, o posicionamento das features ou a tolerância têm alterações que aguardam a geração. Este aviso se refere apenas à exibição dos registros; o resultado mantém as configurações aplicadas.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「trata apenas de」「pendentes para a geração」は covers / pending Generate の直訳なので、「se refere apenas a」「aguardam a geração」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "2d3e810611cc": {
+   "t": "Nenhuma regra manual de visibilidade",
+   "c": "[R2] #1269 (2026-10-22) proposal: 形容詞の位置は「regra manual de visibilidade」が自然なポルトガル語。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "2c37af0f4338": {
+   "t": "Sublinhado desenha uma linha sob cada rótulo horizontal que tem linha de chamada e a une a ela; um rótulo girado não recebe sublinhado. Com Nenhum, não é desenhada nenhuma linha.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「linha de chamada」が3回出てぎこちなく、「Nenhum não desenha」は否定が重なる。「Com Nenhum, …」にし、nenhuma を「sublinhado」に明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "2284b3029cb7": {
+   "t": "Buscar com uma expressão regular JavaScript, sem diferenciar maiúsculas de minúsculas.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「são equivalentes」は match alike の直訳。他の箇所と同じ「sem diferenciar maiúsculas de minúsculas」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "222fb7698076": {
+   "t": "Os rótulos não são desenhados nas features {type}, porque, em Tipos de feature, esse tipo é desenhado como Fundo.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 「Tipos de feature as desenha」は、設定名が主語で代名詞「as」が付く不自然な文。「em Tipos de feature, esse tipo é desenhado como Fundo」と受け身にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "281120d48e54": {
+   "t": "Registros desenhados: {drawn} de {total}",
+   "c": "[R2] #1269 (2026-10-22) sweep: plain t() の件数文で、total が 1 のとき「1 de 1 registros」になる。「名詞句: 値」の形にして単複どちらでも正しく読めるようにした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "2e3c7b5f9b40": {
+   "t": "O alias do registro “{id}” é ambíguo nas origens de sequência disponíveis.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7e と同じ形（alias do registro）にそろえる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "2c410ac0d6b7": {
+   "t": "Dentro dessa trilha, {px} px ficam reservados para as trilhas mais internas.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Para dentro dela」は先行詞が不明で方向に読める。入りきらなかった trilha を明示する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "2143e068e635": {
+   "t": "O ID da trilha “{id}” é usado por mais de uma linha habilitada.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 同じ形の他の ID（ID do slot、ID do grupo、ID do bloco）は「ID da/do + 名詞」。ここだけ「ID de trilha」だったので揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "229cb642c40b": {
+   "t": "Sua pilha personalizada de trilhas tem {count} trilhas de {track}. Ocultar {track} desativa essas trilhas.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 第3部の依頼どおり。単数形 8725baaba16f（第3部で変更済み）と複数形をそろえ、用語集の「pilha personalizada」を離さず、形容詞が trilhas にかかる誤読も避ける。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c5": {
+  "515e2adac2cc": {
+   "t": "Envie os dois arquivos, GFF3 e FASTA, para inspecionar os registros.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 原文の both が訳に出ておらず、2つのファイルが両方必要だと読めなかった。「os dois arquivos」で明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "53bc8802dbd3": {
+   "t": "Operações do arquivo do diagrama linear",
+   "c": "[R2] #1269 (2026-10-22) proposal: D5: 「arquivo linear」は線状形式のファイルと読める。「do diagrama linear」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "5e08b6f1a3f9": {
+   "t": "Registro-alvo da anotação",
+   "c": "[R2] #1269 (2026-10-22) proposal: 段階1の決定（Priberam）: 名詞+alvo はハイフンでつなぐ。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "5172f6df2f03": {
+   "t": "Nomes opcionais para os anéis, usados na falta de outro nome, um por origem. Separe-os com quebras de linha ou vírgulas.",
+   "c": "[R2] #1269 (2026-10-22) proposal: fallback は「他に名前がないときだけ使う」名前。「alternativos」は別名と読めるので言い換えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "570da1327638": {
+   "t": "A geometria da pilha personalizada está ativa. Use a largura da linha Features ou clique em Redefinir para copiar este valor para a pilha.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 038262a6a25a と同じ構文。「Use … ou Redefinir」を「clique em Redefinir」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "5841674fd4cf": {
+   "t": "As regras são avaliadas de cima para baixo. Com Desativado, a feature fica oculta e é omitida da busca de proteínas; com Omitir da busca de proteínas, a feature continua visível, mas é omitida da busca.",
+   "c": "[R2] #1269 (2026-10-22) term: 選択肢名が主語で omite が3回重なっていた（段階1 の P8）。「Com X, …」にし、可視性が変わらないことを「continua visível」で明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "59403e890f20": {
+   "t": "Alternar a barra de busca de features",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Mostrar ou ocultar」への変更は採らない（Alternar は標準語）。「Alternar busca」は検索の種類の切り替えにも読めるので、対象が検索バーだと分かる「barra de busca」を補った。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "52558adc2d0f": {
+   "t": "O número de trilhas de profundidade deve ser um inteiro não negativo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "548548e7a523": {
+   "t": "Paleta: a paleta “{label}” ({path}) aguardava para ser aplicada, mas a Pré-visualização instantânea está ativada e aplica uma paleta imediatamente; ela foi descartada.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「aguardava aplicação」は名詞化の直訳。「aguardava para ser aplicada」が自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "5ddd17eb4c09": {
+   "t": "Não há rótulo editável para esta feature no diagrama atual.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「rótulo de feature … para esta feature」の重複を除いて短くする。意味は変わらない。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "5ad58b933713": {
+   "t": "O mecanismo de desenho falhou ao desenhar este diagrama. Uma nova tentativa com as mesmas entradas e configurações falhará da mesma forma. Altere as entradas ou as configurações, ou salve uma sessão para investigação.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 不定詞を主語にした「Gerar novamente … falha」を避け、「Uma nova tentativa … falhará」にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "575849db118e": {
+   "t": "Em Fonte, desative Incorporar fonte no SVG exportado para exportar sem a fonte, ou escolha outra fonte.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「no SVG exportado em Fonte」はどこにかかるか曖昧。「Em Fonte」を先に出して場所を明確にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "cc": {
+  "c1ff7b08dd5f": {
+   "t": "Tentar inspecionar novamente a origem",
+   "c": "[R2] #1269 (2026-10-22) proposal: 他の Retry ボタンは「Tentar + 不定詞 + novamente」の型（Tentar gerar novamente など）なので揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "c0045ec995b7": {
+   "t": "Edite a pilha circular explícita. Abrir ou fechar este painel não habilita nem altera a pilha. As linhas acima do eixo são desenhadas fora do eixo circular, e as linhas abaixo do eixo, dentro dele.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「por fora / por dentro」は何の外・内か不明。隣の 48dfb051002b と同じく「eixo circular」を名指しし、render は他の文と同じ「desenhadas」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "cfa9d1f85ae3": {
+   "t": "No Chrome e no Edge, é possível escolher fontes instaladas no computador. Neste navegador, use Carregar arquivo de fonte.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 現訳は「Chrome と Edge にインストールされたフォント」と読める。実際はブラウザーが端末のフォントを選べるという意味。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "c97087915f57": {
+   "t": "Somente no modo simples. Com Acima, as features ficam acima do eixo; com Features no eixo, ficam centralizadas sobre ele; com Abaixo, ficam abaixo dele. Use Redefinir para copiar esta escolha para a pilha personalizada.",
+   "c": "[R2] #1269 (2026-10-22) term: ラベル名の直後に代名詞 as を置くと冠詞に読める（段階1 の P8）。「Com X, …」の形にして目的語の取り違えをなくした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "cfb9c57b2f3c": {
+   "t": "Mostra as marcas principais e os rótulos de coordenadas no modo simples. O eixo circular do genoma permanece visível quando esta opção está desativada.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Primary は目盛り記号（marca principal）を修飾するのに、現訳は「escala principal」と別のものに掛けていた。目盛り記号と座標ラベルを並べる形に直した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "c0252dfa457f": {
+   "t": "Redefinir os elementos movidos, a margem da tela, a posição da visualização e o zoom para os valores padrão",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Retornar」は直訳で、「panorâmica」は映像用語。pan は「posição da visualização」、Reset は「Redefinir」に揃えた（Owner D5）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "c35c7fd3f118": {
+   "t": "Nenhum ID dos registros corresponde à busca.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7e の「ID do registro」系に揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ca5904df16fe": {
+   "t": "Os metadados do identificador de sequência desta correspondência são inválidos.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 特定の識別子なので de + 冠詞（do identificador）にする。冠詞なしの並置は不自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "cdc575b146e6": {
+   "t": "O alinhamento precisa ser corrigido: {reason}",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「reparo」は DNA 修復を連想させる。UI の定型どおり「precisa ser corrigido」にする（用語集の Fix = corrigir）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ccecbbdc7ed3": {
+   "t": "As etapas mais antigas de desfazer e todas as etapas de refazer foram descartadas para respeitar o limite do histórico.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「O histórico de desfazer mais antigo」は直訳で、古い履歴全体のように読める。用語集の「etapa」を使い、古い方の手順が捨てられたことを明確にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "c5a207ad0969": {
+   "t": "A comparação salva pode ser executada, mas os controles atuais não permitem editar o formato de entrada de proteínas armazenado nela.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「os controles não podem editar」は英語の主語をそのまま移した形。「não permitem editar」が自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ca2fb8b3b81e": {
+   "t": "A recuperação dos metadados das features falhou. A pré-visualização SVG e os pop-ups das correspondências par a par continuam disponíveis.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「pop-ups par a par」は名詞の積み重ね。ポップアップは対ごとの一致（Correspondência par a par）のものなので、そう明示する。提案の「comparação」ではなく、既存ラベルの「correspondência」を使う。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "c5fe108b568f": {
+   "t": "Comparações: não foi possível ler novamente, nos arquivos de entrada, as sequências das correspondências de comparação salvas; a pré-visualização SVG permanece, e a próxima geração as lê.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「salvas a partir dos arquivos de entrada」が別の名詞にかかって読める。位置を直し、未来形「lerá」を兄弟文字列と同じ現在形にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "cb526a48487e": {
+   "t": "Gerando novamente o registro-alvo…",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「名詞＋alvo」のハイフン統一（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "ce": {
+  "e9738c055e4e": {
+   "t": "Disponível quando a Tela de vários registros está desativada e um registro está selecionado.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同じコントロール名を使う隣の文は「A Tela de vários registros」と冠詞を付けているので揃えた。冠詞なしだと唐突に読める。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e80a0242b8f7": {
+   "t": "Arquivo de entrada {n} do diagrama linear",
+   "c": "[R2] #1269 (2026-10-22) proposal: linear はファイルの性質ではなく図の種類を示す。D5/D7d に従い「do diagrama linear」にした。modo は使わない。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e599e6943dc0": {
+   "t": "Defina o código genético de cada sequência em {options}.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同じ設定は Gencode 行で「Código genético」と呼んでいる。「tabela de tradução」は同じ概念の第二の名前なので統一した（段階1の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e1b61d004ab0": {
+   "t": "Nome mantido do arquivo bruto do LOSAT",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「…LOSAT mantido」では mantido がファイルにもかかるように読める。保持されるのは名前なので「Nome mantido」を先に置いた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e8001e25efaa": {
+   "t": "Quando habilitado, clicar em uma feature mostra as abas Detalhes, Qualificadores e Sequência. Desabilite para usar o pop-up compacto, apenas para edição.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「compacto somente de edição」は形容詞を重ねた英語の直訳。コンマと「apenas para edição」で係り先を明確にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e8b570e636f7": {
+   "t": "Exige compatibilidade de fita ou da ordem dos genes, ou aceita qualquer orientação ao mesclar âncoras colineares.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「compatível」の繰り返しと係り先の曖昧さを、「compatibilidade de fita ou da ordem dos genes」で一度に言う形にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ef7d8bb6f906": {
+   "t": "Alinha o diagrama linear ao centro da página.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D9: map は diagrama（mapa は使わない）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e512d379a7ff": {
+   "t": "Tamanho da fonte do texto dos rótulos de registro (espécie/cepa no diagrama circular; pilha de organismo/replicon/número de acesso/comprimento no diagrama linear).",
+   "c": "[R2] #1269 (2026-10-22) proposal: D7d: 図の種類は「modo」ではなく「diagrama circular / linear」。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e2a4276c1183": {
+   "t": "Tamanho da fonte de {label}",
+   "c": "[R2] #1269 (2026-10-22) proposal: この入力欄が設定するのはフォントサイズ。「Tamanho do estilo」は意味が曖昧。fr も同じ形（Taille de police）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e318d386b762": {
+   "t": "Horizontal mantém os rótulos externos na horizontal; Radial orienta os rótulos ao longo do raio do círculo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「nivelados」は level の直訳で、ラベルの向きの言い方ではない。また「Radial os alinha」はラベル名の直後の代名詞が冠詞に読めるので、名詞を繰り返した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ee0e04a54d40": {
+   "t": "Ao salvar a sessão, o resultado atual e o rascunho das configurações de geração são armazenados, sem gerar o diagrama.",
+   "c": "[R2] #1269 (2026-10-22) sweep: ボタン名を文の主語にしない（「Salvar sessão armazena」→「Ao salvar a sessão, … são armazenados」）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e1de31dd3f7d": {
+   "t": "ex.: cluster de genes biossintéticos da neomicina",
+   "c": "[R2] #1269 (2026-10-22) proposal: biosynthetic gene cluster は「cluster de genes biossintéticos」（Owner D5）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e6a372b680f5": {
+   "t": "As etapas de refazer foram descartadas para respeitar o limite do histórico.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「histórico」が一文に二度出るのを避け、他の二文と etapas で揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ee936c13dbe5": {
+   "t": "Valores hash= de uma sessão mais antiga: {count}. Não foi possível renomeá-los para o hash de uma feature no registro de origem: o diagrama salvo desenhou um registro recortado ou com complemento reverso, e ali o valor indica features de vários hashes de origem, ou as origens não foram lidas novamente. Agora hash= indica uma feature pelo próprio hash no registro de origem, por isso cada valor pode corresponder a outra feature ou a nenhuma.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7a：so は「por isso」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e72588c7ca7d": {
+   "t": "{selector} (registro-alvo indisponível)",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「名詞＋alvo」のハイフン統一（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "e5c318597579": {
+   "t": "Use #<number> ou o ID do registro.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7e：Record ID は「ID do registro」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c8": {
+  "89b262dee6b4": {
+   "t": "ex.: cluster de genes biossintéticos da neomicina",
+   "c": "[R2] #1269 (2026-10-22) proposal: ブラジルの論文は cluster de genes biossintéticos (BGC) と書く。段階1の用語決定に従い、e1de31dd3f7d と統一した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "82699ca9a227": {
+   "t": "Número inteiro não negativo (base 0) que identifica a série lógica de profundidade usada por este slot. Reordenar os slots não altera a vinculação à origem.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「de base 0, da série lógica」は de が連なってぎこちない。この数が何をするか（系列を識別する）を述べる形にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8db6ea47d2cc": {
+   "t": "Somente no diagrama circular. Mantém a espécie e a cepa no rótulo central quando um título do diagrama é mostrado, inclusive em telas compartilhadas de vários registros.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 単独の circular は図の種類。D7d に従い「no diagrama circular」にし、「Somente no modo simples」の型に合わせた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8567f6b9e7c5": {
+   "t": "Ajuste as dimensões das features, a cor e a largura do contorno dos blocos e a cor e a largura das linhas de íntrons.",
+   "c": "[R2] #1269 (2026-10-22) proposal: stroke はブロックでは輪郭（contorno）、イントロンの線では線そのものの色と幅。線の「輪郭」を設定するように読める訳を直した。幅は他の文と同じ「largura」。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8823eca05129": {
+   "t": "Defina a ordem de prioridade dos qualificadores usados nos rótulos (por exemplo, CDS -> product,gene,locus_tag).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 優先順位を付ける対象はラベル同士ではなく、ラベル文字列に使う qualifier。見出し「Prioridade de qualificadores」とも合う。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "84e31f548cdd": {
+   "t": "Habilite os rótulos para configurar a filtragem, a prioridade de qualificadores, as configurações de texto e a geometria dos rótulos circulares. Enquanto a Visibilidade do rótulo de uma feature estiver definida como Ativado, todas essas opções, exceto a filtragem, são exibidas; os filtros não se aplicam a esse rótulo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「está em Ativado」は不自然な言い方。姉妹文字列 2aa508f8b1f5 と同じ「definida como Ativado」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "86b6b2a45a94": {
+   "t": "O gbdraw é distribuído sob a Licença MIT. Os avisos de código aberto do aplicativo hospedado, dos componentes de terceiros para o navegador distribuídos com o aplicativo e das fontes incluídas estão disponíveis em uma página estática local.",
+   "c": "[R2] #1269 (2026-10-22) style: 第2部の訳は「incluídos no aplicativo」と「fontes incluídas」で incluído が続いた。前者を「distribuídos com o aplicativo」にして重複を避けた。意味は変えていない。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8e43f03c0fb1": {
+   "t": "Alternar controles da margem da tela",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Mostrar ou ocultar」への変更は採らない（Alternar は aria-pressed ボタンの標準語）。ただし隣のツールチップ「Controles da margem da tela」と呼び名が違っていたので「da margem」に揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "845d63d2eeb5": {
+   "t": "Uma ou mais âncoras-alvo salvas não podem mais ser usadas. Use Selecionar ou Ignorar em cada alvo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「名詞＋alvo」のハイフン統一（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8158d3cec644": {
+   "t": "O ID do registro “{id}” é ambíguo nas origens de sequência disponíveis.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7e：Record ID は「ID do registro」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8a0cbc442cfe": {
+   "t": "A margem deve ser um número finito não negativo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "80b56de56990": {
+   "t": "Selecionar registro-alvo",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「名詞＋alvo」のハイフン統一（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "8725baaba16f": {
+   "t": "Sua pilha personalizada de trilhas tem {count} trilha de {track}. Ocultar {track} desativa essa trilha.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 用語集は custom stack = 「pilha personalizada」。custom track stack は「pilha personalizada de trilhas」とし、形容詞を pilha の隣に置く。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "86c6d1a06963": {
+   "t": "O arquivo está compactado com gzip. Descompacte-o primeiro (por exemplo, com gunzip); a entrada GenBank/DDBJ deve ser um flat file não compactado.",
+   "c": "[R2] #1269 (2026-10-22) term: 同上。flat file は男性名詞なので「não compactado」はそのまま合う。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "cf": {
+  "f72c5feaeca3": {
+   "t": "Uma tabela de profundidade de cobertura separada por tabulações, desenhada como uma trilha. Com vários registros, um arquivo é usado para a mesma série de todos os registros; uma sessão mantém os campos em branco de cada registro.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D2: Read depth の長い形は profundidade de cobertura。短いラベル profundidade は変えない。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fa1fb211ded8": {
+   "t": "Se faltar o código genético ativo do TLOSATX, isso é indicado no resumo do registro recolhido.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 原文の code は遺伝暗号表（Gencode 欄の欠落）を指す。曖昧な「código TLOSATX」を「código genético」にし、名詞化した主語を条件節に直した。英語原文側の曖昧さは notes に記載。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "f676f7966591": {
+   "t": "Registro-alvo",
+   "c": "[R2] #1269 (2026-10-22) proposal: 段階1の決定（Priberam）: 名詞+alvo はハイフンでつなぐ。既存の sequências-alvo と揃う。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "f3c39aa865d7": {
+   "t": "Aplica-se agora e tem prioridade sobre a paleta na fila.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「inclusive sobre」では何が何に優先するのか不明。コードの意味（利用者の色指定が待機中のパレットより優先される）を述べた。兄弟文の「na fila」は残した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fe098308c478": {
+   "t": "Buscar IDs dos registros",
+   "c": "[R2] #1269 (2026-10-22) proposal: Record ID は「ID do registro」、複数は「IDs dos registros」（Owner D7e）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fc59fef239bd": {
+   "t": "Nenhum par tem um BLAST TSV ainda, por isso Gerar não desenha nenhuma comparação. Escolha um arquivo para um par em Pares selecionados.",
+   "c": "[R2] #1269 (2026-10-22) proposal: so の「então」は「por isso」に統一する（Owner D7a）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fa37d877fafa": {
+   "t": "Com Desvio, a trilha é centralizada em torno da média de todas as janelas. Com Porcentagem, a trilha desenha a porcentagem absoluta de GC a partir de uma linha de base.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 選択肢名（Desvio / Porcentagem）が文の主語になり、「Porcentagem desenha a porcentagem」と語も重なる。「Com X, …」の形にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fd87f2e5a5e8": {
+   "t": "O espaçamento deve ser um número não negativo de pixels (px opcional).",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fd0f24dfd22e": {
+   "t": "Legenda: a posição “{stored}” ({path}) não é válida para o modo do diagrama; ela não é usada.",
+   "c": "[R2] #1269 (2026-10-22) proposal: コードの mode は Circular / Linear（図のモード）で、凡例のモードではない。「modo da legenda」は誤読を招く。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "f2224a4d9e1b": {
+   "t": "Legenda: a posição “{stored}” ({path}) não é válida para o modo do diagrama; a posição {used} é usada.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同上。mode は図のモード（Circular / Linear）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "f065d7f5ea8d": {
+   "t": "Os dados de Redefinir alinhamento gravados na última execução de Alinhar não correspondem aos registros atuais nem ao plano de alinhamento. Desfaça as alterações feitas após Alinhar ou selecione Alinhar… novamente.",
+   "c": "[R2] #1269 (2026-10-22) proposal: plan は plano（Owner D5）。configuração は Settings の語。「gravados na」で de の連鎖も切る。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "feb6f44a426a": {
+   "t": "As fontes do PDF não conseguem representar este texto. Use SVG para preservar o texto.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「este texto」の繰り返しを避け、内容を保つ意味の「preservar」にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "f40969a41dfa": {
+   "t": "A configuração Fonte mantém o nome {names}, por isso a fonte volta a ser usada assim que for carregada.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7a：so は「por isso」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "f7450e7e6e24": {
+   "t": "O arquivo não é um flat file GenBank/DDBJ: ele não tem a linha de cabeçalho do registro.",
+   "c": "[R2] #1269 (2026-10-22) term: 「texto plano」はブラジルの用語ではなく、論文は flat file を英語のまま使う（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "fe581020a08f": {
+   "t": "Para salvar a sessão com o resultado carregado, são necessários os metadados atuais das features. Gere o diagrama uma vez e depois use Salvar sessão.",
+   "c": "[R2] #1269 (2026-10-22) sweep: ボタン名「Salvar sessão」が主語になる文を避ける。何が必要かを先に述べ、操作名は後半の指示でだけ使う。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c0": {
+  "038262a6a25a": {
+   "t": "A geometria da pilha personalizada está ativa. Use a largura de cada linha de profundidade ou clique em Redefinir para copiar este valor para a pilha.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Use … ou Redefinir」だと Redefinir が使う対象に読める。操作を「clique em Redefinir」と明示した（STYLE の「clique em + ラベル」）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "0c87508330d9": {
+   "t": "Mover o slot de trilha linear {id} para cima, dentro do mesmo lado",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D6: 「no lado」は先行詞がなく不明確。「dentro do mesmo lado」で同じ側にとどまることを示す。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "094836ea234c": {
+   "t": "Mantenha estas escolhas e clique em Aplicar, abaixo, para tentar novamente, ou edite as escolhas antes de aplicar.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「tente Aplicar novamente」はボタン名が動詞の後に来て読みにくい。「clique em Aplicar … para tentar novamente」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "052c8c0cf438": {
+   "t": "Descrever este grupo de similaridade",
+   "c": "[R2] #1269 (2026-10-22) proposal: 入力欄の placeholder で、隣の「Renomear este grupo de similaridade」は不定詞。命令形の「Descreva」を不定詞に揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "066338f32d95": {
+   "t": "Aplicando edição…",
+   "c": "[R2] #1269 (2026-10-22) proposal: 短い進行表示は冠詞なし（Aplicando… などと同じ）。「uma」を落とした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "03ce42442ad8": {
+   "t": "Este rótulo não cabe dentro da feature, e a opção Renderização dos rótulos desenha rótulos apenas dentro das features.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 設定名「Renderização dos rótulos」が主語で、「rótulos」が重なっていた。「a opção」を補い、重複を減らした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "02e98364c373": {
+   "t": "As etapas mais antigas de desfazer foram descartadas para respeitar o limite do histórico.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同上。「histórico de desfazer mais antigo」の直訳をやめ、etapas を使う。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "0cc6b8f2b64c": {
+   "t": "O índice da trilha de profundidade deve ser um inteiro não negativo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "0a15c4b0d20d": {
+   "t": "Aplicar predefinição de regras de cor específicas",
+   "c": "[R2] #1269 (2026-10-22) proposal: プリセットが持つのは特定の色ルールで、「predefinição de cores específicas」は色のプリセットに読める。隣の文字列（predefinição de regras）と揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "011aa384b9c4": {
+   "t": "A geometria da pilha personalizada está ativa. Use a largura da linha de conteúdo de GC ou clique em Redefinir para copiar este valor para a pilha.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 同じ文型の兄弟 038262a6a25a と 570da1327638 は第1部で「clique em Redefinir」に直ったが、この4文字列だけ「Use … ou Redefinir」のまま残っていた。操作をそろえる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "0b4adf5825de": {
+   "t": "A geometria da pilha personalizada está ativa. Use o raio da linha de conteúdo de GC ou clique em Redefinir para copiar este valor para a pilha.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 同じ文型の兄弟 038262a6a25a と 570da1327638 は第1部で「clique em Redefinir」に直ったが、この4文字列だけ「Use … ou Redefinir」のまま残っていた。操作をそろえる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "05ec771bb2b8": {
+   "t": "Ao salvar a sessão, o resultado atual e o rascunho das configurações são armazenados; ao exportar, é gerado um arquivo do resultado atual. Nenhuma das duas ações aplica configurações pendentes.",
+   "c": "[R2] #1269 (2026-10-22) sweep: ボタン名を文の主語にしない（「Salvar sessão armazena」→「Ao salvar a sessão, … são armazenados」）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c4": {
+  "41c80cc06c31": {
+   "t": "Alguns registros usam arquivos diferentes ou não têm trilha de profundidade. Ao escolher um arquivo, ele é aplicado a todos os registros deste arquivo de entrada.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Escolher um arquivo o aplica」は代名詞を前に置いた硬い構文。従属節「Ao escolher …, ele é aplicado」が UI の自然な形。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4e95e384137a": {
+   "t": "Largura e raio: px ou ×R, em que R é o raio base do diagrama circular. Cole 20px ou 65% (0.65 ×R). Mudar a unidade mantém o número. Em branco significa Automático; a unidade selecionada vale apenas para o próximo valor digitado.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「raio circular base」は名詞・形容詞・名詞の連続で誤読しやすい。「raio base do diagrama circular」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4e472cf1810b": {
+   "t": "A paleta {name} será aplicada na próxima geração. Este aviso se refere apenas à seleção de paleta.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「está na fila」は queued の直訳。「será aplicada na próxima geração」が自然。「trata apenas da」は「se refere apenas a」に直した（段階1）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "45c3bb222118": {
+   "t": "Gira os rótulos lineares, em graus (por exemplo, 45). No modo Acima da feature, os rótulos girados partem do ponto médio de cada feature.",
+   "c": "[R2] #1269 (2026-10-22) proposal: D7b: 説明文の例示は「(por exemplo, …)」、「ex.:」は入力欄の placeholder だけ。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4a3e69ab6b9c": {
+   "t": "Os realces são desenhados automaticamente atrás da trilha de features. Linha, Colchete e Banda são desenhados em uma subtrilha de anotação separada. Slots de trilha personalizados podem substituir esse posicionamento automático.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 他の文は render を「desenhar」と訳しているので揃えた。コントロール名の前の「Os」は 0e10a491a801 などと合わせて外した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "46a4a11385b9": {
+   "t": "Alinhar aplica imediatamente os alvos determinados; uma ambiguidade abre a revisão. Revisar opções de alinhamento… permite inspecionar ou alterar as âncoras, a opção Ignorar e a direção antes de aplicar.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Ignorar」は操作名なので、動詞のまま名詞と並べると読みにくい。「a opção Ignorar」と補った。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4a09ba39b323": {
+   "t": "O registro começa em",
+   "c": "[R2] #1269 (2026-10-22) proposal: 文頭のラベルで、ポルトガル語では冠詞が要る。「O registro começa em」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "475de60ee0ae": {
+   "t": "Excluir arquivo do diagrama linear",
+   "c": "[R2] #1269 (2026-10-22) proposal: 上と同じ。「arquivo do diagrama linear」（Owner D5）。「do modo linear」は採らない。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4187b240ebac": {
+   "t": "Os pares {pairs} estão configurados como Enviar BLAST TSV, por isso nem todos os pares executam o LOSAT.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 上と同じ。「então」を「por isso」にした（Owner D7a）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4e58432d8457": {
+   "t": "Alinhamento removido: {reason}",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Alinhamento limpo」は「きれいな整列」と読める。通知は整列を解除（removido）したことを示すので removido にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "48bac4964b4a": {
+   "t": "A origem de sequência obrigatória está indisponível.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 用語集の Required = obrigatório。兄弟エラー（recurso obrigatório）と揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "41bf8a0e6164": {
+   "t": "O espaço externo deve ser um número não negativo de pixels (px opcional).",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4e29ff373656": {
+   "t": "Não é possível determinar quais operações são permitidas pela localização da feature no registro de origem.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「…registro de origem permite」で終わる名詞節は読みにくい。受動形にして語順を自然にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4cb0fd3b2a43": {
+   "t": "Selecione uma âncora elegível e habilitada para uma trilha de anotações cujo posicionamento é Sobreposição à âncora (circular) ou No eixo (linear).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 英語は不特定の「an annotation track」。定冠詞「a trilha」を不定冠詞「uma trilha」に直す。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4524d3e32f7f": {
+   "t": "Escolha um recorte ou defina explicitamente o início da exibição.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 用語「início da exibição」を保ち、「início de exibição explícito」の不自然な形容を動詞句にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "4de44c9193c8": {
+   "t": "A geometria da pilha personalizada está ativa. Use o raio da linha de GC skew ou clique em Redefinir para copiar este valor para a pilha.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 同じ文型の兄弟 038262a6a25a と 570da1327638 は第1部で「clique em Redefinir」に直ったが、この4文字列だけ「Use … ou Redefinir」のまま残っていた。操作をそろえる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "ca": {
+  "ad50489054dd": {
+   "t": "Desativado",
+   "c": "[R2] #1269 (2026-10-22) proposal: STYLE 8.4 は全ラベルを文頭のみ大文字にする。同じ Off の訳 Desativado と揃え、9px のバッジでも幅を抑える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "a3311cdf38ee": {
+   "t": "Quando ativada, alinha as definições do diagrama linear em uma coluna comum à esquerda. Quando desativada, centraliza as definições em uma coluna de largura comum e acompanha os deslocamentos das linhas, incluindo o alinhamento ao centro ou por similaridade.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Desativado as centraliza」は as が冠詞に読め、目的語が不明。ON/OFF はオプションの状態なので、64b84d878c7f と同じ「Quando ativada / desativada」にし、目的語を繰り返した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ad34e5a54ae7": {
+   "t": "Automático segue o layout das trilhas (Acima ou Features no eixo: rótulos acima; Abaixo: rótulos abaixo). Acima da feature desenha os rótulos acima das features (e abaixo das features da fita − quando Separar fitas está ativado).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 段階1の決定: 負鎖は「fita −」（0c95a5ea4001 と同じ）。「fita negativa」は他にない表記で、ウイルスの負鎖を連想させる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "a2de605c7b63": {
+   "t": "Raio até o centro da trilha de conteúdo de GC, em relação ao raio base do diagrama circular (1.0 = raio base).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 値は GC 含量そのものではなくトラック中心までの半径の比。現訳の「Raio central do conteúdo de GC」はそれを示さないので、何の半径かを明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "a0db86f1f4cf": {
+   "t": "{label}: nada muda até que a ação Aplicar seja concluída com sucesso. Cancelar mantém o resultado atual.",
+   "c": "[R2] #1269 (2026-10-22) proposal: until Apply succeeds は「成功するまで」。「seja concluído」は成功の条件を弱めていた。「com sucesso」を明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "a83df41b70fd": {
+   "t": "Aguardando a conclusão do cálculo em andamento…",
+   "c": "[R2] #1269 (2026-10-22) proposal: 実装は、実行中の計算が終わるのを待っている状態。「escolha を完了する」という直訳を待機の表現に直した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ae0caf0b4107": {
+   "t": "A geometria da pilha personalizada está ativa. Use a largura da linha de GC skew ou clique em Redefinir para copiar este valor para a pilha.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 同じ文型の兄弟 038262a6a25a と 570da1327638 は第1部で「clique em Redefinir」に直ったが、この4文字列だけ「Use … ou Redefinir」のまま残っていた。操作をそろえる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "cb": {
+  "b98a91e13f21": {
+   "t": "Mostra apenas uma sub-região (base 1, extremidades incluídas). Em arquivos com vários registros, indique o ID do registro ou #index. Uma região que ultrapassa o fim do registro é desenhada até o fim do registro.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「passa do fim」は口語的。隣の Region の説明（8b18595bab8c）と同じ「ultrapassa」にした。base 1 は維持。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "b5415f6c963b": {
+   "t": "Mover o slot de trilha linear {id} para baixo, dentro do mesmo lado",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D6: 「no lado」は先行詞がなく不明確。「dentro do mesmo lado」で同じ側にとどまることを示す。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "bddc882cba90": {
+   "t": "Nome da série de profundidade que esta linha desenha. Ao digitar, a série é renomeada em todos os lugares: no cartão da série, em todas as linhas que a desenham e na legenda. Deixe em branco para usar o nome padrão: Depth, ou Depth N quando houver várias séries.",
+   "c": "[R2] #1269 (2026-10-22) proposal: ddbf88b01173 と同じ理由と同じ書き換え。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "bb22786e18c6": {
+   "t": "Halo desenha um contorno branco ao redor das letras de cada rótulo com linha de chamada, de modo que as linhas de chamada atrás delas sejam cortadas. Caixa desenha uma caixa branca atrás das letras. Com Nenhum, nenhum dos dois é desenhado.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Nenhum não desenha nenhum dos dois」は否定が三重になる。「Com Nenhum, nenhum dos dois é desenhado」が自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "b614792081ce": {
+   "t": "A Edição de layout está ativada: arraste uma legenda, um título ou a escala do diagrama linear para movê-los. Desative-a para deslocar a visualização.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 英語は「a legend」。定冠詞の「a legenda」は、兄弟文の「uma legenda」と食い違うので揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "b9740efee330": {
+   "t": "Preparando registro-alvo…",
+   "c": "[R2] #1269 (2026-10-22) proposal: 第1段階の決定どおり「名詞＋alvo」をハイフン付き（registro-alvo、Priberam の grupo-alvo と同型）に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "b2e424c04875": {
+   "t": "A preparação dos recursos de entrada falhou. Selecione a entrada de novo e tente novamente.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Retry は全体で「Tentar novamente」。「tente outra vez」はここだけだったので揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "b19f6f39617a": {
+   "t": "A versão de sessão {version} é mais recente do que a última que este gbdraw aceita ({latest}).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「a última versão com suporte neste gbdraw」は重い直訳。短い関係節にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c6": {
+  "6f6e05c42f92": {
+   "t": "Os controles abaixo são um rascunho de substituição. A comparação salva e o último resultado bem-sucedido permanecem inalterados até que a geração termine com êxito.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「seja concluída com êxito」は冗長で、直前の bem-sucedido と重なる。「termine com êxito」に短縮した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "6f410bfc7cb7": {
+   "t": "{count} resultados do LOSAT estão em cache e são reutilizados quando as entradas e as configurações são as mesmas.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 目的語のない「correspondem」は match の直訳。再利用の条件は入力と設定が同じことなので「são as mesmas」にした。単数形 3afe1b6fd4d1（第3部）も同様に直す。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "62a61120bcef": {
+   "t": "Valor do qualificador que seleciona a feature da anotação",
+   "c": "[R2] #1269 (2026-10-22) proposal: この入力欄は feature の任意の値ではなく、item.target.selectors[0] の qualifier の値（隣の欄がキー）。何の値かを明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "68acdac8866d": {
+   "t": "Estende a sobreposição da âncora até este slot, sobre todos os slots intermediários (to_slot). Nenhum: a banda própria da sobreposição.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「entre eles」は先行詞が曖昧（アンカーとこのスロット、またはスロット群）。「intermediários」で直接言った。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "632123f9db40": {
+   "t": "Raio até o centro da trilha de GC skew, em relação ao raio base do diagrama circular (1.0 = raio base).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 上の GC content の文と同じ。値はトラック中心までの半径比であることを明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "6310d1fc89f5": {
+   "t": "Este resultado vem de uma sessão salva por uma versão anterior do gbdraw. Gere o diagrama uma vez antes de usar Salvar sessão.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Gere uma vez」だけでは目的語がなく、何を一度生成するのか不明。「Gere o diagrama uma vez」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "61f893d11909": {
+   "t": "Os arquivos de Cores padrão, Regras específicas, Lista de bloqueio, Lista de permissões e Prioridade, com as configurações que eles carregaram",
+   "c": "[R2] #1269 (2026-10-22) sweep: 文で名指しする見出しは、その訳ラベルの大文字小文字のまま書く規則（STYLE 8.2）。Cores padrão、Regras específicas、Lista de bloqueio、Lista de permissões の綴りに揃え、各項目が「arquivo de …」であることを明確にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "6460681af327": {
+   "t": "Uma feature-alvo alinhada não é mais encontrada no respectivo registro.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「名詞＋alvo」のハイフン統一（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "62b2ff1bf5cd": {
+   "t": "O espaço entre subtrilhas deve ser um número finito não negativo.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "6e5b75a6e39d": {
+   "t": "Ao usar Salvar sessão depois, a sessão é gravada no formato atual. O arquivo original não é alterado.",
+   "c": "[R2] #1269 (2026-10-22) proposal: ボタン名を主語にした「Salvar sessão grava o formato」をやめ、書き込まれるもの（sessão）を示す。「o próprio arquivo」は「arquivo original」にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "600a784c9914": {
+   "t": "A rotação do registro será aplicada na próxima geração do diagrama.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「próxima execução de Gerar diagrama」はボタン名を挟んだ名詞連鎖。用語集どおり Generate を出来事として「próxima geração」と書く。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "6573b232d197": {
+   "t": "A saída da busca não continha linhas BLAST outfmt 6 dos registros buscados.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「não consistia em」は直訳。「não continha」が自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "62b9a1516d42": {
+   "t": "Este arquivo parece estar no formato FASTA. Use uma entrada GFF3 + FASTA ou um flat file GenBank/DDBJ.",
+   "c": "[R2] #1269 (2026-10-22) term: 同上。arquivo de texto plano を flat file にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c1": {
+  "1127970a4d4e": {
+   "t": "{label} (apenas com LOSAT para todos os pares adjacentes)",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「com todos os pares adjacentes」は対の性質のように読める。条件は LOSAT の計画が全隣接対であることなので、214d670c97a1 と同じ語句にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "15ba0c9ec41e": {
+   "t": "Linha usada para evitar sobreposição entre as marcas Linha, Colchete e Banda. Deixe em branco para Automático; use 0 para a primeira linha, 1 para a segunda e assim por diante. Realce sempre cobre toda a banda de features.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Linha de prevenção de colisões」は名詞連鎖の直訳で、「para as marcas」は marks のための行にも読める。目的を節で言い、重なる対象を「entre」で示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "11789afd266e": {
+   "t": "Código genético que o TLOSATX usa para a sequência exibida no diagrama circular.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同じ設定は全 Gencode 行で Código genético と呼ぶ。「tabela de tradução」を統一した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "1954b4122539": {
+   "t": "Edite a pilha explícita de trilhas lineares. Abrir ou fechar este painel não habilita nem altera a pilha. As setas reordenam dentro do lado atual; use Operações da linha para mover linhas para o outro lado do limite.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Row actions はコントロール名なので、STYLE 8.2 に従い訳したラベル「Operações da linha」を大文字付きで使う（961e93bb507b と同じ）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "18860a2a19b1": {
+   "t": "Peso em negrito para {label}",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Peso negrito」は文法的でない名詞連鎖。隣の「Peso normal」に対し、太字は「em negrito」が要る。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "1325cefa813b": {
+   "t": "Os arquivos de entrada (genoma, profundidade e arquivos de comparação para diagramas circulares), os registros que você escolheu e os valores padrão de cada arquivo permanecem.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「padrões de arquivo」はファイル形式の規格とも読める。File defaults は各ファイルの既定の定義・副題なので、隣の「Usando o padrão do arquivo」と呼び名を揃えて「valores padrão de cada arquivo」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "1c1b39f89aaf": {
+   "t": "Limpar arquivo do diagrama linear",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「arquivo linear」は線状形式のファイルと読める。英語は Linear diagram の File。「arquivo do diagrama linear」（Owner D5）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "17549920f6fc": {
+   "t": "Edições de visibilidade das features de uma sessão mais antiga: {count}. Elas ocultavam todas as features com o mesmo hash, como cada cópia de um registro duplicado. Agora cada edição se aplica apenas à feature editada, por isso a próxima geração desenha as outras.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7a：so は「por isso」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "1c4a0917507e": {
+   "t": "Em Estender até, selecione um slot elegível e habilitado diferente da âncora, ou Nenhum.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 隣の文字列は「elegível e habilitado」の順。ここだけ逆だったので揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c3": {
+  "37520681971f": {
+   "t": "Nome da espécie usado no rótulo central do diagrama circular quando não há título personalizado do diagrama.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「um título do diagrama personalizado」は図がカスタムと読める。形容詞は title にかかるので語順を直した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "377315948bbe": {
+   "t": "Altura mínima reservada para a banda de features medida, em pixels (px opcional; positiva). A altura reservada é o maior valor entre a altura medida e a configurada; isso não altera a espessura dos glifos das features, que é controlada por Altura das features (--feature_height). Os valores automáticos variam conforme o registro.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「max(medida, configurada)」は関数式の語だけを訳した疑似コードだった。確保される高さを文で説明した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "38bb123e8a48": {
+   "t": "Automático posiciona dentro das features os rótulos que cabem e coloca os demais fora delas. Somente incorporados descarta os rótulos que precisam de posicionamento externo. Somente externos mantém os rótulos fora do corpo das features.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「incorpora」はファイルへの埋め込みにも読める。embedded は feature の図形の内側に置く意味なので、最初の文で位置を明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "3ed39f316369": {
+   "t": "Intervalo manual da escala no diagrama circular (em bp; deve ser > 0). Substitui o cálculo automático.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 図のモードは「diagrama circular」に統一する（Owner D7d）。他は現訳のまま。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "37d90a2a4823": {
+   "t": "Baixar um SVG estático para publicação e fluxos de trabalho de conversão",
+   "c": "[R2] #1269 (2026-10-22) proposal: workflow は他の箇所で「fluxo de trabalho」と訳している。「fluxos de conversão」は trabalho が抜けるので揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "3ae93b1c9234": {
+   "t": "Substituir pelas configurações atuais",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「controles atuais」は controls の直訳で、何のことか分かりにくい。入力欄の現在の設定で置き換えるボタンなので「configurações atuais」にした（案の「do painel」は painel という語が他にないので採らない）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "30ce4cb25faa": {
+   "t": "Issues",
+   "c": "[R2] #1269 (2026-10-22) sweep: リンク先は GitHub の Issues タブで、そこでは英語の「Issues」と表示される。es/fr/ko/ja も英語のままなので揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "370108cc50b8": {
+   "t": "O espaço interno deve ser um número não negativo de pixels (px opcional).",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7c：nonnegative は「não negativo」に統一する（「maior ou igual a 0」をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "35e9da40d23c": {
+   "t": "Orientar na fita direta exige uma feature com fita conhecida.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 設定「Mostrar esta feature na fita direta」と同じ語に揃える。「para a frente」は曖昧（Orient forward の用語決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "337ec258ed87": {
+   "t": "Use um arquivo de comparação que contenha a sequência (FASTA, ou GenBank ou DDBJ com a sequência na seção ORIGIN).",
+   "c": "[R2] #1269 (2026-10-22) proposal: ORIGIN は配列の名前ではなく配列を収めるセクション名。「uma sequência ORIGIN」は誤読を招くので「na seção ORIGIN」にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "32898d86550d": {
+   "t": "A configuração {setting} remove a subtrilha de {count} feature que você posicionou manualmente.",
+   "c": "[R2] #1269 (2026-10-22) proposal: {setting} は任意のコントロール名で性が不明。名詞「A configuração」を前に置く（STYLE §8.5、第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "3f6290631c44": {
+   "t": "O par {pairs} está configurado como Enviar BLAST TSV, por isso nem todos os pares executam o LOSAT.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7a：so は「por isso」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "3afe1b6fd4d1": {
+   "t": "{count} resultado do LOSAT está em cache e é reutilizado quando as entradas e as configurações são as mesmas.",
+   "c": "[R2] #1269 (2026-10-22) consistency: 第1部の依頼どおり。複数形 6f410bfc7cb7 は「são as mesmas」に変わっているので、単数形も同じ形にする（目的語のない correspondem をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "cd": {
+  "d4c61ed7b01b": {
+   "t": "Mover para cima, dentro do mesmo lado",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D6: 「no lado」は先行詞がなく不明確。「dentro do mesmo lado」で同じ側にとどまることを示す。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "ddbf88b01173": {
+   "t": "Nome da série de profundidade que esta linha desenha. Ao digitar, a série é renomeada em todos os lugares: no cartão da série, em todas as linhas que a desenham e na legenda. A legenda lista as séries na ordem da pilha personalizada e omite as séries que nenhuma linha habilitada desenha. Deixe em branco para usar o nome padrão: Depth, ou Depth N quando houver várias séries.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Digitar renomeia」は動詞を主語にした英語構文。「Ao digitar, a série é renomeada」とした（「Editar este nome renomeia a série」は nome と renomeia が重なるので採らない）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "d63e0f092d10": {
+   "t": "Encontre o arquivo nos downloads do navegador.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Procure-o」は硬く、指す対象も不明。Procurar は Browse の語でもある。ファイルを名指しした「Encontre o arquivo」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "d8f456998f08": {
+   "t": "SVG para navegador com controles incorporados. A opção Pop-up detalhado de features define quantos detalhes das features são incorporados.",
+   "c": "[R2] #1269 (2026-10-22) sweep: チェックボックス名「Pop-up detalhado de features」が主語になり、「define」が直接続く。「A opção」を補った。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "df216d0f43c1": {
+   "t": "Aplicando o plano de alinhamento.",
+   "c": "[R2] #1269 (2026-10-22) proposal: plan は plano（Owner D5）。configuração は Settings の語なので衝突する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "d1a65c98ddc7": {
+   "t": "Esta linha indica um slot em Estender até, mas não está posicionada em uma âncora.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「slot de Estender até」はコントロール名を挟んだ名詞連鎖。第1部の兄弟文字列が使う「em Estender até」の形に合わせる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "dda8f76937b1": {
+   "t": "Coloque as anotações de fundo atrás da âncora e do slot indicado em Estender até, e as anotações de primeiro plano à frente deles.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「slot de Estender até」の名詞連鎖をやめ、兄弟文字列と同じ「slot indicado em Estender até」にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "d0940c7d0714": {
+   "t": "in-parálogo",
+   "c": "[R2] #1269 (2026-10-22) term: ブラジルの学位論文は in-parálogos とハイフン付きで書く（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "d1a512487315": {
+   "t": "Com Exportar TSV de edições de features, as edições de rótulo são gravadas por feature.",
+   "c": "[R2] #1269 (2026-10-22) sweep: ボタン名を主語にした「Exportar … grava」を「Com …」の形にする（STYLE の操作名主語の規則）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "d617fba55c87": {
+   "t": "Tente a edição em tempo real novamente ou use Gerar.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 「Tente novamente a edição」は語順が不自然。隣の「Tente a operação novamente.」と同じ形にする。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c9": {
+  "96db5686f750": {
+   "t": "Mover para baixo, dentro do mesmo lado",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D6: 「no lado」は先行詞がなく不明確。「dentro do mesmo lado」で同じ側にとどまることを示す。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "9f197115225a": {
+   "t": "Cores usadas nesta figura ou alteradas",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Cores nesta figura」は未完に響く。図で使われている色という意味を「usadas」で明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "910b6374905a": {
+   "t": "Exibe os rótulos das features no diagrama. “Somente o primeiro registro” mostra rótulos apenas da trilha superior. “Registro superior do grupo de similaridade” exige o modo Grupos de similaridade ou Colinear do LOSATP.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner 決定 D9: map は diagrama。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "945b43a1b794": {
+   "t": "Porcentagem mínima de GC para limitar os valores exibidos e definir a escala do eixo no modo de porcentagem.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「limitação」「dimensionamento do eixo」は何を指すか分かりにくい。値の上下限を切ることと軸の範囲を決めることを動詞で明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "956b7a489ab9": {
+   "t": "Esta alteração é perdida ao gerar novamente.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Perde-se」は主語が曖昧で硬い。失われるのは今回の変更だと分かる「Esta alteração」を主語にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "98006e1ab24e": {
+   "t": "Manter oculto (aplicar somente o texto)",
+   "c": "[R2] #1269 (2026-10-22) proposal: 他の箇所は only を「somente」と訳す（Somente este rótulo など）。口語的な「só」を揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "9566d5f61477": {
+   "t": "{id} (não está no diagrama atual)",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「fora do diagrama」は図の外側という位置にも読める。英語は、そのレコードが図に含まれないこと。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "99fb111f4dfc": {
+   "t": "No momento, só é possível recuperar os metadados das features em sessões baseadas em GenBank. Gere o diagrama novamente para habilitar a edição de features.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「a recuperação … oferece suporte a sessões」は英語の主語構文の直訳。「só é possível recuperar … em sessões」が自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "92684d7e9f35": {
+   "t": "A configuração Fonte mantém os nomes {names}, por isso as fontes voltam a ser usadas assim que forem carregadas.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7a：so は「por isso」に統一する（então をやめる）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "910a6a51dfd1": {
+   "t": "Como fundo, esta linha deve ser desenhada atrás de “{target}”.",
+   "c": "[R2] #1269 (2026-10-22) proposal: コードが検証するのは z 値の前後関係で、画面上の上下ではない。用語集の Below = atrás（z-order）に合わせる。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "960f13040f5e": {
+   "t": "Como anotação em primeiro plano, esta linha deve ser desenhada à frente de “{target}”.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同上。z-order の above は à frente de（用語集 Above = à frente）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "9180458f7c1b": {
+   "t": "Nenhum diagrama está sendo exibido, por isso nada foi aplicado.",
+   "c": "[R2] #1269 (2026-10-22) proposal: Owner D7a：so は「por isso」に統一する。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "9a22dd732960": {
+   "t": "Os registros da comparação salva não podem ser comparados no layout de linhas adjacentes com suporte.",
+   "c": "[R2] #1269 (2026-10-22) sweep: layout は「com suporte」（Owner D4）。「aceito pelo aplicativo」は値に使う語で、文も長い。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ },
+ "c7": {
+  "78582eeca68d": {
+   "t": "Proporção de espaço horizontal adicional entre os limites do conteúdo visível em cada linha da tela de vários registros. Com 0, os conteúdos de uma mesma linha ficam em contato. Padrão: 0.10 (somente horizontal).",
+   "c": "[R2] #1269 (2026-10-22) proposal: 横方向の間隔なので、接するのは異なる行ではなく同じ行内のコンテンツ。「o conteúdo das linhas」ではそれが読み取れなかった。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "74f4eb9e791d": {
+   "t": "Porcentagem máxima de GC para limitar os valores exibidos e definir a escala do eixo no modo de porcentagem.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 上の最小値の文と同じ理由で、clipping と axis scaling を動詞で明示した。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7aa9c9b916e7": {
+   "t": "Edições de features removidas porque a nova origem não tem as features correspondentes: {count}.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「origem substituída」は取り除かれた旧入力にも読める。差し替え後の入力に対応する feature がない、と明示した。重複を避けて語順を整えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "74e80c857ff4": {
+   "t": "O alinhamento salvo precisa ser corrigido.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「reparo」は DNA 修復を連想させ、glossary の Fix = corrigir に反する。「precisa ser corrigido」にした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7488c1a8ecc9": {
+   "t": "A configuração {setting} remove a subtrilha de {count} features que você posicionou manualmente.",
+   "c": "[R2] #1269 (2026-10-22) proposal: {setting} は任意のコントロール名で、性が決まらない。名詞「A configuração」を前に置く（STYLE 8.5）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7e9736d12dbe": {
+   "t": "o seletor de registro mudou.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 他の record selector の文はすべて単数「seletor de registro」。ここだけ複数だったので揃えた。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "79c5edada21c": {
+   "t": "Ainda não há resultado do diagrama {mode}. Ajuste as configurações e clique em Gerar.",
+   "c": "[R2] #1269 (2026-10-22) sweep: {mode} に Circular / Linear が入るが、名詞がなく「resultado Circular」では何の結果か不明。D7d に合わせ「do diagrama {mode}」とした。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7f4b758f76d4": {
+   "t": "Rótulos afetados: {count}. As linhas location e record_location não podem ser associadas a rótulos de registros recortados, com complemento reverso ou girados enquanto o diagrama não registrar onde os desenhou. Gere o diagrama novamente e depois carregue a tabela.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 文中の「rótulos ({count})」は読みにくく、長い列挙の後の「até que」も追いにくい。件数を「名詞: {count}」の形に出す（キーは複数形なし）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7bf1674f650c": {
+   "t": "Escolha um registro-alvo disponível.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「名詞＋alvo」のハイフン統一（第1段階の決定）。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7beb4e42cb8b": {
+   "t": "Use um valor entre 1 e o comprimento do registro para o início da exibição.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Use um início da exibição」は直訳。先に値を示す語順が自然。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "78f303834213": {
+   "t": "Use referências de profundidade que correspondam ao registro selecionado.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 「Faça … corresponderem」は Match … to の直訳。兄弟文の「Use …」の形に揃える。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "73f6c149015c": {
+   "t": "Dentro dessa trilha, {px} px ficam reservados para as trilhas mais internas, entre elas {tracks}.",
+   "c": "[R2] #1269 (2026-10-22) proposal: 同上。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  },
+  "7d355276db77": {
+   "t": "Altere a edição ou as configurações e use Gerar.",
+   "c": "[R2] #1269 (2026-10-22) sweep: 「Altere」の繰り返しをやめて短くする。意味は同じ。",
+   "by": "",
+   "at": "2026-10-22T00:00:00.000Z"
+  }
+ }
+}
