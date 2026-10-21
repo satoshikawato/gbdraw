@@ -5,6 +5,13 @@ review database in the repository, so the review can be republished or restored
 without the claude.ai artifact. It is not part of the gbdraw package and never
 merges into `dev` or `main`.
 
+GitHub Pages serves this branch: https://satoshikawato.github.io/gbdraw/ opens
+the review page (`index.html` at the root forwards to `review-gui/v18/`;
+`.nojekyll` keeps Pages from processing the files). There the page is
+view-only: it shows the drafts and notes and "Export for an agent review…"
+downloads the file, but edits are not saved (saving, reviewer names and
+"Import" persistence need the claude.ai runtime).
+
 ## Contents
 
 - `review-gui/v18/` — the page (`index.html`) and the files it loads:
@@ -29,7 +36,7 @@ merges into `dev` or `main`.
 | Page | Owner | State on 2026-10-21 |
 | --- | --- | --- |
 | https://claude.ai/artifact/DywpUqrJtpb3tS3EvwAxEj | the Owner's other claude.ai account | original; edits made in the page after round 4 are not in this branch (use the page's "Export for an agent review…" to get them) |
-| https://claude.ai/artifact/2wf2xJ42bpyxwMxXH7prmX | the account used by Claude Code on the Owner's machine | v18 (Version 2, seven locales); ja / zh database seeded from `db/seed-2026-10-21/`; the four new locales start with no review state |
+| https://claude.ai/artifact/2wf2xJ42bpyxwMxXH7prmX | the account used by Claude Code on the Owner's machine | v18 (Version 3, seven locales); ja / zh database seeded from `db/seed-2026-10-21/`; the four new locales start with no review state |
 
 ## Republish the page
 
