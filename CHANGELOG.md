@@ -81,8 +81,9 @@ write-up of a release.
   tallest label plus `--linear_label_spacing` per row) instead of stopping just
   above the label it clears, so its underline and box stay off the letters
   below. Figures with stacked horizontal `above_feature` labels change height
-  (lambda at 24 pt: 770 to 772 px; HmmtDNA: 394 to 378 px); turned labels,
-  `auto` figures, and the bundled examples and Gallery figures draw as before.
+  (most get taller; one whose labels were stuck between rows can get lower);
+  turned labels, `auto` figures, and the bundled examples and Gallery figures
+  draw as before.
 - Linear: a region label no longer moves a feature label onto its record's
   definition text (OV-1436).
 - Circular: with no annotation sets, an annotation slot that names a set id
