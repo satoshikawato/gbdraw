@@ -616,6 +616,12 @@ internal function `gbdraw.render.export.save_figure` now warns with
    label text edits in its label override table. A Session 27–30 replayed with
    `--session` keeps these rules as saved and warns. Other saved `hash=` values
    load as saved, and every value that cannot be renamed is reported.
+7. SVG feature IDs: of two features with the same type and location, the one
+   left drawn when the other is hidden keeps its `__instance_<source index>`
+   rendered ID (element `id`, `data-gbdraw-rendered-feature-id`,
+   `data-label-feature-id`), so the live Web Result and Generate agree. When
+   the first feature of a record is one of them, its instance is `0` instead of
+   `item`. Scripts that match these IDs need the new values (OV-1485).
 
 Some command-line input that 0.13 accepted now stops the run with a message:
 

@@ -215,19 +215,26 @@ def test_hiding_one_of_identical_features_keeps_the_rendered_id_of_the_other(mod
             })
         return CircularDiagramRequest(records=(source,), options=CircularDiagramOptions(
             selected_features_set=TYPES, feature_overrides=overrides,
+            config_overrides={"labels.circular.scope": "outer", "canvas.resolve_overlaps": True},
         ))
 
+    def label_ids(svg: str) -> set[str]:
+        return set(re.findall(r'data-label-feature-id="([^"]+)"', svg))
+
     first, second = (entry.biological_feature_id for entry in plan_request(request()).provenance[0].source_feature_catalog)
-    both = _rendered_ids(_svg(request()))
-    assert len(both) == 2 and all("__instance_" in rendered_id for rendered_id in both)
+    assert (first, second) == (f"{first.split('~')[0]}~0", f"{first.split('~')[0]}~1")
+    both_svg = _svg(request())
+    both = _rendered_ids(both_svg)
+    # The instance is the source index, a number for the first feature too.
+    assert sorted(rendered_id.split("__instance_")[1].split("_")[0] for rendered_id in both) == ["0", "1"]
+    assert label_ids(both_svg) == both
     prepared = build_request_diagram(request(FeatureOverride("one", first, feature_visibility="off")))
     svg = prepared.drawing.tostring()
     kept = _rendered_ids(svg)
     assert len(kept) == 1 and kept < both
-    assert {label_id for label_id, _text in _labels(svg)} <= kept
+    assert label_ids(svg) == kept
     catalog = build_prepared_interactive_context(prepared).features
     assert {feature["rendered_feature_svg_id"] for feature in catalog} == kept
-    assert second.endswith("~1")
 
 
 @pytest.mark.parametrize("scope,expected", [("none", []), ("all", ["Renamed"])])

@@ -13,7 +13,7 @@ _VALID_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 
 
 def _safe_fragment(value: object, fallback: str = "item") -> str:
-    text = str(value or "").strip()
+    text = "" if value is None else str(value).strip()
     safe = _SAFE_ID_RE.sub("_", text).strip("_")
     return safe or fallback
 

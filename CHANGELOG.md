@@ -119,6 +119,12 @@ write-up of a release.
 - Web app, Legend: a Legend row of color None shows an empty struck-through
   swatch and **None** in the Legend tab and the Legend item popup, and later
   live color edits of such a row no longer fail (OV-1385, OV-1386).
+- SVG feature IDs: of two features with the same type and location, the one
+  left drawn when the other is hidden keeps its `__instance_<source index>`
+  rendered ID (element `id`, `data-gbdraw-rendered-feature-id`,
+  `data-label-feature-id`), so the live Web Result and Generate agree. When the
+  first feature of a record is one of them, its instance is `0` instead of
+  `item` (OV-1485).
 - Web app, History: the notice about discarded Undo history appears only when
   the memory limit drops steps, not for the routine 30-step window.
 - Web app: **Undo** and **Redo** are disabled while the step they would take

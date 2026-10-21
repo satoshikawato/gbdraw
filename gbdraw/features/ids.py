@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
+from Bio.SeqRecord import SeqRecord
 from gbdraw.core.record_metadata import (
     _iter_source_features,
     _mapped_feature_location_parts,
@@ -184,7 +185,7 @@ def compute_source_feature_hash(
     )
 
 
-def shared_source_feature_hashes(record: Any) -> frozenset[str]:
+def shared_source_feature_hashes(record: SeqRecord) -> frozenset[str]:
     """The source hashes that more than one feature of ``record`` has.
 
     Identical features (the same type and location) share their hash; the
@@ -196,7 +197,7 @@ def shared_source_feature_hashes(record: Any) -> frozenset[str]:
 
     counts = Counter(
         compute_source_feature_hash(feature, record)
-        for feature in _iter_source_features(getattr(record, "features", None))
+        for feature in _iter_source_features(record.features)
     )
     return frozenset(
         feature_hash for feature_hash, count in counts.items() if feature_hash and count > 1
