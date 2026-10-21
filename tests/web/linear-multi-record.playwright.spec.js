@@ -4131,7 +4131,7 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
     app.setLinearComparisonLosatpMode('collinear');
     app.losat.blastp.collinearSearchScope = 'all';
   });
-  const checkbox = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  const checkbox = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches' });
   await expect(checkbox).not.toBeChecked();
   const run = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;

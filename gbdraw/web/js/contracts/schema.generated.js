@@ -239,3 +239,17 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
   paralogLinksDefault: 2
 });
+
+// gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
+/** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
+export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({
+  values: /** @type {readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[]} */ (Object.freeze(['anchor', 'coortholog', 'inparalog', 'low_confidence', 'local_paralog'])),
+  default: 'anchor'
+});
+
+// gbdraw/analysis/protein_colinearity.py: OrthogroupMember.confidence
+/** @type {Readonly<{ values: readonly ('high' | 'medium' | 'low')[], default: 'high' }>} */
+export const ORTHOGROUP_MEMBER_CONFIDENCE = Object.freeze({
+  values: /** @type {readonly ('high' | 'medium' | 'low')[]} */ (Object.freeze(['high', 'medium', 'low'])),
+  default: 'high'
+});

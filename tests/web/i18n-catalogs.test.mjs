@@ -2,11 +2,14 @@
 // catalogs (gbdraw/web/js/utils/i18n-catalogs/<locale>.js). English is the
 // key: the literal first argument of `t()` and of `msg()` (a text kept until
 // it is shown, which `tm()` translates there), the `other` argument of `tn()`,
-// `context + '\u0004' + text` of `tx()`, and the table values of the error
-// wording owner (tests/web/helpers/error-text-keys.mjs). This test lists those
-// literals in index.html and the modules, and fails on a call whose key is not
-// a literal,
-// on a `tm()` given a literal (that is a `t()` call),
+// `context + '\u0004' + text` of `tx()`, the table values of the error
+// wording owner (tests/web/helpers/error-text-keys.mjs), and the labels of
+// the similarity group member values that Python owns, which
+// app/pairwise-match-popup.js derives and lists (`memberValueLabelKeys`,
+// shown with `tmx()`). This test lists those literals in index.html and the
+// modules, and fails on a call whose key is not a literal,
+// on a `tm()` given a literal (that is a `t()` call), on a `tmx()` given a
+// literal text (that is a `tx()` call),
 // on a catalog key that no call produces, on a translation whose placeholders
 // differ from the English, and on a value that is not a string. It prints
 // the coverage of each locale without failing.
@@ -19,6 +22,7 @@ import { pathToFileURL } from 'node:url';
 import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale, uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
+import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { errorTextKeys } from './helpers/error-text-keys.mjs';
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
@@ -38,6 +42,8 @@ const CALLS = {
 const CALL_START = /(?<![\w$.])(msg|tn|tx|t)\(/g;
 // `tm()` translates a value that `msg()` marked; a literal there is a `t()` call.
 const TM_LITERAL = /(?<![\w$.])tm\(\s*['"`]/g;
+// `tmx()` translates a derived text; a literal text there is a `tx()` call.
+const TMX_LITERAL = /(?<![\w$.])tmx\(\s*(['"`])(?:\\.|(?!\1)[^\\])*\1\s*,\s*['"`]/g;
 const ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', 0: '\0' };
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
@@ -148,6 +154,10 @@ const extractCalls = (source, file) => {
   for (const match of source.matchAll(TM_LITERAL)) {
     const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
     calls.push({ where, problem: `${where}: tm() takes a value that msg() marked; write t() for a literal` });
+  }
+  for (const match of source.matchAll(TMX_LITERAL)) {
+    const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
+    calls.push({ where, problem: `${where}: tmx() takes a derived text; write tx() for a literal` });
   }
   return calls;
 };
@@ -323,6 +333,21 @@ test('msg() literals are keys; tm() reads a marked value and refuses a literal',
   ]);
 });
 
+test('tmx() reads a derived text in a context and refuses a literal text', () => {
+  const source = 'tmx(context, english); tmx(\'member role\', label); tmx(\'member role\', \'anchor\'); tmx("a\\"b", `x`);';
+  assert.deepEqual(extractCalls(source, 'sample').map((call) => call.key ?? call.problem), [
+    'sample:1: tmx() takes a derived text; write tx() for a literal',
+    'sample:1: tmx() takes a derived text; write tx() for a literal'
+  ]);
+});
+
+test('OV-1390: the member value labels are the generated Python values, each under its field context', () => {
+  assert.deepEqual(memberValueLabelKeys().map(({ context, english }) => `${context}: ${english}`), [
+    'member role: anchor', 'member role: coortholog', 'member role: inparalog', 'member role: low confidence',
+    'member role: local paralog', 'member confidence: high', 'member confidence: medium', 'member confidence: low'
+  ]);
+});
+
 test('index.html keys are read after Vue decodes entities, in the root and in x-templates', () => {
   const html = [
     '<div :title="t(\'Change &quot;{from}&quot; to {to} &amp; &#x41; &#66;\')"></div>',
@@ -448,6 +473,8 @@ test('every catalog matches the keys and placeholders of the sources', async () 
   const english = new Map(sourceCalls().filter((call) => call.key).map((call) => [call.key, call.english]));
   // The error text keys are the values of the wording owner's tables (D-17), read without msg() markers.
   for (const key of await errorTextKeys()) english.set(key, key);
+  // The member role and confidence labels, derived from the values Python owns (OV-1390).
+  for (const { context, english: text } of memberValueLabelKeys()) english.set(context + CONTEXT_SEPARATOR + text, text);
   for (const file of catalogFiles()) {
     const { default: catalog } = await import(pathToFileURL(join(catalogRoot, file)).href);
     assert.ok(Object.isFrozen(catalog), `${file} exports a frozen object`);

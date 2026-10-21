@@ -90,11 +90,12 @@ Collinear blocks and are unbounded in Similarity groups. Each LOSATP mode
 remembers its own values when switching modes, including after a Session
 round trip. An explicitly blank Collinear value stays unbounded.
 
-Web Collinear blocks defaults **Infer orthogroups with self-comparisons** to
-OFF. OFF searches between records and builds blocks from the selected anchors
-without orthogroup inference. ON adds within-record searches and orthogroup
-inference, including paralog matches. Similarity groups always performs that
-inference. Older Collinear Sessions that lack the checkbox setting keep ON
+Web Collinear blocks defaults **Build similarity groups with within-record
+searches** to OFF. OFF searches between records and builds blocks from the
+selected anchors without similarity groups. ON adds within-record searches and
+groups proteins, paralogs included, into similarity groups before blocks are
+built (the CLI option `--collinear_infer_orthogroups`). Similarity groups
+always builds these groups. Older Collinear Sessions that lack the checkbox setting keep ON
 for reproducibility. The Python and CLI defaults when the setting is omitted keep their previous
 behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 

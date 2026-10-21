@@ -783,9 +783,10 @@ color controls. **Result filters** and **Comparison appearance** follow, then
 initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
 remembers its own edited values. Blank means unbounded.
 
-Collinear also shows **Infer orthogroups with self-comparisons**, initially
-OFF. Enable it to add within-record searches and paralog-aware orthogroup
-inference. OFF builds blocks from comparisons between records only. **Paralog links per
+Collinear also shows **Build similarity groups with within-record searches**,
+initially OFF. Enable it to add within-record searches and group proteins,
+paralogs included, into similarity groups before blocks are built. OFF builds
+blocks from comparisons between records only. **Paralog links per
 group** appears in Advanced under **Advanced collinear search** when inference is enabled,
 and under **Advanced similarity groups** in Similarity groups; both modes draw with the
 same value, initially `2`. Shared result

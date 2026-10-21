@@ -813,7 +813,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       await expect(scope).toHaveValue('adjacent');
       await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
       // Collinear shows Paralog links per group only while it infers orthogroups.
-      const infer = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons', exact: true });
+      const infer = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true });
       const paralogLinks = page.getByRole('spinbutton', {
         name: 'Paralog links per group', exact: true, includeHidden: true
       });
@@ -1068,7 +1068,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   await expect(candidate).toBeVisible();
   await expect(candidate).toHaveValue('5');
   await expect(memberHits).toHaveValue('5');
-  const inference = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  const inference = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches' });
   await expect(inference).not.toBeChecked();
   await candidate.fill('23');
   await memberHits.fill('11');

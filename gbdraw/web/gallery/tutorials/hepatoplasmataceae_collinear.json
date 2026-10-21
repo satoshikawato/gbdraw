@@ -201,7 +201,7 @@
           ["LOSAT Mode", "LOSATP"],
           ["LOSATP mode", "Collinear blocks"],
           ["Max target seqs", "Blank (Unbounded)"],
-          ["Infer orthogroups with self-comparisons", "On"],
+          ["Build similarity groups with within-record searches", "On"],
           ["Max unit gap", "0"],
           ["Min block genes", "1"],
           ["Color mode", "Orientation + identity"],
