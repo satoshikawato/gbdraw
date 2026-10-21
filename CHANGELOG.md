@@ -72,6 +72,13 @@ write-up of a release.
   below. Figures with stacked horizontal `above_feature` labels change height
   (lambda at 24 pt: 770 to 772 px; HmmtDNA: 394 to 378 px); turned labels,
   `auto` figures, and the bundled examples and Gallery figures draw as before.
+- Linear: a region label no longer moves a feature label onto its record's
+  definition text (OV-1436).
+- Circular: with no annotation sets, an annotation slot that names a set id
+  draws the same with and without feature underlays, instead of failing with
+  feature underlays (OV-1437).
+- Linear `--label_rotation` of a whole turn (360, -360, 720) now places labels
+  as horizontal, matching the underline they are drawn with (OV-1438).
 - Linear definition text keeps its `definition_gap` from the tick labels of a
   depth or GC% axis drawn at a record's left, not from the axis line, so a
   definition no longer runs into a label such as `8191x` (OV-1399). The
