@@ -628,6 +628,35 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
     assert skew_y == pytest.approx(geometry["axisYpx"] + slots["gc_skew"]["resolvedOriginPx"])
 
 
+def test_linear_gc_percent_footprint_reserves_its_drawn_tick_labels() -> None:
+    """Beside a depth axis the GC% tick labels take the depth axis font size; the GC% slot reserves
+    half of the drawn size above and below its body."""
+
+    canvas = assemble_linear_diagram_from_records(
+        [_make_record(length=4000)],
+        legend="none",
+        depth_table=_depth_table("rec1"),
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "objects.gc_content.mode": "percent"}
+        ),
+    )
+    drawn_font_sizes = {
+        float(size)
+        for size in re.findall(
+            r'<text[^>]*font-size="([0-9.]+)"[^>]*>[0-9.]+%</text>', canvas.tostring()
+        )
+    }
+    assert len(drawn_font_sizes) == 1
+    (drawn_font_size,) = drawn_font_sizes
+    geometry = canvas._gbdraw_track_slot_geometry["records"][0]
+    gc_slot = next(slot for slot in geometry["slots"] if slot["slotId"] == "gc_content")
+    reserve = gc_slot["reserveBand"]
+
+    assert reserve["bottomPx"] - reserve["topPx"] == pytest.approx(
+        gc_slot["heightPx"] + drawn_font_size
+    )
+
+
 @pytest.mark.circular
 def test_circular_depth_track_is_optional() -> None:
     record = _make_record()

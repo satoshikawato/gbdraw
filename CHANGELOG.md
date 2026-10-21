@@ -61,7 +61,18 @@ write-up of a release.
   record's definition text instead of covering it, and a label still over it
   counts in the label warning. Figures with horizontal `above_feature` labels
   get taller; `auto` figures move only a label that lay over the definition
-  text (OV-1361, OV-1395, OV-1396, OV-1398).
+  text (OV-1361, OV-1395, OV-1396, OV-1398). Neighbouring `above_feature`
+  labels on one line, horizontal or turned, keep the 0.25 em row gap along
+  their text, and the label warning counts a pair that comes closer
+  (OV-1397, OV-1363).
+- Linear definition text keeps its `definition_gap` from the tick labels of a
+  depth or GC% axis drawn at a record's left, not from the axis line, so a
+  definition no longer runs into a label such as `8191x` (OV-1399). The
+  figure's left edge covers those tick labels at their drawn width (OV-1403).
+  Figures with such an axis get about 20 to 35 px wider; other figures draw as
+  before. A GC% track beside a depth axis reserves vertical room for its tick
+  labels at the size they are drawn, the depth axis font size, so such
+  figures can change height by about a pixel.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

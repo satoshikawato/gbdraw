@@ -763,6 +763,11 @@ def _gc_config_matching_linear_depth_axis_font_size(
     return cloned
 
 
+# The GC content configuration a record's slot (by its params) is drawn with, given the record's depth
+# tracks: the drawing, the slot's vertical footprint and the record's left axis room read the same one.
+LinearGcConfigOf = Callable[[Mapping[str, object], Mapping[int, DepthTrackData]], GcContentConfigurator]
+
+
 def _axis_ruler_extents(
     canvas_config: LinearCanvasConfigurator,
     render_context: LinearRecordRenderContext,
@@ -836,7 +841,7 @@ def _slot_body_band(slot: LinearResolvedTrack) -> VerticalBand:
 def _axis_text_overhang(axis_config: object, track_height: float) -> float:
     if not bool(getattr(axis_config, "show_axis", False)):
         return 0.0
-    axis_stroke = 0.4
+    axis_stroke = 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX
     if not bool(getattr(axis_config, "show_ticks", False)):
         return axis_stroke
     return max(
@@ -853,10 +858,10 @@ def _linear_slot_footprints_for_record(
     feature_geometry: LinearFeatureLaneGeometry,
     labels: list[dict],
     canvas_config: LinearCanvasConfigurator,
-    gc_config: GcContentConfigurator,
+    gc_config_of: LinearGcConfigOf,
     skew_config: GcSkewConfigurator,
     depth_config_by_index: dict[int, DepthConfigurator],
-    available_depth_indices: set[int],
+    depth_by_index: Mapping[int, DepthTrackData],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
 ) -> tuple[dict[str, LinearSlotFootprint], float]:
     footprints: dict[str, LinearSlotFootprint] = {}
@@ -905,7 +910,7 @@ def _linear_slot_footprints_for_record(
                 float(getattr(axis_config, "stroke_width", 0.0)),
             )
             expanded = body_band.expand(max(overhang, stroke_overhang))
-            available = track_index in available_depth_indices
+            available = track_index in depth_by_index
             footprints[slot.id] = LinearSlotFootprint(
                 paint_band=expanded if available else None,
                 reserve_band=expanded if available else VerticalBand(0.0, 0.0),
@@ -914,12 +919,13 @@ def _linear_slot_footprints_for_record(
             continue
 
         if slot.renderer == "dinucleotide_content":
+            slot_gc_config = gc_config_of(slot.params, depth_by_index)
             overhang = max(
-                0.5 * max(0.0, float(gc_config.stroke_width)),
-                0.5 * max(0.0, float(gc_config.percent_border_width)),
+                0.5 * max(0.0, float(slot_gc_config.stroke_width)),
+                0.5 * max(0.0, float(slot_gc_config.percent_border_width)),
             )
-            if str(getattr(gc_config, "mode", "deviation")).strip().lower() == "percent":
-                overhang = max(overhang, _axis_text_overhang(gc_config, float(slot.height)))
+            if str(slot_gc_config.mode) == "percent":
+                overhang = max(overhang, _axis_text_overhang(slot_gc_config, float(slot.height)))
             expanded = body_band.expand(overhang)
             footprints[slot.id] = LinearSlotFootprint(expanded, expanded)
             continue
@@ -1184,7 +1190,7 @@ def _build_linear_record_vertical_plans(
     feature_geometries: list[LinearFeatureLaneGeometry],
     labels_by_record: list[list[dict]],
     canvas_config: LinearCanvasConfigurator,
-    gc_config: GcContentConfigurator,
+    gc_config_of: LinearGcConfigOf,
     skew_config: GcSkewConfigurator,
     record_depth_by_index: list[dict[int, DepthTrackData]],
     representative_depth_configs: dict[int, DepthConfigurator],
@@ -1224,10 +1230,10 @@ def _build_linear_record_vertical_plans(
             feature_geometry=feature_geometries[record_index],
             labels=labels_by_record[record_index],
             canvas_config=canvas_config,
-            gc_config=gc_config,
+            gc_config_of=gc_config_of,
             skew_config=skew_config,
             depth_config_by_index=depth_configs,
-            available_depth_indices=set(depth_by_index),
+            depth_by_index=depth_by_index,
             annotation_track_layouts=annotation_track_layouts,
         )
         plan = resolve_linear_record_vertical_plan(
@@ -1558,7 +1564,7 @@ class LinearScalarAxisLeftRoom(NamedTuple):
 def _linear_scalar_axis_left_room(
     slots: Sequence[LinearResolvedTrack],
     *,
-    gc_config_of: Callable[[Mapping[str, object], Mapping[int, DepthTrackData]], GcContentConfigurator],
+    gc_config_of: LinearGcConfigOf,
     depth_by_index: Mapping[int, DepthTrackData],
     cfg: GbdrawConfig,
 ) -> LinearScalarAxisLeftRoom:
@@ -2517,7 +2523,7 @@ def assemble_linear_diagram(
         feature_geometries=record_feature_lane_geometries,
         labels_by_record=all_labels,
         canvas_config=canvas_config,
-        gc_config=gc_config,
+        gc_config_of=drawn_gc_config,
         skew_config=skew_config,
         record_depth_by_index=record_depth_by_index,
         representative_depth_configs=representative_depth_configs,
