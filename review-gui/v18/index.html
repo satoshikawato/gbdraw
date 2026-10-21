@@ -830,9 +830,19 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
       const md = exportMarkdown(list, loc, style);
       const stamp = new Date().toISOString().slice(0, 10);
       const filename = `gbdraw-ui-review-${loc}-${scope}-${list.length}-${stamp}.md`;
-      if (!state.downloads) { io.replaceChildren(el('p', {}, 'Downloads are not available in this view. Open the page on claude.ai.'), el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close')); return; }
-      try { await state.downloads.save({ filename, data: new Blob([md], { type: 'text/markdown' }) }); io.replaceChildren(el('p', {}, `Saved ${filename}. Give it to the reviewing agent, then paste its answer with "Import an agent review…".`), el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close')); }
-      catch (error) { if (!error || error.code !== 'declined') io.replaceChildren(el('p', {}, `Not saved (${(error && error.code) || 'error'}).`), el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close')); }
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const done = (...extra) => io.replaceChildren(el('p', {}, `Saved ${filename}. Give it to the reviewing agent, then paste its answer with "Import an agent review…".`), ...extra, el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close'));
+      if (state.downloads) {
+        // On claude.ai the page cannot download by itself; the viewer confirms the save.
+        try { await state.downloads.save({ filename, data: blob }); done(); }
+        catch (error) { if (!error || error.code !== 'declined') io.replaceChildren(el('p', {}, `Not saved (${(error && error.code) || 'error'}).`), el('button', { class: 'btn', type: 'button', onclick: closeIo }, 'Close')); }
+        return;
+      }
+      // Anywhere else (GitHub Pages, a local copy): a plain browser download, with a link in case the automatic one was blocked.
+      const url = URL.createObjectURL(blob);
+      const link = el('a', { href: url, download: filename, class: 'link' }, 'Download again');
+      const auto = el('a', { href: url, download: filename }); document.body.append(auto); auto.click(); auto.remove();
+      done(link);
     };
     io.replaceChildren(
       el('p', {}, `One Markdown file for ${label}: the review task, the answer format, the style rules, the glossary, and the strings as JSON lines. Large files are easier for agents in parts; filter by area first to export a part.`),
