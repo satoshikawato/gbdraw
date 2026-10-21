@@ -672,6 +672,17 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
     if (defaultColorType) assert.deepEqual(defaults, [['CDS', '#ff0000']], 'the palette row\'s default color');
     else assert.deepEqual(state.legendColorOverrides, { CDS: '#ff0000' }, 'the other key\'s Legend color, in the rule commit');
   }
+  // One route sets a type's default color: the Legend popup (`setTypeDefaultColor`) ends where the scope choice does,
+  // the row's own Legend color released through the Legend owner.
+  const viaScope = fixture('CDS');
+  await viaScope.popup.handleColorScopeChoice('caption');
+  const viaPopup = fixture('CDS');
+  await viaPopup.popup.setTypeDefaultColor('CDS', '#ff0000');
+  const outcome = ({ state, committed, defaults }) => ({
+    rules: state.manualSpecificRules, overrides: { ...state.legendColorOverrides }, committed, defaults
+  });
+  assert.deepEqual(outcome(viaPopup), outcome(viaScope));
+  assert.equal('CDS' in viaScope.state.legendColorOverrides, false, 'the row follows its type\'s default color again');
   const { state, popup } = fixture(null);
   Object.assign(state.featureStyleScopeDialog, { kind: 'stroke', color: null, strokeColor: '#00aa00', strokeWidth: 2 });
   assert.equal(await popup.handleFeatureStyleScopeChoice('caption'), true);
