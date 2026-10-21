@@ -120,6 +120,14 @@ const CASES = [
     states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
     run: (page) => popupEdit(page, 'TESTA_0004', { visibility: 'off' })
   },
+  // OV-1485: of two CDS at the same location, the one left drawn keeps its
+  // rendered ID (its instance suffix) in the Result Generate draws.
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) of one of two identical features',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    run: (page) => popupEdit(page, { type: 'CDS', product: 'dup alpha' }, { visibility: 'off' })
+  },
   {
     kind: 'feature On',
     edit: 'Feature visibility On (popup) for a feature a rule hid at Generate',

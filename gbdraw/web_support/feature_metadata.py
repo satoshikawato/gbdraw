@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import Counter
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence, cast
@@ -22,6 +21,7 @@ from gbdraw.features.ids import (
     compute_feature_hash,
     compute_feature_hash_from_location_parts,
     make_linear_rendered_feature_id,
+    shared_source_feature_hashes,
     source_feature_location_parts,
 )
 from gbdraw.features.visibility import (
@@ -314,7 +314,9 @@ def extract_features_from_records_payload(
         coord_base, coord_step = _read_record_coord_map(record)
         record_ids.append(record_id)
         prepared_features = []
-        rendered_id_counts: Counter[str] = Counter()
+        # The rendered ID of one of identical features carries its instance
+        # suffix whichever of them are drawn, as the drawers write it (OV-1485).
+        shared_hashes = shared_source_feature_hashes(record)
         override_of = feature_override_lookup(
             record, record_features[rec_idx].overrides if record_features else None
         )
@@ -346,8 +348,6 @@ def extract_features_from_records_payload(
                 record=record,
                 coord_step=coord_step,
             )
-            if is_rendered_feature and selector_values[1]:
-                rendered_id_counts[selector_values[1]] += 1
             prepared_features.append(
                 (
                     feature_index,
@@ -458,7 +458,7 @@ def extract_features_from_records_payload(
                 )
             if (
                 rendered_feature_svg_id
-                and rendered_id_counts[stable_svg_id] > 1
+                and stable_svg_id in shared_hashes
             ):
                 rendered_feature_svg_id = instance_svg_id(
                     rendered_feature_svg_id,

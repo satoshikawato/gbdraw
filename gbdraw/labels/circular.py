@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import math
-from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
 from typing import Any, Literal, NamedTuple, TypeAlias, cast
@@ -5029,7 +5028,6 @@ def prepare_label_list(
     feature_ids = {
         key: feature.feature_hash for key, feature in feature_dict.items()
     }
-    feature_id_counts = Counter(feature_ids.values())
 
     for input_order, (stable_id, feature_object) in enumerate(feature_dict.items()):
         candidate = candidates_by_id.get(str(stable_id))
@@ -5145,8 +5143,8 @@ def prepare_label_list(
                 "track_id": track_id,
                 "label_text": feature_label_text,
                 "feature_id": (
-                    instance_svg_id(feature_id, feature_object.source_feature_index)
-                    if feature_id and feature_id_counts[feature_id] > 1
+                    instance_svg_id(feature_id, feature_object.rendered_instance_index)
+                    if feature_id and feature_object.rendered_instance_index is not None
                     else feature_id
                 ),
                 "stable_id": str(stable_id),

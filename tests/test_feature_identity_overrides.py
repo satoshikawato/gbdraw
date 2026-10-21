@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ from gbdraw.annotations import AnnotationOptions, AnnotationSet, FeatureIdentity
 from gbdraw.api.options import CircularDiagramOptions, CircularMultiRecordOptions, LinearDiagramOptions
 from gbdraw.api.request_render import (
     _extract_linear_request_proteins,
+    build_prepared_interactive_context,
     build_request_diagram,
     plan_request,
 )
@@ -184,6 +186,55 @@ def test_label_on_shows_only_the_named_instance_of_identical_features():
         config_overrides={"labels.linear.scope": "none"},
     )
     assert [text for _id, text in _labels(_svg(edited))] == ["second"]
+
+
+def _rendered_ids(svg: str) -> set[str]:
+    """The rendered ID of every drawn feature part: the instance ID of one of
+    identical features, otherwise the feature hash (the Web's parity key)."""
+    root = ET.fromstring(svg)
+    return {
+        element.get("data-gbdraw-rendered-feature-id") or element.get("data-gbdraw-feature-id")
+        for element in root.iter()
+        if element.get("data-gbdraw-feature-id") and element.get("data-gbdraw-feature-part") == "block"
+    }
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_hiding_one_of_identical_features_keeps_the_rendered_id_of_the_other(mode):
+    """OV-1485: identical features (same type and location) are told apart by
+    an instance suffix on their rendered ID. The suffix is decided by the
+    record's source features, so hiding one of them leaves the other's
+    rendered ID, label ID, and catalog ID as they were; the live Web Result
+    hides the hidden one and keeps the other's ID, as Generate draws it."""
+
+    def request(*overrides):
+        source = RecordInput(InMemoryRecordSource(_identical_features_record()), record_key="one")
+        if mode == "linear":
+            return _linear(source, feature_overrides=overrides, config_overrides={
+                "labels.linear.scope": "all", "canvas.resolve_overlaps": True,
+            })
+        return CircularDiagramRequest(records=(source,), options=CircularDiagramOptions(
+            selected_features_set=TYPES, feature_overrides=overrides,
+            config_overrides={"labels.circular.scope": "outer", "canvas.resolve_overlaps": True},
+        ))
+
+    def label_ids(svg: str) -> set[str]:
+        return set(re.findall(r'data-label-feature-id="([^"]+)"', svg))
+
+    first, second = (entry.biological_feature_id for entry in plan_request(request()).provenance[0].source_feature_catalog)
+    assert (first, second) == (f"{first.split('~')[0]}~0", f"{first.split('~')[0]}~1")
+    both_svg = _svg(request())
+    both = _rendered_ids(both_svg)
+    # The instance is the source index, a number for the first feature too.
+    assert sorted(rendered_id.split("__instance_")[1].split("_")[0] for rendered_id in both) == ["0", "1"]
+    assert label_ids(both_svg) == both
+    prepared = build_request_diagram(request(FeatureOverride("one", first, feature_visibility="off")))
+    svg = prepared.drawing.tostring()
+    kept = _rendered_ids(svg)
+    assert len(kept) == 1 and kept < both
+    assert label_ids(svg) == kept
+    catalog = build_prepared_interactive_context(prepared).features
+    assert {feature["rendered_feature_svg_id"] for feature in catalog} == kept
 
 
 @pytest.mark.parametrize("scope,expected", [("none", []), ("all", ["Renamed"])])
