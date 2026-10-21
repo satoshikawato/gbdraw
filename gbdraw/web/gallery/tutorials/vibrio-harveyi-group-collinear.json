@@ -1387,7 +1387,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label='Name / Species style size']",
+          "selector": "input[aria-label='Name / Species font size']",
           "value": 18
         },
         {
@@ -1396,7 +1396,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label='Subtitle style size']",
+          "selector": "input[aria-label='Subtitle font size']",
           "value": 16
         }
       ],

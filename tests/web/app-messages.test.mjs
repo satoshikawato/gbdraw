@@ -74,7 +74,7 @@ test('the notice banner shows warnings as a list and is cleared by dismiss', () 
 // D-06: the handle a notice returns ends that notice and leaves a later one.
 test('a notice handle dismisses only the notice it showed', () => {
   const { notice, show } = createNoticeBanner({ reactive });
-  const loaded = show({ text: 'Loaded 3 row(s). Applied to 2 label(s).' });
+  const loaded = show({ text: 'Loaded 3 rows. Applied to 2 labels.' });
   const later = show({ text: 'Label table saved.' });
   loaded.dismiss();
   assert.equal(notice.text, 'Label table saved.');

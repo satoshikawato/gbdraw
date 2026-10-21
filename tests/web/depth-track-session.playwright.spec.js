@@ -626,7 +626,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await firstSourceSummary.press('Enter');
   await expect(firstSource).toHaveAttribute('open', '');
   expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(closedHeight);
-  await expect(page.getByRole('button', { name: /Add Depth TSV series from file/ })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Add Depth TSV series to all files/ })).toHaveCount(1);
 
   await page.getByTestId('linear-source-depth-1-1').setInputFiles({
     name: 'common.tsv',
@@ -643,7 +643,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
 
   await page.getByRole('button', {
-    name: 'Add Depth TSV series from file 1', exact: true
+    name: 'Add Depth TSV series to all files (file 1)', exact: true
   }).click();
   await expect(firstSourceSummary).toHaveText('1 depth track attached');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({

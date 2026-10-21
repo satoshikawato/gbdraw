@@ -98,7 +98,7 @@ def capture_first_circular(
             "group", name="GenBank/DDBJ File selection", exact=True
         )
         expect(selected_file).to_contain_text("HmmtDNA.gbk")
-        expect_circular_source_status(page, "1 source record(s) inspected")
+        expect_circular_source_status(page, "1 source record inspected")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(
             page, output_paths["01-input-ready.png"], "Circular"
         )

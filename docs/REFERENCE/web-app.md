@@ -500,7 +500,7 @@ readability. Use preview zoom and pan to inspect individual features.
 The browser inspects a Circular source as soon as you choose a **GenBank/DDBJ
 File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
 needed. **Source records** shows **Inspecting source records…** and then the
-count, such as **1 source record(s) inspected**. Each record's rotation row
+count, such as **1 source record inspected**. Each record's rotation row
 appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
 **Upload both GFF3 and FASTA files to inspect records.** Replacing the file
 inspects the new source. For GFF3 + FASTA, the records are the sequences that have GFF3 rows, in FASTA

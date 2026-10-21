@@ -414,7 +414,7 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
 
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
-  await expect(page.locator('[data-circular-discovery-status]')).toContainText('source record(s) inspected', { timeout: 120_000 });
+  await expect(page.locator('[data-circular-discovery-status]')).toContainText(/source records? inspected/, { timeout: 120_000 });
   await expect(zone).toHaveClass(/\bready\b/);
   await expect(zone).not.toHaveClass(/\bfailed\b/);
   await expect(zone.locator('.ph-check-circle')).toHaveCount(1);

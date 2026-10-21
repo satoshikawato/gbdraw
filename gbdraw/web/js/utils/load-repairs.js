@@ -264,13 +264,19 @@ const WORDING = {
     return t('Legend: the entry stored under "{label}" ({path}) moves to the row "{used}", which has an entry of its own; that entry is used and this one was dropped.', params);
   }),
   'feature-edit-unmatched': (repairs) => [
-    t('{count} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.', { count: total(repairs) })
+    tn(total(repairs),
+      '{count} feature edit from an older Session could not be matched to a feature of its saved diagram and was dropped.',
+      '{count} feature edits from an older Session could not be matched to a feature of its saved diagram and were dropped.')
   ],
   'feature-visibility-narrowed': (repairs) => [
-    t('{count} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.', { count: total(repairs) })
+    tn(total(repairs),
+      '{count} Feature visibility edit from an older Session hid every feature with the same hash, such as each copy of a duplicated record. It now applies only to the feature that was edited, so the next Generate draws the others.',
+      '{count} Feature visibility edits from an older Session hid every feature with the same hash, such as each copy of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.')
   ],
   'hash-selector-unmapped': (repairs) => [
-    t('{count} hash= value(s) from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so each may now match another feature or none.', { count: total(repairs) })
+    tn(total(repairs),
+      '{count} hash= value from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so the value may now match another feature or none.',
+      '{count} hash= values from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so each may now match another feature or none.')
   ],
   'table-row-joined': (repairs) => tableLines(repairs, (table, lines, count) => tn(count,
     '{table}: line {lines} had extra cells, joined into the last column with one space.',
@@ -282,10 +288,16 @@ const WORDING = {
     '{table}: line {lines} had a color the table does not accept and was dropped.',
     '{table}: lines {lines} had a color the table does not accept and were dropped.', { table, lines })),
   'orthogroup-edit-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (path.endsWith('DescriptionOverrides')
-    ? t('Similarity groups: {count} description edit(s) ({path}) name a group the saved Result does not have and were dropped.', { count, path })
-    : t('Similarity groups: {count} name edit(s) ({path}) name a group the saved Result does not have and were dropped.', { count, path }))),
+    ? tn(count,
+      'Similarity groups: {count} description edit ({path}) names a group the saved Result does not have and was dropped.',
+      'Similarity groups: {count} description edits ({path}) name a group the saved Result does not have and were dropped.', { path })
+    : tn(count,
+      'Similarity groups: {count} name edit ({path}) names a group the saved Result does not have and was dropped.',
+      'Similarity groups: {count} name edits ({path}) name a group the saved Result does not have and were dropped.', { path }))),
   'cache-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
-    t('LOSAT cache: {count} saved value(s) ({path}) could not be read and were dropped.', { count, path }))),
+    tn(count,
+      'LOSAT cache: {count} saved value ({path}) could not be read and was dropped.',
+      'LOSAT cache: {count} saved values ({path}) could not be read and were dropped.', { path }))),
   'feature-recovery-failed': () => [
     t('Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it.')
   ],

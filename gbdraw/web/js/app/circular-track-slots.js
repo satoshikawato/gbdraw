@@ -126,10 +126,37 @@ const SUPPRESS_FORM_KEY_BY_RENDERER = {
   dinucleotide_content: 'suppress_gc',
   dinucleotide_skew: 'suppress_skew'
 };
-/** @type {Record<string, string>} */
-const SUPPRESS_TRACK_LABEL_BY_RENDERER = {
-  dinucleotide_content: msg('GC content'),
-  dinucleotide_skew: msg('GC skew')
+/**
+ * The shown texts of a Hide GC Content or Hide GC Skew control. Each is a
+ * whole sentence, so no locale fits a track or control name into a sentence
+ * written around another word (OV-1477).
+ * @typedef {object} SuppressTexts
+ * @property {() => string} title the title of the dialog that asks before hiding
+ * @property {(count: number) => string} description the dialog text: the custom stack rows the hide turns off
+ * @property {() => string} hide the dialog's hide button
+ * @property {() => string} keep the dialog's cancel button
+ * @property {() => string} hiddenBy the note on a stack row that the control hides
+ */
+/** @type {Record<string, SuppressTexts>} */
+const SUPPRESS_TEXT_BY_RENDERER = {
+  dinucleotide_content: {
+    title: () => t('Hide GC content?'),
+    description: (count) => tn(count,
+      'Your custom track stack has {count} GC content track. Hiding GC content turns that track off.',
+      'Your custom track stack has {count} GC content tracks. Hiding GC content turns those tracks off.'),
+    hide: () => t('Hide GC content'),
+    keep: () => t('Keep GC content'),
+    hiddenBy: () => t('Hidden: Hide GC Content is on.')
+  },
+  dinucleotide_skew: {
+    title: () => t('Hide GC skew?'),
+    description: (count) => tn(count,
+      'Your custom track stack has {count} GC skew track. Hiding GC skew turns that track off.',
+      'Your custom track stack has {count} GC skew tracks. Hiding GC skew turns those tracks off.'),
+    hide: () => t('Hide GC skew'),
+    keep: () => t('Keep GC skew'),
+    hiddenBy: () => t('Hidden: Hide GC Skew is on.')
+  }
 };
 /** @type {Record<string, string>} */
 const SUPPRESS_CONTROL_LABEL_BY_RENDERER = {
@@ -571,10 +598,14 @@ export const estimateCircularConservationLayoutWarning = (state, drawing, record
     (showSkew ? 12 + 1 : 0);
 
   if (compressedStackPx > availableInsidePx) {
-    return t('There are {count} inside pairwise comparison ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.', { count: entries.length });
+    return tn(entries.length,
+      'There is {count} inside pairwise comparison ring plus other circular tracks; even a compressed ring may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.',
+      'There are {count} inside pairwise comparison rings plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.');
   }
   if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
-    return t('There are {count} inside pairwise comparison ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.', { count: entries.length });
+    return tn(entries.length,
+      'There is {count} inside pairwise comparison ring; gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.',
+      'There are {count} inside pairwise comparison rings; gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.');
   }
   return '';
 };
@@ -1474,19 +1505,14 @@ export const createCircularTrackSlotEditor = ({
   const askCircularSuppressOverride = (drawing, renderer) => {
     if (!drawing.adv.circular_track_slots_enabled) return null;
     const count = activeCircularTrackSlotsForRenderer(drawing, renderer).length;
-    if (count === 0) return null;
-    // The Hide control of GC content or GC skew; the track name is the renderer's label.
-    const trackLabel = tm(ownEntry(SUPPRESS_TRACK_LABEL_BY_RENDERER, renderer) || msg('this track'));
+    // The Hide control of GC content or GC skew.
+    const texts = ownEntry(SUPPRESS_TEXT_BY_RENDERER, renderer);
+    if (count === 0 || !texts) return null;
     return askChoice({
-      title: t('Hide {track}?', { track: trackLabel }),
-      description: tn(
-        count,
-        'Your custom track stack has {count} {track} track. Hiding {track} turns that track off.',
-        'Your custom track stack has {count} {track} tracks. Hiding {track} turns those tracks off.',
-        { track: trackLabel }
-      ),
-      actions: [{ id: 'hide', label: t('Hide {track}', { track: trackLabel }), tone: 'primary' }],
-      cancelLabel: t('Keep {track}', { track: trackLabel })
+      title: texts.title(),
+      description: texts.description(count),
+      actions: [{ id: 'hide', label: texts.hide(), tone: 'primary' }],
+      cancelLabel: texts.keep()
     });
   };
 
@@ -1606,9 +1632,7 @@ export const createCircularTrackSlotEditor = ({
   /** @param {CircularTrackSlot | null | undefined} slot */
   const circularTrackSlotSuppressMessage = (slot) => {
     if (!circularTrackSlotHiddenBySuppress(slot)) return '';
-    const renderer = String(slot?.renderer || '').trim();
-    const controlLabel = tm(ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Layout'));
-    return t('Hidden by {control}.', { control: controlLabel });
+    return ownEntry(SUPPRESS_TEXT_BY_RENDERER, String(slot?.renderer || '').trim())?.hiddenBy() ?? '';
   };
 
   // A placement select (the Annotations row's) moves the row across the Axis

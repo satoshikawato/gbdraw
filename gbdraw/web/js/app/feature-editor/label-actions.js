@@ -24,7 +24,7 @@ import {
   ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
-import { joinSentences, t, tm } from '../../utils/i18n.js';
+import { joinSentences, t, tm, tn } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -1681,7 +1681,7 @@ export const createFeatureLabelActions = ({
       if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
-      const loadedRowsText = t('Loaded {count} row(s).', { count: rows.length });
+      const loadedRowsText = tn(rows.length, 'Loaded {count} row.', 'Loaded {count} rows.');
 
       const svg = sourceSvg;
       const labels = svg ? labelImportTargets(drawing, svg) : [];
@@ -1723,7 +1723,9 @@ export const createFeatureLabelActions = ({
       ))).length;
       if (undecided > 0) {
         showNotice({ text: joinSentences(loadedRowsText, t('Not applied.')), items: [
-          t('location and record_location rows cannot be matched to {count} label(s) on cropped, reverse-complemented, or rotated records until the diagram records where it drew them. Generate the diagram again, then load the table.', { count: undecided })
+          tn(undecided,
+        'location and record_location rows cannot be matched to {count} label on a cropped, reverse-complemented, or rotated record until the diagram records where it drew it. Generate the diagram again, then load the table.',
+        'location and record_location rows cannot be matched to {count} labels on cropped, reverse-complemented, or rotated records until the diagram records where it drew them. Generate the diagram again, then load the table.')
         ] });
         return;
       }
@@ -1748,7 +1750,7 @@ export const createFeatureLabelActions = ({
       if (applicable.length === 0) {
         showNotice({ text: joinSentences(loadedRowsText, t('Not applied; the existing label edits were kept.')), items: [
           skippedNonTrackableCount > 0
-            ? t('The {count} matched label(s) lacked a feature key.', { count: skippedNonTrackableCount })
+            ? tn(skippedNonTrackableCount, 'The {count} matched label lacked a feature key.', 'The {count} matched labels lacked a feature key.')
             : t('No row matched a label of the diagram.')
         ] });
         return;
@@ -1768,9 +1770,9 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      const message = joinSentences(loadedRowsText, t('Applied to {count} label(s).', { count: applicable.length }));
+      const message = joinSentences(loadedRowsText, tn(applicable.length, 'Applied to {count} label.', 'Applied to {count} labels.'));
       const skipped = skippedNonTrackableCount > 0
-        ? [t('{count} match(es) lacked a feature key and were not applied.', { count: skippedNonTrackableCount })]
+        ? [tn(skippedNonTrackableCount, '{count} match lacked a feature key and was not applied.', '{count} matches lacked a feature key and were not applied.')]
         : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;

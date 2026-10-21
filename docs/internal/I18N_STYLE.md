@@ -1,8 +1,9 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
-Revision 8, 2026-10-22 (ko, es, fr and pt round-2 revision: no coined terms, ko feature in English, es and pt
-option-name subjects, fr byte units and positive/zero wording; Revision 7 was the round-1 term audit of Indonesian,
-Vietnamese and Thai: §9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
+Revision 9, 2026-10-22 (counted sentences are `tn` pairs, and track, mode, control and setting names are no
+longer placeholders inside sentences: §1.3, §7.5; fr Feature and MB confirmed by the Owner (P-07): §7.1, §7.3;
+this file and the glossary, not the Product Contract, hold the term rules: §2.1, §3, §9.1. Revision 8 was the ko, es, fr and
+pt round-2 revision; Revision 7 the round-1 term audit of Indonesian, Vietnamese and Thai: §9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
 drafts follow this file and the glossary together. The glossary decides words;
 this file decides how sentences are written around them. Where the two
 disagree, the glossary wins and this file is corrected.
@@ -63,7 +64,7 @@ disagree, the glossary wins and this file is corrected.
 ### 1.3 Placeholders and keys
 
 - The English source text is the key (D-02). There is no English catalog:
-  `t('Save Session')`, `tn(count, one, other)` (the `other` text is the key),
+  `t('Save Session')`, `tn(count, one, other)` (the English text of each form is a key),
   `tx(context, text)` (key `context + '\u0004' + text`, for homonyms), `msg()`
   to keep a text until `tm()` translates it where it is shown. A catalog
   `<locale>.js` maps those keys to plain strings.
@@ -76,6 +77,11 @@ disagree, the glossary wins and this file is corrected.
   have no plural forms either: `Intl.PluralRules` selects `other` for every
   count, so their `one` rows are never shown (they carry the `other` text or a
   natural singular; §9.5, §10.5, §11.5).
+- A sentence that counts things is a `tn` pair; no key writes a plural as "(s)".
+  A track, mode, control or setting name is never a placeholder inside a
+  sentence: each name has a whole-sentence key (Hide GC content?, No Circular
+  Result yet. …), so the sentence can take the article, case or particle the
+  name needs.
 - One key is one sentence or label. Never build a sentence from translated
   fragments; ask for a key with placeholders instead. A sentence with an
   inline element (`<strong>`, a swatch, a bound name) is one key; the
@@ -201,6 +207,9 @@ the same pixel width. Buttons stay within 8 full-width glyphs where
 possible; rail short names within 5 (Features is the known exception).
 
 ## 3. Simplified Chinese (`zh-Hans`, mainland usage)
+
+Open zh-Hans and zh-Hant terms (glossary rows marked [review]) are decided by
+zh reviewers; this file and the glossary record each decision.
 
 ### 3.1 Vocabulary
 
@@ -705,7 +714,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
 ### 7.1 Vocabulary
 
 - **Biology and bioinformatics**, as French scientific writing has them: génome, séquence, gène,
-  protéine, brin (brin +, brin −), complément inverse, annotation, élément (Feature), type
+  protéine, brin (brin +, brin −), complément inverse, annotation, élément (Feature; Owner P-07,
+  2026-10-22, after the French GFF and annotation sources of the glossary row), type
   d’élément, enregistrement (Record), numéro d’accession, locus (invariable), qualificateur,
   produit (/product), localisation (Location), organisme, souche, espèce, organite, teneur en
   GC, dinucléotide, profondeur, profondeur de séquençage (Read depth), couverture, code
@@ -787,7 +797,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - Numbers and units keep the en-US form the app prints (0.65 ×R, 1,024 px, 100 bp, 20px, 65%):
   never 0,65, 1 024 or 65 %, because the formatter writes them and users type them back.
   Byte units are the exception to §1.2: Mo, Go, ko (as octets), never MB, GB, kB; bp, kb
-  and Mb stay. One …
+  and Mb stay. A file size in megabytes is Mo; a sequence length in megabases is Mb (Owner
+  P-07, 2026-10-22). One …
   (U+2026), never three dots. The em dash keeps the source spacing.
 - The code joins two sentences with an ordinary space. Abbreviations take a period: min., max.,
   séq. (Identité min. (%)); ID is invariable (des ID).
@@ -824,8 +835,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   1, so the singular must read right for 0 (0 enregistrement); 1000000 returns many, which `tn`
   treats as other. Keep {count} in the one form whenever the English one form has it; where it
   has none (From this color rule:), the calls pass 1 or more and French omits it too.
-- A key outside `tn` that writes "(s)" in English writes none in French: the count follows a
-  colon (Correspondances sans clé d’élément, non appliquées : {count}.).
+- A count outside `tn` (a short label such as {count} aligned, whose English has one form)
+  follows a colon, so the participle need not agree with it (Alignés : {count}).
 - Worked examples (one / other):
   1. {count} record → {count} enregistrement / {count} enregistrements.
   2. {count} LOSAT result is cached and reused when the inputs and settings match. → {count}
@@ -980,8 +991,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   {items}.
 - Worked examples (one / other):
   1. `{count} record` → {count} registro / {count} registros
-  2. `{count} needs a choice` → {count} precisa de uma escolha / {count}
-     precisam de uma escolha
+  2. `{count} record awaiting a choice` → {count} registro aguardando uma
+     escolha / {count} registros aguardando uma escolha
   3. `{count} chosen feature keeps its current direction.` → {count} feature
      escolhida mantém a direção atual. / {count} features escolhidas mantêm a
      direção atual.
@@ -1013,8 +1024,9 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 
 ### 9.1 Vocabulary
 
-- **Provisional** (PD-OI-106; the vendors differ and the choice is to be
-  reconsidered): Pengaturan (Settings), default, file, Unduh / Unggah,
+- **Provisional** (Owner decision D-05 of the Indonesian, Vietnamese and Thai
+  translation work, 2026-10-21, written "id D-05" in the glossary; the vendors
+  differ and the choice is to be reconsidered): Pengaturan (Settings), default, file, Unduh / Unggah,
   Urungkan (Undo), Atur ulang (Reset), Lanjutan (Advanced), penjajaran
   (alignment), strain, sekuens. The glossary marks each row.
 - **Field terms** (spelling fixed): genom, gen, sekuens, nukleotida, asam

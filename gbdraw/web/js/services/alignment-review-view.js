@@ -132,10 +132,10 @@ export const ALIGNMENT_REFERENCE_KEY = 'reference';
 /** @type {readonly { id: AlignmentReviewGroupId, title: string, count: (records: number) => string }[]} */
 const GROUPS = Object.freeze([
   { id: 'reference', title: '', count: () => '' },
-  { id: 'choose', title: msg('Choose a gene'), count: (n) => tn(n, '{count} needs a choice', '{count} need a choice') },
-  { id: 'several', title: msg('Several candidates'), count: (n) => t('{count} with several candidates', { count: n }) },
-  { id: 'single', title: msg('One candidate'), count: (n) => t('{count} with one candidate', { count: n }) },
-  { id: 'none', title: msg('No usable candidate'), count: (n) => t('{count} without a usable candidate', { count: n }) }
+  { id: 'choose', title: msg('Choose a gene'), count: (n) => tn(n, '{count} record awaiting a choice', '{count} records awaiting a choice') },
+  { id: 'several', title: msg('Several candidates'), count: (n) => tn(n, '{count} record with several candidates', '{count} records with several candidates') },
+  { id: 'single', title: msg('One candidate'), count: (n) => tn(n, '{count} record with one candidate', '{count} records with one candidate') },
+  { id: 'none', title: msg('No usable candidate'), count: (n) => tn(n, '{count} record without a usable candidate', '{count} records without a usable candidate') }
 ]);
 
 /**

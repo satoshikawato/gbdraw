@@ -423,7 +423,7 @@ test('a gzip GenBank and a GenBank record without sequence name their cause', as
     name: 'no-sequence.gb', mimeType: 'text/plain',
     buffer: Buffer.from('LOCUS       X 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')
   });
-  await expect(status).toContainText('source record(s) inspected', { timeout: 120000 });
+  await expect(status).toContainText(/source records? inspected/, { timeout: 120000 });
   const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(failed).toMatchObject({ status: 'error', error: { code: 'INPUT_UNREADABLE', context: { reason: 'SEQUENCE_UNDEFINED' } } });
   const alert = page.getByRole('alert', { name: 'Generation Error' });

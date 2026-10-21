@@ -216,7 +216,7 @@ for (const operation of ['replacement', 'removal']) {
       expect(generated.committedPlacements).toEqual([]);
       expect(await placementKeys(page)).toEqual([]);
       await expect(page.getByTestId('feature-identity-notice')).toContainText(
-        'Removed 1 feature edit(s) whose feature the replaced source no longer has.'
+        'Removed 1 feature edit whose feature the replaced source no longer has.'
       );
       // The removal is part of the Generate step: Undo restores the row and
       // clears the count with the previous Result, and Redo removes it again.
@@ -226,7 +226,7 @@ for (const operation of ['replacement', 'removal']) {
       await expect(notice).toHaveCount(0);
       await page.getByRole('button', { name: /^Redo/ }).first().click();
       await expect.poll(() => placementKeys(page)).toEqual([]);
-      await expect(notice).toContainText('Removed 1 feature edit(s)');
+      await expect(notice).toContainText('Removed 1 feature edit whose');
       expect(external.get(page)).toEqual([]);
     } finally { await page.context().close(); }
   });

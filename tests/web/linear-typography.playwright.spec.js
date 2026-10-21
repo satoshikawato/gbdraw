@@ -82,7 +82,7 @@ test('Titles, Record Labels, and Legend expose one responsive control hierarchy'
   const nameStyle = page.getByLabel('Name / Species style', { exact: true });
   await nameStyle.focus();
   await page.keyboard.press('Space');
-  await page.getByLabel('Name / Species style size', { exact: true }).fill('21');
+  await page.getByLabel('Name / Species font size', { exact: true }).fill('21');
   await page.getByRole('button', { name: 'Name / Species bold weight', exact: true }).click();
   await page.getByLabel('Name / Species definition line fill value', { exact: true }).fill('#123456');
 
@@ -556,7 +556,7 @@ test('a Record Labels style size of zero or less is refused by its setting', asy
   await page.getByLabel('Titles and Record Labels', { exact: true }).press('Enter');
   await page.getByLabel('Subtitle style', { exact: true }).focus();
   await page.keyboard.press('Space');
-  const size = page.getByLabel('Subtitle style size', { exact: true });
+  const size = page.getByLabel('Subtitle font size', { exact: true });
   for (const typed of ['-1', '0']) {
     await size.fill(typed);
     await size.press('Tab');

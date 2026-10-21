@@ -419,9 +419,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const sectionCounts = await dialog.locator('[data-alignment-section]').evaluateAll((headings) => Object.fromEntries(
     headings.map((heading) => [heading.dataset.alignmentSection, Number(heading.querySelector('.count').textContent)])));
   const summaryParts = [
-    ['choose', (n) => `${n} ${n === 1 ? 'needs' : 'need'} a choice`], ['several', (n) => `${n} with several candidates`],
-    ['single', (n) => `${n} with one candidate`], ['none', (n) => `${n} without a usable candidate`]
-  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => words(sectionCounts[id]));
+    ['choose', 'awaiting a choice'], ['several', 'with several candidates'],
+    ['single', 'with one candidate'], ['none', 'without a usable candidate']
+  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => `${sectionCounts[id]} ${sectionCounts[id] === 1 ? 'record' : 'records'} ${words}`);
   const recordCount = await dialog.locator('.alignment-review-card').count();
   await expect(dialog.locator('#similarity-alignment-dialog-description')).toHaveText(
     `Similarity group ${await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.response.groupId)}: `
@@ -3241,7 +3241,7 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   await expect(dialog.locator('[data-alignment-section="choose"]'))
     .toHaveText(`Choose a gene${needKeys.length} (${needKeys.length} record${needKeys.length === 1 ? '' : 's'})`);
   await expect(dialog.locator('#similarity-alignment-dialog-description'))
-    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'needs' : 'need'} a choice`);
+    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'record' : 'records'} awaiting a choice`);
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(/Choose a candidate or Skip for \d+ record/);
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
   // No number joins a row to the figure.

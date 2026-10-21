@@ -68,7 +68,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
     // Preset Reset: the dialog asks before the stack changes; Cancel keeps it.
     const tuckin = page.getByRole('button', { name: 'Reset to Tuckin', exact: true });
     await tuckin.click();
-    await expect(dialog(page)).toContainText('Reset to Tuckin removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Choosing Reset to Tuckin removes the lane for 1 feature you placed manually.');
     await expect(resetButton(page)).toBeFocused();
     expect(await layoutState(page, key)).toEqual(placed);
     await page.screenshot({ path: testInfo.outputPath('preset-reset-dialog.png') });
@@ -79,7 +79,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
 
     // Row reorder: Reset applies the move and removes the row as one step.
     await runRowAction(stackRow(page, 'circular'), 'Move outside Axis');
-    await expect(dialog(page)).toContainText('Move outside Axis removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Choosing Move outside Axis removes the lane for 1 feature you placed manually.');
     expect(await layoutState(page, key)).toEqual(placed);
     // Keep current layout returns focus to the row's Row actions.
     await cancelButton(page).click();

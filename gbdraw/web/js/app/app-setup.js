@@ -6004,7 +6004,7 @@ export const createAppSetup = () => {
     const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
       ? tm(RECORDS_NOT_INSPECTED_LABEL)
       : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-        ? (drawnCount < entries.length ? t('{drawn} of {count} records (separate diagrams)', { drawn: drawnCount, count: entries.length }) : t('All records (separate diagrams)'))
+        ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
         : t('Automatic (only record)');
     return [
       { value: '', label: automaticLabel, synthetic: false },
