@@ -65,20 +65,24 @@ def text_box_corner_offsets(
     text_anchor: object = "middle",
     *,
     padding_px: float = 0.0,
+    along_text_px: float = 0.0,
 ) -> tuple[Point, Point, Point, Point]:
     """Return clockwise rectangle corners relative to the text anchor.
 
     Text height is centered on the anchor. Callers should use a matching
-    ``dominant-baseline="middle"`` when rendering plain SVG text.
+    ``dominant-baseline="middle"`` when rendering plain SVG text. ``padding_px``
+    widens the box on every side, ``along_text_px`` only at both ends of the text
+    (in its reading direction, whatever the rotation).
     """
     padding = max(0.0, float(padding_px))
+    along = padding + max(0.0, float(along_text_px))
     x_min, x_max = anchor_x_bounds(width_px, text_anchor)
     half_height = 0.5 * max(0.0, float(height_px))
     unrotated = (
-        (x_min - padding, -half_height - padding),
-        (x_max + padding, -half_height - padding),
-        (x_max + padding, half_height + padding),
-        (x_min - padding, half_height + padding),
+        (x_min - along, -half_height - padding),
+        (x_max + along, -half_height - padding),
+        (x_max + along, half_height + padding),
+        (x_min - along, half_height + padding),
     )
     # ``unrotated`` always holds exactly four points.
     return cast(

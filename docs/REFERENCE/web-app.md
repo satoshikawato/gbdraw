@@ -663,7 +663,8 @@ organism gets no row-level text.
 
 New Web diagrams and **Reset Settings** start with **Lock Definition Column**
 on. Definitions then share a left edge, with the configured definition gap
-before the nearest sequence. Turn it off explicitly to use a common column
+before the nearest sequence, or before its depth or GC% axis labels when it
+draws them. Turn it off explicitly to use a common column
 center that follows each row's horizontal offset. Shorter text can leave more
 space; record-local text stays above its own sequence. Either selection
 redraws the current Result (**Live edit**).

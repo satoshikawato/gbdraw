@@ -303,10 +303,7 @@ def add_record_definition_group(
     style = LinearDefinitionStyle.of(canvas_config.profile.config)
     length_param = str(canvas_config.length_param)
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
-    try:
-        definition_gap = max(0.0, float(getattr(canvas_config, "definition_gap", 20.0)))
-    except (TypeError, ValueError):
-        definition_gap = 20.0
+    definition_gap = max(0.0, float(canvas_config.definition_column_gap))
 
     if multi_record_layout:
         if placement is None:

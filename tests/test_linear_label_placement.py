@@ -42,7 +42,7 @@ from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
     _label_corners,
-    _linear_label_aabb,
+    _row_label_aabb,
     _rotated_label_rects_intersect,
     calculate_label_bounds,
     LinearLabelFrame,
@@ -958,7 +958,7 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     overlapping = [
         (left, right)
-        for left, right in candidate_aabb_pairs([_linear_label_aabb(label) for label in labels], bucket_size=64.0)
+        for left, right in candidate_aabb_pairs([_row_label_aabb(label) for label in labels], bucket_size=64.0)
         if _rotated_label_rects_intersect(labels[left], labels[right])
     ]
     assert overlapping == []
@@ -1235,6 +1235,81 @@ def test_linear_labels_in_one_row_keep_a_quarter_em_between_them() -> None:
                 close.append((left["label_text"], right["label_text"]))
 
     assert len(rows) > 1 and close == []
+
+
+def _box_along_text(label: dict, room_px: float) -> list[tuple[float, float]]:
+    """A label's box with ``room_px`` added at both ends along its text (its own reading direction)."""
+
+    from gbdraw.layout.text_geometry import anchor_x_bounds, rotate_point
+
+    x_min, x_max = anchor_x_bounds(float(label["width_px"]), label["text_anchor"])
+    half_height = 0.5 * float(label["height_px"])
+    return [
+        (float(label["middle_x"]) + px, float(label["middle_y"]) + py)
+        for px, py in (
+            rotate_point(point, float(label["rotation_deg"]))
+            for point in (
+                (x_min - room_px, -half_height),
+                (x_max + room_px, -half_height),
+                (x_max + room_px, half_height),
+                (x_min - room_px, half_height),
+            )
+        )
+    ]
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("label_rotation", (0.0, 45.0), ids=["horizontal", "turned"])
+def test_linear_above_feature_labels_on_one_line_keep_a_quarter_em_along_their_text(label_rotation: float) -> None:
+    """OV-1397 (horizontal) and OV-1363 (turned): above-feature labels that lie on one line keep the
+    ``ROW_LABEL_GAP_EM`` row gap along their text, as the auto rows do (LP-D104). Lambda at 24 px drew
+    "minor tail protein" 4.4 px from "Lom outer membrane protein" and turned "integrase" 3.1 px along
+    the text from "ead/Ea22-like family protein"."""
+
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    labels = _prepare_linear_labels(
+        label_placement="above_feature", label_rotation=label_rotation, label_font_size=24.0,
+        input_filename="NC_001416.gb",
+    )
+    half_gap = 0.5 * ROW_LABEL_GAP_EM * 24.0 - 1e-6
+    boxes = [(label["label_text"], _box_along_text(label, half_gap)) for label in labels]
+    close = [
+        (left_text, right_text)
+        for index, (left_text, left_box) in enumerate(boxes)
+        for right_text, right_box in boxes[index + 1:]
+        if convex_polygons_intersect(left_box, right_box, touching=False)
+    ]
+    assert len(labels) > 50 and close == []
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("label_rotation", (0.0, 45.0), ids=["horizontal", "turned"])
+def test_linear_fit_counts_above_feature_labels_closer_than_the_row_gap(label_rotation: float) -> None:
+    """The fit count reads the row gap of above-feature labels as the packer keeps it: two labels end to
+    end on one line 0.1 em apart overlap, 0.3 em apart they fit."""
+
+    from gbdraw.labels.linear import linear_row_label_fit
+
+    labels = _prepare_linear_labels(
+        label_placement="above_feature", label_rotation=label_rotation, label_font_size=24.0,
+        input_filename="NC_001416.gb",
+    )
+    first = labels[0]
+    radians = math.radians(float(first["rotation_deg"]))
+
+    def next_on_line(gap_em: float) -> dict:
+        step = float(first["width_px"]) + gap_em * 24.0
+        return {
+            **first,
+            "middle_x": float(first["middle_x"]) + step * math.cos(radians),
+            "middle_y": float(first["middle_y"]) + step * math.sin(radians),
+            "leader_line": False,
+        }
+
+    alone = {**first, "leader_line": False}
+    assert linear_row_label_fit([([alone, next_on_line(0.1)], 0.0)]).overlap_pairs == 1
+    assert linear_row_label_fit([([alone, next_on_line(0.3)], 0.0)]).overlap_pairs == 0
 
 
 @pytest.mark.linear

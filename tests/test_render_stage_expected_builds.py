@@ -96,8 +96,10 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
             "scale_font_size", "scale_style", "show_replicon", "align_center (rows)", "axis_stroke_width",
             "multi_record_column_gap_ratio", "multi_record_row_gap_ratio",
             # The legend wraps at the content width, which a tick label or a
-            # line stroke changes.
-            "gc_content_tick_font_size", "line_stroke_width",
+            # line stroke changes. The definition column keeps its gap from the
+            # GC% tick labels, so an option that changes them moves that width.
+            "gc_content_tick_font_size", "line_stroke_width", "gc_content_mode", "gc_content_max_percent",
+            "show_gc_content_axis", "show_gc_content_ticks",
         ),
         _LEGEND_LAYOUT,
     ),
@@ -112,10 +114,13 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("feature_override_table", "feature_placement_table"), _FEATURE_EDIT),
     "feature_visibility_table": _FEATURE_EDIT | {"visibility_rules"},
     "annotation_table": _LEGEND | {"catalog_normalization", "interactive_context"},
-    **dict.fromkeys(("depth_window", "depth_step", "depth_min", "depth_max", "depth_log_scale"), _DEPTH_FRAME),
+    **dict.fromkeys(("depth_min", "depth_log_scale"), _DEPTH_FRAME),
+    # The definition column keeps its gap from the depth tick labels, so these move the content width.
+    **dict.fromkeys(("depth_window", "depth_step", "depth_max"), _DEPTH_FRAME | _LEGEND_LAYOUT),
+    "show_depth_axis": _DEPTH_DATA | _LEGEND_LAYOUT,
     **dict.fromkeys(
         (
-            "depth_track_large_tick_interval", "depth_track_small_tick_interval", "show_depth_axis",
+            "depth_track_large_tick_interval", "depth_track_small_tick_interval",
             "show_depth_ticks", "depth_large_tick_interval", "depth_small_tick_interval", "share_depth_axis",
         ),
         _DEPTH_DATA,
