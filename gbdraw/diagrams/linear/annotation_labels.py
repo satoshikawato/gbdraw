@@ -324,8 +324,9 @@ def _choose_candidate(
 class _Record(NamedTuple):
     """What the record's feature labels move within: their dicts, their origin,
     their style (what is drawn with their letters), the ink they must not newly meet (feature glyphs, the axis and other tracks), and where the
-    label fit counts them: the x of the record's start in its row and the feature labels of the
-    row's other records, each with its x (``LinearLabelFrame``)."""
+    label fit counts them: the x of the record's start in its row, the feature labels of the
+    row's other records, each with its x (``LinearLabelFrame``), and the record's definition text boxes
+    (label coordinates), which no label may newly cover (OV-1395, OV-1436)."""
 
     record_index: int
     labels: list[LinearLabel]
@@ -334,11 +335,15 @@ class _Record(NamedTuple):
     inks: tuple[LabelObstacle, ...]
     label_x: float = 0.0
     row_labels: tuple[tuple[Sequence[LinearLabel], float], ...] = ()
+    definition_boxes: tuple[Aabb, ...] = ()
 
     def label_fit(self, labels: Sequence[LinearLabel]) -> LabelFit:
-        """The label fit's count of the row's feature labels with the record's labels ``labels``."""
+        """The label fit's count of the row's feature labels with the record's labels ``labels``. The
+        other records' labels do not move here, so only the record's own definition text is counted."""
 
-        return linear_row_label_fit([*self.row_labels, (labels, self.label_x)])
+        return linear_row_label_fit(
+            [*self.row_labels, (labels, self.label_x)], [*(() for _ in self.row_labels), self.definition_boxes]
+        )
 
 
 class _Way(NamedTuple):
@@ -369,7 +374,8 @@ def _another_row(
     another row of its side, the nearest first (the outer one on a tie), then, when ``new_rows``,
     one new row beyond them. A move into an existing row makes no new overlap with the ink and
     obstacles; no move makes the label fit's count of the row's feature labels larger, counted
-    where and as the label fit counts them (``_Record.label_fit``)."""
+    where and as the label fit counts them (``_Record.label_fit``): it covers no more of the definition
+    text either (the packer's keep-clear rule, OV-1436)."""
 
     label = labels[owner[2]]
     side = linear_label_side(label)
@@ -393,7 +399,11 @@ def _another_row(
             continue
         trial = [moved if index == owner[2] else item for index, item in enumerate(labels)]
         after = record.label_fit(trial)
-        if after.overlap_pairs > fit.overlap_pairs or after.crossing_pairs > fit.crossing_pairs:
+        if (
+            after.overlap_pairs > fit.overlap_pairs
+            or after.crossing_pairs > fit.crossing_pairs
+            or after.definition_overlaps > fit.definition_overlaps
+        ):
             continue
         return row, room, moved, boxes
     return None
@@ -475,6 +485,7 @@ def place_linear_annotation_labels(
     new_rows: bool = True,
     label_x: float = 0.0,
     row_labels: Sequence[tuple[Sequence[LinearLabel], float]] = (),
+    definition_boxes: Sequence[Aabb] = (),
 ) -> PlacedAnnotationLabels:
     """Each annotation slot's labels on one record, placed along their spans (slot-local y).
 
@@ -486,7 +497,8 @@ def place_linear_annotation_labels(
     ``label_style`` draws with their letters; ``new_rows`` allows a move to
     a new row. ``label_x`` and ``row_labels`` are where the label fit
     counts the row's feature labels (the record's start and the other records'
-    labels, each with its start); no move makes that count larger. A placed
+    labels, each with its start), with the record's ``definition_boxes`` (its definition text in its
+    feature labels' coordinates); no move makes that count larger. A placed
     label still over an obstacle counts one pair per obstacle owner.
     """
 
@@ -502,6 +514,7 @@ def place_linear_annotation_labels(
         ),
         float(label_x),
         tuple(row_labels),
+        tuple(definition_boxes),
     )
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
     font_sizes: list[float] = []

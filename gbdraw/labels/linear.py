@@ -1113,11 +1113,15 @@ def _linear_row_label_fits(
     return [LabelFit(overlap, crossing, covered) for overlap, crossing, covered in counts], embedded_overlap
 
 
-def linear_row_label_fit(row: Sequence[tuple[Sequence[LinearLabel], float]]) -> LabelFit:
+def linear_row_label_fit(
+    row: Sequence[tuple[Sequence[LinearLabel], float]],
+    definition_boxes: Sequence[Sequence[Aabb]] | None = None,
+) -> LabelFit:
     """The drawn feature labels of one Linear row (each record's labels with the x of its start, its
-    ``LinearLabelFrame``) counted together, as ``linear_label_fit`` counts them."""
+    ``LinearLabelFrame``) counted together, as ``linear_label_fit`` counts them, with each record's
+    ``definition_boxes`` (as ``linear_label_fit`` reads them; none without them)."""
 
-    return sum(_linear_row_label_fits(row)[0], FITS)
+    return sum(_linear_row_label_fits(row, definition_boxes)[0], FITS)
 
 
 # The drawing attribute that carries a Linear figure's label fit to the check.

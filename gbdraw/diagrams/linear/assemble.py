@@ -1685,10 +1685,12 @@ def _place_linear_annotation_labels_by_record(
     gap: float,
     new_rows: bool,
     label_frames: Sequence[LinearLabelFrame] | None,
+    definition_boxes: Sequence[tuple[Aabb, ...]],
 ) -> tuple[list[PlacedAnnotationLabels], list[list[LinearLabel]]]:
     """Each record's annotation labels, placed along their spans in record order, and every
     record's feature labels after the moves made for them (LP-D82), which the label fit of their
-    row (``label_frames``, as ``linear_label_fit`` reads them) counts no larger.
+    row (``label_frames``, as ``linear_label_fit`` reads them, with each record's ``definition_boxes``)
+    counts no larger.
 
     Obstacles are the record's own feature labels and leaders, every record's
     name and definition text, and, from the other records of the same row,
@@ -1753,6 +1755,7 @@ def _place_linear_annotation_labels_by_record(
                 new_rows=new_rows,
                 label_x=next(x for other, x in label_row if other == index),
                 row_labels=[(labels_of(other), x) for other, x in label_row if other != index],
+                definition_boxes=definition_boxes[index],
             )
         )
         feature_labels = with_feature_label_rows(feature_labels, placed[-1].rows)
@@ -2875,6 +2878,15 @@ def assemble_linear_diagram(
             record_keys=record_keys,
         )
 
+    # Each record's drawn definition text, in its feature labels' coordinates (OV-1395).
+    definition_label_boxes = [
+        _definition_label_boxes(
+            record_collision_bands[index],
+            record_x=record_placements[index].x,
+            features_origin_y=record_vertical_plans[index].features_origin_y,
+        )
+        for index in range(len(records))
+    ]
     # The API checks the drawn labels and offers the rows (LP-D48, LP-D52).
     # Annotation labels move along their spans off the feature labels and leaders (OV-845).
     placed_annotation_labels, all_labels = _place_linear_annotation_labels_by_record(
@@ -2894,17 +2906,9 @@ def assemble_linear_diagram(
         # One assembly more at most: one that places proposed rows proposes none.
         new_rows=feature_label_rows is None,
         label_frames=label_frames,
+        definition_boxes=definition_label_boxes,
     )
     annotation_labels_by_record = [placed.by_slot for placed in placed_annotation_labels]
-    # Each record's drawn definition text, in its feature labels' coordinates (OV-1395).
-    definition_label_boxes = [
-        _definition_label_boxes(
-            record_collision_bands[index],
-            record_x=record_placements[index].x,
-            features_origin_y=record_vertical_plans[index].features_origin_y,
-        )
-        for index in range(len(records))
-    ]
     label_fit = linear_label_fit(
         [(str(record.id), labels) for record, labels in zip(records, all_labels)],
         label_font_size,

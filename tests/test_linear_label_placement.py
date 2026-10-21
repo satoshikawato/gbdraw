@@ -1660,6 +1660,55 @@ def test_linear_auto_label_over_a_keep_clear_box_takes_the_next_row(track_layout
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize(
+    ("line", "protection", "definition_font_size", "overlay_height"),
+    (("under", "box", 40, 100), ("none", "none", 50, 150)),
+    ids=("default-style", "bare-letters"),
+)
+def test_a_region_label_moves_no_feature_label_over_the_definition_text(
+    line: str, protection: str, definition_font_size: int, overlay_height: int
+) -> None:
+    """OV-1436: a region label made a feature label ("acme", row 2) move to row 1 over its record's large
+    definition text, because the move was checked with the label's drawn letters (which met the
+    definition box already, or missed it by 1 px) and not with the keep-clear rule the packer and the
+    fit count read (OV-1395). A move that covers the definition text is refused."""
+
+    from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation, RegionAnnotationStyle
+    from gbdraw.api.config import apply_config_overrides
+
+    record = SeqRecord(Seq("ACGT" * 1500), id="rec1", name="rec1", description="rec1")
+    record.features = [SeqFeature(FeatureLocation(10, 40, strand=1), type="CDS", qualifiers={"product": ["acme"]})]
+    region = RegionAnnotation(
+        "tint", CoordinateSpan(None, 1, 60), label="Region label here", mark="highlight",
+        style=RegionAnnotationStyle(label_font_size=10.0),
+    )
+    cfg = apply_config_overrides(None, {
+        "labels.linear.scope": "all",
+        "labels.linear.line": line,
+        "labels.linear.protection": protection,
+        "objects.definition.linear.font_size.short": definition_font_size,
+        "objects.definition.linear.font_size.long": definition_font_size,
+    })
+    slots = [
+        "features:features@side=overlay",
+        f"regions:annotations@side=overlay,h={overlay_height}px,set_id=regions,show_labels=true,padding_px=0,"
+        "anchor_slot=features,layer=underlay,z=-1",
+    ]
+
+    def definition_overlaps(annotations: AnnotationOptions | None) -> int:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            drawing = assemble_linear_diagram_from_records(
+                [record], cfg=cfg, legend="none", selected_features_set=["CDS"], linear_track_slots=slots,
+                annotation_options=annotations,
+            )
+        return sum(item.fit.definition_overlaps for item in drawing._gbdraw_linear_label_fit.records)
+
+    assert definition_overlaps(None) == 0
+    assert definition_overlaps(AnnotationOptions(sets=(AnnotationSet("regions", (region,)),))) == 0
+
+
+@pytest.mark.linear
 def test_linear_label_fit_counts_a_label_over_the_definition_text() -> None:
     """The fit count sees a feature label the placement could not keep off the definition text: it
     warns ("labels cover the definition text"), it does not stop."""
