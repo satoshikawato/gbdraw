@@ -2147,7 +2147,7 @@ const readSessionRequests = (rawData, version, repairs) => {
       const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
       repairs.push(loadRepair({
         code: 'other-result-set-dropped', path: otherRead.path, effect: 'dropped',
-        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+        ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
       }));
       const { otherModeResult: _dropped, ...rest } = data;
       data = rest;

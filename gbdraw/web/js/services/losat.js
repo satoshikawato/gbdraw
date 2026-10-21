@@ -49,7 +49,9 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  */
 
 /**
- * The status the Settings panel and the Generate status line show.
+ * The threaded LOSAT status (`losatThreadingStatus` in state.js). The Settings
+ * panel reads `state` only; `message` is English developer text, like the
+ * console's, that no UI shows (the offline GUI check prints it).
  * @typedef {object} LosatRuntimeStatus
  * @property {string} state
  * @property {string} message

@@ -592,6 +592,12 @@ test('the hosted analytics notice of the About section is in the key list', () =
   ]) assert.ok(keys.has(key), key);
 });
 
+// services/linear-comparisons.js marks each unplaced-draft issue with msg(); the list shows it with tm().
+test('OV-1407: an unplaced comparison draft shows its issues in the UI language', () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  assert.match(html, /<li v-for="issue in unplaced\.issues"[^>]*>\{\{ tm\(issue\.message\) \}\}<\/li>/);
+});
+
 test('OV-1387: the Record Size Mode option Linear is its own key; the diagram mode keeps Linear', () => {
   const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
   const select = html.slice(html.indexOf('v-model="adv.multi_record_size_mode"'));

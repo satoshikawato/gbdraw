@@ -3282,7 +3282,7 @@
                                         <select :value="unplaced.draft.subjectUid" @change="setLinearComparisonEndpoint(unplaced.draft.id, 'subjectUid', $event.target.value)" :aria-label="t('To record for unplaced comparison {id}', { id: unplaced.draft.id })" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable"><template v-for="(seq, idx) in linearSeqs" :key="`s-${unplaced.draft.id}-${seq.uid}`"><option v-if="recordSelection.isDrawn('linear', seq.uid)" :value="seq.uid">{{ t('To #{n}', { n: idx + 1 }) }}</option></template></select>
                                     </div>
                                     <ul class="space-y-0.5 text-[9px] leading-snug text-amber-800">
-                                        <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ issue.message }}</li>
+                                        <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ tm(issue.message) }}</li>
                                     </ul>
                                     <div v-if="unplaced.draft.losatFilename" :data-linear-raw-unplaced="unplaced.draft.id" class="min-w-0 space-y-1">
                                         <label class="linear-primary-label block" :for="`linear-raw-name-unplaced-${unplaced.draft.id}`">{{ t('Retained Raw LOSAT filename') }}</label>
@@ -3385,7 +3385,7 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Require compatible strand, gene order, or either orientation when merging Collinear anchors.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Require compatible strand, gene order, or accept either orientation when merging Collinear anchors.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearMergeOrientation" :aria-label="t('Collinear merge orientation')" aria-describedby="help-comparison-merge-orientation" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="strand">{{ t('Strand') }}</option>
                                             <option value="order">{{ t('Gene order') }}</option>
@@ -6292,10 +6292,10 @@
                                        :value="clickedFeature.color || '#cccccc'"
                                        @change="updateClickedFeatureColor($event.target.value)"
                                        data-history-managed
-                                       :disabled="!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
-                                       :title="canEditFeatureColor(clickedFeature.feat) ? t('Change fill color') : t('The color of this feature cannot be changed.')"
+                                       :disabled="!semanticMutationAvailable"
+                                       :title="t('Change fill color')"
                                        :aria-label="t('Feature fill color')"
-                                       :class="['w-12 h-10 border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed']">
+                                       class="w-12 h-10 border-2 border-slate-200 rounded-lg cursor-pointer">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button :aria-label="t('Reset fill color to default')" @click="resetClickedFeatureFillColor"
                                         data-history-managed
@@ -7953,10 +7953,10 @@
                                     <input type="color"
                                            :value="getFeatureColor(feat)"
                                            @change="requestFeatureColorChange(feat, $event.target.value)"
-                                           :disabled="!semanticMutationAvailable || (!canEditFeatureColor(feat))"
-                                           :title="canEditFeatureColor(feat) ? t('Change fill color') : t('The color of this feature cannot be changed.')"
+                                           :disabled="!semanticMutationAvailable"
+                                           :title="t('Change fill color')"
                                            :aria-label="t('Fill color for {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
-                                           :class="['w-5 h-5 rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                           class="w-5 h-5 rounded shrink-0 cursor-pointer">
                                     <button type="button" data-history-ignore
                                             class="flex-1 min-w-0 flex items-center gap-1.5 text-left text-slate-700 rounded hover:text-blue-700"
                                             :aria-expanded="featureListExpandedId === feat.id ? 'true' : 'false'"

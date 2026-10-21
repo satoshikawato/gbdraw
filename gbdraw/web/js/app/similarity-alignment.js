@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { joinSentences, msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -2231,9 +2231,8 @@ export const createSimilarityAlignmentActions = ({
     const excluded = records.filter(record => record.exclusion
       && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
     const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
-    // The record names are a list: the join stays English until a locale list pattern exists.
     const reversedText = tn(reversed.length, '{count} record ({names})', '{count} records ({names})',
-      { names: reversed.map(({ shortLabel }) => shortLabel).join(', ') });
+      { names: listText(reversed.map(({ shortLabel }) => shortLabel)) });
     const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
       ? (eligible[0].afterArrow === 1 ? 'right' : eligible[0].afterArrow === -1 ? 'left' : '') : '';
     let effect;

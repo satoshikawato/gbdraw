@@ -7,7 +7,7 @@ import {
   normalizeLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
-import { joinSentences, msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 /** @import { ComparisonState } from '../mode-profiles.js' */
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
@@ -473,7 +473,7 @@ const selectedPairsText = (edges) => {
       uploads.length,
       'Pair {pairs} is set to Upload BLAST TSV, so not every pair runs LOSAT.',
       'Pairs {pairs} are set to Upload BLAST TSV, so not every pair runs LOSAT.',
-      { pairs: uploads.join(', ') }
+      { pairs: listText(uploads) }
     );
   return joinSentences(cause, t('Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.'));
 };

@@ -360,7 +360,6 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       for (const entry of groupedEntries) {
         feature = app.extractedFeatures.find((candidate) => (
           entry.featureIds.includes(featureId(candidate))
-          && app.canEditFeatureColor(candidate)
           && hasFeatureElement(featureId(candidate))
         ));
         if (feature) {
@@ -372,9 +371,7 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
         fillLegendEntry = app.legendEntries.find(
           (entry) => hasLegendEntry(String(entry?.caption || ''))
         ) || null;
-        feature = app.extractedFeatures.find((candidate) => (
-          app.canEditFeatureColor(candidate) && hasFeatureElement(featureId(candidate))
-        ));
+        feature = app.extractedFeatures.find((candidate) => hasFeatureElement(featureId(candidate)));
       }
     }
     if (!feature || !fillLegendEntry) {
@@ -1214,9 +1211,7 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
     }]
   }));
 
-  const feature = app.extractedFeatures.find((candidate) => (
-    candidate.type === 'CDS' && app.canEditFeatureColor(candidate)
-  )) || app.extractedFeatures.find((candidate) => app.canEditFeatureColor(candidate));
+  const feature = app.extractedFeatures.find((candidate) => candidate.type === 'CDS') || app.extractedFeatures[0];
   if (!feature) throw new Error('No editable Feature is available for the round-trip contract.');
   const featureId = String(feature.svg_id || feature.id || '');
   const fillApplied = await app.setFeatureColorValue(

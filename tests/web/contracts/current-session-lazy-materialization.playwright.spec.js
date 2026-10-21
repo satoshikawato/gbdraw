@@ -1067,9 +1067,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const undoCountAfterSecond = history.getUndoCount();
     const redoCountAfterSecond = history.getRedoCount();
     const generateProbe = window.__GBDRAW_LAZY_SESSION_PROBE__.snapshot();
-    const editableFeature = app.extractedFeatures.find((feature) => (
-      app.canEditFeatureColor(feature)
-    ));
+    const editableFeature = app.extractedFeatures[0];
     if (!editableFeature) {
       throw new Error('The synthetic session has no editable feature for mutation isolation.');
     }

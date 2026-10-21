@@ -392,7 +392,7 @@ test('the dialog words each code once, in area order, at most 12 lines (12.3)', 
     loadRepair({ code: 'legend-color-dropped', path: 'modes.linear.editorState.legend.entries', effect: 'dropped', label: 'X' })
   ]);
   assert.deepEqual(dialog.items, [
-    'Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.',
+    'Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.',
     '2 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.',
     'Specific colors: line 3 had extra cells, joined into the last column with one space.',
     'Label whitelist: lines 1, 2, 3, 4, 5, and 2 more lacked a required column and were dropped.'

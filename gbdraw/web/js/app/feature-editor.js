@@ -244,7 +244,6 @@ export const createFeatureEditor = ({
     setSpecificRuleField: ruleActions.setSpecificRuleField,
     getFeatureColor: ruleActions.getFeatureColor,
     getFeatureColorValue: ruleActions.getFeatureColorValue,
-    canEditFeatureColor: ruleActions.canEditFeatureColor,
     addFeatureVisibilityRule: visibilityActions.addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv: visibilityActions.downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
