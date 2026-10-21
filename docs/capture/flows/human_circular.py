@@ -84,7 +84,7 @@ def load_raw_human_circular(page: Page, *, output_prefix: str) -> None:
             "group", name="GenBank/DDBJ File selection", exact=True
         )
     ).to_contain_text(FIRST_CIRCULAR_FIXTURE_PATH.name)
-    expect_circular_source_status(page, "1 source record(s) inspected")
+    expect_circular_source_status(page, "1 source record inspected")
     apply_finished_human_settings(page, output_prefix=output_prefix)
 
 

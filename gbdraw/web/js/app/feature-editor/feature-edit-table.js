@@ -12,7 +12,7 @@ import {
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
-import { joinSentences, t } from '../../utils/i18n.js';
+import { joinSentences, t, tn } from '../../utils/i18n.js';
 /** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from '../../services/feature-placement.js' */
 /** @import { CanonicalFeatureOverride } from '../../contracts/request.generated.js' */
@@ -109,8 +109,8 @@ export const createFeatureEditTableActions = ({
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
     const elsewhere = Object.values(drawing.featureOverrides).filter(hasEdit).length - rows.length;
     if (elsewhere > 0) {
-      showNotice({ text: t('Exported {count} feature edit(s).', { count: rows.length }), items: [
-        t('{count} feature edit(s) of records outside the current diagram were not exported.', { count: elsewhere })
+      showNotice({ text: tn(rows.length, 'Exported {count} feature edit.', 'Exported {count} feature edits.'), items: [
+        tn(elsewhere, '{count} feature edit of a record outside the current diagram was not exported.', '{count} feature edits of records outside the current diagram were not exported.')
       ] });
     }
     return true;
@@ -153,9 +153,9 @@ export const createFeatureEditTableActions = ({
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
       showNotice({
-        text: joinSentences(t('Loaded {count} row(s).', { count: rows.length + unmatchedRows.length }), t('Applied {count} feature edit(s).', { count: rows.length })),
+        text: joinSentences(tn(rows.length + unmatchedRows.length, 'Loaded {count} row.', 'Loaded {count} rows.'), tn(rows.length, 'Applied {count} feature edit.', 'Applied {count} feature edits.')),
         items: unmatchedRows.length > 0
-          ? [t('{count} row(s) were not applied: no matching record, or no matching feature in that record.', { count: unmatchedRows.length })]
+          ? [tn(unmatchedRows.length, '{count} row was not applied: no matching record, or no matching feature in that record.', '{count} rows were not applied: no matching record, or no matching feature in that record.')]
           : []
       });
       return true;

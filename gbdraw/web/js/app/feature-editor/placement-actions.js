@@ -221,7 +221,7 @@ export const createFeaturePlacementActions = ({
     pendingLayout = { control, apply };
     Object.assign(layoutChange, { open: true, count: lost.length, value,
       setting: control?.getAttribute?.('aria-label') || control?.labels?.[0]?.textContent.trim()
-        || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || t('This change') });
+        || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || '' });
     // The primary choice of the layout dialog is a button.
     void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (globalThis.document?.querySelector('[data-placement-layout-primary]')));
     return false;

@@ -590,7 +590,7 @@ export const resolveLinearComparisonPlan = ({
   if (selectedHasLosat && normalizedProgram === 'blastp' && normalizedBlastpMode !== 'pairwise') {
     issues.push(validationIssue(
       'selected-losat-requires-pairwise',
-      msg('Selected LOSAT comparisons require LOSATP Pairwise mode. Similarity groups and Collinear blocks use All adjacent LOSAT.'),
+      msg('Selected LOSAT comparisons require LOSATP Pairwise mode. For Similarity groups or Collinear blocks, choose Run LOSAT for all adjacent pairs.'),
       null
     ));
   }

@@ -680,13 +680,13 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
-  assert.deepEqual(messages, [{ text: 'Loaded 2 row(s). Applied to 2 label(s).', items: [] }]);
+  assert.deepEqual(messages, [{ text: 'Loaded 2 rows. Applied to 2 labels.', items: [] }]);
 });
 
 // OV-131: a Label TSV that applies to no label changes nothing. The import
 // replaces the label edits only when it applies, so the bulk and per-feature
 // label edits stay, no state change reaches History, and the message says why.
-const KEPT = 'Loaded 1 row(s). Not applied; the existing label edits were kept.';
+const KEPT = 'Loaded 1 row. Not applied; the existing label edits were kept.';
 for (const [name, body, tsv, message] of [
   ['no row matches a label', batchLabel('fa', 'alpha', 'dominant-baseline="central" '),
     '*\t*\tproduct\t^no such product$\tZZ\n',
@@ -696,7 +696,7 @@ for (const [name, body, tsv, message] of [
   ['every match lacks a feature key',
     '<text dominant-baseline="central" data-label-source-text="alpha">alpha</text>',
     '*\tCDS\tlabel\t^alpha$\tZZ\n',
-    { text: KEPT, items: ['The 1 matched label(s) lacked a feature key.'] }]
+    { text: KEPT, items: ['The 1 matched label lacked a feature key.'] }]
 ]) {
   test(`a Label TSV import keeps the label edits when ${name} (OV-131)`, async () => {
     const svg = new DOMParser().parseFromString(`<svg>${body}</svg>`, 'image/svg+xml').documentElement;
@@ -804,7 +804,7 @@ for (const preparationFollowsRows of [false, true]) {
     const { state } = harness;
     const input = target();
     await load(input, () => { setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' }); });
-    assert.deepEqual(messages, [{ text: 'Loaded 1 row(s). Not applied: label text, label visibility, or feature visibility changed while '
+    assert.deepEqual(messages, [{ text: 'Loaded 1 row. Not applied: label text, label visibility, or feature visibility changed while '
       + 'the table loaded. The changes were kept. Load the table again.', tone: 'warning' }]);
     assert.deepEqual(state.featureOverrides, { [keyFor('fa')]: rowFor('fa', { labelText: 'EDITED', labelSourceText: 'alpha' }) });
     assert.deepEqual(state.labelTextBulkOverrides, {});
@@ -825,7 +825,7 @@ for (const [cause, change, notice] of [
     const { harness, messages, target, load } = held;
     const input = target();
     await load(input, () => change(held));
-    assert.deepEqual(messages, [{ text: `Loaded 1 row(s). Not applied: ${notice}. Load the table again.`, tone: 'warning' }]);
+    assert.deepEqual(messages, [{ text: `Loaded 1 row. Not applied: ${notice}. Load the table again.`, tone: 'warning' }]);
     assert.deepEqual([harness.state.featureOverrides, harness.state.labelTextBulkOverrides], [{}, {}]);
     assert.equal(harness.svg.querySelector('text').textContent, 'alpha');
     assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');

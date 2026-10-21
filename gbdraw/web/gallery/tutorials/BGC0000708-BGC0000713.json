@@ -1744,7 +1744,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Name / Species style size\"]",
+          "selector": "input[aria-label=\"Name / Species font size\"]",
           "value": 20
         },
         {
@@ -1753,12 +1753,12 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Subtitle style size\"]",
+          "selector": "input[aria-label=\"Subtitle font size\"]",
           "value": 20
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Accession style size\"]",
+          "selector": "input[aria-label=\"Accession font size\"]",
           "value": 20
         },
         {
@@ -1768,7 +1768,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Length / Coordinates style size\"]",
+          "selector": "input[aria-label=\"Length / Coordinates font size\"]",
           "value": 20
         },
         {

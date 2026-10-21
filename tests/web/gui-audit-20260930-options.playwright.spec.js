@@ -264,7 +264,7 @@ test('Add Depth TSV series keeps a disabled Linear Depth row disabled', async ({
     slot.params = { ...slot.params, legend_label: 'Coverage A' };
   });
   const before = await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)));
-  await page.getByRole('button', { name: 'Add Depth TSV series from file 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Depth TSV series to all files (file 1)', exact: true }).click();
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].depth.length)).toBe(2);
   expect(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)))).toEqual(before);

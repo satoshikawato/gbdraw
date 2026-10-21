@@ -264,7 +264,7 @@ def _set_gallery_quality_presentation(
             color: str | None = None,
         ) -> None:
             page.get_by_label(f"{label} style", exact=True).click()
-            size_input = page.get_by_label(f"{label} style size", exact=True)
+            size_input = page.get_by_label(f"{label} font size", exact=True)
             size_input.fill(size)
             expect(size_input).to_have_value(size)
             page.get_by_role(

@@ -98,7 +98,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   assert.deepEqual(dialogs, [{
     title: 'Load this file?',
     description: 'Some parts of this file cannot be fully restored:',
-    items: ['1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'],
+    items: ['1 feature edit from an older Session could not be matched to a feature of its saved diagram and was dropped.'],
     note: 'Save Session afterwards writes the current format. The file itself is not changed.'
   }]);
   assert.equal(loadedState(), snapshot);
@@ -393,7 +393,7 @@ test('the dialog words each code once, in area order, at most 12 lines (12.3)', 
   ]);
   assert.deepEqual(dialog.items, [
     'Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.',
-    '2 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.',
+    '2 feature edits from an older Session could not be matched to a feature of its saved diagram and were dropped.',
     'Specific colors: line 3 had extra cells, joined into the last column with one space.',
     'Label whitelist: lines 1, 2, 3, 4, 5, and 2 more lacked a required column and were dropped.'
   ]);
@@ -427,7 +427,7 @@ test('no module outside utils/load-repairs.js words what Load could not restore 
     ? modules(`${dir}${entry.name}/`) : entry.name.endsWith('.js') ? [`${dir}${entry.name}`] : []));
   const texts = [
     'could not be matched to a feature of its saved diagram',
-    'Feature visibility edit(s) from an older Session',
+    'Feature visibility edits from an older Session',
     'could not be renamed to the hash of a feature',
     'had a color the app does not accept',
     'joined into the last column',

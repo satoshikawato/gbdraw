@@ -150,8 +150,8 @@ test('the annotation TSV writes a selected feature by its current record positio
   expect([cell('record'), cell('feature_selector'), cell('envelope'), cell('circular_path')])
     .toEqual(['#1', `hash=${X.identity}`, 'outer_bounds', 'shortest']);
   await expect(panel(page).getByRole('status')).toHaveText(
-    '1 annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. '
-      + 'They name the same features only while the record order stays as drawn.'
+    '1 annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. '
+      + 'It names the same feature only while the record order stays as drawn.'
   );
 
   // The table imported back draws the same annotation in the same placement.

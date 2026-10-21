@@ -234,7 +234,7 @@ test('Export and Load Feature Edits TSV carry per-feature edits by identity, als
   const fresh = await page.context().newPage();
   await openLinear(fresh);
   expect(await draftRows(fresh)).toEqual([]);
-  expect(await loadTable(fresh, table)).toEqual({ text: 'Loaded 3 row(s). Applied 3 feature edit(s).', items: [] });
+  expect(await loadTable(fresh, table)).toEqual({ text: 'Loaded 3 rows. Applied 3 feature edits.', items: [] });
   expect(await draftRows(fresh)).toEqual(edits);
   await expectDrawsEdits(fresh, 'mounted');
 
@@ -272,8 +272,8 @@ test('Load Feature Edits TSV counts rows that name no record or feature and reje
     ''
   ].join('\n'));
   expect(await loadTable(page, table)).toEqual({
-    text: 'Loaded 3 row(s). Applied 1 feature edit(s).',
-    items: ['2 row(s) were not applied: no matching record, or no matching feature in that record.']
+    text: 'Loaded 3 rows. Applied 1 feature edit.',
+    items: ['2 rows were not applied: no matching record, or no matching feature in that record.']
   });
   expect(await draftRows(page)).toEqual([[2, target.identity, 'off', null, null]]);
 

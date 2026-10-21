@@ -150,7 +150,7 @@ const extractCalls = (source, file) => {
       calls.push({ where, problem: `${where}: ${name}() key holds an HTML entity; write the character` });
       continue;
     }
-    for (const [key, english] of CALLS[name].keys(args)) calls.push({ where, key, english });
+    for (const [key, english] of CALLS[name].keys(args)) calls.push({ where, name, key, english });
   }
   for (const match of source.matchAll(TM_LITERAL)) {
     const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
@@ -694,6 +694,47 @@ test('OV-1447: a stroke-width placeholder has its own key; the Circular track sl
   const placeholders = [...html.matchAll(/:placeholder="([^"]*Width[^"]*)"/g)].map((match) => match[1]);
   assert.deepEqual(placeholders, ["tx('stroke width', 'Width')", "tx('stroke width', 'Width')"]);
   assert.match(readFileSync(join(jsRoot, 'app', 'circular-track-slots', 'measure-input.js'), 'utf8'), /label: msg\('Width'\)/);
+});
+
+// OV-1475: a sentence that counts goes through tn(), so each locale words one
+// and many apart; a plain t() key never writes the plural as "(s)", and the
+// counted sentences below have a `one` and an `other` form.
+test('OV-1475: a counted sentence is a tn() call, never a plain key with (s)', () => {
+  const plain = sourceCalls().filter((call) => call.key && call.name !== 'tn');
+  assert.deepEqual(plain.filter(({ key }) => /\{count\}/.test(key) && /\((?:s|es)\)/.test(key)).map(({ where, key }) => `${where} ${key}`), []);
+  const plainKeys = new Set(plain.map(({ key }) => key));
+  for (const key of [
+    'Remove {count} unmatched feature edits', '{count} similarity groups', '{drawn} of {total} records drawn',
+    '{drawn} of {count} records (separate diagrams)', 'There are {count} other features with the legend name "{name}".'
+  ]) assert.ok(!plainKeys.has(key), key);
+  const keys = new Set(sourceCalls().map((call) => call.key));
+  for (const key of [
+    'Remove {count} unmatched feature edit', '{count} similarity group', '{drawn} of {count} record drawn',
+    'There is {count} other feature with the legend name "{name}".', 'Loaded {count} row.', 'Applied to {count} label.'
+  ]) assert.ok(keys.has(key), key);
+});
+
+// OV-1476: the English names only what the UI shows.
+test('OV-1476: no key names a control, row or syntax the UI does not have', async () => {
+  const keys = [...sourceCalls().map((call) => call.key).filter(Boolean), ...await errorTextKeys()];
+  const stale = [/All adjacent LOSAT/, /the GC (?:content|skew) row/, /\(\?i\)/, /style size/, /TLOSATX code/, /from file \{n\}/, /#index/, /^\{count\} needs? a choice$/];
+  assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
+  for (const key of [
+    'Selected LOSAT comparisons require LOSATP Pairwise mode. For Similarity groups or Collinear blocks, choose Run LOSAT for all adjacent pairs.',
+    '{label} font size', '{count} record awaiting a choice', 'Use #<number> to distinguish records with the same ID.'
+  ]) assert.ok(keys.includes(key), key);
+});
+
+// OV-1477: a capitalised label or a control name is not dropped into a
+// sentence; each case is a whole sentence of its own.
+test('OV-1477: track, mode, control and setting names are not placeholders inside sentences', () => {
+  const keys = sourceCalls().map((call) => call.key).filter(Boolean);
+  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/];
+  assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
+  for (const key of [
+    'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.', 'No Circular Result yet. Configure settings and click Generate.',
+    'Choosing {setting} removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
+  ]) assert.ok(keys.includes(key), key);
 });
 
 test('the UI languages are the eleven of the Language menu, Latin script first, then Thai, each named in itself', () => {

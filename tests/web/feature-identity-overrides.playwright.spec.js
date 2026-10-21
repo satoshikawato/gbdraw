@@ -611,7 +611,7 @@ test('a Linear Session 33 with crop and reverse complement keeps its feature edi
   expect(shown[unlabeled.svgId]).toEqual({ drawn: true, labels: [] });
 });
 
-const UNMATCHED_EDIT_LINE = '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.';
+const UNMATCHED_EDIT_LINE = '1 feature edit from an older Session could not be matched to a feature of its saved diagram and was dropped.';
 
 // The Linear Session 33 with one more edit that names no feature.
 const writeUnmatchedEditSession = (testInfo) => {
@@ -693,7 +693,7 @@ test('a Label TSV record_location row applies to a catalog 4 Result drawn with s
   await loadSession(page, 'tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   await importLabelTsv(page, 'NC_001416.1\tCDS\trecord_location\t^NC_001416\\.1:190\\.\\.736:\\+$\tTSV_RL\n');
   await settle(page);
-  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Applied to 1 label(s).');
   expect(await previewLabelCount(page, /^TSV_RL$/)).toBe(1);
 });
 
@@ -708,7 +708,7 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
   const row = '*\ttRNA\trecord_location\t^TESTA:\tTSV_TRNA\n';
   await importLabelTsv(page, row);
   await settle(page);
-  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Not applied.');
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Not applied.');
   await expect(page.locator('[data-app-notice] li')).toHaveText([/Generate the diagram again, then load the table\.$/]);
   expect(await featureOverrideRows(page)).toEqual(before);
   expect(await previewLabelCount(page, /^PROBE_A_TRNA$/)).toBe(1);
@@ -716,7 +716,7 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
   await settle(page);
   await importLabelTsv(page, row);
   await settle(page);
-  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row. Applied to 1 label(s).');
   expect(await previewLabelCount(page, /^TSV_TRNA$/)).toBe(1);
 });
 
@@ -727,8 +727,8 @@ test('loading a Session 44 says which Feature visibility edits now apply to one 
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz', [
-    '1 Feature visibility edit(s) from an older Session hid every feature with '
-      + 'the same hash, such as each copy of a duplicated record. Each now applies only to the feature that '
+    '1 Feature visibility edit from an older Session hid every feature with '
+      + 'the same hash, such as each copy of a duplicated record. It now applies only to the feature that '
       + 'was edited, so the next Generate draws the others.'
   ]);
   await expectSessionLoadedWithoutWarnings(page);

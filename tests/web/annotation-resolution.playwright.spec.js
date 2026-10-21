@@ -66,7 +66,7 @@ for (const width of [1440, 390]) {
     await expect(status).toHaveAttribute('role', 'status');
     await expect(status).toHaveAttribute('aria-live', 'polite');
     await expect(status).toHaveAttribute('aria-atomic', 'true');
-    await expect(status).toContainText('Skipped 2 annotation row(s).');
+    await expect(status).toContainText('Skipped 2 annotation rows.');
     await expect(status).toContainText('plastome_regions/partial-miss');
     await expect(status).toContainText('record #1');
     await status.evaluate((element) => element.scrollIntoView({ block: 'center' }));
@@ -80,7 +80,7 @@ for (const width of [1440, 390]) {
     await expect(status).toHaveCount(0);
     await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
     expect(await artifact(page)).toEqual(mixed);
-    await expect(status).toContainText('Skipped 2 annotation row(s).');
+    await expect(status).toContainText('Skipped 2 annotation rows.');
 
     // A binding failure keeps this exact successful artifact and its notices.
     await panel(page).locator('input[type=file]').setInputFiles({ name: 'invalid-binding.tsv', mimeType: 'text/tab-separated-values',
@@ -88,7 +88,7 @@ for (const width of [1440, 390]) {
     await expect.poll(() => panel(page).locator('input[type=file]').inputValue()).toBe('');
     await generateAndWaitForResult(page, { expectedStatus: 'error' });
     expect(await artifact(page)).toEqual(mixed);
-    await expect(status).toContainText('Skipped 2 annotation row(s).');
+    await expect(status).toContainText('Skipped 2 annotation rows.');
 
     await panel(page).locator('input[type=file]').setInputFiles({ name: 'all-missing.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tables.all) });
     await expect.poll(() => panel(page).locator('input[type=file]').inputValue()).toBe('');
@@ -98,7 +98,7 @@ for (const width of [1440, 390]) {
     expect(all.results[0].content).not.toContain('data-gbdraw-annotation-id');
     expect(all.results[0].content).not.toContain('SKIPPED-PRIVATE-LEGEND');
     expect(all.geometry).toEqual(mixed.geometry);
-    await expect(status).toContainText(`Skipped ${tables.count} annotation row(s).`);
+    await expect(status).toContainText(`Skipped ${tables.count} annotation ${tables.count === 1 ? 'row' : 'rows'}.`);
     const pendingSvg = page.waitForEvent('download');
     await page.getByRole('button', { name: 'SVG', exact: true }).click();
     const svgPath = testInfo.outputPath('all-missing.svg');
@@ -125,7 +125,7 @@ for (const width of [1440, 390]) {
       await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
       expect(await artifact(fresh)).toEqual(all);
       expect((await getDiagramWorkerActivity(fresh)).instances.flatMap((instance) => instance.runs)).toEqual([]);
-      await expect(fresh.getByTestId('annotation-resolution-notice')).toContainText(`Skipped ${tables.count} annotation row(s).`);
+      await expect(fresh.getByTestId('annotation-resolution-notice')).toContainText(`Skipped ${tables.count} annotation ${tables.count === 1 ? 'row' : 'rows'}.`);
       await generateAndWaitForResult(fresh);
       expect(await artifact(fresh)).toEqual(all);
     } finally { await context.close(); }

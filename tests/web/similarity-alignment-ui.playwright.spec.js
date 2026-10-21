@@ -419,9 +419,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const sectionCounts = await dialog.locator('[data-alignment-section]').evaluateAll((headings) => Object.fromEntries(
     headings.map((heading) => [heading.dataset.alignmentSection, Number(heading.querySelector('.count').textContent)])));
   const summaryParts = [
-    ['choose', (n) => `${n} ${n === 1 ? 'needs' : 'need'} a choice`], ['several', (n) => `${n} with several candidates`],
-    ['single', (n) => `${n} with one candidate`], ['none', (n) => `${n} without a usable candidate`]
-  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => words(sectionCounts[id]));
+    ['choose', 'awaiting a choice'], ['several', 'with several candidates'],
+    ['single', 'with one candidate'], ['none', 'without a usable candidate']
+  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => `${sectionCounts[id]} ${sectionCounts[id] === 1 ? 'record' : 'records'} ${words}`);
   const recordCount = await dialog.locator('.alignment-review-card').count();
   await expect(dialog.locator('#similarity-alignment-dialog-description')).toHaveText(
     `Similarity group ${await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.response.groupId)}: `

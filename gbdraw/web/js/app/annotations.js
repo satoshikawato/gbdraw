@@ -285,8 +285,12 @@ export const createAnnotationEditor = ({
     );
     downloadTextFile('annotations.tsv', text);
     const notice = joinSentences(...[
-      placed > 0 ? t('{count} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.', { count: placed }) : '',
-      skipped > 0 ? t('{count} annotation(s) of selected features that the current diagram does not draw were not exported.', { count: skipped }) : ''
+      placed > 0 ? tn(placed,
+        '{count} annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.',
+        '{count} annotations of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.') : '',
+      skipped > 0 ? tn(skipped,
+        '{count} annotation of a selected feature that the current diagram does not draw was not exported.',
+        '{count} annotations of selected features that the current diagram does not draw were not exported.') : ''
     ].filter(Boolean));
     onImportNotice?.(notice);
   };

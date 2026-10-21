@@ -2212,7 +2212,7 @@
                             <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
                                 <span v-if="circularRecordDiscoveryState.status === 'deferred'">{{ t('Records not inspected') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">{{ t('Inspecting source records…') }}</span>
-                                <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ t('{count} source record(s) inspected', { count: circularRecordDiscoveryState.records.length }) }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ t('{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount, count: circularRecordDiscoveryState.records.length }) }}</span></template></span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ tn(circularRecordDiscoveryState.records.length, '{count} source record inspected', '{count} source records inspected') }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ tn(circularRecordDiscoveryState.records.length, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount }) }}</span></template></span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ (circularRecordDiscoveryState.error && errorText(circularRecordDiscoveryState.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.') }}</span>
                                 <span v-else>{{ cInputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
                             </p>
@@ -2660,7 +2660,7 @@
                                     <button
                                         type="button"
                                         @click="addLinearDepthTrack()"
-                                        :aria-label="t('Add Depth TSV series from file {n}', { n: sourceIndex + 1 })"
+                                        :aria-label="t('Add Depth TSV series to all files (file {n})', { n: sourceIndex + 1 })"
                                         class="btn btn-secondary min-w-0 w-full text-xs"
                                      :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add Depth TSV series') }}
@@ -2763,7 +2763,7 @@
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                     <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region (optional)') }}</span>
-                                    <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index. A region that reaches past the record end is drawn to the record end.')"></help-tip>
+                                    <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #<number>. A region that reaches past the record end is drawn to the record end.')"></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-1 gap-1">
@@ -3103,7 +3103,7 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
-                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text>{{ sentenceSeparator() + t('A missing active TLOSATX code is shown on the closed record summary.') }}
+                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text>{{ sentenceSeparator() + t('When TLOSATX needs a translation table that a record lacks, Gencode required appears beside its file name.') }}
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
@@ -4739,7 +4739,7 @@
                                             <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span></summary>
                                             <div class="grid grid-cols-[4rem_auto_minmax(0,1fr)] items-end gap-1.5 pt-1.5">
                                                 <label class="input-label !block text-[9px]">{{ t('Size') }}
-                                                    <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} style size', { label: row.label })" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} font size', { label: row.label })" :disabled="!semanticMutationAvailable">
                                                 </label>
                                                 <div>
                                                     <div class="input-label text-[9px] mb-1">{{ t('Weight') }}</div>
@@ -5203,7 +5203,7 @@
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
-                                        <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span class="font-mono">(?i)NADH</span></template><template #second><span class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span class="font-mono">^...$</span></template></i18n-text></p>
+                                        <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span class="font-mono">NADH|ATPase</span></template><template #second><span class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span class="font-mono">^...$</span></template></i18n-text></p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
                                             <input :value="row.feat" @input="editWhitelistRule(i, 'feat', $event.target.value)" :placeholder="t('Feat')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
                                             <input :value="row.qual" @input="editWhitelistRule(i, 'qual', $event.target.value)" :placeholder="t('Qual')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
@@ -5714,13 +5714,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Content Width') }} <help-tip id="help-gc-gc-content-width" :text="t('GC content track width in px.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_width_circular, 'circularGcWidth')" :text="autoValueText('circularGcWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC content row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Width')" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide content row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Width')" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Content Radius') }} <help-tip id="help-gc-gc-content-radius" :text="t('GC content center radius as a ratio of the base circular radius (1.0 = base radius).')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_radius_circular, 'circularGcRadius')" :text="autoValueText('circularGcRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC content row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Radius')" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide content row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Radius')" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -5728,13 +5728,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Skew Width') }} <help-tip id="help-gc-gc-skew-width" :text="t('GC skew track width in px.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_width_circular, 'circularSkewWidth')" :text="autoValueText('circularSkewWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC skew row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Width')" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide skew row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Width')" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Skew Radius') }} <help-tip id="help-gc-gc-skew-radius" :text="t('GC skew center radius as a ratio of the base circular radius (1.0 = base radius).')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_radius_circular, 'circularSkewRadius')" :text="autoValueText('circularSkewRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC skew row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Radius')" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide skew row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Radius')" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -5934,7 +5934,7 @@
                 <div v-if="annotationWarnings.length && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="annotation-resolution-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
-                    <p class="font-semibold">{{ t('Skipped {count} annotation row(s).', { count: annotationWarnings.filter(w => w.code !== 'out_of_bounds_clipped').length }) }}</p>
+                    <p class="font-semibold">{{ tn(annotationWarnings.filter(w => w.code !== 'out_of_bounds_clipped').length, 'Skipped {count} annotation row.', 'Skipped {count} annotation rows.') }}</p>
                     <p v-for="(warning, index) in annotationWarnings" :key="index">
                         {{ t('{set}/{annotation} · record #{n} ({record}): {message}', { set: warning.setId, annotation: warning.annotationId, n: warning.recordIndex + 1, record: warning.recordId, message: warning.message }) }}
                     </p>
@@ -5942,11 +5942,11 @@
                 <div v-if="featureIdentityNoticeSummary && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="feature-identity-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
-                    <p v-if="featureIdentityNoticeSummary.dormant">{{ t('{count} feature edit(s) apply to features outside the current crop or display; they apply again when those features are drawn.', { count: featureIdentityNoticeSummary.dormant }) }}</p>
-                    <p v-if="featureIdentityNoticeSummary.removed">{{ t('Removed {count} feature edit(s) whose feature the replaced source no longer has.', { count: featureIdentityNoticeSummary.removed }) }}</p>
+                    <p v-if="featureIdentityNoticeSummary.dormant">{{ tn(featureIdentityNoticeSummary.dormant, '{count} feature edit applies to a feature outside the current crop or display; it applies again when that feature is drawn.', '{count} feature edits apply to features outside the current crop or display; they apply again when those features are drawn.') }}</p>
+                    <p v-if="featureIdentityNoticeSummary.removed">{{ tn(featureIdentityNoticeSummary.removed, 'Removed {count} feature edit whose feature the replaced source no longer has.', 'Removed {count} feature edits whose features the replaced source no longer has.') }}</p>
                     <p v-if="featureIdentityNoticeSummary.unmatched" class="flex flex-wrap items-center gap-2">
-                        <span>{{ t('{count} feature edit(s) name a feature the source does not have.', { count: featureIdentityNoticeSummary.unmatched }) }}</span>
-                        <button type="button" class="btn btn-secondary text-xs h-7 px-2" @click="removeUnmatchedFeatureEdits" :disabled="!semanticMutationAvailable">{{ t('Remove {count} unmatched feature edits', { count: featureIdentityNoticeSummary.unmatched }) }}</button>
+                        <span>{{ tn(featureIdentityNoticeSummary.unmatched, '{count} feature edit names a feature the source does not have.', '{count} feature edits name features the source does not have.') }}</span>
+                        <button type="button" class="btn btn-secondary text-xs h-7 px-2" @click="removeUnmatchedFeatureEdits" :disabled="!semanticMutationAvailable">{{ tn(featureIdentityNoticeSummary.unmatched, 'Remove {count} unmatched feature edit', 'Remove {count} unmatched feature edits') }}</button>
                     </p>
                 </div>
                 <div v-if="comparisonWarnings.length && !processing"
@@ -7534,7 +7534,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Reset Fill Color') }}</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                <i18n-text :text="t('There are {count} other features with the legend name &quot;{name}&quot;.')"><template #count><span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
+                                <i18n-text :text="tn(resetColorDialog.siblingCount, 'There is {count} other feature with the legend name &quot;{name}&quot;.', 'There are {count} other features with the legend name &quot;{name}&quot;.', { count: '{count}' })"><template #count><span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
                                 <br>{{ t('How do you want to reset the color?') }}
                             </p>
 
@@ -8085,7 +8085,7 @@
                             <div class="flex items-start justify-between gap-2">
                                 <action-menu :label="t('Import / export')" icon="ph-file-arrow-down" :title="t('Export or load label and feature-edit tables')"
                                              :items="[
-                                               { section: t('Labels'), help: t('Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P<name>NADH).'), helpLabel: t('Help: Label TSV') },
+                                               { section: t('Labels'), help: t('Label TSV value patterns use case-insensitive Python regex. Examples: NADH|ATPase and (?P<name>NADH).'), helpLabel: t('Help: Label TSV') },
                                                { label: t('Export Label TSV'), icon: 'ph-download-simple', run: downloadLabelOverrideTable },
                                                { label: t('Load Label TSV'), icon: 'ph-upload-simple', disabled: !semanticMutationAvailable, run: () => $refs.labelTableInput.click() },
                                                { label: t('Reset Label Edits'), icon: 'ph-arrow-counter-clockwise', disabled: !semanticMutationAvailable, run: resetAllLabelTextOverrides },
@@ -8110,7 +8110,7 @@
 
                     <div v-show="rightDrawerTab === 'orthogroups'" id="right-drawer-panel-orthogroups" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-3 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
-                            <div class="text-xs font-semibold text-slate-600">{{ t('{count} similarity groups', { count: orthogroupCount }) }}</div>
+                            <div class="text-xs font-semibold text-slate-600">{{ tn(orthogroupCount, '{count} similarity group', '{count} similarity groups') }}</div>
                             <div class="grid grid-cols-[1fr_9rem] gap-2">
                                 <input v-model="orthogroupSearch" data-history-ignore :placeholder="t('Search similarity groups...')" :aria-label="t('Search similarity groups')" class="form-input text-xs w-full">
                                 <select v-model="orthogroupSortMode" data-history-ignore :aria-label="t('Sort similarity groups')" class="form-select text-xs w-full">
@@ -8411,7 +8411,7 @@
 
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
-                <p class="font-medium text-slate-400">{{ t('No {mode} Result yet. Configure settings and click Generate.', { mode: mode === 'linear' ? t('Linear') : t('Circular') }) }}</p>
+                <p class="font-medium text-slate-400">{{ mode === 'linear' ? t('No Linear Result yet. Configure settings and click Generate.') : t('No Circular Result yet. Configure settings and click Generate.') }}</p>
                 <template v-if="galleryExamples.length">
                     <button type="button" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
                             class="btn btn-secondary btn-sm mt-4" aria-haspopup="dialog" aria-describedby="example-session-help">
@@ -8620,7 +8620,7 @@
             <h2 id="record-list-title" class="text-base font-bold text-slate-800">{{ t('Choose records') }}</h2>
             <p id="record-list-description" class="mt-1 text-sm leading-relaxed text-slate-600">
                 <strong class="break-all text-slate-800">{{ recordSelection.recordListView.value.name }}</strong>:
-                <span data-record-list-count>{{ t('{drawn} of {total} records drawn', { drawn: recordSelection.recordListView.value.drawn, total: recordSelection.recordListView.value.total }) }}</span>. {{ settingApplicationSentence('inputs') }}
+                <span data-record-list-count>{{ tn(recordSelection.recordListView.value.total, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: recordSelection.recordListView.value.drawn }) }}</span>. {{ settingApplicationSentence('inputs') }}
             </p>
             <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <label class="text-xs font-semibold text-slate-600">{{ t('Search record IDs') }}
@@ -8708,7 +8708,8 @@
             <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">{{ t('Reset Feature placements?') }}</h2>
             <p id="placement-layout-change-description" class="mt-2 mb-4 text-sm leading-relaxed text-slate-600">
                 {{ featurePlacementActions.layoutChange.value ? tn(featurePlacementActions.layoutChange.count, 'Changing {setting} to {value} removes the lane for {count} feature you placed manually.', 'Changing {setting} to {value} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting, value: featurePlacementActions.layoutChange.value })
-                : tn(featurePlacementActions.layoutChange.count, '{setting} removes the lane for {count} feature you placed manually.', '{setting} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting }) }}
+                : featurePlacementActions.layoutChange.setting ? tn(featurePlacementActions.layoutChange.count, 'Choosing {setting} removes the lane for {count} feature you placed manually.', 'Choosing {setting} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting })
+                : tn(featurePlacementActions.layoutChange.count, 'This change removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.') }}
             </p>
             <div class="flex flex-col gap-2">
                 <button type="button" data-history-managed data-placement-layout-primary :disabled="!semanticMutationAvailable" @click="featurePlacementActions.resolveLayoutChange('reset')"
