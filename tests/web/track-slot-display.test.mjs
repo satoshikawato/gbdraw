@@ -595,5 +595,5 @@ test('the row alert leaves an invalid Width or Radius to its field (TK-12)', () 
   assert.equal(editor.circularTrackSlotIssue(slots[2], 2), '');
   assert.equal(editor.circularTrackSlotIssue(slots[0], 0), '');
   slots[2].z = 'x';
-  assert.match(editor.circularTrackSlotIssue(slots[2], 2), /z must be an integer/);
+  assert.equal(editor.circularTrackSlotIssue(slots[2], 2), 'The z value must be an integer.');
 });

@@ -16,6 +16,7 @@ import {
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
@@ -272,15 +273,14 @@ export const createLinearTrackSlotEditor = ({
       ? Number(index)
       : drawing.adv.linear_track_slots.findIndex((/** @type {unknown} */ candidate) => candidate === slot);
     if (resolvedIndex < 0) return '';
-    return (linearTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
-      .map((issue) => issue.message)
-      .join(' ');
+    return errorText((linearTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
+      .flatMap((issue) => issue.parts));
   };
 
   const linearTrackGlobalIssues = () => {
     const drawing = state.drawings.linear;
     return (
-      linearTrackValidationPlan(drawing).globalIssues.map((issue) => issue.message)
+      linearTrackValidationPlan(drawing).globalIssues.map((issue) => errorText(issue.parts))
     );
   };
 

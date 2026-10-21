@@ -113,7 +113,7 @@ for (const width of [1440, 390]) {
           await inputs[index].fill(invalid);
           await inputs[index].press('Tab');
           const relation = mode === 'linear' && index === 0 ? 'positive' : 'nonnegative';
-          await expect(row.getByRole('alert')).toContainText(`${fields[index]} must be ${relation} finite`);
+          await expect(row.getByRole('alert')).toContainText(`${titles[index]} must be a ${relation} number of pixels (px optional).`);
           const before = await inspect(page, mode);
           expect(before.slots.find(slot => slot.id === 'gc_content')[fields[index]]).toBe(invalid);
           await page.getByRole('button', { name: 'Generate Diagram', exact: true }).press('Enter');

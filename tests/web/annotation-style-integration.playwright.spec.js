@@ -211,7 +211,7 @@ for (const width of [1440, 390]) {
         // Invalid pixels do not coerce a combined Result or its warning to a new artifact.
         const field = row.getByTitle(titles[0], { exact: true });
         await field.fill('10em'); await field.press('Tab');
-        await expect(row.getByRole('alert')).toContainText('finite');
+        await expect(row.getByRole('alert')).toContainText('pixels (px optional)');
         const beforeFailure = await inspect(page, mode);
         await page.getByRole('button', { name: 'Generate Diagram', exact: true }).press('Enter');
         await expect.poll(async () => { const current = await inspect(page, mode); return { completed: current.completed, processing: current.processing }; }, { timeout: 180000 })

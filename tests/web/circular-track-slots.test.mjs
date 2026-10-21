@@ -582,3 +582,17 @@ test('Add track names the missing source of the chosen renderer (OV-1254)', () =
   assert.equal(editor.circularTrackAddBlockReason('annotations'), '');
   assert.equal(editor.canAddCircularTrackRenderer('annotations'), true);
 });
+
+// D-51: the slot editor shows each row issue as one sentence in the UI language.
+test('Circular editor shows a row issue in the UI language (D-51)', async () => {
+  const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  const state = createState({ slots: [featureSlot(), { ...spacerSlot(), id: '' }, gcSlot()] });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  assert.equal(editor.circularTrackSlotIssue(state.adv.circular_track_slots[1], 1), 'This row needs a non-empty ID.');
+  await setUiLocale('ja');
+  try {
+    assert.equal(editor.circularTrackSlotIssue(state.adv.circular_track_slots[1], 1), 'この行には空でないIDが必要です。');
+  } finally {
+    await setUiLocale('en');
+  }
+});

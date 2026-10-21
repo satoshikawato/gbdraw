@@ -563,8 +563,35 @@ test('Linear editor shows the row issue after a File clear keeps the series', ()
       annotationSets: []
     })
   });
-  assert.equal(editor.linearTrackSlotIssue(slots[1], 1), "Linear Depth track 'depth_1' has no logical Depth source.");
+  assert.equal(editor.linearTrackSlotIssue(slots[1], 1), 'This row has no Depth source.');
   assert.equal(editor.linearTrackSlotIssue(slots[2], 2), '');
+});
+
+// D-51: the slot editor shows each issue as one sentence in the UI language,
+// worded for the row it sits in; `message` stays the English that Generate throws.
+test('Linear editor shows row and global issues in the UI language (D-51)', async () => {
+  const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  const spacer = (id) => ({ id, renderer: 'spacer', enabled: true, side: 'below', z: 0, params: {} });
+  const slots = [feature(), spacer('gap'), spacer('gap')];
+  const state = withDrawings({
+    form: { linear_track_layout: 'middle', show_depth: false },
+    adv: { linear_track_slots: slots, linear_track_slots_axis_index: 9, nt: 'GC', depth_tracks: [] },
+    linearSeqs: [],
+    annotationSets: []
+  });
+  const editor = createLinearTrackSlotEditor({ state });
+  const plan = validate({ slots, axisIndex: 9 });
+  assert.deepEqual(plan.rowIssues.get(2).map((issue) => issue.message), ["Linear track ID 'gap' is used by more than one enabled row."]);
+  assert.deepEqual(plan.globalIssues.map((issue) => issue.message), ['Linear Axis boundary must be an integer from 0 to 3.']);
+  assert.equal(editor.linearTrackSlotIssue(slots[2], 2), "Track ID 'gap' is used by more than one enabled row.");
+  assert.deepEqual(editor.linearTrackGlobalIssues(), ['The Axis boundary must be an integer from 0 to 3.']);
+  await setUiLocale('ja');
+  try {
+    assert.equal(editor.linearTrackSlotIssue(slots[2], 2), 'トラックID「gap」が、複数の有効な行で使われています。');
+    assert.deepEqual(editor.linearTrackGlobalIssues(), ['軸の境界は0から3までの整数にしてください。']);
+  } finally {
+    await setUiLocale('en');
+  }
 });
 
 test('validates Annotation set inventory and advanced params', () => {
