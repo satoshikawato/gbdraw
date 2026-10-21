@@ -39,7 +39,7 @@ from gbdraw.features.objects import FeatureObject
 from gbdraw.labels.fit import LabelFit
 from gbdraw.labels.label_ink import linear_label_ink
 from gbdraw.labels.label_style import FeatureLabelStyle, label_leader_width_px
-from gbdraw.labels.linear_types import LinearLabel
+from gbdraw.labels.linear_types import LinearLabel, is_horizontal_label
 from gbdraw.labels.linear import (
     FeatureLabelRow,
     RecordRegionLabels,
@@ -95,7 +95,7 @@ def _feature_label_box(label: LinearLabel) -> Aabb:
             dominant_baseline="central",
             text_anchor=label["text_anchor"],
         )
-        if label["rotation_deg"] == 0.0
+        if is_horizontal_label(label)
         else None
     )
     if offsets is None:

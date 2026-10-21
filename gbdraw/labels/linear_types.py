@@ -73,4 +73,11 @@ def is_above_feature_label(label: LinearLabel) -> bool:
     return "above_feature_place_above" in label
 
 
-__all__ = ["LinearLabel", "is_above_feature_label"]
+def is_horizontal_label(label: LinearLabel) -> bool:
+    """Whether ``label`` is drawn level (no rotation): the box, row pitch and ink tests that read only
+    its width and height apply."""
+
+    return label["rotation_deg"] == 0.0
+
+
+__all__ = ["LinearLabel", "is_above_feature_label", "is_horizontal_label"]

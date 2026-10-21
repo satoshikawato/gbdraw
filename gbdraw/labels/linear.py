@@ -13,7 +13,7 @@ from .coordinates import display_label_segment
 
 from .filtering import get_label_text, label_filter_maps
 from .label_style import ROW_LABEL_GAP_EM
-from .linear_types import LinearLabel, is_above_feature_label
+from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
@@ -207,7 +207,7 @@ def calculate_label_bounds(label: LinearLabel) -> tuple[float, float, float, flo
     text_anchor = label["text_anchor"]
     middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"])
-    if rotation_deg == 0.0:
+    if is_horizontal_label(label):
         x_min_offset, x_max_offset = anchor_x_bounds(width_px, text_anchor)
         half_height = 0.5 * max(0.0, height_px)
         return (
@@ -518,7 +518,7 @@ def _resolve_above_feature_label_overlaps(
             placed_x_index.insert(len(placed_by_id) - 1, Interval(box.min_x, box.max_x))
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item["feature_anchor_x"])):
-            pitch = row_pitch if label["rotation_deg"] == 0.0 else None
+            pitch = row_pitch if is_horizontal_label(label) else None
             if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction, pitch):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
@@ -936,7 +936,7 @@ def place_linear_label_row(
     if profile.label_placement == "above_feature":
         for record, _x in records:
             for label in record.labels:
-                if label["rotation_deg"] == 0.0:
+                if is_horizontal_label(label):
                     _above_feature_label_in_first_row(label, track_height)
         # Every label is at its feature here; the resolver reads their anchor and box x.
         on_features = [(label, x) for record, x in records for label in record.labels]

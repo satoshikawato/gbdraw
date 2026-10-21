@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from ....labels.linear_types import LinearLabel
+from ....labels.linear_types import LinearLabel, is_horizontal_label
 from ....svg.elements import Group
 from ....svg.text_path import generate_text_path
 from ...label_binding import bind_label_part
@@ -24,7 +24,7 @@ class LabelDrawer:
             dominant_baseline="central",
             text_anchor=label_entry["text_anchor"],
         )
-        if rotation_deg != 0.0:
+        if not is_horizontal_label(label_entry):
             label_path.rotate(rotation_deg, center=(middle_x, middle_y))
         bind_label_part(label_path, label_entry["feature_id"], complete=True)
         group.add(label_path)
