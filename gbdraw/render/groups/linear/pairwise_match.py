@@ -6,9 +6,11 @@ from gbdraw.exceptions import ComparisonIdentityError
 import math
 from typing import Dict, Literal, Sequence, cast
 
+from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
+from ....configurators.blast import BlastMatchConfigurator
 from ....core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
     COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
@@ -116,13 +118,13 @@ class PairWiseMatchGroup:
         comparison_df: DataFrame,
         actual_comparison_height: float,
         comparison_count: int,
-        blast_config,
-        records,
-        query_y: float | None = None,
-        subject_y: float | None = None,
-        feature_dom_index: LinearFeatureDomIndex | None = None,
-        record_transforms: Sequence[RecordDisplayTransform] | None = None,
+        blast_config: BlastMatchConfigurator,
+        records: Sequence[SeqRecord],
         *,
+        query_y: float,
+        subject_y: float,
+        feature_dom_index: LinearFeatureDomIndex | None,
+        record_transforms: Sequence[RecordDisplayTransform] | None,
         query_placement: LinearRecordPlacement,
         subject_placement: LinearRecordPlacement,
     ) -> None:
@@ -134,6 +136,8 @@ class PairWiseMatchGroup:
             comparison_df (DataFrame): DataFrame containing comparison data.
             comparison_height (float): Height of the comparison track.
             comparison_count (int): Counter for the number of comparisons.
+            query_y, subject_y: The y of the query and subject ends of a ribbon, unless a feature's
+                attachment band moves them (``feature_dom_index``).
             query_placement, subject_placement: Where the two records are drawn; a match end
                 at bp ``p`` sits at ``placement.x_for_position(p)``. Their ``record_index`` is
                 the comparison's query and subject record.
@@ -150,20 +154,20 @@ class PairWiseMatchGroup:
         self.match_stroke_width: float = blast_config.stroke_width
         self.collinearity_orientation_colors: dict[str, str] = {
             **DEFAULT_COLLINEAR_ORIENTATION_COLORS,
-            **(getattr(blast_config, "collinearity_orientation_colors", {}) or {}),
+            **blast_config.collinearity_orientation_colors,
         }
         self.collinearity_orientation_min_colors: dict[str, str] = {
             **DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
-            **(getattr(blast_config, "collinearity_orientation_min_colors", {}) or {}),
+            **blast_config.collinearity_orientation_min_colors,
         }
-        self.match_style: str = str(getattr(blast_config, "match_style", "ribbon")).lower()
-        self.curve_tension: float = float(getattr(blast_config, "curve_tension", 0.5))
+        self.match_style: str = str(blast_config.match_style).lower()
+        self.curve_tension: float = float(blast_config.curve_tension)
         self.comparison_count: int = comparison_count
         self.records = records
         self.query_placement = query_placement
         self.subject_placement = subject_placement
-        self.query_y = 0 if query_y is None else float(query_y)
-        self.subject_y = self.comparison_height if subject_y is None else float(subject_y)
+        self.query_y = float(query_y)
+        self.subject_y = float(subject_y)
         self.feature_dom_index = feature_dom_index
         self.record_transforms = record_transforms
         self.track_id: str = "comparison" + str(self.comparison_count)
@@ -204,10 +208,9 @@ class PairWiseMatchGroup:
 
     def _next_pairwise_match_id(self, match_index: int | None = None) -> str:
         if match_index is None:
-            self._pairwise_match_counter = int(getattr(self, "_pairwise_match_counter", 0)) + 1
+            self._pairwise_match_counter += 1
             match_index = self._pairwise_match_counter
-        track_id = _attribute_text(getattr(self, "track_id", "")) or f"comparison{self.comparison_count}"
-        return f"{track_id}_match{int(match_index)}"
+        return f"{self.track_id}_match{int(match_index)}"
 
     def _rendered_feature_svg_id_values(
         self,
@@ -246,7 +249,7 @@ class PairWiseMatchGroup:
             feature_indexes = [None] * len(view_ids)
 
         rendered_ids: list[str] = []
-        feature_dom_index = getattr(self, "feature_dom_index", None)
+        feature_dom_index = self.feature_dom_index
         for view_id, feature_index in zip(view_ids, feature_indexes, strict=True):
             if not view_id:
                 continue
@@ -279,7 +282,7 @@ class PairWiseMatchGroup:
         return ";".join(rendered_ids)
 
     def _feature_attachment_y(self, row: object, role: Literal["query", "subject"], default_y: float) -> float:
-        index = getattr(self, "feature_dom_index", None)
+        index = self.feature_dom_index
         placement, other = self._placements(role)
         if index is None or not index.attachment_bands:
             return default_y
@@ -339,16 +342,16 @@ class PairWiseMatchGroup:
         else:
             query_start, query_end, subject_start, subject_end = endpoints
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
-            query_start, query_end, self._feature_attachment_y(row, "query", getattr(self, "query_y", 0)), is_query=True
+            query_start, query_end, self._feature_attachment_y(row, "query", self.query_y), is_query=True
         )
         subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(
             subject_start,
             subject_end,
-            self._feature_attachment_y(row, "subject", getattr(self, "subject_y", self.comparison_height)),
+            self._feature_attachment_y(row, "subject", self.subject_y),
             is_query=False,
         )
 
-        match_style = str(getattr(self, "match_style", "ribbon")).lower()
+        match_style = self.match_style
         if match_style == "curve":
             match_path_desc: str = self.construct_curved_ribbon_path_description(
                 query_start_x,
@@ -436,25 +439,15 @@ class PairWiseMatchGroup:
             return default_gradient_color
 
         orientation = str(_row_value(row, "collinearity_orientation", "") or "").strip().lower()
-        orientation_colors = getattr(
-            self,
-            "collinearity_orientation_colors",
-            DEFAULT_COLLINEAR_ORIENTATION_COLORS,
-        )
-        orientation_color = orientation_colors.get(orientation)
+        orientation_color = self.collinearity_orientation_colors.get(orientation)
         if not orientation_color:
             return default_gradient_color
 
         if color_mode == "orientation":
             return orientation_color
         if color_mode == "orientation_identity":
-            orientation_min_colors = getattr(
-                self,
-                "collinearity_orientation_min_colors",
-                DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
-            )
             min_key = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.get(orientation, "pairwise_match_min")
-            min_color = orientation_min_colors.get(orientation, self.match_min_color)
+            min_color = self.collinearity_orientation_min_colors.get(orientation, self.match_min_color)
             return interpolate_default_colors(
                 (min_key, min_color),
                 (COLLINEAR_ORIENTATION_COLOR_KEYS[orientation], orientation_color),
@@ -605,7 +598,7 @@ class PairWiseMatchGroup:
         """
         Constructs a closed curved ribbon path preserving both aligned intervals.
         """
-        tension = float(getattr(self, "curve_tension", 0.5))
+        tension = self.curve_tension
         dy = subject_start_y - query_start_y
         c1y = query_start_y + dy * tension
         c2y = subject_start_y - dy * tension
@@ -627,8 +620,8 @@ class PairWiseMatchGroup:
             Group: The SVG group with all match paths added.
         """
         rows = sorted(self.comparison_df.itertuples(), key=_match_draw_order_key)
+        transforms = self.record_transforms
         for index, row in enumerate(rows, start=1):
-            transforms = getattr(self, "record_transforms", None)
             pair = ((transforms[self.query_record_index], transforms[self.subject_record_index])
                     if transforms is not None else None)
             projected = pair is not None and any(t.start_coordinate is not None for t in pair)

@@ -19,7 +19,7 @@ import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.legend.sources import ComparisonLegendSource
-from tests.utils.comparison_tables import converted_pair_rows, ribbon_placement
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -305,21 +305,11 @@ def _translate_xy_or_zero(transform: str | None) -> tuple[float, float]:
 
 
 def _build_collinearity_match_group() -> PairWiseMatchGroup:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_placement = ribbon_placement(0, px_per_bp=1.0)
-    group.subject_placement = ribbon_placement(1, px_per_bp=1.0)
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
-    group.collinearity_orientation_min_colors = {"plus": "#eeeeee", "minus": "#ffeeee"}
-    return group
+    return ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
+        collinearity_orientation_min_colors={"plus": "#eeeeee", "minus": "#ffeeee"},
+    )
 
 
 def _web_protein_entry(
@@ -2857,19 +2847,10 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
 
 @pytest.mark.linear
 def test_collinearity_match_path_with_metadata_serializes() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_placement = ribbon_placement(0, px_per_bp=1.0)
-    group.subject_placement = ribbon_placement(1, px_per_bp=1.0)
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
+    group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
+    )
 
     row = SimpleNamespace(
         identity=95,
@@ -3454,19 +3435,10 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
 
 @pytest.mark.linear
 def test_collinearity_orientation_colors_use_default_color_overrides() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_placement = ribbon_placement(0, px_per_bp=1.0)
-    group.subject_placement = ribbon_placement(1, px_per_bp=1.0)
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
+    group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
+    )
 
     row = SimpleNamespace(
         identity=95,
@@ -3601,18 +3573,7 @@ def test_average_identity_collinearity_ignores_orientation_colors() -> None:
 
 @pytest.mark.linear
 def test_non_collinearity_match_path_does_not_add_metadata_attributes() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_placement = ribbon_placement(0, px_per_bp=1.0)
-    group.subject_placement = ribbon_placement(1, px_per_bp=1.0)
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
+    group = ribbon_group([_record("record_a", []), _record("record_b", [])])
 
     row = SimpleNamespace(
         identity=95,
@@ -3657,25 +3618,8 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
         },
     ]
     comparison_df = pd.DataFrame.from_records(rows)
-    blast_config = SimpleNamespace(
-        fill_color="#d3d3d3",
-        min_color="#ffffff",
-        max_color="#000000",
-        fill_opacity=1.0,
-        stroke_color="none",
-        stroke_width=0,
-        identity=0,
-        sequence_length_dict={},
-    )
-    match_group = PairWiseMatchGroup(
-        blast_config.sequence_length_dict,
-        comparison_df,
-        40,
-        1,
-        blast_config,
-        [_record("record_a", []), _record("record_b", [])],
-        query_placement=ribbon_placement(0, px_per_bp=1.0),
-        subject_placement=ribbon_placement(1, px_per_bp=1.0),
+    match_group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])], comparison_df, fill_opacity=1.0
     ).get_group()
 
     drawing = Drawing(debug=False)

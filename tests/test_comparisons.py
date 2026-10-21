@@ -33,7 +33,7 @@ from gbdraw.features.ids import (
 )
 from gbdraw.render.groups.linear import build_linear_feature_dom_index
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
-from tests.utils.comparison_tables import ribbon_placement
+from tests.utils.comparison_tables import ribbon_group
 from gbdraw.svg.ids import instance_svg_id
 
 
@@ -50,21 +50,7 @@ def _write_blast_table(path: Path, rows: list[tuple[object, ...]]) -> None:
 
 
 def _build_pairwise_group(match_style: str = "ribbon") -> PairWiseMatchGroup:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.records = [_build_record(), _build_record()]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_placement = ribbon_placement(0, px_per_bp=2.5)
-    group.subject_placement = ribbon_placement(1, px_per_bp=2.5)
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.match_style = match_style
-    group.curve_tension = 0.5
-    return group
+    return ribbon_group([_build_record(), _build_record()], px_per_bp=2.5, match_style=match_style)
 
 
 def _build_match_row() -> SimpleNamespace:
@@ -531,25 +517,8 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
         },
     ]
     comparison_df = pd.DataFrame.from_records(rows)
-    blast_config = SimpleNamespace(
-        fill_color="#d3d3d3",
-        min_color="#ffffff",
-        max_color="#000000",
-        fill_opacity=1.0,
-        stroke_color="none",
-        stroke_width=0,
-        identity=0,
-        sequence_length_dict={},
-    )
-    match_group = PairWiseMatchGroup(
-        blast_config.sequence_length_dict,
-        comparison_df,
-        40,
-        1,
-        blast_config,
-        [_build_record(), _build_record()],
-        query_placement=ribbon_placement(0, px_per_bp=2.5),
-        subject_placement=ribbon_placement(1, px_per_bp=2.5),
+    match_group = ribbon_group(
+        [_build_record(), _build_record()], comparison_df, px_per_bp=2.5, fill_opacity=1.0
     ).get_group()
 
     drawing = Drawing(debug=False)
@@ -564,20 +533,13 @@ def test_pairwise_match_group_reads_its_records_from_their_placements() -> None:
     """The ribbons' record indices are the placements' records, the ones the ribbons are drawn
     between, whatever the comparison's position in the drawing."""
 
-    blast_config = SimpleNamespace(
-        fill_color="#d3d3d3", min_color="#ffffff", max_color="#000000", fill_opacity=1.0,
-        stroke_color="none", stroke_width=0, identity=0, sequence_length_dict={},
-    )
     records = [SeqRecord(Seq("A" * 400), id=f"record_{index}") for index in range(3)]
-    match_group = PairWiseMatchGroup(
-        {},
-        pd.DataFrame.from_records([{"identity": 95, "qstart": 1, "qend": 80, "sstart": 1, "send": 80}]),
-        40,
-        1,
-        blast_config,
+    match_group = ribbon_group(
         records,
-        query_placement=ribbon_placement(0, px_per_bp=2.5),
-        subject_placement=ribbon_placement(2, px_per_bp=2.5),
+        pd.DataFrame.from_records([{"identity": 95, "qstart": 1, "qend": 80, "sstart": 1, "send": 80}]),
+        px_per_bp=2.5,
+        subject_index=2,
+        fill_opacity=1.0,
     ).get_group()
 
     assert match_group.attribs["data-query-record-index"] == 0

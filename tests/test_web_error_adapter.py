@@ -15,7 +15,7 @@ from gbdraw.exceptions import ComparisonIdentityError, ParseError, ValidationErr
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.io.record_select import parse_record_selector, select_record
 from gbdraw.labels.filtering import _build_label_override_rules
-from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+from tests.utils.comparison_tables import ribbon_group
 from gbdraw.web_support.error_adapter import serialize_web_error, private_web_execution
 
 
@@ -33,9 +33,11 @@ def helpers():
     ('private', '0', 'SOURCE_VIEW_CONFLICT'),
 ])
 def test_comparison_identity_producer_preserves_valueerror(value, indexes, reason):
-    group = object.__new__(PairWiseMatchGroup)
-    group.records = [object()]
-    group.feature_dom_index = SimpleNamespace(by_source_index={(0, 0): 'other'}, by_view_id={(0, 'private'): ['private']})
+    group = ribbon_group(
+        [object()],
+        subject_index=0,
+        feature_dom_index=SimpleNamespace(by_source_index={(0, 0): 'other'}, by_view_id={(0, 'private'): ['private']}),
+    )
     with pytest.raises(ValueError) as caught:
         group._rendered_feature_svg_id_values(value, record_index=0, feature_index_value=indexes)
     assert isinstance(caught.value, ComparisonIdentityError)
