@@ -3994,6 +3994,32 @@ assert.throws(
   () => projectCanonicalSessionRequest(mixedCanonicalDepth),
   /depthTracks cannot be combined with legacy depth fields: depthTrackFiles/
 );
+// Python draws a request's Depth series without a color in the request's
+// Depth color (`clone_depth_config`), so an import gives such a series that
+// color, in both the canonical and the legacy form: the imported draft redraws
+// the CLI figure (OV-1510).
+{
+  const colorFreeCanonical = structuredClone(sparseDepthCanonical);
+  colorFreeCanonical.renderRequest.diagramOptions.configOverrides = {
+    ...(colorFreeCanonical.renderRequest.diagramOptions.configOverrides || {}),
+    'objects.depth.fill_color': '#AA0000'
+  };
+  const colorFreeLegacy = structuredClone(colorFreeCanonical);
+  colorFreeCanonical.renderRequest.diagramOptions.depthTracks.forEach((track) => { track.color = null; });
+  const legacyOptions = colorFreeLegacy.renderRequest.diagramOptions;
+  legacyOptions.depthTrackFiles = [
+    [legacyOptions.depthTracks[0].source[0], null],
+    [null, legacyOptions.depthTracks[1].source[1]]
+  ];
+  legacyOptions.depthTrackColors = [null, null];
+  delete legacyOptions.depthTracks;
+  const importedColors = (request) => {
+    const { adv } = projectCanonicalSessionRequest(request).config;
+    return [adv.depth_color, adv.depth_tracks.map((track) => track.color)];
+  };
+  assert.deepEqual(importedColors(colorFreeCanonical), ['#AA0000', ['#AA0000', '#AA0000']]);
+  assert.deepEqual(importedColors(colorFreeLegacy), ['#AA0000', ['#AA0000', '#AA0000']]);
+}
 const wrongCanonicalDepthCardinality = structuredClone(sparseDepthCanonical);
 wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source =
   wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source.slice(0, 1);

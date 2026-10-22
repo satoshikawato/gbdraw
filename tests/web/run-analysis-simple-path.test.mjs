@@ -2807,3 +2807,154 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
     globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
   }
 });
+
+// Generate draws a Linear Depth row at its own height on every run while the
+// row's series has no height of its own: the settings Generate gives a series
+// leave its height Auto, so a second Generate from the same state draws the
+// same figure (OV-1510, review 4 finding 2).
+test('two Linear Generates from one state draw a Depth row at the same height', async () => {
+  const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
+  const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
+  state.mode.value = 'linear';
+  state.lInputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'row-height';
+  drawing.form.show_depth = true;
+  drawing.form.multi_record_canvas = false;
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearRecordRows.splice(0);
+  drawing.linearComparisonPlan.mode = 'none';
+  drawing.linearComparisonPlan.edges.splice(0);
+  drawing.annotationSets.splice(0);
+  state.linearSeqs.splice(0, state.linearSeqs.length, {
+    uid: 'row-height',
+    gb: genbank,
+    gff: null,
+    fasta: null,
+    depth: [depthFile(1), depthFile(2)],
+    blast: null,
+    losat_gencode: 1,
+    definition: '',
+    record_subtitle: '',
+    region_record_id: '',
+    region_start: null,
+    region_end: null,
+    region_reverse: false
+  });
+  const depthRow = (id, trackIndex, height) => ({
+    id, renderer: 'depth', enabled: true, side: 'below', height, spacing: '', z: 0, params: { track_index: trackIndex }
+  });
+  Object.assign(drawing.adv, {
+    depth_height: 50,
+    // Series 2 has no stored settings, as after a Session that saved one series.
+    depth_tracks: [{
+      label: '', color: '#4A90E2', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+    }],
+    linear_track_slots_enabled: true,
+    linear_track_slots_axis_index: 0,
+    linear_track_slots: [
+      { id: 'features', renderer: 'features', enabled: true, side: 'overlay', height: '', spacing: '', z: 0, params: {} },
+      depthRow('depth_1', 0, ''),
+      depthRow('depth_2', 1, '30px')
+    ]
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
+      serializeActiveRenderFiles(state.mode.value, state, activeDrawing, snapshot)
+    ),
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  const generate = async (name) => {
+    const generated = result(`${name}.svg`, name);
+    workerResponses.push(response(generated, validCatalog(generated.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    return {
+      row: drawing.adv.linear_track_slots.find((slot) => slot.id === 'depth_2')?.height,
+      seriesHeights: drawing.adv.depth_tracks.map((track) => track.height)
+    };
+  };
+  const first = await generate('row-height-1');
+  const second = await generate('row-height-2');
+  assert.deepEqual([first.row, second.row], ['30px', '30px']);
+  assert.deepEqual([first.seriesHeights, second.seriesHeights], [[null, null], [null, null]]);
+});
+
+// Circular Generate gives a Depth series without settings the color the
+// series owner gives it, as the editor shows: series 2 the palette, not the
+// Depth color of series 1 (OV-1510).
+test('Circular Generate gives a Depth series without settings its default color', async () => {
+  const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
+  state.mode.value = 'circular';
+  state.cInputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'circular-series';
+  drawing.form.show_depth = true;
+  drawing.form.multi_record_canvas = false;
+  drawing.annotationSets.splice(0);
+  drawing.circularConservation.enabled = false;
+  drawing.circularConservation.series.splice(0);
+  Object.assign(state.files, {
+    c_gb: new AuditFile(['LOCUS circularseries\nORIGIN\n        1 acgtacgt\n//\n'], 'circular-series.gb'),
+    c_gff: null,
+    c_fasta: null,
+    c_depth: [depthFile(1), depthFile(2)],
+    c_conservation_blasts: [],
+    c_conservation_fastas: [],
+    c_conservation_sequence_sources: []
+  });
+  state.circularRecordList.value = [];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+  });
+  const depthRow = (id, trackIndex) => ({ id, renderer: 'depth', enabled: true, side: 'inside', params: { track_index: trackIndex } });
+  Object.assign(drawing.adv, {
+    depth_color: '#AA0000',
+    // Series 2 has no stored settings, as after a Session that saved one series.
+    depth_tracks: [{
+      label: '', color: '#AA0000', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+    }],
+    circular_track_slots_enabled: true,
+    circular_track_slots: [depthRow('depth_1', 0), depthRow('depth_2', 1)]
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    recordDisplayRows: { value: [] },
+    serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
+      serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
+    ),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  // The record discovery of the new source; earlier tests may leave replies queued.
+  workerHelperResponses.splice(0, workerHelperResponses.length, {
+    ok: true,
+    result: { records: [{ selector: '#1', record_id: 'circularseries', record_length: 8 }] }
+  });
+  const generated = result('circular-series.svg', 'circular-series');
+  workerResponses.push(response(generated, validCatalog(generated.name)));
+  assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+  const request = workerMessages.filter(({ type }) => type === 'run').at(-1).payload.request;
+  assert.deepEqual(
+    [drawing.adv.depth_tracks.map((track) => track.color), request.diagramOptions.depthTracks.map((track) => track.color)],
+    [['#AA0000', '#E45756'], ['#AA0000', '#E45756']]
+  );
+});

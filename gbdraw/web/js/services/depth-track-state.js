@@ -109,9 +109,10 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
 
 
 /**
- * The defaults of a Depth series an edit of a drawing, or Generate, gives it
- * settings for (`depthTrackConfigForEdit`): the series color, and the drawing's
- * stored height. Every writer of a drawing's series uses these.
+ * The defaults of a Depth series an edit of a drawing gives it settings for
+ * (`depthTrackConfigForEdit`): the series color, and the drawing's stored
+ * height. Every writer of a drawing's series uses these; Generate leaves out
+ * the height (`shapeDepthTracksForGenerate`).
  * @param {StoredDepthSettings} adv
  * @returns {DepthTrackDefaults}
  */
@@ -164,6 +165,19 @@ const fallbackColor = (index, defaults = {}) => {
  * @returns {string}
  */
 export const depthSeriesDefaultColor = (index, adv) => fallbackColor(index, depthTrackEditDefaults(adv));
+
+/**
+ * The color an imported render request's Depth series takes: its own, else
+ * the request's Depth color, in which Python draws every series without one
+ * (`clone_depth_config` in gbdraw/analysis/depth_tracks.py). An import redraws
+ * what the CLI drew; a series the Web creates takes `depthSeriesDefaultColor`.
+ * @param {unknown} color The series' color in the request: text, or unset.
+ * @param {string} depthColor The request's effective Depth color.
+ * @returns {string}
+ */
+export const importedDepthSeriesColor = (color, depthColor) => (
+  typeof color === 'string' && color ? color : depthColor
+);
 
 /** @param {FileLike | null | undefined} file */
 const depthFileBaseName = (file) => {
@@ -472,6 +486,23 @@ export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
   }
   return targetTracks;
 };
+
+// Generate gives series 0..count-1 of a drawing the settings an edit gives
+// them (`depthTrackEditDefaults`), except a height: a series without one
+// keeps none (Auto). A Linear Depth row draws its series' stored height, so a
+// height Generate stored would replace the row's own on the next Generate
+// (OV-1510). Generate adds no series past `count`; a count of 0 shapes none.
+/**
+ * @param {RawDepthTrackConfig[]} tracks
+ * @param {number} count
+ * @param {StoredDepthSettings} adv
+ * @returns {RawDepthTrackConfig[]}
+ */
+export const shapeDepthTracksForGenerate = (tracks, count, adv) => (
+  count > 0
+    ? ensureDepthTrackConfigShape(tracks, count, { ...depthTrackEditDefaults(adv), depthHeight: null })
+    : tracks
+);
 
 // The settings of Depth series `index` for an edit (TK-03). An edit writes a
 // series the drawing's mode has: `seriesCount` series, at least one. An index

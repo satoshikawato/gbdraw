@@ -60,6 +60,7 @@ import {
   activeDepthTrackIndices,
   defaultDepthSeriesLabel,
   depthSeriesDefaultColor,
+  importedDepthSeriesColor,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -4159,7 +4160,8 @@ const projectCanonicalDepthTracks = ({
     return {
       // A series the request does not name stays unnamed in the draft (OV-1508).
       label: label ?? '',
-      color: color ?? '#4A90E2',
+      // The import gives a series without a color the request's Depth color.
+      color,
       height: mode === 'linear'
         ? canonicalDepthNumber(track.height, `${fieldName}.height`)
         : null,
@@ -5466,11 +5468,15 @@ export const projectCanonicalSessionRequest = ({
   ) {
     throw new Error('diagramOptions.depthTrackHeights must contain only null values for Circular requests.');
   }
-  const projectedDepthTracks = canonicalDepth?.tracks || Array.from(
+  const projectedDepthColor = overrides.depth_color || '#4A90E2';
+  const projectedDepthTracks = canonicalDepth?.tracks.map((track) => ({
+    ...track,
+    color: importedDepthSeriesColor(track.color, projectedDepthColor)
+  })) || Array.from(
     { length: projectedDepthTrackCount },
     (_, index) => ({
       label: String(options.depthTrackLabels?.[index] ?? ''),
-      color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
+      color: importedDepthSeriesColor(options.depthTrackColors?.[index], projectedDepthColor),
       height: projectOptionalNumber(options.depthTrackHeights?.[index], { field: 'height' }),
       large_tick_interval: projectOptionalNumber(options.depthTrackLargeTickIntervals?.[index], { field: 'large_tick_interval' }),
       small_tick_interval: projectOptionalNumber(options.depthTrackSmallTickIntervals?.[index], { field: 'small_tick_interval' }),
@@ -5618,7 +5624,7 @@ export const projectCanonicalSessionRequest = ({
     gc_content_tick_interval: overrides.gc_content_large_tick_interval ?? null,
     gc_content_small_tick_interval: overrides.gc_content_small_tick_interval ?? null,
     gc_content_tick_font_size: overrides.gc_content_tick_font_size ?? null,
-    depth_color: overrides.depth_color || '#4A90E2',
+    depth_color: projectedDepthColor,
     depth_height: overrides.depth_height ?? null,
     depth_min: overrides.depth_min ?? null,
     depth_max: overrides.depth_max ?? null,
