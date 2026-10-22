@@ -3386,12 +3386,12 @@ test('@comparison-contract File source order moves multi-record blocks through p
     const app = window.__GBDRAW_APP__;
     app.setLinearRecordRow(app.linearSeqs[0].uid, app.linearRecordRows.at(-1).row);
   });
-  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('does not give each File its own consecutive rows');
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
   await expect(page.getByLabel('Arrange linear records in rows')).not.toBeChecked();
-  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('does not give each File its own consecutive rows');
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
 
@@ -3871,7 +3871,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   await settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true }).selectOption('1');
   await settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true }).selectOption('2');
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'));
-  const member = settings.getByRole('spinbutton', { name: 'Member hits per protein', exact: true });
+  const member = settings.getByRole('spinbutton', { name: 'Max hits per protein for groups', exact: true });
   await expect(member).toHaveValue('');
   await expect(member).toHaveAttribute('placeholder', 'Unbounded');
   await member.fill('7');

@@ -37,8 +37,6 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * The Depth track defaults of the calling stack. The values are a drawing's
  * stored single-series settings, unvalidated.
  * @typedef {object} DepthTrackDefaults
- * @property {(index: number) => string} [labelForIndex]
- * @property {(index: number) => string} [colorForIndex]
  * @property {unknown} [depthColor] The first series' color.
  * @property {unknown} [depthHeight]
  * @property {unknown} [largeTickInterval]
@@ -109,6 +107,23 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
   '#7F7F7F'
 ];
 
+
+/**
+ * The defaults of a Depth series an edit of a drawing gives it settings for
+ * (`depthTrackConfigForEdit`): the series color, and the drawing's stored
+ * height. Every writer of a drawing's series uses these; Generate leaves out
+ * the height (`shapeDepthTracksForGenerate`).
+ * @param {StoredDepthSettings} adv
+ * @returns {DepthTrackDefaults}
+ */
+export const depthTrackEditDefaults = (adv) => ({
+  depthColor: adv.depth_color,
+  depthHeight: adv.depth_height,
+  largeTickInterval: null,
+  smallTickInterval: null,
+  tickFontSize: null
+});
+
 /**
  * @param {unknown} [params]
  * @returns {Record<string, unknown>}
@@ -118,23 +133,51 @@ const cloneParams = (params = {}) => {
   return { ...params };
 };
 
-/** @param {unknown} index */
-const fallbackLabel = (index) => {
-  const numericIndex = Math.max(0, Number(index) || 0);
-  return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
-};
+/**
+ * The name the figure draws for a Depth series without a label: Depth for
+ * the only series, Depth N for each of several (Python
+ * `_default_depth_track_labels`, gbdraw/analysis/depth_tracks.py). Figure
+ * text, so it stays English in every UI locale; the legend-name fields show it
+ * as their placeholder.
+ * @param {number} index The series' index.
+ * @param {number} count The number of series.
+ * @returns {string}
+ */
+export const defaultDepthSeriesLabel = (index, count) => (count === 1 ? 'Depth' : `Depth ${index + 1}`);
 
+// The one rule for the color of a series without its own: the first series
+// takes the drawing's Depth color, a later one the palette (OV-1510).
 /**
  * @param {number} index
  * @param {DepthTrackDefaults} [defaults]
+ * @returns {string}
  */
 const fallbackColor = (index, defaults = {}) => {
-  if (typeof defaults.colorForIndex === 'function') {
-    return String(defaults.colorForIndex(index) || '');
-  }
   if (index === 0 && defaults.depthColor) return String(defaults.depthColor);
   return DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
 };
+
+/**
+ * The color Depth series `index` of a drawing draws in while it has none of
+ * its own: the editor shows it, an edit stores it, and the request sends it.
+ * @param {number} index
+ * @param {StoredDepthSettings} adv
+ * @returns {string}
+ */
+export const depthSeriesDefaultColor = (index, adv) => fallbackColor(index, depthTrackEditDefaults(adv));
+
+/**
+ * The color an imported render request's Depth series takes: its own, else
+ * the request's Depth color, in which Python draws every series without one
+ * (`clone_depth_config` in gbdraw/analysis/depth_tracks.py). An import redraws
+ * what the CLI drew; a series the Web creates takes `depthSeriesDefaultColor`.
+ * @param {unknown} color The series' color in the request: text, or unset.
+ * @param {string} depthColor The request's effective Depth color.
+ * @returns {string}
+ */
+export const importedDepthSeriesColor = (color, depthColor) => (
+  typeof color === 'string' && color ? color : depthColor
+);
 
 /** @param {FileLike | null | undefined} file */
 const depthFileBaseName = (file) => {
@@ -343,11 +386,9 @@ export const readDepthTrackConfig = (entry, index, defaults = {}) => {
     if (reading.lost) leaves.push({ at: `.${field}`, stored: value, used: reading.value });
     return reading.value;
   };
-  const labelForIndex = typeof defaults.labelForIndex === 'function'
-    ? defaults.labelForIndex
-    : fallbackLabel;
   const value = {
-    label: String(source.label ?? labelForIndex(index)),
+    // A series nobody named keeps no label: its name follows the series count (OV-1508).
+    label: String(source.label ?? ''),
     color: resolveColorToHex(String(source.color || fallbackColor(index, defaults))),
     height: positive('height', Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight),
     large_tick_interval: positive('large_tick_interval', source.large_tick_interval ?? defaults.largeTickInterval),
@@ -446,16 +487,33 @@ export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
   return targetTracks;
 };
 
+// Generate gives series 0..count-1 of a drawing the settings an edit gives
+// them (`depthTrackEditDefaults`), except a height: a series without one
+// keeps none (Auto). A Linear Depth row draws its series' stored height, so a
+// height Generate stored would replace the row's own on the next Generate
+// (OV-1510). Generate adds no series past `count`; a count of 0 shapes none.
+/**
+ * @param {RawDepthTrackConfig[]} tracks
+ * @param {number} count
+ * @param {StoredDepthSettings} adv
+ * @returns {RawDepthTrackConfig[]}
+ */
+export const shapeDepthTracksForGenerate = (tracks, count, adv) => (
+  count > 0
+    ? ensureDepthTrackConfigShape(tracks, count, { ...depthTrackEditDefaults(adv), depthHeight: null })
+    : tracks
+);
+
 // The settings of Depth series `index` for an edit (TK-03). An edit writes a
 // series the drawing's mode has: `seriesCount` series, at least one. An index
 // past them names no series, so there is nothing to write and the series list
 // does not grow; the series up to `index` get their default fields.
 /**
- * @param {Record<string, any>[]} tracks
+ * @param {RawDepthTrackConfig[]} tracks
  * @param {number} index
  * @param {number} seriesCount
- * @param {Record<string, any>} [defaults]
- * @returns {Record<string, any> | null}
+ * @param {DepthTrackDefaults} [defaults]
+ * @returns {RawDepthTrackConfig | null}
  */
 export const depthTrackConfigForEdit = (tracks, index, seriesCount, defaults = {}) => {
   const idx = Math.max(0, Number(index) || 0);
@@ -759,15 +817,16 @@ export const syncDepthSlotLabels = ({ slots, depthTracks, activeCount = null } =
 };
 
 /**
- * The Legend captions the draft's Depth series would draw: each series label, and
- * the legend label of each Depth row. The request carries no Depth source while
+ * The Legend captions the draft's Depth series would draw: each series label (the
+ * default name for a series without one), and the legend label of each Depth row. The request carries no Depth source while
  * Show Depth is off, so Python cannot name these rows then (OV-81).
  * @param {{ depthTracks?: RawDepthTrackConfig[], slots?: DepthSlotRow[] }} [options]
  * @returns {string[]}
  */
 export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {
   const captions = [
-    ...(Array.isArray(depthTracks) ? depthTracks : []).map((track) => track?.label),
+    ...(Array.isArray(depthTracks) ? depthTracks : []).map((track, index, tracks) => (
+      String(track?.label ?? '').trim() || defaultDepthSeriesLabel(index, tracks.length))),
     ...(Array.isArray(slots) ? slots : [])
       .filter((slot) => String(slot?.renderer || '') === 'depth')
       .map((slot) => slot?.params?.legend_label)

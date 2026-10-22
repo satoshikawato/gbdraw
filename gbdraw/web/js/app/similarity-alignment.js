@@ -1963,7 +1963,7 @@ export const createSimilarityAlignmentActions = ({
       }
       const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
       promise = runAlignmentCandidate({canonical, label: scope === 'positions'
-        ? msg('Reset alignment positions') : msg('Reset alignment positions and direction changes'), alignmentResetReceipt:null});
+        ? msg('Reset alignment positions') : msg('Reset alignment positions and directions'), alignmentResetReceipt:null});
       activeApply = promise;
       const outcome = await promise;
       if (expectedActionId !== actionId) return {status:'stale'};
@@ -1971,7 +1971,7 @@ export const createSimilarityAlignmentActions = ({
         clearDraft(); repair.value = null; summary.value = null; resetDialogOpen.value = false;
         error.value = null;
         publishNotice(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
-          : t('Alignment reset: positions and the latest Align direction changes restored.'));
+          : t('Alignment reset: record positions and directions restored to before the latest Align.'));
       } else if (!['canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
     } catch (cause) {

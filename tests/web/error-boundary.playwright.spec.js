@@ -252,7 +252,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   const query=page.getByRole('searchbox',{name:'Search features',exact:true});
-  await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
+  await page.getByRole('combobox',{name:'Field to search',exact:true}).selectOption('qualifier-value');
   await page.getByRole('textbox',{name:'Qualifier key',exact:true}).fill('product');
   const regex=page.getByRole('checkbox',{name:'Regular expression',exact:true});
   await regex.check(); await query.fill('(?<enzyme>nadh)'); await query.press('Enter');
@@ -276,7 +276,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   await page.goto(pathToFileURL(svgPath).href);
   await page.getByRole('button',{name:'Expand feature search',exact:true}).click();
   const standaloneQuery=page.getByRole('searchbox',{name:'Search features',exact:true});
-  await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
+  await page.getByRole('combobox',{name:'Field to search',exact:true}).selectOption('qualifier-value');
   await page.getByRole('textbox',{name:'Qualifier key for qualifier value search',exact:true}).fill('product');
   const standaloneRegex=page.getByRole('checkbox',{name:'Regular expression',exact:true});
   await standaloneRegex.check();await standaloneQuery.fill('(?<enzyme>nadh)');await page.locator('[data-search-apply]').click();

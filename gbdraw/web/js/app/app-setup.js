@@ -267,8 +267,7 @@ import {
   withoutConservationSeries
 } from '../services/conservation-series.js';
 import {
-  getDepthTrackFallbackLabel,
-  getDepthTrackLabelFromFile,
+  getDepthTrackFileBaseName,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
@@ -290,12 +289,15 @@ import {
   depthTrackMatrixWidth,
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
   depthTrackConfigForEdit,
+  depthTrackEditDefaults,
+  depthSeriesDefaultColor,
   isDefaultManagedDepthSlot,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
+  defaultDepthSeriesLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
   syncDepthSlotLabels,
@@ -2206,16 +2208,6 @@ export const createAppSetup = () => {
       return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
     }
   });
-  const depthTrackDefaultColors = [
-    '#4A90E2',
-    '#E45756',
-    '#2CA02C',
-    '#F28E2B',
-    '#9467BD',
-    '#8C564B',
-    '#17BECF',
-    '#7F7F7F'
-  ];
   /** @param {DepthFileSlots | DepthFileSlots[]} value */
   const depthFileCount = (value) => (
     isRecordMajorDepthFileMatrix(value)
@@ -2288,21 +2280,9 @@ export const createAppSetup = () => {
       seq.depth = padDepthFileSlots(seq.depth, targetWidth);
     });
   };
-  /** @param {number} index */
-  const depthTrackFallbackColor = (index) => depthTrackDefaultColors[index % depthTrackDefaultColors.length];
-  /** @param {DrawingState} drawing */
-  const depthTrackConfigDefaults = (drawing) => ({
-    labelForIndex: getDepthTrackFallbackLabel,
-    colorForIndex: depthTrackFallbackColor,
-    depthColor: drawing.adv.depth_color,
-    depthHeight: drawing.adv.depth_height,
-    largeTickInterval: null,
-    smallTickInterval: null,
-    tickFontSize: null
-  });
   /** @param {DrawingState} drawing @param {RawDepthTrackConfig | null | undefined} entry @param {number} index */
   const normalizeDepthTrackConfig = (drawing, entry, index) => (
-    normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults(drawing))
+    normalizeDepthTrackConfigEntry(entry, index, depthTrackEditDefaults(drawing.adv))
   );
   /** @param {unknown} value */
   const optionalNumberInputValue = (value) => value ?? '';
@@ -2327,7 +2307,7 @@ export const createAppSetup = () => {
     const normalized = ensureDepthTrackConfigCountEntries(
       drawing.adv.depth_tracks,
       targetCount,
-      depthTrackConfigDefaults(drawing)
+      depthTrackEditDefaults(drawing.adv)
     );
     drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalized);
   };
@@ -2382,7 +2362,7 @@ export const createAppSetup = () => {
     const active = new Set(activeDepthTrackIndices(rows));
     return Array.from({ length: linearDepthLogicalWidth() }, (_, trackIndex) => ({
       trackIndex,
-      label: getDepthTrackLabel(trackIndex),
+      label: depthSeriesName(trackIndex),
       coverage: linearDepthTrackCoverageLabel(trackIndex),
       disabled: !active.has(trackIndex)
     }));
@@ -2542,7 +2522,7 @@ export const createAppSetup = () => {
   const depthTrackConfigForIndex = (drawing, index) => {
     if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
     return depthTrackConfigForEdit(
-      drawing.adv.depth_tracks, index, activeDepthTrackCount(), depthTrackConfigDefaults(drawing)
+      drawing.adv.depth_tracks, index, activeDepthTrackCount(), depthTrackEditDefaults(drawing.adv)
     );
   };
   // A series' saved settings, or its defaults while the drawing holds none (read only, OV-109).
@@ -2555,11 +2535,19 @@ export const createAppSetup = () => {
     const config = readDepthTrackConfig(state.activeDrawing(), Math.max(0, Number(index) || 0));
     return String(config?.label ?? '');
   };
+  // The name the figure draws for Depth series `index` of the shown drawing
+  // without a label, among the series the request draws (OV-1508). Figure
+  // text: English in every UI language.
+  /** @param {number} index */
+  const depthSeriesDefaultName = (index) => defaultDepthSeriesLabel(index, activeDepthTrackCount());
+  // The name of Depth series `index`: its label, else the default name.
+  /** @param {number} index */
+  const depthSeriesName = (index) => getDepthTrackLabel(index) || depthSeriesDefaultName(index);
   /** @param {number} index */
   const getDepthTrackColor = (index) => {
     const idx = Math.max(0, Number(index) || 0);
     const config = readDepthTrackConfig(state.activeDrawing(), idx);
-    return String(config?.color || depthTrackFallbackColor(idx));
+    return String(config?.color || depthSeriesDefaultColor(idx, state.activeDrawing().adv));
   };
   /** @param {number} index @param {unknown} value */
   const setDepthTrackColor = (index, value) => {
@@ -2570,7 +2558,7 @@ export const createAppSetup = () => {
     const color = String(value ?? '').trim();
     const config = depthTrackConfigForIndex(drawing, idx);
     if (!config) return;
-    config.color = color || depthTrackFallbackColor(idx);
+    config.color = color || depthSeriesDefaultColor(idx, drawing.adv);
   };
   /** @param {DrawingState} drawing */
   const depthTrackSlotCollections = (drawing) => [
@@ -2649,9 +2637,8 @@ export const createAppSetup = () => {
         isDepthTrackAutoLabel(currentLabel, oldIndex, oldFile) ||
         currentLabel === depthTrackAutoLabels[oldIndex]
       ) {
-        const nextLabel = file
-          ? getDepthTrackLabelFromFile(file, newIndex)
-          : getDepthTrackFallbackLabel(newIndex);
+        // A file names its series; a series without one keeps no label (OV-1508).
+        const nextLabel = getDepthTrackFileBaseName(file);
         config.label = nextLabel;
         depthTrackAutoLabels[newIndex] = nextLabel;
       } else {
@@ -2672,7 +2659,7 @@ export const createAppSetup = () => {
     if (!config) return;
     const currentLabel = String(config.label ?? '').trim();
     if (isDepthTrackAutoLabel(currentLabel, index, previousFile) || currentLabel === depthTrackAutoLabels[index]) {
-      const nextLabel = getDepthTrackLabelFromFile(file, index);
+      const nextLabel = getDepthTrackFileBaseName(file);
       config.label = nextLabel;
       depthTrackAutoLabels[index] = nextLabel;
       syncDepthTrackSlotLabelsForTrack(drawing, index);
@@ -6037,7 +6024,7 @@ export const createAppSetup = () => {
       return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: current });
     }
     if (selection.status === 'missing') {
-      return t('Record selector \'{selector}\' was not found in the current input.', { selector: current });
+      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: current });
     }
     return '';
   });
@@ -6655,7 +6642,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return (
       linearSourceMovePlan(drawing, 0, 1).reason === 'custom-layout'
-        ? t('File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to give each File its own consecutive rows.')
+        ? t('Files cannot be moved while Record Layout does not give each File its own consecutive rows. Change the rows in Advanced comparison and layout → Record Layout.')
         : ''
     );
   });
@@ -6960,6 +6947,9 @@ export const createAppSetup = () => {
     enabledOptionClass,
     depthToggleOptionClass,
     depthTrackCountLabel,
+    depthSeriesDefaultName,
+    depthSeriesName,
+    normalizeDepthSlotTrackIndex,
     getDepthTrackLabel,
     setDepthTrackLabel,
     getDepthTrackColor,

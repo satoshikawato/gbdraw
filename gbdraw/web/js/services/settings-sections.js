@@ -27,7 +27,8 @@ import {
  * @property {string} icon Phosphor icon class of the heading and of the entry.
  * @property {string} short The name under the icon of the rail entry (English, marked; shown by `settingsShortText`).
  * @property {'rail'} [shortContext] The context of the short name's own catalog key, for a short name
- *   whose plain translation (that of the title) is too long for the rail button (OV-1417).
+ *   whose plain translation (that of the title) is too long for the rail button (OV-1417): a shorter
+ *   word, or one word with a soft hyphen where it may break (OV-1506).
  * @property {SettingsSectionModes} modes
  * @property {true} [input] An entry that chooses what is drawn; the rail sets these apart from the rest.
  * @property {true} [railOnly] An entry of the rail alone; the stacked row leaves it out.
@@ -59,13 +60,13 @@ export const SETTINGS_SECTIONS = catalog([
   { key: 'region-annotations', title: msg('Region Annotations'), icon: 'ph-brackets-curly', short: msg('Regions'), modes: BOTH_MODES },
   { key: 'pairwise-comparisons', title: msg('Pairwise Comparisons'), icon: 'ph-arrows-left-right', short: msg('Compare'), modes: ['circular'] },
   { key: 'preserved-settings', dock: 'input-genomes', modes: BOTH_MODES },
-  { key: 'layout', title: msg('Layout'), icon: 'ph-layout', short: msg('Layout'), modes: BOTH_MODES },
+  { key: 'layout', title: msg('Layout'), icon: 'ph-layout', short: msg('Layout'), shortContext: 'rail', modes: BOTH_MODES },
   { key: 'font', title: msg('Font'), icon: 'ph-text-aa', short: msg('Font'), modes: BOTH_MODES },
   { key: 'titles', title: msg('Titles & Record Labels'), icon: 'ph-textbox', short: msg('Titles'), modes: BOTH_MODES },
   { key: 'legend', title: msg('Legend'), icon: 'ph-list-bullets', short: msg('Legend'), modes: BOTH_MODES },
   { key: 'colors', title: msg('Colors'), icon: 'ph-palette', short: msg('Colors'), modes: BOTH_MODES },
   { key: 'features', title: msg('Features'), icon: 'ph-shapes', short: msg('Features'), shortContext: 'rail', modes: BOTH_MODES },
-  { key: 'labels', title: msg('Labels'), icon: 'ph-text-t', short: msg('Labels'), modes: BOTH_MODES },
+  { key: 'labels', title: msg('Labels'), icon: 'ph-text-t', short: msg('Labels'), shortContext: 'rail', modes: BOTH_MODES },
   // Axis & Scale is one card per mode, each with its own icon.
   { key: 'linear-axis', title: msg('Axis & Scale'), icon: 'ph-ruler', short: msg('Axis'), modes: ['linear'] },
   { key: 'circular-axis', title: msg('Axis & Scale'), icon: 'ph-paint-brush', short: msg('Axis'), modes: ['circular'] },

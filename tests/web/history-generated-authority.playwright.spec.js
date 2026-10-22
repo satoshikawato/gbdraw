@@ -385,7 +385,7 @@ for (const mode of ['circular', 'linear']) {
       await noDerivedStatus(page);
       await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).not.toHaveAccessibleDescription(/recalculates placement/);
       await expect(page.getByRole('button',{name:'Save Session',exact:true})).toHaveAccessibleDescription(/current Result.*draft.*does not Generate/);
-      await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/Export outputs the current Result.*Neither applies pending/);
+      await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/PNG, and PDF buttons download the current Result.*Neither applies pending/);
       const file=info.outputPath(`${mode}-pending.gbdraw-session.json.gz`);
       const saved=JSON.parse(gunzipSync(await download(page,'Save Session',file)));
       expectArtifact(await inspect(page,info,`${mode}-after-save`),edited);

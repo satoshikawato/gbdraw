@@ -152,6 +152,20 @@
         :root:lang(zh-Hant) body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', sans-serif; }
         /* Korean UI text: system Hangul fonts; a line breaks between words, never inside one (a word too long for its box still wraps). */
         :root:lang(ko) body { font-family: 'Inter', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', 'Noto Sans KR', 'Source Han Sans KR', sans-serif; word-break: keep-all; overflow-wrap: break-word; }
+        /* Japanese control names (buttons, tabs, labels, headings): a name that wraps breaks between phrases
+           (適用, not 適 / 用; TSVを / インポート, not TSVを / インポ / ート), as a Latin name breaks between words (OV-1518).
+           A phrase wider than its box still breaks rather than overflow. Browsers without phrase breaking keep
+           the normal Japanese breaks. The rail names keep their own breaks, never inside a word (css/tailwind.input.css), and an
+           element that asks for break-all (a file name) keeps it. */
+        :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *, .break-all) { word-break: auto-phrase; overflow-wrap: break-word; }
+        /* Japanese and Chinese hints, paragraphs and field labels: a wrapped text does not end on a line of one
+           or two characters (…してくださ / い。, 比 / 较。), where the browser can move a few onto it (OV-1524).
+           Latin text keeps the browser's normal wrapping; the rail names keep theirs. The longhand leaves the
+           wrap mode alone, so an element that asks for one line (truncate, whitespace-nowrap) keeps it. */
+        :root:is(:lang(ja), :lang(zh-Hans), :lang(zh-Hant)) :is(p, .ui-hint, .input-label, label, summary):not(svg, svg *, .settings-index *) { text-wrap-style: pretty; }
+        /* A Korean field label whose one word is wider than its column breaks inside the word, so its help
+           tip stays inside the column (다이뉴클레오타이드 in a three-column row, OV-1525). */
+        :root:lang(ko) .input-label { overflow-wrap: anywhere; }
         :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg, :root:lang(ko) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. The figure keeps the English stack. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
@@ -167,9 +181,8 @@
            hold them, and the rail column scrolls when the entries do not fit. */
         :root:lang(th) :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span) { font-size: 12px; }
         :root:lang(th) .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { font-size: 12px; }
-        /* A Thai or Vietnamese rail name wraps at a word break instead of spilling out of its entry. */
-        :root:is(:lang(th), :lang(vi)) [data-settings-display="rail"] > .settings-index > nav > button { min-height: min-content; }
-        :root:is(:lang(th), :lang(vi)) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.3; white-space: normal; text-align: center; }
+        /* A wrapped Vietnamese or Thai rail name needs taller lines for its stacked marks (the wrap itself is every locale's, css/tailwind.input.css). */
+        :root:lang(vi) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.3; }
         :root:lang(th) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.5; }
 
         /* Custom Scrollbar */
@@ -346,20 +359,26 @@
             background: #ffffff;
             border-radius: 0.5rem;
         }
-        .auto-value-placeholder {
+        /* The automatic value shown in an empty field (a number field, a track slot's height, spacing or
+           gap): a block box centred by align-content, not a flex box, because an ellipsis shows only on
+           a block box; a long value was cut at the field's edge without one (OV-1519, OV-1521). */
+        .auto-value-placeholder,
+        .track-slot-auto-placeholder {
             position: absolute;
             inset: 0;
-            display: flex;
-            align-items: center;
+            display: block;
+            align-content: center;
             min-width: 0;
-            padding: 0.2rem 0.5rem;
             color: var(--ui-muted);
-            font-size: 10px;
             line-height: 1.2;
             pointer-events: none;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        .auto-value-placeholder {
+            padding: 0.2rem 0.5rem;
+            font-size: 10px;
         }
         .track-slot-pixel-field .track-slot-geometry-input::placeholder {
             color: transparent;
@@ -372,19 +391,8 @@
             opacity: 1;
         }
         .track-slot-auto-placeholder {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            min-width: 0;
             padding: 0.25rem 0.45rem;
-            color: var(--ui-muted);
             font-size: 11px;
-            line-height: 1.2;
-            pointer-events: none;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
         .track-slot-unit-suffix {
             position: absolute;
@@ -1456,6 +1464,12 @@
             .app-tagline { visibility: hidden; }
         }
         .app-header .app-logo-title { max-width: none; }
+        /* The Session block is the part of the header that gives way (OV-368), and what it holds stays inside it
+           in every language (OV-1530: fr at 1280 px left it 25 px wide, and its caption ran under the mode switch).
+           The title narrows first; the caption keeps 2rem for the pencil and, when the block is narrower still,
+           ends with an ellipsis or shows nothing; the title button clips its own pencil and title. */
+        .app-session-label { flex: none; min-width: 0; max-width: calc(100% - 2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .app-session-button { overflow: hidden; }
         @media (max-width: 1439px) {
             .app-tagline {
                 display: none !important;
@@ -1549,7 +1563,6 @@
 
             .app-language-select {
                 min-width: 0;
-                text-overflow: ellipsis;
             }
 
             .app-mode-button {
@@ -1997,8 +2010,15 @@
             bottom: 2rem;
             width: var(--settings-pane-width);
         }
-        /* Room for the fixed Generate bar (UI-13): the bar is 102 px tall and sits 2rem above the viewport
-           bottom, 0.75rem below the pane's bottom edge, so it covers the pane's last 90 px; 4 px more keeps a
+        /* The bar ends at the footer's top. The footer's height is its text (one line, or two when it wraps,
+           OV-1427), so the bar is anchored to the footer rather than to a fixed offset (OV-1509). A browser
+           without anchor positioning keeps the one-line footer's 2rem. */
+        @supports (bottom: anchor(top)) {
+            footer[data-app-footer] { anchor-name: --app-footer; }
+            .generate-bar { position-anchor: --app-footer; bottom: anchor(top); }
+        }
+        /* Room for the fixed Generate bar (UI-13): the bar is 102 px tall and ends at the footer's top,
+           0.75rem below the pane's bottom edge, so it covers the pane's last 90 px; 4 px more keeps a
            seam. A layout warning above the button (up to two lines) makes the bar about 63 px taller. Beside
            the rail alone the bar is a 60 px button that ends where the stacked button ends (64 px over the
            pane's end, 8 px seam), under a 28 px mark when there is a warning. */
@@ -2187,7 +2207,7 @@
         </div>
     </header>
 
-    <main class="app-main flex-grow px-4 py-3 flex overflow-hidden h-[calc(100vh-88px)]">
+    <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden">
 
         <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0"
              :data-settings-display="settingsPane.display" :data-settings-docked="settingsPane.docked"
@@ -2321,7 +2341,7 @@
                             <summary :aria-label="t('Depth TSV tracks')">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 {{ t('Depth TSV tracks') }}
-                                <help-tip :text="t('A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a Session keeps any per-record blanks.')"></help-tip>
+                                <help-tip :text="t('A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a loaded Session keeps each record\'s Depth TSV as saved, empty ones included.')"></help-tip>
                                 <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
                             <setting-note setting="depth-sources" class="pt-1"></setting-note>
@@ -2404,7 +2424,7 @@
                                 </div>
                                 <div v-for="track in circularDepthTrackRows" :key="`c-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                     <div class="flex items-center justify-between gap-2">
-                                        <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || t('Depth') }}</div>
+                                        <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</div>
                                         <button type="button" @click="removeCircularDepthTrack(track.index)" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
                                             <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}
                                         </button>
@@ -2419,7 +2439,7 @@
                                                 class="form-input form-input-compact"
                                                 :aria-label="track.index === 0 ? t('Depth legend title') : t('Depth {n} legend title', { n: track.index + 1 })"
                                                 :aria-describedby="`help-circular-depth-legend-title-${track.index}`"
-                                                :placeholder="track.index === 0 && circularDepthTrackRows.length === 1 ? t('Depth') : t('Depth {n}', { n: track.index + 1 })"
+                                                :placeholder="depthSeriesDefaultName(track.index)"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -2449,7 +2469,7 @@
                                                 <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <span class="input-label text-[10px]">{{ t('Tick Font') }} <help-tip :id="`help-circular-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-circular-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
                                                     <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
@@ -2617,7 +2637,7 @@
                                     :aria-label="t('Depth tracks for file {n}', { n: sourceIndex + 1 })"
                                     class="min-w-0 text-[10px]"
                                 >
-                                    <span class="min-w-0 truncate">{{ linearSourceDepthSummary(source) }}</span>
+                                    <span class="min-w-0">{{ linearSourceDepthSummary(source) }}</span>
                                 </summary>
                                 <setting-note setting="depth-sources" class="pt-1"></setting-note>
                                 <div class="min-w-0 space-y-1.5 pt-1">
@@ -2628,7 +2648,7 @@
                                         :data-linear-source-depth-series="track.index"
                                     >
                                         <div class="flex min-w-0 items-center justify-between gap-2 text-[9px]">
-                                            <span class="min-w-0 truncate font-bold text-slate-500">#{{ track.index + 1 }} {{ track.config.label || t('Depth') }}</span>
+                                            <span class="min-w-0 truncate font-bold text-slate-500">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</span>
                                             <span
                                                 class="shrink-0"
                                                 :class="track.status.state === 'mixed' ? 'text-amber-700' : 'text-slate-500'"
@@ -2912,7 +2932,7 @@
                                 <div v-for="track in linearDepthTrackRows()" :key="`linear-depth-settings-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                     <div class="flex items-center justify-between gap-2">
                                         <div class="min-w-0">
-                                            <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || t('Depth') }}</div>
+                                            <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</div>
                                             <div class="text-[9px] text-slate-500">{{ linearDepthTrackCoverageLabel(track.index) }}</div>
                                         </div>
                                         <button type="button" @click="removeLinearDepthTrack(track.index)" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
@@ -2929,7 +2949,7 @@
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
-                                                :placeholder="track.index === 0 && linearDepthTrackRows().length === 1 ? t('Depth') : t('Depth {n}', { n: track.index + 1 })"
+                                                :placeholder="depthSeriesDefaultName(track.index)"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -2974,7 +2994,7 @@
                                                 <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <span class="input-label text-[10px]">{{ t('Tick Font') }} <help-tip :id="`help-linear-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-linear-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
                                                     <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
@@ -3203,8 +3223,8 @@
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <span class="linear-primary-label mb-1">{{ t('Member hits per protein') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
-                                        <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.orthogroupMemberMaxHits" :aria-label="t('Member hits per protein')" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">{{ t('Max hits per protein for groups') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
+                                        <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.orthogroupMemberMaxHits" :aria-label="t('Max hits per protein for groups')" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                         </div>
                                     </section>
@@ -3352,7 +3372,7 @@
                                 </template>
                                 <button type="button" class="btn btn-secondary min-w-0 w-full px-1.5 py-1 text-[9px] whitespace-normal" @click="addLinearComparison()" :disabled="!semanticMutationAvailable">{{ t('Add') }}</button>
                                 <div class="grid min-w-0 grid-cols-1 gap-1">
-                                    <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(false)" :disabled="!semanticMutationAvailable">{{ t('Zipped adjacent pairs') }}</button>
+                                    <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(false)" :disabled="!semanticMutationAvailable">{{ t('Adjacent-row pairs (same position in each row)') }}</button>
                                     <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(true)" :disabled="!semanticMutationAvailable">{{ t('All adjacent-row pairs (cross-product)') }}</button>
                                     <button type="button" class="btn btn-danger min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="clearSelectedLinearComparisons()" :disabled="!semanticMutationAvailable">{{ t('Omit all') }}</button>
                                 </div>
@@ -3452,11 +3472,11 @@
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                <div class="linear-primary-label">{{ linearComparisonUi.sectionKeys.advanced.includes('collinear-details') ? t('Advanced collinear search') : t('Advanced similarity groups') }}</div>
+                                <div class="linear-primary-label">{{ linearComparisonUi.sectionKeys.advanced.includes('collinear-details') ? t('Advanced collinear search') : t('Advanced similarity group settings') }}</div>
                                 <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                     <template v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details')">
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Unit mode') }} <help-tip id="help-comparison-unit-mode" :text="t('Auto resolves the current Collinear unit type; CDS and locus require that exact unit type.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Unit mode') }} <help-tip id="help-comparison-unit-mode" :text="t('Auto makes the CDSs that share a locus identifier one unit and every other CDS a unit of its own. CDS makes each CDS a unit. Locus makes each locus a unit and requires a locus identifier, such as /locus_tag, on every CDS.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearUnitMode" :aria-label="t('Collinear unit mode')" aria-describedby="help-comparison-unit-mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="auto">{{ t('Auto') }}</option>
                                             <option value="cds">CDS</option>
@@ -3503,11 +3523,11 @@
                         <summary :aria-label="t('Region Annotations')"><settings-section-title section="region-annotations"></settings-section-title> <help-tip :text="t('Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement.')"></help-tip></summary>
                         <setting-note setting="region-annotations" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
-                            <div class="flex gap-1">
-                                <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
+                            <div class="flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-secondary text-[10px] flex-auto px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
                                 <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
                             </div>
                             <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
                             <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="ui-hint">{{ t('Add an annotation row to download TSV.') }}</p>
@@ -3528,7 +3548,7 @@
                                         </template>
                                         <template v-else-if="item.target.kind === 'featureSpan'">
                                             <input v-model.trim="item.target.selectors[0].key" :aria-label="t('Annotation qualifier')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Qualifier')" :disabled="!semanticMutationAvailable">
-                                            <input v-model.trim="item.target.selectors[0].value" :aria-label="t('Annotation feature value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
+                                            <input v-model.trim="item.target.selectors[0].value" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
                                         <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :disabled="!semanticMutationAvailable">
@@ -3596,7 +3616,7 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Run LOSAT') }}</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Upload BLAST') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Upload BLAST TSV') }}</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -3639,11 +3659,11 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="flex gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Clear Cache') }}
                                     </button>
                                 </div>
@@ -3702,7 +3722,7 @@
                                 <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add one comparison sequence file (FASTA, GenBank, or DDBJ) per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <span v-else class="text-[9px] flex items-center">{{ t('Series') }} <help-tip :text="t('Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
-                                    <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
+                                    <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" :aria-label="t('Comparison ring label {n}', { n: row.index + 1 })" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
@@ -3921,7 +3941,7 @@
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
                                                     <i class="ph ph-stack" aria-hidden="true"></i>
                                                     <span class="truncate">{{ t('Linear track stack') }}</span>
-                                                    <help-tip :text="t('Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. Records with a blank TSV cell do not paint that series, while its stack space remains reserved.')"></help-tip>
+                                                    <help-tip :text="t('Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. A record without a Depth TSV for that series does not draw it, but its space in the stack stays reserved.')"></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ linearTrackSlots().length }}</span>
                                             </div>
@@ -4073,7 +4093,7 @@
                                                                     :key="`linear-depth-option-${option.trackIndex}`"
                                                                     :value="option.trackIndex"
                                                                     :disabled="option.disabled"
-                                                                >{{ option.trackIndex }} · {{ option.label || t('Depth') }} · {{ option.coverage }}</option>
+                                                                >{{ option.trackIndex }} · {{ option.label }} · {{ option.coverage }}</option>
                                                             </select>
                                                         </div>
                                                         <div class="track-slot-field">
@@ -4084,7 +4104,7 @@
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
-                                                                :placeholder="t('Legend label')"
+                                                                :placeholder="depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))"
                                                                 :disabled="!semanticMutationAvailable"
                                                             >
                                                         </div>
@@ -4292,7 +4312,7 @@
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
                                                     <i class="ph ph-stack" aria-hidden="true"></i>
                                                     <span class="truncate">{{ t('Radial track stack') }}</span>
-                                                    <help-tip :text="t('Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside or Move inside to cross the Axis.')"></help-tip>
+                                                    <help-tip :text="t('Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside Axis or Move inside Axis to cross the Axis.')"></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ circularTrackSlots().length }}</span>
                                             </div>
@@ -4464,7 +4484,7 @@
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
-                                                                :placeholder="t('Legend label')"
+                                                                :placeholder="depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))"
                                                                 :disabled="!semanticMutationAvailable"
                                                             >
                                                         </div>
@@ -4820,11 +4840,11 @@
                                     <h4 class="group-heading" :aria-label="t('PRESET SCHEMES')">{{ t('PRESET SCHEMES') }} <help-tip id="help-colors-preset-schemes" :text="t('Replaces the specific rules with the preset\'s rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.')"></help-tip></h4>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <select v-model="selectedSpecificPreset" :aria-label="t('Preset scheme')" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white" :disabled="!semanticMutationAvailable">
+                                    <select v-model="selectedSpecificPreset" :aria-label="t('Preset scheme')" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow min-w-0 bg-white" :disabled="!semanticMutationAvailable">
                                         <option disabled value="">{{ t('Select preset...') }}</option>
                                         <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
                                     </select>
-                                    <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shadow-md shadow-blue-200" :disabled="!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)">
+                                    <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shrink-0 shadow-md shadow-blue-200" :disabled="!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)">
                                         <i class="ph ph-magic-wand" aria-hidden="true"></i>
                                         <span v-if="specificRulePresetLoading">{{ t('Applying...') }}</span>
                                         <span v-else>{{ t('Apply') }}</span>
@@ -4862,8 +4882,8 @@
                                     <span data-default-color-application-help class="apply-note">{{ settingApplicationText(hasPendingPaletteDraft ? 'generate' : 'live') }}</span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
-                                    <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0">
-                                        <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
+                                    <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0 self-end">
+                                        <span class="text-[9px] text-slate-500 break-words block mb-0.5">{{ feat }}</span>
                                         <color-value-control
                                             v-model="currentColors[feat]"
                                             :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
@@ -4874,8 +4894,8 @@
                                 <details v-if="defaultColorGroups.more.length" class="mt-1.5" data-default-colors-more>
                                     <summary class="cursor-pointer text-[10px] text-slate-500">{{ t('More colors ({count})', { count: defaultColorGroups.more.length }) }}</summary>
                                     <div class="mt-1 grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
-                                        <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0">
-                                            <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
+                                        <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0 self-end">
+                                            <span class="text-[9px] text-slate-500 break-words block mb-0.5">{{ feat }}</span>
                                             <color-value-control
                                                 v-model="currentColors[feat]"
                                                 :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
@@ -4886,7 +4906,7 @@
                                 </details>
 
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
-                                    <div class="flex-grow">
+                                    <div class="flex-grow min-w-0">
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">{{ t('ADD KEY') }}</label>
                                         <select v-model="newColorFeat" :aria-label="t('Add key')" class="form-input text-xs py-1 px-2 h-8" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in defaultColorKeys" :value="k">{{ k }}</option>
@@ -4896,7 +4916,7 @@
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">{{ t('COLOR') }}</label>
                                         <input type="color" v-model="newColorVal" :aria-label="t('Add key color')" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer" :disabled="!semanticMutationAvailable">
                                     </div>
-                                    <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8" :disabled="!semanticMutationAvailable">
+                                    <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8 shrink-0" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add') }}
                                     </button>
                                 </div>
@@ -4983,7 +5003,7 @@
                                             <i class="ph ph-x" aria-hidden="true"></i>
                                         </button>
                                     </span>
-                                    <span v-if="adv.features.length === 0" class="ui-hint italic py-1">{{ t('No features selected') }}</span>
+                                    <span v-if="adv.features.length === 0" class="ui-hint italic py-1">{{ t('No feature types selected') }}</span>
                                 </div>
                                 <div class="flex gap-2">
                                     <select v-model="newFeatureToAdd" :aria-label="t('Feature type to add')" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7" :disabled="!semanticMutationAvailable">
@@ -5179,7 +5199,7 @@
                         <setting-note setting="labels" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">{{ t('Show Labels') }}</label> <help-tip id="help-label-show-labels" :text="t('Display feature labels on the map. \'First\' shows labels only for the top track. \'Top Similarity Group Record\' requires LOSATP similarity-group or collinear mode.')"></help-tip></span>
+                                <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">{{ t('Show Labels') }}</label> <help-tip id="help-label-show-labels" :text="t('Display feature labels on the map. \'First Record Only\' shows labels only for the first record. \'Top Similarity Group Record\' requires LOSATP similarity-group or collinear mode.')"></help-tip></span>
                                 <select id="linear-show-labels" v-model="form.show_labels_linear" aria-describedby="help-label-show-labels" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
                                     <option value="none">{{ t('None') }}</option>
                                     <option value="all">{{ t('All Records') }}</option>
@@ -5699,9 +5719,9 @@
                                         <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" :aria-label="t('Small Tick')" aria-describedby="help-gc-small-tick" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">{{ t('Tick Font') }} <help-tip id="help-gc-tick-font" :text="t('Font size for GC content percent tick labels. Leave blank for auto.')"></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip id="help-gc-tick-font" :text="t('Font size for GC content percent tick labels. Leave blank for auto.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.gc_content_tick_font_size, 'gcTickFont')" :text="autoValueText('gcTickFont')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" :aria-label="t('Tick Font')" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" :aria-label="t('Tick Font Size')" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -5790,21 +5810,21 @@
                                 <p class="mb-2 text-[11px]">
                                     {{ t('gbdraw is released under the MIT License. Open source notices for the hosted app, vendored browser assets, and bundled fonts are available on a local static page.') }}
                                 </p>
-                                <div class="flex gap-2">
-                                    <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-1">
+                                <div class="flex flex-wrap gap-2">
+                                    <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-auto">
                                         <i class="ph ph-book-open-text text-lg" aria-hidden="true"></i> {{ t('Open Source Notices') }}
                                     </a>
-                                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-auto">
                                         <i class="ph ph-file-text text-lg" aria-hidden="true"></i> {{ t('MIT on GitHub') }}
                                     </a>
                                 </div>
                             </div>
 
-                            <div class="flex gap-2">
-                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                            <div class="flex flex-wrap gap-2">
+                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-auto">
                                     <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> GitHub
                                 </a>
-                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-auto">
                                     <i class="ph ph-bug text-lg" aria-hidden="true"></i> {{ t('Issues') }}
                                 </a>
                             </div>
@@ -5923,7 +5943,7 @@
                             </button>
                         </div>
                     </div>
-                    <span id="session-export-help" class="sr-only">{{ t('Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.') }}</span>
+                    <span id="session-export-help" class="sr-only">{{ t('Save Session stores the current Result and settings draft. The SVG, Interactive SVG, PNG, and PDF buttons download the current Result. Neither applies pending settings.') }}</span>
                     <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-x-2 gap-y-1 items-center flex-wrap mr-2" aria-describedby="session-export-help">
                         <p id="preview-layout-help" class="sr-only">{{ t('Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.') }}</p>
                         <div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-slate-300">
@@ -6040,7 +6060,7 @@
                             <select v-model="previewFeatureSearchField"
                                     data-history-ignore
                                     class="gfs-select"
-                                    :aria-label="t('Search field')">
+                                    :aria-label="t('Field to search')">
                                 <option v-for="field in previewFeatureSearchFieldOptions" :key="field.id" :value="field.id">
                                     {{ field.label }}
                                 </option>
@@ -6329,11 +6349,11 @@
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <div v-if="richFeaturePopup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                        <div v-if="richFeaturePopup" class="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-sliders-horizontal shrink-0" aria-hidden="true"></i>
@@ -6342,7 +6362,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'details'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-identification-card shrink-0" aria-hidden="true"></i>
@@ -6351,7 +6371,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'qualifiers'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-list-bullets shrink-0" aria-hidden="true"></i>
@@ -6360,7 +6380,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'sequence'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-text-columns shrink-0" aria-hidden="true"></i>
@@ -7932,7 +7952,8 @@
                     </div>
 
                     <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
-                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
+                        <!-- The toolbar wraps when its two Reset buttons do not fit beside the sort buttons; Reset strokes then keeps the right edge (OV-1520). -->
+                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex flex-wrap items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
                             <help-tip id="legend-tab-help" :label="t('About the Legend tab')" :text="settingApplicationNote('legend-editor').text + ' ' + t('To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.')"></help-tip>
                             <button :aria-label="t('Sort A-Z')" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" :title="t('Sort A-Z')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-sort-ascending" aria-hidden="true"></i>
@@ -7947,7 +7968,7 @@
                             <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="layoutRepositionMode ? t('Reset the legend position. Drag the legend in the preview to move it.') : t('Reset the legend position. To move the legend, turn on Layout edit and drag it in the preview.')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset position') }}
                             </button>
-                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
+                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 ml-auto flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset strokes') }}
                             </button>
                         </div>
@@ -8097,7 +8118,7 @@
                                                { label: t('Export Label TSV'), icon: 'ph-download-simple', run: downloadLabelOverrideTable },
                                                { label: t('Load Label TSV'), icon: 'ph-upload-simple', disabled: !semanticMutationAvailable, run: () => $refs.labelTableInput.click() },
                                                { label: t('Reset Label Edits'), icon: 'ph-arrow-counter-clockwise', disabled: !semanticMutationAvailable, run: resetAllLabelTextOverrides },
-                                               { section: t('Features'), help: t('Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied.'), helpLabel: t('Help: Feature Edits TSV'), helpId: 'help-feature-edits-tsv' },
+                                               { section: t('Features'), help: t('Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows whose record or feature is not in this diagram are counted and not applied.'), helpLabel: t('Help: Feature Edits TSV'), helpId: 'help-feature-edits-tsv' },
                                                { label: t('Export Feature Edits TSV'), icon: 'ph-download-simple', describedby: 'help-feature-edits-tsv', run: downloadFeatureEditTable },
                                                { label: t('Load Feature Edits TSV'), icon: 'ph-upload-simple', describedby: 'help-feature-edits-tsv', disabled: !semanticMutationAvailable, run: () => $refs.featureEditTableInput.click() }
                                              ]"></action-menu>
@@ -8440,15 +8461,17 @@
         </button>
     </div>
 
-    <footer data-app-footer class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 h-8">
+    <!-- The footer is one 32 px line when its text fits, and grows to hold the text when it wraps (OV-1427). -->
+    <footer data-app-footer class="bg-slate-50 border-t border-slate-200 px-4 py-1 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 min-h-8">
         <span>
             <strong>{{ t('Disclaimer:') }}</strong> {{ t('This tool is provided "as is" without warranty of any kind.') }}
         </span>
         <span>
-            {{ t('License:') }} <a href="./open-source-notices.html" class="hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a> |
-            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a> |
-            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a> |
-            {{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a>
+            <!-- A line breaks only between the items: each link stays whole and keeps its separator at its end (OV-1517). -->
+            {{ t('License:') }} <a href="./open-source-notices.html" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a>&nbsp;|
+            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>&nbsp;|
+            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a>&nbsp;|
+            {{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a>
         </span>
         <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
@@ -8859,11 +8882,11 @@
                     <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" class="form-input form-input-compact" :disabled="!available">
                 </div>
                 <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
-                <!-- The pattern's state under its field, once; the rule for what Save, Generate and Export use sits in the help tip. -->
+                <!-- The pattern's state under its field, once; the rule for what Save Session, Generate and the downloads use sits in the help tip. -->
                 <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="space-y-0.5 break-words text-[10px] leading-snug" data-color-rule-pattern-status data-history-ignore>
                     <div class="flex items-center gap-1 text-amber-800">
                         <p role="status" aria-live="polite" class="font-semibold">{{ t('Not applied') }}<span v-if="patternDraft(rule).pending"> — {{ t('Checking color rule…') }}</span></p>
-                        <help-tip :id="`${fieldId(rule)}-policy`" :text="t('Until the pattern is accepted, Save Session and Generate use the last accepted rule, and Export uses the current Result. The draft is not saved.')"></help-tip>
+                        <help-tip :id="`${fieldId(rule)}-policy`" :text="t('Until the pattern is accepted, Save Session and Generate use the last accepted rule, and the SVG, Interactive SVG, PNG, and PDF downloads use the current Result. The draft is not saved.')"></help-tip>
                     </div>
                     <operation-error v-if="patternDraft(rule).error" compact :error="patternDraft(rule).error"></operation-error>
                     <div class="flex flex-wrap gap-3">

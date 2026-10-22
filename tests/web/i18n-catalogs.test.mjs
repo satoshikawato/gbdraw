@@ -545,6 +545,51 @@ test('OV-1477: track, mode, control and setting names are not placeholders insid
   ]) assert.ok(keys.includes(key), key);
 });
 
+// The cross-locale check (i18n-crossfix-20261022): the English names the
+// control, option or value the UI shows and says what happens.
+test('the English cites the controls the UI has and names what each text describes', async () => {
+  const keys = [...(await sourceKeys()).keys.keys()];
+  const stale = [
+    /Export (?:outputs|uses) the current Result/, /^File order is unavailable/, /cannot use Overlay\.$/, /^Search field$/,
+    /^Orient forward/, /direction changes(?: restored)?\.?$/, /comparison endpoints/i, /was not found in the current input/,
+    /Zipped/, /Use Move outside or Move inside/, /'First' shows/, /name no record or feature here/, /per-record blanks/,
+    /blank TSV cell/, /^Tick Font$/, /^Annotation feature value$/, /^No features selected$/, /^Color for \{file\}$/,
+    /^Upload BLAST$/, /^Advanced similarity groups$/, /^Set on individual features$/, /member hits per protein/i, /^Depth \{n\}$/
+  ];
+  assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
+  for (const key of [
+    'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'No feature types selected', 'Comparison ring color for {file}',
+    'Max hits per protein for groups', 'Protein BLASTP max hits per protein for groups', 'Color set on individual features',
+    'Upload BLAST TSV', 'Advanced similarity group settings'
+  ]) assert.ok(keys.includes(key), key);
+});
+
+// OV-1446: the legend-name field of a Depth series shows, as its placeholder,
+// the default name the figure draws, which is English in every locale.
+test('OV-1446: a Depth legend-name placeholder is the English default name of the figure', async () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  assert.deepEqual([...html.matchAll(/:placeholder="[^"]*\bt\('Depth/g)].map((match) => match[0]), []);
+  // The series cards' Legend title fields, then the Depth rows' legend-label fields (OV-1508).
+  assert.deepEqual([...html.matchAll(/:placeholder="(depthSeriesDefaultName\([^"]*)"/g)].map((match) => match[1]), [
+    'depthSeriesDefaultName(track.index)', 'depthSeriesDefaultName(track.index)',
+    'depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))', 'depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))'
+  ]);
+  const { defaultDepthSeriesLabel } = await import('../../gbdraw/web/js/services/depth-track-state.js');
+  try {
+    await setUiLocale('ja', async () => ({ default: Object.freeze({ Depth: '深度', 'Depth {n}': '深度{n}' }) }));
+    assert.deepEqual([defaultDepthSeriesLabel(0, 1), defaultDepthSeriesLabel(0, 2), defaultDepthSeriesLabel(1, 2)], ['Depth', 'Depth 1', 'Depth 2'],
+      'one series: Depth; several: Depth N from 1, as gbdraw/analysis/depth_tracks.py names them');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-1506: a rail name too wide for its entry has a rail key of its own.
+test('OV-1506: Layout, Labels and Features have rail keys of their own', async () => {
+  const rail = [...(await sourceKeys()).keys.values()].filter(({ context }) => context === 'rail');
+  assert.deepEqual(rail.map(({ context, english }) => `${context}:${english}`), ['rail:Layout', 'rail:Features', 'rail:Labels']);
+});
+
 test('the UI languages are the eleven of the Language menu, Latin script first, then Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
     ['en', 'English'], ['id', 'Bahasa Indonesia'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],

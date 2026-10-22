@@ -569,3 +569,20 @@ def test_comparison_rows_refuse_an_ordered_table_past_the_last_record(source: st
     with pytest.raises(ValidationError, match="outside the loaded records: query=#2, subject=#3, record_count=2") as caught:
         linear_comparison_rows(blast, protein, (), thresholds, records, (0, 1), False)
     assert caught.value.diagnostic["code"] == "COMPARISON_INPUT"
+
+
+def test_comparison_table_reads_each_value_as_the_nearest_double(tmp_path: Path) -> None:
+    # OV-1534: pandas before 3.1 read "2.41e-73" as 2.4100000000000003e-73 and
+    # 3.1 reads it exactly, so the drawing's data-evalue followed the pandas version.
+    from gbdraw.io.comparisons import read_comparison_table
+
+    written = ("2.41e-73", "6.69e-59", "5.84e-79")
+    table = tmp_path / "hits.tsv"
+    table.write_text(
+        "".join(f"q\ts\t42.963\t135\t77\t0\t1\t135\t1\t135\t{evalue}\t60.6\n" for evalue in written),
+        encoding="utf-8",
+    )
+
+    frame = read_comparison_table(table)
+
+    assert [repr(value) for value in frame["evalue"]] == list(written)

@@ -3,6 +3,8 @@
 /** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 import {
   activeDepthTrackIndices,
+  depthTrackConfigForEdit,
+  depthTrackEditDefaults,
   depthTrackMatrixWidth,
   reconcileManagedDepthSlots
 } from '../services/depth-track-state.js';
@@ -905,7 +907,6 @@ export const createLinearTrackSlotEditor = ({
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, linearDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
-    if (renderer === 'depth') return 'Depth'; // the default legend text of the figure: stays English
     return t('Legend label');
   };
 
@@ -926,34 +927,6 @@ export const createLinearTrackSlotEditor = ({
     }
   };
 
-  /** @param {DrawingState} drawing @param {unknown} trackIndex */
-  const ensureDepthTrackConfigForSlotIndex = (drawing, trackIndex) => {
-    const idx = Math.max(0, Number(trackIndex) || 0);
-    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
-    while (drawing.adv.depth_tracks.length <= idx) {
-      const nextIndex = drawing.adv.depth_tracks.length;
-      drawing.adv.depth_tracks.push({
-        label: nextIndex === 0 ? 'Depth' : `Depth ${nextIndex + 1}`,
-        color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-        height: null,
-        large_tick_interval: null,
-        small_tick_interval: null,
-        tick_font_size: null
-      });
-    }
-    if (!drawing.adv.depth_tracks[idx] || typeof drawing.adv.depth_tracks[idx] !== 'object' || Array.isArray(drawing.adv.depth_tracks[idx])) {
-      drawing.adv.depth_tracks[idx] = {
-        label: idx === 0 ? 'Depth' : `Depth ${idx + 1}`,
-        color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-        height: null,
-        large_tick_interval: null,
-        small_tick_interval: null,
-        tick_font_size: null
-      };
-    }
-    return drawing.adv.depth_tracks[idx];
-  };
-
   /** @param {OptionalLinearSlot} slot */
   const linearDepthTrackIndexForSlot = (slot) => {
     if (!slot || normalizeRenderer(slot.renderer) !== 'depth') return null;
@@ -961,10 +934,13 @@ export const createLinearTrackSlotEditor = ({
     return normalizeTrackIndex(params.track_index) ?? 0;
   };
 
-  /** @param {DrawingState} drawing @param {unknown} trackIndex */
+  // The stored height of a Depth series, read without writing: a series
+  // without settings has none.
+  /** @param {DrawingState} drawing @param {number} trackIndex */
   const heightTextFromDepthTrackConfig = (drawing, trackIndex) => {
-    const config = ensureDepthTrackConfigForSlotIndex(drawing, trackIndex);
-    const height = parsePositivePxNumber(config.height);
+    const tracks = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks : [];
+    const config = tracks[trackIndex];
+    const height = config && typeof config === 'object' ? parsePositivePxNumber(config.height) : null;
     return height === null ? '' : String(height);
   };
 
@@ -1080,7 +1056,12 @@ export const createLinearTrackSlotEditor = ({
     slot.height = text;
     if (normalizeRenderer(slot.renderer) !== 'depth') return;
     const trackIndex = linearDepthTrackIndexForSlot(slot) ?? 0;
-    const config = ensureDepthTrackConfigForSlotIndex(drawing, trackIndex);
+    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
+    // A row whose series the drawing does not have keeps its own height only (TK-03).
+    const config = depthTrackConfigForEdit(
+      drawing.adv.depth_tracks, trackIndex, linearAvailableDepthTrackCountForState(state), depthTrackEditDefaults(drawing.adv)
+    );
+    if (!config) return;
     try {
       config.height = parseOptionalPixel(text, 'Linear track height', { allowZero: false });
     } catch {

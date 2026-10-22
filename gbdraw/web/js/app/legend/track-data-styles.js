@@ -1,5 +1,5 @@
 // @ts-check
-import { getDepthTrackFallbackLabel } from '../depth-tracks.js';
+import { defaultDepthSeriesLabel } from '../../services/depth-track-state.js';
 
 /** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
@@ -37,7 +37,9 @@ export const trackDataLegendCaptions = ({
     (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {{ legendLabel?: unknown } | null | undefined} */ annotation) => add(annotation?.legendLabel));
   });
   const sourced = new Set(sourcedDepthTrackIndexes);
-  sourced.forEach((index) => add(depthTracks?.[index]?.label || getDepthTrackFallbackLabel(index)));
+  // A series without a label draws the name its index has among all the series.
+  const seriesCount = Math.max(Array.isArray(depthTracks) ? depthTracks.length : 0, ...[...sourced].map((index) => index + 1));
+  sourced.forEach((index) => add(depthTracks?.[index]?.label || defaultDepthSeriesLabel(index, seriesCount)));
   (Array.isArray(depthSlots) ? depthSlots : []).forEach((slot) => {
     if (slot?.renderer === 'depth' && sourced.has(Number(slot?.params?.track_index ?? 0))) {
       add(slot.params?.legend_label);

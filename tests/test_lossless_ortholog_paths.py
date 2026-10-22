@@ -205,20 +205,28 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
     assert runner.canonical(actual) == runner.canonical(expected)
 
 
+# The post_search science of the s04 archive
+# (docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/
+# s04-current-timing-cursor-<case>.json.gz), with its e-values read exactly. The archive
+# read them with pandas' default float parser, which can miss by one unit in the last
+# place; since OV-1534 every pandas version reads them exactly. The two differ only in
+# those e-values: no ortholog, orthogroup, block, or order changes.
+S04_SCIENCE_SHA256 = {
+    "gallery-collinear": "ad52c06ef3a74e2f5cb8a7bac7699167799317fe655ff09c73cea4b5bb89a9c1",
+    "gallery-orthogroup": "86ba4bf37097529161babd24e4e2cd25c7e03e863aaef77f31ddb71514cd8d5b",
+}
+
+
 @pytest.mark.parametrize("name", ["gallery-collinear", "gallery-orthogroup"])
 def test_gallery_science_matches_archived_s04_bytes(name):
-    import gzip
     from gbdraw.analysis import collinearity as cc
     # Reproduce the archived pandas 2 inference setting, including its dtypes.
     with pd.option_context("future.infer_string", False):
         _, stages = runner.build_case(ROOT, pc, cc, name, runner.SEED)
         result = stages["post_search"]()
     legacy = replace(result, orthogroups=pc.materialize_ortholog_paths(result.orthogroups))
-    saved = json.loads(gzip.decompress((ROOT / 'docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data'
-        / f's04-current-timing-cursor-{name}.json.gz').read_bytes()))
     # The archive was made on Python 3.13; compensated_sum gives its float bits on every Python (OV-1237).
-    expected = saved['cases'][name]['stages']['post_search']['semanticSha256']
-    assert runner.digest(runner.json_bytes(runner.canonical(legacy))) == expected
+    assert runner.digest(runner.json_bytes(runner.canonical(legacy))) == S04_SCIENCE_SHA256[name]
 
 
 @pytest.mark.parametrize("name", ["gallery-collinear", "gallery-orthogroup"])

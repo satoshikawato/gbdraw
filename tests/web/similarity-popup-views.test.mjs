@@ -294,7 +294,8 @@ test('OV-1390: member roles and confidence levels show in the UI language; an un
     await setUiLocale('ja');
     assert.deepEqual(shown(), {
       notes: ['', 'レコード内パラログ · 信頼度：中', 'future_role · 信頼度：低'],
-      rows: ['低信頼度', '共オーソログ', '低', 'future_level']
+      // ja keeps the English word coortholog: no established Japanese term (catalog decision, no coined terms).
+      rows: ['低信頼度', 'coortholog', '低', 'future_level']
     });
   } finally {
     await setUiLocale(SOURCE_LOCALE);

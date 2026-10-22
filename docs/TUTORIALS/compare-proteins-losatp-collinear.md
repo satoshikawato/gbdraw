@@ -127,7 +127,7 @@ also the value used by this checked recipe and output.
 | Settings / Performance | Parallel runs | Auto |
 | Settings / Performance | Threads per run | Auto |
 | Settings / Search limits | Max target seqs | Blank (**Unbounded**) |
-| Settings / Search limits | Member hits per protein | `5` |
+| Settings / Search limits | Max hits per protein for groups | `5` |
 | Settings | Build similarity groups with within-record searches | Selected |
 | Settings | Max unit gap | `0` |
 | Settings | Min block genes | `1` |

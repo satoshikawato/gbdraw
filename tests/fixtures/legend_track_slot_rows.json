@@ -1501,6 +1501,63 @@
       ]
     },
     {
+      "name": "circular: three Depth series without labels or slots draw rows named Depth 1, Depth 2 and Depth 3 (OV-1508)",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "",
+          "color": "#4a90e2"
+        },
+        {
+          "label": "",
+          "color": "#e24a4a"
+        },
+        {
+          "label": "",
+          "color": "#4ae24a"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "Depth 1",
+          "depth",
+          null,
+          "#4a90e2"
+        ],
+        [
+          "Depth 2",
+          "depth",
+          null,
+          "#e24a4a"
+        ],
+        [
+          "Depth 3",
+          "depth",
+          null,
+          "#4ae24a"
+        ]
+      ]
+    },
+    {
       "mode": "circular",
       "dinucleotide": "GC",
       "palette": {

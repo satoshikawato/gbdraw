@@ -260,3 +260,29 @@ test('Depth legend label help says it renames the series and what a blank gives 
   }
   assert.equal(tips.filter((text) => text.includes('renames the series everywhere')).length, 2);
 });
+
+// OV-1510: a Linear Depth row's height edit writes its series' settings
+// through the series owner (`depthTrackConfigForEdit`, TK-03): a row whose
+// series the drawing does not have writes no series and does not grow
+// `depth_tracks`, a series without stored settings gets the owner's defaults
+// (no name, the series color), and reading a row's height writes nothing.
+test('linear: a Depth row height edit writes only a series the drawing has, with its defaults (OV-1510)', () => {
+  const editor = MODES.linear.create([{ id: 'depth', track: 0 }, { id: 'my_depth', track: 3, manual: true }], [0], 1);
+  const linear = createLinearTrackSlotEditor({ state: withDrawings(editor.state) });
+  const row = (id) => editor.slots().find((slot) => slot.id === id);
+  assert.equal(linear.linearTrackSlotHeightValue(row('my_depth')), '');
+  assert.deepEqual(editor.state.adv.depth_tracks, []);
+  linear.setLinearTrackSlotHeight(row('my_depth'), '40');
+  assert.equal(row('my_depth').height, '40');
+  assert.deepEqual(editor.state.adv.depth_tracks, []);
+});
+
+test('linear: a Depth row height edit gives a series without settings the owner defaults (OV-1510)', () => {
+  const editor = MODES.linear.create([{ id: 'depth', track: 0 }, { id: 'depth_2', track: 1 }], [0, 1], 2);
+  const linear = createLinearTrackSlotEditor({ state: withDrawings(editor.state) });
+  linear.setLinearTrackSlotHeight(editor.slots().find((slot) => slot.id === 'depth_2'), '40');
+  assert.deepEqual(
+    editor.state.adv.depth_tracks.map(({ label, color, height }) => ({ label, color, height })),
+    [{ label: '', color: '#4A90E2', height: null }, { label: '', color: '#E45756', height: 40 }]
+  );
+});
