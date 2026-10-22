@@ -636,6 +636,37 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
                     ) from cleanup_error
 
 
+@contextmanager
+def prepared_input_lookup(
+    cache: PreparedBiologicalInputCache,
+    *,
+    resource_paths: Mapping[str, str | Path],
+    resource_identities: Mapping[str, Mapping[str, Any]],
+) -> Iterator[None]:
+    """Let a Worker helper read the inputs the last Generate prepared.
+
+    A helper that plans the request the Worker staged for it (alignment
+    projection, Feature Edits TSV, stored protein frames) passes the identities
+    of its manifest, validated as a render's are. Lookups under them hit what
+    a Generate stored; a miss parses once for the whole call and is not kept;
+    nothing is published, pruned or evicted (``transaction(read_only=True)``).
+    """
+
+    if not isinstance(resource_paths, Mapping):
+        raise ValidationError("The staged Web helper resource map must be an object.")
+    paths = {resource_id: Path(raw_path) for resource_id, raw_path in resource_paths.items()}
+    identities = _validate_prepared_resource_identities(
+        resource_identities, resource_paths=paths, cache_requested=True,
+    )
+    assert identities is not None
+    with cache.transaction(
+        resource_paths={paths[resource_id]: identity for resource_id, identity in identities.items()},
+        diagnostics=None,
+        read_only=True,
+    ):
+        yield
+
+
 def _validate_prepared_resource_identities(
     value: Mapping[str, Mapping[str, Any]] | None,
     *,
@@ -698,6 +729,7 @@ def _validate_prepared_resource_identities(
 
 
 __all__ = [
+    "prepared_input_lookup",
     "render_canonical_web_request",
     "render_embedded_canonical_web_request",
     "render_staged_canonical_web_request",

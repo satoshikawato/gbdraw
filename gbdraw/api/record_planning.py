@@ -35,7 +35,7 @@ from gbdraw.io.cli_tables import (
     read_conservation_table,
     read_records_table,
 )
-from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.comparisons import read_comparison_resource
 from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -43,7 +43,6 @@ from gbdraw.io.record_select import (
 )
 from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.api.prepared import register_prepared_resource_value
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -1725,7 +1724,7 @@ def resolve_linear_options(
             continue
         try:
             # The file's staged identity keys the stages that take its rows.
-            matches = register_prepared_resource_value(read_comparison_table(row.blast), row.blast)
+            matches = read_comparison_resource(row.blast)
         except ValidationError as exc:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"

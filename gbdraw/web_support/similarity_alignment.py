@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
-    ResolvedRecordCollection, project_similarity_alignment_anchor_fact,
+    ResolvedRecordCollection, _source_details, project_similarity_alignment_anchor_fact,
     similarity_alignment_evidence_edges,
 )
 from gbdraw.api.request_render import plan_linear_request
@@ -372,18 +372,25 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
         else:
             flipped_records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
     flipped = plan_linear_request(replace(request, records=tuple(flipped_records)))
-    return raw, before, before_collection, after, flipped, request.options.orthogroups
+    return raw, before, before_collection, after, flipped, request.options.orthogroups, request
 
 
 def _serialize_projection(context, candidates, raw_request):
-    raw, before, collection, after, flipped, _orthogroups = context
+    raw, before, collection, after, flipped, _orthogroups, request = context
     before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
     after_placements = getattr(after.build().drawing, "_gbdraw_alignment_placements")
     flipped_collection = ResolvedRecordCollection(flipped.records, flipped.provenance)
-    fingerprints = {}
+    # The content of each source this call staged, hashed once per file. Not
+    # ``provenance.source_paths``: records the Worker's cache supplied name the
+    # files of the Generate that parsed them.
+    fingerprints: dict[int, list[str]] = {}
+    hashes: dict[str, str] = {}
     for provenance in collection.provenance:
-        for path in provenance.source_paths:
-            fingerprints[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        _kind, paths = _source_details(request.records[provenance.input_index].source)
+        for path in paths:
+            if path not in hashes:
+                hashes[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        fingerprints[provenance.input_index] = [hashes[path] for path in paths]
     binding_records = []
     records = []
     base = {item.record_key: item for item in (before.layout.record_translations if before.layout else ())}
@@ -404,7 +411,7 @@ def _serialize_projection(context, candidates, raw_request):
                             "y": 0.0 if translation is None else float(translation.y)},
             "sourceRecordIndex": provenance.source_record_index,
             "sourceRecordId": provenance.source_record_id,
-            "sourceFingerprints": [fingerprints[path] for path in provenance.source_paths],
+            "sourceFingerprints": fingerprints[provenance.input_index],
         })
         variants = []
         for reverse in (False, True):

@@ -149,8 +149,8 @@ const pendingHelperA = runDiagramHelperOperation(
   { entry: {}, identityManifest: {} }
 );
 const pendingHelperB = runDiagramHelperOperation(
-  DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-  { caption: 'pending', fontFamily: 'Arial', fontSize: 14 }
+  DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+  { features: [], rules: [], kind: 'color' }
 );
 const rejectedA = assert.rejects(pendingHelperA, /disposed/);
 const rejectedB = assert.rejects(pendingHelperB, /disposed/);

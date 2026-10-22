@@ -14,7 +14,6 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
-  MEASURE_LEGEND_TEXT: 'measureLegendText',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
