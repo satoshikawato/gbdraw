@@ -536,6 +536,13 @@ def render_staged_canonical_web_request(
     )
 
 
+def _require_resource_map(resource_paths: object) -> None:
+    """The one check that a staged resource map is an object (render and helper paths)."""
+
+    if not isinstance(resource_paths, Mapping):
+        raise ValidationError("The staged Web render resource map must be an object.")
+
+
 @web_error_stage("resource-staging")
 def _render_staged_canonical_web_request_with_prepared_inputs(
     payload: Mapping[str, Any],
@@ -549,8 +556,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _held_feature_catalog_revision: str | None = None,
     _held_segments: AbstractSet[str] = frozenset(),
 ) -> WebRenderReply:
-    if not isinstance(resource_paths, Mapping):
-        raise ValidationError("The staged Web render resource map must be an object.")
+    _require_resource_map(resource_paths)
     workspace_path = Path(workspace)
     resource_directory = workspace_path / "resources"
     cache_directory = workspace_path.parent / "gbdraw-web-render-resource-cache"
@@ -641,7 +647,7 @@ def prepared_input_lookup(
     cache: PreparedBiologicalInputCache,
     *,
     resource_paths: Mapping[str, str | Path],
-    resource_identities: Mapping[str, Mapping[str, Any]],
+    resource_identities: Mapping[str, Mapping[str, object]],
 ) -> Iterator[None]:
     """Let a Worker helper read the inputs the last Generate prepared.
 
@@ -652,8 +658,7 @@ def prepared_input_lookup(
     nothing is published, pruned or evicted (``transaction(read_only=True)``).
     """
 
-    if not isinstance(resource_paths, Mapping):
-        raise ValidationError("The staged Web helper resource map must be an object.")
+    _require_resource_map(resource_paths)
     paths = {resource_id: Path(raw_path) for resource_id, raw_path in resource_paths.items()}
     identities = _validate_prepared_resource_identities(
         resource_identities, resource_paths=paths, cache_requested=True,
