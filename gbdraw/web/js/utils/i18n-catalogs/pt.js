@@ -21,7 +21,7 @@ export default Object.freeze({
   "A circular track does not fit.": "Uma trilha circular não cabe.",
   "A color rule would draw a Legend item that already exists in another color. Change the rule's Legend name or color, or rename that Legend item.": "Uma regra de cor desenharia um item da legenda que já existe com outra cor. Altere o nome na legenda ou a cor da regra, ou renomeie esse item da legenda.",
   "A comparison cannot connect a record to itself.": "Uma comparação não pode ligar um registro a ele mesmo.",
-  "A comparison row cannot use the placement Overlay anchor.": "Uma linha de comparação não pode usar o posicionamento Sobreposição à âncora.",
+  "A comparison row cannot use the placement Overlay anchor.": "Uma linha de comparação não pode usar o posicionamento Sobre a âncora.",
   "A diagram generation request is already running. Wait for it to finish before retrying.": "Uma solicitação de geração de diagrama já está em execução. Aguarde a conclusão antes de tentar novamente.",
   "A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.": "Uma edição de feature não identifica um registro das entradas atuais. Gere novamente; se o problema continuar, salve uma sessão para investigação.",
   "A genome diagram generator for microbes and organelles": "Um gerador de diagramas de genomas para microrganismos e organelas",
