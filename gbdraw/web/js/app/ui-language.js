@@ -57,7 +57,8 @@ const TRANSLATION_FEEDBACK_FORM = 'https://github.com/satoshikawato/gbdraw/issue
 
 /**
  * The link of the translation feedback form (`.github/ISSUE_TEMPLATE/translation-feedback.yml`)
- * with its `language` and `version` fields filled in. No file, setting,
+ * with its `language` and `version` fields filled in and the language tag in
+ * the issue title. No file, setting,
  * Result or Session content goes into it (PD-OI-106).
  * @param {UiLocale} language the shown UI language
  * @returns {string}
@@ -66,5 +67,6 @@ export const translationFeedbackUrl = (language) => {
   const url = new URL(TRANSLATION_FEEDBACK_FORM);
   url.searchParams.set('language', language);
   url.searchParams.set('version', GBDRAW_VERSION);
+  url.searchParams.set('title', `[Translation] ${language}: `);
   return url.href;
 };

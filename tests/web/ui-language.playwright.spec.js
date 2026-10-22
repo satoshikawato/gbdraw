@@ -23,7 +23,8 @@
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
 //   new tab, and links the translation feedback form with only the shown
-//   language and the gbdraw version (PD-OI-106 scenario revision 5);
+//   language and the gbdraw version, with the language tag in the issue title
+//   (PD-OI-106 scenario revision 5);
 //   at 1024, 1280 and 1440 px the header keeps the menu and the link in view;
 // Not checked here: PNG and PDF bytes, the shown Run Info text, and the
 // diagnostics text.
@@ -337,7 +338,7 @@ test('in every language, the link beside the menu opens the feedback form with o
     await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     const href = new URL(await link.getAttribute('href'));
     expect(href.origin + href.pathname).toBe('https://github.com/satoshikawato/gbdraw/issues/new');
-    expect([...href.searchParams]).toEqual([['template', 'translation-feedback.yml'], ['language', tag], ['version', version]]);
+    expect([...href.searchParams]).toEqual([['template', 'translation-feedback.yml'], ['language', tag], ['version', version], ['title', `[Translation] ${tag}: `]]);
     // The header keeps one row inside the window, with the menu and the link in view (OV-1495: es, fr and pt at 1440 px).
     for (const width of [1024, 1440, 1280]) {
       await page.setViewportSize({ width, height: 800 });

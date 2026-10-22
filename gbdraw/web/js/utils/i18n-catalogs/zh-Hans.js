@@ -2150,6 +2150,7 @@ export default Object.freeze({
   "Subtitle": "副标题",
   "Subtitle / title (optional)": "副标题 / 标题（可选）",
   "Subtitle / title for sequence {n}": "序列{n}的副标题 / 标题",
+  "Suggest a translation fix": "建议修改翻译",
   "Summary": "摘要",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "请提供GenBank输入，或相互匹配的GFF3和FASTA输入。",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "请按需提供比较序列文件（FASTA、GenBank或DDBJ）或BLAST outfmt 6/7文件。",

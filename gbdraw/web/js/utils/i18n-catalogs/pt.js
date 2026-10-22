@@ -2150,6 +2150,7 @@ export default Object.freeze({
   "Subtitle": "Subtítulo",
   "Subtitle / title (optional)": "Subtítulo / título (opcional)",
   "Subtitle / title for sequence {n}": "Subtítulo / título da sequência {n}",
+  "Suggest a translation fix": "Sugerir uma correção de tradução",
   "Summary": "Resumo",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "Forneça uma entrada GenBank ou entradas GFF3 e FASTA correspondentes.",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "Forneça um arquivo de sequência de comparação (FASTA, GenBank ou DDBJ) ou BLAST outfmt 6/7, conforme necessário.",

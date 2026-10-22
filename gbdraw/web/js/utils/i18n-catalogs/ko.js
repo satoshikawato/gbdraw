@@ -2150,6 +2150,7 @@ export default Object.freeze({
   "Subtitle": "부제목",
   "Subtitle / title (optional)": "부제목 / 제목(선택 사항)",
   "Subtitle / title for sequence {n}": "서열 {n}의 부제목 / 제목",
+  "Suggest a translation fix": "번역 수정 제안하기",
   "Summary": "요약",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "GenBank 입력 또는 서로 대응하는 GFF3 및 FASTA 입력을 지정하십시오.",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "필요에 따라 비교 서열 파일(FASTA, GenBank 또는 DDBJ) 또는 BLAST outfmt 6/7을 지정하십시오.",
