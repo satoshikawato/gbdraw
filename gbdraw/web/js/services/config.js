@@ -122,8 +122,10 @@ import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
   bytesToBase64,
+  fileDescriptorOf,
   getSessionResourceSource,
-  readFileBytes
+  readFileBytes,
+  rememberFileDescriptor
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
@@ -1129,12 +1131,20 @@ const replacePlainObject = (target, source) => {
  */
 /** @type {ConfigCheckPort | null} */
 let unmanagedConfigOverrideValidator = null;
+// The overrides the validator accepted, by the JSON of its whole request: its
+// reply is a function of that request, so Load and every Save ask once per
+// distinct request. A refusal or a failed call is not kept; the entries are
+// bounded and belong to the port that answered them.
+const ACCEPTED_CONFIG_CHECKS_LIMIT = 16;
+/** @type {Map<string, Record<string, unknown>>} */
+const acceptedConfigChecks = new Map();
 
 /** @param {typeof unmanagedConfigOverrideValidator} validator */
 export const setUnmanagedConfigOverrideValidator = (validator) => {
   unmanagedConfigOverrideValidator = typeof validator === 'function'
     ? validator
     : null;
+  acceptedConfigChecks.clear();
 };
 
 /**
@@ -1175,13 +1185,13 @@ const checkUnmanagedConfigOverrides = async ({
   if (!unmanagedConfigOverrideValidator) {
     throw new Error('Configuration validation service is unavailable.');
   }
-  const result = await unmanagedConfigOverrideValidator({
-    mode,
-    config,
-    configOverrides: overrides,
-    managedPaths,
-    source
-  });
+  /** @type {ConfigCheckRequest} */
+  const request = { mode, config, configOverrides: overrides, managedPaths, source };
+  const requestKey = JSON.stringify(request);
+  const accepted = acceptedConfigChecks.get(requestKey);
+  if (accepted) return { overrides: cloneJsonData(accepted) };
+  const validator = unmanagedConfigOverrideValidator;
+  const result = await validator(request);
   if (result?.result?.error && typeof result.result.error === 'object') {
     return { refusal: Object.assign(new Error('Configuration validation failed.'), result.result.error) };
   }
@@ -1193,7 +1203,15 @@ const checkUnmanagedConfigOverrides = async ({
     throw new Error('Configuration validation returned an invalid preserved-settings result.');
   }
   // The cast: `isPlainObject(preserved)` above (this module's predicate is no type guard).
-  return { overrides: cloneJsonData(/** @type {Record<string, unknown>} */ (preserved)) };
+  const kept = cloneJsonData(/** @type {Record<string, unknown>} */ (preserved));
+  if (validator === unmanagedConfigOverrideValidator) {
+    acceptedConfigChecks.delete(requestKey);
+    acceptedConfigChecks.set(requestKey, kept);
+    if (acceptedConfigChecks.size > ACCEPTED_CONFIG_CHECKS_LIMIT) {
+      acceptedConfigChecks.delete(/** @type {string} */ (acceptedConfigChecks.keys().next().value));
+    }
+  }
+  return { overrides: cloneJsonData(kept) };
 };
 
 /**
@@ -2985,11 +3003,6 @@ const restorePaletteStateFromSession = (drawing, ui = {}) => {
 };
 
 /**
- * The descriptor each file was saved or loaded as, keyed by that file.
- * @type {WeakMap<object, RawSessionResourceDescriptor>}
- */
-const serializedFileDescriptors = new WeakMap();
-/**
  * @template {RawSessionResourceDescriptor} D
  * @param {object} file A `File`, or another object whose bytes were read.
  * @param {D} descriptor
@@ -2997,8 +3010,7 @@ const serializedFileDescriptors = new WeakMap();
  */
 const cacheSerializedFileDescriptor = (file, descriptor) => {
   setResourcePayloadOwner(descriptor, file);
-  serializedFileDescriptors.set(file, descriptor);
-  return descriptor;
+  return rememberFileDescriptor(file, descriptor);
 };
 
 /**
@@ -3019,15 +3031,12 @@ const serializeFile = async (file) => {
     setResourcePayloadOwner(descriptor, file);
     return descriptor;
   }
-  // A key is an object (functions included): any other value has no entry.
-  const cached = typeof file === 'object' || typeof file === 'function'
-    ? serializedFileDescriptors.get(/** @type {object} */ (file))
-    : undefined;
+  const cached = fileDescriptorOf(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
   // `readFileBytes` resolves only for an object (or a function) with `arrayBuffer()`.
   const owner = /** @type {object} */ (file);
-  const shared = serializedFileDescriptors.get(owner);
+  const shared = fileDescriptorOf(owner);
   if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(view?.name || 'file')

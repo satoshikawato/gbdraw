@@ -368,6 +368,35 @@ const fastPathRecords = async (files, parse) => {
   }
 };
 
+// Every reader of a source's records (the Linear cards, the Circular refresh,
+// a draft Save, the comparison frame) shares one discovery per File object and
+// format, or per GFF3 and FASTA pair: an uploaded File and a Session resource
+// view never change their bytes. A failed read is not kept; each reader keeps
+// an error it treats as final in its own state. Each call returns its own copy
+// of the records.
+/** @type {WeakMap<FileLike, Map<string, Promise<SequenceRecord[]>>>} */
+const sequenceRecordReads = new WeakMap();
+/** @type {WeakMap<FileLike, WeakMap<FileLike, Promise<SequenceRecord[]>>>} */
+const gffFastaRecordReads = new WeakMap();
+
+/**
+ * @template K
+ * @param {{ get: (key: K) => Promise<SequenceRecord[]> | undefined, set: (key: K, read: Promise<SequenceRecord[]>) => unknown, delete: (key: K) => unknown }} reads
+ * @param {K} key
+ * @param {() => Promise<SequenceRecord[]>} read
+ * @returns {Promise<SequenceRecord[]>}
+ */
+const sharedRecordRead = (reads, key, read) => {
+  let held = reads.get(key);
+  if (!held) {
+    const started = read();
+    held = started;
+    reads.set(key, started);
+    started.catch(() => { if (reads.get(key) === started) reads.delete(key); });
+  }
+  return held.then((records) => records.map((record) => ({ ...record })));
+};
+
 /**
  * @param {{
  *   file: FileLike | null | undefined, format: string,
@@ -380,16 +409,20 @@ export const discoverSequenceRecords = async ({
   runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!file) throw new Error('A sequence file is required.');
-  const records = await fastPathRecords([file], (text) => parseSequenceRecordText(text, format));
-  if (records) return records;
-  const response = await runHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
-    {
-      format,
-      files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
-    }
-  );
-  return normalizeSequenceRecords(response.result);
+  let byFormat = sequenceRecordReads.get(file);
+  if (!byFormat) sequenceRecordReads.set(file, byFormat = new Map());
+  return sharedRecordRead(byFormat, format, async () => {
+    const records = await fastPathRecords([file], (text) => parseSequenceRecordText(text, format));
+    if (records) return records;
+    const response = await runHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
+      {
+        format,
+        files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
+      }
+    );
+    return normalizeSequenceRecords(response.result);
+  });
 };
 
 /**
@@ -442,16 +475,20 @@ export const discoverGffFastaRecords = async ({
   runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
-  const records = await fastPathRecords([gffFile, fastaFile], parseGffFastaRecordText);
-  if (records) return records;
-  const response = await runHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS,
-    {
-      files: [
-        { role: 'gff', bytes: await cloneFileBytesForTransfer(gffFile) },
-        { role: 'fasta', bytes: await cloneFileBytesForTransfer(fastaFile) }
-      ]
-    }
-  );
-  return normalizeSequenceRecords(response.result);
+  let byFasta = gffFastaRecordReads.get(gffFile);
+  if (!byFasta) gffFastaRecordReads.set(gffFile, byFasta = new WeakMap());
+  return sharedRecordRead(byFasta, fastaFile, async () => {
+    const records = await fastPathRecords([gffFile, fastaFile], parseGffFastaRecordText);
+    if (records) return records;
+    const response = await runHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS,
+      {
+        files: [
+          { role: 'gff', bytes: await cloneFileBytesForTransfer(gffFile) },
+          { role: 'fasta', bytes: await cloneFileBytesForTransfer(fastaFile) }
+        ]
+      }
+    );
+    return normalizeSequenceRecords(response.result);
+  });
 };

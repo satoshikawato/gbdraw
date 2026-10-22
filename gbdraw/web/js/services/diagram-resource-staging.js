@@ -1,4 +1,5 @@
 // @ts-check
+import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
 import { takeFileBytesForTransfer } from './file-content-cache.js';
@@ -23,34 +24,22 @@ import {
  *   A descriptor as the depth codec reads it; base64 `data` is a string, which never matches the codec's `schema`.
  */
 
-const BASE64_CHUNK_CHARACTERS = 1024 * 1024;
-
+// The base64 text of a resource is decoded by the one decoder a Session
+// resource backing also uses: native chunks that yield to paint where the
+// engine has them. `prepare` checks the decoded size against the descriptor.
 /**
  * @param {unknown} encoded
- * @param {number} declaredSize
  * @param {string} resourceId
+ * @returns {Promise<ArrayBuffer>}
  */
-const decodeBase64ForTransfer = (encoded, declaredSize, resourceId) => {
-  const source = String(encoded || '');
-  if (source.length % 4 !== 0 || /\s/.test(source)) {
-    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`);
+const decodeBase64ForTransfer = async (encoded, resourceId) => {
+  try {
+    const bytes = await base64ToBytesInTasks(/** @type {string | null | undefined} */ (encoded));
+    // The decoder writes into a buffer of exactly the decoded length.
+    return /** @type {ArrayBuffer} */ (bytes.buffer);
+  } catch (error) {
+    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
-  const bytes = new Uint8Array(declaredSize);
-  let byteOffset = 0;
-  for (let offset = 0; offset < source.length; offset += BASE64_CHUNK_CHARACTERS) {
-    const chunk = atob(source.slice(offset, offset + BASE64_CHUNK_CHARACTERS));
-    if (byteOffset + chunk.length > bytes.byteLength) {
-      throw new Error(`Canonical resource ${resourceId} exceeds its declared byte size.`);
-    }
-    for (let index = 0; index < chunk.length; index += 1) {
-      bytes[byteOffset + index] = chunk.charCodeAt(index);
-    }
-    byteOffset += chunk.length;
-  }
-  if (byteOffset !== declaredSize) {
-    throw new Error(`Canonical resource ${resourceId} byte size does not match its descriptor.`);
-  }
-  return bytes.buffer;
 };
 
 /**
@@ -92,7 +81,7 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
     return bytes.buffer;
   }
   recordStructuralMetric('base64DecodeCount', 1, { resourceId });
-  const buffer = decodeBase64ForTransfer(descriptor.data, descriptor.size, resourceId);
+  const buffer = await decodeBase64ForTransfer(descriptor.data, resourceId);
   recordStructuralMetric('decodedByteCount', buffer.byteLength, { resourceId });
   return buffer;
 };

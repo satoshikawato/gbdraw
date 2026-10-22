@@ -1,6 +1,7 @@
 // @ts-check
 import {
   bytesToBase64,
+  encodedFilePayloadOf,
   getSessionResourceSource,
   readFileBytes,
   sha256Hex
@@ -18,15 +19,18 @@ import {
 } from './canonical-resource-references.js';
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
+/** @import { EncodedFilePayload } from './file-content-cache.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
 
 /**
  * What the allocator reads of a resource's source: a Session resource
- * (`descriptor`, `readBytes`) or bytes read from a file.
+ * (`descriptor`, `readBytes`), a File with the payload it was encoded as
+ * (`encoded`, `readBytes`), or bytes read from a file.
  * @typedef {object} ResourceSource
  * @property {string} [resourceId]
  * @property {RawSessionResourceDescriptor} [descriptor]
+ * @property {EncodedFilePayload} [encoded]
  * @property {Uint8Array} [bytes]
  * @property {() => Promise<Uint8Array>} [readBytes]
  */
@@ -241,15 +245,15 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   };
   /** @param {ResourceSource} source */
   const candidateFor = (source) => {
-    // A source has a descriptor or bytes.
-    const key = /** @type {WeakKey} */ (source.descriptor || source.bytes);
+    // A source has a descriptor, an encoded payload, or bytes.
+    const key = /** @type {WeakKey} */ (source.descriptor || source.encoded || source.bytes);
     if (candidatesByDescriptor.has(key)) {
       return /** @type {ResourceCandidate} */ (candidatesByDescriptor.get(key));
     }
     /** @type {ResourceCandidate} */
     const candidate = {
       ...source,
-      size: source.descriptor?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
+      size: source.descriptor?.size ?? source.encoded?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
       bytesPromise: null,
       identityPromise: null
     };
@@ -286,7 +290,7 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       bucket = { encoded: new Map(), identities: new Map(), pending: new Map() };
       candidatesBySize.set(candidate.size, bucket);
     }
-    const descriptor = candidate.descriptor;
+    const descriptor = candidate.descriptor || candidate.encoded;
     if (descriptor) {
       let encoded = bucket.encoded.get(descriptor.encoding);
       if (!encoded) bucket.encoded.set(descriptor.encoding, encoded = new Map());
@@ -300,7 +304,7 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   const equivalentId = async candidate => {
     const bucket = candidatesBySize.get(candidate.size);
     if (!bucket) return null;
-    const descriptor = candidate.descriptor;
+    const descriptor = candidate.descriptor || candidate.encoded;
     const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(descriptor.data);
     if (encodedId) return encodedId;
     const identity = await identityFor(candidate);
@@ -349,14 +353,22 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       if (descriptor) {
         resources[id] = safePreferred ? descriptor : { ...descriptor, name };
       } else {
-        const bytes = await bytesFor(candidate);
-        recordStructuralMetric('base64EncodeCount', 1, { resourceName: metadata.name });
-        recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: metadata.name });
+        // A File Generate already encoded keeps that text; other bytes are encoded here.
+        /** @type {{ data: string, size: number }} */
+        let encoded;
+        if (source.encoded) {
+          encoded = source.encoded;
+        } else {
+          const bytes = await bytesFor(candidate);
+          recordStructuralMetric('base64EncodeCount', 1, { resourceName: metadata.name });
+          recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: metadata.name });
+          encoded = { data: bytesToBase64(bytes), size: bytes.byteLength };
+        }
         resources[id] = {
           kind: String(metadata.kind || 'web-file'), name,
           type: String(metadata.type || 'application/octet-stream'),
-          size: bytes.byteLength, lastModified: Number(metadata.lastModified) || 0,
-          encoding: 'base64', data: bytesToBase64(bytes)
+          size: encoded.size, lastModified: Number(metadata.lastModified) || 0,
+          encoding: 'base64', data: encoded.data
         };
       }
       register(id, candidate);
@@ -439,6 +451,10 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       return { kind: 'composite', components, ...metadata };
     }
     if (source?.descriptor) return bindSource(source, file);
+    // The payload Generate encoded for this File matches the committed resource
+    // by its text, so binding it reads, hashes and decodes nothing.
+    const encoded = encodedFilePayloadOf(file);
+    if (encoded) return bindSource({ encoded, readBytes: () => readFileBytes(file) }, file);
     return bindSource({ bytes: await readFileBytes(file) }, file);
   };
 

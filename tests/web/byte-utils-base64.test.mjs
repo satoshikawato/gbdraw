@@ -24,21 +24,62 @@ test('base64 preserves every byte and padding across chunk boundaries', () => {
   }
 });
 
-test('base64 bounds the temporary binary string while keeping the full resource', () => {
-  const originalBtoa = globalThis.btoa;
-  let maximumInput = 0;
+const randomBytes = (size, seed) => {
+  let state = seed >>> 0;
+  return Uint8Array.from({ length: size }, () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state >>> 24;
+  });
+};
+const ENCODER_SIZES = [0, 1, 2, 3, 4, 5, 24575, 24576, 24577, 65535, 65536, 65537, 1048577];
+
+const withoutNativeToBase64 = (fn) => {
+  const native = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'toBase64');
+  if (native) Object.defineProperty(Uint8Array.prototype, 'toBase64', { ...native, value: undefined });
+  try { return fn(); } finally {
+    if (native) Object.defineProperty(Uint8Array.prototype, 'toBase64', native);
+  }
+};
+
+test('base64 encoding uses the native encoder when the engine has one', () => {
+  const native = Uint8Array.prototype.toBase64;
   let calls = 0;
-  globalThis.btoa = value => {
-    maximumInput = Math.max(maximumInput, value.length);
+  Uint8Array.prototype.toBase64 = function (...options) {
     calls += 1;
-    return originalBtoa(value);
+    return typeof native === 'function'
+      ? native.apply(this, options)
+      : Buffer.from(this).toString('base64');
   };
+  let encoded;
+  try { encoded = bytesToBase64(randomBytes(70000, 7)); }
+  finally {
+    if (native) Uint8Array.prototype.toBase64 = native;
+    else delete Uint8Array.prototype.toBase64;
+  }
+  assert.equal(calls, 1);
+  assert.equal(encoded, Buffer.from(randomBytes(70000, 7)).toString('base64'));
+});
+
+test('the native and portable base64 encoders give identical text', () => {
+  for (const size of ENCODER_SIZES) {
+    const bytes = randomBytes(size, size + 1);
+    const expected = Buffer.from(bytes).toString('base64');
+    assert.equal(bytesToBase64(bytes), expected, `native size ${size}`);
+    assert.equal(withoutNativeToBase64(() => bytesToBase64(bytes)), expected, `portable size ${size}`);
+    assert.equal(withoutNativeToBase64(() => bytesToBase64(bytes.buffer)), expected, `portable buffer ${size}`);
+  }
+});
+
+test('the portable base64 encoder builds no binary string', () => {
+  const originalBtoa = globalThis.btoa;
+  let calls = 0;
+  globalThis.btoa = (value) => { calls += 1; return originalBtoa(value); };
   const bytes = new Uint8Array(8 * 1024 * 1024 + 2).fill(255);
   let encoded;
-  try { encoded = bytesToBase64(bytes); } finally { globalThis.btoa = originalBtoa; }
+  try { encoded = withoutNativeToBase64(() => bytesToBase64(bytes)); }
+  finally { globalThis.btoa = originalBtoa; }
   assert.equal(encoded, Buffer.from(bytes).toString('base64'));
-  assert(maximumInput <= 32768, 'Encoding must not materialize a full-resource binary string');
-  assert(calls > 1);
+  assert.equal(calls, 0);
 });
 
 test('text base64 retains native UTF-8 semantics for Unicode and lone surrogates', () => {
