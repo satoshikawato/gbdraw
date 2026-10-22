@@ -111,3 +111,32 @@ test('unacknowledged preparation, replacement, and reset never publish stale own
   assert.equal(beforeReset.commit(), false, 'reset invalidates outstanding preparations');
   assert.equal((await prepare('B')).stagedResources.length, 1);
 });
+
+test('staging decodes base64 with the one shared decoder (OV-1560)', async () => {
+  const bytes = Uint8Array.from({ length: 200_003 }, (_, index) => (index * 89 + 7) % 256);
+  const resources = {
+    big: { kind: 'genbank', name: 'big.gb', type: '', size: bytes.length, lastModified: 0,
+      encoding: 'base64', data: Buffer.from(bytes).toString('base64') },
+    bad: { kind: 'genbank', name: 'bad.gb', type: '', size: 3, lastModified: 0, encoding: 'base64', data: 'TQ!A' }
+  };
+  const request = (resourceId) => ({ records: [{ source: { kind: 'genbank', resourceId } }] });
+  const native = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'setFromBase64');
+  const decodeWith = async (setFromBase64) => {
+    Object.defineProperty(Uint8Array.prototype, 'setFromBase64', { ...native, value: setFromBase64 });
+    try {
+      return await createDiagramResourceTransport().prepare({ request: request('big'), resources });
+    } finally {
+      Object.defineProperty(Uint8Array.prototype, 'setFromBase64', native);
+    }
+  };
+  let nativeCalls = 0;
+  const viaNative = await decodeWith(function (...args) { nativeCalls += 1; return native.value.apply(this, args); });
+  assert.ok(nativeCalls > 0, 'the engine decoder writes the transfer buffer');
+  assert.deepEqual(new Uint8Array(viaNative.stagedResources[0].bytes), bytes);
+  const viaFallback = await decodeWith(undefined);
+  assert.deepEqual(new Uint8Array(viaFallback.stagedResources[0].bytes), bytes);
+  await assert.rejects(
+    createDiagramResourceTransport().prepare({ request: request('bad'), resources }),
+    /Canonical resource bad contains invalid base64 data\./
+  );
+});

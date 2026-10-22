@@ -358,4 +358,72 @@ assert.deepEqual(discoveredRows, [
 ]);
 assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_001416.1');
 
+// OV-1558: every reader of a source's records shares one discovery per File
+// (or GFF3 and FASTA pair). A Linear -> Circular -> Linear trip and a draft
+// Save read nothing again, also after a Generate transfer released the bytes.
+{
+  const { releaseFileContentCache } = await import(pathToFileURL(join(sourceRoot, '..', 'services', 'file-content-cache.js')));
+  const { File } = await import('node:buffer');
+  let fileReads = 0;
+  const genbank = (id) => {
+    const file = new File([`LOCUS       ${id}  10 bp    DNA     linear   BCT 01-JAN-2000\nORIGIN\n        1 acgtacgtac\n//\n`], `${id}.gb`);
+    const read = file.arrayBuffer.bind(file);
+    file.arrayBuffer = async () => { fileReads += 1; return read(); };
+    return file;
+  };
+  const fileA = genbank('RecA');
+  const fileB = genbank('RecB');
+  const tripState = {
+    lInputType: { value: 'gb' }, mode: { value: 'linear' },
+    linearSeqs: [{ uid: 'trip-a', gb: fileA }, { uid: 'trip-b', gb: fileB }]
+  };
+  const trip = createLinearRecordSelector({
+    state: tripState,
+    reactive: (value) => value,
+    recordReader: ({ primaryFile }) => discoverSequenceRecords({ file: primaryFile, format: 'genbank' })
+  });
+  const generateTransfer = () => [fileA, fileB].forEach((file) => releaseFileContentCache(file));
+  await trip.refresh();
+  assert.equal(fileReads, 2);
+  generateTransfer();
+  tripState.mode.value = 'circular';
+  await trip.refresh();
+  tripState.mode.value = 'linear';
+  await trip.refresh();
+  assert.equal(fileReads, 2, 'a mode round trip reads no card again');
+  assert.equal(trip.optionsFor(tripState.linearSeqs[1])[1].value, 'RecB');
+  // The draft Save's private discovery is a lookup.
+  const draft = await discoverSequenceRecords({ file: fileA, format: 'genbank' });
+  assert.equal(fileReads, 2, 'a draft Save reads no card again');
+  // Each caller owns its copy of the records.
+  draft[0].recordId = 'changed';
+  assert.equal((await discoverSequenceRecords({ file: fileA, format: 'genbank' }))[0].recordId, 'RecA');
+
+  // A failed read is not kept: the next caller reads again, and a success is kept.
+  const bom = new File([new Uint8Array([0xef, 0xbb, 0xbf]), '>x\nACGT\n'], 'bom.fa');
+  let helperCalls = 0;
+  const runHelperOperation = async () => {
+    helperCalls += 1;
+    if (helperCalls === 1) throw Object.assign(new Error('Worker start failed.'), { code: 'UNKNOWN' });
+    return { result: { records: [{ selector: '#1', record_id: 'x', record_length: 4 }] } };
+  };
+  await assert.rejects(discoverSequenceRecords({ file: bom, format: 'fasta', runHelperOperation }));
+  assert.equal((await discoverSequenceRecords({ file: bom, format: 'fasta', runHelperOperation }))[0].recordId, 'x');
+  await discoverSequenceRecords({ file: bom, format: 'fasta', runHelperOperation });
+  assert.equal(helperCalls, 2);
+
+  // A GFF3 and FASTA pair is one key.
+  let gffReads = 0;
+  const gff = new File(['##gff-version 3\nchr1\tsrc\tgene\t1\t4\t.\t+\t.\tID=g1\n'], 'a.gff');
+  const fasta = new File(['>chr1\nACGT\n'], 'a.fa');
+  [gff, fasta].forEach((file) => {
+    const read = file.arrayBuffer.bind(file);
+    file.arrayBuffer = async () => { gffReads += 1; return read(); };
+  });
+  await discoverGffFastaRecords({ gffFile: gff, fastaFile: fasta });
+  [gff, fasta].forEach((file) => releaseFileContentCache(file));
+  assert.equal((await discoverGffFastaRecords({ gffFile: gff, fastaFile: fasta }))[0].recordId, 'chr1');
+  assert.equal(gffReads, 2);
+}
+
 console.log('record selector tests passed');

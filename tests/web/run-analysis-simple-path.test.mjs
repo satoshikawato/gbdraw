@@ -626,6 +626,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     type: 'application/octet-stream',
     lastModified: 8
   });
+  // Discovery is shared per File (OV-1558): a scenario that needs its own
+  // pending or failing read uses a File no earlier scenario read.
+  const coalescedPrimary = new AuditFile(['record parser fallback'], 'coalesced.gb', {
+    type: 'application/octet-stream', lastModified: 8
+  });
+  const stalePrimary = new AuditFile(['record parser fallback'], 'stale.gb', {
+    type: 'application/octet-stream', lastModified: 8
+  });
   const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
 
   installSimpleCircularInput(primary, inactive);
@@ -1282,11 +1290,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     });
   }));
   state.circularRecordList.value = [];
+  state.files.c_gb = coalescedPrimary;
   Object.assign(state.circularRecordDiscovery, {
     status: 'loading',
     error: '',
     inputType: 'gb',
-    primaryFile: fallbackPrimary,
+    primaryFile: coalescedPrimary,
     pairedFile: null,
     canonicalRecordIdentities: [{
       selector: '#1',
@@ -1367,6 +1376,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
+  state.files.c_gb = fallbackPrimary;
   let releaseDiscovery;
   workerHelperResponses.push(new Promise((resolve) => {
     releaseDiscovery = () => resolve({
@@ -1396,7 +1406,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.files.c_gb = fallbackPrimary;
+  state.files.c_gb = stalePrimary;
   state.activeDrawing().adv.multi_record_positions.splice(
     0,
     state.activeDrawing().adv.multi_record_positions.length,
