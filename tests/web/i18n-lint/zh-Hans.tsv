@@ -1,0 +1,12 @@
+id	regex	flags	message	severity
+zh-Hans-taiwan-words	档案|资料|工作阶段|设定|预设值|基因体|胺基酸|软体|程式|萤幕|介面|执行绪|快取|载入|储存|匯|栏位	u	Taiwan wording in the mainland catalog: use 文件, 数据, 会话, 设置, 默认, 基因组, 氨基酸, 软件, 程序, 屏幕, 界面, 线程, 缓存, 加载, 保存, 导入/导出, 字段 (STYLE 3.1).	error
+zh-Hans-hk-taiwan-bio	(?<!细)胞器|(?<!丝)股(?!票)	u	Biology terms are 细胞器 (not 胞器) and 链 for strand (not 股) (STYLE 3.1).	error
+zh-Hans-accession	登入号	u	Accession is 登录号; 登入号 means "log-in number" (STYLE 4.4.1).	error
+zh-Hans-you-formal	您	u	Avoid 您 unless the sentence needs a pronoun (STYLE 3.2); leave the subject out.	warn
+zh-Hans-please-twice	请.*请	u	请 may open an instruction at most once per message (STYLE 3.2).	warn
+zh-Hans-ascii-ellipsis	\.\.\.	u	Write … (U+2026), not three ASCII periods.	error
+zh-Hans-fullwidth-digit	[０-９]	u	Write ASCII digits 0-9 (STYLE 3.3).	error
+zh-Hans-latin-space	[\u4e00-\u9fff] \d|\d%? [\u4e00-\u9fff]	u	No space between Chinese and digits: 10条记录, 最小一致性（%）; only an interpolated identifier takes spaces (STYLE 3.3).	warn
+zh-Hans-ascii-comma	[\u4e00-\u9fff],|[\u4e00-\u9fff]:(?!//)|[\u4e00-\u9fff];|[\u4e00-\u9fff]\?	u	Full-width punctuation after Chinese: ，：；？ (STYLE 3.3).	warn
+zh-Hans-period-after-period	。 	u	No space follows 。 between two sentences (D-18).	error
+zh-Hans-curly-hant-quotes	「|」|『|』	u	The mainland catalog quotes with “ ” and nested ‘ ’ (STYLE 3.3).	error
