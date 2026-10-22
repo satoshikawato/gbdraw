@@ -1827,14 +1827,14 @@
 
         /* The same canvas and Editor dock below the search on compact cards. */
         @container (max-width: 40rem) {
-            .result-pane > [aria-label="Result Preview"] {
+            .result-pane > [data-result-preview] {
                 flex: none;
                 min-height: 0;
                 overflow: visible;
                 --editor-toggle-width: 2.25rem;
                 --compact-preview-space: calc(100dvh - 21rem - env(safe-area-inset-bottom));
             }
-            [aria-label="Result Preview"] > .card-header {
+            [data-result-preview] > .card-header {
                 margin-inline: 0;
                 padding-right: calc(var(--editor-toggle-width) + 0.75rem);
             }
@@ -1920,7 +1920,7 @@
             .preview-controls > button .preview-search-count {
                 display: inline;
             }
-            .preview-controls [aria-label="Reset zoom"] {
+            .preview-controls [data-zoom-reset] {
                 width: 3rem;
             }
         }
@@ -5905,7 +5905,7 @@
                 </div>
             </operation-error>
 
-            <div v-if="results.length > 0" role="region" :aria-label="t('Result Preview')" class="card p-0 flex flex-col flex-grow overflow-clip relative">
+            <div v-if="results.length > 0" data-result-preview role="region" :aria-label="t('Result Preview')" class="card p-0 flex flex-col flex-grow overflow-clip relative">
                 <div class="card-header mb-0 py-2 pl-5 pr-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <h2 class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 min-w-0">
@@ -8429,7 +8429,7 @@
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
                             <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom in')"><i class="ph ph-plus" aria-hidden="true"></i></button>
-                            <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" :aria-label="t('Reset zoom')"><preview-zoom-percent></preview-zoom-percent></button>
+                            <button @click="zoom = 1.0" data-zoom-reset class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" :aria-label="t('Reset zoom')"><preview-zoom-percent></preview-zoom-percent></button>
                             <button @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom out')"><i class="ph ph-minus" aria-hidden="true"></i></button>
                             <button @click="fitPreviewToViewport" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" :aria-label="t('Fit to preview')" :title="t('Fit to preview')"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>{{ t('Fit') }}</span></button>
                         </div>
