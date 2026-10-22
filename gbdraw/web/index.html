@@ -152,6 +152,11 @@
         :root:lang(zh-Hant) body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', sans-serif; }
         /* Korean UI text: system Hangul fonts; a line breaks between words, never inside one (a word too long for its box still wraps). */
         :root:lang(ko) body { font-family: 'Inter', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', 'Noto Sans KR', 'Source Han Sans KR', sans-serif; word-break: keep-all; overflow-wrap: break-word; }
+        /* Japanese control names (buttons, tabs, labels, headings): a name that wraps breaks between phrases
+           (適用, not 適 / 用; TSVを / インポート, not TSVを / インポ / ート), as a Latin name breaks between words (OV-1518).
+           A phrase wider than its box still breaks rather than overflow. Browsers without phrase breaking keep
+           the normal Japanese breaks. The rail names keep their own strict breaks (css/tailwind.input.css). */
+        :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *) { word-break: auto-phrase; overflow-wrap: break-word; }
         :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg, :root:lang(ko) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. The figure keeps the English stack. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
@@ -3510,10 +3515,10 @@
                         <setting-note setting="region-annotations" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
-                                <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
+                                <button type="button" class="btn btn-secondary text-[10px] flex-1 px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1 px-2" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
                                 <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1 px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
                             </div>
                             <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
                             <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="ui-hint">{{ t('Add an annotation row to download TSV.') }}</p>
@@ -4826,11 +4831,11 @@
                                     <h4 class="group-heading" :aria-label="t('PRESET SCHEMES')">{{ t('PRESET SCHEMES') }} <help-tip id="help-colors-preset-schemes" :text="t('Replaces the specific rules with the preset\'s rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.')"></help-tip></h4>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <select v-model="selectedSpecificPreset" :aria-label="t('Preset scheme')" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white" :disabled="!semanticMutationAvailable">
+                                    <select v-model="selectedSpecificPreset" :aria-label="t('Preset scheme')" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow min-w-0 bg-white" :disabled="!semanticMutationAvailable">
                                         <option disabled value="">{{ t('Select preset...') }}</option>
                                         <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
                                     </select>
-                                    <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shadow-md shadow-blue-200" :disabled="!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)">
+                                    <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shrink-0 shadow-md shadow-blue-200" :disabled="!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)">
                                         <i class="ph ph-magic-wand" aria-hidden="true"></i>
                                         <span v-if="specificRulePresetLoading">{{ t('Applying...') }}</span>
                                         <span v-else>{{ t('Apply') }}</span>
@@ -4892,7 +4897,7 @@
                                 </details>
 
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
-                                    <div class="flex-grow">
+                                    <div class="flex-grow min-w-0">
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">{{ t('ADD KEY') }}</label>
                                         <select v-model="newColorFeat" :aria-label="t('Add key')" class="form-input text-xs py-1 px-2 h-8" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in defaultColorKeys" :value="k">{{ k }}</option>
@@ -4902,7 +4907,7 @@
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">{{ t('COLOR') }}</label>
                                         <input type="color" v-model="newColorVal" :aria-label="t('Add key color')" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer" :disabled="!semanticMutationAvailable">
                                     </div>
-                                    <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8" :disabled="!semanticMutationAvailable">
+                                    <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8 shrink-0" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add') }}
                                     </button>
                                 </div>
