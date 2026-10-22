@@ -1,9 +1,23 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
-Revision 6, 2026-10-21 (adds Indonesian, Vietnamese and Thai: §9, §10, §11, and §1 for eleven locales). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM drafts
-follow this file and the glossary together. The glossary decides words; this
-file decides how sentences are written around them. Where the two disagree,
-the glossary wins and this file is corrected.
+Revision 9, 2026-10-22 (counted sentences are `tn` pairs, and track, mode, control and setting names are no
+longer placeholders inside sentences: §1.3, §7.5; fr Feature and MB confirmed by the Owner (P-07): §7.1, §7.3;
+this file and the glossary, not the Product Contract, hold the term rules: §2.1, §3, §9.1. Revision 8 was the ko, es, fr and
+pt round-2 revision; Revision 7 the round-1 term audit of Indonesian, Vietnamese and Thai: §9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
+drafts follow this file and the glossary together. The glossary decides words;
+this file decides how sentences are written around them. Where the two
+disagree, the glossary wins and this file is corrected.
+
+When keys are translated: a pull request that adds or changes UI text adds the
+English key only; the catalogs show the English until the translation batch
+before each release fills them. The batch follows
+`.claude/skills/translate-web-ui/SKILL.md` with `node tools/i18n/sync.mjs`
+(`status`, `export`, `apply`), and the release tier of `Tests` fails while a
+catalog lacks a key of the sources or holds a stale one
+(`node tools/i18n/sync.mjs status --require-complete`). Each locale has a lint
+list, `tests/web/i18n-lint/<locale>.tsv`, run by
+`tests/web/i18n-catalogs.test.mjs` as §9.7 describes. Translations are drafts;
+nothing states that they are reviewed.
 
 ## 1. All locales
 
@@ -50,7 +64,8 @@ the glossary wins and this file is corrected.
   quantities. Decimal point and digit grouping stay as the English source
   shows them, because the app formats numbers with `en-US`.
 - Units stay Latin and keep the source's spacing between number and unit:
-  `100 bp`, `1kb`, `20px`, `0.65 ×R`, `8 pt`, `10x`. Never convert a unit.
+  `100 bp`, `1kb`, `20px`, `0.65 ×R`, `8 pt`, `10x`. Never convert a unit (bp, kb and Mb
+  stay in every locale; `fr` writes byte units in French, §7.3).
   Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`.
 - Keep `→ ← · × + − %` and the en dash of ranges (`Rows 3–4`) as written.
 - Ellipsis is one `…` (U+2026) whether the source writes `...` or `…`, both
@@ -60,7 +75,7 @@ the glossary wins and this file is corrected.
 ### 1.3 Placeholders and keys
 
 - The English source text is the key (D-02). There is no English catalog:
-  `t('Save Session')`, `tn(count, one, other)` (the `other` text is the key),
+  `t('Save Session')`, `tn(count, one, other)` (the English text of each form is a key),
   `tx(context, text)` (key `context + '\u0004' + text`, for homonyms), `msg()`
   to keep a text until `tm()` translates it where it is shown. A catalog
   `<locale>.js` maps those keys to plain strings.
@@ -73,6 +88,11 @@ the glossary wins and this file is corrected.
   have no plural forms either: `Intl.PluralRules` selects `other` for every
   count, so their `one` rows are never shown (they carry the `other` text or a
   natural singular; §9.5, §10.5, §11.5).
+- A sentence that counts things is a `tn` pair; no key writes a plural as "(s)".
+  A track, mode, control or setting name is never a placeholder inside a
+  sentence: each name has a whole-sentence key (Hide GC content?, No Circular
+  Result yet. …), so the sentence can take the article, case or particle the
+  name needs.
 - One key is one sentence or label. Never build a sentence from translated
   fragments; ask for a key with placeholders instead. A sentence with an
   inline element (`<strong>`, a swatch, a bound name) is one key; the
@@ -94,6 +114,10 @@ the glossary wins and this file is corrected.
   including compounds: Record label is レコードラベル because Record is
   レコード and Label is ラベル. A row tagged `[review]` marks a judgment call;
   it is still the value to use until the glossary changes.
+- Do not coin a target-language term. A domain term with no established use
+  in that language's molecular biology or bioinformatics writing stays in
+  English (lower case in running text unless it is an acronym or a name); an
+  established native term or loanword stays. Example: reciprocal best hit.
 - Title Case, ALL CAPS headings (PRESET SCHEMES, DEFAULT COLORS, SPECIFIC
   RULES, LABEL FILTERING, QUALIFIER PRIORITY, LABEL GEOMETRY, ADD KEY) and
   letter spacing carry no meaning in CJK; translate them as ordinary
@@ -194,6 +218,9 @@ the same pixel width. Buttons stay within 8 full-width glyphs where
 possible; rail short names within 5 (Features is the known exception).
 
 ## 3. Simplified Chinese (`zh-Hans`, mainland usage)
+
+Open zh-Hans and zh-Hant terms (glossary rows marked [review]) are decided by
+zh reviewers; this file and the glossary record each decision.
 
 ### 3.1 Vocabulary
 
@@ -395,9 +422,13 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   (identity), 유사성, 보존성, 공선성 (collinear), 쌍별 (pairwise), 깊이 / 리드
   깊이 (depth), 원형 / 선형 (Circular / Linear), 주 눈금 / 보조 눈금, 범례,
   축척 (scale), 축척 막대.
-- **Kept in Latin**, as Korean papers write them: GC skew, AT skew, Bitscore,
-  E-value, orthogroup, RBH, locus tag, and every §1.1 name. Skew alone is 스큐.
-- **Loanwords** in the standard spelling (외래어 표기법) Microsoft uses: 피처,
+- **Kept in Latin**, as Korean papers write them: GC skew, AT skew, skew,
+  Bitscore, E-value, orthogroup, RBH, reciprocal best hit, near-reciprocal
+  hit, coortholog, inparalog, locus tag, and every §1.1 name.
+- **Feature** is written in English, lower case, also at the start of a label
+  (feature 유형), and its particle follows the Korean reading: feature를,
+  feature의. Never 피처 or 특징.
+- **Loanwords** in the standard spelling (외래어 표기법) Microsoft uses:
   레코드, 트랙, 레인, 슬롯, 앵커, 히트, 쿼리, 블록, 리본, 링, 밴드, 마크,
   레이블, 라이선스, 메타데이터, 스키마, 런타임, 렌더러, 렌더링, 오버레이,
   오프셋, 팔레트, 프리셋, 캔버스, 레이어, 레이아웃, 세션, 섹션, 필드, 필터,
@@ -406,7 +437,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   loanword the glossary does not list. The glossary's 0.15.0 rows add
   these, which are allowed: 템플릿, 시드, 패널, 라이브러리, 인코딩, 파이프라인,
   워크플로, 해시, 플랫 파일, 포커스, 그라데이션, 픽셀, 인트론, 레플리콘,
-  프리프린트, 캐시, 사이드바, 호스팅, 문자 이스케이프, 웹 앱, and the
+  프리프린트, 캐시, 사이드바, 호스팅, 웹 앱, 리소스, 컨트롤, and the
   loanword parts of 파라로그, 오솔로그 and 갭 개시 수 (rows of
   `I18N_GLOSSARY.tsv`). The compound 소스 코드 (Source code) is allowed.
 - **Command words** (Microsoft Korean): 저장, 열기, 닫기, 취소, 추가, 삭제
@@ -417,7 +448,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   내보내기, 불러오기 (Load), 찾아보기 (Browse), 고정, 도킹, 접기 / 펼치기,
   확대/축소, 맞춤 (Align); nouns 미리 보기, 대화 상자, 편집기, 도움말, 세부
   정보, 사용자 지정, 기본값, 재정의, 임계값, 정규식, 글꼴, 오류, 기록 (History).
-- **Never**: 게놈, 시퀀스, 스트랜드, 어노테이션, 특징 or 기능 for Feature,
+- **Never**: 게놈, 시퀀스 (except 이스케이프 시퀀스, regular-expression escape
+  sequences), 스트랜드, 어노테이션, 피처, 특징 or 기능 for Feature,
   기록 for Record, 라벨, 라이센스, 디폴트, 컬러 / 색상 (use 색), 폰트, 에러,
   리셋, 쓰레드, 끌기 (use 드래그), 소스 (also "sauce"; use 원본, except in the compound 소스 코드), 당신 / 귀하
   (leave the subject out), 유저.
@@ -443,6 +475,9 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 - **Errors** say what failed (~에 실패했습니다. / ~할 수 없습니다.), then
   what to do in ~하십시오. A control name in a sentence is its translated
   label in ‘ ’: ‘생성’을 클릭하십시오.
+- **Recurring phrasings**: Leave blank for Auto is 비워 두면 자동으로
+  설정됩니다; a label that does not fit is 배치할 공간이 부족합니다 (heading:
+  레이블 배치 공간 부족), never 들어가지 않습니다.
 
 ### 5.3 Punctuation and spacing
 
@@ -489,6 +524,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   `Remove {name}?` → {name}을(를) 제거하시겠습니까?;
   `Rename "{from}" to "{to}"?` → ‘{from}’의 이름을 ‘{to}’(으)로
   바꾸시겠습니까?; `{first} and {second}` → {first}과(와) {second}.
+- A Latin word takes the particle of its Korean reading (feature를, LOSAT을,
+  px이).
 - Prefer a known noun after the placeholder, so the particle attaches to
   Korean: {file} 파일을, {track} 트랙을, {names} 글꼴은. Use the paired form
   only when no such noun fits.
@@ -513,7 +550,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 
 - A Hangul syllable is full width; a Korean label has 0.5–0.7× the English
   character count and about the same pixel width. Count width.
-- Rail short names: at most 4 syllables, 2 preferred: 입력, 피처, 레이블,
+- Rail short names: at most 4 syllables, 2 preferred: 입력, feature, 레이블,
   범례, 색, 축, 비교, 영역, 제목, 고급, 정보, 글꼴, GC/스큐; 레이아웃 (4) is
   the longest.
 - Header and bar buttons no wider than the English label: 세션 저장, 설정
@@ -546,7 +583,8 @@ differ, take the word Microsoft uses in both markets or the RAE form
   organismo, cepa, especie, producto, gen; the tabs Nucleótidos / Aminoácidos.
 - **Alignment has two words**: alineamiento for sequences (BLAST, LOSAT,
   longitud del alineamiento), alineación for the layout action of Similarity
-  groups (Revisar alineación, Restablecer alineación).
+  groups (Revisar alineación, Restablecer alineación; Similarity alignment is
+  alineación por similitud).
 - **Diagram terms**: pista (Track), carril (Lane), ranura (track slot),
   posición (File card slot), marca de graduación (Tick; marca principal /
   secundaria), marca (annotation mark), regla graduada (Ruler; regla is a
@@ -560,7 +598,9 @@ differ, take the word Microsoft uses in both markets or the RAE form
   Acoplar (Dock), Girar, Mantener (Keep), Volver a generar; Habilitar /
   Deshabilitar (Enable / Disable); Activado / Desactivado (On / Off).
 - **Loanwords**: only hit (plural hits), query, subject, E-value, Bitscore,
-  zoom, renderizador and the names of §1.1; never track, feature, slot,
+  zoom, renderizador and the names of §1.1; also the English terms reciprocal
+  best hit, near-reciprocal hit, coortholog, inparalog and orthogroup (el
+  coortholog, masculine; plural -s); never track, feature, slot,
   preset, lane, popup, default or reset.
 - **Never use**: fichero, ordenador, computadora, salvar, remover, resetear,
   setear, chequear, clicar, pinchar, pulsar (write hacer clic), similaridad,
@@ -578,9 +618,14 @@ differ, take the word Microsoft uses in both markets or the RAE form
   ¿Quitar todo el archivo?, ¿Restablecer toda la configuración?
 - Instructions (help texts, notices, dialogs, errors): formal imperative.
   Seleccione un registro. Haga clic en Generar. Vuelva a generar el diagrama.
-  Leave blank for auto: Déjelo vacío para usar el valor automático.
+  Leave blank for auto: Déjelo vacío para usar el valor automático. Name a
+  button as an action: haga clic en Restablecer. Do not mix the third-person
+  indicative and the usted imperative in one sentence.
 - Descriptions: third person present or impersonal se (Muestra la
   profundidad de lectura como una pista. Se aplica al generar.).
+- An option, button or setting name is not the grammatical subject of a
+  sentence: Con Automático, …; Al guardar, se almacenan …, not Automático
+  elige … or Guardar almacena ….
 - Progress (…ing): gerund + … (Guardando sesión…, Generando diagrama…).
   Completion: a participle agreeing with its noun in a status line (Sesión
   guardada.), se + preterite in a sentence (Se aplicó la alineación.).
@@ -643,7 +688,8 @@ differ, take the word Microsoft uses in both markets or the RAE form
   returns one, which is the count 1 alone; 0 and 1.5 take the plural (0
   registros). Intl returns many for 1,000,000 and other exact millions; tn
   must use `other` there. A `one` string drops {count} only where the English
-  one does.
+  one does. A string without plural forms that counts things is a noun phrase
+  and a colon: Etiqueta: {count}.
 - Worked pairs, `one` / `other` (English `other` key in parentheses):
   1. ({count} records): ({count} registro) / ({count} registros)
   2. ({count} features ready): {count} característica lista / {count}
@@ -666,7 +712,7 @@ differ, take the word Microsoft uses in both markets or the RAE form
   Características, 15 letters, does not fit).
 - Header buttons stay within about 1.3× the English label; check Restablecer
   configuración at 1,024 px. Options in 10 px rows use the glossary's short forms: Automático, En serie,
-  Multihilo, Arriba / Abajo, Dentro / Fuera, Sobre el eje, Fondo, Cinta /
+  Multihilo, Arriba / Abajo, Dentro / Fuera, En el eje, Fondo, Cinta /
   Curva. To shorten a label, drop articles first (Ancho de pista, not Ancho de
   la pista); never switch terms, and abbreviate with a period only where a
   screenshot shows an overflow.
@@ -679,7 +725,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
 ### 7.1 Vocabulary
 
 - **Biology and bioinformatics**, as French scientific writing has them: génome, séquence, gène,
-  protéine, brin (brin +, brin −), complément inverse, annotation, élément (Feature), type
+  protéine, brin (brin +, brin −), complément inverse, annotation, élément (Feature; Owner P-07,
+  2026-10-22, after the French GFF and annotation sources of the glossary row), type
   d’élément, enregistrement (Record), numéro d’accession, locus (invariable), qualificateur,
   produit (/product), localisation (Location), organisme, souche, espèce, organite, teneur en
   GC, dinucléotide, profondeur, profondeur de séquençage (Read depth), couverture, code
@@ -703,7 +750,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - **Loanwords kept**: hit, skew (GC skew, le skew positif), orthogroupe (prose; option values such as
   orthogroup stay as written), open source, thread /
   multithread, cross-origin, Bitscore, E-value, the names of 1.1, tRNA and rRNA (prose ARNt, ARNr)
-  and the unit bp (prose pb).
+  and the unit bp (prose pb). Byte units are French (§7.3).
 - **One word, one concept**: élément is Feature only (a list item is entrée, a thing on the
   canvas is objet); entrée is Input and Entry, saisie a typed value; enregistrement is Record
   only, never the act of saving (write enregistrer, enregistrée, en cours d’enregistrement);
@@ -733,6 +780,13 @@ entry is the endonym **Français**; the menu label itself is Langue.
   Errors: what failed, then what to do, as two sentences; Could not X is Impossible de X
   (Impossible d’importer les annotations : {reason}), X failed is X a échoué or Échec de X,
   Retry after it finishes is Réessayez une fois l’opération terminée.
+- A number that must be above 0 is strictement positif / positive; one that may be 0 is
+  positif ou nul (positif alone includes 0 in France).
+- An option or button name as the subject is quoted: « Avec « Enregistrer », … », or
+  « Auto » masque …, so it is not read as an adverb. A setting that is Enabled is réglé(e) sur
+  « Activé »; an instruction is Définissez … or Choisissez ….
+- Linear / Circular qualifying a noun is du diagramme linéaire / circulaire (étiquettes du
+  diagramme circulaire); « en mode circulaire » only for the app mode.
 - Dialog questions: infinitive (Retirer tout le fichier ?). Negation is always ne … pas. A
   control or section named in a sentence takes its French label in guillemets: Cliquez sur
   « Générer », dans « Annotations de régions ».
@@ -752,7 +806,10 @@ entry is the endonym **Français**; the menu label itself is Langue.
   ({inner}–{outer} px); in prose from … to … is de … à …. The slash keeps the source spacing:
   Organisme / souche, GenBank/DDBJ.
 - Numbers and units keep the en-US form the app prints (0.65 ×R, 1,024 px, 100 bp, 20px, 65%):
-  never 0,65, 1 024 or 65 %, because the formatter writes them and users type them back. One …
+  never 0,65, 1 024 or 65 %, because the formatter writes them and users type them back.
+  Byte units are the exception to §1.2: Mo, Go, ko (as octets), never MB, GB, kB; bp, kb
+  and Mb stay. A file size in megabytes is Mo; a sequence length in megabases is Mb (Owner
+  P-07, 2026-10-22). One …
   (U+2026), never three dots. The em dash keeps the source spacing.
 - The code joins two sentences with an ordinary space. Abbreviations take a period: min., max.,
   séq. (Identité min. (%)); ID is invariable (des ID).
@@ -777,7 +834,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - A placeholder value has no known gender (record IDs, file names, setting paths, track names,
   user-typed names). Put a French noun before it and make articles, adjectives and participles
   agree with that noun: le fichier {file}, l’enregistrement {record}, la piste {track}, le
-  paramètre {setting}, la palette « {palette} ». Never elide or inflect against the placeholder
+  paramètre {setting}, la palette « {palette} ». At a sentence start or as subject: Le paramètre {setting} …, la piste « {track} ».
+  Never elide or inflect against the placeholder
   itself: de {name}, que {name}, never d’{name}. A placeholder holding a translated phrase
   ({action}, {reason}) follows a colon: Annuler : {action}.
 - None is one shared key and is always Aucun (legend position, label mode,
@@ -788,8 +846,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   1, so the singular must read right for 0 (0 enregistrement); 1000000 returns many, which `tn`
   treats as other. Keep {count} in the one form whenever the English one form has it; where it
   has none (From this color rule:), the calls pass 1 or more and French omits it too.
-- A key outside `tn` that writes "(s)" in English writes none in French: the count follows a
-  colon (Correspondances sans clé d’élément, non appliquées : {count}.).
+- A count outside `tn` (a short label such as {count} aligned, whose English has one form)
+  follows a colon, so the participle need not agree with it (Alignés : {count}).
 - Worked examples (one / other):
   1. {count} record → {count} enregistrement / {count} enregistrements.
   2. {count} LOSAT result is cached and reused when the inputs and settings match. → {count}
@@ -878,6 +936,15 @@ entry is the endonym **Français**; the menu label itself is Langue.
   follow as sentences. Busy reasons: Gerando o diagrama. Tente novamente
   quando a geração terminar. A dialog title asks with the infinitive (Remover
   o arquivo inteiro?); Deseja …? only in body text.
+- **Connective and examples**: so is por isso, not então. e.g. is
+  (por exemplo, …) inside a help sentence and ex.: in a placeholder or a short
+  field hint. Nonnegative is não negativo / não negativa, agreeing with its
+  noun, not maior ou igual a 0.
+- **Diagram mode**: Circular / Linear qualifying a noun is diagrama circular /
+  diagrama linear (registros do diagrama linear); modo stays for modo simples.
+- **An option or button name is not the sentence subject**: Ao salvar a
+  sessão, … são armazenados; Com Nenhum, …; never Salvar armazena … or
+  Desativado as centraliza.
 - **A control named in a sentence** takes its translated label with that
   label's capitals, no quotes, after em: clique em Gerar diagrama, use Salvar
   sessão, em Configurações.
@@ -922,7 +989,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   so put a noun before it and make articles and adjectives agree with that
   noun: o arquivo “{file}”, o registro {record}, a fonte {names}, a
   configuração {setting} (when {setting} is a setting's label; a {setting} that
-  can be a button name or Esta alteração opens the sentence bare), o valor
+  can be a button name or Esta alteração opens the sentence bare; at a sentence
+  start: A configuração {setting} …), o valor
   {value}, a trilha {track}. Never put o, a,
   do, da, no, na, ao or à straight before such a placeholder: Mesclar em
   “{name}”, not no {name}. A user-typed name the English quotes is “{name}”.
@@ -934,8 +1002,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   {items}.
 - Worked examples (one / other):
   1. `{count} record` → {count} registro / {count} registros
-  2. `{count} needs a choice` → {count} precisa de uma escolha / {count}
-     precisam de uma escolha
+  2. `{count} record awaiting a choice` → {count} registro aguardando uma
+     escolha / {count} registros aguardando uma escolha
   3. `{count} chosen feature keeps its current direction.` → {count} feature
      escolhida mantém a direção atual. / {count} features escolhidas mantêm a
      direção atual.
@@ -967,29 +1035,33 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 
 ### 9.1 Vocabulary
 
-- **Provisional** (PD-OI-106; the vendors differ and the choice is to be
-  reconsidered): Pengaturan (Settings), default, file, Unduh / Unggah,
+- **Provisional** (Owner decision D-05 of the Indonesian, Vietnamese and Thai
+  translation work, 2026-10-21, written "id D-05" in the glossary; the vendors
+  differ and the choice is to be reconsidered): Pengaturan (Settings), default, file, Unduh / Unggah,
   Urungkan (Undo), Atur ulang (Reset), Lanjutan (Advanced), penjajaran
   (alignment), strain, sekuens. The glossary marks each row.
 - **Field terms** (spelling fixed): genom, gen, sekuens, nukleotida, asam
   amino, organel, lokus, anotasi, fitur (Feature; jenis fitur), untai (Strand;
-  untai forward, untai +/−), komplemen balik, kode genetik, nomor aksesi,
-  kandungan GC, dinukleotida, kedalaman / kedalaman baca (Depth, read depth,
-  coverage), identitas, kemiripan, ortolog, penjajaran (sequence alignment),
-  kecocokan (comparison match), sirkular, linear, Kueri / Subjek, Kolinear.
-- **Kept in English** : E-value, Bitscore, hit,
-  RBH, reciprocal best hit, orthogroup, synteny, GC skew, AT skew, skew,
-  qualifier, record, track, tick, ribbon, preset, offset, padding, thread,
-  runtime and the names of §1.1: lower case in prose, no English plural
-  ({count} record, Hit maksimum), no Indonesian affix. A help text may gloss
-  once: qualifier (atribut fitur), Strain (galur), default (bawaan). Adapted
-  loanwords, no italics: sesi, galeri, pratinjau, kueri, fitur, kustom, draf,
-  filter, font, file, browser, pop-up, templat.
-- **Diagram terms**: lajur (Lane), posisi (File card slot), bilah skala,
-  penggaris (Ruler), celah (Gap), jarak (Spacing), pita (Band), tanda
-  (annotation mark), latar belakang (Underlay), garis tepi (Stroke), isian
-  (Fill), legenda, tumpukan, jangkar (anchor), perataan / Ratakan (Similarity
-  group alignment), grafik (plot), gambar (Session drawing).
+  untai forward, untai +/−), kode genetik, nomor aksesi, kandungan GC,
+  dinukleotida, kedalaman (Depth, depth coverage; kedalaman baca only for the
+  read-depth table), identitas, kemiripan, ortolog, penjajaran (sequence
+  alignment), kecocokan (comparison match), sirkular, linear (topology; the
+  drawing mode is diagram linear / diagram sirkular), Kolinear.
+- **Kept in English** : E-value, Bitscore, hit, query, subject, reverse
+  complement, locus tag, upstream, downstream, RBH, reciprocal best hit,
+  orthogroup, synteny, GC skew, AT skew, skew, qualifier, record, track, tick,
+  ribbon, preset, offset, padding, thread, runtime and the names of §1.1:
+  lower case in prose, no English plural ({count} record, Hit maksimum), no
+  Indonesian affix. A help text may gloss once: qualifier (atribut fitur),
+  Strain (galur), default (bawaan). Adapted loanwords, no italics: sesi,
+  galeri, pratinjau, fitur, kustom, draf, filter, font, file, browser, pop-up,
+  templat.
+- **Diagram terms**: lajur (Lane), posisi (File card slot), garis skala (scale
+  bar; Bar = Garis), penggaris (Ruler), celah (Gap), jarak (Spacing), pita
+  (Band), tanda (annotation mark), latar belakang (Underlay), garis tepi
+  (Stroke), isian (Fill), legenda, tumpukan, jangkar (anchor), perataan /
+  Ratakan (Similarity group alignment), grafik (plot), gambar (Session
+  drawing).
 - **Command words**: Simpan, Muat (Load), Impor, Ekspor, Unduh, Unggah, Buat
   (Generate), Terapkan, Atur ulang, Urungkan, Ulangi, Batal, Hapus (Delete,
   Remove, Clear), Tambahkan, Pilih (Select, Choose), Telusuri (Browse), Cari
@@ -997,8 +1069,11 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
   (Inspect); states Aktif / Nonaktif, Otomatis.
 - **Never use** (checked in 9.7): Malay (muat turun, muat naik, fail, tetapan,
   pelayar, peranti, pangkalan data, perisian, boleh, bila, kerana); galat,
-  peramban, prasetel, tetikus, utas; Setelan, Setel ulang, Tingkat lanjut, Download; sekuen, sirkuler,
-  linier, unting, eror; khusus for Custom, rekaman for record, nilai E.
+  peramban, prasetel, tetikus, utas; Setelan, Setel ulang, Tingkat lanjut,
+  Download; sekuen, sirkuler, linier, unting, eror (variants or misspellings;
+  one form is kept); komplemen balik, tag lokus, bilah skala, kueri, subjek,
+  hulu / hilir, tumpang-tindih; khusus for Custom, rekaman for record, nilai
+  E.
 
 ### 9.2 Buttons and sentences
 
@@ -1014,8 +1089,8 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
   ? (Hapus seluruh file?).
 - Instructions: imperative without a subject (Pilih record. Klik Buat.
   Kosongkan untuk otomatis.). Descriptions: an active verb, subject implied
-  (Menampilkan kedalaman baca.), or a di- passive. Progress: meN- verb + object
-  + one … (Menyimpan sesi…). Completion: di- passive with a period (Sesi
+  (Menampilkan kedalaman.), or a di- passive. Progress: meN- verb + object +
+  one … (Menyimpan sesi…). Completion: di- passive with a period (Sesi
   disimpan.).
 - Failure: Gagal + verb (Gagal memuat sesi.) or Tidak dapat + verb (Tidak dapat
   membaca file.), never Gagal untuk or Tidak bisa; also … tidak tersedia /
@@ -1031,8 +1106,8 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 - A period ends each sentence of help texts, notices, dialogs and errors;
   labels, buttons, headings, options and links take none; no "!". Straight
   double quotes wherever the English quotes a name or a UI word, also for its
-  'Bar' style (Pilih "Bilah" atau "Penggaris"); straight single quotes only for
-  a gloss (EYD); never “ ”, ‘ ’ or « ».
+  'Bar' style (Pilih "Garis" atau "Penggaris"); straight single quotes only
+  for a gloss (EYD); never “ ”, ‘ ’ or « ».
 - Colon: no space before, one after (Bidang: {path}); keep a label colon; no
   NBSP. Spacing around Latin terms, digits, placeholders and units is as in
   English; a placeholder takes no affix. Lists: no comma before dan / atau
@@ -1041,10 +1116,10 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 - ASCII digits, English point and grouping (0.65, 1,000), not 0,65 /
   1.000; units as the source (100 bp, 20px); bp, never pb.
 - Parentheses, slashes and ranges as the source (Daerah (opsional), Baris 3–4,
-  Kanan →); one … (U+2026), no space before it. di and ke as prepositions stand
-  apart (di atas, ke bawah); the prefix di- attaches (dihapus). Hyphens: huruf
-  besar-kecil, tumpang-tindih; prefixes attach (nonaktif) except before English
-  (multi-record); never di-reset.
+  Kanan →); one … (U+2026), no space before it. di and ke as prepositions
+  stand apart (di atas, ke bawah); the prefix di- attaches (dihapus). Hyphens:
+  huruf besar-kecil; tumpang tindih is two words (KBBI); prefixes attach
+  (nonaktif) except before English (multi-record); never di-reset.
 
 ### 9.4 Words and capitals
 
@@ -1062,10 +1137,16 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
   bare phrase is also the ordinary noun phrase "pairwise matches". On option
   labels, headings and buttons it stays bare (Gunakan Kecocokan berpasangan).
   Other cited controls stay unquoted.
-- Head noun first: TSV kedalaman, TSV BLAST, cache LOSAT, ID record, lebar slot
-  track linear {id}, warna default. Never split or abbreviate a fixed compound
-  (tata letak, atur ulang, ambang batas, asam amino, kandungan GC, komplemen
-  balik, kedalaman baca).
+- Head noun first: TSV kedalaman, TSV BLAST, cache LOSAT, ID record, lebar
+  slot track linear {id}, warna default. Never split or abbreviate a fixed
+  compound (tata letak, atur ulang, ambang batas, asam amino, kandungan GC,
+  nomor aksesi, kedalaman baca).
+- A cited control that is a select or radio option and the subject of the
+  sentence is written Opsi + label (Opsi Otomatis …); a button, a pressed
+  toggle button included, is Tombol + label (Tombol Simpan sesi …).
+- A mode word after a noun means the topology (record sirkular); for the
+  Linear or Circular drawing, write the noun phrase + diagram linear / diagram
+  sirkular (Label record diagram sirkular), or … di diagram linear in prose.
 
 ### 9.5 Placeholders and counts
 
@@ -1113,9 +1194,13 @@ fails the test and `warn` is printed. Each rule flags:
   `id-d05-terms` (error) the rejected forms of the provisional terms (Setelan,
   Setel ulang, Tingkat lanjut, Download, Upload); `id-d05-file` (warn) berkas.
 - Spelling and register: `id-spelling` (error) sekuen, sirkuler, linier,
-  unting, eror, histori, penyejajaran; `id-anda-case` (error) lower-case anda;
-  `id-informal` (error) kamu, gak, udah; `id-register-phrases` (warn) tidak
-  bisa, gagal untuk, silakan.
+  unting, helai, eror, histori, trek, penyejajaran, persejajaran, pensejajaran
+  (not the glossary form; some are attested variants, not misspellings);
+  `id-anda-case` (error) lower-case anda; `id-informal` (error) kamu, gak,
+  udah; `id-register-phrases` (warn) tidak bisa, gagal untuk, silakan;
+  `id-tumpang-tindih` (error) tumpang-tindih; `id-r1-terms` (error) the terms
+  retired in round 1 (komplemen balik, tag lokus, bilah skala, kueri, subjek,
+  ke hulu / ke hilir).
 - Word forms: `id-di-ke-preposition` (error) diatas, kebawah;
   `id-di-prefix-split` (error) di hapus; `id-men-assimilation` (warn)
   mensimpan; `id-affixed-loanword` (error) di-reset; `id-nominalized-command`
@@ -1147,26 +1232,37 @@ typefaces.
   textbooks): gene, DNA, RNA, mRNA, nucleotide, dinucleotide, amino acid,
   protein, enzyme, codon, allele, plasmid; never gen, ADN, ARN, nuclêôtit,
   axit amin, prôtêin, enzim, côđon. No plural `-s`.
-- **Field terms** (the glossary decides; never swap them): **hệ gen**
-  (genome; the one place `gen` stays), trình tự (sequence; never chuỗi), bản
-  ghi (record), **mạch** (strand: mạch xuôi (+), mạch ngược), bổ sung ngược,
-  **chú thích** (annotation) and **chú giải** (legend), **sắp gióng cột
-  (alignment)** for sequences ("(alignment)" once per string) and **căn
-  chỉnh** for aligning records, **độ đồng nhất (identity)** and **độ tương
-  đồng** (similarity), hàm lượng GC, độ sâu / độ sâu đọc / độ bao phủ, vạch
-  chia, thang đo, sơ đồ dạng vòng / dạng thẳng, bảng mã di truyền, chủng,
-  mã số (accession), đoạn khớp (a drawn match), kết quả phù hợp (a search result).
-- **Kept in English**, lower case inside a phrase, after the head noun,
-  no plural: feature, qualifier, track, query, subject, hit, E-value,
-  Bitscore, RBH, orthogroup, ortholog, paralog, synteny, Collinear, GC skew,
-  AT skew, skew, locus, locus tag, runtime, seed (loại feature, bố cục track,
-  số hit tối đa). A help text may gloss one once, never a label: feature
-  (thành phần chú thích), qualifier (thuộc tính), track (dải / vòng), query
-  (trình tự truy vấn), subject (trình tự đích), GC skew (độ lệch GC).
-- **Command words** (Firefox, Google, Android): Cài đặt, Mặc định, Cài đặt
-  sẵn (Preset), Phiên, Tạo, Lưu, Tải (Load; Mở phiên), Nhập / Xuất, Tải lên /
-  Tải xuống, Hoàn tác / Làm lại, Áp dụng, Đặt lại, **Huỷ**, Đóng, Xoá (Delete,
-  Clear), Gỡ bỏ (Remove), Nhân bản, Bỏ qua, **tệp**, Thẻ, Bật / Tắt, Nhấp.
+- **Field terms** (the glossary decides; never swap them): **hệ gene**
+  (genome; as the 2018-program textbooks and papers that spell gene write it),
+  trình tự (sequence; never chuỗi), bản ghi (record), **mạch** (strand: mạch
+  xuôi (+), mạch ngược), bổ sung ngược, **chú thích** (annotation) and **chú
+  giải** (legend), **sắp gióng cột (alignment)** for sequences ("(alignment)"
+  once per string) and **căn chỉnh** for aligning records, **độ đồng nhất
+  (identity)** and **độ tương đồng** (similarity), hàm lượng GC, độ sâu / độ
+  sâu đọc / độ bao phủ, vạch chia, thang đo, sơ đồ dạng vòng / dạng thẳng,
+  bảng mã di truyền, chủng, mã số (accession), **mô tả** (a record definition,
+  the GenBank DEFINITION line; never định nghĩa), đoạn khớp (a drawn match),
+  kết quả phù hợp (a search result).
+- **Kept in English**, lower case inside a phrase, after the head noun, no
+  plural: feature, qualifier, track, query, subject, hit, E-value, Bitscore,
+  RBH, reciprocal best hit, near-reciprocal hit, orthogroup, ortholog,
+  paralog, synteny, Collinear, GC skew, AT skew, skew, locus, locus tag,
+  runtime, seed (loại feature, bố cục track, số hit tối đa). A help text may
+  gloss one once, never a label: feature (như gene, CDS, tRNA), qualifier
+  (thuộc tính), track (dải / vòng), query (trình tự truy vấn), subject (trình
+  tự đích), GC skew (độ lệch GC).
+- **Diagram mode after a noun**: a record, sequence, file, region, row or
+  Session of the Circular or Linear diagram takes sơ đồ: bản ghi trong sơ đồ
+  dạng thẳng, Nhãn bản ghi (sơ đồ dạng vòng). bản ghi / trình tự / hệ gene /
+  tệp / vùng / tham chiếu + dạng vòng or dạng thẳng states the molecule
+  topology (Display start requires a circular record = … bản ghi dạng vòng).
+  Nouns without a topology keep the short form: track dạng vòng, khe track
+  dạng thẳng {id}.
+- **Command words** (Firefox, Google, Android): Cài đặt, Mặc định, Đặt sẵn
+  (Preset; after a head noun: Chế độ track đặt sẵn, Bộ màu đặt sẵn), Phiên,
+  Tạo, Lưu, Tải (Load; Mở phiên), Nhập / Xuất, Tải lên / Tải xuống, Hoàn tác /
+  Làm lại, Áp dụng, Đặt lại, **Huỷ**, Đóng, Xoá (Delete, Clear), Gỡ bỏ
+  (Remove), Nhân bản, Bỏ qua, **tệp**, Thẻ, Bật / Tắt, Nhấp.
 - **Loanwords**: Vietnamese where Firefox, Google or the journals have a word
   (tệp, bộ nhớ đệm); ID, web, pixel, pipeline, intron as written; never a
   phonetic respelling (pích-xen, lô-cút).
@@ -1218,18 +1314,21 @@ typefaces.
 - **Sentence case** for labels, buttons, headings, menu items, tabs and
   options: Cài đặt nâng cao, Tải xuống TSV. No Title Case (Cài Đặt Nâng Cao),
   no ALL CAPS (stacked tone marks collide). The English capital headings
-  become sentence case: Bộ màu cài đặt sẵn (PRESET SCHEMES), Màu mặc định,
-  Quy tắc riêng, Lọc nhãn, Thứ tự ưu tiên qualifier, Kích thước nhãn, Thêm
-  khoá (ADD KEY). `:lang(vi)` turns off `uppercase` and `tracking-*`.
+  become sentence case: Bộ màu đặt sẵn (PRESET SCHEMES), Màu mặc định, Quy tắc
+  riêng, Lọc nhãn, Thứ tự ưu tiên qualifier, Vị trí nhãn (LABEL GEOMETRY),
+  Thêm khoá (ADD KEY). `:lang(vi)` turns off `uppercase` and `tracking-*`.
 - Names keep their capitals (GenBank, LOSAT); gbdraw stays lower case. A
   common noun kept in English is capitalized only at the start of a label
   (Feature, Track).
-- **Tone marks in the new position** in every string (2018 textbooks,
-  Google): hoà, hoá, xoá, khoá, toạ, khoẻ, tuỳ, huỷ, thuỷ, so Xoá, Huỷ, Tuỳ
-  chỉnh, Tuỳ chọn, Toạ độ, Chuẩn hoá, Mã hoá. Only open syllables in oa, oe,
-  uy change; closed ones are the same in both systems (hoàn, khoảng, thuyết).
-  Cancel is Huỷ: not Hủy bỏ, and not Hủy (old position).
-- **i / y** as Google and Firefox: tỷ lệ, lý do, kỹ thuật, ký tự, ký hiệu.
+- **Tone marks in the new position** in every string (QĐ 1989/QĐ-BGDĐT Điều 8,
+  2018 textbooks, Google; many papers still use the old position): hoà, hoá,
+  xoá, khoá, toạ, khoẻ, tuỳ, huỷ, thuỷ, so Xoá, Huỷ, Tuỳ chỉnh, Tuỳ chọn, Toạ
+  độ, Chuẩn hoá, Mã hoá. Only open syllables in oa, oe, uy change; closed ones
+  are the same in both systems (hoàn, khoảng, thuyết). Cancel is Huỷ: not Hủy
+  bỏ, and not Hủy (old position).
+- **i / y** as Google, Firefox and most Vietnamese journal papers: tỷ lệ, lý
+  do, kỹ thuật, ký tự, ký hiệu. This deliberately differs from the textbook
+  rule QĐ 1989/QĐ-BGDĐT Điều 9, which writes i (tỉ lệ, lí luận).
 
 ### 10.5 Placeholders and counts
 
@@ -1252,7 +1351,8 @@ typefaces.
 
 - Letters are Latin-width, so character counts are a fair guide: the core
   words measured 0.98× the English width in Inter 10 px; a word rendered as a
-  phrase reaches 1.5–1.7× (Áp dụng 1.47×, Cài đặt sẵn 1.74×).
+  phrase reaches 1.5–1.7× (Áp dụng 1.47×; Cài đặt sẵn, the earlier Preset
+  form, 1.74×).
 - Rail short names (52 px buttons at 9–10 px), about 9 characters: Đầu vào,
   Feature, Nhãn, Màu, Trục, Vùng, So sánh, Nâng cao, Tiêu đề, Bố cục, GC /
   skew. Phông chữ and Giới thiệu are the widest and fit on one line at 1,024
@@ -1269,11 +1369,11 @@ The rule lists live in `tests/web/i18n-lint/vi.tsv` and run in
 key, after each `{name}` placeholder is masked (as `{X}`); `error`
 fails the test and `warn` is printed. Each rule flags:
 
-- `vi-old-gen` (error): the word gen anywhere but in hệ gen.
+- `vi-old-gen` (error): the word gen anywhere, also in hệ gen (genome is hệ gene).
 - `vi-old-adn-arn` (error): ADN, ARN, mARN, tARN or rARN instead of DNA / RNA.
 - `vi-old-acid` (error): axit amin, acid amin or axit nuclêic.
 - `vi-old-loanword` (error): nuclêôtit, prôtêin, côđon, enzim, pôlipeptit, ribôxôm, plasmit, alen.
-- `vi-genome-term` (error): bộ gen, bộ gene or hệ gene instead of hệ gen.
+- `vi-genome-term` (error): bộ gen or bộ gene instead of hệ gene.
 - `vi-tap-tin` (error): tập tin instead of tệp.
 - `vi-huy-bo` (error): Hủy bỏ or Huỷ bỏ instead of Huỷ.
 - `vi-tai-ve` (error): Tải về instead of Tải xuống.
@@ -1294,6 +1394,7 @@ fails the test and `warn` is printed. Each rule flags:
 - `vi-decimal-comma` (warn): a decimal comma (0,65) where the English format keeps 0.65.
 - `vi-english-plural` (warn): features, tracks, hits, queries, subjects, qualifiers, orthogroups, genes, reads or loci.
 - `vi-ellipsis` (error): three periods instead of one ….
+- `vi-preset-term` (error): cài đặt sẵn instead of đặt sẵn after a head noun (chế độ track đặt sẵn, bộ màu đặt sẵn).
 
 ## 11. Thai (`th`)
 
@@ -1308,24 +1409,41 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
 ### 11.1 Vocabulary
 
 - **Field terms**: จีโนม, ยีน, ลำดับ, นิวคลีโอไทด์, กรดอะมิโน, สาย (strand),
-  สายพันธุ์ (strain), สิ่งมีชีวิต (organism), ออร์แกเนลล์, แอนโนเทชัน, ฟีเจอร์,
-  ระเบียน (record), บริเวณ (region), ปริมาณ GC, การเทียบลำดับ (sequence
-  alignment), การจัดแนว (Similarity-group alignment), ความคล้าย, แผนภาพ, แทร็ก.
-- **Kept in English**, no plural s: E-value, Bitscore, Query,
-  Subject, hit, RBH, orthogroup, Collinear, GC skew, AT skew, coverage,
-  qualifier, accession (หมายเลข accession), locus tag, identity, LOCUS, the
-  §1.1 names, units. Help may gloss one once: ค่า E, ร้อยละความเหมือน.
+  สายพันธุ์ (strain), สิ่งมีชีวิต (organism), ออร์แกเนลล์, คำอธิบายประกอบ
+  (annotation), ฟีเจอร์, ระเบียน (record), บริเวณ (region), ปริมาณ GC,
+  การเทียบลำดับ (sequence alignment), การจัดแนว (Similarity-group alignment),
+  ความคล้ายคลึง (similarity), ความเหมือน (sequence identity),
+  ความอนุรักษ์ของลำดับ (conservation), ผลิตภัณฑ์ของยีน (/product),
+  การเปรียบเทียบรายคู่ (pairwise comparison), แผนภาพ, แทร็ก. The stroke of a
+  line element is the line itself (สีเส้นแกน, ความหนาเส้น); เส้นขอบ is the
+  outline of a block or swatch.
+- **Kept in English**, no plural s: E-value, Bitscore, Query, Subject, hit,
+  RBH, orthogroup, ortholog, paralog, coortholog, inparalog, upstream,
+  downstream, Collinear, GC skew, AT skew, coverage, qualifier, accession
+  (หมายเลข accession), locus tag, LOCUS, the §1.1 names, units. Help may gloss
+  one once: ค่า E; ความเหมือน may take “(identity)” once.
 - **Command words** (Google): บันทึก, โหลด, ยกเลิก, เพิ่ม, ลบ (Delete), นำออก
   (Remove), ล้าง (Clear), ทำสำเนา, แก้ไข, นำไปใช้, เลิกทำ / ทำซ้ำ, เปลี่ยนกลับ,
   กู้คืน, รีเซ็ต, นำเข้า / ส่งออก, อัปโหลด, สร้าง (Generate), เรียกใช้ (Run).
-- **UI nouns** (Google): การตั้งค่า, ค่าเริ่มต้น, ค่าที่ตั้งไว้ล่วงหน้า / พรีเซ็ต,
-  เซสชัน, ไฟล์, ตัวอย่าง (Example), ภาพตัวอย่าง (Preview), แกลเลอรี, ขั้นสูง,
-  เลย์เอาต์, แบบอักษร, ชุดสี, ป้ายกำกับ, ประกาศ (Notice; หมายเหตุ is /note).
+- **UI nouns** (Google): การตั้งค่า, ค่าเริ่มต้น, ค่าที่ตั้งไว้ล่วงหน้า /
+  พรีเซ็ต (not ค่าที่กำหนดล่วงหน้า: กำหนดเอง is Custom), เซสชัน, ไฟล์,
+  ตัวอย่าง (Example), ภาพตัวอย่าง (Preview), แกลเลอรี, ขั้นสูง, เลย์เอาต์,
+  แบบอักษร, ชุดสี, ป้ายกำกับ, ประกาศ (Notice; หมายเหตุ is /note; a notice that
+  refers to itself says ข้อความนี้), การลบล้าง (override, as a noun or label;
+  a help sentence says ใช้ … แทน).
+- **Legend**: คำอธิบายสัญลักษณ์ in sentences, titles and panel labels; the
+  short form คำอธิบาย only on the rail, the Legend tab and buttons, so it
+  never stands next to คำอธิบายประกอบ (annotation) or คำจำกัดความ
+  (Definition).
 - **Loanwords**: only those the glossary lists, in the Google spelling
   (§11.4); otherwise a native word. Prefer แบบอักษร to ฟอนต์.
 - **Never** (official coinages and known mistranslations): ค่าโดยปริยาย, บรรณนิทัศน์, เอกลักษณ์,
   การปรับแนว, จีน for gene, อินทรีย์, ภูมิภาค, ข้อคำถาม, บรรจุลง / บรรจุขึ้น,
   แฟ้ม, สายโยงใย, ช่วงเวลาสื่อสาร, ทำกลับ, จุดตั้งระยะ, คะแนนบิต, ความเบ้.
+- **Retired** (r1 term audit, lint `th-retired-term`): แอนโนเทชัน, ความคล้าย
+  without คลึง, การเปรียบเทียบเป็นคู่, การจับคู่แบบเป็นคู่, ออร์โธล็อก /
+  พาราล็อก and their compounds, การอนุรักษ์ for sequence conservation, ต้นน้ำ
+  / ปลายน้ำ.
 
 ### 11.2 Buttons and sentences
 
@@ -1349,11 +1467,27 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
 - **Active voice**: avoid the adverse passive ถูก…; leave the agent out or
   name ระบบ (ทิ้งบรรทัด {lines} แล้ว, not บรรทัด {lines} ถูกทิ้ง).
 - A control named in a sentence is its Thai label in “ ”: คลิก “สร้าง”.
+- **Relative clauses**: never stack ที่…ที่; the second clause takes ซึ่ง, or
+  a redundant modifier is dropped (ฟีเจอร์ที่เลือก). At most two การ- nouns in
+  a row.
+- **Generate again**: สร้างแผนภาพอีกครั้ง, without quotes; คลิก “สร้าง” only
+  when the button is clicked.
+- **Drawing mode**: Linear / Circular after a record, file, sequence, axis or
+  scale attaches to the diagram: ระเบียนในแผนภาพแบบเส้นตรง,
+  ลำดับที่แสดงในแผนภาพแบบวงกลม. ระเบียนแบบวงกลม is the topology of the
+  molecule only; tracks and slots keep แทร็กแบบวงกลม.
 
 ### 11.3 Punctuation and spacing
 
 - **Sentence ends**: no period, comma or semicolon after Thai text. One space
-  separates clauses and sentences; keys shown together join with `' '`. Periods stay inside Latin names, numbers and ranges (0.65, 1..200).
+  separates clauses and sentences; keys shown together join with `' '`. No
+  space inside a clause: never between a noun and its ที่-clause, a subject
+  and its verb, or a verb and its object; this rule wins over th-long-run, so
+  a sentence whose closed clause would run 60 or more Thai characters is
+  restructured (a fronted เมื่อ / หาก / จาก phrase, ระบบ as subject, a break
+  before เพื่อ(ให้), โดย, ใน…, และ or หรือ, or a shorter synonym) instead of
+  keeping the space. Periods stay inside Latin names, numbers and ranges
+  (0.65, 1..200).
 - **Lists**: Thai items are separated by spaces, with และ / หรือ before the last
   item (ฟีเจอร์ ป้ายกำกับ และคำอธิบายสัญลักษณ์). Latin-only lists (formats,
   identifiers, code values) keep commas: A, B หรือ C. Run-time
@@ -1379,7 +1513,7 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
   เวอร์ชัน, อัปโหลด, อัปเดต, แกลเลอรี, เลย์เอาต์, ไฮไลต์, รีเซ็ต, คลิก, ลิงก์,
   ไอคอน, อีเมล, อินเทอร์เฟซ. Never เซสชั่น, เวอร์ชั่น, อัพโหลด, อัพเดท,
   แกลเลอรี่, ไฮไลท์, ลิ้งค์. The one exception is Chromium's ป๊อปอัป.
-- Mai taikhu ็ is not a tone mark and stays: บล็อก, แท็บ, พาราล็อก. Biology
+- Mai taikhu ็ is not a tone mark and stays: บล็อก, แท็บ, ล็อก. Biology
   follows IPST / NSTDA: จีโนม, ยีน, นิวคลีโอไทด์, โครโมโซม, ออร์แกเนลล์.
 - **Storage order**: consonant, upper or lower vowel, tone mark, then ำ
   (น้ำ). แ and ำ are one character each, never เเ or ํา.
@@ -1393,10 +1527,11 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
   side except next to `( ) : “ ” /` or the edge of the value.
 - **No plural forms**: `Intl.PluralRules('th')` selects `other`, and the
   `one` row repeats it.
-- **Counts**: number + classifier. In labels a noun that is its own
-  classifier follows the number ({count} ระเบียน, {count} ไฟล์); in sentences
-  the noun comes first (ฟีเจอร์ {count} รายการ, สี {count} สี). รายการ counts
-  features, entries, matches, rules and issues. An ordinal is ที่ + number.
+- **Counts**: number + classifier. In labels a noun that is its own classifier
+  follows the number ({count} ระเบียน, {count} ไฟล์); in sentences the noun
+  comes first (ฟีเจอร์ {count} รายการ, สี {count} สี). รายการ counts features,
+  entries, matches, rules and issues; status chips that count records put the
+  status first: จัดแนวแล้ว {count} ระเบียน. An ordinal is ที่ + number.
 - Examples:
   1. `{count} record` → {count} ระเบียน
   2. `{count} feature` → ฟีเจอร์ {count} รายการ
@@ -1456,3 +1591,6 @@ fails the test and `warn` is printed. Each rule flags:
 - `th-quotes` (warn): an ASCII quote instead of “ ” or ‘ ’.
 - `th-long-run` (warn): 60 or more Thai characters without a space.
 - `th-whitespace` (warn): a leading, trailing or doubled space, or NBSP, ZWSP, ZWNJ, ZWJ, WJ or BOM.
+- `th-retired-term` (error): a term the r1 term audit retired (แอนโนเทชัน, ความคล้าย without คลึง, …เป็นคู่, ออร์โธล็อก / พาราล็อก, การอนุรักษ์, ต้นน้ำ / ปลายน้ำ).
+- `th-identity-thai` (warn): the English word identity outside a “(identity)” gloss or a code value.
+- `th-line-stroke` (warn): เส้นขอบของแกน / เส้นขอบของเส้น, or ไม่ยอมรับ.

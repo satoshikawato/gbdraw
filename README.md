@@ -18,6 +18,14 @@ the files).
 
 ## Only the latest page is published
 
+`data/` is generated from `dev`: the `Translation review page` workflow
+(`.github/workflows/translation-review.yml` on `dev`) runs
+`node tools/i18n/review-page-data.mjs --out data` after each `dev` push that
+changes the Web UI keys, the catalogs, the glossary or the style guide, and
+commits only when the data changed. Do not edit `data/` by hand; the next run
+replaces it. `data/shots.json` keeps its screenshot rectangles and loses the
+ids of keys that `dev` no longer has.
+
 A new version replaces `index.html` and `data/` in place. There are no version
 folders. Older versions exist only in the branch history; the last commit that
 still had `review-gui/` (v19 and v20) is `fb3371073`.
