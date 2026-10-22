@@ -37,7 +37,6 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * The Depth track defaults of the calling stack. The values are a drawing's
  * stored single-series settings, unvalidated.
  * @typedef {object} DepthTrackDefaults
- * @property {(index: number) => string} [colorForIndex]
  * @property {unknown} [depthColor] The first series' color.
  * @property {unknown} [depthHeight]
  * @property {unknown} [largeTickInterval]
@@ -108,22 +107,15 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
   '#7F7F7F'
 ];
 
-/**
- * The color of Depth series `index` while it has none of its own.
- * @param {number} index
- * @returns {string}
- */
-export const depthTrackFallbackColor = (index) => DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
 
 /**
- * The defaults of a Depth series an edit of a drawing gives it settings for
- * (`depthTrackConfigForEdit`): the series color, and the drawing's stored
- * height. Every editor of a drawing's series uses these.
+ * The defaults of a Depth series an edit of a drawing, or Generate, gives it
+ * settings for (`depthTrackConfigForEdit`): the series color, and the drawing's
+ * stored height. Every writer of a drawing's series uses these.
  * @param {StoredDepthSettings} adv
  * @returns {DepthTrackDefaults}
  */
 export const depthTrackEditDefaults = (adv) => ({
-  colorForIndex: depthTrackFallbackColor,
   depthColor: adv.depth_color,
   depthHeight: adv.depth_height,
   largeTickInterval: null,
@@ -152,17 +144,26 @@ const cloneParams = (params = {}) => {
  */
 export const defaultDepthSeriesLabel = (index, count) => (count === 1 ? 'Depth' : `Depth ${index + 1}`);
 
+// The one rule for the color of a series without its own: the first series
+// takes the drawing's Depth color, a later one the palette (OV-1510).
 /**
  * @param {number} index
  * @param {DepthTrackDefaults} [defaults]
+ * @returns {string}
  */
 const fallbackColor = (index, defaults = {}) => {
-  if (typeof defaults.colorForIndex === 'function') {
-    return String(defaults.colorForIndex(index) || '');
-  }
   if (index === 0 && defaults.depthColor) return String(defaults.depthColor);
-  return depthTrackFallbackColor(index);
+  return DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
 };
+
+/**
+ * The color Depth series `index` of a drawing draws in while it has none of
+ * its own: the editor shows it, an edit stores it, and the request sends it.
+ * @param {number} index
+ * @param {StoredDepthSettings} adv
+ * @returns {string}
+ */
+export const depthSeriesDefaultColor = (index, adv) => fallbackColor(index, depthTrackEditDefaults(adv));
 
 /** @param {FileLike | null | undefined} file */
 const depthFileBaseName = (file) => {

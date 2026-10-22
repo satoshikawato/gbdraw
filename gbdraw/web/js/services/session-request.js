@@ -59,6 +59,7 @@ import {
 import {
   activeDepthTrackIndices,
   defaultDepthSeriesLabel,
+  depthSeriesDefaultColor,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -2113,7 +2114,7 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
     return {
       source,
       label: String(track.label || defaultDepthSeriesLabel(trackIndex, logicalTrackCount)),
-      color: String(track.color || drawing.adv.depth_color || '#4A90E2'),
+      color: String(track.color || depthSeriesDefaultColor(trackIndex, drawing.adv)),
       height: state.mode.value === 'linear'
         ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
         : null,

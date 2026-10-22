@@ -520,6 +520,77 @@ test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface th
   });
 });
 
+// Generate stores the Depth series settings a series edit stores (OV-1510): a
+// series without settings gets the owner's defaults, so Generate draws series 2
+// in its own color, not in series 1's; a Depth row whose series the drawing
+// does not have keeps only its own height and adds no series (TK-03).
+test('Linear Generate gives Depth series the settings a series edit gives them', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
+  await openApp(page);
+  await page.evaluate((genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    const depthFile = (n) => new File([
+      'reference_name\tposition\tdepth\n' +
+      `NC_001454.1\t1\t${n * 10}\n` +
+      `NC_001454.1\t80\t${n * 10 + 5}\n`
+    ], `series-${n}.tsv`, { type: 'text/tab-separated-values', lastModified: 30 + n });
+    app.setDiagramMode('linear');
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'repeat-region.gbk', {
+      type: 'text/plain',
+      lastModified: 29
+    }));
+    app.setLinearDepthFile(app.linearSeqs[0], 0, depthFile(1));
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, depthFile(2));
+    Object.assign(app.form, {
+      show_gc: false,
+      show_skew: false,
+      show_depth: true,
+      show_labels_linear: 'none',
+      legend: 'none'
+    });
+    app.resetLinearTrackSlotsFromSimpleControls();
+    app.setLinearTrackSlotsEnabled(true);
+  }, genbank);
+  await page.waitForFunction(() => window.__GBDRAW_APP__.adv.depth_tracks.length === 2);
+  const generate = (edit) => evaluateWithRetainedPromise(page, async (editName) => {
+    const app = window.__GBDRAW_APP__;
+    if (editName === 'series-2-without-settings') {
+      // Series 2 has no stored settings, as after a Session that saved one series.
+      app.adv.depth_tracks.splice(1);
+    } else {
+      // A switched-off Depth row on a series the drawing does not have.
+      app.adv.linear_track_slots.push({
+        id: 'depth_far',
+        renderer: 'depth',
+        enabled: false,
+        side: 'above',
+        z: 0,
+        height: '40px',
+        params: { track_index: 3 }
+      });
+    }
+    app.results.splice(0, app.results.length);
+    const result = await app.runAnalysis();
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      tracks: app.adv.depth_tracks.map(({ color, height }) => ({ color, height })),
+      farHeight: app.adv.linear_track_slots.find((slot) => slot.id === 'depth_far')?.height ?? null,
+      drawsSeries2Color: String(app.results?.[0]?.content || '').toUpperCase().includes('#E45756')
+    };
+  }, edit);
+  const tracks = [{ color: '#4A90E2', height: null }, { color: '#E45756', height: null }];
+  expect.soft(await generate('series-2-without-settings')).toEqual({
+    result: { status: 'ok' }, errorSummary: '', tracks, farHeight: null, drawsSeries2Color: true
+  });
+  expect.soft(await generate('row-past-the-series')).toEqual({
+    result: { status: 'ok' }, errorSummary: '', tracks, farHeight: '40px', drawsSeries2Color: true
+  });
+});
+
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 

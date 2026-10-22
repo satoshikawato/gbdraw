@@ -3951,6 +3951,26 @@ assert.deepEqual(
   sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.map((track) => track.label),
   ['Sample A', 'Sample B']
 );
+{
+  // A series without settings draws in the default color the series owner
+  // gives it, not in series 1's (OV-1510): series 1 takes the Depth color,
+  // a later series the palette.
+  const storedTracks = state.adv.depth_tracks;
+  const storedColor = state.adv.depth_color;
+  state.adv.depth_tracks = [];
+  state.adv.depth_color = '#AA0000';
+  const unsetCanonical = buildCanonicalRenderRequestRaw({
+    state,
+    filesData: sparseDepthFilesData,
+    comparisonPlanSnapshot: comparisonSnapshotForState(state, sparseDepthFilesData)
+  });
+  assert.deepEqual(
+    unsetCanonical.renderRequest.diagramOptions.depthTracks.map(({ label, color }) => [label, color]),
+    [['Depth 1', '#AA0000'], ['Depth 2', '#E45756']]
+  );
+  state.adv.depth_tracks = storedTracks;
+  state.adv.depth_color = storedColor;
+}
 [
   'depthTrackFiles',
   'depthTrackLabels',

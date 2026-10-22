@@ -25,6 +25,7 @@ const {
   clearDepthTrackSourceAt,
   depthSeriesLegendCaptions,
   depthTrackConfigForEdit,
+  depthTrackEditDefaults,
   depthTrackCoverageCount,
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
@@ -76,6 +77,19 @@ const depthIndexes = (slots) => slots
   const legacy = { depth_color: '#111111', depth_height: 30, depth_large_tick_interval: 100 };
   assert.deepEqual(readDepthTracks([{}, {}], legacy).value.map(({ color, height, large_tick_interval }) => [color, height, large_tick_interval]),
     [['#111111', 30, 100], ['#E45756', 30, null]]);
+}
+
+{
+  // One rule for the default color of a series without settings (OV-1510): the
+  // first series takes the drawing's Depth color and a later one the palette,
+  // for an edit (`depthTrackEditDefaults`) as for the reader.
+  const adv = { depth_color: '#AA0000' };
+  const edited = [];
+  depthTrackConfigForEdit(edited, 1, 2, depthTrackEditDefaults(adv));
+  assert.deepEqual(edited.map(({ color }) => color), ['#AA0000', '#E45756']);
+  assert.deepEqual(edited.map(({ color }) => color), readDepthTracks([{}, {}], adv).value.map(({ color }) => color));
+  // Without a Depth color the first series takes the palette's first color.
+  assert.equal(depthTrackConfigForEdit([], 0, 1, depthTrackEditDefaults({})).color, '#4A90E2');
 }
 
 {

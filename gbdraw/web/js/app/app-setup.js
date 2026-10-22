@@ -290,7 +290,7 @@ import {
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
   depthTrackConfigForEdit,
   depthTrackEditDefaults,
-  depthTrackFallbackColor,
+  depthSeriesDefaultColor,
   isDefaultManagedDepthSlot,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
@@ -2547,7 +2547,7 @@ export const createAppSetup = () => {
   const getDepthTrackColor = (index) => {
     const idx = Math.max(0, Number(index) || 0);
     const config = readDepthTrackConfig(state.activeDrawing(), idx);
-    return String(config?.color || depthTrackFallbackColor(idx));
+    return String(config?.color || depthSeriesDefaultColor(idx, state.activeDrawing().adv));
   };
   /** @param {number} index @param {unknown} value */
   const setDepthTrackColor = (index, value) => {
@@ -2558,7 +2558,7 @@ export const createAppSetup = () => {
     const color = String(value ?? '').trim();
     const config = depthTrackConfigForIndex(drawing, idx);
     if (!config) return;
-    config.color = color || depthTrackFallbackColor(idx);
+    config.color = color || depthSeriesDefaultColor(idx, drawing.adv);
   };
   /** @param {DrawingState} drawing */
   const depthTrackSlotCollections = (drawing) => [
