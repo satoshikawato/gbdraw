@@ -225,18 +225,8 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
 <script>
 (() => {
   'use strict';
-  const LOCALES = [
-    { id: 'ja', label: '日本語', lang: 'ja' },
-    { id: 'zh-Hans', label: '简体中文', lang: 'zh-Hans' },
-    { id: 'zh-Hant', label: '繁體中文', lang: 'zh-Hant' },
-    { id: 'ko', label: '한국어', lang: 'ko' },
-    { id: 'es', label: 'Español', lang: 'es' },
-    { id: 'fr', label: 'Français', lang: 'fr' },
-    { id: 'pt', label: 'Português', lang: 'pt' },
-    { id: 'id', label: 'Bahasa Indonesia', lang: 'id' },
-    { id: 'vi', label: 'Tiếng Việt', lang: 'vi' },
-    { id: 'th', label: 'ไทย', lang: 'th' },
-  ];
+  // The languages with a catalog, from data/locales.json (the generator's list of UI_LOCALES).
+  const LOCALES = [];
   const FILTERS = [
     { id: 'todo', label: 'To review' },
     { id: 'flag', label: 'Flagged' },
@@ -258,7 +248,6 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
     db: null, branchDocs: 0, user: null, me: null, canWrite: null, names: {},
     shots: { scale: 1, shots: [], keys: {} }, showShots: true, lastBulk: null, sugs: {}, downloads: null,
   };
-  for (const l of LOCALES) { state.drafts[l.id] = {}; state.notes[l.id] = {}; state.edits[l.id] = new Map(); state.sugs[l.id] = new Map(); }
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const el = (tag, props = {}, ...kids) => {
@@ -834,7 +823,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
       '- Copy `id` exactly. `suggestion` is the complete translation of the string, not a fragment or a diff.',
       '- When the English itself prevents a good translation (a sentence fragment, an English word inserted at run time), say so in `reason` and still give your best suggestion.', '',
       '## Fields of each string', '',
-      '`id`; `en` = English source; `meaning` = context when the English is ambiguous; `kind` = button, label, help text, screen-reader name, tooltip, option, …; `area` = part of the app; `where` = source file and line; `text` = current translation; `status`; `reviewer_comment`; `draft_note` = the translator\'s note; `glossary` = glossary terms found in the English.', '',
+      '`id`; `en` = English source; `meaning` = context when the English is ambiguous; `kind` = what the text is for (button, label, option, placeholder, title, aria-label, heading, help, dialog, notice, other); `area` = part of the app (a settings section, Dialogs, Shared components, Page, or a script); `where` = source file; `text` = current translation; `status`; `reviewer_comment`; `draft_note` = the translator\'s note; `glossary` = glossary terms found in the English.', '',
       '## Style rules', '', style, '',
       `## Glossary (English, ${loc}, note)`, '', '```tsv', ...glossary, '```', '',
       '## Strings', '', '```jsonl', ...rows, '```', '',
@@ -933,6 +922,10 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
 
   // ---- start ----------------------------------------------------------------
   async function start() {
+    for (const { tag, label } of await loadJson('data/locales.json', [])) {
+      LOCALES.push({ id: tag, label, lang: tag });
+      state.drafts[tag] = {}; state.notes[tag] = {}; state.edits[tag] = new Map(); state.sugs[tag] = new Map();
+    }
     const savedLocale = storeGet('review.locale'); if (LOCALES.some((l) => l.id === savedLocale)) state.locale = savedLocale;
     const savedFilter = storeGet('review.filter'); if (FILTERS.some((f) => f.id === savedFilter)) state.filter = savedFilter;
     state.area = storeGet('review.area') || '';

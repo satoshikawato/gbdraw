@@ -10,7 +10,7 @@ the files).
 ## Layout
 
 - `index.html` - the review page.
-- `data/` - what the page loads: `keys.json`, `glossary.json`, `shots.json`,
+- `data/` - what the page loads: `locales.json`, `keys.json`, `glossary.json`, `shots.json`,
   `style.md`, and `draft-<locale>.json` and `notes-<locale>.json` per locale.
 - `shots/` - the Web UI screenshots (WebP) that `data/shots.json` points at.
 - `db/current/` - the review database the page reads
