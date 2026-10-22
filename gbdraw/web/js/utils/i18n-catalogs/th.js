@@ -2150,6 +2150,7 @@ export default Object.freeze({
   "Subtitle": "ชื่อเรื่องรอง",
   "Subtitle / title (optional)": "ชื่อเรื่องรอง / ชื่อเรื่อง (ไม่บังคับ)",
   "Subtitle / title for sequence {n}": "ชื่อเรื่องรอง / ชื่อเรื่องของลำดับ {n}",
+  "Suggest a translation fix": "เสนอแก้ไขคำแปล",
   "Summary": "สรุป",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "ระบุอินพุต GenBank หรืออินพุต GFF3 และ FASTA ที่ตรงกัน",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "ระบุไฟล์ลำดับสำหรับการเปรียบเทียบ (FASTA, GenBank หรือ DDBJ) หรือ BLAST outfmt 6/7 ตามที่จำเป็น",

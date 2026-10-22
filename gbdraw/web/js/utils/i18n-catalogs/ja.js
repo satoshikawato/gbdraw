@@ -2150,6 +2150,7 @@ export default Object.freeze({
   "Subtitle": "サブタイトル",
   "Subtitle / title (optional)": "サブタイトル / タイトル（任意）",
   "Subtitle / title for sequence {n}": "配列{n}のサブタイトル / タイトル",
+  "Suggest a translation fix": "翻訳の修正を提案する",
   "Summary": "概要",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "GenBankの入力、または対応するGFF3とFASTAの入力を指定してください。",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "必要に応じて、比較配列ファイル（FASTA、GenBank、DDBJ）またはBLAST outfmt 6/7を指定してください。",
