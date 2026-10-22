@@ -109,6 +109,29 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
 ];
 
 /**
+ * The color of Depth series `index` while it has none of its own.
+ * @param {number} index
+ * @returns {string}
+ */
+export const depthTrackFallbackColor = (index) => DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
+
+/**
+ * The defaults of a Depth series an edit of a drawing gives it settings for
+ * (`depthTrackConfigForEdit`): the series color, and the drawing's stored
+ * height. Every editor of a drawing's series uses these.
+ * @param {StoredDepthSettings} adv
+ * @returns {DepthTrackDefaults}
+ */
+export const depthTrackEditDefaults = (adv) => ({
+  colorForIndex: depthTrackFallbackColor,
+  depthColor: adv.depth_color,
+  depthHeight: adv.depth_height,
+  largeTickInterval: null,
+  smallTickInterval: null,
+  tickFontSize: null
+});
+
+/**
  * @param {unknown} [params]
  * @returns {Record<string, unknown>}
  */
@@ -138,7 +161,7 @@ const fallbackColor = (index, defaults = {}) => {
     return String(defaults.colorForIndex(index) || '');
   }
   if (index === 0 && defaults.depthColor) return String(defaults.depthColor);
-  return DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
+  return depthTrackFallbackColor(index);
 };
 
 /** @param {FileLike | null | undefined} file */
@@ -454,11 +477,11 @@ export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
 // past them names no series, so there is nothing to write and the series list
 // does not grow; the series up to `index` get their default fields.
 /**
- * @param {Record<string, any>[]} tracks
+ * @param {RawDepthTrackConfig[]} tracks
  * @param {number} index
  * @param {number} seriesCount
- * @param {Record<string, any>} [defaults]
- * @returns {Record<string, any> | null}
+ * @param {DepthTrackDefaults} [defaults]
+ * @returns {RawDepthTrackConfig | null}
  */
 export const depthTrackConfigForEdit = (tracks, index, seriesCount, defaults = {}) => {
   const idx = Math.max(0, Number(index) || 0);

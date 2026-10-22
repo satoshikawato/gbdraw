@@ -442,6 +442,8 @@ test('Linear Depth above Features generates with repeat_region underlays', async
 // them, as the figure and the CLI do: the series cards of both modes, the Linear
 // File card rows, the Depth row's series options and the Depth row's legend-label
 // placeholder (OV-1508). The name is figure text, English in every UI language.
+// A Depth row's height edit on a series without stored settings gives it the
+// series owner's defaults: no name and the series color (OV-1510).
 test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface that names them', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
   const files = () => [1, 2].map((n) => new File([`position\tdepth\n1\t${n}0\n`], `reads-${n}.tsv`, { type: 'text/tab-separated-values' }));
@@ -456,7 +458,8 @@ test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface th
       fileRows: [...new Set([...document.querySelectorAll('[data-linear-source-depth-series]')].map((row) => text(row.querySelector('.truncate'))))],
       // Each Depth row's series menu lists every series.
       options: [...new Set([...document.querySelectorAll('select[aria-label^="Depth track index"] option')].map(text))],
-      slotPlaceholders: [...document.querySelectorAll('input[aria-label$=" Depth legend label"]')].map((input) => [input.value, input.placeholder])
+      slotPlaceholders: [...document.querySelectorAll('input[aria-label$=" Depth legend label"]')]
+        .filter((input) => input.offsetParent).map((input) => [input.value, input.placeholder])
     };
   });
   await page.evaluate((source) => {
@@ -481,6 +484,19 @@ test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface th
     options: [expect.stringMatching(/^0 · Depth 1 · /), expect.stringMatching(/^1 · Depth 2 · /)],
     slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
   });
+  const heightEdit = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    // Series 2 has no stored settings yet, as after a Session that saved one series.
+    app.adv.depth_tracks.splice(1);
+    const row = app.adv.linear_track_slots.find((slot) => slot.renderer === 'depth' && slot.params.track_index === 1);
+    app.setLinearTrackSlotHeight(row, '40');
+    return app.adv.depth_tracks.map(({ label, color, height }) => ({ label, color, height }));
+  });
+  expect(heightEdit).toEqual([
+    { label: '', color: expect.any(String), height: null },
+    { label: '', color: '#E45756', height: 40 }
+  ]);
+  await expect.poll(async () => (await names()).cards).toEqual(['#1 Depth 1', '#2 Depth 2']);
   await page.evaluate((source) => {
     const app = window.__GBDRAW_APP__;
     const [first, second] = new Function(`return (${source})`)()();
@@ -490,11 +506,18 @@ test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface th
     app.setCircularDepthFile(1, second);
     app.setDepthTrackLabel(0, '');
     app.setDepthTrackLabel(1, '');
+    app.setTrackShown('show_depth', true);
+    app.setCircularTrackSlotsEnabled(true);
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
   }, files.toString());
   await expect.poll(async () => {
-    const { cards, placeholders } = await names();
-    return { cards, placeholders };
-  }).toEqual({ cards: ['#1 Depth 1', '#2 Depth 2'], placeholders: ['Depth 1', 'Depth 2'] });
+    const { cards, placeholders, slotPlaceholders } = await names();
+    return { cards, placeholders, slotPlaceholders };
+  }).toEqual({
+    cards: ['#1 Depth 1', '#2 Depth 2'],
+    placeholders: ['Depth 1', 'Depth 2'],
+    slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
+  });
 });
 
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {

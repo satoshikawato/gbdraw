@@ -289,6 +289,8 @@ import {
   depthTrackMatrixWidth,
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
   depthTrackConfigForEdit,
+  depthTrackEditDefaults,
+  depthTrackFallbackColor,
   isDefaultManagedDepthSlot,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
@@ -2206,16 +2208,6 @@ export const createAppSetup = () => {
       return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
     }
   });
-  const depthTrackDefaultColors = [
-    '#4A90E2',
-    '#E45756',
-    '#2CA02C',
-    '#F28E2B',
-    '#9467BD',
-    '#8C564B',
-    '#17BECF',
-    '#7F7F7F'
-  ];
   /** @param {DepthFileSlots | DepthFileSlots[]} value */
   const depthFileCount = (value) => (
     isRecordMajorDepthFileMatrix(value)
@@ -2288,20 +2280,9 @@ export const createAppSetup = () => {
       seq.depth = padDepthFileSlots(seq.depth, targetWidth);
     });
   };
-  /** @param {number} index */
-  const depthTrackFallbackColor = (index) => depthTrackDefaultColors[index % depthTrackDefaultColors.length];
-  /** @param {DrawingState} drawing */
-  const depthTrackConfigDefaults = (drawing) => ({
-    colorForIndex: depthTrackFallbackColor,
-    depthColor: drawing.adv.depth_color,
-    depthHeight: drawing.adv.depth_height,
-    largeTickInterval: null,
-    smallTickInterval: null,
-    tickFontSize: null
-  });
   /** @param {DrawingState} drawing @param {RawDepthTrackConfig | null | undefined} entry @param {number} index */
   const normalizeDepthTrackConfig = (drawing, entry, index) => (
-    normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults(drawing))
+    normalizeDepthTrackConfigEntry(entry, index, depthTrackEditDefaults(drawing.adv))
   );
   /** @param {unknown} value */
   const optionalNumberInputValue = (value) => value ?? '';
@@ -2326,7 +2307,7 @@ export const createAppSetup = () => {
     const normalized = ensureDepthTrackConfigCountEntries(
       drawing.adv.depth_tracks,
       targetCount,
-      depthTrackConfigDefaults(drawing)
+      depthTrackEditDefaults(drawing.adv)
     );
     drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalized);
   };
@@ -2541,7 +2522,7 @@ export const createAppSetup = () => {
   const depthTrackConfigForIndex = (drawing, index) => {
     if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
     return depthTrackConfigForEdit(
-      drawing.adv.depth_tracks, index, activeDepthTrackCount(), depthTrackConfigDefaults(drawing)
+      drawing.adv.depth_tracks, index, activeDepthTrackCount(), depthTrackEditDefaults(drawing.adv)
     );
   };
   // A series' saved settings, or its defaults while the drawing holds none (read only, OV-109).
