@@ -1463,6 +1463,12 @@
             .app-tagline { visibility: hidden; }
         }
         .app-header .app-logo-title { max-width: none; }
+        /* The Session block is the part of the header that gives way (OV-368), and what it holds stays inside it
+           in every language (OV-1530: fr at 1280 px left it 25 px wide, and its caption ran under the mode switch).
+           The title narrows first; the caption keeps 2rem for the pencil and, when the block is narrower still,
+           ends with an ellipsis or shows nothing; the title button clips its own pencil and title. */
+        .app-session-label { flex: none; min-width: 0; max-width: calc(100% - 2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .app-session-button { overflow: hidden; }
         @media (max-width: 1439px) {
             .app-tagline {
                 display: none !important;

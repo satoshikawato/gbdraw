@@ -536,9 +536,32 @@ test('in every language, the link beside the menu opens the feedback form with o
       await page.setViewportSize({ width, height: 800 });
       const fit = await page.locator('header').evaluate((header) => {
         const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
-        return { inside: right <= document.documentElement.clientWidth, scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+        // The Session caption and title button paint inside the Session block, never under the mode switch (OV-1530:
+        // fr at 1280 px). A box clips what it hides: a part counts only up to the right edge of a clipping ancestor.
+        const block = header.querySelector('.app-session-actions');
+        const clipped = (node, edge) => {
+          let shown = edge;
+          for (let element = node.parentElement; element && element !== block; element = element.parentElement) {
+            if (getComputedStyle(element).overflowX !== 'visible') shown = Math.min(shown, element.getBoundingClientRect().right);
+          }
+          return shown;
+        };
+        const range = document.createRange();
+        const parts = [...block.querySelectorAll('*')].filter((element) => element.getClientRects().length > 0)
+          .map((element) => clipped(element, element.getBoundingClientRect().right));
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          range.selectNodeContents(node);
+          parts.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => clipped(node, rect.right)));
+        }
+        const limit = Math.min(block.getBoundingClientRect().right, header.querySelector('.mode-switch').getBoundingClientRect().left);
+        return {
+          inside: right <= document.documentElement.clientWidth,
+          scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          sessionInside: Math.max(...parts) <= limit + 0.5
+        };
       });
-      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false });
+      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false, sessionInside: true });
     }
   }
   expect(errors).toEqual([]);
