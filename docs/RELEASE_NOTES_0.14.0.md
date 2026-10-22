@@ -149,11 +149,16 @@ English format (1,000.5), and warnings from Python, the Gallery tutorials, and
 the documentation stay English. Translated wording may contain errors until it is
 corrected; the Bahasa Indonesia, Español, Français, Português, Tiếng Việt,
 ไทย, and 한국어 wording was drafted and checked without a native-speaker
-reviewer.
+reviewer. The **Suggest a translation fix** link beside the menu opens the GitHub
+translation feedback form with the shown language and the gbdraw version
+filled in.
 
 Count sentences in the web app (for example "1 source record inspected") use
 the singular and plural forms of each language, and several English texts now
 use the control names the UI shows.
+The translations were checked against each other and corrected, and the
+header, settings rail, popups, and controls fit their text in every language;
+a name wraps only between words, never inside one.
 
 Documentation: the GUI images and the Gallery tutorial media show the header
 **Language** menu and the final label look.
@@ -671,6 +676,9 @@ Some older figures can change:
   their former size.
 - A manual tick interval that is not a whole unit prints the decimals it needs:
   a 500 bp interval no longer reads "1 kbp, 1 kbp".
+- In the web app, unnamed Depth series are called **Depth** for one series and
+  **Depth 1**, **Depth 2**, … for more, as the CLI and Python draw them,
+  instead of **Depth**, **Depth 2**.
 - Depth TSV positions follow crops and reverse complement. Before,
   `--region chr:601-800` drew the rows of positions 1-200, and a
   reverse-complemented record drew its coverage mirrored.

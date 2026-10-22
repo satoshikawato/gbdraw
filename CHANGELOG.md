@@ -103,7 +103,10 @@ write-up of a release.
   without a reload, between English, Bahasa Indonesia, Español, Français,
   Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어. English is
   shown on a first visit whatever the browser's language; the choice is kept
-  per browser and is not part of the Session, History, or any export. The
+  per browser and is not part of the Session, History, or any export. A
+  **Suggest a translation fix** link beside the menu opens the GitHub
+  translation feedback form with the shown language and the gbdraw version
+  filled in. The
   figure, every export, and the Session are the same in every language, and
   numbers keep the English format. Warnings from Python, the Gallery tutorials,
   and the documentation stay English. Translated wording may contain errors until it is
@@ -140,6 +143,19 @@ write-up of a release.
 - Web app: count sentences (for example "1 source record inspected") use the
   singular and plural forms of each language, and several English texts now
   use the control names the UI shows (#1276).
+- Web app: the translations were checked against each other and corrected, the
+  English of 27 texts now names the control or the action it describes, and
+  the header, settings rail, popups, and controls fit their text in every
+  language; a name wraps only between words, never inside one.
+- Web app, Depth: unnamed Depth series are called **Depth** for one series and
+  **Depth 1**, **Depth 2**, … for more, as the CLI and Python draw them;
+  the web app named them **Depth**, **Depth 2** (OV-1508). Editing a Linear
+  Depth row's height no longer adds empty Depth series up to that row
+  (OV-1510).
+- Comparison, Depth, and Session tables read decimal numbers exactly with every
+  supported pandas version; before pandas 3.1 some values, for example a
+  comparison E-value in `data-evalue`, were one unit in the last place off
+  (OV-1534).
 - Documentation: the GUI images, the `examples/` figures, and the Gallery
   tutorial media were retaken for the feature label style.
 - Documentation: the GUI images and the Gallery tutorial media were retaken
