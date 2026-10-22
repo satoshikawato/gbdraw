@@ -289,8 +289,11 @@ test('Embed font in exported SVG is an export-only setting', () => {
 });
 
 test('no timing note is written as literal text in index.html', () => {
-  const page = html.replace(/<!--[\s\S]*?-->/g, '');
-  const literal = [...page.matchAll(/appl(?:y|ies) (?:on|to) (?:the next )?Generate|not to Generate|data-applies-on-generate/gi)]
-    .map((match) => `${match[0]} at line ${page.slice(0, match.index).split('\n').length}`);
+  // Skip matches inside HTML comments by their ranges instead of deleting the
+  // comments, which CodeQL reads as incomplete sanitization.
+  const comments = [...html.matchAll(/<!--[\s\S]*?-->/g)].map((match) => [match.index, match.index + match[0].length]);
+  const literal = [...html.matchAll(/appl(?:y|ies) (?:on|to) (?:the next )?Generate|not to Generate|data-applies-on-generate/gi)]
+    .filter((match) => !comments.some(([start, end]) => match.index >= start && match.index < end))
+    .map((match) => `${match[0]} at line ${html.slice(0, match.index).split('\n').length}`);
   assert.deepEqual(literal, []);
 });
