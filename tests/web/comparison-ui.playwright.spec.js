@@ -735,7 +735,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       name: 'Pairwise display max hits per protein'
     }).count(),
     groupHits: await page.getByRole('spinbutton', {
-      name: 'Member hits per protein'
+      name: 'Max hits per protein for groups'
     }).count(),
     collinearGap: await page.getByRole('spinbutton', {
       name: 'Collinear max unit gap'
@@ -826,7 +826,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     }
     if (value === 'orthogroup') {
       await expect(page.locator('[data-linear-advanced-comparison]'))
-        .toContainText('Advanced similarity groups');
+        .toContainText('Advanced similarity group settings');
     }
   }
 
@@ -1037,7 +1037,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const pairwiseMax = page.getByRole('spinbutton', {
     name: 'Pairwise display max hits per protein'
   });
-  const memberHits = page.getByRole('spinbutton', { name: 'Member hits per protein' });
+  const memberHits = page.getByRole('spinbutton', { name: 'Max hits per protein for groups' });
   const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });
   const matchStyle = page.getByRole('combobox', { name: 'Comparison match style' });
   const matchHeight = page.getByRole('spinbutton', { name: 'Comparison match height' });

@@ -1407,8 +1407,8 @@ const collectCustomTrackIssues = ({
         code: 'conservation_overlay',
         field: 'side',
         slotId: id || null,
-        message: `Circular comparison track ${slotLabel} cannot use Overlay.`,
-        parts: sentence(msg('A comparison row cannot use Overlay.'))
+        message: `Circular comparison track ${slotLabel} cannot use the placement Overlay anchor.`,
+        parts: sentence(msg('A comparison row cannot use the placement Overlay anchor.'))
       });
     }
 

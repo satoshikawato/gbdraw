@@ -1,6 +1,7 @@
 // @ts-check
 import { normalizeCircularTrackSlot, normalizeNt, parseCircularTrackSlotSpec } from './circular-track-slot-model.js';
 import { parseLinearTrackSlotSpecs } from './linear-track-slot-model.js';
+import { defaultDepthSeriesLabel } from './depth-track-state.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { samePaint } from '../utils/color-utils.js';
 
@@ -115,7 +116,7 @@ const trackRequestView = (request) => {
   const depthTracks = diagramOptions.depthTracks ?? [];
   if (!Array.isArray(depthTracks) || !depthTracks.every(isRecord)) return null;
   const depth = depthTracks.map(({ label }, index) => (typeof label === 'string' && label
-    ? label : depthTracks.length === 1 ? 'Depth' : `Depth ${index + 1}`));
+    ? label : defaultDepthSeriesLabel(index, depthTracks.length)));
   return { mode, defaultNt: normalizeNt(dinucleotide), entries, depth };
 };
 

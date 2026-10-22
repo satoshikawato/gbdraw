@@ -286,7 +286,7 @@ def _search_and_open_feature(
     search = page.get_by_role("searchbox", name="Search features", exact=True)
     search.fill(query)
     field_control = page.get_by_role(
-        "combobox", name="Search field", exact=True
+        "combobox", name="Field to search", exact=True
     )
     field_control.select_option(field)
     expect(field_control).to_have_value(field)

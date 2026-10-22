@@ -187,7 +187,7 @@ const buildLegendEntryView = ({
         ? tn(ruleLines.length, 'From this color rule:', 'From these {count} color rules:')
         : featureTypes.has(key)
           ? t('Default color of {type} features', { type: key })
-          : t('Set on individual features');
+          : t('Color set on individual features');
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,

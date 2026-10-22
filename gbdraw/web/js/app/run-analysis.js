@@ -68,7 +68,6 @@ import {
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from '../services/linear-track-slot-model.js';
-import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   activeDepthTrackIndices,
   depthFileSlotsFromValue,
@@ -78,6 +77,7 @@ import {
   normalizeRecordMajorDepthFileRows,
   depthSeriesLegendCaptions,
   representativeDepthFiles,
+  shapeDepthTracksForGenerate,
   syncDepthSlotLabels
 } from '../services/depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -212,6 +212,7 @@ import {
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { DepthSlotRow, RawDepthTrackConfig } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
@@ -3037,74 +3038,33 @@ export const createRunAnalysis = ({
           };
         }
       );
-      /** @param {unknown} index */
-      const ensureDepthTrackConfigAt = (index) => {
-        const idx = Math.max(0, Number(index) || 0);
+      // Generate gives each series the drawing has its settings through the
+      // series owner, before a row reads them; it adds no series (OV-1510).
+      /** @param {number} seriesCount */
+      const shapeDepthSeriesForGenerate = (seriesCount) => {
         if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
-        while (drawing.adv.depth_tracks.length <= idx) {
-          const nextIndex = drawing.adv.depth_tracks.length;
-          drawing.adv.depth_tracks.push({
-            label: getDepthTrackFallbackLabel(nextIndex),
-            color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-            height: null,
-            large_tick_interval: null,
-            small_tick_interval: null,
-            tick_font_size: null
-          });
-        }
-        const config = drawing.adv.depth_tracks[idx];
-        if (!config || typeof config !== 'object' || Array.isArray(config)) {
-          drawing.adv.depth_tracks[idx] = {
-            label: getDepthTrackFallbackLabel(idx),
-            color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-            height: null,
-            large_tick_interval: null,
-            small_tick_interval: null,
-            tick_font_size: null
-          };
-        }
-        return drawing.adv.depth_tracks[idx];
+        shapeDepthTracksForGenerate(drawing.adv.depth_tracks, seriesCount, drawing.adv);
       };
       /**
-       * @param {unknown} slots
-       * @param {unknown} [trackFiles]
+       * @param {DepthSlotRow[]} slots
+       * @param {number} seriesCount
        */
-      const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, trackFiles = []) => {
-        if (!Array.isArray(slots)) return;
-        const trackCount = Array.isArray(trackFiles)
-          ? trackFiles.length
-          : 0;
-        for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
-          ensureDepthTrackConfigAt(trackIndex);
-        }
-        syncDepthSlotLabels(/** @type {any} */ ({
-          slots,
-          depthTracks: drawing.adv.depth_tracks,
-          activeCount: trackCount
-        }));
+      const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, seriesCount) => {
+        syncDepthSlotLabels({ slots, depthTracks: drawing.adv.depth_tracks, activeCount: seriesCount });
       };
-      const linearDepthRepresentativeFiles = () => {
-        const rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
-        const maxDepthTracks = depthTrackMatrixWidth(rows);
-        return Array.from({ length: maxDepthTracks }, (_, trackIndex) => (
-          rows.map((row) => row[trackIndex]).find(Boolean) || null
-        ));
-      };
+      // A Depth row draws its series' stored height, read without writing: a
+      // series without settings, or one the drawing does not have, leaves the
+      // row its own height (TK-03).
       /** @param {LinearTrackSlot | null | undefined} slot */
       const syncLinearDepthSlotHeightFromTrackConfig = (slot) => {
         if (!slot || String(slot.renderer || '') !== 'depth') return;
         const rawTrackIndex = Number(slot.params?.track_index);
         const trackIndex = Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
-        const config = ensureDepthTrackConfigAt(trackIndex);
-        const configuredHeight = normalizeDepthTrackValue(config.height);
-        if (configuredHeight) {
-          slot.height = configuredHeight;
-          return;
-        }
-        const slotHeight = normalizeDepthTrackValue(slot.height);
-        if (slotHeight) {
-          config.height = Number(slotHeight);
-        }
+        /** @type {unknown} */
+        const config = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks[trackIndex] : null;
+        if (!config || typeof config !== 'object') return;
+        const configuredHeight = normalizeDepthTrackValue(/** @type {RawDepthTrackConfig} */ (config).height);
+        if (configuredHeight) slot.height = configuredHeight;
       };
       const normalizeGcContentPercentState = () => {
         drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
@@ -3231,10 +3191,9 @@ export const createRunAnalysis = ({
             }
             circularDepthSlotOrdinal += 1;
           });
-          syncDepthSlotLegendLabelsFromTrackConfigs(
-            circularTrackSlots,
-            representativeDepthFiles(circularDepthRows)
-          );
+          const circularDepthSeriesCount = representativeDepthFiles(circularDepthRows).length;
+          shapeDepthSeriesForGenerate(circularDepthSeriesCount);
+          syncDepthSlotLegendLabelsFromTrackConfigs(circularTrackSlots, circularDepthSeriesCount);
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         if (draftDrawsDepth('circular', drawing)) {
@@ -3477,6 +3436,10 @@ export const createRunAnalysis = ({
             drawing.adv.nt,
             drawing.form.linear_track_layout
           );
+          const linearDepthSeriesCount = depthTrackMatrixWidth(
+            linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
+          );
+          shapeDepthSeriesForGenerate(linearDepthSeriesCount);
           let nextDepthIndex = 0;
           linearTrackSlots.forEach((slot) => {
             if (slot.renderer !== 'depth') return;
@@ -3492,10 +3455,7 @@ export const createRunAnalysis = ({
             syncLinearDepthSlotHeightFromTrackConfig(slot);
             nextDepthIndex = Number(slot.params.track_index) + 1;
           });
-          syncDepthSlotLegendLabelsFromTrackConfigs(
-            linearTrackSlots,
-            linearDepthRepresentativeFiles()
-          );
+          syncDepthSlotLegendLabelsFromTrackConfigs(linearTrackSlots, linearDepthSeriesCount);
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
             drawing.adv.linear_track_slots_axis_index,
             linearTrackSlots.length

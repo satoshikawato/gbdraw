@@ -179,6 +179,10 @@ test('feature and match popups stay above the footer when opened low or dragged 
     expect(await bottomOf(matchPopup), 'match popup dragged down').toBeLessThanOrEqual(await footerTop() + 0.5);
 
     // OV-626: a window that gets narrower moves an open popup the least distance back inside it.
+    // The footer may wrap to a second line in the narrower window (OV-1427); a popup that was
+    // dragged down to it then rises just enough to keep its margin above it (#941). The margin
+    // is placePopupWithin's default in gbdraw/web/js/utils/popup-bounds.js.
+    const popupMargin = 12;
     const insideNarrowerWindow = async (locator, name) => {
       const before = await locator.boundingBox();
       expect(before.x + before.width, `${name} starts right of the narrower window`).toBeGreaterThan(1100);
@@ -188,7 +192,10 @@ test('feature and match popups stay above the footer when opened low or dragged 
       await expect(locator, `${name} stays open`).toBeVisible();
       const after = await locator.boundingBox();
       expect(after.x, `${name} inside the window`).toBeGreaterThanOrEqual(0);
-      expect(after.y, `${name} keeps its height on the page`).toBeCloseTo(before.y, 0);
+      const footerY = await footerTop();
+      expect(after.y + after.height, `${name} stays above the footer`).toBeLessThanOrEqual(footerY - popupMargin + 0.5);
+      expect(after.y, `${name} keeps its height on the page unless the footer pushes it up`)
+        .toBeCloseTo(Math.min(before.y, footerY - popupMargin - after.height), 0);
       await page.setViewportSize({ width: 1600, height: 1000 });
     };
     await insideNarrowerWindow(matchPopup, 'match popup');

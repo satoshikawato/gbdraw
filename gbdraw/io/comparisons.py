@@ -19,6 +19,7 @@ from pandas import DataFrame
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 from ..exceptions import ValidationError
+from .table_text import EXACT_FLOAT_READ_OPTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,7 @@ def read_comparison_table(
             quoting=csv.QUOTE_NONE,
             skiprows=skipped or None,
             encoding="utf-8-sig",
+            **EXACT_FLOAT_READ_OPTIONS,
         )
         raw = raw.loc[:, [file_columns[position] for position in positions]]
         raw.columns = list(COMPARISON_COLUMNS)

@@ -189,7 +189,7 @@ assert.equal(
   nonExecutableEndpoints.disposition,
   IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED
 );
-assert.match(nonExecutableEndpoints.message, /not executable/i);
+assert.match(nonExecutableEndpoints.message, /not on adjacent rows/i);
 
 const inheritedState = createImportedComparisonIntentState();
 restoreImportedComparisonIntent(inheritedState, preserved, {

@@ -19,6 +19,14 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
+// - at 1024x768, 1280x800 and 1440x900, in all 11 languages: every rail name
+//   stays inside the rail column (inside its border and padding) and no word of
+//   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
+//   scroll, with nothing drawn over it and the settings pane, its Generate
+//   bar and the Result pane ending above it (stacked: en, ja; rail: all 11)
+//   (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
+//   the header's mode and Session names keep one line (OV-1515), and each
+//   footer separator stays on the line of the link before it (OV-1517);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
@@ -263,6 +271,37 @@ test('French and Korean show their catalogs and plural forms, and French changes
   // A Generate in French writes the Source recipe and Exact replay of one in English.
   const frenchRecipes = await generatedRecipes(page);
   expect(frenchRecipes).toContain('gbdraw');
+  // With the Result in French: the drawer's Legend toolbar stays inside the
+  // drawer (OV-1520), and the feature popup's tabs show their whole names, also
+  // at phone width (OV-1527).
+  const drawer = page.locator('.right-drawer');
+  await page.locator('.drawer-toggle').click();
+  await drawer.locator('[aria-controls="right-drawer-panel-legend"]').click();
+  expect(await drawer.evaluate((panel) => {
+    const toolbar = panel.querySelector('[data-legend-tab-toolbar]');
+    const right = panel.getBoundingClientRect().right;
+    return {
+      scrolls: toolbar.scrollWidth > toolbar.clientWidth || panel.scrollWidth > panel.clientWidth,
+      past: [...toolbar.children].filter((child) => child.getBoundingClientRect().right > right + 0.5).map((child) => child.textContent.trim())
+    };
+  })).toEqual({ scrolls: false, past: [] });
+  await drawer.locator('[aria-controls="right-drawer-panel-features"]').click();
+  await drawer.getByRole('button', { name: fr.Edit, exact: true }).first().click();
+  const featurePopup = page.locator('.feature-popup');
+  await expect(featurePopup).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => featurePopup.evaluate((element) => {
+    const strip = element.querySelector('button:has(> .ph-list-bullets)').parentElement;
+    const box = strip.getBoundingClientRect();
+    return [...strip.querySelectorAll('button')].filter((tab) => {
+      const name = tab.querySelector('span');
+      const rect = tab.getBoundingClientRect();
+      return name.scrollWidth > name.clientWidth || rect.left < box.left - 0.5 || rect.right > box.right + 0.5;
+    }).map((tab) => tab.textContent.trim());
+  })).toEqual([]);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole('button', { name: fr['Close feature popup'], exact: true }).click();
+  await page.locator('.drawer-toggle').click();
   await menu(page).selectOption('en');
   await expect.poll(() => pageLanguage(page)).toBe('en');
   expect(await generatedRecipes(page)).toBe(frenchRecipes);
@@ -315,6 +354,184 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
   expect(errors).toEqual([]);
 });
 
+// The text of a rail name, as line boxes, against the rail column inside its
+// border and padding, and each word of it (the words of the page language)
+// against the lines it lies on; the footer's text lines against what is drawn
+// over them, the bottoms of the settings pane, its Generate bar and the Result
+// pane against the footer's top, and the page height against the window.
+const railAndFooterFit = (page) => page.evaluate(() => {
+  const names = [...document.querySelectorAll('.settings-index nav > button > span')].filter((span) => span.offsetParent);
+  const outside = names.flatMap((span) => {
+    const column = span.closest('.settings-index');
+    const box = column.getBoundingClientRect();
+    const style = getComputedStyle(column);
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+    const left = Math.min(...lines.map((rect) => rect.left));
+    const right = Math.max(...lines.map((rect) => rect.right));
+    const innerLeft = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const innerRight = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    return left < innerLeft - 0.5 || right > innerRight + 0.5 ? [span.textContent.trim()] : [];
+  });
+  const words = new Intl.Segmenter(document.documentElement.lang, { granularity: 'word' });
+  const splitWords = names.flatMap((span) => {
+    const text = span.firstChild;
+    const range = document.createRange();
+    const lineTop = (index) => {
+      range.setStart(text, index);
+      range.setEnd(text, index + 1);
+      return [...range.getClientRects()].find((rect) => rect.width > 0)?.top;
+    };
+    return [...words.segment(text.textContent)].filter((word) => word.isWordLike).flatMap((word) => {
+      const tops = [...word.segment].map((_, offset) => lineTop(word.index + offset)).filter((top) => top !== undefined);
+      return tops.some((top) => Math.abs(top - tops[0]) > 3) ? [word.segment] : [];
+    });
+  });
+  const footer = document.querySelector('[data-app-footer]');
+  const box = footer.getBoundingClientRect();
+  const content = [...footer.children].map((child) => child.getBoundingClientRect());
+  const coveredLines = [...footer.querySelectorAll(':scope > span')].flatMap((span) => {
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    return [...range.getClientRects()].filter((rect) => rect.width > 1).flatMap((rect) => {
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hit && footer.contains(hit) ? [] : [String(hit?.className || hit?.tagName || 'nothing').split(' ')[0]];
+    });
+  });
+  const below = ['.settings-pane', '.generate-bar', '.result-pane'].filter((selector) => {
+    const element = document.querySelector(selector);
+    // A fixed element (the Generate bar) has no offsetParent: shown means it has a box.
+    return element && element.getClientRects().length > 0 && element.getBoundingClientRect().bottom > box.top + 0.5;
+  });
+  // The header's mode and Session names keep one line (OV-1515), and a footer
+  // separator stays on the line of the link before it (OV-1517).
+  const lineTops = (element) => {
+    const range = document.createRange();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const tops = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      range.selectNodeContents(node);
+      tops.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => rect.top));
+    }
+    return tops.filter((top, index) => tops.findIndex((other) => Math.abs(other - top) < 3) === index);
+  };
+  const wrappedHeaderNames = [...document.querySelectorAll('.mode-switch > button, .app-session-label')]
+    .filter((element) => element.getClientRects().length > 0 && lineTops(element).length > 1)
+    .map((element) => element.textContent.trim());
+  const separatorsAlone = [...footer.querySelectorAll('a')].flatMap((link) => {
+    const next = link.nextSibling;
+    const at = next?.nodeType === Node.TEXT_NODE ? next.textContent.indexOf('|') : -1;
+    if (at < 0) return [];
+    const range = document.createRange();
+    range.setStart(next, at);
+    range.setEnd(next, at + 1);
+    const separator = range.getBoundingClientRect();
+    const linkLines = lineTops(link);
+    // A link name keeps one line (Satoshi / Kawato split before OV-1517), and its separator follows on that line.
+    return linkLines.length === 1 && Math.abs(separator.top - linkLines[0]) < 3 ? [] : [link.textContent.trim()];
+  });
+  return {
+    names: names.length,
+    outside,
+    splitWords,
+    wrappedHeaderNames,
+    separatorsAlone,
+    pageScrollsX: document.documentElement.scrollWidth > innerWidth,
+    footerHoldsText: Math.min(...content.map((rect) => rect.top)) >= box.top - 0.5 && Math.max(...content.map((rect) => rect.bottom)) <= box.bottom + 0.5,
+    coveredLines,
+    below,
+    pageScrolls: document.documentElement.scrollHeight > innerHeight
+  };
+});
+
+// Control names and automatic values in the settings pane: the Colors Apply and
+// Add buttons keep their name on one line (OV-1516); a Japanese control name
+// breaks between phrases, but an element that asks for break-all keeps it
+// (OV-1518, OV-1522); the automatic value shown in an empty field, in a number
+// field or a track slot, is a block box that ends a long value with an
+// ellipsis (OV-1519, OV-1521); a closed select does too (OV-1523); the
+// Chinese and Japanese wrapping rule leaves an element that asks for one line
+// on one line (OV-1524 uses the text-wrap-style longhand).
+const controlFit = (page) => page.evaluate(() => {
+  const colors = document.querySelector('[data-settings-section="colors"]');
+  colors.querySelectorAll('details').forEach((details) => { details.open = true; });
+  // The text lines of an element (its icon aside).
+  const lines = (element) => {
+    const range = document.createRange();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const tops = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      range.selectNodeContents(node);
+      tops.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => rect.top));
+    }
+    return tops.filter((top, index) => tops.findIndex((other) => Math.abs(other - top) < 3) === index).length;
+  };
+  const buttons = [...colors.querySelectorAll('button:has(> .ph-magic-wand), button:has(> .ph-plus)')].filter((button) => button.getClientRects().length > 0);
+  const probe = (tag, className) => {
+    const element = document.createElement(tag);
+    element.className = className;
+    element.textContent = 'x';
+    document.getElementById('app').appendChild(element);
+    const style = getComputedStyle(element);
+    const read = { display: style.display, textOverflow: style.textOverflow, wordBreak: style.wordBreak, wrapMode: style.textWrapMode };
+    element.remove();
+    return read;
+  };
+  const placeholders = [...document.querySelectorAll('.auto-value-placeholder')].filter((span) => span.getClientRects().length > 0);
+  const slot = probe('span', 'track-slot-auto-placeholder');
+  const select = getComputedStyle(document.querySelector('header select[data-ui-language]'));
+  return {
+    buttons: buttons.length,
+    wrappedButtons: buttons.filter((button) => lines(button) > 1).map((button) => button.textContent.trim()),
+    placeholders: placeholders.length > 0,
+    placeholderBoxes: [...new Set([...placeholders.map((span) => getComputedStyle(span)), slot].map((style) => `${style.display}/${style.textOverflow}`))],
+    selectOverflow: select.textOverflow,
+    buttonBreak: probe('button', '').wordBreak,
+    breakAll: probe('h2', 'break-all').wordBreak,
+    oneLine: [probe('p', 'truncate').wrapMode, probe('summary', 'whitespace-nowrap').wrapMode]
+  };
+});
+
+test('rail names stay inside the rail and keep each word on one line, nothing covers the footer, and control names fit, in every language at three window sizes', async ({ page }) => {
+  test.setTimeout(480_000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openApp(page);
+  for (const tag of ['zh-Hans', 'ja']) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    await expect.poll(() => controlFit(page), { message: `${tag} at 1024x768` }).toEqual({
+      buttons: 3,
+      wrappedButtons: [],
+      placeholders: true,
+      placeholderBoxes: ['block/ellipsis'],
+      selectOverflow: 'ellipsis',
+      buttonBreak: tag === 'ja' ? 'auto-phrase' : 'normal',
+      breakAll: 'break-all',
+      oneLine: ['nowrap', 'nowrap']
+    });
+  }
+  const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];
+  const fit = { outside: [], splitWords: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
+  for (const display of ['stacked', 'rail']) {
+    if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th'] : ['en', 'ja']) {
+      await menu(page).selectOption(tag);
+      await expect.poll(() => pageLanguage(page)).toBe(tag);
+      for (const viewport of viewports) {
+        await page.setViewportSize(viewport);
+        await expect.poll(() => railAndFooterFit(page), { message: `${display}, ${tag} at ${viewport.width}x${viewport.height}` })
+          .toEqual({ ...fit, names: display === 'rail' ? 13 : 0 });
+      }
+    }
+    await menu(page).selectOption('en');
+    await page.setViewportSize(viewports[0]);
+  }
+  expect(errors).toEqual([]);
+});
+
 test('in every language, the link beside the menu opens the feedback form with only the shown language and the gbdraw version', async ({ page }) => {
   test.setTimeout(180_000);
   const version = /^version\s*=\s*"([^"]+)"/m.exec(readFileSync(join(process.cwd(), 'pyproject.toml'), 'utf8'))[1];
@@ -344,9 +561,32 @@ test('in every language, the link beside the menu opens the feedback form with o
       await page.setViewportSize({ width, height: 800 });
       const fit = await page.locator('header').evaluate((header) => {
         const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
-        return { inside: right <= document.documentElement.clientWidth, scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+        // The Session caption and title button paint inside the Session block, never under the mode switch (OV-1530:
+        // fr at 1280 px). A box clips what it hides: a part counts only up to the right edge of a clipping ancestor.
+        const block = header.querySelector('.app-session-actions');
+        const clipped = (node, edge) => {
+          let shown = edge;
+          for (let element = node.parentElement; element && element !== block; element = element.parentElement) {
+            if (getComputedStyle(element).overflowX !== 'visible') shown = Math.min(shown, element.getBoundingClientRect().right);
+          }
+          return shown;
+        };
+        const range = document.createRange();
+        const parts = [...block.querySelectorAll('*')].filter((element) => element.getClientRects().length > 0)
+          .map((element) => clipped(element, element.getBoundingClientRect().right));
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          range.selectNodeContents(node);
+          parts.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => clipped(node, rect.right)));
+        }
+        const limit = Math.min(block.getBoundingClientRect().right, header.querySelector('.mode-switch').getBoundingClientRect().left);
+        return {
+          inside: right <= document.documentElement.clientWidth,
+          scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          sessionInside: Math.max(...parts) <= limit + 0.5
+        };
       });
-      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false });
+      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false, sessionInside: true });
     }
   }
   expect(errors).toEqual([]);

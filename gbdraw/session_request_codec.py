@@ -82,6 +82,7 @@ from gbdraw.features.placement import (
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -4478,7 +4479,7 @@ def _read_canonical_table(
     text_options: dict[str, Any] = (
         {"dtype": str, "keep_default_na": False}
         if text_cells
-        else {"float_precision": "round_trip"}
+        else EXACT_FLOAT_READ_OPTIONS
     )
     try:
         table = read_csv(file_path, sep="\t", **text_options)

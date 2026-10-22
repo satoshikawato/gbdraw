@@ -136,8 +136,11 @@ const REASONS = Object.freeze({
   SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
-  EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
-  SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
+  // gbdraw/render/groups/linear/pairwise_match.py: a link end without a usable feature ID or index.
+  EMPTY_ENDPOINT: 'Check the comparison inputs: a comparison link does not identify the feature at one of its ends.',
+  INDEX_ALIGNMENT: 'Check the comparison inputs: a comparison link does not identify the feature at one of its ends.',
+  SOURCE_INDEX: 'Check the comparison inputs: a comparison link does not identify the feature at one of its ends.',
+  SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
   RECORD_ID: 'A table row names another displayed record in this column. Swap the query and subject columns of the table, or assign the table to the pair it describes.',
   BLAST_TSV_REQUIRED: 'Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.',
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
@@ -199,7 +202,7 @@ const DEFINITIONS = Object.freeze({
   COMPARISON_INPUT: ['The comparison input is invalid.', ['edit-comparison', 'retry'], 'Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.'],
   LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
-  COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
+  COMPARISON_IDENTITY: ['The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   // A read-only saved comparison fails the same way until Inherit, Replace, or Clear is chosen.
   COMPARISON_CHOICE_REQUIRED: ['Choose how to handle the saved comparison in the Comparison panel, then Generate again.', ['edit-comparison']],
   // Replace with an empty draft would clear the saved comparison, which Clear comparison does explicitly.
@@ -235,7 +238,7 @@ const DEFINITIONS = Object.freeze({
 /** @type {Readonly<Record<string, string>>} */
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
-  losatp_member_max_hits: 'Protein BLASTP member hits per protein',
+  losatp_member_max_hits: 'Protein BLASTP max hits per protein for groups',
   output_prefix: 'Output Prefix',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
@@ -467,7 +470,7 @@ for (const [message, code] of [
 // Fixed labels/options emitted by the existing current-option validators.
 for (const [label, field, reason] of [
   ['Protein BLASTP Pairwise max hits', 'protein_blastp_max_hits', 'POSITIVE_INTEGER'],
-  ['Protein BLASTP member hits per protein', 'orthogroup_member_max_hits', 'POSITIVE_INTEGER'],
+  ['Protein BLASTP max hits per protein for groups', 'orthogroup_member_max_hits', 'POSITIVE_INTEGER'],
   ['Collinear minimum anchors', 'collinear_min_anchors', 'POSITIVE_INTEGER'],
   ['Collinear maximum unit gap', 'collinear_max_unit_gap', 'NONNEGATIVE_INTEGER'],
   ['Collinear maximum diagonal drift', 'collinear_max_diagonal_drift', 'NONNEGATIVE_INTEGER'],

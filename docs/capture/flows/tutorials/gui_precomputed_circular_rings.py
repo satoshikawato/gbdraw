@@ -246,7 +246,7 @@ def capture_gui_precomputed_circular_rings(
         )
 
         toggle_disclosure(page.get_by_label("Pairwise Comparisons", exact=True))
-        upload = page.get_by_role("radio", name="Upload BLAST", exact=True)
+        upload = page.get_by_role("radio", name="Upload BLAST TSV", exact=True)
         upload.check()
         expect(upload).to_be_checked()
         page.get_by_label("BLAST outfmt 6/7 files", exact=True).set_input_files(

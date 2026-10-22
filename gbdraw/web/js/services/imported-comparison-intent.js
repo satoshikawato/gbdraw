@@ -393,7 +393,7 @@ export const classifyImportedComparisonIntent = ({
     : endpoints;
   if (!rowsAreEditable(records, executableEndpoints)) {
     return decision(
-      msg('The saved comparison endpoints are not executable in the supported adjacent-row layout.')
+      msg('The saved comparison connects records that are not on adjacent rows; the comparison controls support adjacent rows only.')
     );
   }
   const duplicateEndpoints = endpointKeys(records, endpoints);

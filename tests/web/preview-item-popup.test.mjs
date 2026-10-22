@@ -323,7 +323,7 @@ test('the legend-entry view names the rule behind the color and the feature coun
   const single = openView(createPopup({ entries: [{ caption: 'x', color: '#000000' }], featureTypes: [], featureCount: 1 }),
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');
-  assert.equal(single.colorSource, 'Set on individual features');
+  assert.equal(single.colorSource, 'Color set on individual features');
 });
 
 // OV-1466: a rule for any feature is one sentence, so a locale can write the

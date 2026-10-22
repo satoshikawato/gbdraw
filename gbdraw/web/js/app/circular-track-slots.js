@@ -1701,7 +1701,6 @@ export const createCircularTrackSlotEditor = ({
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, circularDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
-    if (renderer === 'depth') return 'Depth'; // the default legend text of the figure: stays English
     return t('Legend label');
   };
   /** @param {CircularTrackSlot | null | undefined} slot */

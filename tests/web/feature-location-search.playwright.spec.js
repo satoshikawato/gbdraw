@@ -72,7 +72,7 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   const status = page.getByRole('status', { name: 'Feature search status' });
   const find = async (field, query) => {
-    await page.getByLabel('Search field', { exact: true }).selectOption(field);
+    await page.getByLabel('Field to search', { exact: true }).selectOption(field);
     await search.fill(query);
     await search.press('Enter');
   };

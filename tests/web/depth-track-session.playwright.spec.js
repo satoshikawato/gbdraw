@@ -438,6 +438,159 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   expect(outcome.underlayCount).toBeGreaterThan(0);
 });
 
+// Two Depth series nobody named are Depth 1 and Depth 2 wherever the app names
+// them, as the figure and the CLI do: the series cards of both modes, the Linear
+// File card rows, the Depth row's series options and the Depth row's legend-label
+// placeholder (OV-1508). The name is figure text, English in every UI language.
+// A Depth row's height edit on a series without stored settings gives it the
+// series owner's defaults: no name and the series color (OV-1510).
+test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface that names them', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  const files = () => [1, 2].map((n) => new File([`position\tdepth\n1\t${n}0\n`], `reads-${n}.tsv`, { type: 'text/tab-separated-values' }));
+  const names = () => page.evaluate(() => {
+    const text = (element) => element?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+    const titles = [...document.querySelectorAll('input[aria-label="Depth legend title"], input[aria-label$=" legend title"][aria-label^="Depth "]')]
+      .filter((input) => input.offsetParent);
+    return {
+      cards: titles.map((input) => text(input.closest('.rounded')?.querySelector('.truncate'))),
+      placeholders: titles.map((input) => input.placeholder),
+      // Each File card lists every series; the rows of all cards name them alike.
+      fileRows: [...new Set([...document.querySelectorAll('[data-linear-source-depth-series]')].map((row) => text(row.querySelector('.truncate'))))],
+      // Each Depth row's series menu lists every series.
+      options: [...new Set([...document.querySelectorAll('select[aria-label^="Depth track index"] option')].map(text))],
+      slotPlaceholders: [...document.querySelectorAll('input[aria-label$=" Depth legend label"]')]
+        .filter((input) => input.offsetParent).map((input) => [input.value, input.placeholder])
+    };
+  });
+  await page.evaluate((source) => {
+    const app = window.__GBDRAW_APP__;
+    const [first, second] = new Function(`return (${source})`)()();
+    app.setDiagramMode('linear');
+    app.addLinearSeq();
+    app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, second);
+    app.setDepthTrackLabel(0, '');
+    app.setDepthTrackLabel(1, '');
+    app.resetLinearTrackSlotsFromSimpleControls();
+    app.setLinearTrackSlotsEnabled(true);
+    if (!app.linearTrackSlotsPanelOpen) app.toggleLinearTrackSlotsPanel();
+  }, files.toString());
+  await openLinearFileCards(page);
+  await expect.poll(names).toEqual({
+    cards: ['#1 Depth 1', '#2 Depth 2'],
+    placeholders: ['Depth 1', 'Depth 2'],
+    fileRows: ['#1 Depth 1', '#2 Depth 2'],
+    options: [expect.stringMatching(/^0 · Depth 1 · /), expect.stringMatching(/^1 · Depth 2 · /)],
+    slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
+  });
+  const heightEdit = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    // Series 2 has no stored settings yet, as after a Session that saved one series.
+    app.adv.depth_tracks.splice(1);
+    const row = app.adv.linear_track_slots.find((slot) => slot.renderer === 'depth' && slot.params.track_index === 1);
+    app.setLinearTrackSlotHeight(row, '40');
+    return app.adv.depth_tracks.map(({ label, color, height }) => ({ label, color, height }));
+  });
+  expect(heightEdit).toEqual([
+    { label: '', color: expect.any(String), height: null },
+    { label: '', color: '#E45756', height: 40 }
+  ]);
+  await expect.poll(async () => (await names()).cards).toEqual(['#1 Depth 1', '#2 Depth 2']);
+  await page.evaluate((source) => {
+    const app = window.__GBDRAW_APP__;
+    const [first, second] = new Function(`return (${source})`)()();
+    app.setDiagramMode('circular');
+    app.setCircularDepthFile(0, first);
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, second);
+    app.setDepthTrackLabel(0, '');
+    app.setDepthTrackLabel(1, '');
+    app.setTrackShown('show_depth', true);
+    app.setCircularTrackSlotsEnabled(true);
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
+  }, files.toString());
+  await expect.poll(async () => {
+    const { cards, placeholders, slotPlaceholders } = await names();
+    return { cards, placeholders, slotPlaceholders };
+  }).toEqual({
+    cards: ['#1 Depth 1', '#2 Depth 2'],
+    placeholders: ['Depth 1', 'Depth 2'],
+    slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
+  });
+});
+
+// Generate stores the Depth series settings a series edit stores (OV-1510): a
+// series without settings gets the owner's defaults, so Generate draws series 2
+// in its own color, not in series 1's; a Depth row whose series the drawing
+// does not have keeps only its own height and adds no series (TK-03).
+test('Linear Generate gives Depth series the settings a series edit gives them', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
+  await openApp(page);
+  await page.evaluate((genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    const depthFile = (n) => new File([
+      'reference_name\tposition\tdepth\n' +
+      `NC_001454.1\t1\t${n * 10}\n` +
+      `NC_001454.1\t80\t${n * 10 + 5}\n`
+    ], `series-${n}.tsv`, { type: 'text/tab-separated-values', lastModified: 30 + n });
+    app.setDiagramMode('linear');
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'repeat-region.gbk', {
+      type: 'text/plain',
+      lastModified: 29
+    }));
+    app.setLinearDepthFile(app.linearSeqs[0], 0, depthFile(1));
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, depthFile(2));
+    Object.assign(app.form, {
+      show_gc: false,
+      show_skew: false,
+      show_depth: true,
+      show_labels_linear: 'none',
+      legend: 'none'
+    });
+    app.resetLinearTrackSlotsFromSimpleControls();
+    app.setLinearTrackSlotsEnabled(true);
+  }, genbank);
+  await page.waitForFunction(() => window.__GBDRAW_APP__.adv.depth_tracks.length === 2);
+  const generate = (edit) => evaluateWithRetainedPromise(page, async (editName) => {
+    const app = window.__GBDRAW_APP__;
+    if (editName === 'series-2-without-settings') {
+      // Series 2 has no stored settings, as after a Session that saved one series.
+      app.adv.depth_tracks.splice(1);
+    } else {
+      // A switched-off Depth row on a series the drawing does not have.
+      app.adv.linear_track_slots.push({
+        id: 'depth_far',
+        renderer: 'depth',
+        enabled: false,
+        side: 'above',
+        z: 0,
+        height: '40px',
+        params: { track_index: 3 }
+      });
+    }
+    app.results.splice(0, app.results.length);
+    const result = await app.runAnalysis();
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      tracks: app.adv.depth_tracks.map(({ color, height }) => ({ color, height })),
+      farHeight: app.adv.linear_track_slots.find((slot) => slot.id === 'depth_far')?.height ?? null,
+      drawsSeries2Color: String(app.results?.[0]?.content || '').toUpperCase().includes('#E45756')
+    };
+  }, edit);
+  const tracks = [{ color: '#4A90E2', height: null }, { color: '#E45756', height: null }];
+  expect.soft(await generate('series-2-without-settings')).toEqual({
+    result: { status: 'ok' }, errorSummary: '', tracks, farHeight: null, drawsSeries2Color: true
+  });
+  expect.soft(await generate('row-past-the-series')).toEqual({
+    result: { status: 'ok' }, errorSummary: '', tracks, farHeight: '40px', drawsSeries2Color: true
+  });
+});
+
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 

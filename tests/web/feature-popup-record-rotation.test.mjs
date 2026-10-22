@@ -233,7 +233,7 @@ test('unavailable choices are disabled with their own reason and the selection s
   assert.equal(draft.position, 'end', 'the first available choice replaces an unavailable one');
   assert.equal(draft.canApply, true);
   assert.equal(draft.orientCapability.enabled, false);
-  assert.match(draft.orientCapability.message, /known feature strand/);
+  assert.match(draft.orientCapability.message, /needs a feature on the \+ or − strand/);
   assert.deepEqual(draft.referenceChoices.map(({ value, enabled }) => [value, enabled]), [
     ['five-prime', false], ['midpoint', true], ['three-prime', false], ['feature-end', true]
   ]);

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   buildLegendStyleRetirement,
   trackDataLegendCaptions
 } from '../../gbdraw/web/js/app/legend/track-data-styles.js';
+import { getDepthTrackFileBaseName, isDepthTrackAutoLabel } from '../../gbdraw/web/js/app/depth-tracks.js';
+import { depthSeriesLegendCaptions, ensureDepthTrackConfigCount } from '../../gbdraw/web/js/services/depth-track-state.js';
 
 test('track data names the legend labels of annotation sets and the sourced Depth series (OV-65)', () => {
   const captions = trackDataLegendCaptions({
@@ -22,8 +25,38 @@ test('track data names the legend labels of annotation sets and the sourced Dept
   assert.deepEqual([...captions].sort(), ['Coverage', 'Region X', 'Set', 'sample']);
 });
 
-test('a Depth series without a label is named by the fallback label', () => {
-  assert.deepEqual([...trackDataLegendCaptions({ sourcedDepthTrackIndexes: [0, 1] })], ['Depth', 'Depth 2']);
+// The Depth rows Python draws for series without a label: Depth for one,
+// Depth 1, Depth 2 ... for several (`_default_depth_track_labels`; the shared
+// vector's unnamed Circular cases). A series the Web adds keeps no label, so
+// its name follows the series count as the CLI draws it (OV-1508).
+const UNNAMED_DEPTH_CASES = JSON.parse(readFileSync(new URL('../fixtures/legend_track_slot_rows.json', import.meta.url), 'utf8'))
+  .cases.filter(({ mode, slots, depthTracks }) => mode === 'circular' && slots === null
+    && Array.isArray(depthTracks) && depthTracks.every(({ label }) => label === ''));
+
+test('a Depth series the Web adds without a name keeps no label and is named as Python names it (OV-1508)', () => {
+  assert.deepEqual(UNNAMED_DEPTH_CASES.map(({ depthTracks }) => depthTracks.length), [1, 3]);
+  for (const { name, depthTracks, rows } of UNNAMED_DEPTH_CASES) {
+    const pythonNames = rows.filter(([, slot]) => slot === 'depth').map(([key]) => key);
+    const configs = ensureDepthTrackConfigCount([], depthTracks.length);
+    assert.deepEqual(configs.map(({ label }) => label), depthTracks.map(() => ''), name);
+    const indexes = depthTracks.map((_, index) => index);
+    assert.deepEqual([...trackDataLegendCaptions({ depthTracks: configs, sourcedDepthTrackIndexes: indexes })], pythonNames, name);
+    assert.deepEqual([...trackDataLegendCaptions({ sourcedDepthTrackIndexes: indexes })], pythonNames, name);
+    assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: configs, slots: [] }), pythonNames, name);
+  }
+});
+
+test('a default name of its series, an empty label, or its file name is a label the next file may replace', () => {
+  assert.equal(getDepthTrackFileBaseName({ name: 'dir/reads.depth.tsv' }), 'reads.depth');
+  assert.equal(getDepthTrackFileBaseName(null), '');
+  // A Session saved before OV-1508 holds Depth for the first of several series.
+  for (const [label, index] of [['', 0], ['Depth', 0], ['Depth 1', 0], ['Depth 2', 1], ['Depth 3', 2]]) {
+    assert.equal(isDepthTrackAutoLabel(label, index), true, `${label} at ${index}`);
+  }
+  for (const [label, index] of [['Depth', 1], ['Depth 3', 1], ['Reads', 0]]) {
+    assert.equal(isDepthTrackAutoLabel(label, index), false, `${label} at ${index}`);
+  }
+  assert.equal(isDepthTrackAutoLabel('reads.depth', 0, { name: 'reads.depth.tsv' }), true);
 });
 
 test('styles follow the caption: a data change retires only the captions the data stops naming', () => {

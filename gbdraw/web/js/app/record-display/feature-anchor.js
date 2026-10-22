@@ -325,7 +325,7 @@ export const resolveFeatureAnchor = ({
   const orientForward = !record.enabled ? record
     : !profileState.enabled ? profileState
       : !['+', '-'].includes(located.strand)
-        ? unavailable('orientation-strand-unavailable', t('Orient forward requires one known feature strand.'))
+        ? unavailable('orientation-strand-unavailable', t('Show this feature on the forward strand needs a feature on the + or − strand.'))
         : available();
   const featureEnd = !positional.enabled ? positional
     : located.strand === 'unstranded' && located.partOrder !== 'source-forward'

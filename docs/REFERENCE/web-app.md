@@ -776,11 +776,11 @@ plan is reported as an error instead.
 **Settings** shows only controls used by the active LOSAT program and, for
 LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's
 active genetic code in that record's **Record options**. LOSATP **Pairwise
-matches** shows **Max hits per protein**; **Similarity groups** shows **Member
-hits per protein**; **Collinear blocks** shows its primary block, scope, and
+matches** shows **Max hits per protein**; **Similarity groups** shows **Max
+hits per protein for groups**; **Collinear blocks** shows its primary block, scope, and
 color controls. **Result filters** and **Comparison appearance** follow, then
 **Search limits** and **Performance**. **Max target seqs** is visible under
-**Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Member hits per protein**
+**Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Max hits per protein for groups**
 initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
 remembers its own edited values. Blank means unbounded.
 
@@ -789,7 +789,7 @@ initially OFF. Enable it to add within-record searches and group proteins,
 paralogs included, into similarity groups before blocks are built. OFF builds
 blocks from comparisons between records only. **Paralog links per
 group** appears in Advanced under **Advanced collinear search** when inference is enabled,
-and under **Advanced similarity groups** in Similarity groups; both modes draw with the
+and under **Advanced similarity group settings** in Similarity groups; both modes draw with the
 same value, initially `2`. Shared result
 filters appear in the same disclosure. LOSATN,
 TLOSATX, LOSATP Pairwise matches, and uploaded comparison files also show **Comparison
@@ -829,7 +829,7 @@ block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
 
-Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST**.
+Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
 Uploaded comparison tables use **BLAST outfmt 6/7 files** and **Reference side**
 (**Auto (...)**, **Query**, or **Subject**). A browser-generated Circular
 comparison uses the displayed Circular record as the search subject and each
@@ -1561,7 +1561,7 @@ Retry adds no History action. Revert restores the accepted pattern and field
 focus without evaluating Python or adding History.
 
 **Save Session** and **Generate Diagram** use the last accepted rule, while
-Export uses the current Result. The rejected pattern draft is not saved in a
+the **SVG**, **Interactive SVG**, **PNG**, and **PDF** downloads use the current Result. The rejected pattern draft is not saved in a
 Session or included in diagnostics. Closing and reopening Editor, or temporarily
 switching diagram modes in the same document, retains it. Removing its rule,
 Undo/Redo that replaces that rule, successful document or Session replacement,

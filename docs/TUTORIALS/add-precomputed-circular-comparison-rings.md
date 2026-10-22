@@ -79,7 +79,7 @@ rings.
 
 ### Step 3: Add the three precomputed comparisons
 
-Open **Pairwise Comparisons**, select **Upload BLAST**, and choose all three TSV
+Open **Pairwise Comparisons**, select **Upload BLAST TSV**, and choose all three TSV
 files together. Set **Reference side** to **Subject**: every table uses a
 comparison genome as query and human mtDNA as subject.
 

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `79`
+- Contract revision: `80`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2773,6 +2773,35 @@ Status: active Product authority
   - This change is authority for the later runtime change that adds the link:
     this record changes no runtime by itself and supplies no runtime
     acceptance evidence, and the Review is `REQUIRED`.
+- Revision 80 changes: `PD-OI-002` gains scenario revision `3` and
+  `PD-OI-004` gains scenario revision `4`. Each renames the visible label of
+  the LOSATP member limit from **Member hits per protein** to
+  **Max hits per protein for groups** and changes no behavior. They come from
+  the Product Decision Owner `satoshikawato`'s replies of `2026-10-22` in the
+  Claude Code session that fixed the Web UI wording found by the cross-locale
+  translation check.
+  - Reply 1. The session reported as remaining work that the Product Contract
+    still named the setting **Member hits per protein**, and the Owner asked
+    「これらは何？」. The session answered that `PD-OI-002` and `PD-OI-004`
+    name the setting by its old label in three places, that the same pull
+    request renames the label in the Web UI to
+    **Max hits per protein for groups**, that behavior does not change, and
+    that the Contract is the Owner's text and changes only on the Owner's word.
+    The Owner replied: 「Product Contract の "Member hits per protein": 直して。」
+  - Reply 2, to the request to confirm the receipt fields recorded below,
+    shown in full with the two records and their scenario revisions, and with
+    the note that the `PD-OI-004` decision source keeps the old name as
+    "the member limit (then labelled Member hits per protein)": 「承認します」
+  - The two receipts share the choice, rationale, retirement scope, accepted
+    residual risk, owner and decision date; their preservation fields differ
+    as shown. They name no choice code. No character of a confirmed field
+    differs.
+  - Where an earlier term or revision entry names **Member hits per protein**,
+    it means the control now labelled **Max hits per protein for groups**.
+    The record titles and the concern keys keep their wording.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that show the new label are in the same pull request,
+    and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2915,11 +2944,15 @@ so placement remains the writer of the slot inputs.
 ### PD-OI-002: LOSATP mode-specific limit retention and GUI placement
 
 - Concern key: `diagram-generation.losatp-candidate-limit-scope`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-002`, scenario revision `1`.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-002`, scenario revision `2`, only by renaming the
+  visible label of the member limit; every scenario-2 term stays in force.
+  Scenario revision `2` superseded scenario revision `1`.
 - Status: `ACCEPTED`
+- Selected outcomes: the scenario-2 terms below and the label change of
+  scenario revision `3`, whose receipt names no choice code
 - Normative outcome: **Max target seqs** is directly editable in LOSATP
-  Settings, alongside **Member hits per protein** when member selection applies.
+  Settings, alongside **Max hits per protein for groups** when member selection applies.
   Each mode remembers its own raw and member limits. The first visit to
   Collinear uses `5`/`5`; the first visit to Similarity groups uses unbounded/
   unbounded. After editing either mode, switching away and back restores its
@@ -2938,9 +2971,42 @@ so placement remains the writer of the slot inputs.
   changes caused by selecting a different saved raw limit remain visible;
   matching raw evidence remains reusable.
 - Acceptance contracts: `OIC-001`, `OIC-002`, `OIC-006`, `OIC-017`.
-- Decision source: Explicit maintainer correction to remember each mode's
+- Decision source (scenario revision `2`): Explicit maintainer correction to remember each mode's
   settings, superseding the earlier same-session request to reset on every switch.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Owner and decision date (scenario revision `2`): `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-10-22`
+  quoted in the Revision 80 entry above. The receipt and JSON below reproduce
+  the confirmed fields. The runtime that shows the new label merges with it
+  (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `b5445af26261583651c638d02739d418d539a0d34db73c9a3b49fa6357d50ae2`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.losatp-candidate-limit-scope
+Scenario revision: 3
+Choice: The member limit of LOSATP Settings is labelled "Max hits per protein for groups" (was "Member hits per protein"), and messages that name its field say "Protein BLASTP max hits per protein for groups" (was "Protein BLASTP member hits per protein").
+Rationale: The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.
+Must preserve: Every scenario-2 term (each LOSATP mode remembers its own raw and member limits; first visit 5/5 in Collinear, unbounded/unbounded in Similarity groups; switching restores edited values and blanks; Save, fresh Load and Reset Settings keep their meaning; one control per active raw-search setting). The control, its Session field and its request field keep their identity; only the shown name changes.
+May retire: The old visible label "Member hits per protein" and the old field name in messages only; no behavior.
+Accepted residual risk: Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.
+Owner: satoshikawato
+Decision date: 2026-10-22
+```
+
+```json
+{
+  "concern": "diagram-generation.losatp-candidate-limit-scope",
+  "scenarioRevision": 3,
+  "choice": "The member limit of LOSATP Settings is labelled \"Max hits per protein for groups\" (was \"Member hits per protein\"), and messages that name its field say \"Protein BLASTP max hits per protein for groups\" (was \"Protein BLASTP member hits per protein\").",
+  "rationale": "The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.",
+  "mustPreserve": "Every scenario-2 term (each LOSATP mode remembers its own raw and member limits; first visit 5/5 in Collinear, unbounded/unbounded in Similarity groups; switching restores edited values and blanks; Save, fresh Load and Reset Settings keep their meaning; one control per active raw-search setting). The control, its Session field and its request field keep their identity; only the shown name changes.",
+  "mayRetire": "The old visible label \"Member hits per protein\" and the old field name in messages only; no behavior.",
+  "acceptedResidualRisk": "Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-22"
+}
+```
 
 ### PD-OI-003: Pairwise display max hits
 
@@ -2962,10 +3028,14 @@ so placement remains the writer of the slot inputs.
 ### PD-OI-004: Similarity/Collinear member hits per protein
 
 - Concern key: `diagram-generation.member-hits-per-protein`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-004`, scenario revision `2`.
+- Scenario revision: `4`
+- Supersedes: `PD-OI-004`, scenario revision `3`, only by renaming the
+  visible label of the member limit; every scenario-3 term stays in force.
+  Scenario revision `3` superseded scenario revision `2`.
 - Status: `ACCEPTED`
-- Normative outcome: Fresh and reset Web **Member hits per protein** starts at
+- Selected outcomes: the scenario-3 terms below and the label change of
+  scenario revision `4`, whose receipt names no choice code
+- Normative outcome: Fresh and reset Web **Max hits per protein for groups** starts at
   `5` in Collinear and unbounded (`None`) in Similarity groups. CLI/Python
   omission semantics remain unchanged. A blank Web control always means
   unbounded, including in Collinear; an explicit positive integer limits the
@@ -2984,9 +3054,43 @@ so placement remains the writer of the slot inputs.
   remains visible in provenance. The existing unbounded computation/memory
   allowance is unchanged; no additional waiver is recorded.
 - Acceptance contracts: `OIC-002`, `OIC-004`, `OIC-005`, `OIC-006`, `OIC-017`.
-- Decision source: Explicit maintainer instruction that Member hits per protein
-  receive the same mode defaults and remembered-value behavior as Max target seqs.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `3`): Explicit maintainer instruction that the member limit
+  (then labelled Member hits per protein) receive the same mode defaults and
+  remembered-value behavior as Max target seqs.
+- Owner and decision date (scenario revision `3`): `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `4`): the Owner replies of `2026-10-22`
+  quoted in the Revision 80 entry above. The receipt and JSON below reproduce
+  the confirmed fields. The runtime that shows the new label merges with it
+  (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `340a1bc12bc56c449e787f888856463723dd738fa8e99c031605e3f8d6128c8e`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.member-hits-per-protein
+Scenario revision: 4
+Choice: The member limit of LOSATP Settings is labelled "Max hits per protein for groups" (was "Member hits per protein"), and messages that name its field say "Protein BLASTP max hits per protein for groups" (was "Protein BLASTP member hits per protein").
+Rationale: The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.
+Must preserve: Every scenario-3 term (fresh and reset values 5 in Collinear, unbounded in Similarity groups; blank means unbounded; a positive integer limits the distinct directional subject candidates kept after result filtering; independent of Max target seqs and Pairwise display matches; Collinear uses it with inference OFF and ON; request, provenance and Session replay distinguish unbounded and finite). The control, its Session field and its request field keep their identity; only the shown name changes.
+May retire: The old visible label "Member hits per protein" and the old field name in messages only; no behavior.
+Accepted residual risk: Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.
+Owner: satoshikawato
+Decision date: 2026-10-22
+```
+
+```json
+{
+  "concern": "diagram-generation.member-hits-per-protein",
+  "scenarioRevision": 4,
+  "choice": "The member limit of LOSATP Settings is labelled \"Max hits per protein for groups\" (was \"Member hits per protein\"), and messages that name its field say \"Protein BLASTP max hits per protein for groups\" (was \"Protein BLASTP member hits per protein\").",
+  "rationale": "The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.",
+  "mustPreserve": "Every scenario-3 term (fresh and reset values 5 in Collinear, unbounded in Similarity groups; blank means unbounded; a positive integer limits the distinct directional subject candidates kept after result filtering; independent of Max target seqs and Pairwise display matches; Collinear uses it with inference OFF and ON; request, provenance and Session replay distinguish unbounded and finite). The control, its Session field and its request field keep their identity; only the shown name changes.",
+  "mayRetire": "The old visible label \"Member hits per protein\" and the old field name in messages only; no behavior.",
+  "acceptedResidualRisk": "Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-22"
+}
+```
 
 ### PD-OI-005: Supported Collinear value domains
 
