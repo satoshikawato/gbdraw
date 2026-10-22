@@ -1,0 +1,53 @@
+name: Walkthrough video
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: walkthrough-video-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  walkthrough:
+    name: Record and render ${{ matrix.journey }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        journey: [meet-gbdraw, HmmtDNA_ATskew, tobacco-chloroplast, BGC0000708-BGC0000713,
+                  Vnig_TUMSAT-TG-2018, hepatoplasmataceae_collinear, vibrio-harveyi-group-collinear,
+                  HmmtDNA_ATskew-vertical, tobacco-chloroplast-vertical, BGC0000708-BGC0000713-vertical,
+                  Vnig_TUMSAT-TG-2018-vertical, hepatoplasmataceae_collinear-vertical, vibrio-harveyi-group-collinear-vertical]
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install recording dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          python -m pip install -e ".[dev]" brotli
+          python -m playwright install --with-deps chromium
+          python tools/prepare_browser_wheel.py
+      - name: Record, render, and check
+        run: python docs/capture/build_video.py build --journey ${{ matrix.journey }} --out build/videos/${{ matrix.journey }}/ci
+      - name: Upload videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: gbdraw-video-${{ matrix.journey }}-${{ github.event.release.tag_name || github.sha }}
+          path: |
+            build/videos/${{ matrix.journey }}/ci/final/
+            build/videos/${{ matrix.journey }}/ci/reports/
+            build/videos/${{ matrix.journey }}/ci/raw/walkthrough/walkthrough.json
+          retention-days: 30

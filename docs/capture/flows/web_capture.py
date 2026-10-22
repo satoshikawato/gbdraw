@@ -108,6 +108,8 @@ def _same_origin(url: str, base_url: str) -> bool:
 
 def open_browser_capture(
     browser_type: BrowserType, base_url: str, *, device_scale_factor: float = DEVICE_SCALE_FACTOR,
+    viewport: tuple[int, int] = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT),
+    launch_args: tuple[str, ...] = (),
 ) -> BrowserCapture:
     """Open the pinned browser with a fresh context and same-origin routing."""
 
@@ -119,7 +121,7 @@ def open_browser_capture(
             f"{PYTHON_PLAYWRIGHT_VERSION}; found {installed_playwright}"
         )
 
-    browser = browser_type.launch(headless=True)
+    browser = browser_type.launch(headless=True, args=list(launch_args))
     if browser.version != CHROMIUM_VERSION:
         installed_chromium = browser.version
         browser.close()
@@ -129,7 +131,7 @@ def open_browser_capture(
         )
 
     context = browser.new_context(
-        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+        viewport={"width": viewport[0], "height": viewport[1]},
         device_scale_factor=device_scale_factor,
         locale=LOCALE,
         timezone_id=TIMEZONE_ID,
@@ -269,15 +271,23 @@ def generate_and_wait_for_result(
     *,
     timeout_ms: int = GENERATION_TIMEOUT_MS,
     expected_status: str = "ok",
+    click: Callable[[Locator], None] | None = None,
 ) -> dict[str, Any]:
-    """Start Generate and await a committed Result or an explicit app error."""
+    """Start Generate and await a committed Result or an explicit app error.
+
+    ``click`` lets a recorded journey press the button with its own visible
+    pointer; the default is Playwright's direct click.
+    """
 
     generate = page.get_by_role("button", name="Generate Diagram", exact=True)
     expect(generate).to_be_enabled()
     previous_run_marker = page.evaluate(
         "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"
     )
-    generate.click()
+    if click is None:
+        generate.click()
+    else:
+        click(generate)
     page.wait_for_function(
         """
         previous => {

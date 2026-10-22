@@ -1891,6 +1891,7 @@ test('steady-state topology removes legacy main producers without changing final
     'release.yml',
     'test.yml',
     'translation-review.yml',
+    'walkthrough-video.yml',
     'web-base-policy.yml'
   ]);
   assert.doesNotMatch(TEST_WORKFLOW, /needs: web-change-budget/);
