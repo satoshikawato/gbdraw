@@ -24,6 +24,13 @@ const scratch = (t) => {
   t.after(() => rmSync(folder, { recursive: true, force: true }));
   const root = join(folder, 'catalogs');
   cpSync(CATALOG_ROOT, root, { recursive: true });
+  // Start complete whatever dev's catalogs lack: a feature PR adds English only, and the batch before a release translates it.
+  for (const locale of CATALOG_LOCALES) {
+    const catalog = readCatalog(locale, root);
+    for (const key of Object.keys(catalog.entries)) if (!keys.has(key)) delete catalog.entries[key];
+    for (const { key, english } of keys.values()) catalog.entries[key] ??= english;
+    writeFileSync(join(root, `${locale}.js`), formatCatalog(catalog));
+  }
   const run = async (...argv) => {
     const lines = [];
     const code = await runSync(argv, { catalogRoot: root, print: (line) => lines.push(line) });
