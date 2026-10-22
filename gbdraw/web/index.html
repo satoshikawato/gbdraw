@@ -1989,8 +1989,15 @@
             bottom: 2rem;
             width: var(--settings-pane-width);
         }
-        /* Room for the fixed Generate bar (UI-13): the bar is 102 px tall and sits 2rem above the viewport
-           bottom, 0.75rem below the pane's bottom edge, so it covers the pane's last 90 px; 4 px more keeps a
+        /* The bar ends at the footer's top. The footer's height is its text (one line, or two when it wraps,
+           OV-1427), so the bar is anchored to the footer rather than to a fixed offset (OV-1509). A browser
+           without anchor positioning keeps the one-line footer's 2rem. */
+        @supports (bottom: anchor(top)) {
+            footer[data-app-footer] { anchor-name: --app-footer; }
+            .generate-bar { position-anchor: --app-footer; bottom: anchor(top); }
+        }
+        /* Room for the fixed Generate bar (UI-13): the bar is 102 px tall and ends at the footer's top,
+           0.75rem below the pane's bottom edge, so it covers the pane's last 90 px; 4 px more keeps a
            seam. A layout warning above the button (up to two lines) makes the bar about 63 px taller. Beside
            the rail alone the bar is a 60 px button that ends where the stacked button ends (64 px over the
            pane's end, 8 px seam), under a 28 px mark when there is a warning. */
@@ -2178,7 +2185,7 @@
         </div>
     </header>
 
-    <main class="app-main flex-grow px-4 py-3 flex overflow-hidden h-[calc(100vh-88px)]">
+    <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden">
 
         <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0"
              :data-settings-display="settingsPane.display" :data-settings-docked="settingsPane.docked"

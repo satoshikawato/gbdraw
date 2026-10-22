@@ -19,9 +19,11 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
-// - in en, ja, es and fr at 1024x768 and 1440x900: every rail name stays
-//   inside its entry, and the footer holds its text without a page scroll
-//   (OV-1506, OV-1427);
+// - at 1024x768, 1280x800 and 1440x900: every rail name stays inside its
+//   entry (en, ja, es, fr), and the footer holds its text without a page
+//   scroll, with nothing drawn over it and the settings pane, its Generate
+//   bar and the Result pane ending above it (stacked: en, ja; rail: en, ja,
+//   es, fr) (OV-1506, OV-1427, OV-1509);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // Not checked here: PNG and PDF bytes, the shown Run Info text, and the
 // diagnostics text.
@@ -313,7 +315,9 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
 });
 
 // The text of a rail name, as line boxes, against its entry; the footer's
-// children against the footer and the page height against the window.
+// text lines against what is drawn over them, the bottoms of the settings
+// pane, its Generate bar and the Result pane against the footer's top, and
+// the page height against the window.
 const railAndFooterFit = (page) => page.evaluate(() => {
   const names = [...document.querySelectorAll('.settings-index nav > button > span')].filter((span) => span.offsetParent);
   const outside = names.flatMap((span) => {
@@ -328,30 +332,50 @@ const railAndFooterFit = (page) => page.evaluate(() => {
   const footer = document.querySelector('[data-app-footer]');
   const box = footer.getBoundingClientRect();
   const content = [...footer.children].map((child) => child.getBoundingClientRect());
+  const coveredLines = [...footer.querySelectorAll(':scope > span')].flatMap((span) => {
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    return [...range.getClientRects()].filter((rect) => rect.width > 1).flatMap((rect) => {
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hit && footer.contains(hit) ? [] : [String(hit?.className || hit?.tagName || 'nothing').split(' ')[0]];
+    });
+  });
+  const below = ['.settings-pane', '.generate-bar', '.result-pane'].filter((selector) => {
+    const element = document.querySelector(selector);
+    // A fixed element (the Generate bar) has no offsetParent: shown means it has a box.
+    return element && element.getClientRects().length > 0 && element.getBoundingClientRect().bottom > box.top + 0.5;
+  });
   return {
     names: names.length,
     outside,
     footerHoldsText: Math.min(...content.map((rect) => rect.top)) >= box.top - 0.5 && Math.max(...content.map((rect) => rect.bottom)) <= box.bottom + 0.5,
+    coveredLines,
+    below,
     pageScrolls: document.documentElement.scrollHeight > innerHeight
   };
 });
 
-test('rail names stay inside their entries and the footer fits, in Latin and Japanese text at two window sizes', async ({ page }) => {
+test('rail names stay inside their entries and nothing covers the footer, in Latin and Japanese text at three window sizes', async ({ page }) => {
   test.setTimeout(300_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.setViewportSize({ width: 1024, height: 768 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-  for (const tag of ['en', 'ja', 'es', 'fr']) {
-    await menu(page).selectOption(tag);
-    await expect.poll(() => pageLanguage(page)).toBe(tag);
-    for (const viewport of [{ width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
-      await page.setViewportSize(viewport);
-      await expect.poll(() => railAndFooterFit(page), { message: `${tag} at ${viewport.width}x${viewport.height}` })
-        .toEqual({ names: 13, outside: [], footerHoldsText: true, pageScrolls: false });
+  const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];
+  const fit = { outside: [], footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
+  for (const display of ['stacked', 'rail']) {
+    if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+    for (const tag of display === 'rail' ? ['en', 'ja', 'es', 'fr'] : ['en', 'ja']) {
+      await menu(page).selectOption(tag);
+      await expect.poll(() => pageLanguage(page)).toBe(tag);
+      for (const viewport of viewports) {
+        await page.setViewportSize(viewport);
+        await expect.poll(() => railAndFooterFit(page), { message: `${display}, ${tag} at ${viewport.width}x${viewport.height}` })
+          .toEqual({ ...fit, names: display === 'rail' ? 13 : 0 });
+      }
     }
-    await page.setViewportSize({ width: 1024, height: 768 });
+    await menu(page).selectOption('en');
+    await page.setViewportSize(viewports[0]);
   }
   expect(errors).toEqual([]);
 });
