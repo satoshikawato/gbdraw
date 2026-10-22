@@ -23,7 +23,9 @@
 //   entry (en, ja, es, fr), and the footer holds its text without a page
 //   scroll, with nothing drawn over it and the settings pane, its Generate
 //   bar and the Result pane ending above it (stacked: en, ja; rail: en, ja,
-//   es, fr) (OV-1506, OV-1427, OV-1509);
+//   es, fr) (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
+//   the header's mode and Session names keep one line (OV-1515), and each
+//   footer separator stays on the line of the link before it (OV-1517);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
@@ -351,9 +353,38 @@ const railAndFooterFit = (page) => page.evaluate(() => {
     // A fixed element (the Generate bar) has no offsetParent: shown means it has a box.
     return element && element.getClientRects().length > 0 && element.getBoundingClientRect().bottom > box.top + 0.5;
   });
+  // The header's mode and Session names keep one line (OV-1515), and a footer
+  // separator stays on the line of the link before it (OV-1517).
+  const lineTops = (element) => {
+    const range = document.createRange();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const tops = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      range.selectNodeContents(node);
+      tops.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => rect.top));
+    }
+    return tops.filter((top, index) => tops.findIndex((other) => Math.abs(other - top) < 3) === index);
+  };
+  const wrappedHeaderNames = [...document.querySelectorAll('.mode-switch > button, .app-session-label')]
+    .filter((element) => element.getClientRects().length > 0 && lineTops(element).length > 1)
+    .map((element) => element.textContent.trim());
+  const separatorsAlone = [...footer.querySelectorAll('a')].flatMap((link) => {
+    const next = link.nextSibling;
+    const at = next?.nodeType === Node.TEXT_NODE ? next.textContent.indexOf('|') : -1;
+    if (at < 0) return [];
+    const range = document.createRange();
+    range.setStart(next, at);
+    range.setEnd(next, at + 1);
+    const separator = range.getBoundingClientRect();
+    const linkLines = [...link.getClientRects()];
+    return Math.abs(separator.top - linkLines[linkLines.length - 1].top) < 3 ? [] : [link.textContent.trim()];
+  });
   return {
     names: names.length,
     outside,
+    wrappedHeaderNames,
+    separatorsAlone,
+    pageScrollsX: document.documentElement.scrollWidth > innerWidth,
     footerHoldsText: Math.min(...content.map((rect) => rect.top)) >= box.top - 0.5 && Math.max(...content.map((rect) => rect.bottom)) <= box.bottom + 0.5,
     coveredLines,
     below,
@@ -368,7 +399,7 @@ test('rail names stay inside their entries and nothing covers the footer, in Lat
   await page.setViewportSize({ width: 1024, height: 768 });
   await openApp(page);
   const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];
-  const fit = { outside: [], footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
+  const fit = { outside: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
   for (const display of ['stacked', 'rail']) {
     if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
     for (const tag of display === 'rail' ? ['en', 'ja', 'es', 'fr'] : ['en', 'ja']) {
