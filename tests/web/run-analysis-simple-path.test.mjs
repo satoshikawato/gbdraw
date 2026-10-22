@@ -457,6 +457,31 @@ const sha256Text = async (text) => {
   return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 };
 
+// Runs `generate` and returns its LOSAT timing line and how many SHA-256 digests of FASTA text it took.
+const watchLosatPreparation = async (generate) => {
+  const watched = { fastaDigests: 0, timing: '' };
+  const { subtle } = globalThis.crypto;
+  const ownDigest = Object.hasOwn(subtle, 'digest');
+  const digest = subtle.digest;
+  const info = console.info;
+  subtle.digest = function digestWatched(algorithm, data) {
+    if (new TextDecoder().decode(data).startsWith('>')) watched.fastaDigests += 1;
+    return digest.call(this, algorithm, data);
+  };
+  console.info = (...args) => {
+    if (String(args[0]).startsWith('LOSAT timing')) watched.timing = String(args[0]);
+    return info.apply(console, args);
+  };
+  try {
+    await generate();
+  } finally {
+    if (ownDigest) subtle.digest = digest;
+    else delete subtle.digest;
+    console.info = info;
+  }
+  return watched;
+};
+
 test('afterPaint crosses one completed frame before resolving', async () => {
   const frames = [];
   let resolved = false;
@@ -1716,11 +1741,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     resourceMetrics.splice(0);
     const repeatResult = result('lazy-circular-repeat.svg', 'lazy-circular-repeat');
     workerResponses.push(response(repeatResult, validCatalog(repeatResult.name)));
-    assert.deepEqual(
+    const repeatWatch = await watchLosatPreparation(async () => assert.deepEqual(
       await runner.runAnalysis(),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
-    );
+    ));
+    // OV-1565: the ring sequences' digests are kept with their FASTA, so no ring FASTA is digested again.
+    assert.equal(repeatWatch.fastaDigests, 0);
     assert.equal(losatCalls, 0);
     assert.equal(
       workerMessages.filter(({ type }) => type === 'helper').length,
@@ -2233,6 +2260,56 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(state.results.value, committedAlignedResult);
     assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
     assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
+
+    // OV-1556, OV-1565: one GenBank file of 13 records drawn as 13 cards. Generate parses the file once and
+    // slices each card's record from it, and the next Generate parses nothing and digests no FASTA again.
+    const recordIds = Array.from({ length: 13 }, (_, index) => `REC${index + 1}`);
+    const bases = ['a', 'c', 'g', 't'];
+    const thirteenFile = new AuditFile([recordIds.map((id, index) => [
+      `LOCUS       ${id} 8 bp DNA`,
+      'ORIGIN',
+      `        1 ${bases[index % 4].repeat(4)}${bases[(index + 1) % 4].repeat(4)}`,
+      '//'
+    ].join('\n')).join('\n') + '\n'], 'thirteen.gb');
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...recordIds.map((id, index) => ({
+      uid: `card-${index + 1}`, gb: thirteenFile, gff: null, fasta: null, depth: null, blast: null,
+      losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
+      region_start: null, region_end: null, region_reverse: false
+    })));
+    state.files.linearCanonicalComparisons = [];
+    state.similarityAlignmentPlan.value = null;
+    state.linearRecordTranslations.value = [];
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.activeDrawing().losat.blastn.task = 'megablast';
+    Object.assign(state.activeDrawing().linearComparisonPlan, { mode: 'adjacent', defaultSource: 'losat' });
+    state.activeDrawing().linearComparisonPlan.edges.splice(0);
+    const thirteenPlan = resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan,
+      sequences: state.linearSeqs,
+      layout: [],
+      losatProgram: 'blastn',
+      blastpMode: state.activeDrawing().losat.blastp.mode
+    });
+    globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+      losatCalls += 1;
+      return jobs.map((job) => ({ cacheKey: job.cacheKey, text: '' }));
+    };
+    const thirteenWatches = [];
+    for (const name of ['thirteen-first', 'thirteen-second']) {
+      const thirteenResult = result(`${name}.svg`, name);
+      workerResponses.push(response(thirteenResult, validCatalog(thirteenResult.name)));
+      thirteenWatches.push(await watchLosatPreparation(async () => assert.deepEqual(
+        await runner.runAnalysis(thirteenPlan),
+        { status: 'ok' },
+        JSON.stringify(state.errorLog.value)
+      )));
+    }
+    assert.equal(losatCalls, 3, 'the first Generate searched and the second reused its raw results');
+    assert.match(thirteenWatches[0].timing, /FASTA cache hits=0, .*JS FASTA=1, Worker FASTA=0/);
+    assert.match(thirteenWatches[1].timing, /FASTA cache hits=13, .*JS FASTA=0, Worker FASTA=0/);
+    assert.equal(thirteenWatches[1].fastaDigests, 0);
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];
@@ -2466,11 +2543,15 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   // Observe the existing internal helper staging boundary. Run Info deliberately
   // withholds annotation Source recipes because TSV cannot preserve inheritance.
   const stagedAnnotationTables = [];
+  const stagedColorTables = [];
   const NativeMap = globalThis.Map;
   globalThis.Map = class extends NativeMap {
     set(key, value) {
       if (key === '/web_annotations.tsv' && typeof value?.data === 'string') {
         stagedAnnotationTables.push(value.data);
+      }
+      if ((key === '/combined_d.tsv' || key === '/combined_t.tsv') && typeof value?.data === 'string') {
+        stagedColorTables.push(key);
       }
       return super.set(key, value);
     }
@@ -2491,7 +2572,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   }
 
   const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
-  assert.ok(stagedAnnotationTables.length > 0, 'Generate stages the annotation helper');
+  // OV-1573: once, and no color table copies: Run Info builds those from the request resources.
+  assert.equal(stagedAnnotationTables.length, 1, 'Generate stages the annotation helper once');
+  assert.deepEqual(stagedColorTables, []);
   for (const text of stagedAnnotationTables) {
     assert.equal(text, encodeAnnotationTable(state.activeDrawing().annotationSets));
     assert.equal(parseAnnotationTable(text)[0].annotations[0].style.fill, null);

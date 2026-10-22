@@ -399,20 +399,48 @@ assert.ok(counted.getCurrentRawLosatCacheEntry(rawMap, 'protein-key', proteinEnt
 assert.deepEqual(counted.counts, {manifest: 1, tsv: 1, runtimeSets: 2}, 'one validation per getter hit');
 const resetCounts = () => Object.assign(counted.counts, {manifest: 0, tsv: 0, runtimeSets: 0});
 resetCounts();
-const privateManifest = counted.mergeProteinIdentityManifests([manifest]);
-// The merge owns deep copies, including nested runtime IDs and metadata.
-assert.notStrictEqual(privateManifest.recordInstances['record-1'].runtimeIds,
-  manifest.recordInstances['record-1'].runtimeIds);
+const extractedManifest = structuredClone(manifest);
+const privateManifest = counted.mergeProteinIdentityManifests([extractedManifest]);
+// OV-1553: the merge admits its input (validated once, frozen) and shares its frozen parts instead of copying them.
+assert.deepEqual(counted.counts, {manifest: 2, tsv: 0, runtimeSets: 0}, 'the input and the merged manifest');
+assert.strictEqual(privateManifest.recordInstances['record-1'], extractedManifest.recordInstances['record-1']);
+assert.ok(Object.isFrozen(extractedManifest.recordInstances['record-1'].runtimeIds));
+assert.throws(() => { privateManifest.recordInstances['record-1'].runtimeIds[featureA] = 'h_changed'; }, TypeError);
+assert.throws(() => { privateManifest.schema = 1; }, TypeError);
 resetCounts();
+// The next Generate merges the same extractions: the same manifest, and no validation.
+assert.strictEqual(counted.mergeProteinIdentityManifests([extractedManifest]), privateManifest);
+assert.equal(counted.validateProteinIdentityManifest(privateManifest), true);
+assert.deepEqual(counted.counts, {manifest: 1, tsv: 0, runtimeSets: 0}, 'an admitted manifest is not checked again');
+resetCounts();
+const indexedEntries = [proteinEntry, reverseEntry, {...proteinEntry, text: ''}];
+for (const entry of indexedEntries) {
+  assert.ok(counted.getCurrentRawLosatCacheEntry(new Map([['protein-key', entry]]), 'protein-key', entry, privateManifest));
+}
+assert.deepEqual(counted.counts, {manifest: 0, tsv: 3, runtimeSets: 2}, 'one runtime ID Set per record instance');
+resetCounts();
+// OV-1554: a raw entry verified against an admitted manifest is not scanned again while its text is the same.
+for (const entry of indexedEntries) {
+  assert.ok(counted.getCurrentRawLosatCacheEntry(new Map([['protein-key', entry]]), 'protein-key', entry, privateManifest));
+}
+assert.deepEqual(counted.counts, {manifest: 0, tsv: 0, runtimeSets: 0}, 'the next Generate scans no table');
+const rewrittenEntry = {...proteinEntry};
+assert.ok(counted.getCurrentRawLosatCacheEntry(new Map([['protein-key', rewrittenEntry]]), 'protein-key', rewrittenEntry, privateManifest));
+rewrittenEntry.text = proteinEntry.text.replace(runtimeA, `h_${'c'.repeat(26)}`);
+assert.equal(counted.getCurrentRawLosatCacheEntry(
+  new Map([['protein-key', rewrittenEntry]]), 'protein-key', rewrittenEntry, privateManifest
+), null, 'a changed text is scanned again');
+// A manifest that is not admitted is checked on every read, and nothing is kept for it.
+resetCounts();
+const unadmitted = structuredClone(manifest);
+for (let read = 0; read < 2; read += 1) {
+  assert.ok(counted.getCurrentRawLosatCacheEntry(rawMap, 'protein-key', proteinEntry, unadmitted));
+}
+assert.deepEqual(counted.counts, {manifest: 2, tsv: 2, runtimeSets: 4});
+resetCounts();
+// The index callers outside Generate still build reads one admitted manifest without a new check.
 const batchIndex = counted.buildValidatedProteinIdentityIndex(privateManifest);
 assert.deepEqual(counted.counts, {manifest: 1, tsv: 0, runtimeSets: 2});
-resetCounts();
-for (const entry of [proteinEntry, reverseEntry, {...proteinEntry, text: ''}]) {
-  assert.ok(counted.getCurrentRawLosatCacheEntry(
-    new Map([['protein-key', entry]]), 'protein-key', entry, privateManifest, {identityIndex: batchIndex}
-  ));
-}
-assert.deepEqual(counted.counts, {manifest: 0, tsv: 3, runtimeSets: 0}, 'batch reuses only manifest work');
 const changedManifest = structuredClone(privateManifest);
 changedManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
 assert.equal(counted.getCurrentRawLosatCacheEntry(
@@ -426,13 +454,16 @@ for (const numericCase of numericContract) {
 }
 assert.equal(counted.releaseValidatedProteinIdentityIndex(batchIndex), true);
 assert.equal(counted.releaseValidatedProteinIdentityIndex(batchIndex), false);
-privateManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
+const releasedManifest = structuredClone(manifest);
+const releasedIndex = counted.buildValidatedProteinIdentityIndex(releasedManifest);
+assert.equal(counted.releaseValidatedProteinIdentityIndex(releasedIndex), true);
+releasedManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
 assert.equal(counted.getCurrentRawLosatCacheEntry(
-  rawMap, 'protein-key', proteinEntry, privateManifest, {identityIndex: batchIndex}
+  rawMap, 'protein-key', proteinEntry, releasedManifest, {identityIndex: releasedIndex}
 ), null, 'a released index cannot approve changed contents of the same object');
-privateManifest.schema = 1;
+releasedManifest.schema = 1;
 assert.equal(counted.getCurrentRawLosatCacheEntry(
-  rawMap, 'protein-key', proteinEntry, privateManifest, {identityIndex: batchIndex}
+  rawMap, 'protein-key', proteinEntry, releasedManifest, {identityIndex: releasedIndex}
 ), null, 'released index falls back to full manifest validation');
 
 
@@ -824,15 +855,23 @@ for (let index = 0; index < mergeInputs.length; index++) {
   assert.equal(counted.manifestCalls[index], mergeInputs[index]);
 }
 assert.equal(counted.manifestCalls.at(-1), generatedManifest);
+// OV-1553: the merged manifest shares the inputs' values, and every part of both is frozen, so no reader can
+// change the inputs through it, or the merged manifest through an input.
 for (const map of ['proteinSets', 'recordAnalyses', 'recordInstances']) {
   for (const [key, value] of Object.entries(firstRecord[map])) {
-    assert.notEqual(generatedManifest[map][key], value, `merged ${map} values are copied`);
+    assert.equal(generatedManifest[map][key], value, `merged ${map} values are the inputs' frozen values`);
   }
 }
-generatedManifest.proteinSets['sha256:set-a'].proteins[0].aaSha256 = 'changed';
-generatedManifest.recordInstances['record-1'].runtimeIds[featureA] = runtimeB;
-generatedManifest.recordInstances['record-1'].featureMetadata[featureA].displayAlias = 'changed';
+assert.throws(() => { generatedManifest.proteinSets['sha256:set-a'].proteins[0].aaSha256 = 'changed'; }, TypeError);
+assert.throws(() => { generatedManifest.recordInstances['record-1'].runtimeIds[featureA] = runtimeB; }, TypeError);
+assert.throws(() => {
+  generatedManifest.recordInstances['record-1'].featureMetadata[featureA].displayAlias = 'changed';
+}, TypeError);
+assert.throws(() => { firstRecord.recordInstances['record-1'].runtimeBindingHash = 'changed'; }, TypeError);
 assert.deepEqual(mergeInputs, originalInputs, 'nested merged edits cannot alter source inputs');
+counted.manifestCalls.length = 0;
+assert.equal(mergeForGenerate([...mergeInputs]), generatedManifest, 'the same extractions merge to the same manifest');
+assert.deepEqual(counted.manifestCalls, [], 'and validate nothing again');
 
 const reloadMessage = 'Protein comparison metadata could not be validated. Reload the page and try again.';
 const invalidInputMessage = 'Cannot merge an invalid protein identity manifest.';
@@ -875,18 +914,17 @@ for (const merge of [cache.mergeProteinIdentityManifests, mergeForGenerate]) {
 for (const input of [undefined, null, {}, 'not an array']) {
   assert.deepEqual(cache.mergeProteinIdentityManifests(input), cache.emptyProteinIdentityManifest());
 }
-console.log('RW-03: 3 input checks + 1 merged check; default/Generate failure precedence and deep copy passed');
+console.log('RW-03: 3 input checks + 1 merged check; default/Generate failure precedence and shared frozen values passed');
 
-const loopStart = runSource.indexOf('          const identityIndex = useProteinBlastp && preparedJobs.length > 0');
+const loopStart = runSource.indexOf('          // The merged manifest is admitted');
 const loopEnd = runSource.indexOf('          const sourceJobs = [];', loopStart);
 assert.ok(loopStart > 0 && loopEnd > loopStart);
 const loopSource = runSource.slice(loopStart, loopEnd);
-const exercisePairLoop = async ({failure = null, promote = false, mutateSource = false} = {}) => {
-  const externalManifest = structuredClone(manifest);
-  const workingManifest = counted.mergeProteinIdentityManifests([externalManifest]);
-  const entries = [proteinEntry, reverseEntry, {...proteinEntry, text: ''}];
+const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
+  const workingManifest = counted.mergeProteinIdentityManifests([structuredClone(manifest)]);
+  const entries = [proteinEntry, reverseEntry, {...proteinEntry, text: ''}].map((entry) => ({...entry}));
   const cacheMap = new Map(promote ? [] : entries.map((entry, index) => [String(index), entry]));
-  let loan = null, released = false, reads = 0;
+  let reads = 0;
   const cancellation = new Error('canceled inside pair preparation');
   const context = {
     useProteinBlastp: true,
@@ -897,37 +935,23 @@ const exercisePairLoop = async ({failure = null, promote = false, mutateSource =
       losatArgs: [], cacheMetadata: entry, batch: {}
     })),
     workingProteinIdentityManifest: workingManifest,
-    buildValidatedProteinIdentityIndex(value) {
-      loan = counted.buildValidatedProteinIdentityIndex(value);
-      return loan;
-    },
-    releaseValidatedProteinIdentityIndex(value) {
-      assert.strictEqual(value, loan);
-      released = counted.releaseValidatedProteinIdentityIndex(value);
-    },
     throwIfGenerationCanceled() { if (failure === 'cancel' && reads >= 3) throw cancellation; },
     async getSeqEntry() {
       reads++;
       await Promise.resolve();
       if (failure === 'error' && reads >= 3) throw new Error('sequence preparation failed');
-      if (mutateSource) {
-        externalManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
-        externalManifest.schema = 1;
-      }
       return {sequenceKey: 'sequence', fasta: 'data'};
     },
     proteinCacheKeys: ['0', '1', '2'],
     async getSeqHash() { return 'hash'; },
     sequenceEntriesByKey: new Map(), cacheMap,
-    getReusableLosatCacheEntry(map, key, metadata, identity, index) {
-      assert.strictEqual(index, loan);
-      return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity, {identityIndex: index});
+    getReusableLosatCacheEntry(map, key, metadata, identity) {
+      return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity);
     },
-    async tryPromoteLegacyProteinEntry({cacheKey, metadata, identityIndex: index}) {
+    async tryPromoteLegacyProteinEntry({cacheKey, metadata}) {
       await Promise.resolve();
-      assert.strictEqual(index, loan);
       cacheMap.set(cacheKey, entries[Number(cacheKey)]);
-      return counted.getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, workingManifest, {identityIndex: index});
+      return counted.getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, workingManifest);
     },
     promoteRawLosatCacheEntry() {},
     losatTiming: {totalPairs: 0, cacheHits: 0, cacheMisses: 0},
@@ -943,24 +967,33 @@ const exercisePairLoop = async ({failure = null, promote = false, mutateSource =
   resetCounts();
   if (failure) await assert.rejects(execute(context), failure === 'cancel' ? /canceled inside/ : /sequence preparation failed/);
   else await execute(context);
-  assert.equal(released, true, 'every exit releases the loop index');
-  assert.equal(counted.releaseValidatedProteinIdentityIndex(loan), false);
-  assert.equal(counted.counts.manifest, 1, 'one manifest validation in the pair loop');
+  assert.equal(counted.counts.manifest, 0, 'the admitted manifest is not validated in the pair loop');
   assert.equal(counted.counts.runtimeSets, 2, 'one runtime ID Set per record');
   assert.equal(counted.counts.tsv, failure ? 1 : 3, 'one TSV validation for every hit, including promotion');
-  if (!failure) assert.equal(context.losatTiming.cacheHits, 3);
-  // The very same manifest object may change once the loan has ended. Its old
-  // index must no longer bypass ID or manifest validation on a later lookup.
-  workingManifest.schema = 1;
-  assert.equal(counted.getCurrentRawLosatCacheEntry(
-    new Map([['protein-key', proteinEntry]]), 'protein-key', proteinEntry, workingManifest, {identityIndex: loan}
-  ), null);
+  if (failure) return;
+  assert.equal(context.losatTiming.cacheHits, 3);
+  // OV-1553, OV-1554: the next Generate, past the identical-Generate skip, with the same extractions and cache.
+  const nextGenerate = (workingProteinIdentityManifest) => Object.assign(context, {
+    workingProteinIdentityManifest,
+    losatTiming: {totalPairs: 0, cacheHits: 0, cacheMisses: 0}, losatPairs: [], cacheInfo: [], pendingJobKeys: new Set()
+  });
+  resetCounts();
+  nextGenerate(workingManifest);
+  await execute(context);
+  assert.equal(context.losatTiming.cacheHits, 3);
+  assert.deepEqual(counted.counts, {manifest: 0, tsv: 0, runtimeSets: 0}, 'the same manifest scans no table again');
+  resetCounts();
+  nextGenerate(counted.mergeProteinIdentityManifests([structuredClone(manifest)]));
+  await execute(context);
+  assert.equal(context.losatTiming.cacheHits, 3);
+  assert.deepEqual(counted.counts, {manifest: 2, tsv: 3, runtimeSets: 2}, 'a new extraction is a new manifest');
+  // The manifest the loop read cannot change afterwards.
+  assert.throws(() => { workingManifest.schema = 1; }, TypeError);
 };
-await exercisePairLoop({mutateSource: true});
-await exercisePairLoop({promote: true, mutateSource: true});
+await exercisePairLoop();
+await exercisePairLoop({promote: true});
 await exercisePairLoop({failure: 'error'});
 await exercisePairLoop({failure: 'cancel'});
-await exercisePairLoop(); // Retry must acquire a new index.
 
 // OV-980, OV-985: LOSATP Collinear, Search between All records, on a CLI
 // Session grid whose rows put record a below c (rows b, c, a). The pair loop
@@ -989,7 +1022,6 @@ await exercisePairLoop(); // Retry must acquire a new index.
       spec, losatArgs: [], cacheMetadata: { search: `${spec.queryUid}->${spec.subjectUid}` }, batch: {}
     })),
     workingProteinIdentityManifest: null, proteinCacheKeys: null,
-    buildValidatedProteinIdentityIndex() { return null; }, releaseValidatedProteinIdentityIndex() {},
     throwIfGenerationCanceled() {},
     async getSeqEntry(index) { return { sequenceKey: `sequence-${index}`, fasta: '' }; },
     buildLosatCachePayload: (metadata) => metadata,
