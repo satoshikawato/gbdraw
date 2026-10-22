@@ -17,9 +17,9 @@ from playwright.sync_api import Locator, expect
 
 from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS, REPO_ROOT, tutorial_file_identity
 from flows.web_capture import assert_fixture_identity
-from video.walkthrough import (PORTRAIT_FIGURE_WIDTH, _PREVIEW, Journey, Recorder, _center, export_interactive_svg,
-                               open_in_browser)
-from video.walkthrough_render import VERTICAL
+from video.walkthrough import (PORTRAIT_FIGURE_WIDTH, PREVIEW_REGION, VIEWPORT, _PREVIEW, Journey, Recorder, _center,
+                               export_interactive_svg, open_in_browser)
+from video.walkthrough_render import TUTORIAL_LANGUAGES, take_name
 
 
 def _fixture(file_id: str) -> Path:
@@ -51,7 +51,7 @@ def _require(report: dict, ok: bool, svg: Path) -> dict:
 _HIT = """
 (selector) => {
   // In an opened Interactive SVG the drawing is the whole page.
-  const region = document.querySelector('[role="region"][aria-label="Result Preview"]') || document.documentElement;
+  const region = document.querySelector('$REGION') || document.documentElement;
   const view = region.getBoundingClientRect();
   for (const node of region.querySelectorAll(selector)) {
     const b = node.getBoundingClientRect();
@@ -68,13 +68,34 @@ _HIT = """
   }
   return null;
 }
-"""
+""".replace("$REGION", PREVIEW_REGION)
 
 
 # -- shared steps -------------------------------------------------------------
 
+def _css(rec: Recorder, attribute: str, text: str, params: dict | None = None) -> str:
+    """A CSS attribute test for the UI text ``text``, in the app's current language."""
+
+    value = rec.t(text, params).replace("\\", "\\\\").replace('"', '\\"')
+    return f'[{attribute}="{value}"]'
+
+
+def _summary(rec: Recorder, name: str, params: dict | None = None) -> Locator:
+    """A settings disclosure by its (translated) name."""
+
+    return rec.page.locator(f"summary{_css(rec, 'aria-label', name, params)}")
+
+
+def _label(rec: Recorder, name: str, params: dict | None = None, *, within: Locator | None = None) -> Locator:
+    return (within or rec.page).get_by_label(rec.t(name, params), exact=True)
+
+
+def _button(rec: Recorder, name: str, params: dict | None = None, *, within: Locator | None = None) -> Locator:
+    return (within or rec.page).get_by_role("button", name=rec.t(name, params), exact=True)
+
+
 def _select_mode(rec: Recorder, name: str) -> None:
-    button = rec.page.get_by_role("button", name=name, exact=True)
+    button = _button(rec, name)
     rec.focus(button, zoom=2.2)
     rec.hold(0.4)
     rec.click(button, pause=0.6)
@@ -90,7 +111,7 @@ def _fit_preview(rec: Recorder, *, margin: float = 24) -> None:
     """
 
     page = rec.page
-    zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
+    zoom_out = _button(rec, "Zoom out")
     skimming = False
     for _ in range(16):
         geometry = page.evaluate(_PREVIEW)
@@ -129,12 +150,18 @@ def _fit_preview(rec: Recorder, *, margin: float = 24) -> None:
         rec.normal_speed()
 
 
-def _generate(rec: Recorder, *, target: float = 1.4, look: float = 2.0,
-              timeout_ms: int = GENERATION_TIMEOUT_MS) -> None:
-    button = rec.page.get_by_role("button", name="Generate Diagram", exact=True)
+def _generate(rec: Recorder, *, target: float | None = 1.4, look: float = 2.0,
+              timeout_ms: int = GENERATION_TIMEOUT_MS, stages: bool = False) -> None:
+    """Generate, fit the figure, and show the whole page for ``look`` seconds.
+
+    ``stages`` frames the progress overlay's stage line meanwhile; ``target``
+    None plays the wait at normal speed.
+    """
+
+    button = _button(rec, "Generate Diagram")
     rec.focus(button, zoom=1.9)
     rec.hold(0.4)
-    rec.generate(target=target, timeout_ms=timeout_ms)
+    rec.generate(target=target, timeout_ms=timeout_ms, stages=stages)
     _fit_preview(rec)
     rec.camera(duration=1.0)
     rec.hold(look)
@@ -187,33 +214,33 @@ def _look(rec: Recorder, box: dict, *, zoom: float, seconds: float, pad: float =
 def _priority_rule(rec: Recorder, feature: str, order: str) -> None:
     """Labels › Qualifier priority: one feature type, one qualifier order."""
 
-    field = rec.page.locator('input[placeholder="product,gene,locus_tag"]')
+    field = _label(rec, "New priority rule qualifier order")
     rec.reveal(field)
     rec.focus(field, zoom=2.2)
-    rec.choose(field.locator("xpath=preceding-sibling::select[1]"), feature)
+    rec.choose(_label(rec, "New priority rule feature type"), feature)
     rec.type(field, order)
-    rec.click(field.locator("xpath=following-sibling::button[1]"), pause=0.6)
+    rec.click(_button(rec, "Add priority rule"), pause=0.6)
 
 
 def _color_rules(rec: Recorder, rules: tuple[tuple[str, str, str, str, str], ...]) -> None:
     """Colors › Specific rules; the first is shown at pace, the rest at 3×."""
 
-    regex = rec.page.get_by_label("New color rule pattern", exact=True)
-    rule_box = regex.locator('xpath=ancestor::div[contains(@class,"bg-slate-50")][1]')
+    regex = rec.page.locator("input[data-new-specific-rule-pattern]")
+    rule_box = rec.page.locator("div:has(> div > input[data-new-specific-rule-pattern])")
     for index, (feature, qualifier_name, pattern, color, legend) in enumerate(rules):
         rec.reveal(rule_box, anchor=0.45)
         rec.mark(f"rule-{index + 1}")
         rec.focus(rule_box, zoom=2.2, duration=0.6)
         if index == 1:
             rec.fast_forward(factor=3.0)
-        rec.choose(rule_box.get_by_label("New color rule feature type", exact=True), feature)
-        qualifier = rule_box.get_by_label("Qualifier name", exact=True)
+        rec.choose(_label(rec, "New color rule feature type"), feature)
+        qualifier = _label(rec, "Qualifier name", within=rule_box)
         if qualifier.input_value() != qualifier_name:
             rec.type(qualifier, qualifier_name)
         rec.type(regex, pattern)
-        rec.pick_color(rule_box.get_by_label("New color rule color", exact=True), color)
-        rec.type(rule_box.get_by_label("New color rule legend caption", exact=True), legend)
-        rec.click(rule_box.get_by_role("button", name="Add color rule", exact=True), pause=0.45)
+        rec.pick_color(_label(rec, "New color rule color"), color)
+        rec.type(_label(rec, "New color rule legend name"), legend)
+        rec.click(_button(rec, "Add color rule"), pause=0.45)
         # Each rule is validated before it is committed; a quicker next rule
         # would be validated without this one.
         rec.page.wait_for_function(
@@ -226,7 +253,7 @@ def _feature_types(rec: Recorder, *, remove: tuple[str, ...] = (), add: tuple[st
     """Features › Feature Types: drop and add the drawn feature types."""
 
     page = rec.page
-    summary = page.locator('summary[aria-label="Features"]')
+    summary = _summary(rec, "Features")
     rec.open_section(summary)
     card = summary.locator("xpath=..")
     for name in remove:
@@ -246,9 +273,8 @@ def _feature_types(rec: Recorder, *, remove: tuple[str, ...] = (), add: tuple[st
 def _color_value(rec: Recorder, label: str, color: str, *, zoom: float = 2.2) -> None:
     """Switch an Auto / None / Color control to Color and pick ``color``."""
 
-    page = rec.page
-    _pick(rec, page.get_by_label(f"{label} mode", exact=True), "color", zoom=zoom)
-    rec.pick_color(page.get_by_label(label, exact=True), color)
+    _pick(rec, _label(rec, "{name} mode", {"name": rec.t(label)}), "color", zoom=zoom)
+    rec.pick_color(_label(rec, label), color)
 
 
 def _hit(rec: Recorder, selector: str) -> dict:
@@ -278,7 +304,7 @@ def _feature_point(rec: Recorder, feature_filter: str, arg: object) -> dict:
 
 def _feature_tab(rec: Recorder, popup: Locator, tab: str, *, pause: float) -> None:
     # Icon glyphs precede the tab text in the accessible name.
-    rec.click(popup.get_by_role("button", name=re.compile(rf"\b{tab}$")), pause=pause)
+    rec.click(popup.get_by_role("button", name=re.compile(rf"(^|\s){re.escape(rec.t(tab))}$")), pause=pause)
 
 
 def _open_feature(rec: Recorder, point: dict, tab: str) -> Locator:
@@ -286,7 +312,7 @@ def _open_feature(rec: Recorder, point: dict, tab: str) -> Locator:
 
     page = rec.page
     rec.click_point(point["x"], point["y"], pause=0.4)
-    popup = page.get_by_role("dialog", name=re.compile(r"^Feature details"))
+    popup = page.locator(".feature-popup")
     expect(popup).to_be_visible()
     _feature_tab(rec, popup, tab, pause=0.5)
     box = popup.bounding_box()
@@ -317,7 +343,7 @@ def _scroll_popup_to(rec: Recorder, popup: Locator, text: str) -> None:
 
 
 def _close_feature(rec: Recorder) -> None:
-    rec.click(rec.page.get_by_label("Close feature popup", exact=True), pause=0.3)
+    rec.click(_label(rec, "Close feature popup"), pause=0.3)
     rec.camera(duration=0.9)
     rec.hold(0.5)
 
@@ -336,7 +362,7 @@ def _slot(rec: Recorder, slot_id: str) -> Locator:
 def _run_losat(rec: Recorder) -> None:
     """Comparison › Run LOSAT for all adjacent pairs; the pressed button confirms the choice."""
 
-    button = rec.page.get_by_role("button", name="Run LOSAT for all adjacent pairs", exact=True)
+    button = _button(rec, "Run LOSAT for all adjacent pairs")
     _press(rec, button, zoom=2.0)
     expect(button).to_have_attribute("aria-pressed", "true")
 
@@ -370,8 +396,8 @@ _SEARCH_STATUS = """
 """
 
 
-def _open_export(rec: Recorder, svg: Path, step: int) -> list[str]:
-    rec.caption(step, "Open it in any web browser", "The Interactive SVG needs no server and no install")
+def _open_export(rec: Recorder, svg: Path, step: int | None) -> list[str]:
+    rec.caption(step, "Open it in any web browser", "No server, no install")
     errors = open_in_browser(rec, svg)
     rec.mark("interactive")
     rec.camera(duration=0.6)
@@ -499,7 +525,7 @@ MT_GENES = {"ND1", "ND2", "ND3", "ND4", "ND4L", "ND5", "ND6", "COX1", "COX2", "C
 def _hmmtdna_atskew(rec: Recorder, downloads: Path) -> Path:
     _verify("human-mitochondrion-genbank")
     page = rec.page
-    preview = page.get_by_role("region", name="Result Preview", exact=True)
+    preview = page.locator(PREVIEW_REGION)
 
     rec.camera(duration=0)
     rec.caption(1, "Switch to Circular mode", "Open gbdraw.app and choose the circular layout")
@@ -654,7 +680,7 @@ def _tobacco_chloroplast(rec: Recorder, downloads: Path) -> Path:
     _verify("tobacco-plastome-genbank", "tobacco-plastome-specific-colors",
             "tobacco-plastome-qualifier-priority", "tobacco-plastome-regions-table")
     page = rec.page
-    preview = page.get_by_role("region", name="Result Preview", exact=True)
+    preview = page.locator(PREVIEW_REGION)
 
     rec.camera(duration=0)
     rec.caption(1, "Switch to Circular mode", "Open gbdraw.app and choose the circular layout")
@@ -825,6 +851,63 @@ def _inspect_tobacco_chloroplast(svg: Path) -> dict:
                     and not report["skew_legend"], svg)
 
 
+# -- shared steps of the progressive Linear tutorials ---------------------------
+#
+# These journeys follow their tutorial JSON step by step: Generate with the
+# defaults first, look at each preview, name what it lacks, change it, and
+# Generate again. Every UI name in a locator goes through ``rec.t``, so the same
+# steps record the English and the translated app.
+
+def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4) -> None:
+    """Name what the new preview shows while the camera holds the whole figure."""
+
+    rec.caption(step, title, subtitle)
+    figure = rec.figure()
+    if figure is None:
+        raise AssertionError("No preview figure to show")
+    zoom = min(VIEWPORT[0] / figure["width"], VIEWPORT[1] / figure["height"]) / 1.08
+    rec.camera(figure, zoom=max(1.0, min(zoom, 2.2)), duration=1.0)
+    rec.hold(seconds)
+
+
+def _linear_file(rec: Recorder, index: int, source: Path) -> Locator:
+    """Upload ``source`` into File ``index`` (one-based) and return its card."""
+
+    page = rec.page
+    card = page.get_by_role("region", name=rec.t("Linear input file {n}", {"n": index}), exact=True)
+    chooser = card.locator(".upload-zone").first
+    rec.reveal(chooser)
+    rec.focus(chooser, zoom=2.0, duration=0.6)
+    rec.hold(0.3)
+    rec.upload(chooser, source)
+    expect(card).to_contain_text(source.name, timeout=GENERATION_TIMEOUT_MS)
+    rec.hold(0.6)
+    return card
+
+
+def _add_sequence(rec: Recorder) -> None:
+    _press(rec, _button(rec, "Add sequence"), zoom=2.0, pause=0.5)
+
+
+def _losat_settings(rec: Recorder) -> Locator:
+    """Comparison › Run LOSAT, open its Settings, and press LOSATP."""
+
+    page = rec.page
+    _run_losat(rec)
+    settings = page.locator('details[data-linear-comparison-disclosure="settings"]')
+    rec.open_section(_summary(rec, "Comparison Settings"))
+    losatp = settings.locator("[data-linear-comparison-losat-mode-option='blastp']")
+    _press(rec, losatp, zoom=2.2)
+    expect(losatp).to_have_attribute("aria-pressed", "true")
+    return settings
+
+
+def _check(rec: Recorder, box: Locator, checked: bool = True) -> None:
+    rec.reveal(box)
+    rec.focus(box, zoom=2.2, duration=0.5)
+    rec.set_checked(box, checked, pause=0.5)
+
+
 # -- Aminoglycoside biosynthetic gene clusters from Streptomyces spp. ---------
 
 BGC_FILES = tuple(f"bgc-{number}-genbank" for number in ("0000708", "0000709", "0000711", "0000712", "0000713"))
@@ -843,77 +926,143 @@ BGC_RULES = (
     ("CDS", "gene_kind", "transport", "#577edb", "Transport-related genes"),
     ("CDS", "gene_kind", "regulatory", "#57b767", "Regulatory genes"),
 )
+# Titles & Record Labels › definition-line styles: (line, font size, bold, fill)
 BGC_DEFINITION_STYLES = (
-    ("Name / Species", True, None),
-    ("Subtitle", False, None),
-    ("Accession", False, "#7b7c7d"),
-    ("Length / Coordinates", False, "#7b7c7d"),
+    ("Name / Species", "20", True, None),
+    ("Subtitle", "20", False, None),
+    ("Accession", "20", False, "#7b7c7d"),
+    ("Length / Coordinates", "20", False, "#7b7c7d"),
 )
+_ALIGNMENT_READY = """
+() => { const app = window.__GBDRAW_APP__;
+  const row = app?.similarityAlignmentDraft?.rows?.find((item) => item.recordDetail === 'BGC0000708');
+  const chosen = row?.candidates?.find((candidate) => candidate.key === row?.choice?.candidateKey);
+  return Boolean(row && !app.similarityAlignmentBusy && row.choice?.kind === 'select'
+    && row.choice.candidateKey === row.recommendedKey && String(chosen?.name || '') === 'livU'
+    && document.querySelector('[data-similarity-alignment-dialog]')); }
+"""
+_ALIGNMENT_APPLIED = """
+(before) => { const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || '');
+  return Boolean(app && !app.processing && !app.similarityAlignmentBusy
+    && !document.querySelector('[data-similarity-alignment-dialog]') && content && content !== before); }
+"""
 
 
-def _record_options(rec: Recorder, index: int) -> Locator:
-    button = rec.page.get_by_role("button", name=f"Record options for sequence {index}", exact=True)
-    definition = rec.page.get_by_label(f"Definition for sequence {index}", exact=True)
-    if not definition.is_visible():
-        _press(rec, button, zoom=2.0, pause=0.4)
-    return definition
+def _bgc_record(rec: Recorder, card: Locator, index: int) -> None:
+    """Organism / strain and Subtitle / title on the File card of a one-record file."""
+
+    definition, subtitle = BGC_RECORDS[index - 1]
+    _field(rec, _label(rec, "Definition for sequence {n}", {"n": index}, within=card), definition, zoom=2.0)
+    _field(rec, _label(rec, "Subtitle / title for sequence {n}", {"n": index}, within=card), subtitle, zoom=2.0)
 
 
-def _align_to_group(rec: Recorder, popup: Locator, group_id: str) -> None:
-    """Align on the popup's similarity group through Review alignment options…."""
+def _bgc_align(rec: Recorder) -> None:
+    """Step 7: Review alignment options… on neoU (og_6), keep livU, Apply."""
 
     page = rec.page
-    review = popup.get_by_role("button", name=re.compile(r"^Review alignment options"))
-    _scroll_popup_to(rec, popup, "Review alignment options…")
-    section = popup.locator('[data-feature-popup-group="similarity"]')
-    box = section.bounding_box()
-    rec.camera(box, zoom=1.9, duration=0.9, portrait={"x": box["x"] - 20, "y": box["y"] - 20,
-                                                      "width": box["width"] + 40, "height": box["height"] + 40})
-    for name in ("Show in editor", "Align…"):
-        rec.focus(popup.get_by_role("button", name=name, exact=True), zoom=2.2, duration=0.6)
-        rec.hold(0.5)
-    rec.caption(8, "Review the alignment options", "Review alignment options… lists every candidate per record")
+    rec.caption(7, "Align the rows on og_6", "Click neoU of BGC0000709, in row 2")
+    neou = _feature_point(rec, "(item) => item.gene === arg && item.orthogroupId === 'og_6'"
+                               " && /^BGC0000709/.test(item.record_id || '')", "neoU")
+    rec.mark("align")
+    rec.click_point(neou["x"], neou["y"], pause=0.4)
+    popup = page.locator(".feature-popup")
+    expect(popup).to_be_visible()
+    expect(popup).to_contain_text("og_6")
+    review = popup.locator("[data-similarity-alignment-popup-review]")
+    review.evaluate("node => node.scrollIntoView({block: 'center'})")
+    page.wait_for_timeout(300)
+    box = popup.bounding_box()
+    rec.camera({"x": min(box["x"], neou["x"]) - 40, "y": box["y"] - 40,
+                "width": max(box["x"] + box["width"], neou["x"]) - min(box["x"], neou["x"]) + 80,
+                "height": box["height"] + 80}, zoom=1.5, duration=0.9,
+               portrait={"x": box["x"] - 30, "y": box["y"] - 30, "width": box["width"] + 60,
+                         "height": box["height"] + 60})
+    rec.hold(1.6)
+    rec.caption(7, "Review alignment options…", "One card per record, with its og_6 candidates")
     rec.focus(review, zoom=2.4, duration=0.6)
+    before = page.evaluate("() => String(window.__GBDRAW_APP__.results?.[0]?.content || '')")
     rec.click(review, pause=0.4)
-    dialog = page.get_by_role("dialog", name="Review alignment", exact=True)
+    dialog = page.locator("[data-similarity-alignment-dialog]")
     expect(dialog).to_be_visible(timeout=ACTION_TIMEOUT_MS)
+    page.wait_for_function(_ALIGNMENT_READY, timeout=GENERATION_TIMEOUT_MS)
     page.wait_for_timeout(600)
     rec.camera(dialog.bounding_box(), zoom=1.4, duration=0.8)
-    rec.hold(1.6)
-    # BGC0000708 has two og_6 members: the recommended livU and the coortholog CAG38692.1.
+    rec.hold(2.4)
+    # BGC0000708 has two og_6 members: the Recommended livU and CAG38692.1.
     card = dialog.locator("[data-alignment-record-key]").filter(has_text="CAG38692.1")
     expect(card).to_have_count(1)
-    candidates = card.get_by_role("radio", name=re.compile(r"^Select "))
-    if candidates.count() != 2:
-        raise AssertionError(f"Expected two og_6 candidates for BGC0000708, found {candidates.count()}")
-    recommended = card.locator("label").filter(has_text="Recommended")
-    expect(recommended).to_have_count(1)
-    expect(recommended).to_contain_text("livU")
-    expect(card).to_contain_text("CAG38692.1")
+    expect(card).to_contain_text("livU")
+    rec.caption(7, "Keep livU (Recommended)", "CAG38692.1 is the other og_6 member")
     rec.camera(card.bounding_box(), zoom=1.8, duration=0.8)
-    other = card.locator("label").filter(has_not_text="Recommended")
-    spot = other.first.bounding_box()
-    rec.move_to(spot["x"] + spot["width"] / 2, spot["y"] + spot["height"] / 2)
-    rec.hold(1.4)
-    rec.click(recommended.get_by_role("radio"), pause=0.5)
-    rec.hold(0.8)
-    rec.caption(8, "Keep the arrow direction", "Arrow direction: Keep as is · All right · All left")
+    rec.hold(3.0)
     direction = dialog.locator("[data-similarity-alignment-direction-mode]")
+    rec.caption(7, "Arrow direction: Keep as is", "Apply regenerates the preview")
     rec.camera(direction.bounding_box(), zoom=2.0, duration=0.8)
-    expect(direction.get_by_role("radio", name="Keep as is")).to_be_checked()
+    expect(direction.get_by_role("radio", name=rec.t("Keep as is"), exact=True)).to_be_checked()
     rec.hold(2.0)
-    rec.camera(dialog.bounding_box(), zoom=1.4, duration=0.8)
-    rec.click(dialog.get_by_role("button", name="Apply", exact=True), pause=0.2)
-    expect(dialog).to_be_hidden(timeout=ACTION_TIMEOUT_MS)
+    apply = dialog.locator('button[aria-describedby="similarity-alignment-apply-reason"]')
+    rec.focus(apply, zoom=2.0, duration=0.6)
+    rec.click(apply, pause=0.2)
     rec.camera(duration=0.8)
     rec.fast_forward(target=1.4)
-    # Apply regenerates the preview through the alignment owner, which leaves the run marker as it was.
-    page.wait_for_function(
-        """(group) => { const app = window.__GBDRAW_APP__;
-          return !app?.processing && app?.similarityAlignmentStatus === 'idle' && !app?.errorLog
-            && app?.similarityAlignmentPlanInspector?.groupId === group; }""",
-        arg=group_id, timeout=GENERATION_TIMEOUT_MS)
+    page.wait_for_function(_ALIGNMENT_APPLIED, arg=before, timeout=GENERATION_TIMEOUT_MS)
     rec.hold(0.3)
+    rec.normal_speed()
+    # The neoU popup, hidden during the review, comes back after Apply.
+    expect(popup).to_be_visible()
+    rec.caption(7, "Close the neoU popup", "")
+    _close_feature(rec)
+    expect(popup).to_be_hidden()
+    _fit_preview(rec)
+    _show_figure(rec, 7, "The og_6 genes line up", "One column across the five clusters")
+
+
+def _bgc_finish(rec: Recorder) -> None:
+    """Step 10: arrow geometry, sizes, strokes, ruler, legend, title, and definition lines."""
+
+    page = rec.page
+    rec.caption(10, "Finish the figure", "Arrow Geometry: Head 0.64 · Shaft 0.6")
+    rec.open_section(_summary(rec, "Features"))
+    _field(rec, _label(rec, "Arrow head length ratio"), "0.64")
+    _field(rec, _label(rec, "Arrow shaft width ratio"), "0.6")
+    rec.caption(10, "Fix the feature sizes", "Feature Height 75 · strokes #262626, 2 and 2")
+    rec.fast_forward(factor=3.0)
+    _field(rec, _label(rec, "Feature Height"), "75")
+    _color_value(rec, "Block stroke color", "#262626")
+    _field(rec, _label(rec, "Block Stroke Width"), "2")
+    _field(rec, _label(rec, "Line Stroke Width"), "2")
+    rec.normal_speed()
+    rec.caption(10, "One row of arrows per cluster", "Layout › Separate Strands: Off")
+    rec.open_section(_summary(rec, "Layout"))
+    _check(rec, _label(rec, "Separate Strands"), False)
+    rec.caption(10, "A gray axis with a ruler", "Axis & Scale › #808080, 5 · Ruler (Ticks) · 20")
+    rec.open_section(_summary(rec, "Axis & Scale"))
+    rec.fast_forward(factor=3.0)
+    _color_value(rec, "Axis stroke color", "#808080")
+    _field(rec, _label(rec, "Axis Stroke Width"), "5")
+    _pick(rec, _label(rec, "Linear scale style"), "ruler")
+    _field(rec, _label(rec, "Linear scale font size"), "20")
+    rec.normal_speed()
+    rec.caption(10, "Fix the text sizes", "Label Font Size 18 · Legend swatch and font 20")
+    rec.open_section(_summary(rec, "Labels"))
+    _field(rec, _label(rec, "Label Font Size"), "18")
+    rec.open_section(_summary(rec, "Legend settings"))
+    rec.fast_forward(factor=3.0)
+    _field(rec, _label(rec, "Legend swatch size"), "20")
+    _field(rec, _label(rec, "Legend font size"), "20")
+    rec.normal_speed()
+    rec.caption(10, "Add the plot title", "Titles & Record Labels › Plot Title")
+    rec.open_section(_summary(rec, "Titles and Record Labels"))
+    _field(rec, page.get_by_role("textbox", name=rec.t("Plot Title"), exact=True), BGC_TITLE, zoom=2.0)
+    rec.caption(10, "Style the definition lines", "Size 20 · bold names · gray accession and length")
+    rec.fast_forward(factor=3.0)
+    for line, size, bold, fill in BGC_DEFINITION_STYLES:
+        rec.open_section(_summary(rec, "{label} style", {"label": rec.t(line)}))
+        _field(rec, _label(rec, "{label} font size", {"label": rec.t(line)}), size, zoom=2.0)
+        if bold:
+            _press(rec, _button(rec, "{label} bold weight", {"label": rec.t(line)}), zoom=2.0, pause=0.3)
+        if fill:
+            _field(rec, _label(rec, "{label} definition line fill value", {"label": rec.t(line)}), fill, zoom=2.0)
     rec.normal_speed()
 
 
@@ -922,205 +1071,104 @@ def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:
     page = rec.page
 
     rec.camera(duration=0)
-    rec.caption(1, "Switch to Linear mode", "Five clusters, one row each")
+    rec.caption(1, "Switch to Linear mode", "One row per gene cluster")
     rec.hold(1.6)
     _select_mode(rec, "Linear")
 
-    rec.caption(2, "Upload the five GenBank files", "BGC0000708, 709, 711, 712, and 713 from MIBiG, in this order")
-    add = page.get_by_role("button", name="Add sequence", exact=True)
-    rec.focus(add, zoom=2.0)
-    for _ in range(len(BGC_SOURCES) - 1):
-        _press(rec, add, zoom=2.0, pause=0.35)
-    for index, source in enumerate(BGC_SOURCES, start=1):
-        if index == 2:
+    rec.caption(2, "Add the first cluster", "File 1: upload BGC0000708.gbk")
+    card = _linear_file(rec, 1, BGC_SOURCES[0])
+    rec.caption(2, "Name the cluster", "Organism / strain · Subtitle / title")
+    _bgc_record(rec, card, 1)
+
+    rec.caption(3, "Add the other four clusters", "Add sequence, then upload and name each file")
+    for index, source in enumerate(BGC_SOURCES[1:], start=2):
+        if index == 3:
+            rec.caption(3, "Add the other four clusters", "BGC0000711, 712, and 713, in this order")
             rec.fast_forward(factor=3.0)
-        row = page.get_by_role("region", name=f"Linear input file {index}", exact=True)
-        chooser = row.get_by_role("button", name=re.compile(r"^Choose GenBank"))
-        rec.reveal(chooser)
-        rec.focus(chooser, zoom=2.0, duration=0.6)
-        rec.upload(chooser, source)
-        expect(row).to_contain_text(source.name)
-    rec.normal_speed()
-    rec.caption(2, "Fill in each record's text", "Record options › Organism / strain and Subtitle / title")
-    for index, (definition, subtitle) in enumerate(BGC_RECORDS, start=1):
-        if index == 2:
-            rec.fast_forward(factor=3.0)
-        field = _record_options(rec, index)
-        _field(rec, field, definition, zoom=2.0)
-        _field(rec, page.get_by_label(f"Subtitle / title for sequence {index}", exact=True), subtitle, zoom=2.0)
+        _add_sequence(rec)
+        _bgc_record(rec, _linear_file(rec, index, source), index)
     rec.normal_speed()
 
-    rec.caption(3, "Run LOSAT in the browser", "Comparison › Run LOSAT for all adjacent pairs")
-    _run_losat(rec)
-    settings = page.locator('details[data-linear-comparison-disclosure="settings"]')
-    summary = settings.get_by_role("button", name="Comparison Settings", exact=True)
-    if settings.get_attribute("open") is None:
-        _press(rec, summary, zoom=2.0)
-    rec.caption(3, "Group proteins by similarity", "LOSAT Mode: LOSATP · LOSATP mode: Similarity groups")
-    losatp = settings.get_by_role("group", name="LOSAT Mode", exact=True).get_by_role("button", name="LOSATP",
-                                                                                      exact=True)
-    _press(rec, losatp, zoom=2.2)
-    expect(losatp).to_have_attribute("aria-pressed", "true")
-    _pick(rec, settings.get_by_role("combobox", name="LOSATP mode", exact=True), "orthogroup")
-    rec.caption(3, "Set the match filters", "Bitscore 50 · E-value 0.01 · Identity 30 · Length 0")
-    for label, value in (("minimum bitscore", "50"), ("maximum e-value", "0.01"),
-                         ("minimum identity", "30"), ("minimum alignment length", "0")):
-        _value(rec, settings.get_by_label(f"Linear comparison {label}", exact=True), value)
-    rec.caption(3, "Let the browser choose the runtime", "Execution: Auto · Total threads: Safe")
-    for name, value in (("LOSAT execution", "auto"), ("LOSAT total threads", "safe")):
-        _pick(rec, settings.get_by_role("combobox", name=name, exact=True), value, zoom=2.0)
+    rec.caption(4, "Generate with the defaults", "The first run starts Python in the browser")
+    _generate(rec, target=1.8, look=0.6)
+    _show_figure(rec, 4, "Five clusters, one row each", "Nothing shows yet which genes they share")
 
-    rec.caption(4, "Reverse-complement BGC0000713", "Record options for sequence 5 › Reverse complement")
-    _record_options(rec, 5)
-    reverse = page.get_by_label("Reverse complement for sequence 5", exact=True)
-    rec.reveal(reverse)
-    rec.focus(reverse, zoom=2.2, duration=0.6)
-    rec.set_checked(reverse, True)
-    rec.caption(4, "Keep features in the middle of each axis",
-                "Layout › Track Layout: Middle · Lock Definition Column")
-    rec.open_section(page.get_by_label("Layout", exact=True))
-    _pick(rec, page.get_by_label("Track Layout", exact=True), "middle")
-    lock = page.get_by_label("Lock Definition Column", exact=True)
-    rec.reveal(lock)
-    rec.focus(lock, zoom=2.2, duration=0.6)
-    rec.set_checked(lock, True)
-    rec.caption(4, "Put both strands on one track", "Layout › Separate Strands: off, as in the Gallery session")
-    strands = page.get_by_label("Separate Strands", exact=True)
-    rec.reveal(strands)
-    rec.focus(strands, zoom=2.2, duration=0.6)
-    rec.set_checked(strands, False)
-    rec.caption(4, "Narrow the arrow shafts", "Features › Arrow Geometry › Shaft Width Ratio: 0.6")
-    rec.open_section(page.locator('summary[aria-label="Features"]'))
-    _field(rec, page.get_by_label("Arrow shaft width ratio", exact=True), "0.6", zoom=2.2)
+    rec.caption(5, "Link the clusters with LOSATP", "Comparison › Run LOSAT, then Settings")
+    settings = _losat_settings(rec)
+    rec.caption(5, "Group similar proteins", "LOSATP mode: Similarity groups")
+    _pick(rec, _label(rec, "LOSATP mode", within=settings), "orthogroup")
+    rec.caption(5, "Drop the weak matches", "Min identity (%): 30")
+    _field(rec, _label(rec, "Linear comparison minimum identity", within=settings), "30")
+    rec.caption(5, "Run LOSAT once", "Generate shows each stage while it runs")
+    _generate(rec, target=3.0, look=0.6, stages=True)
+    if page.evaluate("() => (window.__GBDRAW_APP__?.orthogroups || []).length") != 23:
+        raise AssertionError("Expected 23 similarity groups")
+    _show_figure(rec, 5, "Ribbons link similar proteins", "The X: BGC0000713 runs the other way")
 
-    rec.caption(5, "Label the first record", "Labels › Show Labels: First Record Only · CDS › gene")
-    rec.open_section(page.get_by_label("Labels", exact=True))
-    _pick(rec, page.get_by_label("Show Labels", exact=True), "first")
-    _priority_rule(rec, "CDS", "gene")
-    rec.caption(5, "Rotate the labels", "Label Placement: Above Feature · Label Rotation: 45 · Font size: 18")
-    _pick(rec, page.get_by_label("Label Placement", exact=True), "above_feature")
-    _field(rec, page.get_by_label("Label Rotation", exact=True), "45")
-    _field(rec, page.get_by_label("Label Font Size", exact=True), "18")
-    rec.caption(5, "Gray out the other CDS features", "Colors › CDS: #d3d3d3 on the default palette")
-    rec.open_section(page.get_by_label("Colors", exact=True))
-    cds = page.get_by_label("CDS feature color", exact=True)
+    rec.caption(6, "Reverse-complement File 5", "BGC0000713 › Record options › Reverse complement")
+    rec.open_section(_summary(rec, "Record options for sequence {n}", {"n": 5}))
+    _check(rec, _label(rec, "Reverse complement for sequence {n}", {"n": 5}))
+    rec.caption(6, "LOSAT results are reused", "Generate redraws without a new search")
+    _generate(rec, target=None, look=0.6, stages=True)
+    _show_figure(rec, 6, "The X is gone", "All five clusters now run the same way")
+
+    _bgc_align(rec)
+
+    rec.caption(8, "Color by antiSMASH gene kind", "Colors › Palette: orange · CDS: #dddddd")
+    rec.open_section(_summary(rec, "Colors"))
+    _pick(rec, _label(rec, "Palette"), "orange")
+    cds = _label(rec, "{type} feature color", {"type": "CDS"})
     rec.reveal(cds)
     rec.focus(cds, zoom=2.2, duration=0.6)
-    rec.pick_color(cds, "#d3d3d3")
-    rec.caption(5, "Draw the Gallery feature types", "Features › Feature Types: remove misc_RNA")
-    _feature_types(rec, remove=("misc_RNA",))
-    rec.caption(5, "Size and outline the features", "Height 75 · Block stroke #262626, width 2 · Line stroke width 2")
-    _field(rec, page.get_by_label("Feature Height", exact=True), "75")
-    _color_value(rec, "Block stroke color", "#262626")
-    _field(rec, page.get_by_label("Block Stroke Width", exact=True), "2")
-    _field(rec, page.get_by_label("Line Stroke Width", exact=True), "2")
-    rec.caption(5, "Add a ruler on a gray axis", "Axis & Scale › Axis gray, width 5 · Scale Style: Ruler · Font size 20")
-    rec.open_section(page.get_by_label("Axis & Scale", exact=True))
-    show_scale = page.get_by_label("Show Coordinate Scale (Linear)", exact=True)
-    rec.reveal(show_scale)
-    rec.set_checked(show_scale, True)
-    _color_value(rec, "Axis stroke color", "#808080")
-    _field(rec, page.get_by_label("Axis Stroke Width", exact=True), "5")
-    _pick(rec, page.get_by_label("Linear scale style", exact=True), "ruler")
-    _field(rec, page.get_by_label("Linear scale font size", exact=True), "20")
-    ruler = page.get_by_label("Linear ruler label font size", exact=True)
-    if ruler.input_value() != "20":
-        _field(rec, ruler, "20")
-    rec.caption(5, "Put the legend at the bottom", "Legend position: Bottom · Swatch size 20 · Font size 20")
-    rec.open_section(page.get_by_label("Legend settings", exact=True))
-    _pick(rec, page.locator("#legend-position"), "bottom")
-    _field(rec, page.get_by_label("Legend swatch size", exact=True), "20")
-    _field(rec, page.get_by_label("Legend font size", exact=True), "20")
-
-    rec.caption(6, "Add the plot title", "Titles & Record Labels › Plot Title, Position: Bottom (Default)")
-    rec.open_section(page.get_by_label("Titles and Record Labels", exact=True))
-    _field(rec, page.get_by_role("textbox", name="Plot Title", exact=True), BGC_TITLE, zoom=2.0)
-    _pick(rec, page.get_by_label("Plot Title Position", exact=True), "bottom")
-    rec.caption(6, "Show every definition line", "Accession and Length / Coordinates visibility: Show")
-    for label in ("Accession", "Length / Coordinates"):
-        _pick(rec, page.get_by_label(f"{label} visibility", exact=True), "show", zoom=2.0)
-    rec.caption(6, "Style the definition lines", "Size 20 · bold names · gray accession and length")
-    rec.fast_forward(factor=3.0)
-    for label, bold, color in BGC_DEFINITION_STYLES:
-        _press(rec, page.get_by_label(f"{label} style", exact=True), zoom=2.0, pause=0.3)
-        _field(rec, page.get_by_label(f"{label} style size", exact=True), "20", zoom=2.0)
-        weight = page.get_by_role("button", name=f"{label} {'bold' if bold else 'normal'} weight", exact=True)
-        _press(rec, weight, zoom=2.0, pause=0.3)
-        if color:
-            _field(rec, page.get_by_label(f"{label} definition line fill value", exact=True), color, zoom=2.0)
-    rec.normal_speed()
-
-    rec.caption(7, "Color genes by antiSMASH category", "Colors › Specific rules on the gene_kind qualifier")
-    rec.open_section(page.get_by_label("Colors", exact=True))
+    rec.pick_color(cds, "#dddddd")
+    rec.caption(8, "Add four SPECIFIC RULES", "gene_kind: core, additional, transport, regulatory")
     _color_rules(rec, BGC_RULES)
+    _generate(rec, look=0.6)
+    _show_figure(rec, 8, "Red core genes stand out", "against the blue ribbons")
 
-    rec.caption(8, "Generate the comparison", "LOSATP searches every pair of records in the browser")
-    _generate(rec, target=2.4, look=2.4)
-    groups = page.evaluate("() => (window.__GBDRAW_APP__?.orthogroups || []).length")
-    if groups != 23:
-        raise AssertionError(f"Expected 23 similarity groups, found {groups}")
-    rec.caption(8, "Align the rows on og_6", "Click the neoU CDS of BGC0000709, then Align…")
-    neou = _feature_point(rec, "(item) => item.gene === arg && item.orthogroupId === 'og_6' && /^BGC0000709/.test(item.record_id || '')",
-                          "neoU")
-    rec.mark("align")
-    rec.click_point(neou["x"], neou["y"], pause=0.4)
-    popup = page.get_by_role("dialog", name=re.compile(r"^Feature details"))
-    expect(popup).to_be_visible()
-    expect(popup).to_contain_text("og_6")
-    box = popup.bounding_box()
-    rec.camera({"x": min(box["x"], neou["x"]) - 40, "y": box["y"] - 40,
-                "width": max(box["x"] + box["width"], neou["x"]) - min(box["x"], neou["x"]) + 80,
-                "height": box["height"] + 80}, zoom=1.5, duration=0.9,
-               portrait={"x": box["x"] - 30, "y": box["y"] - 30, "width": box["width"] + 60,
-                         "height": box["height"] + 60})
-    rec.hold(1.2)
-    _align_to_group(rec, popup, "og_6")
-    _fit_preview(rec)
-    rec.camera(duration=1.0)
-    rec.hold(2.4)
+    rec.caption(9, "Label the first cluster", "Labels › Show Labels: First Record Only")
+    rec.open_section(_summary(rec, "Labels"))
+    _pick(rec, page.locator("#linear-show-labels"), "first")
+    rec.caption(9, "Use the short gene names", "Qualifier priority: CDS › gene")
+    _priority_rule(rec, "CDS", "gene")
+    rec.caption(9, "Above the features, at 45°", "Label Placement · Label Rotation")
+    _pick(rec, _label(rec, "Label Placement"), "above_feature")
+    _field(rec, _label(rec, "Label Rotation"), "45")
+    _generate(rec, look=0.6)
+    _show_figure(rec, 9, "Gene names on the first row", "The other rows stay uncrowded")
 
-    rec.caption(9, "Inspect a similarity-group ribbon", "og_18: group ID, 6 genes in 5 records, and the member table")
+    _bgc_finish(rec)
+    rec.caption(10, "Generate the finished figure", "It keeps og_6 and reuses the LOSAT results")
+    _generate(rec, target=None, look=0.6, stages=True)
+    _show_figure(rec, 10, "The finished figure", "", seconds=4.0)
+
+    rec.caption(11, "Inspect a similarity ribbon", "og_18: 6 genes in 5 records, and its members")
     ribbon = _hit(rec, '[data-match-kind="orthogroup"][data-orthogroup-id="og_18"]')
     rec.click_point(ribbon["x"], ribbon["y"], pause=0.4)
-    details = page.get_by_role("dialog", name="Pairwise match details", exact=True)
+    details = page.get_by_role("dialog", name=rec.t("Pairwise match details"), exact=True)
     expect(details).to_be_visible()
     expect(details).to_contain_text("og_18")
-    expect(details).to_contain_text("6 genes in 5 records")
     rec.camera(details.bounding_box(), zoom=1.5, duration=1.0)
-    rec.hold(3.2)
-    rec.click(details.get_by_label("Close match popup", exact=True), pause=0.3)
+    rec.hold(4.0)
+    rec.click(_label(rec, "Close match popup", within=details), pause=0.3)
     rec.camera(duration=0.9)
     rec.hold(0.5)
 
-    rec.caption(10, "Inspect the feature qualifiers", "livE: gene supplies the label, gene_kind the color")
-    live = _feature_point(rec, "(item) => item.gene === arg && item.orthogroupId === 'og_1'", "livE")
-    popup = _open_feature(rec, live, "Qualifiers")
+    rec.caption(12, "Inspect the feature qualifiers", "livE: gene gives the label, gene_kind the color")
+    live = "(item) => item.gene === arg && item.orthogroupId === 'og_1'"
+    popup = _open_feature(rec, _feature_point(rec, live, "livE"), "Qualifiers")
     rec.hold(1.0)
     _scroll_popup_to(rec, popup, "gene_kind")
-    rec.hold(3.0)
+    rec.hold(3.2)
     _close_feature(rec)
 
-    live_id = _svg_id(rec, "(item) => item.gene === arg && item.orthogroupId === 'og_1'", "livE")
-    exported = export_interactive_svg(rec, downloads, 11)
-    errors = _open_export(rec, exported, 11)
-    rec.caption(11, "Click a feature for its similarity group", "livE: the other og_1 members light up in every cluster")
-    _svg_close(rec, _svg_feature(rec, live_id, 11, overview=2.6, shows="og_1"))
-    rec.caption(11, "Click a similarity-group link", "og_1: every member with its record, coordinates, and product")
-    popup = _svg_popup(rec, _hit(rec, '[data-match-kind="orthogroup"][data-orthogroup-id="og_1"]'))
+    live_id = _svg_id(rec, live, "livE")
+    exported = export_interactive_svg(rec, downloads, None)
+    errors = _open_export(rec, exported, None)
+    rec.caption(None, "Click a feature in the file", "livE: its og_1 members light up")
+    popup = _svg_popup(rec, _hit(rec, f'[data-gbdraw-feature-id="{live_id}"]'), overview=2.6)
     expect(popup).to_contain_text("og_1")
     rec.hold(3.0)
-    rec.caption(11, "Download the group's sequences", "DL aa saves every member protein in one FASTA file")
-    save = popup.get_by_role("button", name=re.compile(r"^DL aa \((\d+)\)$"))
-    members = int(re.search(r"\((\d+)\)", save.inner_text()).group(1))
-    rec.focus(save, zoom=2.4, duration=0.8)
-    with rec.page.expect_download(timeout=ACTION_TIMEOUT_MS) as info:
-        rec.click(save, pause=0.2)
-    fasta = downloads / info.value.suggested_filename
-    info.value.save_as(fasta)
-    if fasta.read_text(encoding="utf-8").count(">") != members:
-        raise AssertionError(f"{fasta.name} does not hold the {members} og_1 proteins")
-    rec.toast(f"{fasta.name} downloaded ({max(1, round(fasta.stat().st_size / 1024))} KB)", "download")
-    rec.hold(2.4)
     _svg_close(rec, popup)
     _svg_done(rec, errors)
     return exported
@@ -1132,12 +1180,14 @@ def _inspect_bgc_aminoglycosides(svg: Path) -> dict:
     report = {
         "rule_fills": sorted({color for *_, color, _ in BGC_RULES} & fills),
         "legend": sorted({legend for *_, legend in BGC_RULES} & labels),
+        "default_cds": "#dddddd" in fills,
         "similarity_links": text.count('data-match-kind="orthogroup"'),
         "livE": "livE" in labels,
+        "title": "Aminoglycoside biosynthetic gene clusters from " in labels,
         "records": sorted({"BGC0000708", "BGC0000709", "BGC0000711", "BGC0000712", "BGC0000713"}
                           & {label.split(".")[0] for label in labels}),
     }
-    return _require(report, len(report["rule_fills"]) == 4 and len(report["legend"]) == 4
+    return _require(report, len(report["rule_fills"]) == 4 and len(report["legend"]) == 4 and report["default_cds"]
                     and report["similarity_links"] > 0 and report["livE"] and len(report["records"]) == 5, svg)
 
 
@@ -1159,7 +1209,7 @@ _RECORD_ORDER = """
 def _vnig_multirecord(rec: Recorder, downloads: Path) -> Path:
     assert_fixture_identity(VNIG, expected_size=VNIG_IDENTITY[0], expected_sha256=VNIG_IDENTITY[1])
     page = rec.page
-    preview = page.get_by_role("region", name="Result Preview", exact=True)
+    preview = page.locator(PREVIEW_REGION)
 
     rec.camera(duration=0)
     rec.caption(1, "Switch to Circular mode", "Open gbdraw.app and choose the circular layout")
@@ -1467,16 +1517,16 @@ VIBRIO_FILES = (
 )
 VIBRIO_SOURCES = tuple(path for path, _, _ in VIBRIO_FILES)
 VIBRIO_RECORDS = ("NC_004603.1", "NC_004605.1", "NC_022349.1", "NC_022359.1")
-VIBRIO_ROWS = ("1", "1", "2", "2")
-VIBRIO_SPECIES = ((1, "<i>Vibrio parahaemolyticus</i>", "RIMD 2210633"),
-                  (3, "<i>Vibrio alginolyticus</i>", "NBRC 15630"))
-# (qualifier key, query, the record of each match, in the order the search lists them)
+# File defaults: (Organism / strain, Subtitle / title) for all records of each file.
+VIBRIO_SPECIES = (("<i>Vibrio parahaemolyticus</i>", "RIMD 2210633"), ("<i>Vibrio alginolyticus</i>", "NBRC 15630"))
+# (qualifier key, query, the record of each match in the order the search lists them)
 VIBRIO_INITIATORS = (("gene", "dnaA", ("NC_004603.1", "NC_022349.1")),
                      ("product", "RctB", ("NC_004605.1", "NC_022359.1")))
+VIBRIO_SHAPES = ("CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region")
 VIBRIO_GALLERY = REPO_ROOT / "gbdraw/web/gallery/sources/vibrio-harveyi-group-collinear.svg"
 _LEFTMOST = """
 ([recordId, svgId]) => {
-  const svg = document.querySelector('[role="region"][aria-label="Result Preview"] svg');
+  const svg = document.querySelector('$REGION svg');
   const left = (node) => node.getBoundingClientRect().left;
   const own = [...svg.querySelectorAll('path[data-gbdraw-feature-id]')]
     .filter((node) => node.getAttribute('data-gbdraw-record-id') === recordId);
@@ -1485,7 +1535,7 @@ _LEFTMOST = """
   const record = Math.min(...own.map(left));
   return {offset: left(target) - record, width: svg.getBoundingClientRect().width};
 }
-"""
+""".replace("$REGION", PREVIEW_REGION)
 
 
 def _verify_vibrio() -> None:
@@ -1493,85 +1543,79 @@ def _verify_vibrio() -> None:
         assert_fixture_identity(path, expected_size=size, expected_sha256=digest)
 
 
-def _search_palette(rec: Recorder, shown: bool) -> None:
-    """Show or hide the floating feature search, which the recorder hides by default."""
-
-    rec.page.evaluate("(shown) => { if (shown) document.documentElement.dataset.recSearch = '';"
-                      " else delete document.documentElement.dataset.recSearch; }", shown)
-
-
-def _search_status(rec: Recorder) -> str:
-    return rec.page.get_by_role("status", name="Feature search status", exact=True).inner_text().strip()
-
-
 def _frame_box(rec: Recorder, box: dict, *, zoom: float = 1.6, pad: float = 30) -> None:
     area = {"x": box["x"] - pad, "y": box["y"] - pad, "width": box["width"] + 2 * pad, "height": box["height"] + 2 * pad}
     rec.camera(area, zoom=zoom, duration=0.9, portrait=area)
 
 
-def _rotate_record(rec: Recorder, record_id: str) -> None:
-    """In the open feature popup: Rotate record using this feature › Start of the record › Apply on Generate."""
+def _vibrio_file(rec: Recorder, index: int) -> None:
+    """Upload File ``index`` and fill its Names for all records in this file."""
 
     page = rec.page
-    popup = page.get_by_role("dialog", name=re.compile(r"^Feature details"))
+    card = _linear_file(rec, index, VIBRIO_SOURCES[index - 1])
+    page.wait_for_function("(count) => window.__GBDRAW_APP__?.linearSeqs?.length === count",
+                           arg=2 * index, timeout=GENERATION_TIMEOUT_MS)
+    species, strain = VIBRIO_SPECIES[index - 1]
+    rec.caption(index + 1, "Name both of its records", "Names for all records in this file")
+    _field(rec, _label(rec, "Default definition for file {n}", {"n": index}, within=card), species, zoom=2.0)
+    _field(rec, _label(rec, "Default subtitle for file {n}", {"n": index}, within=card), strain, zoom=2.0)
+
+
+def _search_matches(rec: Recorder, current: int, count: int = 2) -> str:
+    return rec.tn(count, "{current} of {count} match", "{current} of {count} matches", {"current": current})
+
+
+def _rotate_open_feature(rec: Recorder, step: int, record_id: str) -> None:
+    """In the open feature popup: Rotate record using this feature › Start of the record › Apply when I Generate."""
+
+    page = rec.page
+    popup = page.locator(".feature-popup")
     expect(popup).to_be_visible()
-    if page.evaluate("() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id") != record_id:
-        raise AssertionError(f"The popup is not for {record_id}")
+    page.wait_for_function("(id) => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === id", arg=record_id)
     toggle = popup.locator("#feature-record-actions-toggle")
     toggle.evaluate("node => node.scrollIntoView({block: 'center'})")
     page.wait_for_timeout(300)
     _frame_box(rec, popup.bounding_box())
+    rec.hold(0.8)
     rec.click(toggle, pause=0.4)
+    rec.caption(step, "Start of the record", "then Apply when I Generate")
     start = popup.locator("input[name='feature-record-rotation-position'][value='start']")
     start.evaluate("node => node.scrollIntoView({block: 'center'})")
     page.wait_for_timeout(300)
     rec.set_checked(start, True, pause=0.6)
-    preview = popup.locator("#feature-record-rotation-preview")
-    expect(preview).to_contain_text(f"{record_id} will start at")
-    apply = popup.get_by_role("button", name="Apply on Generate", exact=True)
+    expect(popup.locator("#feature-record-rotation-preview")).to_contain_text(record_id)
+    apply = _button(rec, "Apply when I Generate", within=popup)
     apply.evaluate("node => node.scrollIntoView({block: 'end'})")
     page.wait_for_timeout(300)
     _frame_box(rec, popup.bounding_box())
     rec.hold(1.6)
     rec.click(apply, pause=0.8)
-    rec.hold(1.0)
-    close = page.get_by_label("Close feature popup", exact=True)
-    if close.count() and close.is_visible():
-        rec.click(close, pause=0.3)
-    rec.camera(duration=0.9)
-    rec.hold(0.4)
+    rec.hold(0.6)
 
 
-def _search_initiator(rec: Recorder, key: str, query: str) -> None:
-    """Search › Qualifier value, ``key`` and ``query``: the initiator of both species."""
+def _rotate_initiators(rec: Recorder, step: int, key: str, query: str, records: tuple[str, str]) -> None:
+    """Search the preview for ``key`` = ``query``, then start both matches' records at them."""
 
     page = rec.page
-    _search_palette(rec, True)
-    palette = page.locator(".preview-feature-search")
-    rec.camera(palette.bounding_box(), zoom=2.4, duration=0.9, portrait=palette.bounding_box())
-    rec.choose(palette.get_by_label("Search field", exact=True), "qualifier-value")
-    rec.type(palette.get_by_label("Qualifier key", exact=True), key)
-    rec.type(palette.locator("input[aria-label='Search features']"), query)
-    rec.click(palette.locator("button.gfs-button--search"), pause=0.6)
-    expect(page.get_by_role("status", name="Feature search status", exact=True)).to_have_text(
-        "1 / 2 features", timeout=ACTION_TIMEOUT_MS)
-    rec.hold(1.4)
-
-
-def _rotate_match(rec: Recorder, record_id: str, *, second: bool) -> None:
-    """Open the active match (the second one after Next match) and start its record at the feature."""
-
-    page = rec.page
-    palette = page.locator(".preview-feature-search")
-    if second:
-        rec.click(palette.get_by_role("button", name="Next match", exact=True), pause=0.5)
-        expect(page.get_by_role("status", name="Feature search status", exact=True)).to_have_text(
-            "2 / 2 features", timeout=ACTION_TIMEOUT_MS)
-        rec.hold(1.0)
-    rec.click(palette.get_by_role("button", name="Open active feature", exact=True), pause=0.6)
-    _search_palette(rec, False)
-    _rotate_record(rec, record_id)
-    _search_palette(rec, True)
+    search = page.locator(".preview-feature-search")
+    rec.camera(search.bounding_box(), zoom=2.4, duration=0.9, portrait=search.bounding_box())
+    rec.choose(_label(rec, "Field to search", within=search), "qualifier-value")
+    rec.type(_label(rec, "Qualifier key", within=search), key)
+    rec.type(search.locator("input.gfs-query"), query)
+    rec.click(search.locator("button.gfs-button--search"), pause=0.6)
+    status = search.locator(".gfs-count")
+    expect(status).to_have_text(_search_matches(rec, 1), timeout=ACTION_TIMEOUT_MS)
+    rec.hold(1.6)
+    rec.caption(step, "Open the first match", "Rotate record using this feature")
+    rec.click(search.locator("button.gfs-button--open"), pause=0.6)
+    _rotate_open_feature(rec, step, records[0])
+    rec.caption(step, "Now the second match", "> moves the open popup to it")
+    rec.camera(search.bounding_box(), zoom=2.4, duration=0.8, portrait=search.bounding_box())
+    rec.click(_button(rec, "Next match", within=search), pause=0.5)
+    expect(status).to_have_text(_search_matches(rec, 2), timeout=ACTION_TIMEOUT_MS)
+    rec.hold(0.8)
+    _rotate_open_feature(rec, step, records[1])
+    _close_feature(rec)
 
 
 def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
@@ -1583,60 +1627,46 @@ def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
     rec.hold(1.6)
     _select_mode(rec, "Linear")
 
-    rec.caption(2, "Add the two assembly files", "GCF_000196095.1 as File 1 and GCF_000354175.2 as File 2")
-    add = page.get_by_role("button", name="Add sequence", exact=True)
-    _press(rec, add, zoom=2.0, pause=0.35)
-    for index, source in enumerate(VIBRIO_SOURCES, start=1):
-        row = page.get_by_role("region", name=f"Linear input file {index}", exact=True)
-        chooser = row.get_by_role("button", name=re.compile(r"^Choose GenBank"))
-        rec.reveal(chooser)
-        rec.focus(chooser, zoom=2.0, duration=0.6)
-        rec.upload(chooser, source)
-        expect(row).to_contain_text(source.name)
-    page.wait_for_function("() => window.__GBDRAW_APP__?.linearSeqs?.length === 4", timeout=GENERATION_TIMEOUT_MS)
-    rec.caption(2, "Name the species", "Record options › Organism / strain and Subtitle / title of each File's first record")
-    for number, species, strain in VIBRIO_SPECIES:
-        file_number = 1 if number == 1 else 2
-        records = page.get_by_role("button", name=f"Records for file {file_number}", exact=True)
-        rec.open_section(records)
-        options = page.get_by_role("button", name=f"Record options for sequence {number}", exact=True)
-        rec.open_section(options)
-        _field(rec, page.get_by_label(f"Definition for sequence {number}", exact=True), species, zoom=2.0)
-        _field(rec, page.get_by_label(f"Subtitle / title for sequence {number}", exact=True), strain, zoom=2.0)
+    rec.caption(2, "Add the first assembly", "File 1: GCF_000196095.1, two chromosomes")
+    _vibrio_file(rec, 1)
+    rec.caption(3, "Add the second assembly", "Add sequence, then GCF_000354175.2")
+    _add_sequence(rec)
+    _vibrio_file(rec, 2)
 
-    rec.caption(3, "Arrange one species per row", "Advanced comparison and layout › Arrange in rows · Record gap 48 px")
-    advanced = page.locator('details[data-linear-comparison-disclosure="advanced"]')
-    rec.open_section(advanced.get_by_role("button", name="Advanced comparison and layout", exact=True))
-    rec.set_checked(page.get_by_label("Arrange linear records in rows", exact=True), True)
-    for number, row in enumerate(VIBRIO_ROWS, start=1):
-        field = page.get_by_label(f"Linear record row for sequence {number}", exact=True)
-        if number == 3:
-            rec.fast_forward(factor=3.0)
-        _value(rec, field, row, zoom=2.0)
-    rec.normal_speed()
-    _value(rec, page.get_by_label("Linear record gap", exact=True), "48", zoom=2.0)
+    rec.caption(4, "Generate with the defaults", "The first run starts Python in the browser")
+    _generate(rec, target=2.4, look=0.6)
+    _show_figure(rec, 4, "One species per row", "Each row shows only its species and strain")
 
-    rec.caption(4, "Generate a first preview", "Without a comparison it is ready in seconds; the first run starts Python in the browser")
-    _generate(rec, target=2.4, look=1.6)
+    rec.caption(5, "Compare with Collinear blocks", "Comparison › Run LOSAT, then Settings")
+    settings = _losat_settings(rec)
+    rec.caption(5, "LOSATP mode: Collinear blocks", "Color mode: Orientation + identity")
+    _pick(rec, _label(rec, "LOSATP mode", within=settings), "collinear")
+    _pick(rec, _label(rec, "Collinear color mode", within=settings), "orientation_identity")
+    rec.caption(5, "Set the block rules", "Max unit gap 2 · Min block genes 3")
+    _field(rec, _label(rec, "Collinear max unit gap", within=settings), "2")
+    _field(rec, _label(rec, "Collinear minimum block genes", within=settings), "3")
+    rec.caption(5, "Build similarity groups", "with within-record searches: On")
+    _check(rec, _label(rec, "Build similarity groups with within-record searches", within=settings))
+    rec.caption(5, "Diagonal drift: 2", "Advanced comparison and layout")
+    rec.open_section(_summary(rec, "Advanced comparison and layout"))
+    _field(rec, _label(rec, "Collinear diagonal drift"), "2")
+    rec.caption(5, "Run LOSAT once", "Generate shows each stage while it runs")
+    # Four 3-5 Mbp proteomes: the search takes minutes.
+    _generate(rec, target=3.0, look=0.6, stages=True, timeout_ms=900_000)
+    _show_figure(rec, 5, "The ribbons run diagonally", "NCBI starts each chromosome elsewhere")
 
-    rec.caption(4, "Search for dnaA", "Search field: Qualifier value · Qualifier key gene · dnaA")
-    _search_initiator(rec, "gene", "dnaA")
-    rec.caption(5, "Start chromosome I at dnaA",
-                "Open › Rotate record using this feature › Start of the record › Apply on Generate")
-    _rotate_match(rec, VIBRIO_INITIATORS[0][2][0], second=False)
-    rec.caption(5, "Do the same for the second match", "Next match › Open › Start of the record › Apply on Generate")
-    _rotate_match(rec, VIBRIO_INITIATORS[0][2][1], second=True)
-    rec.caption(6, "Search for rctB", "Search field: Qualifier value · Qualifier key product · RctB")
-    _search_initiator(rec, "product", "RctB")
-    rec.caption(6, "Start chromosome II at rctB",
-                "Open › Rotate record using this feature › Start of the record › Apply on Generate")
-    _rotate_match(rec, VIBRIO_INITIATORS[1][2][0], second=False)
-    rec.caption(6, "Do the same for the second match", "Next match › Open › Start of the record › Apply on Generate")
-    _rotate_match(rec, VIBRIO_INITIATORS[1][2][1], second=True)
-    _search_palette(rec, False)
+    rec.caption(6, "Start chromosome I at dnaA", "Search: Qualifier value · gene · dnaA")
+    _rotate_initiators(rec, 6, *VIBRIO_INITIATORS[0])
+    rec.caption(7, "Start chromosome II at rctB", "Search: Qualifier value · product · RctB")
+    _rotate_initiators(rec, 7, *VIBRIO_INITIATORS[1])
+    rec.caption(7, "Clear the search", "The other features stop dimming")
+    search = page.locator(".preview-feature-search")
+    rec.camera(search.bounding_box(), zoom=2.4, duration=0.8, portrait=search.bounding_box())
+    rec.click(search.locator("button.gfs-button--clear"), pause=0.8)
 
-    rec.caption(6, "Generate to apply the new starts", "A checkpoint before the comparison: every record begins at its initiator")
-    _generate(rec, target=2.4, look=2.0)
+    rec.caption(8, "Generate rotated chromosomes", "Generate reuses the LOSAT results")
+    # Redrawing four chromosomes still takes about 20 s, so it is fast-forwarded too.
+    _generate(rec, target=4.0, look=0.6, stages=True, timeout_ms=900_000)
     initiators = (("(item) => item.gene === arg && item.record_id === 'NC_004603.1'", "dnaA", "NC_004603.1"),
                   ("(item) => item.gene === arg && item.record_id === 'NC_022349.1'", "dnaA", "NC_022349.1"),
                   ("(item) => /RctB/i.test(item.product || '') && item.record_id === 'NC_004605.1'", "", "NC_004605.1"),
@@ -1645,94 +1675,59 @@ def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
         found = page.evaluate(_LEFTMOST, [record_id, _svg_id(rec, feature_filter, arg)])
         if found is None or found["offset"] > 3:
             raise AssertionError(f"{record_id} does not start at its initiator: {found}")
+    _show_figure(rec, 8, "Blocks run straight down", "Inversions stand out in red")
 
-    rec.caption(7, "Run LOSAT in the browser", "Comparison › Run LOSAT for all adjacent pairs")
-    _run_losat(rec)
-    settings = page.locator('details[data-linear-comparison-disclosure="settings"]')
-    if settings.get_attribute("open") is None:
-        _press(rec, settings.get_by_role("button", name="Comparison Settings", exact=True), zoom=2.0)
-    losatp = settings.get_by_role("group", name="LOSAT Mode", exact=True).get_by_role("button", name="LOSATP",
-                                                                                      exact=True)
-    rec.caption(7, "Build collinear blocks", "LOSAT Mode: LOSATP · LOSATP mode: Collinear blocks")
-    _press(rec, losatp, zoom=2.2)
-    expect(losatp).to_have_attribute("aria-pressed", "true")
-    _pick(rec, settings.get_by_role("combobox", name="LOSATP mode", exact=True), "collinear")
-    # The Web app leaves this off; the Gallery session has it on.
-    rec.caption(7, "Group the proteins, as in the Gallery session", "Infer orthogroups with self-comparisons: on")
-    infer = settings.get_by_label("Infer orthogroups with self-comparisons", exact=True)
-    rec.reveal(infer)
-    rec.focus(infer, zoom=2.2, duration=0.6)
-    rec.set_checked(infer, True)
-    rec.caption(7, "Set the block rules", "Max unit gap 2 · Min block genes 3 · Evidence scope: Adjacent pairs")
-    _value(rec, settings.get_by_label("Collinear max unit gap", exact=True), "2")
-    _value(rec, settings.get_by_label("Collinear minimum block genes", exact=True), "3")
-    _pick(rec, settings.get_by_label("Collinear evidence scope", exact=True), "adjacent")
-    rec.caption(7, "Color blocks by orientation and identity", "Color mode: Orientation + identity")
-    _pick(rec, settings.get_by_label("Collinear color mode", exact=True), "orientation_identity")
-    rec.caption(7, "Set the match filters", "Bitscore 50 · E-value 1e-2 · Identity 0 · Length 0")
-    for label, value in (("minimum bitscore", "50"), ("maximum e-value", "1e-2"),
-                         ("minimum identity", "0"), ("minimum alignment length", "0")):
-        _value(rec, settings.get_by_label(f"Linear comparison {label}", exact=True), value)
-    rec.caption(7, "Limit block merging", "Advanced comparison and layout › Diagonal drift 2 · Merge conflicts 1")
-    if advanced.get_attribute("open") is None:
-        _press(rec, advanced.get_by_role("button", name="Advanced comparison and layout", exact=True), zoom=2.0)
-    _value(rec, advanced.get_by_label("Collinear diagonal drift", exact=True), "2")
-    _value(rec, advanced.get_by_label("Collinear merge conflicts", exact=True), "1")
-
-    rec.caption(8, "Render every feature as a rectangle", "Features › Rendering of all seven feature types: Rectangle")
-    rec.open_section(page.locator('summary[aria-label="Features"]'))
-    shapes = page.locator('select[aria-label^="Rendering for "]')
-    expect(shapes).to_have_count(7)
-    for index in range(7):
+    rec.caption(9, "Finish the figure", "Features › Rendering: Rectangle for all seven")
+    rec.open_section(_summary(rec, "Features"))
+    for index, feature in enumerate(VIBRIO_SHAPES):
         if index == 1:
             rec.fast_forward(factor=3.0)
-        _pick(rec, shapes.nth(index), "rectangle", zoom=2.0)
+        _pick(rec, _label(rec, "Rendering for {feature}", {"feature": feature}), "rectangle", zoom=2.0)
+    rec.normal_speed()
+    rec.caption(9, "Thin the outlines", "Block Stroke Width 0 · Line Stroke Width 1")
+    _field(rec, _label(rec, "Block Stroke Width"), "0")
+    _field(rec, _label(rec, "Line Stroke Width"), "1")
+    rec.caption(9, "Layout › Track Layout: Above", "Separate Strands and Lock Definition Column stay on")
+    rec.open_section(_summary(rec, "Layout"))
+    _pick(rec, page.locator("#linear-track-layout"), "above")
+    for name in ("Separate Strands", "Lock Definition Column"):
+        box = _label(rec, name)
+        expect(box).to_be_checked()
+        _point(rec, box)
+    rec.caption(9, "A ruler on each axis", "Axis & Scale › Ruler (Ticks) every 750,000 bp")
+    rec.open_section(_summary(rec, "Axis & Scale"))
+    _field(rec, _label(rec, "Axis Stroke Width"), "2")
+    _pick(rec, _label(rec, "Linear scale style"), "ruler")
+    _check(rec, page.locator("input[aria-describedby='help-linear-axis-ruler-on-axis']"))
+    _field(rec, _label(rec, "Linear ruler interval"), "750000")
+    rec.caption(9, "Set the record-label fonts", "Default 16 · Name / Species 18, bold · Subtitle 16")
+    rec.open_section(_summary(rec, "Titles and Record Labels"))
+    _field(rec, _label(rec, "Default font size"), "16")
+    rec.fast_forward(factor=2.0)
+    for line, size, bold in (("Name / Species", "18", True), ("Subtitle", "16", False)):
+        label = {"label": rec.t(line)}
+        rec.open_section(_summary(rec, "{label} style", label))
+        _field(rec, _label(rec, "{label} font size", label), size, zoom=2.0)
+        if bold:
+            _press(rec, _button(rec, "{label} bold weight", label), zoom=2.0, pause=0.3)
     rec.normal_speed()
 
-    rec.caption(9, "Set the layout", "Layout › Track Layout: Above · Separate Strands · Lock Definition Column")
-    rec.open_section(page.get_by_label("Layout", exact=True))
-    _pick(rec, page.get_by_label("Track Layout", exact=True), "above")
-    for name in ("Separate Strands", "Lock Definition Column"):
-        box = page.get_by_label(name, exact=True)
-        rec.reveal(box)
-        rec.focus(box, zoom=2.2, duration=0.5)
-        rec.set_checked(box, True, pause=0.4)
-    rec.caption(9, "Draw a 750,000 bp ruler on each axis", "Axis & Scale › Scale Style: Ruler (Ticks) · Ruler on Axis · Scale Interval 750000")
-    rec.open_section(page.get_by_label("Axis & Scale", exact=True))
-    _pick(rec, page.get_by_label("Linear scale style", exact=True), "ruler")
-    on_axis = page.get_by_label("Ruler on Axis", exact=True)
-    rec.reveal(on_axis)
-    rec.focus(on_axis, zoom=2.2, duration=0.5)
-    rec.set_checked(on_axis, True)
-    _value(rec, page.get_by_label("Linear ruler interval", exact=True), "750000")
-    rec.caption(9, "Show each definition as species and strain", "Titles & Record Labels › Default font size 16 · Replicon off · Accession and Length hidden")
-    rec.open_section(page.get_by_label("Titles and Record Labels", exact=True))
-    _value(rec, page.get_by_label("Default font size", exact=True), "16")
-    for summary, size, weight in (("Name / Species", "18", "bold"), ("Subtitle", "16", "normal")):
-        rec.open_section(page.locator(f'summary[aria-label="{summary} style"]'))
-        _value(rec, page.get_by_label(f"{summary} style size", exact=True), size, zoom=2.0)
-        _press(rec, page.get_by_label(f"{summary} {weight} weight", exact=True), zoom=2.0, pause=0.4)
-    rec.set_checked(page.get_by_label("Replicon visibility", exact=True), False)
-    for name in ("Accession visibility", "Length / Coordinates visibility"):
-        _pick(rec, page.get_by_label(name, exact=True), "hide")
-
-    rec.caption(10, "Place the legend at the bottom", "Plot Title stays empty · Legend position: Bottom")
-    _point(rec, page.get_by_role("textbox", name="Plot Title", exact=True), zoom=2.0)
-    rec.open_section(page.get_by_label("Legend settings", exact=True))
-    _pick(rec, page.locator("#legend-position"), "bottom")
-
-    rec.caption(11, "Generate once and inspect", "LOSATP compares the proteins in the browser; the wait is fast-forwarded")
-    # Four 3-4 Mbp proteomes: slower than the five small Hepatoplasmataceae genomes.
-    _generate(rec, target=2.4, look=2.4, timeout_ms=900_000)
+    rec.caption(10, "Generate and check the result", "Generate again reuses the LOSAT results")
+    _generate(rec, target=4.0, look=0.6, stages=True, timeout_ms=900_000)
     rec.mark("blocks")
-    _look(rec, rec.text_bounds(r"^(Collinear|Inverted)$"), zoom=2.2, seconds=1.8, pad=40)
-    rec.camera(duration=1.0)
-    rec.hold(0.6)
+    _show_figure(rec, 10, "Rows start at dnaA and rctB", "Each chromosome begins at its initiator")
+    _look(rec, rec.text_bounds(r"^(Collinear|Inverted)$"), zoom=2.2, seconds=2.4, pad=40)
+    _show_figure(rec, 10, "Red blocks: inversions", "within chromosome I or within chromosome II")
+    _show_figure(rec, 10, "Few blocks cross over", "from one species' chromosome I to the other's II")
 
-    exported = export_interactive_svg(rec, downloads, 12)
-    errors = _open_export(rec, exported, 12)
-    rec.caption(12, "Find an initiator in the file", "Search › Qualifier value: gene dnaA, in both species")
-    _svg_search(rec, "dnaA", 12, qualifier="gene")
+    dnaa = _svg_id(rec, "(item) => item.gene === arg && item.record_id === 'NC_004603.1'", "dnaA")
+    exported = export_interactive_svg(rec, downloads, None)
+    errors = _open_export(rec, exported, None)
+    rec.caption(None, "Click a feature in the file", "dnaA of Vibrio parahaemolyticus")
+    popup = _svg_popup(rec, _hit(rec, f'[data-gbdraw-feature-id="{dnaa}"]'))
+    expect(popup).to_contain_text("dnaA")
+    rec.hold(3.0)
+    _svg_close(rec, popup)
     _svg_done(rec, errors)
     return exported
 
@@ -1750,10 +1745,14 @@ def _inspect_vibrio_harveyi_group_collinear(svg: Path) -> dict:
         "legend": sorted({"Collinear", "Inverted"} & labels),
         "ruler": {"0.75 Mbp", "1.5 Mbp"} <= labels,
         "same_blocks": _blocks(text) == gallery,
+        # Auto hides Accession and Length / Coordinates for two records per row; Replicon is off.
+        "accession_or_length_drawn": sorted(label for label in labels
+                                            if label in VIBRIO_RECORDS or re.fullmatch(r"[\d,]+ bp", label)
+                                            or re.fullmatch(r"(chromosome|Chromosome) (1|2|I|II)", label)),
     }
     return _require(report, len(report["records"]) == 4 and len(report["species"]) == 4
                     and len(report["legend"]) == 2 and report["ruler"] and report["blocks"] > 0
-                    and report["same_blocks"], svg)
+                    and report["same_blocks"] and not report["accession_or_length_drawn"], svg)
 
 
 # Each tutorial ends in its exported Interactive SVG, opened in the browser,
@@ -1772,7 +1771,11 @@ _LANDSCAPE_TAKES = (
     Journey("vibrio-harveyi-group-collinear", VIBRIO_SOURCES, _vibrio_harveyi_group_collinear,
             _inspect_vibrio_harveyi_group_collinear, zoom_text="NC_004603.1", vector_zoom=False),
 )
-# The tall video is recorded again, so the preview figure and the opened file
-# can take a tall window's shape; the steps and checks are the same.
-TUTORIALS = _LANDSCAPE_TAKES + tuple(replace(journey, name=journey.name + VERTICAL, portrait=True)
-                                     for journey in _LANDSCAPE_TAKES)
+# Each take is one journey: the tall video is recorded again, so the preview
+# figure and the opened file can take a tall window's shape, and a take in
+# another language records the app in that language; the steps and checks are
+# the same.
+TUTORIALS = tuple(replace(journey, name=take_name(journey.name, vertical=vertical, language=language),
+                          portrait=vertical)
+                  for journey in _LANDSCAPE_TAKES for vertical in (False, True)
+                  for language in TUTORIAL_LANGUAGES[journey.name])

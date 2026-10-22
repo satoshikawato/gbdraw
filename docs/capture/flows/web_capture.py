@@ -272,14 +272,16 @@ def generate_and_wait_for_result(
     timeout_ms: int = GENERATION_TIMEOUT_MS,
     expected_status: str = "ok",
     click: Callable[[Locator], None] | None = None,
+    button: Locator | None = None,
 ) -> dict[str, Any]:
     """Start Generate and await a committed Result or an explicit app error.
 
     ``click`` lets a recorded journey press the button with its own visible
-    pointer; the default is Playwright's direct click.
+    pointer; the default is Playwright's direct click. ``button`` is the
+    Generate Diagram button when the UI shows another language.
     """
 
-    generate = page.get_by_role("button", name="Generate Diagram", exact=True)
+    generate = button or page.get_by_role("button", name="Generate Diagram", exact=True)
     expect(generate).to_be_enabled()
     previous_run_marker = page.evaluate(
         "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"

@@ -14,8 +14,8 @@ sys.path.insert(0, str(CAPTURE_ROOT))
 from video import walkthrough_render  # noqa: E402
 from video.walkthrough import PORTRAIT_TAB, Recorder, journeys  # noqa: E402
 from video.walkthrough_render import (  # noqa: E402
-    FPS, HIGHLIGHTS, LANDSCAPE, PORTRAIT, STORIES, TUTORIAL_IDS, VERTICAL, Camera, Language, TimeMap,
-    _clean_breaks, _moments, _runs)
+    FPS, HIGHLIGHTS, LANDSCAPE, PORTRAIT, STORIES, TUTORIAL_IDS, TUTORIAL_LANGUAGES, Camera, Language, TimeMap,
+    _clean_breaks, _moments, _outputs, _runs, take_name)
 
 
 def test_highlights_cut_only_at_marks_the_journey_records() -> None:
@@ -95,10 +95,14 @@ def test_portrait_camera_keeps_partial_targets_and_the_logged_zoom() -> None:
 def test_every_tutorial_has_a_portrait_take_for_phone_feeds() -> None:
     takes = journeys()
     for name in TUTORIAL_IDS:
-        assert STORIES[name].outputs == (('walkthrough', LANDSCAPE, f'gbdraw-tutorial-{name}'),)
-        assert STORIES[name + VERTICAL].outputs == (('walkthrough', PORTRAIT, f'gbdraw-tutorial-{name}-vertical'),)
-        assert not takes[name].portrait and takes[name + VERTICAL].portrait
-        assert takes[name + VERTICAL].run is takes[name].run  # the same steps, shaped for the tall window
+        for language in TUTORIAL_LANGUAGES[name]:
+            wide, tall = take_name(name, language=language), take_name(name, vertical=True, language=language)
+            assert STORIES[wide].outputs == (('walkthrough', LANDSCAPE, f'gbdraw-tutorial-{name}'),)
+            assert STORIES[tall].outputs == (('walkthrough', PORTRAIT, f'gbdraw-tutorial-{name}-vertical'),)
+            assert STORIES[wide].language == STORIES[tall].language == language
+            assert not takes[wide].portrait and takes[tall].portrait
+            # The same steps, shaped for the tall window or recorded in another UI language.
+            assert takes[wide].run is takes[tall].run is takes[name].run
     # The tab for the opened file has the tall window's shape at full page height.
     assert PORTRAIT_TAB[0] / PORTRAIT_TAB[1] == pytest.approx(PORTRAIT.aspect, abs=0.002)
 
@@ -116,6 +120,17 @@ class _StubPage:
 
     def evaluate(self, _: str) -> None:
         return None
+
+
+def test_a_take_renders_only_the_language_it_recorded() -> None:
+    assert take_name('BGC0000708-BGC0000713', vertical=True, language='zh-Hans') \
+        == 'BGC0000708-BGC0000713-vertical.zh-Hans'
+    assert 'zh-Hans' in TUTORIAL_LANGUAGES['vibrio-harveyi-group-collinear']
+    for story in STORIES.values():
+        outputs = list(_outputs(story))
+        assert {lang.code for lang, *_ in outputs} == {story.language}
+        suffix = '' if story.language == 'en' else f'.{story.language}'
+        assert [stem for *_, stem in outputs] == [stem + suffix for *_, stem in story.outputs]
 
 
 def test_recorder_logs_a_smaller_tab_on_the_stage(tmp_path: Path) -> None:
@@ -179,7 +194,9 @@ def _screen_text() -> set[str]:
     for module in ('walkthrough.py', 'tutorials.py'):
         tree = ast.parse((CAPTURE_ROOT / 'video' / module).read_text(encoding='utf-8'))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'caption':
+            # Captions come from ``rec.caption`` and from helpers that caption a view, such as ``_show_figure``.
+            name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None) if isinstance(node, ast.Call) else None
+            if name in ('caption', '_show_figure'):
                 strings |= {arg.value for arg in node.args
                             if isinstance(arg, ast.Constant) and isinstance(arg.value, str)}
             if isinstance(node, ast.Assign) and any(getattr(t, 'id', '') == 'GALLERY' for t in node.targets):

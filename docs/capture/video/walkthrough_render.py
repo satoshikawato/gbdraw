@@ -78,19 +78,36 @@ PORTRAIT = Layout("portrait", (1080, 1920), (72, 430, 936, 1060), True, 54, 32, 
 
 @dataclass(frozen=True)
 class Story:
-    """How one journey's recording becomes videos: its intro and its outputs."""
+    """How one journey's recording becomes videos: its intro, its outputs, and its language.
+
+    The app shows ``language`` for the whole recording, and the videos show
+    their text only in it: a take in another language is another journey.
+    """
 
     intro: tuple[str, str]
-    outputs: tuple[tuple[str, Layout, str], ...]   # (edit, layout, file stem), once per language
+    outputs: tuple[tuple[str, Layout, str], ...]   # (edit, layout, file stem without the language suffix)
+    language: str = "en"
 
 
 TUTORIAL_IDS = ("HmmtDNA_ATskew", "tobacco-chloroplast", "BGC0000708-BGC0000713",
                 "Vnig_TUMSAT-TG-2018", "hepatoplasmataceae_collinear",
                 "vibrio-harveyi-group-collinear")
 VERTICAL = "-vertical"   # a tutorial's take for RedNote and other phone feeds
+# The UI languages each tutorial is recorded in. A journey in a language other
+# than English finds every control by the app's own text for it (``Recorder.t``).
+TUTORIAL_LANGUAGES = {name: ("en",) for name in TUTORIAL_IDS} | {
+    "BGC0000708-BGC0000713": ("en", "zh-Hans"),
+    "vibrio-harveyi-group-collinear": ("en", "zh-Hans"),
+}
 
 
-def _tutorial(example_id: str, *, vertical: bool = False) -> Story:
+def take_name(example_id: str, *, vertical: bool = False, language: str = "en") -> str:
+    """The journey name of one take: ``<id>[-vertical][.<language>]``, English without a suffix."""
+
+    return example_id + (VERTICAL if vertical else "") + ("" if language == "en" else f".{language}")
+
+
+def _tutorial(example_id: str, *, vertical: bool = False, language: str = "en") -> Story:
     """A Gallery tutorial opens with the Gallery example's own title.
 
     Its landscape take becomes the landscape video, and its portrait take,
@@ -101,7 +118,7 @@ def _tutorial(example_id: str, *, vertical: bool = False) -> Story:
     title = next(row["title"] for row in examples if row["id"] == example_id)
     stem = f"gbdraw-tutorial-{example_id}"
     output = ("walkthrough", PORTRAIT, stem + VERTICAL) if vertical else ("walkthrough", LANDSCAPE, stem)
-    return Story((title, TUTORIAL_NOTE), (output,))
+    return Story((title, TUTORIAL_NOTE), (output,), language)
 
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
@@ -111,8 +128,8 @@ STORIES = {
         ("highlights", LANDSCAPE, "gbdraw-highlights"),
         ("highlights", PORTRAIT, "gbdraw-highlights-vertical"),
     )),
-    **{name: _tutorial(name) for name in TUTORIAL_IDS},
-    **{name + VERTICAL: _tutorial(name, vertical=True) for name in TUTORIAL_IDS},
+    **{take_name(name, vertical=vertical, language=language): _tutorial(name, vertical=vertical, language=language)
+       for name in TUTORIAL_IDS for vertical in (False, True) for language in TUTORIAL_LANGUAGES[name]},
 }
 
 
@@ -229,9 +246,6 @@ class Language:
             if match:
                 return template.format(**match.groupdict())
         raise KeyError(f"No {self.code} text for {text!r}; add it to captions.{self.code}.json")
-
-
-LANGUAGES = ("en", "zh-Hans")
 
 
 # -- timeline ---------------------------------------------------------------
@@ -1256,10 +1270,9 @@ def _encode(frames, video: Path, review: Path, layout: Layout) -> int:
 
 
 def _outputs(story: Story):
-    for code in LANGUAGES:
-        lang = Language(code)
-        for name, layout, stem in story.outputs:
-            yield lang, name, layout, f"{stem}{lang.suffix}"
+    lang = Language(story.language)
+    for name, layout, stem in story.outputs:
+        yield lang, name, layout, f"{stem}{lang.suffix}"
 
 
 def render_walkthrough(run: Path, out: Path) -> Path:
@@ -1301,22 +1314,21 @@ def render_walkthrough(run: Path, out: Path) -> Path:
         }
     # Every edit ends on the same outro; its last frame has faded fully in.
     last = round(OUTRO_SECONDS * FPS) - 1
-    for code in LANGUAGES:
-        suffix = Language(code).suffix
-        covers: list[tuple[str, Image.Image]] = []
-        landscape = composers.get((code, "landscape"))
-        if landscape is not None:
-            covers.append(("poster", landscape._outro_frame(last)))
-        portrait = composers.get((code, "portrait"))
-        if portrait is not None:
-            cover = portrait._outro_frame(last)
-            # RedNote prefers a 3:4 cover; keep the window area and centre it.
-            card = PORTRAIT.card
-            top = card[1] + card[3] // 2 - 720
-            covers += [("cover-vertical", cover), ("cover-3x4", cover.crop((0, top, 1080, top + 1440)))]
-        for name, image in covers:
-            image.save(final / f"{name}{suffix}.png")
-            report["covers"][f"{name}{suffix}.png"] = list(image.size)
+    suffix = Language(story.language).suffix
+    covers: list[tuple[str, Image.Image]] = []
+    landscape = composers.get((story.language, "landscape"))
+    if landscape is not None:
+        covers.append(("poster", landscape._outro_frame(last)))
+    portrait = composers.get((story.language, "portrait"))
+    if portrait is not None:
+        cover = portrait._outro_frame(last)
+        # RedNote prefers a 3:4 cover; keep the window area and centre it.
+        card = PORTRAIT.card
+        top = card[1] + card[3] // 2 - 720
+        covers += [("cover-vertical", cover), ("cover-3x4", cover.crop((0, top, 1080, top + 1440)))]
+    for name, image in covers:
+        image.save(final / f"{name}{suffix}.png")
+        report["covers"][f"{name}{suffix}.png"] = list(image.size)
     report["fast_forward"] = [{"start": round(a, 2), "end": round(b, 2), "factor": round(f, 2), "kind": kind}
                               for a, b, f, kind in recording.timemap.segments]
     (reports / "walkthrough-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

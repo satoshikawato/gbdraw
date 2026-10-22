@@ -30,7 +30,7 @@ from flows.web_capture import (
     open_browser_capture,
     wait_for_app_shell,
 )
-from video.walkthrough_render import PORTRAIT, PORTRAIT_PAD, _contains, sha256
+from video.walkthrough_render import PORTRAIT, PORTRAIT_PAD, STORIES, _contains, sha256
 from web_server import CaptureWebServer
 
 
@@ -63,10 +63,13 @@ FINALE_ZOOM = 7.0
 # window, and fits the preview figure narrow enough for that window to hold.
 PORTRAIT_TAB = (round(VIEWPORT[1] * PORTRAIT.aspect), VIEWPORT[1])
 PORTRAIT_FIGURE_WIDTH = PORTRAIT_TAB[0] / PORTRAIT_PAD
+# The Result Preview region, found by its structure: its aria-label is
+# translated with the rest of the UI.
+PREVIEW_REGION = '[role="region"]:has(.result-tabs)'
 
 _TEXT_BOUNDS = """
 (pattern) => {
-  const region = document.querySelector('[role="region"][aria-label="Result Preview"]');
+  const region = document.querySelector('$REGION');
   const expression = new RegExp(pattern);
   const boxes = Array.from(region.querySelectorAll('svg text'))
     .filter((node) => expression.test(node.textContent || ''))
@@ -83,7 +86,7 @@ _TEXT_BOUNDS = """
 
 _PREVIEW = """
 () => {
-  const region = document.querySelector('[role="region"][aria-label="Result Preview"]');
+  const region = document.querySelector('$REGION');
   const canvas = region?.querySelector('div.absolute.inset-0.overflow-auto');
   const svg = canvas?.querySelector(':scope > div > svg');
   if (!svg) return null;
@@ -107,7 +110,7 @@ _PREVIEW = """
 
 _FEATURE_BOUNDS = """
 () => {
-  const region = document.querySelector('[role="region"][aria-label="Result Preview"]');
+  const region = document.querySelector('$REGION');
   const boxes = Array.from(region ? region.querySelectorAll('svg [data-gbdraw-feature-id]') : [])
     .map((node) => node.getBoundingClientRect())
     .filter((box) => box.width > 0 || box.height > 0);
@@ -122,7 +125,7 @@ _FEATURE_BOUNDS = """
 
 _LARGEST_FEATURE = """
 (fill) => {
-  const region = document.querySelector('[role="region"][aria-label="Result Preview"]');
+  const region = document.querySelector('$REGION');
   const rows = Array.from(region.querySelectorAll('svg [data-gbdraw-feature-id]'))
     .filter((node) => (node.getAttribute('fill') || '').toLowerCase() === fill)
     .map((node) => ({node, box: node.getBoundingClientRect()}))
@@ -132,6 +135,10 @@ _LARGEST_FEATURE = """
   return {x: box.left + box.width / 2, y: box.top + box.height / 2};
 }
 """
+
+
+_TEXT_BOUNDS, _PREVIEW, _FEATURE_BOUNDS, _LARGEST_FEATURE = (
+    script.replace("$REGION", PREVIEW_REGION) for script in (_TEXT_BOUNDS, _PREVIEW, _FEATURE_BOUNDS, _LARGEST_FEATURE))
 
 
 _SET_VALUE = """
@@ -157,6 +164,7 @@ class Recorder:
 
     def __init__(self, page: Page, raw: Path, *, portrait: bool = False) -> None:
         self.page = page
+        self.app = page                     # the app's tab; ``page`` follows an opened file
         self.portrait = portrait            # a take for the tall video
         self.frames_dir = raw / "frames"
         self.frames_dir.mkdir(parents=True, exist_ok=True)
@@ -510,19 +518,55 @@ class Recorder:
             self.hold(pause)
         expect(box).to_be_checked(checked=checked)
 
-    def generate(self, *, target: float = 1.4, timeout_ms: int = GENERATION_TIMEOUT_MS) -> None:
+    def generate(self, *, target: float | None = 1.4, timeout_ms: int = GENERATION_TIMEOUT_MS,
+                 stages: bool = False) -> None:
+        """Press Generate Diagram and wait for the result.
+
+        ``target`` fast-forwards the wait to about that many seconds; None
+        keeps it at normal speed. ``stages`` frames the stage line that the
+        progress overlay shows while Generate runs.
+        """
+
         def press(button: Locator) -> None:
             self.click(button, pause=0.05)
-            # Pull back so the progress overlay and then the result are in view.
-            self.camera(duration=0.8)
-            self.fast_forward(target=target)
+            status = self.page.locator("[data-generation-progress]")
+            if stages:
+                # The overlay is centered; its stage line changes width as it runs.
+                status.wait_for(state="visible", timeout=ACTION_TIMEOUT_MS)
+                cx, cy = _center(status.bounding_box())
+                self.camera({"x": cx - 400, "y": cy - 190, "width": 800, "height": 300}, zoom=2.4, duration=0.6)
+            else:
+                # Pull back so the progress overlay and then the result are in view.
+                self.camera(duration=0.8)
+            if target is not None:
+                self.fast_forward(target=target)
 
-        generate_and_wait_for_result(self.page, click=press, timeout_ms=timeout_ms)
+        button = self.page.get_by_role("button", name=self.t("Generate Diagram"), exact=True)
+        generate_and_wait_for_result(self.page, button=button, click=press, timeout_ms=timeout_ms)
         self.page.wait_for_function("() => document.fonts.status === 'loaded'")
         self.hold(0.35)
-        self.normal_speed()
+        if target is not None:
+            self.normal_speed()
 
     # -- page queries ------------------------------------------------------
+    def t(self, text: str, params: dict | None = None) -> str:
+        """``text`` as the app shows it in its current language (the app's own ``t``).
+
+        Locators use it for every UI name, since the app translates labels,
+        aria-labels, and titles alike. Data such as gene names or file names is
+        never translated.
+        """
+
+        return self.app.evaluate("([text, params]) => window.__GBDRAW_APP__.t(text, params ?? undefined)",
+                                 [text, params])
+
+    def tn(self, count: int, one: str, other: str, params: dict | None = None) -> str:
+        """The app's plural text for ``count`` (the app's own ``tn``)."""
+
+        return self.app.evaluate(
+            "([count, one, other, params]) => window.__GBDRAW_APP__.tn(count, one, other, params ?? undefined)",
+            [count, one, other, params])
+
     def text_bounds(self, pattern: str) -> dict:
         bounds = self.page.evaluate(_TEXT_BOUNDS, pattern)
         if not bounds:
@@ -532,7 +576,7 @@ class Recorder:
 
 def _meet_gbdraw(rec: Recorder, downloads: Path) -> Path:
     page = rec.page
-    preview = page.get_by_role("region", name="Result Preview", exact=True)
+    preview = page.locator(PREVIEW_REGION)
 
     # Tall outputs open on the settings column and the empty preview beside it.
     rec.camera(duration=0, portrait={"x": 0, "y": 0, "width": 820, "height": 930})
@@ -671,7 +715,7 @@ def _meet_gbdraw(rec: Recorder, downloads: Path) -> Path:
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.0)
-    dloop = page.locator('[role="region"][aria-label="Result Preview"] svg [data-gbdraw-annotation-id]').first
+    dloop = page.locator(f"{PREVIEW_REGION} svg [data-gbdraw-annotation-id]").first
     rec.mark("dloop")
     rec.focus(dloop, zoom=2.4, duration=1.2)
     rec.move_to(*_center(dloop.bounding_box()))
@@ -723,13 +767,13 @@ def export_svg(rec: Recorder, downloads: Path, step: int) -> Path:
     return exported
 
 
-def export_interactive_svg(rec: Recorder, downloads: Path, step: int) -> Path:
+def export_interactive_svg(rec: Recorder, downloads: Path, step: int | None) -> Path:
     """Download the result through the Interactive SVG button."""
 
     page = rec.page
-    rec.caption(step, "Export an Interactive SVG", "One file that carries every feature's details and sequences")
+    rec.caption(step, "Export an Interactive SVG", "Every feature's details, in one file")
     # Icon glyphs precede the button text in the accessible name.
-    button = page.get_by_role("button", name=re.compile(r"Interactive SVG$"))
+    button = page.get_by_role("button", name=re.compile(rf"{re.escape(rec.t('Interactive SVG'))}$"))
     rec.mark("export")
     rec.focus(button, zoom=2.1)
     rec.hold(0.4)
@@ -769,7 +813,7 @@ def open_in_browser(rec: Recorder, svg: Path) -> list[str]:
     page.route(url, lambda route: route.fulfill(path=str(svg), content_type="image/svg+xml"))
     # A large file takes seconds to open; the previous tab stays on screen meanwhile.
     rec.fast_forward(target=1.2)
-    page.goto(url, wait_until="load")
+    page.goto(url, wait_until="load", timeout=GENERATION_TIMEOUT_MS)
     # The embedded script builds its controls once it has read the metadata.
     expect(page.get_by_role("button", name="Expand feature search", exact=True)).to_be_visible(
         timeout=GENERATION_TIMEOUT_MS)
@@ -782,6 +826,25 @@ def open_in_browser(rec: Recorder, svg: Path) -> list[str]:
     rec.normal_speed()
     rec.toast(svg.name, "file")
     return errors
+
+
+def switch_language(rec: Recorder, code: str) -> None:
+    """Switch the app's UI language on camera with the header's Language menu."""
+
+    page = rec.page
+    menu = page.locator("select[data-ui-language]")
+    rec.camera(duration=0)
+    rec.caption(None, "Switch the app to Simplified Chinese", "Language, in the header")
+    rec.hold(1.6)
+    rec.mark("language")
+    rec.focus(menu, zoom=2.6)
+    rec.hold(0.5)
+    rec.choose(menu, code)
+    page.wait_for_function("(code) => window.__GBDRAW_APP__.uiLocale.value === code", arg=code)
+    page.wait_for_function("() => document.fonts.status === 'loaded'")
+    rec.hold(1.4)
+    rec.camera(duration=0.9)
+    rec.hold(1.6)
 
 
 def _inspect_export(svg: Path) -> dict:
@@ -920,11 +983,6 @@ def record_walkthrough(run: Path, name: str) -> Path:
         try:
             page.goto(server.base_url, wait_until="domcontentloaded")
             wait_for_app_shell(page)
-            # The floating feature search would cover the top right of every
-            # result; it is the only element hidden for the recording. A journey
-            # that uses it shows it with ``<html data-rec-search>``.
-            page.add_style_tag(
-                content="html:not([data-rec-search]) .preview-feature-search{display:none !important}")
             if journey.mode:
                 mode = page.get_by_role("button", name=journey.mode, exact=True)
                 mode.click()
@@ -937,6 +995,9 @@ def record_walkthrough(run: Path, name: str) -> Path:
             page.wait_for_function("() => document.fonts.status === 'loaded'")
             recorder = Recorder(page, raw, portrait=journey.portrait)
             recorder.start()
+            language = STORIES[name].language
+            if language != "en":
+                switch_language(recorder, language)
             exported = journey.run(recorder, raw / "downloads")
             recorder.stop()
             capture.assert_clean()
