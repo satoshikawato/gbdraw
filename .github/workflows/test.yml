@@ -1770,3 +1770,9 @@ jobs:
           --workflow-path .github/workflows/gallery-publication.yml
           --aggregate-name "Gallery readiness / gate"
           --head-sha "${{ github.sha }}"
+
+      # New Web UI keys ship in English until the translation batch before a
+      # release (.claude/skills/translate-web-ui/SKILL.md); only the release
+      # tier requires every catalog to hold every key and no stale one.
+      - name: Require complete Web UI translations
+        run: node tools/i18n/sync.mjs status --require-complete

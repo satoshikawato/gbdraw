@@ -8,6 +8,17 @@ drafts follow this file and the glossary together. The glossary decides words;
 this file decides how sentences are written around them. Where the two
 disagree, the glossary wins and this file is corrected.
 
+When keys are translated: a pull request that adds or changes UI text adds the
+English key only; the catalogs show the English until the translation batch
+before each release fills them. The batch follows
+`.claude/skills/translate-web-ui/SKILL.md` with `node tools/i18n/sync.mjs`
+(`status`, `export`, `apply`), and the release tier of `Tests` fails while a
+catalog lacks a key of the sources or holds a stale one
+(`node tools/i18n/sync.mjs status --require-complete`). Each locale has a lint
+list, `tests/web/i18n-lint/<locale>.tsv`, run by
+`tests/web/i18n-catalogs.test.mjs` as §9.7 describes. Translations are drafts;
+nothing states that they are reviewed.
+
 ## 1. All locales
 
 ### 1.1 What is never translated
