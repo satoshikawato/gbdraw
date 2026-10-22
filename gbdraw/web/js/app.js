@@ -29,7 +29,7 @@ import {
 import { CircularMeasureInput } from './app/circular-track-slots/measure-input.js';
 import { DepthTrackIndexInput } from './app/circular-track-slots/track-index-input.js';
 import { createAppSetup } from './app/app-setup.js';
-import { chooseUiLanguage, showStoredUiLanguage } from './app/ui-language.js';
+import { chooseUiLanguage, showStoredUiLanguage, translationFeedbackUrl } from './app/ui-language.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
@@ -39,7 +39,7 @@ const { createApp } = window.Vue;
 
 const app = createApp({
   components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
-  methods: { chooseUiLanguage, formatFeatureLocation, settingApplicationNote, settingApplicationSentence, settingApplicationText },
+  methods: { chooseUiLanguage, formatFeatureLocation, settingApplicationNote, settingApplicationSentence, settingApplicationText, translationFeedbackUrl },
   setup: createAppSetup
 });
 // Every template (the root, the x-templates, the inline component templates)
