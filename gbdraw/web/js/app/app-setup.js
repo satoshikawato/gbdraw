@@ -2381,7 +2381,7 @@ export const createAppSetup = () => {
     const active = new Set(activeDepthTrackIndices(rows));
     return Array.from({ length: linearDepthLogicalWidth() }, (_, trackIndex) => ({
       trackIndex,
-      label: getDepthTrackLabel(trackIndex),
+      label: depthSeriesName(trackIndex),
       coverage: linearDepthTrackCoverageLabel(trackIndex),
       disabled: !active.has(trackIndex)
     }));
@@ -2554,6 +2554,14 @@ export const createAppSetup = () => {
     const config = readDepthTrackConfig(state.activeDrawing(), Math.max(0, Number(index) || 0));
     return String(config?.label ?? '');
   };
+  // The name the figure draws for Depth series `index` of the shown drawing
+  // without a label, among the series the request draws (OV-1508). Figure
+  // text: English in every UI language.
+  /** @param {number} index */
+  const depthSeriesDefaultName = (index) => defaultDepthSeriesLabel(index, activeDepthTrackCount());
+  // The name of Depth series `index`: its label, else the default name.
+  /** @param {number} index */
+  const depthSeriesName = (index) => getDepthTrackLabel(index) || depthSeriesDefaultName(index);
   /** @param {number} index */
   const getDepthTrackColor = (index) => {
     const idx = Math.max(0, Number(index) || 0);
@@ -6958,7 +6966,9 @@ export const createAppSetup = () => {
     enabledOptionClass,
     depthToggleOptionClass,
     depthTrackCountLabel,
-    defaultDepthSeriesLabel,
+    depthSeriesDefaultName,
+    depthSeriesName,
+    normalizeDepthSlotTrackIndex,
     getDepthTrackLabel,
     setDepthTrackLabel,
     getDepthTrackColor,

@@ -438,6 +438,65 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   expect(outcome.underlayCount).toBeGreaterThan(0);
 });
 
+// Two Depth series nobody named are Depth 1 and Depth 2 wherever the app names
+// them, as the figure and the CLI do: the series cards of both modes, the Linear
+// File card rows, the Depth row's series options and the Depth row's legend-label
+// placeholder (OV-1508). The name is figure text, English in every UI language.
+test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface that names them', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  const files = () => [1, 2].map((n) => new File([`position\tdepth\n1\t${n}0\n`], `reads-${n}.tsv`, { type: 'text/tab-separated-values' }));
+  const names = () => page.evaluate(() => {
+    const text = (element) => element?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+    const titles = [...document.querySelectorAll('input[aria-label="Depth legend title"], input[aria-label$=" legend title"][aria-label^="Depth "]')]
+      .filter((input) => input.offsetParent);
+    return {
+      cards: titles.map((input) => text(input.closest('.rounded')?.querySelector('.truncate'))),
+      placeholders: titles.map((input) => input.placeholder),
+      // Each File card lists every series; the rows of all cards name them alike.
+      fileRows: [...new Set([...document.querySelectorAll('[data-linear-source-depth-series]')].map((row) => text(row.querySelector('.truncate'))))],
+      // Each Depth row's series menu lists every series.
+      options: [...new Set([...document.querySelectorAll('select[aria-label^="Depth track index"] option')].map(text))],
+      slotPlaceholders: [...document.querySelectorAll('input[aria-label$=" Depth legend label"]')].map((input) => [input.value, input.placeholder])
+    };
+  });
+  await page.evaluate((source) => {
+    const app = window.__GBDRAW_APP__;
+    const [first, second] = new Function(`return (${source})`)()();
+    app.setDiagramMode('linear');
+    app.addLinearSeq();
+    app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, second);
+    app.setDepthTrackLabel(0, '');
+    app.setDepthTrackLabel(1, '');
+    app.resetLinearTrackSlotsFromSimpleControls();
+    app.setLinearTrackSlotsEnabled(true);
+    if (!app.linearTrackSlotsPanelOpen) app.toggleLinearTrackSlotsPanel();
+  }, files.toString());
+  await openLinearFileCards(page);
+  await expect.poll(names).toEqual({
+    cards: ['#1 Depth 1', '#2 Depth 2'],
+    placeholders: ['Depth 1', 'Depth 2'],
+    fileRows: ['#1 Depth 1', '#2 Depth 2'],
+    options: [expect.stringMatching(/^0 · Depth 1 · /), expect.stringMatching(/^1 · Depth 2 · /)],
+    slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
+  });
+  await page.evaluate((source) => {
+    const app = window.__GBDRAW_APP__;
+    const [first, second] = new Function(`return (${source})`)()();
+    app.setDiagramMode('circular');
+    app.setCircularDepthFile(0, first);
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, second);
+    app.setDepthTrackLabel(0, '');
+    app.setDepthTrackLabel(1, '');
+  }, files.toString());
+  await expect.poll(async () => {
+    const { cards, placeholders } = await names();
+    return { cards, placeholders };
+  }).toEqual({ cards: ['#1 Depth 1', '#2 Depth 2'], placeholders: ['Depth 1', 'Depth 2'] });
+});
+
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 

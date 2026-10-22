@@ -905,7 +905,6 @@ export const createLinearTrackSlotEditor = ({
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, linearDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
-    if (renderer === 'depth') return 'Depth'; // the default legend text of the figure: stays English
     return t('Legend label');
   };
 
@@ -933,7 +932,7 @@ export const createLinearTrackSlotEditor = ({
     while (drawing.adv.depth_tracks.length <= idx) {
       const nextIndex = drawing.adv.depth_tracks.length;
       drawing.adv.depth_tracks.push({
-        label: nextIndex === 0 ? 'Depth' : `Depth ${nextIndex + 1}`,
+        label: '',
         color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
         height: null,
         large_tick_interval: null,
@@ -943,7 +942,7 @@ export const createLinearTrackSlotEditor = ({
     }
     if (!drawing.adv.depth_tracks[idx] || typeof drawing.adv.depth_tracks[idx] !== 'object' || Array.isArray(drawing.adv.depth_tracks[idx])) {
       drawing.adv.depth_tracks[idx] = {
-        label: idx === 0 ? 'Depth' : `Depth ${idx + 1}`,
+        label: '',
         color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
         height: null,
         large_tick_interval: null,

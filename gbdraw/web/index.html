@@ -2402,7 +2402,7 @@
                                 </div>
                                 <div v-for="track in circularDepthTrackRows" :key="`c-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                     <div class="flex items-center justify-between gap-2">
-                                        <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || t('Depth') }}</div>
+                                        <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</div>
                                         <button type="button" @click="removeCircularDepthTrack(track.index)" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
                                             <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}
                                         </button>
@@ -2417,7 +2417,7 @@
                                                 class="form-input form-input-compact"
                                                 :aria-label="track.index === 0 ? t('Depth legend title') : t('Depth {n} legend title', { n: track.index + 1 })"
                                                 :aria-describedby="`help-circular-depth-legend-title-${track.index}`"
-                                                :placeholder="defaultDepthSeriesLabel(track.index, circularDepthTrackRows.length)"
+                                                :placeholder="depthSeriesDefaultName(track.index)"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -2626,7 +2626,7 @@
                                         :data-linear-source-depth-series="track.index"
                                     >
                                         <div class="flex min-w-0 items-center justify-between gap-2 text-[9px]">
-                                            <span class="min-w-0 truncate font-bold text-slate-500">#{{ track.index + 1 }} {{ track.config.label || t('Depth') }}</span>
+                                            <span class="min-w-0 truncate font-bold text-slate-500">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</span>
                                             <span
                                                 class="shrink-0"
                                                 :class="track.status.state === 'mixed' ? 'text-amber-700' : 'text-slate-500'"
@@ -2910,7 +2910,7 @@
                                 <div v-for="track in linearDepthTrackRows()" :key="`linear-depth-settings-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                     <div class="flex items-center justify-between gap-2">
                                         <div class="min-w-0">
-                                            <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || t('Depth') }}</div>
+                                            <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</div>
                                             <div class="text-[9px] text-slate-500">{{ linearDepthTrackCoverageLabel(track.index) }}</div>
                                         </div>
                                         <button type="button" @click="removeLinearDepthTrack(track.index)" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
@@ -2927,7 +2927,7 @@
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
-                                                :placeholder="defaultDepthSeriesLabel(track.index, linearDepthTrackRows().length)"
+                                                :placeholder="depthSeriesDefaultName(track.index)"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -4071,7 +4071,7 @@
                                                                     :key="`linear-depth-option-${option.trackIndex}`"
                                                                     :value="option.trackIndex"
                                                                     :disabled="option.disabled"
-                                                                >{{ option.trackIndex }} · {{ option.label || t('Depth') }} · {{ option.coverage }}</option>
+                                                                >{{ option.trackIndex }} · {{ option.label }} · {{ option.coverage }}</option>
                                                             </select>
                                                         </div>
                                                         <div class="track-slot-field">
@@ -4082,7 +4082,7 @@
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
-                                                                :placeholder="t('Legend label')"
+                                                                :placeholder="depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))"
                                                                 :disabled="!semanticMutationAvailable"
                                                             >
                                                         </div>
@@ -4462,7 +4462,7 @@
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
-                                                                :placeholder="t('Legend label')"
+                                                                :placeholder="depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))"
                                                                 :disabled="!semanticMutationAvailable"
                                                             >
                                                         </div>

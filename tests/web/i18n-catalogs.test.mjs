@@ -771,8 +771,10 @@ test('the English cites the controls the UI has and names what each text describ
 test('OV-1446: a Depth legend-name placeholder is the English default name of the figure', async () => {
   const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
   assert.deepEqual([...html.matchAll(/:placeholder="[^"]*\bt\('Depth/g)].map((match) => match[0]), []);
-  assert.deepEqual([...html.matchAll(/:placeholder="(defaultDepthSeriesLabel\([^"]*)"/g)].map((match) => match[1]), [
-    'defaultDepthSeriesLabel(track.index, circularDepthTrackRows.length)', 'defaultDepthSeriesLabel(track.index, linearDepthTrackRows().length)'
+  // The series cards' Legend title fields, then the Depth rows' legend-label fields (OV-1508).
+  assert.deepEqual([...html.matchAll(/:placeholder="(depthSeriesDefaultName\([^"]*)"/g)].map((match) => match[1]), [
+    'depthSeriesDefaultName(track.index)', 'depthSeriesDefaultName(track.index)',
+    'depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))', 'depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))'
   ]);
   const { defaultDepthSeriesLabel } = await import('../../gbdraw/web/js/services/depth-track-state.js');
   try {
