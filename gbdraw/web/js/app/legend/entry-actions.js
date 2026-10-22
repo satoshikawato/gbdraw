@@ -8,6 +8,10 @@
  * @typedef {{ caption?: string, originalCaption?: string, color?: string, featureIds?: unknown[], xPos?: number, yPos?: number }} EntryRecord
  */
 /** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
+/**
+ * The rows a Result lists (`listLegendRows`) and the keys of those that are Python's.
+ * @typedef {{ entries: ListedEntry[], generatedCaptions: Set<string> }} LegendRowListing
+ */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { keepBothNames, legendSwatch } from '../../services/legend-row-names.js';
@@ -590,7 +594,7 @@ export const createLegendEntryActions = ({
     const order = [...new Set(rendered)];
     return placeByInventory(order, surviving.filter(caption => !order.includes(caption)), inventory, (caption) => caption);
   };
-  /** @param {{ entries: ListedEntry[], generatedCaptions: Set<string> }} listing */
+  /** @param {LegendRowListing} listing */
   const renderedCaptions = ({ entries, generatedCaptions }) => entries
     .map(entry => entry.originalCaption)
     .filter(caption => generatedCaptions.has(caption));
@@ -615,6 +619,29 @@ export const createLegendEntryActions = ({
         || deleted.has(originalCaption) || seen.has(originalCaption)) return [];
       seen.add(originalCaption);
       return [{ caption, originalCaption, color: entry.color, featureIds: [] }];
+    });
+  };
+
+  // A drawn Result's inventory (OV-1486). Python's order of its rows is the
+  // order the executor recorded when it replayed an edited order over them
+  // (`recordedLegendOrder`), else the order the Result shows. The rows a
+  // reorder moved are never Python's order: a row Python placed first that an
+  // edited order put last would become a default the edited order then equals.
+  /**
+   * @param {DrawingState} drawing
+   * @param {SVGSVGElement} svg
+   * @param {LegendRowListing} listing The rows the Result lists.
+   * @param {{ inventory: string[], orderEdited: boolean }} previous The inventory before
+   *   the draw, and whether the draw replayed an edited order (read when nothing is recorded).
+   * @returns {string[]}
+   */
+  const resultInventory = (drawing, svg, listing, { inventory, orderEdited }) => {
+    const recorded = recordedLegendOrder(svg);
+    return drawnInventory(drawing, {
+      inventory,
+      orderEdited: !recorded && orderEdited,
+      generatedCaptions: recorded ? new Set(recorded) : listing.generatedCaptions,
+      rendered: recorded || renderedCaptions(listing)
     });
   };
 
@@ -645,14 +672,9 @@ export const createLegendEntryActions = ({
     const stored = inventoryByResult.get(identity);
     if (!identity || stored) return stored || [];
     const mounted = listLegendRows(svg, legendIntentOf(drawing));
-    // A Result whose rows were reordered keeps Python's order as a record (L1).
-    const recorded = recordedLegendOrder(svg);
     const inventory = mounted
-      ? drawnInventory(drawing, {
-        inventory: originalLegendOrder.value,
-        orderEdited: !recorded && replayedInventoryResults.has(identity),
-        generatedCaptions: recorded ? new Set(recorded) : mounted.generatedCaptions,
-        rendered: recorded || renderedCaptions(mounted)
+      ? resultInventory(drawing, svg, mounted, {
+        inventory: originalLegendOrder.value, orderEdited: replayedInventoryResults.has(identity)
       })
       : [];
     inventoryByResult.set(identity, inventory);
@@ -709,7 +731,7 @@ export const createLegendEntryActions = ({
       drawing.legendEntries.value = [];
       return;
     }
-    const { entries: visuallySortedEntries, generatedCaptions } = mounted;
+    const visuallySortedEntries = mounted.entries;
 
     // The entries shown before this extraction decide, as in Generate, whether
     // the displayed Result replays an edited order (D-08).
@@ -728,12 +750,7 @@ export const createLegendEntryActions = ({
     if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {
       // Keep deletion intent; live editor extraction alone must not advance
       // the accepted generated inventory.
-      originalLegendOrder.value = drawnInventory(drawing, {
-        inventory: originalLegendOrder.value,
-        orderEdited,
-        generatedCaptions,
-        rendered: renderedCaptions(mounted)
-      });
+      originalLegendOrder.value = resultInventory(drawing, svg, mounted, { inventory: originalLegendOrder.value, orderEdited });
       if (identity) {
         // A draw that replays an edited order shows it on every Result.
         if (replaceGeneratedInventory && orderEdited) {
