@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `78`
+- Contract revision: `79`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2701,6 +2701,78 @@ Status: active Product authority
   - This change is authority only: it removes text and changes no runtime
     obligation, and the Review is `REQUIRED`; this record supplies no runtime
     acceptance evidence.
+- Revision 79 changes: `PD-OI-106` is replaced for scenario revision `5`
+  (concern `product.web-ui-language`). The receipt keeps every product outcome
+  of scenario revision `4` and adds two pieces of text: at the end of the
+  Choice, the sentence "Beside the Language menu, in every language, a link
+  named "Suggest a translation fix" opens the GitHub translation feedback
+  issue form in a new tab with the shown language and the gbdraw version
+  filled in; no file, setting, Result or Session content is put in the link."
+  and, at the end of the Accepted residual risk, the clause "a translation
+  report needs a GitHub account and is public". It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-22` in the Claude Code
+  session.
+  - The session asked whether the translation feedback route is a GitHub issue
+    template, an in-app link, or both. The Owner replied 「2:両方。進めてください。」.
+    The Owner then asked 「これリンクから飛んでもイシュー作れるのはGitHubのアカウント持ってるひとでいいんだよね？スパムで爆撃とかされないよね？」;
+    the session answered that a GitHub account is needed, and the residual-risk
+    clause records it. The placement beside the Language menu and the wording
+    of the link sentence are the session's wording; the Owner confirms them by
+    merging this change.
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `b8ea7ea8de68208e2d46805f2d854cc092580670ac9411138cae0dbbfd0a8d5c`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.web-ui-language (language of the Web UI text)
+    Scenario revision: 5
+    Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+      (English, Bahasa Indonesia, Español, Français, Português,
+      Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the
+      Web UI text at once, without reload, and without changing the
+      Result, the settings or the History; switching is not a History
+      step. English is shown on a first visit; the browser language
+      never chooses. The chosen language is remembered per browser and
+      is not part of the Session, History or any export. Names fixed
+      in English by PD-OI-093 and PD-OI-105 keep that English in the
+      English UI and are translated in the other languages. pt follows
+      the Brazilian norm; one Portuguese catalog. A language with
+      singular and plural forms shows the form its own plural rule
+      selects for the count. Numbers keep the English decimal point
+      and digit grouping in every language. Thai text is shown in the
+      Thai typeface of the user's system and Vietnamese letters in the
+      bundled Latin typeface, at the sizes the script needs; the
+      figure is unchanged. No text states that the translations are
+      reviewed. Beside the Language menu, in every language, a link
+      named "Suggest a translation fix" opens the GitHub translation
+      feedback issue form in a new tab with the shown language and
+      the gbdraw version filled in; no file, setting, Result or
+      Session content is put in the link.
+    Rationale: Let users work in their own language while every
+      scientific output stays identical in all languages.
+    Must preserve: the English UI text and accessible names; the
+      figure, every export, the Session, CLI / Source recipe / Exact
+      replay text and diagnostics are identical in every language;
+      the stored settings-pane display choice of PD-OI-093.
+    May retire: PD-OI-093's limit of browser storage to one display
+      choice; storage now holds that choice and the UI language.
+    Accepted residual risk: Python-produced warnings, Gallery
+      tutorials and the docs stay English inside a translated UI;
+      translated wording may contain errors until corrected; the es,
+      fr, pt, ko, id, vi and th wording is drafted and checked without
+      a native reviewer until one corrects it; id and vi readers see
+      the English number format (1,000.5) where their convention
+      writes 1.000,5; a translation report needs a GitHub account and
+      is public.
+    Owner: satoshikawato
+    Decision date: 2026-10-22
+    ```
+
+  - Scope: only `PD-OI-106` is replaced; no other record is amended or
+    retired. `PD-OI-093` and `PD-OI-105` keep their text.
+  - This change is authority for the later runtime change that adds the link:
+    this record changes no runtime by itself and supplies no runtime
+    acceptance evidence, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -8329,13 +8401,13 @@ Decision date: 2026-10-13
 ### PD-OI-106: Web UI language
 
 - Concern key: `product.web-ui-language`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-106`, scenario revision `3`. Scenario revision `4` keeps
-  every outcome of scenario revision `3` and removes what is not a product
-  outcome: which release ships which language, what the 0.14.0 tag waits for,
-  the Japanese term for Default, who decides the open Chinese terms, and the
-  list of provisional Indonesian terms. The Revision 78 entry says where these
-  are kept now. As scenario revisions `1` to `3`, it narrows `PD-OI-093`: that
+- Scenario revision: `5`
+- Supersedes: `PD-OI-106`, scenario revision `4`. Scenario revision `5` keeps
+  every outcome of scenario revision `4` and adds one sentence at the end of
+  the Choice, the "Suggest a translation fix" link beside the Language menu,
+  and one clause at the end of the Accepted residual risk, that a translation
+  report needs a GitHub account and is public. The Revision 79 entry quotes
+  the replies. As scenario revisions `1` to `4`, it narrows `PD-OI-093`: that
   record's limit of browser storage to one display choice no longer holds (see
   the receipt's May retire); `PD-OI-093` keeps its text and its stored display
   choice.
@@ -8344,9 +8416,10 @@ Decision date: 2026-10-13
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
 - Decision source: the Owner replies of `2026-10-22` in the Claude Code
-  session, quoted in the Revision 78 entry above; scenario revision `3` came
-  from the Owner replies of `2026-10-21` (Revision 76 entry), scenario revision
-  `2` from those of the same day (Revision 75 entry), and scenario revision `1`
+  session, quoted in the Revision 79 entry above; scenario revision `4` came
+  from the Owner replies of the same day (Revision 78 entry), scenario revision
+  `3` from those of `2026-10-21` (Revision 76 entry), scenario revision `2`
+  from those of the same day (Revision 75 entry), and scenario revision `1`
   from the Owner answers of `2026-10-19` (Revision 70 entry). The receipt text
   below is the session's wording; the Owner confirms it by merging this
   change. The receipt reproduces its
@@ -8356,12 +8429,12 @@ Decision date: 2026-10-13
   runtime acceptance evidence. The JSON `concern` holds the concern key
   without the receipt's parenthetical description.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `2080b4640e76cfe74281c11d7a03bce5fc563ddebb66f1113365949a10af2b71`.
+  `b8ea7ea8de68208e2d46805f2d854cc092580670ac9411138cae0dbbfd0a8d5c`.
 
 ```text
 PRODUCT_DECISION
 Concern: product.web-ui-language (language of the Web UI text)
-Scenario revision: 4
+Scenario revision: 5
 Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
   (English, Bahasa Indonesia, Español, Français, Português,
   Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the
@@ -8379,7 +8452,11 @@ Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
   Thai typeface of the user's system and Vietnamese letters in the
   bundled Latin typeface, at the sizes the script needs; the
   figure is unchanged. No text states that the translations are
-  reviewed.
+  reviewed. Beside the Language menu, in every language, a link
+  named "Suggest a translation fix" opens the GitHub translation
+  feedback issue form in a new tab with the shown language and
+  the gbdraw version filled in; no file, setting, Result or
+  Session content is put in the link.
 Rationale: Let users work in their own language while every
   scientific output stays identical in all languages.
 Must preserve: the English UI text and accessible names; the
@@ -8394,7 +8471,8 @@ Accepted residual risk: Python-produced warnings, Gallery
   fr, pt, ko, id, vi and th wording is drafted and checked without
   a native reviewer until one corrects it; id and vi readers see
   the English number format (1,000.5) where their convention
-  writes 1.000,5.
+  writes 1.000,5; a translation report needs a GitHub account and
+  is public.
 Owner: satoshikawato
 Decision date: 2026-10-22
 ```
@@ -8402,12 +8480,12 @@ Decision date: 2026-10-22
 ```json
 {
   "concern": "product.web-ui-language",
-  "scenarioRevision": 4,
-  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Español, Français, Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count. Numbers keep the English decimal point and digit grouping in every language. Thai text is shown in the Thai typeface of the user's system and Vietnamese letters in the bundled Latin typeface, at the sizes the script needs; the figure is unchanged. No text states that the translations are reviewed.",
+  "scenarioRevision": 5,
+  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Español, Français, Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count. Numbers keep the English decimal point and digit grouping in every language. Thai text is shown in the Thai typeface of the user's system and Vietnamese letters in the bundled Latin typeface, at the sizes the script needs; the figure is unchanged. No text states that the translations are reviewed. Beside the Language menu, in every language, a link named \"Suggest a translation fix\" opens the GitHub translation feedback issue form in a new tab with the shown language and the gbdraw version filled in; no file, setting, Result or Session content is put in the link.",
   "rationale": "Let users work in their own language while every scientific output stays identical in all languages.",
   "mustPreserve": "the English UI text and accessible names; the figure, every export, the Session, CLI / Source recipe / Exact replay text and diagnostics are identical in every language; the stored settings-pane display choice of PD-OI-093.",
   "mayRetire": "PD-OI-093's limit of browser storage to one display choice; storage now holds that choice and the UI language.",
-  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi and th wording is drafted and checked without a native reviewer until one corrects it; id and vi readers see the English number format (1,000.5) where their convention writes 1.000,5.",
+  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi and th wording is drafted and checked without a native reviewer until one corrects it; id and vi readers see the English number format (1,000.5) where their convention writes 1.000,5; a translation report needs a GitHub account and is public.",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-22"
 }
