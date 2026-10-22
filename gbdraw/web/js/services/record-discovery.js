@@ -392,25 +392,42 @@ export const discoverSequenceRecords = async ({
   return normalizeSequenceRecords(response.result);
 };
 
-// D12: the label a ring comparison file names itself (GenBank / DDBJ: first
-// record's DEFINITION, then organism), or null (FASTA). Only the Python ring
-// reader reads the file; there is no fast path.
+/**
+ * A ring comparison file as the Python ring reader reads it (D12): the LOSAT
+ * query FASTA, and the label the file names itself (GenBank / DDBJ: first
+ * record's DEFINITION, then organism), or null (FASTA).
+ * @typedef {{ fasta: string, recordLabel: string | null }} ComparisonSequence
+ */
+/** @type {WeakMap<FileLike, Promise<ComparisonSequence>>} */
+const comparisonSequenceReads = new WeakMap();
+
+// Only the Python ring reader reads the file; there is no fast path. Add Seq and
+// every Generate share one read per file (OV-1545): an uploaded File and a
+// Session resource view never change their bytes. A failed read is not kept.
 /**
  * @param {{
  *   file: FileLike,
- *   runHelperOperation?: HelperOperationRunner<{ error?: unknown, recordLabel?: string | null }>
+ *   runHelperOperation?: HelperOperationRunner<{ error?: unknown, fasta?: string, recordLabel?: string | null }>
  * }} options
+ * @returns {Promise<ComparisonSequence>}
  */
-export const discoverComparisonSequenceRecordLabel = async ({
+export const readComparisonSequence = ({
   file,
   runHelperOperation = runDiagramHelperOperation
 }) => {
-  const response = await runHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
-    { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
-  );
-  if (response.result?.error) throw response.result.error;
-  return response.result?.recordLabel ?? null;
+  const held = comparisonSequenceReads.get(file);
+  if (held) return held;
+  const read = (async () => {
+    const response = await runHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
+      { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
+    );
+    if (response.result?.error) throw response.result.error;
+    return { fasta: String(response.result?.fasta || ''), recordLabel: response.result?.recordLabel ?? null };
+  })();
+  comparisonSequenceReads.set(file, read);
+  read.catch(() => comparisonSequenceReads.delete(file));
+  return read;
 };
 
 /**

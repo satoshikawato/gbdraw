@@ -147,7 +147,8 @@ import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
-  discoveryErrorIsFinal
+  discoveryErrorIsFinal,
+  readComparisonSequence
 } from '../services/record-discovery.js';
 import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
@@ -323,12 +324,21 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @property {string} [sequenceKey]
  * @property {string} [hash]
  */
-/** @type {WeakMap<FileLike, Map<string, LosatSeqEntry>>} */
-const fastaExtractionCache = new WeakMap();
-const FASTA_EXTRACTION_CACHE_LIMIT = 12;
-/** @type {WeakMap<FileLike, Map<string, LosatSeqEntry>>} */
-const proteinExtractionCache = new WeakMap();
-const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
+/**
+ * What Generate read from an input file, kept per file: an uploaded File and a Session resource view never
+ * change their bytes, so the file object and the reading's settings (`key`) name the value.
+ * @template T
+ * @typedef {{ byFile: WeakMap<FileLike, Map<string, T>>, limit: number }} FileReadCache
+ */
+/** @type {FileReadCache<LosatSeqEntry>} */
+const fastaExtractionCache = { byFile: new WeakMap(), limit: 12 };
+/** @type {FileReadCache<LosatSeqEntry>} */
+const proteinExtractionCache = { byFile: new WeakMap(), limit: 16 };
+/**
+ * The Circular similarity ring reference as one FASTA text, by input format (OV-1545).
+ * @type {FileReadCache<string>}
+ */
+const ringSubjectFastaCache = { byFile: new WeakMap(), limit: 2 };
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 export const LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
@@ -1042,25 +1052,28 @@ const applyLosatSequenceTransforms = (record, regionSpec) => {
   return { id: record.id, sequence };
 };
 /**
+ * @template T
+ * @param {FileReadCache<T>} cache
  * @param {FileLike} file
  * @param {string} key
+ * @returns {T | null}
  */
-const getCachedFastaExtraction = (file, key) => {
-  const byKey = fastaExtractionCache.get(file);
-  return byKey?.get(key) || null;
-};
+const getCachedFileRead = (cache, file, key) => cache.byFile.get(file)?.get(key) ?? null;
 /**
+ * @template T
+ * @param {FileReadCache<T>} cache
  * @param {FileLike} file
  * @param {string} key
- * @param {LosatSeqEntry} value
+ * @param {T} value
  */
-const setCachedFastaExtraction = (file, key, value) => {
-  let byKey = fastaExtractionCache.get(file);
+const setCachedFileRead = (cache, file, key, value) => {
+  let byKey = cache.byFile.get(file);
   if (!byKey) {
     byKey = new Map();
-    fastaExtractionCache.set(file, byKey);
+    cache.byFile.set(file, byKey);
   }
-  if (byKey.size >= FASTA_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
+  const oldestKey = byKey.keys().next().value;
+  if (byKey.size >= cache.limit && oldestKey !== undefined) byKey.delete(oldestKey);
   byKey.set(key, value);
 };
 /** @param {FileLike | null | undefined} file */
@@ -1071,30 +1084,6 @@ const getFileFingerprint = (file) => {
     size: Number(file.size || 0),
     lastModified: Number(file.lastModified || 0)
   };
-};
-/**
- * @param {FileLike | null | undefined} file
- * @param {string} key
- */
-const getCachedProteinExtraction = (file, key) => {
-  if (!file) return null;
-  const byKey = proteinExtractionCache.get(file);
-  return byKey?.get(key) || null;
-};
-/**
- * @param {FileLike | null | undefined} file
- * @param {string} key
- * @param {LosatSeqEntry & { error?: unknown }} value
- */
-const setCachedProteinExtraction = (file, key, value) => {
-  if (!file || value?.error) return;
-  let byKey = proteinExtractionCache.get(file);
-  if (!byKey) {
-    byKey = new Map();
-    proteinExtractionCache.set(file, byKey);
-  }
-  if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
-  byKey.set(key, value);
 };
 /**
  * @typedef {{ label: string, ms: number, details?: string }} TimingEntry
@@ -3247,13 +3236,14 @@ export const createRunAnalysis = ({
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
-            const subjectEntry = await extractAllLosatFastaFast({
-              file: subjectFile,
-              fmt: subjectFmt
-            });
-            const subjectHash = await hashText(subjectEntry.fasta);
+            let subjectFasta = getCachedFileRead(ringSubjectFastaCache, subjectFile, subjectFmt);
+            if (subjectFasta === null) {
+              subjectFasta = (await extractAllLosatFastaFast({ file: subjectFile, fmt: subjectFmt })).fasta;
+              setCachedFileRead(ringSubjectFastaCache, subjectFile, subjectFmt, subjectFasta);
+            }
+            const subjectHash = await hashText(subjectFasta);
             const subjectSequenceKey = `circular-subject:${subjectHash}`;
-            const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectEntry.fasta]]);
+            const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectFasta]]);
             const cacheMap = new Map(losatCache.value || []);
             /** @type {LosatCacheInfoEntry[]} */
             const cacheInfo = [];
@@ -3269,12 +3259,7 @@ export const createRunAnalysis = ({
               const fileObj = comparisonEntry?.file || comparisonEntry;
               // One sequence reader (D12): the Python helper reads FASTA, GenBank
               // or DDBJ and returns the query FASTA that the CLI ring hashes.
-              const sequenceResponse = await runDiagramHelperOperation(
-                DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
-                { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(fileObj) }] }
-              );
-              if (sequenceResponse.result?.error) throw sequenceResponse.result.error;
-              const queryFasta = String(sequenceResponse.result?.fasta || '');
+              const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
@@ -3801,8 +3786,10 @@ export const createRunAnalysis = ({
           const cachedEntry = sourceFile
             ? (
                 useProteinBlastp
-                  ? getCachedProteinExtraction(sourceFile, persistentCacheKey)
-                  : (usePersistentFastaCache ? getCachedFastaExtraction(sourceFile, persistentCacheKey) : null)
+                  ? getCachedFileRead(proteinExtractionCache, sourceFile, persistentCacheKey)
+                  : (usePersistentFastaCache
+                      ? getCachedFileRead(fastaExtractionCache, sourceFile, persistentCacheKey)
+                      : null)
               )
             : null;
           let entry = cachedEntry;
@@ -3900,9 +3887,9 @@ export const createRunAnalysis = ({
               }
             }
             if (sourceFile && useProteinBlastp) {
-              setCachedProteinExtraction(sourceFile, persistentCacheKey, entry);
+              setCachedFileRead(proteinExtractionCache, sourceFile, persistentCacheKey, entry);
             } else if (sourceFile && usePersistentFastaCache) {
-              setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
+              setCachedFileRead(fastaExtractionCache, sourceFile, persistentCacheKey, entry);
             }
           }
           fastaCache.set(idx, entry);
