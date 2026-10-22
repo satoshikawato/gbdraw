@@ -2630,7 +2630,7 @@
                                     :aria-label="t('Depth tracks for file {n}', { n: sourceIndex + 1 })"
                                     class="min-w-0 text-[10px]"
                                 >
-                                    <span class="min-w-0 truncate">{{ linearSourceDepthSummary(source) }}</span>
+                                    <span class="min-w-0">{{ linearSourceDepthSummary(source) }}</span>
                                 </summary>
                                 <setting-note setting="depth-sources" class="pt-1"></setting-note>
                                 <div class="min-w-0 space-y-1.5 pt-1">
@@ -3516,11 +3516,11 @@
                         <summary :aria-label="t('Region Annotations')"><settings-section-title section="region-annotations"></settings-section-title> <help-tip :text="t('Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement.')"></help-tip></summary>
                         <setting-note setting="region-annotations" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
-                            <div class="flex gap-1">
-                                <button type="button" class="btn btn-secondary text-[10px] flex-1 px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1 px-2" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
+                            <div class="flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-secondary text-[10px] flex-auto px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
                                 <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1 px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
                             </div>
                             <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
                             <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="ui-hint">{{ t('Add an annotation row to download TSV.') }}</p>
@@ -3652,11 +3652,11 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="flex gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Clear Cache') }}
                                     </button>
                                 </div>
@@ -4875,8 +4875,8 @@
                                     <span data-default-color-application-help class="apply-note">{{ settingApplicationText(hasPendingPaletteDraft ? 'generate' : 'live') }}</span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
-                                    <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0">
-                                        <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
+                                    <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0 self-end">
+                                        <span class="text-[9px] text-slate-500 break-words block mb-0.5">{{ feat }}</span>
                                         <color-value-control
                                             v-model="currentColors[feat]"
                                             :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
@@ -4887,8 +4887,8 @@
                                 <details v-if="defaultColorGroups.more.length" class="mt-1.5" data-default-colors-more>
                                     <summary class="cursor-pointer text-[10px] text-slate-500">{{ t('More colors ({count})', { count: defaultColorGroups.more.length }) }}</summary>
                                     <div class="mt-1 grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
-                                        <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0">
-                                            <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
+                                        <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0 self-end">
+                                            <span class="text-[9px] text-slate-500 break-words block mb-0.5">{{ feat }}</span>
                                             <color-value-control
                                                 v-model="currentColors[feat]"
                                                 :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
@@ -5803,21 +5803,21 @@
                                 <p class="mb-2 text-[11px]">
                                     {{ t('gbdraw is released under the MIT License. Open source notices for the hosted app, vendored browser assets, and bundled fonts are available on a local static page.') }}
                                 </p>
-                                <div class="flex gap-2">
-                                    <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-1">
+                                <div class="flex flex-wrap gap-2">
+                                    <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-auto">
                                         <i class="ph ph-book-open-text text-lg" aria-hidden="true"></i> {{ t('Open Source Notices') }}
                                     </a>
-                                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-auto">
                                         <i class="ph ph-file-text text-lg" aria-hidden="true"></i> {{ t('MIT on GitHub') }}
                                     </a>
                                 </div>
                             </div>
 
-                            <div class="flex gap-2">
-                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                            <div class="flex flex-wrap gap-2">
+                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-auto">
                                     <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> GitHub
                                 </a>
-                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-auto">
                                     <i class="ph ph-bug text-lg" aria-hidden="true"></i> {{ t('Issues') }}
                                 </a>
                             </div>
@@ -6342,11 +6342,11 @@
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <div v-if="richFeaturePopup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                        <div v-if="richFeaturePopup" class="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-sliders-horizontal shrink-0" aria-hidden="true"></i>
@@ -6355,7 +6355,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'details'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-identification-card shrink-0" aria-hidden="true"></i>
@@ -6364,7 +6364,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'qualifiers'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-list-bullets shrink-0" aria-hidden="true"></i>
@@ -6373,7 +6373,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'sequence'"
                                     :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-text-columns shrink-0" aria-hidden="true"></i>
