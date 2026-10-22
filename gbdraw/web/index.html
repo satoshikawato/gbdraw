@@ -350,11 +350,13 @@
             background: #ffffff;
             border-radius: 0.5rem;
         }
+        /* A block box centred by align-content, not a flex box: an ellipsis shows only on a block
+           box, and a long value was cut at the field's edge without one (OV-1519). */
         .auto-value-placeholder {
             position: absolute;
             inset: 0;
-            display: flex;
-            align-items: center;
+            display: block;
+            align-content: center;
             min-width: 0;
             padding: 0.2rem 0.5rem;
             color: var(--ui-muted);
@@ -7943,7 +7945,8 @@
                     </div>
 
                     <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
-                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
+                        <!-- The toolbar wraps when its two Reset buttons do not fit beside the sort buttons; Reset strokes then keeps the right edge (OV-1520). -->
+                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex flex-wrap items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
                             <help-tip id="legend-tab-help" :label="t('About the Legend tab')" :text="settingApplicationNote('legend-editor').text + ' ' + t('To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.')"></help-tip>
                             <button :aria-label="t('Sort A-Z')" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" :title="t('Sort A-Z')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-sort-ascending" aria-hidden="true"></i>
@@ -7958,7 +7961,7 @@
                             <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="layoutRepositionMode ? t('Reset the legend position. Drag the legend in the preview to move it.') : t('Reset the legend position. To move the legend, turn on Layout edit and drag it in the preview.')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset position') }}
                             </button>
-                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
+                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 ml-auto flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset strokes') }}
                             </button>
                         </div>
