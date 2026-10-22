@@ -1,9 +1,13 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
-Revision 9, 2026-10-22 (counted sentences are `tn` pairs, and track, mode, control and setting names are no
-longer placeholders inside sentences: §1.3, §7.5; fr Feature and MB confirmed by the Owner (P-07): §7.1, §7.3;
-this file and the glossary, not the Product Contract, hold the term rules: §2.1, §3, §9.1. Revision 8 was the ko, es, fr and
-pt round-2 revision; Revision 7 the round-1 term audit of Indonesian, Vietnamese and Thai: §9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
+Revision 10, 2026-10-22 (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
+locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
+ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
+and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
+track, mode, control and setting names are no longer placeholders inside sentences (§1.3, §7.5); fr Feature and MB confirmed
+by the Owner (P-07): §7.1, §7.3; this file and the glossary, not the Product Contract, hold the term rules: §2.1, §3, §9.1.
+Revision 8 was the ko, es, fr and pt round-2 revision; Revision 7 the round-1 term audit of Indonesian, Vietnamese and Thai:
+§9, §10, §11). Companion of `I18N_GLOSSARY.tsv`. Translators and LLM
 drafts follow this file and the glossary together. The glossary decides words;
 this file decides how sentences are written around them. Where the two
 disagree, the glossary wins and this file is corrected.
@@ -136,8 +140,18 @@ nothing states that they are reviewed.
 
 - CJK glyphs are about twice as wide as Latin letters at the same size, and
   the CJK CSS raises 10–11 px text to 12 px. Count width, not characters.
-- Rail short names: at most 5 full-width glyphs, 4 preferred (the 60 px icon
-  column has 52 px buttons at 10 px). Header and bar buttons: no wider than
+- Rail short names (52 px entries; 10 px, CJK 12 px, Thai 12 px): prefer a
+  name that fits on one line (CJK at most 4 full-width glyphs, 5 at most;
+  Latin about nine letters). A name never breaks inside a word in any
+  locale: CJK words keep their glyphs together (`keep-all`) and Latin words
+  are not hyphenated (no soft hyphens in rail values). A name that does not
+  fit takes two lines, breaking only between words (GC / sesgo, Acerca de),
+  and its entry grows. A single word wider than the entry stays on one line
+  and may run into the rail column's padding (58 px inside the column at most;
+  ja フィーチャー uses proportional kana to fit); a word wider than that needs a
+  shorter rail key (`tx('rail', '…')`). Rail keys: `rail\u0004Features`,
+  `rail\u0004Layout`, `rail\u0004Labels`; a catalog value equal to the
+  section title is correct when it fits. Header and bar buttons: no wider than
   the English label. Option labels inside 10 px rows: as short as the
   glossary form.
 - Help texts and notices may be as long as needed; they wrap.
@@ -146,8 +160,7 @@ nothing states that they are reviewed.
 - `id` and `vi` short verbs and phrases can run up to twice the English width;
   see §9.6 and §10.6.
 - Thai UI text has a 12 px floor, also for the rail names, the hints and the
-  header buttons; a rail name may take two lines and its entry grows to fit
-  (§11.6).
+  header buttons, and line-height 1.5 on the rail (§11.6).
 
 ## 2. Japanese (`ja`)
 
@@ -166,6 +179,19 @@ nothing states that they are reviewed.
 - **既定**, not デフォルト, for Default (D-13). **直鎖状**, not 線状, for
   Linear (D-20); the Record Size Mode option Linear is 線形. As a modifier of
   a diagram: 環状図の, 直鎖状図の.
+- **Diagram mode versus topology**: a record that belongs to the Circular or
+  Linear diagram is written 環状図の… / 直鎖状図の… (環状図のレコード,
+  直鎖状図の配列{n}). 環状レコード is only the topology (Circular record
+  checkbox: the record is circular); 直鎖状配列 is never used for a Linear
+  diagram's sequence.
+- **Comparative-genomics terms (§1.4)**: オーソログ, パラログ, 相互ベストヒット
+  (reciprocal best hit; U-Tokyo bioinformatics textbook) and グラフのエッジ
+  (エッジ) are established and stay. Terms with no established Japanese use
+  stay English in lower case: near-reciprocal hit, coortholog, inparalog. Do
+  not write 準相互ヒット, 共オーソログ or インパラログ. Compounds of an
+  established word keep the Japanese pattern: レコード内パラログ, RBHシード.
+- **Attach / Attached** (a Depth TSV to a series or record) is 割り当て /
+  割り当て済み in every key, not 関連付け.
 - **Depth**: the Depth input file is リード深度TSV; every other Depth (track,
   axis, series, window) is 深度 (D-27). 一致率 for Identity (D-31).
 - **DDBJ terms** for INSDC fields: 位置情報 (Location), 遺伝子産物
@@ -220,6 +246,9 @@ Japanese is usually 0.5–0.8× the English character count, which is about
 the same pixel width. Buttons stay within 8 full-width glyphs where
 possible; rail short names within 5 (Features is the known exception).
 
+- フィーチャー on the rail keeps one line at every window size (never
+  フィー / チャー, Owner 2026-10-22); no shorter rail form.
+
 ## 3. Simplified Chinese (`zh-Hans`, mainland usage)
 
 Open zh-Hans and zh-Hant terms (glossary rows marked [review]) are decided by
@@ -270,6 +299,39 @@ zh reviewers; this file and the glossary record each decision.
 ### 3.5 Length
 
 Usually 0.4–0.6× the English character count. Rail short names 2–4 glyphs.
+
+### 3.6 Circular and Linear as the name of a drawing
+
+- When Circular or Linear names the diagram mode and is followed by a record,
+  sequence, file, region, scale or row, say 图谱: 线性图谱的记录间隙,
+  环状图谱的记录标签, 序列{n}在线性图谱中的记录行, 线性图谱的比例尺,
+  清除线性图谱的文件. 线性记录, 线性序列, 线性文件, 线性比例尺, 环状区域,
+  环状序列 read as molecule topology (or a mathematical linear scale) and are
+  not used.
+- A bare 环状 stays for the topology of a record (环状记录 for the key
+  `Circular record`), for the mode name itself, and for things that are
+  ring-shaped (环状轨道, 环状比较环).
+- Either (Collinear merge orientation) is 不限方向 (accept any orientation),
+  not 任一 (one of the two other conditions).
+
+### 3.7 Axis and line, not an outline
+
+- The axis line and the intron line are lines, not outlines: 轴线颜色 /
+  轴线宽度, 线条颜色 / 线条宽度 (as zh-Hant 軸線, 線條). 描边 stays for the
+  outline of blocks, features and legend entries.
+
+### 3.8 Established Chinese terms for comparative genomics (§1.4)
+
+- Kept: 直系同源 and 旁系同源 (ortholog, paralog; zh.wikipedia, Chinese
+  textbooks), 命中 for a BLAST hit, 共线性, 锚点, 区块.
+- English, lower case in running text (no established Chinese term found):
+  reciprocal best hit, near-reciprocal hit, coortholog, inparalog. 双向最佳命中,
+  近似双向最佳命中, 共直系同源 and 内旁系同源 are not used. A Chinese gloss may
+  follow once in a help text if reviewers want one (双向最优匹配 for BBH appears
+  in one Chinese course page; zh.wikipedia writes 后重复 for inparalog).
+- Sentence or label start keeps the English capital (Reciprocal best hit：…);
+  Chinese has no plural, so the option Reciprocal best hits is Reciprocal best
+  hit.
 
 ## 4. Traditional Chinese (`zh-Hant`, Taiwan usage)
 
@@ -408,6 +470,30 @@ to record length). Collinear is 共線性 (R2).
 As `zh-Hans`. 工作階段 is four glyphs where 会话 is two; check the header
 buttons 儲存工作階段 and 載入工作階段 at 1,024 px in PR-1.
 
+### 4.7 Circular and Linear as the name of a drawing
+
+- The rule of §3.6 holds with 圖譜 (the glossary's Diagram): when Circular or
+  Linear names the diagram mode and is followed by a record, sequence, file,
+  region, scale or row, say 線狀圖譜的… / 環狀圖譜的… (線狀圖譜的比例尺, not
+  線狀圖 or 線狀比例尺). A bare 環狀 / 線狀 record, sequence,
+  file or scale reads as molecule topology and is not used for the mode. A
+  bare 環狀 stays for the topology of a record, the mode name itself, and
+  ring-shaped things.
+- Either (Collinear merge orientation) is 不限方向, not 任一.
+
+### 4.8 Dimension words of a track
+
+- Width, Height and Radius of a GC, skew or depth track carry 軌道:
+  深度軌道寬度, GC含量軌道半徑, GC skew軌道寬度, GC軌道高度 (zh-Hans 轨道
+  already). A bare 深度寬度 / GC含量寬度 reads as the width of a value.
+  Sentences that quote these labels quote the new wording.
+
+### 4.9 Established Chinese terms for comparative genomics (§1.4)
+
+- The rule of §3.8 holds: 直系同源 and 旁系同源, 命中, 共線性, 錨點, 區塊 stay;
+  reciprocal best hit, near-reciprocal hit, coortholog and inparalog stay
+  English in lower case, with the English capital at a label or sentence start.
+
 ## 5. Korean (`ko`)
 
 Standard Korean (표준어) as South Korean software writes it: Microsoft and
@@ -443,6 +529,11 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   프리프린트, 캐시, 사이드바, 호스팅, 웹 앱, 리소스, 컨트롤, and the
   loanword parts of 파라로그, 오솔로그 and 갭 개시 수 (rows of
   `I18N_GLOSSARY.tsv`). The compound 소스 코드 (Source code) is allowed.
+- **Track dimensions** carry 트랙: the Width, Height and Radius of a GC, skew
+  or depth track are GC 함량 트랙 너비, GC skew 트랙 반지름, GC 트랙 높이,
+  깊이 트랙 너비. Without 트랙 the label reads as the width of the GC content
+  itself. A control name for a slot is 트랙 슬롯 {id} …, never 트랙 {id} …
+  (선형 다이어그램의 트랙 슬롯 {id} 렌더러).
 - **Command words** (Microsoft Korean): 저장, 열기, 닫기, 취소, 추가, 삭제
   (Delete), 제거 (Remove), 지우기 (Clear), 복사 (Copy), 복제 (Duplicate),
   붙여넣기, 편집, 적용, 선택, 모두 선택 해제, 표시 / 숨기기, 켬 / 끔, 활성화 /
@@ -600,6 +691,11 @@ differ, take the word Microsoft uses in both markets or the RAE form
   (Select), Elegir (Choose), Contraer, Omitir (Skip), Combinar (Merge),
   Acoplar (Dock), Girar, Mantener (Keep), Volver a generar; Habilitar /
   Deshabilitar (Enable / Disable); Activado / Desactivado (On / Off).
+- **A slot id is a slot, not a track**: a label whose `{id}` is a track slot
+  id names the ranura (Renderizador de la ranura de pista lineal {id}), so it
+  cannot read as a track id.
+- **A count of members is "Número de …"**: Número de genes del grupo de la
+  query; a bare plural (Genes del grupo) reads as the list of genes.
 - **Loanwords**: only hit (plural hits), query, subject, E-value, Bitscore,
   zoom, renderizador and the names of §1.1; also the English terms reciprocal
   best hit, near-reciprocal hit, coortholog, inparalog and orthogroup (el
@@ -678,6 +774,12 @@ differ, take the word Microsoft uses in both markets or the RAE form
   TSV de profundidad, TSV de BLAST, caché de LOSAT. Genders: el ancla
   (feminine: el ancla habilitada), la CDS, el ID, el TSV, el hit, la query,
   el subject, el locus.
+- **An exact-match condition is parenthesized after the field**: Producto
+  (coincidencia exacta): {product}, never Producto exacto, which reads as an
+  adjective of the value.
+- **Avoid su for "its"** where the sentence has no clear owner (hover hints,
+  per-item settings): name the thing (la configuración de este elemento),
+  because su is also "your" under usted.
 
 ### 6.5 Placeholders and plurals
 
@@ -708,11 +810,12 @@ differ, take the word Microsoft uses in both markets or the RAE form
 
 - Spanish runs 15–30% longer than English; help texts and notices wrap. Rail
   short names: at most 9 letters, about 50 px at 10 px semibold in the
-  52 px button, which does not wrap: Entrada, Comparar, Avanzado, Regiones,
+  52 px entry; a name that does not fit takes two lines (GC / sesgo takes two
+  lines at 1,440 px): Entrada, Comparar, Avanzado, Regiones,
   Diseño, Fuente, Títulos, Leyenda, Colores, Etiquetas, Eje, GC / sesgo,
   Acerca de; Generar beside the rail. The rail short name of Features has its
-  own key, `tx('rail', 'Features')`: Caract. (the section title
-  Características, 15 letters, does not fit).
+  own key, `tx('rail', 'Features')`: Caract. stays its rail form (the section
+  title Características, 15 letters, does not fit).
 - Header buttons stay within about 1.3× the English label; check Restablecer
   configuración at 1,024 px. Options in 10 px rows use the glossary's short forms: Automático, En serie,
   Multihilo, Arriba / Abajo, Dentro / Fuera, En el eje, Fondo, Cinta /
@@ -739,6 +842,10 @@ entry is the endonym **Français**; the menu label itself is Langue.
   anneau, règle graduée (ruler), graduation principale / secondaire (Excel French ticks), entrée
   de légende, étiquette, libellé (caption), trait (line), contour (stroke), remplissage (fill),
   pastille (swatch), calque, marge (padding), écart (gap), décalage.
+- **Stroke has two words**: trait for the axis and for lines (trait de l’axe,
+  Épaisseur du trait: the line itself); contour for the outline of a shape
+  (blocs, éléments, pastilles de légende). The axis stroke is never « contour
+  de l’axe », which reads as an outline around the axis.
 - **Command words** of Microsoft and Apple French: Enregistrer, Charger, Ouvrir, Fermer, Copier,
   Coller, Dupliquer, Supprimer (Delete), Retirer (Remove), Renommer, Effacer, Vider le cache,
   Réinitialiser, Restaurer, Appliquer, Réessayer, Ignorer (Skip), Conserver, Afficher / Masquer,
@@ -790,6 +897,14 @@ entry is the endonym **Français**; the menu label itself is Langue.
   « Activé »; an instruction is Définissez … or Choisissez ….
 - Linear / Circular qualifying a noun is du diagramme linéaire / circulaire (étiquettes du
   diagramme circulaire); « en mode circulaire » only for the app mode.
+- The Linear scale (scale bar and ruler of the drawing) is « l’échelle du
+  diagramme linéaire », never « l’échelle linéaire » (linear versus
+  logarithmic scale, as the Échelle logarithmique checkbox shows); the same
+  for the ruler: la règle graduée du diagramme linéaire.
+- A count of members is « Nombre de … » : Nombre de gènes du groupe (requête).
+- An exact-match condition: Produit (correspondance exacte) : {product}.
+- The « mode » of a legend position is the diagram’s mode: des positions du
+  mode du diagramme, not de son mode.
 - Dialog questions: infinitive (Retirer tout le fichier ?). Negation is always ne … pas. A
   control or section named in a sentence takes its French label in guillemets: Cliquez sur
   « Générer », dans « Annotations de régions ».
@@ -868,9 +983,12 @@ entry is the endonym **Français**; the menu label itself is Langue.
 
 - French labels run 15–30% longer than English, a button with an object about twice as long
   (Enregistrer la session); take the short form the glossary gives.
-- Rail short names (52 px buttons, 10 px semibold, no wrapping: about nine Latin letters):
-  Entrée, Comparer, Avancé, Régions, Disposition (about 52 px, the limit), Police, Titres,
-  Légende, Couleurs, Éléments, Étiquettes (about 48 px), Axe, GC / skew, À propos, Générer.
+- Rail short names (52 px entries, 10 px semibold; about nine Latin letters on one line):
+  Entrée, Comparer, Avancé, Régions, Police, Titres, Légende, Couleurs, Éléments, Axe,
+  GC / skew, À propos, Générer. Disposition and Étiquettes have rail keys with a soft
+  hyphen, Dispo­sition and Éti­quettes; they take two lines (Dispo- / sition,
+  Éti- / quettes) where the one-line word does not fit (1,440 px). The section titles
+  keep the plain words.
 - The four header buttons (Réinitialiser les paramètres, Enregistrer la session, Charger une
   session, Charger un exemple) are about 1.7× the English width: check them at 1,024 px and
   fix an overflow in CSS, not with a shorter key, since the same keys name them in prose.
@@ -945,6 +1063,10 @@ entry is the endonym **Français**; the menu label itself is Langue.
   noun, not maior ou igual a 0.
 - **Diagram mode**: Circular / Linear qualifying a noun is diagrama circular /
   diagrama linear (registros do diagrama linear); modo stays for modo simples.
+  The rule covers every noun, not only registros: a session or a comparison of
+  a mode is sessão do diagrama circular, comparação do diagrama linear; sessão
+  circular reads as a circular topology. The trilha / slot compounds of the
+  glossary (slot de trilha linear) stay.
 - **An option or button name is not the sentence subject**: Ao salvar a
   sessão, … são armazenados; Com Nenhum, …; never Salvar armazena … or
   Desativado as centraliza.
@@ -983,6 +1105,14 @@ entry is the endonym **Français**; the menu label itself is Langue.
   rótulo do registro; Feature type → tipo de feature; Linear track slot Lane
   gap → Espaço entre subtrilhas do slot de trilha linear. de + article for a
   specific thing (da legenda), bare de for a kind (tabela de cores).
+- **Track dimensions**: the Width, Height and Radius of a GC, skew or depth
+  track carry trilha: Largura da trilha de conteúdo de GC, Raio da trilha de
+  GC skew, Altura das trilhas de GC. A slot control name is Renderizador do
+  slot de trilha linear {id}, not Renderizador da trilha {id}.
+- **Counts and exact matches**: a value that counts members is Número de genes
+  do grupo … (a bare plural noun reads as a list of genes); an exact-match
+  condition is written Produto (correspondência exata): {product}, because
+  exato beside a noun describes the noun.
 - Adjectives agree (posição personalizada); a standalone option label is
   invariable masculine: Automático, Nenhum, Ativado, Desativado, Padrão.
 
@@ -1020,7 +1150,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
 ### 8.6 Length
 
 - Portuguese runs 20–35% longer than English. Rail short names fit the
-  52 px button at 10 px in about 9 letters: Entrada, Features, Cores,
+  52 px button at 10 px in about 9 letters; a rail name of two words takes two
+  lines when it does not fit, and a single word must fit or get a rail key: Entrada, Features, Cores,
   Rótulos, Legenda, Layout, Eixo, GC / skew, Regiões, Títulos, Comparar (the
   verb; Comparação does not fit), Avançado, Fonte, Sobre.
 - Header and bar buttons stay within about 1.3× the English (Salvar sessão,
@@ -1102,7 +1233,10 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 - Required, optional, recommended: Wajib ("… wajib diisi" in a sentence),
   Opsional and "(opsional)" after a field name, Direkomendasikan. Generate as
   an event: saat diagram dibuat, sebelum diagram dibuat, pembuatan diagram
-  berikutnya; a cited button is Buat (klik Buat).
+  berikutnya; a cited button is Buat (klik Buat). An option that selects what a
+  button does is cited with its label (klik Buat); "manually" for a generation
+  started by that button is written with the button (dibuat dengan Buat), not
+  secara manual.
 
 ### 9.3 Punctuation and spacing
 
@@ -1150,6 +1284,17 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 - A mode word after a noun means the topology (record sirkular); for the
   Linear or Circular drawing, write the noun phrase + diagram linear / diagram
   sirkular (Label record diagram sirkular), or … di diagram linear in prose.
+  The drawing mode is attached to the diagram also after file, reference and
+  task nouns: file diagram linear, Kode genetik referensi di diagram sirkular,
+  Tugas LOSATN diagram sirkular. The names of records that the record selector
+  lists use the same form (Record diagram sirkular); Record sirkular is the
+  topology.
+- A dimension word (Lebar, Tinggi, Radius) for a depth or GC value takes track,
+  because the dimension belongs to the drawn track, not to the value: Lebar
+  track kedalaman, Tinggi track GC skew, Radius track kandungan GC.
+- A common noun kept for a feature is lower case inside a sentence or phrase
+  and capital only at the start of a label: Aturan warna untuk fitur apa pun;
+  Fitur apa pun dengan {qualifier} yang cocok dengan "{pattern}".
 
 ### 9.5 Placeholders and counts
 
@@ -1174,10 +1319,12 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 - About 1.05–1.15× English overall, but short verbs grow
   1.4–2.25× (Terapkan 1.65×, Urungkan 2.0×) and meN- progress forms run 8–12
   letters: allow +50% for labels of up to 10 characters, +15–20% for sentences.
-- Rail short names (52 px buttons, 10 px semibold, no wrap) hold about nine
-  letters; Pengaturan (54 px) already overflows. Use Input, Banding, Lanjutan,
+- Rail short names (52 px buttons, 10 px semibold) hold about nine letters on
+  one line; Pengaturan (54 px) overflows. Use Input, Banding, Lanjutan,
   Daerah, Tata letak, Font, Judul, Legenda, Warna, Label, Sumbu, GC / skew,
-  Fitur, Tentang; Buat beside the rail.
+  Fitur, Tentang; Buat beside the rail. A rail name of two words takes two
+  lines when it does not fit; a single word must fit (about nine letters) or
+  get a rail key. Pengaturan still does not fit as one word.
 - Header buttons within about 1.5× the English: check Atur ulang pengaturan (21
   letters for 14) and Urungkan at 1,024 px. To shorten, drop yang, untuk and
   the subject; never switch terms; abbreviate only after a screenshot shows
@@ -1260,7 +1407,13 @@ typefaces.
   tệp / vùng / tham chiếu + dạng vòng or dạng thẳng states the molecule
   topology (Display start requires a circular record = … bản ghi dạng vòng).
   Nouns without a topology keep the short form: track dạng vòng, khe track
-  dạng thẳng {id}.
+  dạng thẳng {id}. The record selector of the Circular diagram is Bản ghi
+  trong sơ đồ dạng vòng (the selector's aria name), and bản ghi dạng vòng is
+  the topology only. A task or reference of a diagram takes the bracket form:
+  Tác vụ LOSATN (sơ đồ dạng vòng), Bảng mã di truyền tham chiếu (sơ đồ dạng
+  vòng).
+- A stroke-width placeholder under a thickness label uses the label's word:
+  Độ dày (not Chiều rộng).
 - **Command words** (Firefox, Google, Android): Cài đặt, Mặc định, Đặt sẵn
   (Preset; after a head noun: Chế độ track đặt sẵn, Bộ màu đặt sẵn), Phiên,
   Tạo, Lưu, Tải (Load; Mở phiên), Nhập / Xuất, Tải lên / Tải xuống, Hoàn tác /
@@ -1322,7 +1475,8 @@ typefaces.
   Thêm khoá (ADD KEY). `:lang(vi)` turns off `uppercase` and `tracking-*`.
 - Names keep their capitals (GenBank, LOSAT); gbdraw stays lower case. A
   common noun kept in English is capitalized only at the start of a label
-  (Feature, Track).
+  (Feature, Track) and is lower case inside a sentence or phrase: Quy tắc màu
+  cho feature bất kỳ.
 - **Tone marks in the new position** in every string (QĐ 1989/QĐ-BGDĐT Điều 8,
   2018 textbooks, Google; many papers still use the old position): hoà, hoá,
   xoá, khoá, toạ, khoẻ, tuỳ, huỷ, thuỷ, so Xoá, Huỷ, Tuỳ chỉnh, Tuỳ chọn, Toạ
@@ -1358,8 +1512,9 @@ typefaces.
   form, 1.74×).
 - Rail short names (52 px buttons at 9–10 px), about 9 characters: Đầu vào,
   Feature, Nhãn, Màu, Trục, Vùng, So sánh, Nâng cao, Tiêu đề, Bố cục, GC /
-  skew. Phông chữ and Giới thiệu are the widest and fit on one line at 1,024
-  and 1,280 px; the short form Phông is not used.
+  skew. Phông chữ and Giới thiệu are the widest: Phông chữ takes two lines at
+  1,440 px; both fit. The short form Phông is not used. The rail names have
+  line-height 1.3 in vi so a two-line name keeps its diacritics clear.
 - Header and bar buttons: within about 1.3× the English (Lưu phiên, Tải ví
   dụ, Đặt lại cài đặt); Huỷ, not Huỷ bỏ. No abbreviations with periods
   (Trình đ.khiển). Help texts wrap. Headings need line-height ≥ 1.4 and no
@@ -1419,7 +1574,10 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
   ความอนุรักษ์ของลำดับ (conservation), ผลิตภัณฑ์ของยีน (/product),
   การเปรียบเทียบรายคู่ (pairwise comparison), แผนภาพ, แทร็ก. The stroke of a
   line element is the line itself (สีเส้นแกน, ความหนาเส้น); เส้นขอบ is the
-  outline of a block or swatch.
+  outline of a block or swatch. A dimension word for GC content or GC skew
+  takes แทร็ก, as it already does for depth: ความกว้างแทร็กปริมาณ GC. A
+  stroke-width placeholder under a thickness label uses the label's word:
+  ความหนา (not ความกว้าง).
 - **Kept in English**, no plural s: E-value, Bitscore, Query, Subject, hit,
   RBH, orthogroup, ortholog, paralog, coortholog, inparalog, upstream,
   downstream, Collinear, GC skew, AT skew, coverage, qualifier, accession
@@ -1475,10 +1633,14 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
   a row.
 - **Generate again**: สร้างแผนภาพอีกครั้ง, without quotes; คลิก “สร้าง” only
   when the button is clicked.
+- **Any feature**: a whole-sentence phrase writes ฟีเจอร์ใดก็ได้ with no space
+  before its ที่ clause (ฟีเจอร์ใดก็ได้ที่ {qualifier} ตรงกับ “{pattern}”);
+  กฎสีของฟีเจอร์ใดก็ได้ is one phrase, not two fragments.
 - **Drawing mode**: Linear / Circular after a record, file, sequence, axis or
   scale attaches to the diagram: ระเบียนในแผนภาพแบบเส้นตรง,
   ลำดับที่แสดงในแผนภาพแบบวงกลม. ระเบียนแบบวงกลม is the topology of the
-  molecule only; tracks and slots keep แทร็กแบบวงกลม.
+  molecule only; tracks and slots keep แทร็กแบบวงกลม. The record selector of
+  the Circular diagram is ระเบียนในแผนภาพแบบวงกลม (the selector's aria name).
 
 ### 11.3 Punctuation and spacing
 
@@ -1553,8 +1715,8 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
   zero-width marks (ค่าที่ตั้งไว้ล่วงหน้า: 21 code points, 13 base glyphs).
   Measure, or count base glyphs; never apply CJK character limits. Thai
   needs about 150% of the Latin line height.
-- **Rail** (52 px buttons): rail names are 12 px and may take two lines; the
-  entry grows to fit. แบบอักษร, คำอธิบาย, ป้ายกำกับ and GC / skew take two lines
+- **Rail** (52 px buttons): rail names are 12 px with line-height 1.5; two
+  lines are the rule of every locale (§1.5). แบบอักษร, คำอธิบาย, ป้ายกำกับ and GC / skew take two lines
   and fit the entry at 1,024 and 1,280 px (Chromium on Linux, Loma), so ฟอนต์
   and ป้าย are not used. Compare is เทียบ, not เปรียบเทียบ. The inline button
   รีเซ็ตตำแหน่งเริ่มแสดงผล (Reset start) keeps the glossary form.
