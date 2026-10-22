@@ -155,8 +155,16 @@
         /* Japanese control names (buttons, tabs, labels, headings): a name that wraps breaks between phrases
            (適用, not 適 / 用; TSVを / インポート, not TSVを / インポ / ート), as a Latin name breaks between words (OV-1518).
            A phrase wider than its box still breaks rather than overflow. Browsers without phrase breaking keep
-           the normal Japanese breaks. The rail names keep their own strict breaks (css/tailwind.input.css). */
-        :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *) { word-break: auto-phrase; overflow-wrap: break-word; }
+           the normal Japanese breaks. The rail names keep their own strict breaks (css/tailwind.input.css), and an
+           element that asks for break-all (a file name) keeps it. */
+        :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *, .break-all) { word-break: auto-phrase; overflow-wrap: break-word; }
+        /* Japanese and Chinese hints, paragraphs and field labels: a wrapped text does not end on a line of one
+           or two characters (…してくださ / い。, 比 / 较。), where the browser can move a few onto it (OV-1524).
+           Latin text keeps the browser's normal wrapping; the rail names keep theirs. */
+        :root:is(:lang(ja), :lang(zh-Hans), :lang(zh-Hant)) :is(p, .ui-hint, .input-label, label, summary):not(svg, svg *, .settings-index *) { text-wrap: pretty; }
+        /* A Korean field label whose one word is wider than its column breaks inside the word, so its help
+           tip stays inside the column (다이뉴클레오타이드 in a three-column row, OV-1525). */
+        :root:lang(ko) .input-label { overflow-wrap: anywhere; }
         :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg, :root:lang(ko) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. The figure keeps the English stack. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
