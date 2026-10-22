@@ -429,7 +429,9 @@ const railAndFooterFit = (page) => page.evaluate(() => {
 // breaks between phrases, but an element that asks for break-all keeps it
 // (OV-1518, OV-1522); the automatic value shown in an empty field, in a number
 // field or a track slot, is a block box that ends a long value with an
-// ellipsis (OV-1519, OV-1521); a closed select does too (OV-1523).
+// ellipsis (OV-1519, OV-1521); a closed select does too (OV-1523); the
+// Chinese and Japanese wrapping rule leaves an element that asks for one line
+// on one line (OV-1524 uses the text-wrap-style longhand).
 const controlFit = (page) => page.evaluate(() => {
   const colors = document.querySelector('[data-settings-section="colors"]');
   colors.querySelectorAll('details').forEach((details) => { details.open = true; });
@@ -451,7 +453,7 @@ const controlFit = (page) => page.evaluate(() => {
     element.textContent = 'x';
     document.getElementById('app').appendChild(element);
     const style = getComputedStyle(element);
-    const read = { display: style.display, textOverflow: style.textOverflow, wordBreak: style.wordBreak };
+    const read = { display: style.display, textOverflow: style.textOverflow, wordBreak: style.wordBreak, wrapMode: style.textWrapMode };
     element.remove();
     return read;
   };
@@ -465,7 +467,8 @@ const controlFit = (page) => page.evaluate(() => {
     placeholderBoxes: [...new Set([...placeholders.map((span) => getComputedStyle(span)), slot].map((style) => `${style.display}/${style.textOverflow}`))],
     selectOverflow: select.textOverflow,
     buttonBreak: probe('button', '').wordBreak,
-    breakAll: probe('h2', 'break-all').wordBreak
+    breakAll: probe('h2', 'break-all').wordBreak,
+    oneLine: [probe('p', 'truncate').wrapMode, probe('summary', 'whitespace-nowrap').wrapMode]
   };
 });
 
@@ -485,7 +488,8 @@ test('rail names stay inside their entries, nothing covers the footer, and contr
       placeholderBoxes: ['block/ellipsis'],
       selectOverflow: 'ellipsis',
       buttonBreak: tag === 'ja' ? 'auto-phrase' : 'normal',
-      breakAll: 'break-all'
+      breakAll: 'break-all',
+      oneLine: ['nowrap', 'nowrap']
     });
   }
   const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];

@@ -160,8 +160,9 @@
         :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *, .break-all) { word-break: auto-phrase; overflow-wrap: break-word; }
         /* Japanese and Chinese hints, paragraphs and field labels: a wrapped text does not end on a line of one
            or two characters (…してくださ / い。, 比 / 较。), where the browser can move a few onto it (OV-1524).
-           Latin text keeps the browser's normal wrapping; the rail names keep theirs. */
-        :root:is(:lang(ja), :lang(zh-Hans), :lang(zh-Hant)) :is(p, .ui-hint, .input-label, label, summary):not(svg, svg *, .settings-index *) { text-wrap: pretty; }
+           Latin text keeps the browser's normal wrapping; the rail names keep theirs. The longhand leaves the
+           wrap mode alone, so an element that asks for one line (truncate, whitespace-nowrap) keeps it. */
+        :root:is(:lang(ja), :lang(zh-Hans), :lang(zh-Hant)) :is(p, .ui-hint, .input-label, label, summary):not(svg, svg *, .settings-index *) { text-wrap-style: pretty; }
         /* A Korean field label whose one word is wider than its column breaks inside the word, so its help
            tip stays inside the column (다이뉴클레오타이드 in a three-column row, OV-1525). */
         :root:lang(ko) .input-label { overflow-wrap: anywhere; }
@@ -6352,7 +6353,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
                                     :class="[
-                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-sliders-horizontal shrink-0" aria-hidden="true"></i>
@@ -6361,7 +6362,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'details'"
                                     :class="[
-                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-identification-card shrink-0" aria-hidden="true"></i>
@@ -6370,7 +6371,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'qualifiers'"
                                     :class="[
-                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-list-bullets shrink-0" aria-hidden="true"></i>
@@ -6379,7 +6380,7 @@
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'sequence'"
                                     :class="[
-                                      'flex-auto px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
                                 <i class="ph ph-text-columns shrink-0" aria-hidden="true"></i>
