@@ -8,9 +8,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { CONTEXT_SEPARATOR } from '../../gbdraw/web/js/utils/i18n.js';
+import { CONTEXT_SEPARATOR, UI_LOCALES } from '../../gbdraw/web/js/utils/i18n.js';
 import {
-  CATALOG_LOCALES, CATALOG_ROOT, formatCatalog, glossaryMatcher, parseCatalog, parseGlossary, readCatalog
+  CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, formatCatalog, glossaryMatcher, parseCatalog, parseGlossary, readCatalog
 } from '../../tools/i18n/catalogs.mjs';
 import { reviewKeyId, reviewPageData } from '../../tools/i18n/review-page-data.mjs';
 import { roleAt, sourceKeys } from '../../tools/i18n/source-keys.mjs';
@@ -101,6 +101,14 @@ test('status counts missing and stale keys; --require-complete fails on either',
     `fr: ${keys.size - 1} of ${keys.size} translated, 1 missing, 1 stale`, '  missing "Generating Diagram..."', '  stale "Old text"'
   ]);
   assert.equal((await run('status', '--locale', 'fr')).code, 0, 'without --require-complete status only reports');
+  // A stale key alone: the PR-tier catalog check passes it, the release gate fails it.
+  const stale = scratch(t);
+  stale.edit('fr', (entries) => { entries['Old text'] = 'Ancien texte'; });
+  const english = new Map([...keys.values()].map(({ key, english: text }) => [key, text]));
+  assert.deepEqual(catalogProblems(english, readCatalog('fr', stale.root).entries), []);
+  const gate = await stale.run('status', '--locale', 'fr', '--require-complete');
+  assert.equal(gate.code, 1);
+  assert.ok(gate.lines.includes('  stale "Old text"'));
   assert.equal((await run('status', '--locale', 'de')).code, 2);
 });
 
@@ -159,18 +167,24 @@ test('apply refuses unknown keys, placeholder changes, repeated keys and bad lin
     { key: counted.key, translation: '{n}' },
     { key: 'Generating Diagram...', translation: 'A' },
     { key: 'Generating Diagram...', translation: 'B' },
-    { key: 'Undo', translation: 3 }
+    { key: 'Undo', translation: 3 },
+    { key: 'Cancel', translation: '  ' }
   ]);
-  writeFileSync(path, `${readFileSync(path, 'utf8')}{oops\n`);
+  writeFileSync(path, `${readFileSync(path, 'utf8')}{oops\nnull\n[1]\n{"key": 5, "translation": "x"}\n{"key": "Cancel"}\n`);
   const { code, lines } = await run('apply', '--locale', 'es', path);
   assert.equal(code, 1);
   assert.deepEqual(lines.map((line) => line.replace(path, 'bad.jsonl')), [
     'refused bad.jsonl:1: "Not a key of the sources" is not a key of the sources',
     `refused bad.jsonl:2: ${JSON.stringify(counted.key)}: placeholders {n} differ from the English {count}`,
     'refused bad.jsonl:4: "Generating Diagram..." is given twice',
-    'refused bad.jsonl:5: "Undo": the value is not a string',
-    'refused bad.jsonl:6: not a JSON line',
-    'es: nothing written; fix the 5 refused line(s)'
+    'refused bad.jsonl:5: not an object with a string "key" and a string "translation"',
+    'refused bad.jsonl:6: "Cancel": the translation is empty',
+    'refused bad.jsonl:7: not a JSON line',
+    'refused bad.jsonl:8: not an object with a string "key" and a string "translation"',
+    'refused bad.jsonl:9: not an object with a string "key" and a string "translation"',
+    'refused bad.jsonl:10: not an object with a string "key" and a string "translation"',
+    'refused bad.jsonl:11: not an object with a string "key" and a string "translation"',
+    'es: nothing written; fix the 10 refused line(s)'
   ]);
   assert.deepEqual(bytes(), before);
   assert.equal((await run('apply', '--locale', 'es')).code, 2, 'apply needs a file');
@@ -181,14 +195,19 @@ test('the review page data: ids are sha1(key)[:12], drafts are the catalogs, the
   const shots = { scale: 2, shots: [{ file: 'shots/s001.webp', w: 10, h: 10, state: 'x' }], keys: { [kept]: [[0, 1, 2, 3, 4]], ffffffffffff: [[0, 1, 1, 1, 1]] } };
   const files = await reviewPageData({ shots });
   assert.deepEqual([...files.keys()].sort(), [
-    ...CATALOG_LOCALES.flatMap((locale) => [`draft-${locale}.json`, `notes-${locale}.json`]), 'glossary.json', 'keys.json', 'shots.json', 'style.md'
+    ...CATALOG_LOCALES.flatMap((locale) => [`draft-${locale}.json`, `notes-${locale}.json`]), 'glossary.json', 'keys.json', 'locales.json', 'shots.json', 'style.md'
   ].sort());
+  assert.deepEqual(JSON.parse(files.get('locales.json')).map(({ tag }) => tag), [...CATALOG_LOCALES]);
+  assert.equal(JSON.parse(files.get('locales.json'))[0].label, UI_LOCALES.find(({ tag }) => tag === CATALOG_LOCALES[0]).name);
   assert.equal(kept, createHash('sha1').update('Cancel').digest('hex').slice(0, 12));
   const rows = JSON.parse(files.get('keys.json'));
   assert.equal(rows.length, keys.size);
   const linear = rows.find(({ key }) => key === `size scaling${CONTEXT_SEPARATOR}Linear`);
   assert.deepEqual([linear.id, linear.en, linear.sense, linear.area, linear.kind], [reviewKeyId(linear.key), 'Linear', 'size scaling', 'Settings: Layout', 'option']);
-  for (const row of rows) assert.deepEqual(Object.keys(row), ['id', 'en', 'sense', 'key', 'area', 'where', 'kind', 'uses', 'ctx', 'g']);
+  for (const row of rows) {
+    assert.deepEqual(Object.keys(row), ['id', 'en', 'sense', 'key', 'area', 'where', 'kind', 'uses', 'ctx', 'g']);
+    assert.doesNotMatch(row.where, /:\d+$/, 'no line number in the published data');
+  }
   const glossary = JSON.parse(files.get('glossary.json'));
   assert.ok(rows.every(({ g }) => g.every((index) => glossary[index])));
   const ja = JSON.parse(files.get('draft-ja.json'));

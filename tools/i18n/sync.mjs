@@ -15,8 +15,9 @@
 //   sites with their roles, the glossary rows of its terms with this locale's
 //   cell, the current translation, and, for a missing key whose English is a
 //   small edit of a stale key, that key and its translation as `previous`.
-// apply: reads lines of {"key", "translation"}, refuses a key the sources do
-//   not have and a translation whose placeholders differ, then writes the
+// apply: reads lines of {"key", "translation"}, refuses a line that is not an
+//   object with those two strings, a key the sources do not have, and an empty
+//   translation or one whose placeholders differ, then writes the
 //   catalog in its canonical format without its stale keys. Nothing is written
 //   when a line is refused; a catalog that does not change is not rewritten.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -82,6 +83,16 @@ export const previousKeyOf = (key, stale) => {
     if (score <= bestScore) [best, bestScore] = [candidate, score];
   }
   return best;
+};
+
+/**
+ * @param {unknown} value one parsed line of an apply file
+ * @returns {ApplyRecord | null} null unless a plain object with a string key and a string translation
+ */
+const applyRecordOf = (value) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const { key, translation } = /** @type {Record<string, unknown>} */ (value);
+  return typeof key === 'string' && typeof translation === 'string' ? { key, translation } : null;
 };
 
 /**
@@ -172,15 +183,20 @@ export const runSync = async (argv, { catalogRoot = CATALOG_ROOT, print = (line)
   for (let at = 0; at < lines.length; at += 1) {
     if (!lines[at].trim()) continue;
     const where = `${files[0]}:${at + 1}`;
-    /** @type {Partial<ApplyRecord>} */
-    let record;
+    /** @type {unknown} */
+    let parsed;
     try {
-      record = JSON.parse(lines[at]);
+      parsed = JSON.parse(lines[at]);
     } catch {
       refused.push(`${where}: not a JSON line`);
       continue;
     }
-    const entry = typeof record.key === 'string' ? keys.get(record.key) : undefined;
+    const record = applyRecordOf(parsed);
+    if (!record) {
+      refused.push(`${where}: not an object with a string "key" and a string "translation"`);
+      continue;
+    }
+    const entry = keys.get(record.key);
     if (!entry) {
       refused.push(`${where}: ${JSON.stringify(record.key)} is not a key of the sources`);
       continue;
@@ -191,7 +207,7 @@ export const runSync = async (argv, { catalogRoot = CATALOG_ROOT, print = (line)
     }
     const problem = translationProblem(entry.key, entry.english, record.translation);
     if (problem) refused.push(`${where}: ${problem}`);
-    else applied[entry.key] = /** @type {string} */ (record.translation);
+    else applied[entry.key] = record.translation;
   }
   if (refused.length) {
     for (const line of refused) print(`refused ${line}`);

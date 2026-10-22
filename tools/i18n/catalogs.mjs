@@ -69,6 +69,7 @@ export const readCatalog = (locale, root = CATALOG_ROOT) => parseCatalog(readFil
  */
 export const translationProblem = (key, english, value) => {
   if (typeof value !== 'string') return `${JSON.stringify(key)}: the value is not a string`;
+  if (!value.trim()) return `${JSON.stringify(key)}: the translation is empty`;
   const expected = placeholdersOf(english);
   const actual = placeholdersOf(value);
   return expected.join() === actual.join() ? null
@@ -76,15 +77,18 @@ export const translationProblem = (key, english, value) => {
 };
 
 /**
- * The problems of one catalog against the English keys of the sources.
+ * The problems of one catalog against the English keys of the sources: a
+ * non-string or empty value, or placeholders that differ, on a key the sources
+ * have. A key the sources no longer have is not a problem here (it is stale
+ * until the translation batch drops it; `catalogStatus` lists it and
+ * `sync.mjs status --require-complete` fails on it).
  * @param {ReadonlyMap<string, string>} english the key of each call and its English text
  * @param {Readonly<Record<string, unknown>>} catalog
  * @returns {string[]}
  */
 export const catalogProblems = (english, catalog) => Object.entries(catalog).flatMap(([key, value]) => {
   const text = english.get(key);
-  if (text === undefined && typeof value === 'string') return [`${JSON.stringify(key)}: no t(), tn() or tx() call has this key`];
-  const problem = translationProblem(key, text ?? '', value);
+  const problem = text === undefined ? null : translationProblem(key, text, value);
   return problem ? [problem] : [];
 });
 

@@ -5,9 +5,14 @@ description: Translate the new and changed gbdraw Web UI keys into the ten local
 
 # Translate the Web UI before a release
 
-Feature PRs add English keys only. The keys ship in English until this batch
-fills the catalogs (`gbdraw/web/js/utils/i18n-catalogs/<locale>.js`); the
-release tier fails while a catalog lacks a key or holds a stale one. Every
+Feature PRs add or change English only and leave the catalogs alone: an
+edited or removed text stays in them as a stale key, and the new text ships in
+English until this batch fills the catalogs
+(`gbdraw/web/js/utils/i18n-catalogs/<locale>.js`). Pull-request and `dev` runs
+tolerate stale and missing keys; the release tier fails while a catalog lacks a
+key or holds a stale one. `export` offers a stale key's old translation as
+`previous` (`needs-check`) for a new key whose English is a small edit of it,
+and `apply` drops the stale keys. Every
 translation stays an LLM draft: never record, show or write that a
 translation is reviewed, checked by a native speaker, or final.
 

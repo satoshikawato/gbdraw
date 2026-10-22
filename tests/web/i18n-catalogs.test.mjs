@@ -226,18 +226,23 @@ test('every t(), tn() and tx() call in the Web UI has a literal key', () => {
   assert.deepEqual(problems, []);
 });
 
-test('catalog check: stale keys, placeholder sets and non-string values', () => {
+test('catalog check: placeholder sets and non-string or empty values; a stale key is no problem', () => {
   const english = new Map([['Save Session', 'Save Session'], ['{count} rows', '{count} rows']]);
   assert.deepEqual(catalogProblems(english, {
     'Save Session': 'セッションを保存',
     '{count} rows': '{n} 行',
     'Load Session': 'セッションを読み込む',
-    'Undo': 1
+    'Undo': 1,
+    'Empty': 1
   }), [
-    '"{count} rows": placeholders {n} differ from the English {count}',
-    '"Load Session": no t(), tn() or tx() call has this key',
-    '"Undo": the value is not a string'
+    '"{count} rows": placeholders {n} differ from the English {count}'
   ]);
+  const withUndo = new Map([...english, ['Undo', 'Undo'], ['Blank', 'Blank']]);
+  assert.deepEqual(catalogProblems(withUndo, { Undo: 1, Blank: ' \n' }), [
+    '"Undo": the value is not a string',
+    '"Blank": the translation is empty'
+  ]);
+  assert.deepEqual(catalogStatus(english.keys(), { 'Save Session': 'x', 'Load Session': 'y' }).stale, ['Load Session']);
 });
 
 // A module that marks keys with msg() imports it from utils/i18n.js, or, when
@@ -272,8 +277,10 @@ test('every catalog matches the keys and placeholders of the sources', async () 
     const { default: catalog } = await import(pathToFileURL(join(CATALOG_ROOT, file)).href);
     assert.ok(Object.isFrozen(catalog), `${file} exports a frozen object`);
     assert.deepEqual(catalogProblems(english, catalog), [], file);
-    const { translated } = catalogStatus(english.keys(), catalog);
-    console.log(`${file}: ${translated.length} of ${english.size} keys translated`);
+    // Stale keys wait for the translation batch (sync.mjs apply drops them);
+    // only the release tier fails on them.
+    const { translated, stale } = catalogStatus(english.keys(), catalog);
+    console.log(`${file}: ${translated.length} of ${english.size} keys translated, ${stale.length} stale`);
   }
   // The keys a module derives rather than writes as literals.
   assert.ok(english.has(`member role${CONTEXT_SEPARATOR}anchor`), 'the member value labels (OV-1390)');

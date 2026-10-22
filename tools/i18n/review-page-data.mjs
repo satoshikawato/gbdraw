@@ -5,8 +5,10 @@
 //
 //   node tools/i18n/review-page-data.mjs --out <translation-review>/data [--shots <shots.json>]
 //
+// locales.json (the languages with a catalog, {tag, label}, in menu order),
 // keys.json (each key with its id, context, first call site and glossary
-// hints), draft-<locale>.json (the catalog by key id), notes-<locale>.json
+// hints; no line numbers, so the data changes only when text changes),
+// draft-<locale>.json (the catalog by key id), notes-<locale>.json
 // (empty: drafting notes have no owner in the repository), glossary.json
 // (I18N_GLOSSARY.tsv), style.md (I18N_STYLE.md), and shots.json: the
 // screenshot map, read from --shots or from the old <out>/shots.json, with
@@ -18,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { UI_LOCALES } from '../../gbdraw/web/js/utils/i18n.js';
 import { CATALOG_LOCALES, glossaryMatcher, readCatalog, readGlossary } from './catalogs.mjs';
 import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
 
@@ -30,7 +33,7 @@ import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
  * @property {string} sense the tx() context, or ''
  * @property {string} key the catalog key
  * @property {string} area the part of the app of the first call site
- * @property {string} where `file:line` of the first call site
+ * @property {string} where the file of the first call site
  * @property {KeyRole} kind the role of the first call site
  * @property {number} uses the number of call sites
  * @property {string} ctx the source line of the first call site
@@ -62,12 +65,15 @@ export const reviewPageData = async ({ shots }) => {
     const [site] = entry.sites;
     return {
       id: reviewKeyId(entry.key), en: entry.english, sense: entry.context ?? '', key: entry.key, area: site.area,
-      where: `${site.file}:${site.line}`, kind: site.role, uses: entry.sites.length, ctx: site.snippet, g: termsOf(entry.english)
+      where: site.file, kind: site.role, uses: entry.sites.length, ctx: site.snippet, g: termsOf(entry.english)
     };
   });
   if (new Set(rows.map(({ id }) => id)).size !== rows.length) throw new Error('two keys share an id');
   /** @type {Map<string, string>} */
-  const files = new Map([['keys.json', json(rows)]]);
+  const files = new Map([
+    ['locales.json', json(CATALOG_LOCALES.map((tag) => ({ tag, label: UI_LOCALES.find((option) => option.tag === tag)?.name ?? tag })))],
+    ['keys.json', json(rows)]
+  ]);
   for (const locale of CATALOG_LOCALES) {
     const { entries } = readCatalog(locale);
     files.set(`draft-${locale}.json`, json(Object.fromEntries(rows.filter(({ key }) => Object.hasOwn(entries, key)).map(({ id, key }) => [id, entries[key]]))));
