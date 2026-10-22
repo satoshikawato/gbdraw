@@ -218,14 +218,15 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
 }
 
 {
-  // OV-81: the captions a Depth series draws: its label and the legend label of its rows.
+  // OV-81: the captions a Depth series draws: its label (the default name of a
+  // series without one, OV-1508) and the legend label of its rows.
   const tracks = [{ label: ' depth ' }, { label: 'Depth 2' }, { label: '' }, null];
   const slots = [
     { renderer: 'depth', params: { legend_label: 'Coverage' } },
     { renderer: 'depth', enabled: false, params: { legend_label: 'depth' } },
     { renderer: 'gc_content', params: { legend_label: 'GC content' } }
   ];
-  assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: tracks, slots }), ['depth', 'Depth 2', 'Coverage']);
+  assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: tracks, slots }), ['depth', 'Depth 2', 'Depth 3', 'Depth 4', 'Coverage']);
   assert.deepEqual(depthSeriesLegendCaptions(), []);
 }
 

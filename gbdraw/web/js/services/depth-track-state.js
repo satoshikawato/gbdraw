@@ -37,7 +37,6 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * The Depth track defaults of the calling stack. The values are a drawing's
  * stored single-series settings, unvalidated.
  * @typedef {object} DepthTrackDefaults
- * @property {(index: number) => string} [labelForIndex]
  * @property {(index: number) => string} [colorForIndex]
  * @property {unknown} [depthColor] The first series' color.
  * @property {unknown} [depthHeight]
@@ -129,12 +128,6 @@ const cloneParams = (params = {}) => {
  * @returns {string}
  */
 export const defaultDepthSeriesLabel = (index, count) => (count === 1 ? 'Depth' : `Depth ${index + 1}`);
-
-/** @param {unknown} index */
-const fallbackLabel = (index) => {
-  const numericIndex = Math.max(0, Number(index) || 0);
-  return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
-};
 
 /**
  * @param {number} index
@@ -355,11 +348,9 @@ export const readDepthTrackConfig = (entry, index, defaults = {}) => {
     if (reading.lost) leaves.push({ at: `.${field}`, stored: value, used: reading.value });
     return reading.value;
   };
-  const labelForIndex = typeof defaults.labelForIndex === 'function'
-    ? defaults.labelForIndex
-    : fallbackLabel;
   const value = {
-    label: String(source.label ?? labelForIndex(index)),
+    // A series nobody named keeps no label: its name follows the series count (OV-1508).
+    label: String(source.label ?? ''),
     color: resolveColorToHex(String(source.color || fallbackColor(index, defaults))),
     height: positive('height', Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight),
     large_tick_interval: positive('large_tick_interval', source.large_tick_interval ?? defaults.largeTickInterval),
@@ -771,15 +762,16 @@ export const syncDepthSlotLabels = ({ slots, depthTracks, activeCount = null } =
 };
 
 /**
- * The Legend captions the draft's Depth series would draw: each series label, and
- * the legend label of each Depth row. The request carries no Depth source while
+ * The Legend captions the draft's Depth series would draw: each series label (the
+ * default name for a series without one), and the legend label of each Depth row. The request carries no Depth source while
  * Show Depth is off, so Python cannot name these rows then (OV-81).
  * @param {{ depthTracks?: RawDepthTrackConfig[], slots?: DepthSlotRow[] }} [options]
  * @returns {string[]}
  */
 export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {
   const captions = [
-    ...(Array.isArray(depthTracks) ? depthTracks : []).map((track) => track?.label),
+    ...(Array.isArray(depthTracks) ? depthTracks : []).map((track, index, tracks) => (
+      String(track?.label ?? '').trim() || defaultDepthSeriesLabel(index, tracks.length))),
     ...(Array.isArray(slots) ? slots : [])
       .filter((slot) => String(slot?.renderer || '') === 'depth')
       .map((slot) => slot?.params?.legend_label)

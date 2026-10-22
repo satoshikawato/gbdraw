@@ -4156,7 +4156,8 @@ const projectCanonicalDepthTracks = ({
     const label = canonicalDepthText(track.label, `${fieldName}.label`);
     const color = canonicalDepthText(track.color, `${fieldName}.color`);
     return {
-      label: label ?? defaultDepthSeriesLabel(trackIndex, options.depthTracks.length),
+      // A series the request does not name stays unnamed in the draft (OV-1508).
+      label: label ?? '',
       color: color ?? '#4A90E2',
       height: mode === 'linear'
         ? canonicalDepthNumber(track.height, `${fieldName}.height`)
@@ -5467,7 +5468,7 @@ export const projectCanonicalSessionRequest = ({
   const projectedDepthTracks = canonicalDepth?.tracks || Array.from(
     { length: projectedDepthTrackCount },
     (_, index) => ({
-      label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
+      label: String(options.depthTrackLabels?.[index] ?? ''),
       color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
       height: projectOptionalNumber(options.depthTrackHeights?.[index], { field: 'height' }),
       large_tick_interval: projectOptionalNumber(options.depthTrackLargeTickIntervals?.[index], { field: 'large_tick_interval' }),

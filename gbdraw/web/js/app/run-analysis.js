@@ -68,7 +68,6 @@ import {
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from '../services/linear-track-slot-model.js';
-import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   activeDepthTrackIndices,
   depthFileSlotsFromValue,
@@ -3044,7 +3043,7 @@ export const createRunAnalysis = ({
         while (drawing.adv.depth_tracks.length <= idx) {
           const nextIndex = drawing.adv.depth_tracks.length;
           drawing.adv.depth_tracks.push({
-            label: getDepthTrackFallbackLabel(nextIndex),
+            label: '',
             color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
             height: null,
             large_tick_interval: null,
@@ -3055,7 +3054,7 @@ export const createRunAnalysis = ({
         const config = drawing.adv.depth_tracks[idx];
         if (!config || typeof config !== 'object' || Array.isArray(config)) {
           drawing.adv.depth_tracks[idx] = {
-            label: getDepthTrackFallbackLabel(idx),
+            label: '',
             color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
             height: null,
             large_tick_interval: null,

@@ -3847,6 +3847,11 @@ assert.deepEqual(circularSparseProjection.config.adv.depth_tracks.map((track) =>
   'Sample A',
   'Sample B'
 ]);
+// A request without Depth labels projects series that stay unnamed in the
+// draft, so their names follow the series count (OV-1508).
+const labelFreeSparseCanonical = structuredClone(circularSparseCanonical);
+labelFreeSparseCanonical.renderRequest.diagramOptions.depthTracks.forEach((track) => { track.label = null; });
+assert.deepEqual(projectCanonicalSessionRequest(labelFreeSparseCanonical).config.adv.depth_tracks.map((track) => track.label), ['', '']);
 const circularSparseRebuilt = buildCanonicalRenderRequest({
   state,
   filesData: circularSparseProjection.files

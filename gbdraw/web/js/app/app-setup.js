@@ -267,8 +267,7 @@ import {
   withoutConservationSeries
 } from '../services/conservation-series.js';
 import {
-  getDepthTrackFallbackLabel,
-  getDepthTrackLabelFromFile,
+  getDepthTrackFileBaseName,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
@@ -2293,7 +2292,6 @@ export const createAppSetup = () => {
   const depthTrackFallbackColor = (index) => depthTrackDefaultColors[index % depthTrackDefaultColors.length];
   /** @param {DrawingState} drawing */
   const depthTrackConfigDefaults = (drawing) => ({
-    labelForIndex: getDepthTrackFallbackLabel,
     colorForIndex: depthTrackFallbackColor,
     depthColor: drawing.adv.depth_color,
     depthHeight: drawing.adv.depth_height,
@@ -2650,9 +2648,8 @@ export const createAppSetup = () => {
         isDepthTrackAutoLabel(currentLabel, oldIndex, oldFile) ||
         currentLabel === depthTrackAutoLabels[oldIndex]
       ) {
-        const nextLabel = file
-          ? getDepthTrackLabelFromFile(file, newIndex)
-          : getDepthTrackFallbackLabel(newIndex);
+        // A file names its series; a series without one keeps no label (OV-1508).
+        const nextLabel = getDepthTrackFileBaseName(file);
         config.label = nextLabel;
         depthTrackAutoLabels[newIndex] = nextLabel;
       } else {
@@ -2673,7 +2670,7 @@ export const createAppSetup = () => {
     if (!config) return;
     const currentLabel = String(config.label ?? '').trim();
     if (isDepthTrackAutoLabel(currentLabel, index, previousFile) || currentLabel === depthTrackAutoLabels[index]) {
-      const nextLabel = getDepthTrackLabelFromFile(file, index);
+      const nextLabel = getDepthTrackFileBaseName(file);
       config.label = nextLabel;
       depthTrackAutoLabels[index] = nextLabel;
       syncDepthTrackSlotLabelsForTrack(drawing, index);
