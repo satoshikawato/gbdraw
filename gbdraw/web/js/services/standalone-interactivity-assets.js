@@ -3362,7 +3362,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     var fieldSelect = createXhtmlNode('select', {
       className: 'gfs-select',
-      'aria-label': 'Search field',
+      'aria-label': 'Field to search',
       'data-search-field': 'true'
     });
     var searchFieldOptions = [
