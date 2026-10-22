@@ -2410,7 +2410,7 @@ export default Object.freeze({
   "Unsupported Custom Track mode: {mode}.": "Modo de pista personalizada no admitido: {mode}.",
   "Unsupported session version: {version}. This gbdraw reads Session versions {versions}.": "Versión de sesión no admitida: {version}. Esta versión de gbdraw lee las versiones de sesión {versions}.",
   "Unsupported track-slot layout kind: {kind}.": "Tipo de diseño de ranura no admitido: {kind}.",
-  "Until the pattern is accepted, Save Session and Generate use the last accepted rule, and the SVG, Interactive SVG, PNG, and PDF downloads use the current Result. The draft is not saved.": "Hasta que se acepte el patrón, al guardar la sesión y al generar se usa la última regla aceptada, y las descargas SVG, SVG interactivo, PNG y PDF usan el resultado actual. El borrador no se guarda.",
+  "Until the pattern is accepted, Save Session and Generate use the last accepted rule, and the SVG, Interactive SVG, PNG, and PDF downloads use the current Result. The draft is not saved.": "Hasta que se acepte el patrón, Guardar sesión y Generar usan la última regla aceptada, y las descargas SVG, SVG interactivo, PNG y PDF usan el resultado actual. El borrador no se guarda.",
   "Untitled session": "Sesión sin título",
   "Up": "Arriba",
   "Updates the current Result": "Actualiza el resultado actual",

@@ -787,7 +787,7 @@
           "title": "Search by qualifier value",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-06-01-search-dnaa.webp",
-            "alt": "Feature search bar with Search field set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 of 2 matches, and the first match named as NC_004603.1.",
+            "alt": "Feature search bar with Field to search set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 of 2 matches, and the first match named as NC_004603.1.",
             "caption": "Set the search field to Qualifier value, enter gene and dnaA, and click Search."
           },
           "capture": {
@@ -1107,7 +1107,7 @@
           "title": "Search the RctB product",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-07-01-search-rctb.webp",
-            "alt": "Feature search bar with Search field set to Qualifier value, product as the qualifier key, RctB as the query, 1 of 2 matches, and the first match named as NC_004605.1.",
+            "alt": "Feature search bar with Field to search set to Qualifier value, product as the qualifier key, RctB as the query, 1 of 2 matches, and the first match named as NC_004605.1.",
             "caption": "Search Qualifier key product for RctB; it finds the RctB CDS of both species."
           },
           "capture": {
