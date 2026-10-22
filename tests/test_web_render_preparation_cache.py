@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pytest
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api import (
+    CircularBatchRequest,
     CircularDiagramOptions,
     CircularDiagramRequest,
     CircularOutputOptions,
@@ -121,12 +123,14 @@ def _document(
 
 def _render(
     tmp_path: Path,
-    cache: PreparedBiologicalInputCache,
+    cache: PreparedBiologicalInputCache | None,
     document: dict[str, object],
     *,
     request_id: int,
     token_generation: int = 1,
     token_numbers: dict[str, int] | None = None,
+    held_revision: str | None = None,
+    held_segments: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, object], dict[str, object]]:
     resources = document["resources"]
     assert isinstance(resources, dict)
@@ -165,9 +169,11 @@ def _render(
         workspace=workspace,
         _diagnostics=diagnostics,
         _prepared_input_cache=cache,
-        _resource_identities=identities,
+        _resource_identities=identities if cache is not None else None,
+        _held_feature_catalog_revision=held_revision,
+        _held_segments=held_segments,
     )
-    return result, diagnostics
+    return dict(result), diagnostics
 
 
 def _metrics(diagnostics: dict[str, object]) -> dict[str, int]:
@@ -274,6 +280,7 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
 
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
+    assert warm["featureCatalog"] == cold["featureCatalog"]
     assert render_only["results"] != cold["results"]
     # Every top-level Circular group is a content (the plot title too), so the
     # catalog item is reused and no Generate after the first reads the SVG.
@@ -287,7 +294,7 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert {
         name for name in _metrics(render_only_diagnostics) if name.startswith("renderStageBuild:")
     } == {"renderStageBuild:circular_plot_title_content", "renderStageBuild:composition_plan"}
-    assert render_only["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+    assert render_only["featureCatalog"] == cold["featureCatalog"]
 
 
 def _linear_document(source: Path, *, title: str) -> dict[str, object]:
@@ -329,8 +336,9 @@ def test_a_linear_title_change_reuses_the_catalog_item(tmp_path: Path) -> None:
 
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
+    assert warm["featureCatalog"] == cold["featureCatalog"]
     assert retitled["results"] != cold["results"]
-    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+    assert retitled["featureCatalog"] == cold["featureCatalog"]
 
 
 def _multi_record_document(source: Path, *, title: str) -> dict[str, object]:
@@ -372,7 +380,20 @@ def test_a_multi_record_circular_title_change_reuses_the_merged_records(tmp_path
         "renderStageBuild:composition_plan",
     }
     assert retitled["results"] != cold["results"]
-    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+    assert retitled["featureCatalog"] == cold["featureCatalog"]
+
+
+def test_a_render_without_a_cache_always_returns_the_catalog_without_a_revision(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("uncached-catalog"),))
+    document = _document(source, title="Uncached")
+    uncached, _ = _render(tmp_path, None, document, request_id=1, held_revision="e:1")
+    cached, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=2)
+
+    assert uncached["featureCatalogRevision"] is None
+    assert uncached["featureCatalog"] == cached["featureCatalog"]
+    assert isinstance(cached["featureCatalogRevision"], str)
+    assert "featureCatalog" not in uncached["metadata"]
 
 
 def test_public_render_request_remains_uncached_by_default(
@@ -491,7 +512,7 @@ def test_annotation_change_invalidates_interactive_context_only(
     assert changed_metrics["parsedSourceCacheHitCount"] == 1
     assert changed_metrics["resolvedRecordCacheHitCount"] == 1
     assert changed_metrics["renderStageBuild:interactive_context"] == 1
-    assert changed["metadata"] != first["metadata"]
+    assert changed["featureCatalog"] != first["featureCatalog"]
 
 
 def test_visibility_resource_invalidates_context_but_not_genbank_records(
@@ -595,7 +616,7 @@ def test_orthogroup_resource_invalidates_interactive_context_only(
     assert metrics["resolvedRecordCacheHitCount"] == 1
     assert metrics["resolvedRecordBuildCount"] == 0
     assert metrics["renderStageBuild:interactive_context"] == 1
-    assert changed["metadata"] != first["metadata"]
+    assert changed["featureCatalog"] != first["featureCatalog"]
     changed_payload = json.dumps(changed, sort_keys=True)
     assert "OG-B" in changed_payload
     assert "OG-A" not in changed_payload
@@ -1284,3 +1305,391 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
     )
     assert cached_features > 0
     assert len(walked) == cached_features
+
+
+# Step 3a: the feature catalog revision (gbdraw/web/CLAUDE.md, Runtime data
+# flow). A held revision equal to this render's gives featureCatalog None; the
+# page then keeps the catalog it admitted for that revision.
+
+
+def _rewrite_genbank(path: Path, records: tuple[SeqRecord, ...]) -> None:
+    path.unlink()
+    _write_genbank(path, records)
+
+
+def test_a_held_revision_is_answered_unchanged_while_its_catalog_builds_are_reused(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("held-linear"),))
+    cache = PreparedBiologicalInputCache()
+    cold, _ = _render(tmp_path, cache, _linear_document(source, title="Cold"), request_id=1)
+    revision = cold["featureCatalogRevision"]
+    assert isinstance(revision, str) and cold["featureCatalog"] is not None
+    warm, _ = _render(tmp_path, cache, _linear_document(source, title="Cold"), request_id=2, held_revision=revision)
+    retitled, _ = _render(
+        tmp_path, cache, _linear_document(source, title="Render-only title"), request_id=3, held_revision=revision
+    )
+    unheld, _ = _render(tmp_path, cache, _linear_document(source, title="Render-only title"), request_id=4)
+
+    for reply in (warm, retitled):
+        assert reply["featureCatalog"] is None
+        assert reply["featureCatalogRevision"] == revision
+    assert retitled["results"] != cold["results"]
+    assert unheld["featureCatalogRevision"] == revision
+    assert unheld["featureCatalog"] == cold["featureCatalog"]
+
+
+def test_a_feature_change_sends_a_new_revision_and_a_rebuilt_equal_input_is_sent_again(tmp_path: Path) -> None:
+    """Inputs A, B (a feature change), A: three revisions; A's first revision held at the third is not reused."""
+
+    source = tmp_path / "records.gbk"
+    cache = PreparedBiologicalInputCache()
+    _write_genbank(source, (_record("change-a"),))
+    first, _ = _render(tmp_path, cache, _document(source), request_id=1, token_generation=1)
+    _rewrite_genbank(source, (_record("change-a", product="changed product"),))
+    changed, _ = _render(
+        tmp_path, cache, _document(source), request_id=2, token_generation=2,
+        held_revision=str(first["featureCatalogRevision"]),
+    )
+    _rewrite_genbank(source, (_record("change-a"),))
+    again, _ = _render(
+        tmp_path, cache, _document(source), request_id=3, token_generation=1,
+        held_revision=str(first["featureCatalogRevision"]),
+    )
+
+    revisions = [reply["featureCatalogRevision"] for reply in (first, changed, again)]
+    assert None not in revisions and len(set(revisions)) == 3
+    assert changed["featureCatalog"] is not None and changed["featureCatalog"] != first["featureCatalog"]
+    assert again["featureCatalog"] == first["featureCatalog"]
+
+
+def test_two_caches_never_share_a_revision(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("two-caches"),))
+    document = _linear_document(source, title="Same")
+    one, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=1)
+    two, _ = _render(
+        tmp_path, PreparedBiologicalInputCache(), document, request_id=2,
+        held_revision=str(one["featureCatalogRevision"]),
+    )
+    assert two["featureCatalogRevision"] != one["featureCatalogRevision"]
+    assert two["featureCatalog"] == one["featureCatalog"]
+
+
+def test_a_cache_without_a_random_source_always_sends_the_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_random_source(_size: int) -> str:
+        raise NotImplementedError("no random source")
+
+    monkeypatch.setattr(prepared_module.secrets, "token_hex", no_random_source)
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("no-epoch"),))
+    cache = PreparedBiologicalInputCache()
+    document = _linear_document(source, title="Same")
+    cold, _ = _render(tmp_path, cache, document, request_id=1)
+    warm, _ = _render(tmp_path, cache, document, request_id=2, held_revision="x:1")
+    for reply in (cold, warm):
+        assert reply["featureCatalogRevision"] is None
+        assert reply["featureCatalog"] is not None
+
+
+def test_a_linear_revision_held_for_a_circular_request_is_not_reused(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("other-mode"),))
+    cache = PreparedBiologicalInputCache()
+    linear, _ = _render(tmp_path, cache, _linear_document(source, title="Linear"), request_id=1)
+    circular, _ = _render(
+        tmp_path, cache, _document(source), request_id=2, held_revision=str(linear["featureCatalogRevision"])
+    )
+    assert circular["featureCatalog"] is not None
+    assert circular["featureCatalogRevision"] not in (None, linear["featureCatalogRevision"])
+
+
+def test_a_failed_render_publishes_no_build_and_keeps_the_held_revision_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gbdraw.web_support.request_render as web_request_render
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("failed-render"),))
+    cache = PreparedBiologicalInputCache()
+    document = _linear_document(source, title="Same")
+    cold, _ = _render(tmp_path, cache, document, request_id=1)
+    revision = str(cold["featureCatalogRevision"])
+    original = web_request_render.collect_legend_row_facts
+
+    def fail_once(*args: object, **kwargs: object) -> object:
+        monkeypatch.setattr(web_request_render, "collect_legend_row_facts", original)
+        raise RuntimeError("render failed after the catalog stage")
+
+    monkeypatch.setattr(web_request_render, "collect_legend_row_facts", fail_once)
+    with pytest.raises(RuntimeError, match="after the catalog stage"):
+        _render(tmp_path, cache, document, request_id=2, held_revision=revision)
+    after, _ = _render(tmp_path, cache, document, request_id=3, held_revision=revision)
+    assert after["featureCatalog"] is None
+    assert after["featureCatalogRevision"] == revision
+
+
+def _circular_batch_document(first: Path, second: Path) -> dict[str, object]:
+    request = CircularBatchRequest(
+        records=tuple(
+            RecordInput(source=GenBankInputSource(path), record_key=f"batch-{index}")
+            for index, path in enumerate((first, second), start=1)
+        ),
+        outputs=tuple(
+            RenderOutputRequest(output_prefix=f"batch-{index}", formats=("svg",)) for index in (1, 2)
+        ),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_circular_batch_revision_names_each_result_and_one_changed_record_sends_the_whole_catalog(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "first.gbk"
+    second = tmp_path / "second.gbk"
+    _write_genbank(first, (_record("batch-a"),))
+    _write_genbank(second, (_record("batch-b"),))
+    cache = PreparedBiologicalInputCache()
+    cold, _ = _render(tmp_path, cache, _circular_batch_document(first, second), request_id=1)
+    revision = str(cold["featureCatalogRevision"])
+    assert len(revision.split(":")[1].split(".")) == 2
+    resource_ids = list(_circular_batch_document(first, second)["resources"])
+    _rewrite_genbank(second, (_record("batch-b", product="changed product"),))
+    changed, _ = _render(
+        tmp_path, cache, _circular_batch_document(first, second), request_id=2,
+        token_numbers={resource_ids[0]: 101, resource_ids[1]: 202}, held_revision=revision,
+    )
+
+    assert changed["featureCatalogRevision"] not in (None, revision)
+    assert str(changed["featureCatalogRevision"]).split(":")[1].split(".")[0] == revision.split(":")[1].split(".")[0]
+    catalog = changed["featureCatalog"]
+    cold_catalog = cold["featureCatalog"]
+    assert isinstance(catalog, dict) and isinstance(cold_catalog, dict)
+    assert [item["resultName"] for item in catalog["items"]] == ["batch-1.svg", "batch-2.svg"]
+    assert catalog["items"][0] == cold_catalog["items"][0]
+    assert catalog["items"][1] != cold_catalog["items"][1]
+
+
+def _cw04_document(source: Path, overrides: tuple[FeatureOverride, ...]) -> dict[str, object]:
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=GenBankInputSource(source), record_key=f"record-{index}") for index in (1, 2)
+        ),
+        # The Web default: Show Labels None, so only a label set On is drawn.
+        options=LinearDiagramOptions(
+            config_overrides={"labels.linear.scope": "none"}, feature_overrides=overrides
+        ),
+        output=RenderOutputRequest(output_prefix="cw04", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives(tmp_path: Path) -> None:
+    """Py-9, the oracle of the CW-04 loop (tests/web/computation-ownership.playwright.spec.js).
+
+    The three requests of CW-04 on two Linear copies of one GenBank file, with
+    the browser's Show Labels None and the rows it commits (observed on this
+    branch, 2026-10-15): no row; then ``label_visibility="on"`` on the
+    tRNA-Phe feature of ``record-1`` (the feature popup); then only
+    ``label_text="CW_BULK_LABEL"`` on that feature (the Label TSV import
+    replaces the label edits, so the visibility row goes, and its
+    ``* * label`` row reaches the one label shown). Outcome on this code: each
+    edit builds the catalog item again (a new revision; the catalog is sent),
+    and every catalog equals a fresh cache's. In the browser each edit's
+    automatic label reflow is that render, so the Generate after it reuses the
+    build; the CW-04 loop pins that.
+    """
+
+    source = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    plan = plan_request(LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(source), record_key="record-1"),),
+        output=RenderOutputRequest(output_prefix="cw04", formats=("svg",)),
+    ))
+    trna = next(
+        entry.biological_feature_id
+        for entry in plan.provenance[0].source_feature_catalog or ()
+        if entry.feature_type == "tRNA"
+    )
+    steps: tuple[tuple[FeatureOverride, ...], ...] = (
+        (),
+        (FeatureOverride("record-1", trna, label_visibility="on"),),
+        (FeatureOverride("record-1", trna, label_text="CW_BULK_LABEL"),),
+    )
+    cache = PreparedBiologicalInputCache()
+    replies = []
+    for index, rows in enumerate(steps, start=1):
+        # No held revision: every reply carries its catalog, so content is compared.
+        reply, _ = _render(tmp_path, cache, _cw04_document(source, rows), request_id=index)
+        fresh, _ = _render(
+            tmp_path, PreparedBiologicalInputCache(), _cw04_document(source, rows), request_id=10 + index
+        )
+        assert reply["featureCatalog"] is not None
+        assert reply["featureCatalog"] == fresh["featureCatalog"]
+        replies.append(reply)
+    # The rule (CW-04): a reused revision means an equal catalog.
+    for earlier, later in zip(replies, replies[1:]):
+        if later["featureCatalogRevision"] == earlier["featureCatalogRevision"]:
+            assert later["featureCatalog"] == earlier["featureCatalog"]
+    # The outcome recorded above, which the CW-04 loop pins.
+    revisions = [reply["featureCatalogRevision"] for reply in replies]
+    assert None not in revisions and len(set(revisions)) == 3
+    # Holding the latest revision, a repeat of the last request keeps the catalog.
+    repeat, _ = _render(
+        tmp_path, cache, _cw04_document(source, steps[-1]), request_id=4, held_revision=revisions[-1]
+    )
+    assert repeat["featureCatalog"] is None
+    assert repeat["featureCatalogRevision"] == revisions[-1]
+
+
+# Document pieces (STEP3B stage S): the reply names every children text and
+# carries it only when the page does not hold its revision.
+
+
+def _content_pieces(reply: dict[str, object]) -> list[dict[str, object]]:
+    results = reply["results"]
+    assert isinstance(results, list)
+    return [
+        piece
+        for result in results
+        for piece in result["document"]["pieces"]
+        if piece["kind"] == "content"
+    ]
+
+
+def _joined_document(result: dict[str, object]) -> str:
+    document = result["document"]
+    assert isinstance(document, dict)
+    texts = [
+        piece["start"] + piece["children"] + "</g>" if piece["kind"] == "content" else piece["text"]
+        for piece in document["pieces"]
+    ]
+    return document["head"] + "".join(texts) + document["tail"]
+
+
+def test_the_reply_document_joins_to_the_written_svg(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("pieces-record"),))
+    reply, _ = _render(tmp_path, PreparedBiologicalInputCache(), _document(source, title="Pieces"), request_id=1)
+
+    (result,) = reply["results"]
+    assert result["content"] == '<?xml version="1.0" encoding="utf-8" ?>\n' + _joined_document(result)
+    pieces = _content_pieces(reply)
+    assert pieces
+    for piece in pieces:
+        data = piece["children"].encode("utf-8")
+        assert piece["revision"] == hashlib.sha256(data).hexdigest()
+        assert piece["bytes"] == len(data)
+    assert {piece["kind"] for piece in result["document"]["pieces"]} == {"content", "raw"}
+
+
+def test_held_revisions_are_named_without_their_text(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("held-record"),))
+    cache = PreparedBiologicalInputCache()
+    cold, _ = _render(tmp_path, cache, _document(source, title="Held"), request_id=1)
+    empty_held, _ = _render(tmp_path, cache, _document(source, title="Held"), request_id=2)
+    assert empty_held["results"] == cold["results"]
+
+    revisions = [piece["revision"] for piece in _content_pieces(cold)]
+    held = frozenset(revisions[:1])
+    partial, _ = _render(tmp_path, cache, _document(source, title="Held"), request_id=3, held_segments=held)
+    for cold_piece, piece in zip(_content_pieces(cold), _content_pieces(partial)):
+        assert {key: value for key, value in piece.items() if key != "children"} == {
+            key: value for key, value in cold_piece.items() if key != "children"
+        }
+        assert ("children" in piece) == (piece["revision"] not in held)
+    assert partial["results"][0]["content"] == cold["results"][0]["content"]
+
+
+def test_a_title_position_change_sends_no_children_text(tmp_path: Path) -> None:
+    """Moving the title changes start tags only, so every children text is held."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("moved-title"),))
+    cache = PreparedBiologicalInputCache()
+    document = _document(source, title="Moved title")
+    cold, _ = _render(tmp_path, cache, document, request_id=1)
+    held = frozenset(piece["revision"] for piece in _content_pieces(cold))
+    moved_document = copy.deepcopy(document)
+    output = moved_document["renderRequest"]["diagramOptions"]["output"]
+    assert output["plotTitlePosition"] == "top"
+    output["plotTitlePosition"] = "bottom"
+    moved, _ = _render(tmp_path, cache, moved_document, request_id=2, held_segments=held)
+
+    assert moved["results"][0]["content"] != cold["results"][0]["content"]
+    assert _content_pieces(moved)
+    assert not [piece for piece in _content_pieces(moved) if "children" in piece]
+
+
+def _gc_percent_calls(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    import gbdraw.render.groups.circular.definition as definition_module
+
+    calls: list[int] = []
+    real = definition_module.calculate_gc_percent
+
+    def counted(seq: object) -> float:
+        calls.append(1)
+        return real(seq)
+
+    monkeypatch.setattr(definition_module, "calculate_gc_percent", counted)
+    return calls
+
+
+def test_a_circular_title_change_reuses_the_gc_percent_of_every_record(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The GC percent reads only the record: a warm Generate keys it and does not recompute it."""
+
+    calls = _gc_percent_calls(monkeypatch)
+    source = tmp_path / "records.gbk"
+    records = (_record("gc-a"), _record("gc-b"), _record("gc-c"))
+    records[2].seq = Seq("ATGC" * 180)
+    _write_genbank(source, records)
+    cache = PreparedBiologicalInputCache()
+
+    cold, cold_diagnostics = _render(tmp_path, cache, _multi_record_document(source, title="Cold"), request_id=1)
+    cold_metrics = _metrics(cold_diagnostics)
+    assert cold_metrics["renderStageBuild:record_gc_percent"] == len(records)
+    assert len(calls) == len(records)
+
+    calls.clear()
+    retitled, retitled_diagnostics = _render(
+        tmp_path, cache, _multi_record_document(source, title="Warm"), request_id=2
+    )
+    warm_metrics = _metrics(retitled_diagnostics)
+    assert calls == []
+    assert warm_metrics["renderStageHit:record_gc_percent"] >= len(records)
+    assert "renderStageBuild:record_gc_percent" not in warm_metrics
+    assert warm_metrics.get("renderStageUncacheableCount", 0) == 0
+    assert retitled["featureCatalog"] == cold["featureCatalog"]
+
+    # Replaced records are other records: each GC percent is computed again.
+    replaced, replaced_diagnostics = _render(
+        tmp_path,
+        cache,
+        _multi_record_document(source, title="Warm"),
+        request_id=3,
+        token_generation=2,
+    )
+    assert _metrics(replaced_diagnostics)["renderStageBuild:record_gc_percent"] == len(records)
+    assert len(calls) == len(records)
+    assert replaced["results"] == retitled["results"]
+
+
+def test_a_single_record_title_change_reuses_the_gc_percent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _gc_percent_calls(monkeypatch)
+    source = tmp_path / "record.gbk"
+    _write_genbank(source, (_record("gc-single"),))
+    cache = PreparedBiologicalInputCache()
+    _render(tmp_path, cache, _document(source, title="Cold"), request_id=1)
+    assert len(calls) == 1
+
+    calls.clear()
+    _warm, diagnostics = _render(tmp_path, cache, _document(source, title="Warm"), request_id=2)
+    metrics = _metrics(diagnostics)
+    assert calls == []
+    assert metrics["renderStageHit:record_gc_percent"] >= 1
+    assert metrics.get("renderStageUncacheableCount", 0) == 0

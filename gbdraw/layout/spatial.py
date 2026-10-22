@@ -167,9 +167,21 @@ def bounding_aabb(
         return None
     pad_x = _validate_padding(pad_x) if pad_x else 0.0
     pad_y = pad_x if pad_y is None else _validate_padding(pad_y)
-    min_x, min_y, max_x, max_y = min(xs) - pad_x, min(ys) - pad_y, max(xs) + pad_x, max(ys) + pad_y
-    if not all(map(math.isfinite, (min_x, min_y, max_x, max_y))):
+    return finite_aabb(min(xs) - pad_x, min(ys) - pad_y, max(xs) + pad_x, max(ys) + pad_y)
+
+
+def finite_aabb(min_x: float, min_y: float, max_x: float, max_y: float) -> Aabb | None:
+    """Return the box with these bounds (swapped bounds are reordered).
+
+    ``None`` means the extent is unknown: a bound is not finite (as for
+    :func:`bounding_aabb`).
+    """
+    if not (math.isfinite(min_x) and math.isfinite(min_y) and math.isfinite(max_x) and math.isfinite(max_y)):
         return None
+    if max_x < min_x:
+        min_x, max_x = max_x, min_x
+    if max_y < min_y:
+        min_y, max_y = max_y, min_y
     return _ordered_aabb(min_x, min_y, max_x, max_y)
 
 
@@ -342,6 +354,7 @@ __all__ = [
     "aabbs_touch",
     "bounding_aabb",
     "candidate_aabb_pairs",
+    "finite_aabb",
     "split_circular_interval",
     "touching_aabb_indices",
     "touching_aabb_pairs",

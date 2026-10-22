@@ -32,6 +32,16 @@
         "--feature_override_table", "tests/fixtures/cli_session_cross_surface/feature_overrides.tsv"]
     },
     {
+      "id": "linear_blacklist_file",
+      "mode": "linear",
+      "args": ["--records_table", "tests/fixtures/cli_session_cross_surface/records_linear.tsv",
+        "--show_labels", "all",
+        "--label_blacklist", "tests/fixtures/cli_session_cross_surface/blacklist.txt"],
+      "legacySessions": {
+        "v47": "tests/fixtures/sessions/cli-linear-blacklist-file.v47.gbdraw-session.json.gz"
+      }
+    },
+    {
       "id": "linear_blast",
       "mode": "linear",
       "args": ["--gbk", "tests/fixtures/web_comparison_shared_block.gb",

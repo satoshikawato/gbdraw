@@ -9,11 +9,11 @@ used by both circular and linear diagram commands.
 
 import argparse
 import logging
-import math
 import sys
 from dataclasses import replace
 from typing import Sequence
 
+from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -24,7 +24,14 @@ from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
 from gbdraw.render.export import has_cairosvg
-from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format, normalize_format_token
+from gbdraw.io.colors import require_palette_name
+from gbdraw.render.formats import (
+    CAIROSVG_FORMATS,
+    SVG_FORMAT,
+    is_cairosvg_format,
+    normalize_format_token,
+    parse_output_formats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +80,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--feature_overlap_tolerance_bp", metavar="BP", type=int, default=0,
+        "--feature_overlap_tolerance_bp", metavar="BP", type=argparse_integer, default=0,
         help="Non-negative permitted feature overlap in base pairs (default: 0).",
     )
     parser.add_argument(
@@ -81,7 +88,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         help="Topology override for exactly one direct-input record (default: auto).",
     )
     parser.add_argument(
-        "--display_start_coordinate", type=int, default=None,
+        "--display_start_coordinate", type=argparse_integer, default=None,
         help="1-based source coordinate at the display start; requires one complete circular record.",
     )
     parser.add_argument(
@@ -109,12 +116,12 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
         '-w',
         '--window',
         help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '-s',
         '--step',
         help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
 
 
 def _add_feature_shape_arg(parser: argparse.ArgumentParser) -> None:
@@ -158,7 +165,7 @@ def _add_block_stroke_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--block_stroke_width',
         help='Block stroke width (optional; float; default: 2 pt for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 0 pt otherwise)',
-        type=float)
+        type=argparse_float)
 
 
 def _add_format_arg(parser: argparse.ArgumentParser) -> None:
@@ -289,11 +296,11 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_window',
         help='Depth aggregation window size. Defaults to one tenth of the GC/skew window, with a 100 bp minimum.',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '--depth_step',
         help='Depth aggregation step size. Defaults to one tenth of the GC/skew step.',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '--share_depth_axis',
         help='Use one depth y-axis scale across records.',
@@ -301,11 +308,11 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_min',
         help='Minimum depth for clipping/normalization (optional; must be >= 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_max',
         help='Maximum depth for clipping/normalization (optional; must be >= 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_log_scale',
         dest='depth_normalize',
@@ -342,15 +349,15 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_large_tick_interval',
         help='Depth coverage large tick interval in x coverage units (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_small_tick_interval',
         help='Depth coverage small tick interval in x coverage units (optional; must be > 0; hidden by default).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_tick_font_size',
         help='Depth coverage tick label font size (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
 
 
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
@@ -358,22 +365,22 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--evalue',
         help='Maximum BLAST e-value retained for similarity rings (default: 1e-5).',
-        type=float,
+        type=argparse_float,
         default=thresholds.evalue)
     parser.add_argument(
         '--bitscore',
         help='Minimum BLAST bitscore retained for similarity rings (default: 50).',
-        type=float,
+        type=argparse_float,
         default=thresholds.bitscore)
     parser.add_argument(
         '--identity',
         help='Minimum BLAST identity percentage retained for similarity rings (default: 70).',
-        type=float,
+        type=argparse_float,
         default=thresholds.identity)
     parser.add_argument(
         '--alignment_length',
         help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
-        type=int,
+        type=argparse_integer,
         default=thresholds.alignment_length)
 
 
@@ -386,27 +393,27 @@ def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--gc_content_min_percent',
         help='Minimum GC percent for percent-mode clipping/axis (optional; finite number).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_max_percent',
         help='Maximum GC percent for percent-mode clipping/axis (optional; finite number).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_tick_interval',
         help='GC content percent-mode large tick interval (optional; must be > 0; alias for --gc_content_large_tick_interval).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_large_tick_interval',
         help='GC content percent-mode large tick interval (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_small_tick_interval',
         help='GC content percent-mode small tick interval (optional; must be > 0; hidden by default).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_tick_font_size',
         help='GC content percent-mode tick label font size (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--show_gc_content_axis',
         dest='gc_content_show_axis',
@@ -435,11 +442,11 @@ def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--legend_box_size',
         help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 20 otherwise).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--legend_font_size',
         help='Legend font size (optional; float; default: 20 (pt) for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 16 otherwise).',
-        type=float)
+        type=argparse_float)
 
 
 def _add_font_args(parser: argparse.ArgumentParser) -> None:
@@ -538,12 +545,12 @@ def add_analysis_args(parser: argparse.ArgumentParser) -> None:
         '-w',
         '--window',
         help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '-s',
         '--step',
         help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
 
 
 def add_feature_args(parser: argparse.ArgumentParser) -> None:
@@ -635,6 +642,17 @@ def apply_record_display_cli_options(
     ),))
 
 
+def validate_output_choice_args(args: argparse.Namespace) -> None:
+    """Refuse an unknown ``-f/--format`` token or ``-p/--palette`` name (OV-1244).
+
+    The replay of a released legacy Session skips this check: its saved
+    arguments keep the fallbacks they were drawn with.
+    """
+
+    parse_output_formats(args.format)
+    require_palette_name(args.palette)
+
+
 def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Validate label argument combinations."""
     if args.label_whitelist and args.label_blacklist:
@@ -653,13 +671,8 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
     text = str(value).strip().lower()
     if text == "auto":
         return "auto"
-    try:
-        parsed = float(text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "arrow head length ratio must be 'auto' or a positive finite number"
-        ) from exc
-    if not math.isfinite(parsed) or parsed <= 0:
+    parsed = parse_ascii_finite_float(text)
+    if parsed is None or parsed <= 0:
         raise argparse.ArgumentTypeError(
             "arrow head length ratio must be 'auto' or a positive finite number"
         )
@@ -667,13 +680,8 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
 
 
 def parse_arrow_shaft_width_ratio_arg(value: str) -> float:
-    try:
-        parsed = float(str(value).strip())
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "arrow shaft width ratio must be a finite number in (0, 1]"
-        ) from exc
-    if not math.isfinite(parsed) or parsed <= 0 or parsed > 1:
+    parsed = parse_ascii_finite_float(str(value))
+    if parsed is None or parsed <= 0 or parsed > 1:
         raise argparse.ArgumentTypeError(
             "arrow shaft width ratio must be a finite number in (0, 1]"
         )

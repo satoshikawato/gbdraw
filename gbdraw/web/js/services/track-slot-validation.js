@@ -1,5 +1,11 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
+import { noteReplacedLeaf } from '../utils/field-reading.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+import { msg, t } from '../utils/i18n.js';
+
+/** @import { FieldLeaf } from '../utils/field-reading.js' */
+/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 
 /**
  * A `{ value, unit }` Width or Radius draft. Both fields are checked on read.
@@ -15,11 +21,16 @@ import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
  * @typedef {Record<string, unknown> | null | undefined} TrackSlotRow
  */
 
+// An issue has two texts from one place (D-51): `message`, the English that
+// Generate throws and the error normalizer reads, and `parts`, the sentence the
+// slot editors show (`errorText`), one per issue code and worded for the row
+// it sits in, without the mode or the row's name.
 /**
  * @typedef {object} TrackSlotGlobalIssue A problem of the whole plan.
  * @property {string} code
  * @property {string} field
  * @property {string} message
+ * @property {ErrorTextPart[]} parts
  * @property {'error'} severity
  */
 
@@ -28,6 +39,7 @@ import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
  * @property {string} code
  * @property {string} field
  * @property {string} message
+ * @property {ErrorTextPart[]} parts
  * @property {number} rowIndex
  * @property {string | null} slotId
  * @property {'error'} severity
@@ -76,6 +88,20 @@ const normalizedOptionalString = (value) => {
   const text = normalizedString(value);
   return text || null;
 };
+
+/**
+ * One shown sentence as the parts of an issue or fault.
+ * @param {string} text A catalog key, marked with msg.
+ * @param {Readonly<Record<string, string | number>>} [params]
+ * @returns {ErrorTextPart[]}
+ */
+const sentence = (text, params) => [params ? { text, params } : { text }];
+const CIRCULAR_GAPS_HINT = msg('Use inner_gap_px and outer_gap_px for physical gaps.');
+/** The obsolete Circular field a row or its params uses. @param {string} field */
+const obsoleteFieldParts = (field) => [
+  ...sentence(msg("This row uses the obsolete field '{field}'."), { field }),
+  ...sentence(CIRCULAR_GAPS_HINT)
+];
 
 const LINEAR_GENERIC_LAYOUT_KEYS = new Set([
   'id', 'renderer', 'type', 'side', 'h', 'height', 'spacing',
@@ -195,75 +221,346 @@ export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure
   return { value: resolved, unit: isPx ? 'px' : 'factor' };
 };
 
+/** A Circular row's Width or Radius field. @typedef {'width' | 'radius'} CircularMeasureField */
+const CIRCULAR_MEASURE_INVALID = Object.freeze({
+  radius: msg('Radius must be a number greater than 0, in px or ×R.'),
+  width: msg('Width must be a number greater than 0, in px or ×R.')
+});
 /**
- * @param {Record<string, unknown>} slot The row.
- * @param {string} id
- * @param {string} layoutKind 'linear' or 'circular'; anything else throws.
- * @returns {void}
+ * The shown sentence of an invalid Circular Width or Radius: the row issue
+ * and the row's own field show it (TK-12).
+ * @param {CircularMeasureField} field
+ * @returns {ErrorTextPart[]}
  */
-const validateSlotGeometry = (slot, id, layoutKind) => {
-  if (layoutKind === 'linear') {
-    parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
-    parseOptionalPixel(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true });
-    return;
+export const circularMeasureInvalidParts = (field) => sentence(CIRCULAR_MEASURE_INVALID[field]);
+
+const ANNOTATION_OVERFLOWS = ['error', 'compress', 'clip'];
+/**
+ * An annotation slot's params as both stacks read them, edited in place. What
+ * the reading replaces is recorded in `losses` (OV-758).
+ * @param {Record<string, unknown>} params
+ * @param {string} at Where the params are under the stack (`[2].params`).
+ * @param {FieldLeaf[] | null} [losses]
+ */
+export const normalizeAnnotationSlotParams = (params, at, losses = null) => {
+  /** @type {[string, unknown][]} */
+  const read = [
+    ['set_id', String(params.set_id || '').trim()],
+    ['overflow', ANNOTATION_OVERFLOWS.find((overflow) => overflow === String(params.overflow || '').toLowerCase()) ?? 'error'],
+    ['show_labels', params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false'],
+    ['layer', String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground']
+  ];
+  read.forEach(([field, value]) => {
+    noteReplacedLeaf(losses, `${at}.${field}`, params[field], value);
+    params[field] = value;
+  });
+  if (Array.isArray(params.marks)) {
+    params.marks = Array.from(new Set(
+      params.marks
+        .map((mark) => String(mark || '').trim().toLowerCase())
+        .filter(Boolean)
+    ));
+    // params.marks is the array assigned just above.
+    if (/** @type {unknown[]} */ (params.marks).length === 0) delete params.marks;
   }
-  if (layoutKind !== 'circular') {
-    throw new Error(`Unsupported track-slot layout kind: ${layoutKind}.`);
-  }
-  const obsoleteKey = Object.keys(slot).find((key) => (
-    OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))
-  ));
-  if (obsoleteKey) {
-    throw new Error(
-      `Circular track slot '${id}' uses obsolete field '${obsoleteKey}'. ` +
-      'Use inner_gap_px and outer_gap_px for physical gaps.'
-    );
-  }
-  for (const field of ['radius', 'width']) {
-    try {
-      parseOptionalCircularScalar(slot[field], `Circular track slot '${id}' ${field}`);
-    } catch (error) {
-      // The row's Width or Radius field shows this failure itself (TK-12).
-      throw Object.assign(error, { field });
+  for (const [field, defaultValue] of /** @type {[string, number][]} */ ([['lane_gap_px', 3], ['padding_px', 2]])) {
+    if (params[field] === null || params[field] === undefined || params[field] === '') {
+      delete params[field];
+      continue;
+    }
+    const numeric = Number(params[field]);
+    if (Number.isFinite(numeric) && numeric >= 0) {
+      if (numeric === defaultValue) delete params[field];
+      else params[field] = numeric;
     }
   }
-  parseOptionalPixel(
-    slot.inner_gap_px,
-    `Circular track slot '${id}' inner_gap_px`,
-    { allowZero: true }
-  );
-  parseOptionalPixel(
-    slot.outer_gap_px,
-    `Circular track slot '${id}' outer_gap_px`,
-    { allowZero: true }
-  );
+  if (params.cover_anchor === true || String(params.cover_anchor).toLowerCase() === 'true') {
+    params.cover_anchor = true;
+  } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
+    delete params.cover_anchor;
+  }
 };
 
 /**
+ * A slot an Overlay annotation slot names by id (Python
+ * `_OVERLAY_SLOT_REFERENCES`, gbdraw/tracks/parsing.py): `anchor_slot` is the
+ * slot it is drawn on, `to_slot` (Extend to) the slot its span reaches.
+ * @typedef {'anchor_slot' | 'to_slot'} OverlaySlotReference
+ */
+/**
+ * The shown sentences of the row issues about one reference (D-51).
+ * @typedef {object} OverlayReferenceText
+ * @property {string} withoutOverlay
+ * @property {string} unknown `{target}` is the slot id it names.
+ * @property {string} ineligible `{target}` is the slot id it names.
+ */
+/**
+ * Each reference with its name in the binding check's messages (Python's
+ * wording), its issue codes (`annotation_<code>_unknown`, ...), its name in
+ * the issue messages and the sentences the editors show for those issues.
+ * @type {ReadonlyArray<{ key: OverlaySlotReference, role: string, code: string, label: string, text: OverlayReferenceText }>}
+ */
+const OVERLAY_SLOT_REFERENCES = Object.freeze([
+  { key: 'anchor_slot', role: 'anchor', code: 'anchor', label: 'anchor', text: {
+    withoutOverlay: msg('This row has an anchor but is not placed on it.'),
+    unknown: msg("Anchor '{target}' is missing or disabled."),
+    ineligible: msg("Anchor '{target}' has no drawable band.")
+  } },
+  { key: 'to_slot', role: 'to_slot', code: 'to_slot', label: 'Extend to slot', text: {
+    withoutOverlay: msg('This row has an Extend to slot but is not placed on an anchor.'),
+    unknown: msg("Extend to slot '{target}' is missing or disabled."),
+    ineligible: msg("Extend to slot '{target}' has no drawable band.")
+  } }
+]);
+/** The params only an Overlay annotation slot keeps: leaving Overlay drops them. */
+export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
+
+/** A row's z as the plan check reads it: a draft that is no integer counts as 0. @param {unknown} value */
+const rowZ = (value) => (Number.isSafeInteger(Number(value)) ? Number(value) : 0);
+
+/**
+ * Whether an Overlay annotation slot's z meets its layer against the z of a
+ * slot it names (Python validate_overlay_annotation_anchors): an Underlay
+ * draws below it, a Foreground above. Another layer is refused on its own.
+ * @param {string} layer @param {number} z @param {number} targetZ
+ */
+const overlayLayerZHolds = (layer, z, targetZ) => (
+  layer === 'underlay' ? z < targetZ : layer !== 'foreground' || z > targetZ
+);
+
+/**
+ * The z an Overlay annotation row needs for its layer (OV-1297, LP-D91). The
+ * GUI has no z control, so both track editors set it when Placement Overlay,
+ * Layer, the anchor or Extend to changes: a z that meets the layer rule
+ * against every slot the row names is kept (a loaded Session keeps its z),
+ * else it is one below the lowest (Underlay) or one above the highest
+ * (Foreground) of their z. A disabled slot counts too, so the row stays valid
+ * when it is enabled again; the plan check refuses a disabled target anyway.
+ * @param {{ z?: unknown, params?: Record<string, unknown> | null }} slot
+ * @param {ReadonlyArray<{ id?: unknown, z?: unknown } | null | undefined>} slots The stack the row is in.
+ * @returns {number}
+ */
+export const overlayAnnotationZ = (slot, slots) => {
+  const params = slot.params || {};
+  const layer = normalizedString(params.layer || 'foreground');
+  const z = rowZ(slot.z);
+  const targetZs = OVERLAY_SLOT_REFERENCES.flatMap(({ key }) => {
+    const targetId = String(params[key] || '').trim();
+    const target = targetId
+      ? slots.find((candidate) => candidate && candidate !== slot && String(candidate.id || '').trim() === targetId)
+      : null;
+    return target ? [rowZ(target.z)] : [];
+  });
+  if (targetZs.every((targetZ) => overlayLayerZHolds(layer, z, targetZ))) return z;
+  return layer === 'underlay' ? Math.min(...targetZs) - 1 : Math.max(...targetZs) + 1;
+};
+
+/**
+ * An edit of an Overlay annotation row's Layer, anchor or Extend to, as both
+ * track editors' selects make it: an empty value (Select anchor, None) unsets
+ * the param, and the row takes the z its layer needs (`overlayAnnotationZ`).
+ * @param {{ z: number, params: Record<string, unknown> }} slot
+ * @param {Parameters<typeof overlayAnnotationZ>[1]} slots The stack the row is in.
+ * @param {OverlaySlotReference | 'layer'} key
+ * @param {unknown} value
+ */
+export const setOverlayAnnotationParam = (slot, slots, key, value) => {
+  const text = String(value ?? '').trim();
+  slot.params = { ...slot.params };
+  if (text) slot.params[key] = text;
+  else delete slot.params[key];
+  slot.z = overlayAnnotationZ(slot, slots);
+};
+
+/**
+ * The facts of a drawing that decide whether Add track can add a row.
+ * @typedef {object} TrackAddFacts
+ * @property {boolean} supported The mode draws this renderer.
+ * @property {number} annotationSetCount Region annotation sets loaded in the drawing.
+ * @property {number} depthSeriesCount Depth series with a loaded TSV.
+ * @property {boolean} [featuresRowEnabled] The stack already has an enabled Features row (Linear draws one).
+ */
+/**
+ * Why Add track cannot add a row of `renderer`, or '' when it can (OV-1254).
+ * Both track editors read their availability and the button title here.
+ * @param {string} renderer
+ * @param {TrackAddFacts} facts
+ * @returns {string}
+ */
+export const trackAddBlockReason = (renderer, { supported, annotationSetCount, depthSeriesCount, featuresRowEnabled = false }) => {
+  if (!supported) return t('Choose a track type this diagram can draw');
+  if (renderer === 'annotations' && annotationSetCount <= 0) return t('Import or add a Region annotation set in Region Annotations first');
+  if (renderer === 'depth' && depthSeriesCount <= 0) return t('Load a Depth TSV first');
+  if (renderer === 'features' && featuresRowEnabled) return t('The stack already has an enabled Features row; disable or delete it first');
+  return '';
+};
+
+/**
+ * An annotation slot's params as both modes write them to the request: a
+ * default or an empty value is left out.
+ * @param {Record<string, unknown>} params
+ * @returns {Record<string, unknown>}
+ */
+export const canonicalAnnotationParams = (params) => {
+  const next = { ...params };
+  if (!Array.isArray(next.marks) || next.marks.length === 0) {
+    delete next.marks;
+  } else {
+    next.marks = Array.from(new Set(
+      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
+    ));
+  }
+  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
+    ? null
+    : Number(next.lane_gap_px);
+  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
+  else next.lane_gap_px = laneGap;
+  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
+    ? null
+    : Number(next.padding_px);
+  if (padding === null || padding === 2) delete next.padding_px;
+  else next.padding_px = padding;
+  if (next.cover_anchor !== true) delete next.cover_anchor;
+  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
+  if (next.show_labels !== false) delete next.show_labels;
+  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
+  OVERLAY_SLOT_REFERENCES.forEach(({ key }) => {
+    if (!String(next[key] || '').trim()) delete next[key];
+  });
+  return next;
+};
+
+/**
+ * A leaf of a track slot row the binding check refuses, with the error it
+ * raises: `field` is its place in the row (`width`, `params.side`).
+ * @typedef {{ field: string, error: Error }} TrackSlotLeafFault
+ */
+/**
+ * A fault the plan validator also reports as a row issue, with the sentence
+ * the editors show for it (D-51).
+ * @typedef {TrackSlotLeafFault & { parts: ErrorTextPart[] }} TrackSlotShownFault
+ */
+
+/**
+ * @template {TrackSlotLeafFault} Fault
+ * @param {Fault[]} faults Appended to.
+ * @param {Omit<Fault, 'error'>} fault The fault the reader's error completes.
+ * @param {() => unknown} read A reader that throws for a value it refuses.
+ */
+const checkLeaf = (faults, fault, read) => {
+  try {
+    read();
+  } catch (error) {
+    // `fault` and its error are a whole Fault.
+    faults.push(/** @type {Fault} */ ({ ...fault, error: /** @type {Error} */ (error) }));
+  }
+};
+
+/**
+ * The geometry fields of a row the binding check refuses, in its order.
+ * @param {Record<string, unknown>} slot The row.
+ * @param {string} id
+ * @param {string} layoutKind 'linear' or 'circular'; anything else is a fault.
+ * @returns {TrackSlotShownFault[]}
+ */
+const slotGeometryFaults = (slot, id, layoutKind) => {
+  /** @type {TrackSlotShownFault[]} */
+  const faults = [];
+  if (layoutKind === 'linear') {
+    checkLeaf(faults, { field: 'height', parts: sentence(msg('Height must be a positive number of pixels (px optional).')) },
+      () => parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false }));
+    checkLeaf(faults, { field: 'spacing', parts: sentence(msg('Spacing must be a nonnegative number of pixels (px optional).')) },
+      () => parseOptionalPixel(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true }));
+    return faults;
+  }
+  if (layoutKind !== 'circular') {
+    return [{
+      field: 'geometry',
+      error: new Error(`Unsupported track-slot layout kind: ${layoutKind}.`),
+      parts: sentence(msg('Unsupported track-slot layout kind: {kind}.'), { kind: layoutKind })
+    }];
+  }
+  Object.keys(slot).filter((key) => OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))).forEach((key) => faults.push({
+    field: key,
+    error: new Error(`Circular track slot '${id}' uses obsolete field '${key}'. ${CIRCULAR_GAPS_HINT}`),
+    parts: obsoleteFieldParts(key)
+  }));
+  for (const field of /** @type {const} */ (['radius', 'width'])) {
+    checkLeaf(faults, { field, parts: circularMeasureInvalidParts(field) }, () => {
+      try {
+        parseOptionalCircularScalar(slot[field], `Circular track slot '${id}' ${field}`);
+      } catch (error) {
+        // The row's Width or Radius field shows this failure itself (TK-12).
+        throw Object.assign(/** @type {Error} */ (error), { field });
+      }
+    });
+  }
+  for (const [field, text] of [
+    ['inner_gap_px', msg('Inner gap must be a nonnegative number of pixels (px optional).')],
+    ['outer_gap_px', msg('Outer gap must be a nonnegative number of pixels (px optional).')]
+  ]) {
+    checkLeaf(faults, { field, parts: sentence(text) },
+      () => parseOptionalPixel(slot[field], `Circular track slot '${id}' ${field}`, { allowZero: true }));
+  }
+  return faults;
+};
+
+/**
+ * The generic layout fields a row stores in its params, which the binding check refuses.
  * @param {Record<string, unknown>} params
  * @param {string} id
  * @param {string} layoutKind 'linear' selects the Linear keys; any other value the Circular keys.
- * @returns {void}
+ * @returns {TrackSlotShownFault[]}
  */
-const validateGenericParams = (params, id, layoutKind) => {
-  const genericKeys = layoutKind === 'linear'
-    ? LINEAR_GENERIC_LAYOUT_KEYS
-    : CIRCULAR_GENERIC_LAYOUT_KEYS;
-  const invalidKey = Object.keys(params).find((key) => genericKeys.has(normalizedString(key)));
-  if (invalidKey) {
-    if (
-      layoutKind === 'circular' &&
-      OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(invalidKey))
-    ) {
-      throw new Error(
-        `Circular track slot '${id}' uses obsolete field 'params.${invalidKey}'. ` +
-        'Use inner_gap_px and outer_gap_px for physical gaps.'
-      );
-    }
-    throw new Error(
-      `${layoutKind === 'linear' ? 'Linear' : 'Circular'} track slot '${id}' stores generic layout field '${invalidKey}' in params.`
-    );
+const genericParamFaults = (params, id, layoutKind) => {
+  const genericKeys = layoutKind === 'linear' ? LINEAR_GENERIC_LAYOUT_KEYS : CIRCULAR_GENERIC_LAYOUT_KEYS;
+  return Object.keys(params).filter((key) => genericKeys.has(normalizedString(key))).map((key) => (
+    layoutKind === 'circular' && OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))
+      ? {
+          field: `params.${key}`,
+          error: new Error(`Circular track slot '${id}' uses obsolete field 'params.${key}'. ${CIRCULAR_GAPS_HINT}`),
+          parts: obsoleteFieldParts(`params.${key}`)
+        }
+      : {
+          field: `params.${key}`,
+          error: new Error(`${layoutKind === 'linear' ? 'Linear' : 'Circular'} track slot '${id}' stores generic layout field '${key}' in params.`),
+          parts: sentence(msg("The layout field '{field}' belongs to the row, not to its params."), { field: key })
+        }
+  ));
+};
+
+/**
+ * The leaves of one row (an object with an id) that the binding check
+ * refuses, in the order it checks them. Generate and Save throw the first
+ * (`validateTrackSlotBindingInvariants`); Load drops each and lists it
+ * (`readImportedTrackSlots`).
+ * @param {Record<string, unknown>} slot The row.
+ * @param {string} id
+ * @param {{ modeLabel: string, layoutKind: string, sideSet: ReadonlySet<string> }} options
+ * @returns {TrackSlotLeafFault[]}
+ */
+export const trackSlotLeafFaults = (slot, id, { modeLabel, layoutKind, sideSet }) => {
+  /** @type {TrackSlotLeafFault[]} */
+  const faults = [];
+  if (Object.hasOwn(slot, 'enabled') && typeof slot.enabled !== 'boolean') {
+    faults.push({ field: 'enabled', error: new Error(`${modeLabel} track slot '${id}' enabled must be boolean.`) });
   }
+  faults.push(...slotGeometryFaults(slot, id, layoutKind));
+  if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
+    if (typeof slot.side !== 'string') {
+      faults.push({ field: 'side', error: new Error(`${modeLabel} track slot '${id}' side must be a string or null.`) });
+    } else if (!sideSet.has(normalizedString(slot.side))) {
+      faults.push({ field: 'side', error: new Error(`${modeLabel} track slot '${id}' has unsupported side=${JSON.stringify(slot.side)}.`) });
+    }
+  }
+  const params = Object.hasOwn(slot, 'params') ? slot.params : {};
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    faults.push({ field: 'params', error: new Error(`${modeLabel} track slot '${id}' params must be an object.`) });
+  } else {
+    faults.push(...genericParamFaults(/** @type {Record<string, unknown>} */ (params), id, layoutKind));
+  }
+  checkLeaf(faults, { field: 'z' }, () => parseSlotZIndex(slot.z, `${modeLabel} track slot '${id}' z`));
+  return faults;
 };
 
 /**
@@ -346,35 +643,13 @@ export const validateTrackSlotBindingInvariants = (
     if (!rendererSet.has(renderer)) {
       throw new Error(`${modeLabel} track slot '${id}' has unsupported renderer=${JSON.stringify(slot.renderer)}.`);
     }
-    if (
-      Object.prototype.hasOwnProperty.call(slot, 'enabled') &&
-      typeof slot.enabled !== 'boolean'
-    ) {
-      throw new Error(`${modeLabel} track slot '${id}' enabled must be boolean.`);
-    }
+    const [leafFault] = trackSlotLeafFaults(slot, id, { modeLabel, layoutKind, sideSet });
+    if (leafFault) throw leafFault.error;
     const enabled = slot.enabled !== false;
-
-    validateSlotGeometry(slot, id, layoutKind);
-
     /** @type {string | null} */
-    let side = null;
-    if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
-      if (typeof slot.side !== 'string') {
-        throw new Error(`${modeLabel} track slot '${id}' side must be a string or null.`);
-      }
-      side = normalizedString(slot.side);
-      if (!sideSet.has(side)) {
-        throw new Error(`${modeLabel} track slot '${id}' has unsupported side=${JSON.stringify(slot.side)}.`);
-      }
-    }
-
-    const hasParams = Object.prototype.hasOwnProperty.call(slot, 'params');
-    const paramsValue = hasParams ? slot.params : {};
-    if (!paramsValue || typeof paramsValue !== 'object' || Array.isArray(paramsValue)) {
-      throw new Error(`${modeLabel} track slot '${id}' params must be an object.`);
-    }
-    const params = { ...paramsValue };
-    validateGenericParams(params, id, layoutKind);
+    let side = typeof slot.side === 'string' && slot.side !== '' ? normalizedString(slot.side) : null;
+    // An object (`trackSlotLeafFaults`).
+    const params = { .../** @type {Record<string, unknown>} */ (Object.hasOwn(slot, 'params') ? slot.params : {}) };
     const z = parseSlotZIndex(slot.z, `${modeLabel} track slot '${id}' z`);
 
     if (enabled && layoutKind === 'linear') {
@@ -427,16 +702,17 @@ export const validateTrackSlotBindingInvariants = (
     if (enabled && renderer === 'annotations') {
       const anchorId = String(params.anchor_slot || '').trim();
       if (side === 'overlay' && !anchorId) {
-        throw new Error(`${modeLabel} annotation slot '${id}' with side=overlay requires anchor_slot.`);
+        throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_ANCHOR', field: 'anchor_slot', slotIndex: index });
       }
-      if (side !== 'overlay' && anchorId) {
-        throw new Error(`${modeLabel} annotation slot '${id}' uses anchor_slot without side=overlay.`);
+      const offOverlay = side === 'overlay'
+        ? undefined
+        : OVERLAY_SLOT_REFERENCES.find(({ key }) => String(params[key] || '').trim());
+      if (offOverlay) {
+        throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SIDE', field: 'side', slotIndex: index });
       }
       const layer = normalizedOptionalString(params.layer) ?? 'foreground';
       if (!['foreground', 'underlay'].includes(layer)) {
-        throw new Error(
-          `${modeLabel} annotation slot '${id}' layer must be foreground or underlay.`
-        );
+        throw diagnosticError('TRACK_INVALID', { reason: 'LAYER', field: 'layer', slotIndex: index });
       }
       params.layer = layer;
     }
@@ -465,30 +741,30 @@ export const validateTrackSlotBindingInvariants = (
   const enabledById = new Map(
     normalized.filter((slot) => slot.enabled).map((slot) => [slot.id, slot])
   );
-  normalized.forEach((slot) => {
+  normalized.forEach((slot, slotIndex) => {
     if (!slot.enabled || slot.renderer !== 'annotations' || slot.side !== 'overlay') return;
-    const anchorId = String(slot.params.anchor_slot || '').trim();
-    const anchor = enabledById.get(anchorId);
-    if (!anchor) {
-      throw new Error(
-        `${modeLabel} annotation slot '${slot.id}' references unknown anchor_slot=${JSON.stringify(anchorId)}.`
-      );
-    }
-    if (anchor.renderer === 'annotations' || anchorlessSet.has(anchor.renderer)) {
-      throw new Error(
-        `${modeLabel} annotation slot '${slot.id}' anchor '${anchor.id}' has no eligible drawable band.`
-      );
+    const toSlot = String(slot.params.to_slot || '').trim();
+    if (toSlot && toSlot === String(slot.params.anchor_slot || '').trim()) {
+      throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SPAN', field: 'to_slot', slotIndex });
     }
     const layer = normalizedString(slot.params.layer || 'foreground');
-    if (layer === 'underlay' && slot.z >= anchor.z) {
-      throw new Error(
-        `${modeLabel} annotation underlay slot '${slot.id}' must have z less than anchor '${anchor.id}'.`
-      );
-    }
-    if (layer === 'foreground' && slot.z <= anchor.z) {
-      throw new Error(
-        `${modeLabel} annotation foreground slot '${slot.id}' must have z greater than anchor '${anchor.id}'.`
-      );
+    for (const { key } of OVERLAY_SLOT_REFERENCES) {
+      const targetId = String(slot.params[key] || '').trim();
+      if (key === 'to_slot' && !targetId) continue;
+      const target = enabledById.get(targetId);
+      if (!target) {
+        throw diagnosticError('TRACK_INVALID', {
+          reason: key === 'to_slot' ? 'OVERLAY_SPAN' : 'OVERLAY_ANCHOR', field: key, slotIndex
+        });
+      }
+      if (target.renderer === 'annotations' || anchorlessSet.has(target.renderer)) {
+        throw diagnosticError('TRACK_INVALID', {
+          reason: key === 'to_slot' ? 'OVERLAY_SPAN' : 'OVERLAY_ANCHOR', field: key, slotIndex
+        });
+      }
+      if (!overlayLayerZHolds(layer, slot.z, target.z)) {
+        throw diagnosticError('TRACK_INVALID', { reason: 'DRAW_ORDER', field: 'z', slotIndex });
+      }
     }
   });
 
@@ -551,6 +827,7 @@ const PARAM_OWNER = new Map([
   ['overflow', 'annotations'],
   ['show_labels', 'annotations'],
   ['anchor_slot', 'annotations'],
+  ['to_slot', 'annotations'],
   ['layer', 'annotations'],
   ['cover_anchor', 'annotations'],
   ['style_override', 'annotations']
@@ -573,39 +850,47 @@ const cloneValidationSlot = (slot) => {
 };
 
 /**
- * @param {{ code: string, field: string, message: string, rowIndex: number, slotId?: string | null }} issue
+ * What a check reports of a row issue.
+ * @typedef {{ code: string, field: string, message: string, parts: ErrorTextPart[], slotId?: string | null }} RowIssueInput
+ */
+
+/**
+ * @param {RowIssueInput & { rowIndex: number }} issue
  * @returns {TrackSlotRowIssue}
  */
 const issueForRow = ({
   code,
   field,
   message,
+  parts,
   rowIndex,
   slotId = null
 }) => ({
   code,
   field,
   message,
+  parts,
   rowIndex,
   slotId,
   severity: 'error'
 });
 
 /**
- * @param {{ code: string, field: string, message: string }} issue
+ * @param {{ code: string, field: string, message: string, parts: ErrorTextPart[] }} issue
  * @returns {TrackSlotGlobalIssue}
  */
-const globalIssue = ({ code, field, message }) => ({
+const globalIssue = ({ code, field, message, parts }) => ({
   code,
   field,
   message,
+  parts,
   severity: 'error'
 });
 
 /**
  * @param {Map<number, TrackSlotRowIssue[]>} rowIssues
  * @param {number} index
- * @param {{ code: string, field: string, message: string, slotId?: string | null }} issue
+ * @param {RowIssueInput} issue
  * @returns {void}
  */
 const addRowIssue = (rowIssues, index, issue) => {
@@ -712,18 +997,57 @@ const paramsAllowedForRenderer = (renderer, key) => {
   return false;
 };
 
+// The params that describe a row's track: `legend_label` (a Depth row's is its
+// series title) and a comparison ring's `label`, `color` and `fileName`. Every
+// renderer takes them (Python carries them, LP-D70), so they are in no
+// PARAM_OWNER entry, and a renderer change drops them (OV-1186).
+const TRACK_DESCRIPTION_PARAMS = new Set(['legend_label', 'label', 'color', 'fileName']);
+
 /**
  * The params a row keeps when its renderer changes (TK-04): those the new
- * renderer accepts under PARAM_OWNER. `legend_label` names the previous track
- * (a Depth row's is its series title), so the new renderer starts without it.
+ * renderer accepts under PARAM_OWNER, without the params that describe the
+ * previous track (`TRACK_DESCRIPTION_PARAMS`), so the new renderer starts
+ * without them.
  * @param {unknown} params
  * @param {string} renderer
  * @returns {Record<string, unknown>}
  */
 export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntries(
   Object.entries(params && typeof params === 'object' && !Array.isArray(params) ? params : {})
-    .filter(([key]) => key !== 'legend_label' && paramsAllowedForRenderer(renderer, normalizedString(key)))
+    .filter(([key]) => !TRACK_DESCRIPTION_PARAMS.has(key) && paramsAllowedForRenderer(renderer, normalizedString(key)))
 );
+
+/**
+ * The ID of a track slot or annotation set that Add creates, in both modes: the
+ * default ID of its kind (a slot's renderer, `annotations` for a set) while
+ * nothing uses it, then that ID numbered `_2`, `_3`, and so on, taking the
+ * first unused number. IDs compare after trimming.
+ * @param {string} baseId
+ * @param {ReadonlyArray<{ id?: unknown } | null | undefined>} items
+ * @returns {string}
+ */
+export const nextNumberedId = (baseId, items) => {
+  const usedIds = new Set(items.map((item) => String(item?.id || '').trim()).filter(Boolean));
+  let id = baseId;
+  for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${baseId}_${suffix}`;
+  return id;
+};
+
+/**
+ * The ID of a track slot or annotation set that Duplicate creates, in both
+ * modes: the source's own ID without one trailing `_<digits>`, numbered with
+ * the first unused number from 2. A copy never takes the bare base, so copying
+ * `my_skew` gives `my_skew_2`, and a copy of `my_skew_2` then gives `my_skew_3`,
+ * not `my_skew_2_2`.
+ * @param {string} sourceId
+ * @param {ReadonlyArray<{ id?: unknown } | null | undefined>} items
+ * @returns {string}
+ */
+export const nextCopyId = (sourceId, items) => {
+  const trimmed = sourceId.trim();
+  const baseId = trimmed.replace(/_\d+$/, '') || trimmed;
+  return nextNumberedId(baseId, [...items, { id: baseId }]);
+};
 
 /**
  * @param {unknown} values
@@ -794,7 +1118,8 @@ const collectCustomTrackIssues = ({
     globalIssues.push(globalIssue({
       code: 'slots_not_array',
       field: 'slots',
-      message: `${modeLabel} Custom Track Slots must be an array.`
+      message: `${modeLabel} Custom Track Slots must be an array.`,
+      parts: sentence(msg('Custom Track Slots must be a list of rows.'))
     }));
     return {
       draftSlots,
@@ -811,7 +1136,8 @@ const collectCustomTrackIssues = ({
     globalIssues.push(globalIssue({
       code: 'mode_unsupported',
       field: 'mode',
-      message: `Unsupported Custom Track mode: ${String(mode)}.`
+      message: `Unsupported Custom Track mode: ${String(mode)}.`,
+      parts: sentence(msg('Unsupported Custom Track mode: {mode}.'), { mode: String(mode) })
     }));
     return {
       draftSlots,
@@ -839,7 +1165,8 @@ const collectCustomTrackIssues = ({
     globalIssues.push(globalIssue({
       code: 'depth_count_invalid',
       field: 'depthTrackCount',
-      message: `${modeLabel} Depth track count must be a non-negative integer.`
+      message: `${modeLabel} Depth track count must be a non-negative integer.`,
+      parts: sentence(msg('The Depth track count must be a non-negative integer.'))
     }));
   }
 
@@ -850,7 +1177,8 @@ const collectCustomTrackIssues = ({
       addRowIssue(rowIssues, index, {
         code: 'slot_not_object',
         field: 'slot',
-        message: `${modeLabel} track row ${index + 1} must be an object.`
+        message: `${modeLabel} track row ${index + 1} must be an object.`,
+        parts: sentence(msg('This row must be an object.'))
       });
       return;
     }
@@ -862,7 +1190,8 @@ const collectCustomTrackIssues = ({
         code: 'enabled_not_boolean',
         field: 'enabled',
         slotId: String(slot.id || '').trim() || null,
-        message: `${modeLabel} track row ${index + 1} Enabled must be true or false.`
+        message: `${modeLabel} track row ${index + 1} Enabled must be true or false.`,
+        parts: sentence(msg('Enabled must be true or false.'))
       });
     }
     if (slot.enabled !== false) enabledIndexes.push(index);
@@ -871,7 +1200,8 @@ const collectCustomTrackIssues = ({
     globalIssues.push(globalIssue({
       code: 'linear_slots_empty',
       field: 'slots',
-      message: 'Linear Custom Track Slots require at least one enabled row.'
+      message: 'Linear Custom Track Slots require at least one enabled row.',
+      parts: sentence(msg('Custom Track Slots need at least one enabled row.'))
     }));
   }
 
@@ -890,7 +1220,8 @@ const collectCustomTrackIssues = ({
     globalIssues.push(globalIssue({
       code: 'axis_out_of_range',
       field: 'axisIndex',
-      message: `${modeLabel} Axis boundary must be an integer from 0 to ${draftSlots.length}.`
+      message: `${modeLabel} Axis boundary must be an integer from 0 to ${draftSlots.length}.`,
+      parts: sentence(msg('The Axis boundary must be an integer from 0 to {max}.'), { max: draftSlots.length })
     }));
   }
   const emittedAxisIndex = resolvedAxisIndex === null
@@ -910,7 +1241,8 @@ const collectCustomTrackIssues = ({
       addRowIssue(rowIssues, index, {
         code: 'id_required',
         field: 'id',
-        message: `${modeLabel} track row ${index + 1} requires a non-empty ID.`
+        message: `${modeLabel} track row ${index + 1} requires a non-empty ID.`,
+        parts: sentence(msg('This row needs a non-empty ID.'))
       });
       return;
     }
@@ -924,7 +1256,8 @@ const collectCustomTrackIssues = ({
       code: 'id_duplicate',
       field: 'id',
       slotId: id,
-      message: `${modeLabel} track ID '${id}' is used by more than one enabled row.`
+      message: `${modeLabel} track ID '${id}' is used by more than one enabled row.`,
+      parts: sentence(msg("Track ID '{id}' is used by more than one enabled row."), { id })
     }));
   });
 
@@ -944,7 +1277,8 @@ const collectCustomTrackIssues = ({
         code: 'renderer_unsupported',
         field: 'renderer',
         slotId: id || null,
-        message: `${modeLabel} track ${slotLabel} has an unsupported renderer.`
+        message: `${modeLabel} track ${slotLabel} has an unsupported renderer.`,
+        parts: sentence(msg('This row has an unsupported renderer.'))
       });
     }
 
@@ -957,7 +1291,8 @@ const collectCustomTrackIssues = ({
           code: 'side_unsupported',
           field: 'side',
           slotId: id || null,
-          message: `${modeLabel} track ${slotLabel} has an unsupported side.`
+          message: `${modeLabel} track ${slotLabel} has an unsupported side.`,
+          parts: sentence(msg('This row has an unsupported side.'))
         });
         explicitSide = null;
       }
@@ -974,18 +1309,21 @@ const collectCustomTrackIssues = ({
         code: 'params_not_object',
         field: 'params',
         slotId: id || null,
-        message: `${modeLabel} track ${slotLabel} Params must be an object.`
+        message: `${modeLabel} track ${slotLabel} Params must be an object.`,
+        parts: sentence(msg('Params must be an object.'))
       });
     }
 
-    try {
-      validateSlotGeometry(slot, id || `#${index + 1}`, mode);
-    } catch (error) {
+    const [geometryFault] = slotGeometryFaults(slot, id || `#${index + 1}`, mode);
+    if (geometryFault) {
+      // The cast: a Width or Radius error names its field (TK-12).
+      const { field } = /** @type {Error & { field?: unknown }} */ (geometryFault.error);
       addRowIssue(rowIssues, index, {
         code: 'geometry_invalid',
-        field: typeof error?.field === 'string' ? error.field : 'geometry',
+        field: typeof field === 'string' ? field : 'geometry',
         slotId: id || null,
-        message: error instanceof Error ? error.message : String(error)
+        message: geometryFault.error.message,
+        parts: geometryFault.parts
       });
     }
     try {
@@ -995,18 +1333,15 @@ const collectCustomTrackIssues = ({
         code: 'z_invalid',
         field: 'z',
         slotId: id || null,
-        message: error instanceof Error ? error.message : String(error)
+        message: error instanceof Error ? error.message : String(error),
+        parts: sentence(msg('The z value must be an integer.'))
       });
     }
     if (params) {
-      try {
-        validateGenericParams(params, id || `#${index + 1}`, mode);
-      } catch (error) {
+      const [genericFault] = genericParamFaults(params, id || `#${index + 1}`, mode);
+      if (genericFault) {
         addRowIssue(rowIssues, index, {
-          code: 'generic_param',
-          field: 'params',
-          slotId: id || null,
-          message: error instanceof Error ? error.message : String(error)
+          code: 'generic_param', field: 'params', slotId: id || null, message: genericFault.error.message, parts: genericFault.parts
         });
       }
       const mismatchedParam = Object.keys(params).find(
@@ -1017,7 +1352,8 @@ const collectCustomTrackIssues = ({
           code: 'renderer_param_mismatch',
           field: `params.${mismatchedParam}`,
           slotId: id || null,
-          message: `${modeLabel} track ${slotLabel} retains '${mismatchedParam}' from another renderer.`
+          message: `${modeLabel} track ${slotLabel} retains '${mismatchedParam}' from another renderer.`,
+          parts: sentence(msg("This row keeps '{param}' from another renderer."), { param: mismatchedParam })
         });
       }
     }
@@ -1038,7 +1374,8 @@ const collectCustomTrackIssues = ({
           code: 'feature_lane',
           field: 'params.lane_direction',
           slotId: id || null,
-          message: `Circular Features track ${slotLabel} has an invalid lane direction.`
+          message: `Circular Features track ${slotLabel} has an invalid lane direction.`,
+          parts: sentence(msg('This row has an invalid lane direction.'))
         });
       } else if (lane !== null) {
         const laneSide = lane === 'split' ? 'overlay' : lane;
@@ -1047,7 +1384,8 @@ const collectCustomTrackIssues = ({
             code: 'feature_lane_side_conflict',
             field: 'side',
             slotId: id || null,
-            message: `Circular Features track ${slotLabel} side conflicts with its lane direction.`
+            message: `Circular Features track ${slotLabel} side conflicts with its lane direction.`,
+            parts: sentence(msg("This row's side conflicts with its lane direction."))
           });
         }
         side = laneSide;
@@ -1060,7 +1398,8 @@ const collectCustomTrackIssues = ({
         code: 'overlay_renderer_unsupported',
         field: 'side',
         slotId: id || null,
-        message: `Linear track ${slotLabel} can use On Axis only for Features or Annotations.`
+        message: `Linear track ${slotLabel} can use On Axis only for Features or Annotations.`,
+        parts: sentence(msg('Only Features and Annotations rows can use On axis.'))
       });
     }
     if (mode === 'circular' && renderer === 'sequence_conservation' && side === 'overlay') {
@@ -1068,7 +1407,8 @@ const collectCustomTrackIssues = ({
         code: 'conservation_overlay',
         field: 'side',
         slotId: id || null,
-        message: `Circular comparison track ${slotLabel} cannot use Overlay.`
+        message: `Circular comparison track ${slotLabel} cannot use the placement Overlay anchor.`,
+        parts: sentence(msg('A comparison row cannot use the placement Overlay anchor.'))
       });
     }
 
@@ -1080,7 +1420,8 @@ const collectCustomTrackIssues = ({
           code: 'ticks_obsolete_param',
           field: `params.${obsoleteTickKey}`,
           slotId: id || null,
-          message: `Circular Ticks track ${slotLabel} uses obsolete '${obsoleteTickKey}'.`
+          message: `Circular Ticks track ${slotLabel} uses obsolete '${obsoleteTickKey}'.`,
+          parts: sentence(msg("This row uses the obsolete parameter '{param}'."), { param: obsoleteTickKey })
         });
       }
     }
@@ -1100,7 +1441,8 @@ const collectCustomTrackIssues = ({
           code: 'depth_track_index',
           field: 'params.track_index',
           slotId: id || null,
-          message: error instanceof Error ? error.message : String(error)
+          message: error instanceof Error ? error.message : String(error),
+          parts: sentence(msg('The Depth track index must be a non-negative integer.'))
         });
       }
       if (trackIndex !== null && validDepthCount && depthCountProvided) {
@@ -1109,14 +1451,16 @@ const collectCustomTrackIssues = ({
             code: 'depth_track_index_range',
             field: 'params.track_index',
             slotId: id || null,
-            message: `${modeLabel} Depth track ${slotLabel} references index ${trackIndex}; available indexes are 0..${depthTrackCount - 1}.`
+            message: `${modeLabel} Depth track ${slotLabel} references index ${trackIndex}; available indexes are 0..${depthTrackCount - 1}.`,
+            parts: sentence(msg('Depth track index {index} is not available; the available indexes are 0–{last}.'), { index: trackIndex, last: depthTrackCount - 1 })
           });
         } else if (depthTrackCount === 0 || (sourcedDepthIndexes && !sourcedDepthIndexes.has(trackIndex))) {
           addRowIssue(rowIssues, index, {
             code: 'depth_source_missing',
             field: 'params.track_index',
             slotId: id || null,
-            message: `${modeLabel} Depth track ${slotLabel} has no logical Depth source.`
+            message: `${modeLabel} Depth track ${slotLabel} has no logical Depth source.`,
+            parts: sentence(msg('This row has no Depth source.'))
           });
         }
       }
@@ -1129,14 +1473,16 @@ const collectCustomTrackIssues = ({
           code: 'annotation_set_required',
           field: 'params.set_id',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} requires an annotation set.`
+          message: `${modeLabel} Annotation track ${slotLabel} requires an annotation set.`,
+          parts: sentence(msg('This row needs an annotation set.'))
         });
       } else if (annotationInventory && !annotationInventory.has(setId)) {
         addRowIssue(rowIssues, index, {
           code: 'annotation_set_unknown',
           field: 'params.set_id',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} references unknown set '${setId}'.`
+          message: `${modeLabel} Annotation track ${slotLabel} references unknown set '${setId}'.`,
+          parts: sentence(msg("Annotation set '{set}' does not exist."), { set: setId })
         });
       }
 
@@ -1152,20 +1498,22 @@ const collectCustomTrackIssues = ({
           code: 'annotation_marks',
           field: 'params.marks',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} has invalid mark filters.`
+          message: `${modeLabel} Annotation track ${slotLabel} has invalid mark filters.`,
+          parts: sentence(msg('This row has invalid mark filters.'))
         });
       }
       [
-        ['lane_gap_px', 'annotation_lane_gap', 'lane gap'],
-        ['padding_px', 'annotation_padding', 'padding']
-      ].forEach(([field, code, label]) => {
+        ['lane_gap_px', 'annotation_lane_gap', 'lane gap', msg('Lane gap must be a nonnegative finite number.')],
+        ['padding_px', 'annotation_padding', 'padding', msg('Padding must be a nonnegative finite number.')]
+      ].forEach(([field, code, label, text]) => {
         if (!Object.prototype.hasOwnProperty.call(params, field)) return;
         if (Number.isNaN(nonnegativeFiniteNumber(params[field]))) {
           addRowIssue(rowIssues, index, {
             code,
             field: `params.${field}`,
             slotId: id || null,
-            message: `${modeLabel} Annotation track ${slotLabel} ${label} must be a nonnegative finite number.`
+            message: `${modeLabel} Annotation track ${slotLabel} ${label} must be a nonnegative finite number.`,
+            parts: sentence(text)
           });
         }
       });
@@ -1177,7 +1525,8 @@ const collectCustomTrackIssues = ({
           code: 'annotation_cover_anchor',
           field: 'params.cover_anchor',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} Cover anchor must be true or false.`
+          message: `${modeLabel} Annotation track ${slotLabel} Cover anchor must be true or false.`,
+          parts: sentence(msg('Cover anchor must be true or false.'))
         });
       }
       if (
@@ -1188,7 +1537,8 @@ const collectCustomTrackIssues = ({
           code: 'annotation_overflow',
           field: 'params.overflow',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} has invalid overflow behavior.`
+          message: `${modeLabel} Annotation track ${slotLabel} has invalid overflow behavior.`,
+          parts: sentence(msg('This row has an invalid overflow behavior.'))
         });
       }
       const layer = normalizedOptionalString(params.layer) ?? 'foreground';
@@ -1197,7 +1547,8 @@ const collectCustomTrackIssues = ({
           code: 'annotation_layer',
           field: 'params.layer',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} has an invalid layer.`
+          message: `${modeLabel} Annotation track ${slotLabel} has an invalid layer.`,
+          parts: sentence(msg('This row has an invalid layer.'))
         });
       }
       const anchorId = String(params.anchor_slot || '').trim();
@@ -1206,14 +1557,18 @@ const collectCustomTrackIssues = ({
           code: 'annotation_anchor_required',
           field: 'params.anchor_slot',
           slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} requires an Overlay anchor.`
+          message: `${modeLabel} Annotation track ${slotLabel} requires an Overlay anchor.`,
+          parts: sentence(msg('This row needs an anchor.'))
         });
-      } else if (side !== 'overlay' && anchorId) {
-        addRowIssue(rowIssues, index, {
-          code: 'annotation_anchor_without_overlay',
-          field: 'params.anchor_slot',
-          slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} has an anchor but is not Overlay.`
+      } else if (side !== 'overlay') {
+        OVERLAY_SLOT_REFERENCES.filter(({ key }) => String(params[key] || '').trim()).forEach(({ key, code, label, text }) => {
+          addRowIssue(rowIssues, index, {
+            code: `annotation_${code}_without_overlay`,
+            field: `params.${key}`,
+            slotId: id || null,
+            message: `${modeLabel} Annotation track ${slotLabel} has an ${label} but is not Overlay.`,
+            parts: sentence(text.withoutOverlay)
+          });
         });
       }
     }
@@ -1224,7 +1579,8 @@ const collectCustomTrackIssues = ({
           code: 'conservation_unmanaged',
           field: 'params.managed',
           slotId: id || null,
-          message: `Circular comparison track ${slotLabel} is not owned by Comparison Series.`
+          message: `Circular comparison track ${slotLabel} is not owned by Comparison Series.`,
+          parts: sentence(msg('This comparison row is not managed by Series.'))
         });
       }
       const sourceKey = String(params.series_key || '').trim();
@@ -1241,7 +1597,8 @@ const collectCustomTrackIssues = ({
           code: 'conservation_source_missing',
           field: sourceKey ? 'params.source_index' : 'params.series_key',
           slotId: id || null,
-          message: `Circular comparison track ${slotLabel} is not bound to an active Comparison Series source.`
+          message: `Circular comparison track ${slotLabel} is not bound to an active Comparison Series source.`,
+          parts: sentence(msg('This comparison row is not bound to an active Series source.'))
         });
       }
     }
@@ -1252,7 +1609,7 @@ const collectCustomTrackIssues = ({
       renderer,
       enabled: true,
       side,
-      z: Number.isSafeInteger(Number(slot.z)) ? Number(slot.z) : 0,
+      z: rowZ(slot.z),
       params: params || {}
     };
     normalizedEnabled.push(normalizedSlot);
@@ -1267,7 +1624,8 @@ const collectCustomTrackIssues = ({
       code: 'features_multiple',
       field: 'renderer',
       slotId: String(draftSlots[index]?.id || '').trim() || null,
-      message: 'Linear Custom Track Slots support only one enabled Features row.'
+      message: 'Linear Custom Track Slots support only one enabled Features row.',
+      parts: sentence(msg('Only one enabled Features row is allowed.'))
     }));
   }
   // Whether the plan needs a Features row for underlays depends on the
@@ -1284,40 +1642,56 @@ const collectCustomTrackIssues = ({
     const rowIndex = rowIndexByNormalizedSlot.get(slot) ?? 0;
     const anchorId = String(slot.params.anchor_slot || '').trim();
     if (!anchorId) return;
-    const anchor = enabledById.get(anchorId);
-    if (!anchor) {
+    // The checks of Python's validate_overlay_annotation_anchors, in its
+    // order; like Python, a row reports its first fault.
+    if (String(slot.params.to_slot || '').trim() === anchorId) {
       addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_anchor_unknown',
-        field: 'params.anchor_slot',
+        code: 'annotation_to_slot_same',
+        field: 'params.to_slot',
         slotId: slot.id || null,
-        message: `${modeLabel} Annotation track '${slot.id}' references missing or disabled anchor '${anchorId}'.`
-      });
-      return;
-    }
-    if (INELIGIBLE_ANCHOR_RENDERERS.has(anchor.renderer)) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_anchor_ineligible',
-        field: 'params.anchor_slot',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation track '${slot.id}' anchor '${anchorId}' has no eligible drawable band.`
+        message: `${modeLabel} Annotation track '${slot.id}' extends to its own anchor '${anchorId}'; choose another slot or None.`,
+        parts: sentence(msg("This row extends to its own anchor '{anchor}'; choose another slot or None."), { anchor: anchorId })
       });
       return;
     }
     const layer = normalizedString(slot.params.layer || 'foreground');
-    if (layer === 'underlay' && slot.z >= anchor.z) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_underlay_z',
-        field: 'z',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation underlay '${slot.id}' must have z below anchor '${anchorId}'.`
-      });
-    } else if (layer === 'foreground' && slot.z <= anchor.z) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_foreground_z',
-        field: 'z',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation foreground '${slot.id}' must have z above anchor '${anchorId}'.`
-      });
+    for (const { key, code, label, text } of OVERLAY_SLOT_REFERENCES) {
+      const targetId = String(slot.params[key] || '').trim();
+      if (!targetId) continue;
+      const target = enabledById.get(targetId);
+      /** @type {RowIssueInput | null} */
+      let issue = null;
+      if (!target) {
+        issue = {
+          code: `annotation_${code}_unknown`,
+          field: `params.${key}`,
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation track '${slot.id}' references missing or disabled ${label} '${targetId}'.`,
+          parts: sentence(text.unknown, { target: targetId })
+        };
+      } else if (INELIGIBLE_ANCHOR_RENDERERS.has(target.renderer)) {
+        issue = {
+          code: `annotation_${code}_ineligible`,
+          field: `params.${key}`,
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation track '${slot.id}' ${label} '${targetId}' has no eligible drawable band.`,
+          parts: sentence(text.ineligible, { target: targetId })
+        };
+      } else if (!overlayLayerZHolds(layer, slot.z, target.z)) {
+        issue = {
+          code: `annotation_${layer}_z`,
+          field: 'z',
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation ${layer} '${slot.id}' must have z ${layer === 'underlay' ? 'below' : 'above'} ${label} '${targetId}'.`,
+          parts: sentence(layer === 'underlay'
+            ? msg("As an underlay, this row must be drawn below '{target}'.")
+            : msg("As a foreground annotation, this row must be drawn above '{target}'."), { target: targetId })
+        };
+      }
+      if (issue) {
+        addRowIssue(rowIssues, rowIndex, issue);
+        return;
+      }
     }
   });
 
@@ -1359,7 +1733,8 @@ const collectCustomTrackIssues = ({
         code: 'axis_side_conflict',
         field: 'side',
         slotId: slot.id || null,
-        message: `${modeLabel} track '${slot.id}' side conflicts with the enabled Axis boundary.`
+        message: `${modeLabel} track '${slot.id}' side conflicts with the enabled Axis boundary.`,
+        parts: sentence(msg("This row's side conflicts with the Axis boundary."))
       });
     });
   }

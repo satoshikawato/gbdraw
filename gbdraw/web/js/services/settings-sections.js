@@ -6,7 +6,12 @@
 // element carries its key through `v-settings-section`; `SettingsSectionIndex`
 // lists the entries of the shown mode (js/components.js). A card without an
 // entry of its own (Basic, the preserved-settings notice) names the entry that
-// docks it in the rail.
+// docks it in the rail. The list of drawn elements below names, for each
+// element of the Result that has a section, the section a click on it opens.
+import { msg, tm, tmx } from '../utils/i18n.js';
+import {
+  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, LENGTH_BAR_ID, PLOT_TITLE_ID, TICK_GROUPS, trackGroupSelector
+} from './drawn-groups.js';
 
 /** @import { SettingsPaneDisplay } from './settings-pane-state.js' */
 
@@ -17,9 +22,13 @@
  * @template {string} Key
  * @typedef {object} SettingsEntryOf
  * @property {Key} key Identity of the section; the value of `data-settings-section`.
- * @property {string} title The heading text; the entry is named "Go to <title>".
+ * @property {string} title The heading text; the entry is named "Go to <title>". English, marked
+ *   with `msg`: the rail matches the sections of two modes by it; show it with `tm`.
  * @property {string} icon Phosphor icon class of the heading and of the entry.
- * @property {string} short The name under the icon of the rail entry.
+ * @property {string} short The name under the icon of the rail entry (English, marked; shown by `settingsShortText`).
+ * @property {'rail'} [shortContext] The context of the short name's own catalog key, for a short name
+ *   whose plain translation (that of the title) is too long for the rail button (OV-1417): a shorter
+ *   word, or one word with a soft hyphen where it may break (OV-1506).
  * @property {SettingsSectionModes} modes
  * @property {true} [input] An entry that chooses what is drawn; the rail sets these apart from the rest.
  * @property {true} [railOnly] An entry of the rail alone; the stacked row leaves it out.
@@ -44,25 +53,25 @@ const catalog = (sections) => Object.freeze(sections.map((section) => Object.fre
 const BOTH_MODES = ['circular', 'linear'];
 
 export const SETTINGS_SECTIONS = catalog([
-  { key: 'input-genomes', title: 'Input Genomes', icon: 'ph-folder-open', short: 'Input', modes: BOTH_MODES, input: true },
-  { key: 'comparison', title: 'Comparison', icon: 'ph-arrows-left-right', short: 'Compare', modes: ['linear'], input: true },
+  { key: 'input-genomes', title: msg('Input Genomes'), icon: 'ph-folder-open', short: msg('Input'), modes: BOTH_MODES, input: true },
+  { key: 'comparison', title: msg('Comparison'), icon: 'ph-arrows-left-right', short: msg('Compare'), modes: ['linear'], input: true },
   { key: 'basic', dock: 'input-genomes', modes: BOTH_MODES },
-  { key: 'advanced-comparison', title: 'Advanced comparison and layout', icon: 'ph-gear-six', short: 'Advanced', modes: ['linear'] },
-  { key: 'region-annotations', title: 'Region Annotations', icon: 'ph-brackets-curly', short: 'Regions', modes: BOTH_MODES },
-  { key: 'pairwise-comparisons', title: 'Pairwise Comparisons', icon: 'ph-arrows-left-right', short: 'Compare', modes: ['circular'] },
+  { key: 'advanced-comparison', title: msg('Advanced comparison and layout'), icon: 'ph-gear-six', short: msg('Advanced'), modes: ['linear'] },
+  { key: 'region-annotations', title: msg('Region Annotations'), icon: 'ph-brackets-curly', short: msg('Regions'), modes: BOTH_MODES },
+  { key: 'pairwise-comparisons', title: msg('Pairwise Comparisons'), icon: 'ph-arrows-left-right', short: msg('Compare'), modes: ['circular'] },
   { key: 'preserved-settings', dock: 'input-genomes', modes: BOTH_MODES },
-  { key: 'layout', title: 'Layout', icon: 'ph-layout', short: 'Layout', modes: BOTH_MODES },
-  { key: 'font', title: 'Font', icon: 'ph-text-aa', short: 'Font', modes: BOTH_MODES },
-  { key: 'titles', title: 'Titles & Record Labels', icon: 'ph-textbox', short: 'Titles', modes: BOTH_MODES },
-  { key: 'legend', title: 'Legend', icon: 'ph-list-bullets', short: 'Legend', modes: BOTH_MODES },
-  { key: 'colors', title: 'Colors', icon: 'ph-palette', short: 'Colors', modes: BOTH_MODES },
-  { key: 'features', title: 'Features', icon: 'ph-shapes', short: 'Features', modes: BOTH_MODES },
-  { key: 'labels', title: 'Labels', icon: 'ph-text-t', short: 'Labels', modes: BOTH_MODES },
+  { key: 'layout', title: msg('Layout'), icon: 'ph-layout', short: msg('Layout'), shortContext: 'rail', modes: BOTH_MODES },
+  { key: 'font', title: msg('Font'), icon: 'ph-text-aa', short: msg('Font'), modes: BOTH_MODES },
+  { key: 'titles', title: msg('Titles & Record Labels'), icon: 'ph-textbox', short: msg('Titles'), modes: BOTH_MODES },
+  { key: 'legend', title: msg('Legend'), icon: 'ph-list-bullets', short: msg('Legend'), modes: BOTH_MODES },
+  { key: 'colors', title: msg('Colors'), icon: 'ph-palette', short: msg('Colors'), modes: BOTH_MODES },
+  { key: 'features', title: msg('Features'), icon: 'ph-shapes', short: msg('Features'), shortContext: 'rail', modes: BOTH_MODES },
+  { key: 'labels', title: msg('Labels'), icon: 'ph-text-t', short: msg('Labels'), shortContext: 'rail', modes: BOTH_MODES },
   // Axis & Scale is one card per mode, each with its own icon.
-  { key: 'linear-axis', title: 'Axis & Scale', icon: 'ph-ruler', short: 'Axis', modes: ['linear'] },
-  { key: 'circular-axis', title: 'Axis & Scale', icon: 'ph-paint-brush', short: 'Axis', modes: ['circular'] },
-  { key: 'dinucleotide', title: 'Dinucleotide content/skew', icon: 'ph-dna', short: 'GC / skew', modes: BOTH_MODES },
-  { key: 'about', title: 'About & Citation', icon: 'ph-info', short: 'About', modes: BOTH_MODES, railOnly: true }
+  { key: 'linear-axis', title: msg('Axis & Scale'), icon: 'ph-ruler', short: msg('Axis'), modes: ['linear'] },
+  { key: 'circular-axis', title: msg('Axis & Scale'), icon: 'ph-paint-brush', short: msg('Axis'), modes: ['circular'] },
+  { key: 'dinucleotide', title: msg('Dinucleotide content/skew'), icon: 'ph-dna', short: msg('GC / skew'), modes: BOTH_MODES },
+  { key: 'about', title: msg('About & Citation'), icon: 'ph-info', short: msg('About'), modes: BOTH_MODES, railOnly: true }
 ]);
 
 /** @typedef {(typeof SETTINGS_SECTIONS)[number]} SettingsSection */
@@ -76,6 +85,21 @@ const hasEntry = (section) => 'short' in section;
 /** @param {'circular' | 'linear'} mode @param {SettingsPaneDisplay} display */
 export const settingsEntriesOf = (mode, display) => SETTINGS_SECTIONS.filter(hasEntry)
   .filter((entry) => entry.modes.includes(mode) && (display === 'rail' || !entry.railOnly));
+
+/**
+ * The shown name under the icon of a rail entry.
+ * @param {SettingsEntry} entry
+ * @returns {string}
+ */
+export const settingsShortText = (entry) => (entry.shortContext ? tmx(entry.shortContext, entry.short) : tm(entry.short));
+
+/**
+ * The catalog keys of the short names with a context of their own, with
+ * their English text; the catalog check reads them.
+ * @returns {{ context: string, english: string }[]}
+ */
+export const settingsShortKeys = () => SETTINGS_SECTIONS.filter(hasEntry)
+  .flatMap((entry) => (entry.shortContext ? [{ context: entry.shortContext, english: entry.short }] : []));
 
 // The entry that docks a section in the rail: its own, or the one it names.
 /** @param {SettingsSectionKey} key */
@@ -92,6 +116,51 @@ export const settingsEntryIn = (mode, key) => {
   const own = SETTINGS_SECTIONS.filter(hasEntry).find((entry) => entry.key === settingsEntryOf(key));
   const entries = settingsEntriesOf(mode, 'rail');
   return (entries.find((entry) => entry === own) ?? entries.find((entry) => entry.title === own?.title))?.key;
+};
+
+// The element of a section in the settings scroll area.
+/** @param {ParentNode} area The settings scroll area. @param {SettingsSectionKey} key */
+export const settingsSectionElement = (area, key) =>
+  /** @type {HTMLElement | null} */ (area.querySelector(`[data-settings-section="${key}"]`));
+
+// The drawn elements of a Result whose settings have a section: the scale
+// (the Circular ticks, the Linear bar or ruler), every dinucleotide track, and
+// the plot title. The groups are those of services/drawn-groups.js; a section
+// of one mode stands for the section of the same title in the other
+// (`settingsEntryIn`).
+/**
+ * The sections a drawn element opens. The template moves each of them into the
+ * popup beside the Result (index.html, `to="#settings-popup"`).
+ * @typedef {Extract<SettingsSectionKey, 'circular-axis' | 'linear-axis' | 'dinucleotide' | 'titles'>} DrawnElementSectionKey
+ */
+/** @type {readonly { readonly selector: string, readonly section: DrawnElementSectionKey }[]} */
+const DRAWN_ELEMENT_SECTIONS = Object.freeze([
+  { selector: trackGroupSelector(TICK_GROUPS), section: 'circular-axis' },
+  { selector: `#${LENGTH_BAR_ID}`, section: 'linear-axis' },
+  { selector: `${trackGroupSelector(DINUCLEOTIDE_CONTENT_GROUPS)}, ${trackGroupSelector(DINUCLEOTIDE_SKEW_GROUPS)}`, section: 'dinucleotide' },
+  { selector: `#${PLOT_TITLE_ID}`, section: 'titles' }
+]);
+
+export const DRAWN_ELEMENT_SELECTOR = DRAWN_ELEMENT_SECTIONS.map(({ selector }) => selector).join(', ');
+
+// The groups of a record are named after it, so those of a record called
+// `tick_1` or `skew_a` have ids that read like a track's: its definition
+// (`<record id>_definition…`; a Result drawn by 0.13.0 has the id alone, no
+// role) and, in such a Result, the group of its features (`<record id>…`).
+const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"], [id*="_definition"]';
+const FEATURE_SELECTOR = '[data-gbdraw-feature-id]';
+
+/**
+ * The section that holds the settings of the drawn element an event in the
+ * Result reached: the element itself, or the group it is drawn in. A group of
+ * a record has none, whatever its id.
+ * @param {EventTarget | null} target
+ * @returns {DrawnElementSectionKey | null}
+ */
+export const drawnElementSection = (target) => {
+  const element = target instanceof Element ? target.closest(DRAWN_ELEMENT_SELECTOR) : null;
+  if (!element || element.matches(RECORD_DEFINITION_SELECTOR) || element.querySelector(FEATURE_SELECTOR)) return null;
+  return DRAWN_ELEMENT_SECTIONS.find(({ selector }) => element.matches(selector))?.section ?? null;
 };
 
 // What scrolls the settings: their scroll area, or the page in the phone

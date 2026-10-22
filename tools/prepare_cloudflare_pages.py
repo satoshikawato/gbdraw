@@ -27,7 +27,11 @@ GALLERY_REMOTE_ASSET_PATTERNS = (
     "gallery/media/**/*",
 )
 SCRIPT_MARKER = "<!-- GOOGLE_ANALYTICS_SCRIPT -->"
-NOTICE_MARKER = "<!-- GOOGLE_ANALYTICS_NOTICE -->"
+# The flag that tells the page it is the hosted site, which loads Google
+# Analytics; the About section shows its analytics notice from it
+# (gbdraw/web/js/utils/hosted-build.js reads it by this name).
+HOSTED_ANALYTICS_META_NAME = "gbdraw-hosted-analytics"
+HOSTED_ANALYTICS_FLAG = f'<meta name="{HOSTED_ANALYTICS_META_NAME}" content="google-analytics-4">'
 FULL_COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 ISOLATION_HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
@@ -76,7 +80,8 @@ def _replace_once(source: str, old: str, new: str) -> str:
 
 
 def _render_google_analytics_script(measurement_id: str) -> str:
-    return f"""    <!-- Google tag (gtag.js) -->
+    return f"""    {HOSTED_ANALYTICS_FLAG}
+    <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={measurement_id}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -84,13 +89,6 @@ def _render_google_analytics_script(measurement_id: str) -> str:
       gtag('js', new Date());
       gtag('config', '{measurement_id}');
     </script>"""
-
-
-def _render_google_analytics_notice() -> str:
-    return """                            <div class="bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
-                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-chart-line"></i> Hosted Site Analytics</strong>
-                                The hosted <strong>gbdraw.app</strong> deployment uses Google Analytics 4 for aggregate page-usage metrics. Uploaded genome files and generated diagrams are still processed locally in your browser and are not sent to Google Analytics by gbdraw.
-                            </div>"""
 
 
 def _default_gallery_remote_base(*, commit_sha: str | None = None) -> str:
@@ -156,7 +154,6 @@ def build_cloudflare_pages_bundle(
         SCRIPT_MARKER,
         _render_google_analytics_script(google_analytics_measurement_id),
     )
-    index_html = _replace_once(index_html, NOTICE_MARKER, _render_google_analytics_notice())
     index_html = _replace_once(
         index_html,
         "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
@@ -217,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the Cloudflare Pages bundle in dist/cloudflare-pages with the browser wheel, "
-            "Google Analytics 4 tag, hosted-site privacy notice, and build label."
+            "Google Analytics 4 tag, the hosted-site analytics flag, and build label."
         )
     )
     parser.add_argument(

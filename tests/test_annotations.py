@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -72,6 +73,7 @@ def test_highlight_track_flattens_overlaps_and_ignores_explicit_lanes() -> None:
         bundle.annotations,
         record_lengths={0: 100},
         params=params,
+        label_font_size=10.0,
     )
 
     assert params.cover_anchor is True
@@ -115,6 +117,7 @@ def test_spanning_annotation_track_does_not_fit_lanes_to_its_own_extent() -> Non
                 {"set_id": "s", "show_labels": False, "anchor_slot": "features", **extra}
             ),
             available_extent_px=14.0,
+            label_font_size=10.0,
         )
 
     with pytest.raises(ValidationError, match="only 14.00px is available"):
@@ -142,6 +145,7 @@ def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() 
         bundle.annotations,
         record_lengths={0: 100},
         params=AnnotationTrackParams(set_id="s", marks=("line", "band")),
+        label_font_size=10.0,
     )
     customized = layout_annotation_track(
         "custom",
@@ -154,6 +158,7 @@ def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() 
             lane_gap_px=7,
             padding_px=5,
         ),
+        label_font_size=10.0,
     )
 
     assert {item.annotation.mark for item in defaults.placements} == {
@@ -298,6 +303,25 @@ def test_lane_assignment_is_deterministic_and_separates_overlap() -> None:
     bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
     lanes = assign_annotation_lanes(bundle.annotations, record_lengths={0: 100})
     assert {item.annotation.id: item.lane for item in lanes} == {"a": 0, "c": 0, "b": 1}
+
+
+def test_explicit_lane_conflict_names_its_cause_to_the_web() -> None:
+    """OV-1262: the Web shows a classified message, not RENDER_FAILED."""
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    annotations = (
+        RegionAnnotation("first", CoordinateSpan(None, 1, 10), lane=0),
+        RegionAnnotation("second", CoordinateSpan(None, 5, 15), lane=0),
+    )
+    bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
+    with pytest.raises(ValidationError, match="Annotation s/second conflicts in explicit lane 0.") as raised:
+        assign_annotation_lanes(bundle.annotations, record_lengths={0: 100})
+    payload = serialize_web_error(raised.value, operation="generate", stage="render")
+    assert (payload["code"], payload["stage"], payload["context"]) == (
+        "TRACK_INVALID",
+        "render",
+        {"reason": "ANNOTATION_LANE_CONFLICT"},
+    )
 
 
 def test_annotation_options_reject_mixed_sources() -> None:
@@ -491,3 +515,106 @@ def test_malformed_hex_annotation_color_names_its_column(field: str, name: str) 
     # annotation message keeps the column and the annotation-correct advice.
     with pytest.raises(ValidationError, match=f"{name} is not a valid color: '#zz'"):
         RegionAnnotationStyle(**{field: "#zz"})
+
+
+def _drawn_label_fonts(
+    mode: str,
+    length: int,
+    *,
+    style: RegionAnnotationStyle | None = None,
+    config_overrides: dict[str, object] | None = None,
+) -> tuple[float, float]:
+    """The drawn font size of a region label and of a feature label in one diagram of ``mode``."""
+
+    from gbdraw.api import CircularDiagramOptions, LinearDiagramOptions
+    from gbdraw.api.diagram import build_circular_diagram, build_linear_diagram
+
+    record = SeqRecord(Seq("ACGT" * (length // 4)), id="r1", name="r1", annotations={"molecule_type": "DNA"})
+    record.annotations["topology"] = "circular"
+    record.features = [
+        SeqFeature(FeatureLocation(100, 400, strand=1), type="CDS", qualifiers={"product": ["alpha protein"]})
+    ]
+    annotations = AnnotationOptions(
+        sets=(AnnotationSet("regions", (RegionAnnotation("reg", CoordinateSpan(None, 500, 700), label="RegionX", style=style),)),)
+    )
+    overrides = {f"labels.{mode}.scope": "all" if mode == "linear" else "both", **(config_overrides or {})}
+    if mode == "linear":
+        drawing = build_linear_diagram(
+            [record], options=LinearDiagramOptions(annotations=annotations, config_overrides=overrides)
+        )
+    else:
+        drawing = build_circular_diagram(
+            record, options=CircularDiagramOptions(annotations=annotations, config_overrides=overrides)
+        )
+    sizes = {
+        text: float(size)
+        for size, text in re.findall(
+            r'<text[^>]*font-size="([^"]+)"[^>]*>(?:<textPath[^>]*>)?([^<]*)<', drawing.tostring()
+        )
+    }
+    return sizes["RegionX"], sizes["alpha protein"]
+
+
+@pytest.mark.parametrize("length", [1000, 200000], ids=["short", "long"])
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_region_label_without_a_font_takes_the_feature_label_font(mode: str, length: int) -> None:
+    region, feature = _drawn_label_fonts(mode, length)
+    assert region == feature
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_region_label_follows_a_feature_label_font_override(mode: str) -> None:
+    path = "labels.font_size.linear" if mode == "linear" else "labels.font_size"
+    region, feature = _drawn_label_fonts(mode, 1000, config_overrides={f"{path}.short": 11.0})
+    assert (region, feature) == (11.0, 11.0)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_region_label_with_its_own_font_keeps_it(mode: str) -> None:
+    region, feature = _drawn_label_fonts(mode, 1000, style=RegionAnnotationStyle(label_font_size=7.0))
+    assert region == 7.0
+    assert feature != 7.0
+
+
+def test_lane_packing_measures_a_label_in_the_slot_style_font() -> None:
+    annotations = (
+        RegionAnnotation("first", CoordinateSpan(None, 40, 41), label="Wide label"),
+        RegionAnnotation("second", CoordinateSpan(None, 60, 61), label="Next"),
+    )
+    bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
+
+    def lanes(style_override: RegionAnnotationStyle | None) -> set[int]:
+        track = layout_annotation_track(
+            "regions",
+            "s",
+            bundle.annotations,
+            record_lengths={0: 100},
+            params=AnnotationTrackParams(set_id="s", style_override=style_override),
+            label_font_size=1.0,
+        )
+        return {placement.lane for placement in track.placements}
+
+    assert lanes(None) == {0}
+    assert lanes(RegionAnnotationStyle(label_font_size=20.0)) == {0, 1}
+
+
+def test_lane_packing_pads_a_bracket_by_the_slot_style_stroke() -> None:
+    annotations = (
+        RegionAnnotation("first", CoordinateSpan(None, 10, 40), mark="bracket"),
+        RegionAnnotation("second", CoordinateSpan(None, 50, 80), mark="bracket"),
+    )
+    bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
+
+    def lanes(style_override: RegionAnnotationStyle | None) -> set[int]:
+        track = layout_annotation_track(
+            "regions",
+            "s",
+            bundle.annotations,
+            record_lengths={0: 100},
+            params=AnnotationTrackParams(set_id="s", padding_px=0.0, style_override=style_override),
+            label_font_size=10.0,
+        )
+        return {placement.lane for placement in track.placements}
+
+    assert lanes(None) == {0}
+    assert lanes(RegionAnnotationStyle(stroke_width=3.0)) == {0, 1}

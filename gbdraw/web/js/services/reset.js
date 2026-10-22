@@ -12,6 +12,7 @@ import {
 } from '../state.js';
 /** @import { DrawingState, LegendCaption, LegendEntry, state as AppState } from '../state.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+import { replaceBulkLabelEdits } from './label-override-table.js';
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
@@ -113,6 +114,7 @@ const resetRuleDraftState = (state, drawing) => {
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
   replaceReactiveArray(drawing.manualPriorityRules);
+  clearReactiveObject(drawing.fileImports);
   replaceReactiveObject(state.newPriorityRule, createDefaultPriorityRule());
   state.newColorFeat.value = editorDefaults.newColorFeat;
   state.newColorVal.value = editorDefaults.newColorVal;
@@ -142,7 +144,10 @@ const resetEditorDraftState = (state, drawing) => {
   drawing.addedLegendCaptions.value = new Set();
   drawing.fileLegendCaptions.value = new Set();
 
-  clearReactiveObject(drawing.labelTextBulkOverrides);
+  // The saved label table of a loaded Session goes with the bulk label edits,
+  // also when the bulk map is already empty (R15-21).
+  replaceBulkLabelEdits(drawing, {});
+  drawing.canonicalLabelOverrideRows.value = [];
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
@@ -156,6 +161,7 @@ const resetEditorDraftState = (state, drawing) => {
   state.selectedOrthogroupAlignmentFeature.value = '';
   clearReactiveObject(drawing.orthogroupNameOverrides);
   clearReactiveObject(drawing.orthogroupDescriptionOverrides);
+  clearReactiveObject(drawing.orthogroupDormantOverrides);
 };
 
 /** @param {DrawingState} drawing */
@@ -178,8 +184,24 @@ const resetLinearComparisonPlan = (drawing) => {
 
 // Reset Settings returns both drawings to their own mode's defaults
 // (PD-OI-070), and the app-level LOSAT execution and popup settings.
+/**
+ * The uploaded tables whose rows become settings (Default colors, Specific
+ * color rules, Blacklist, Whitelist, Priority File). Reset Settings, which a
+ * Session replace also runs, clears those settings, so the cards go with them
+ * (OV-1267); a card that stayed would name a table its rules no longer hold.
+ * @param {Record<'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority', unknown>} files
+ */
+const clearSettingTableFiles = (files) => {
+  files.d_color = null;
+  files.t_color = null;
+  files.blacklist = null;
+  files.whitelist = null;
+  files.qualifier_priority = null;
+};
+
 /** @param {typeof AppState} state */
 export const resetSettings = (state) => {
+  clearSettingTableFiles(state.files);
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
   /** @type {[string, DrawingState][]} */ (Object.entries(state.drawings)).forEach(([mode, drawing]) => {

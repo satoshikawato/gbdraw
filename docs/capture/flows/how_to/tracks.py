@@ -23,6 +23,7 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
+    run_track_slot_row_action,
     set_feature_search_visible,
     toggle_disclosure,
     wait_for_app_shell,
@@ -908,9 +909,7 @@ def capture_gui_annotation_tracks(
         )
         annotation_set.select_option("plastome_regions")
         expect(annotation_set).to_have_value("plastome_regions")
-        move_outside = annotation_slot.get_by_title("Move outside Axis", exact=True)
-        expect(move_outside).to_be_enabled()
-        move_outside.click()
+        run_track_slot_row_action(annotation_slot, "Move outside Axis")
         annotation_slot = page.get_by_role(
             "group", name="Circular track slot annotations", exact=True
         )

@@ -161,7 +161,7 @@ test('the reference card comes first and each record is in the section it had wh
   ]);
   assert.equal(referenceOf(view).kind, 'reference');
   // The summary counts what the headings count.
-  assert.equal(view.summary, '4 records, 1 needs a choice, 1 with one candidate, 1 without a usable candidate.');
+  assert.equal(view.summary, '4 records, 1 record awaiting a choice, 1 record with one candidate, 1 record without a usable candidate.');
   const [two] = sectionsOf(view)[0].cards;
   assert.deepEqual({ kind: two.kind, needsChoice: two.needsChoice, skipped: two.skipped, chosenKey: two.chosenKey },
     { kind: 'several', needsChoice: true, skipped: false, chosenKey: '' });
@@ -178,7 +178,7 @@ test('the reference card comes first and each record is in the section it had wh
   assert.deepEqual(sectionsOf(preselected).map(({ id, title, cards }) => [id, title, cards.length]),
     [['several', 'Several candidates', 1], ['single', 'One candidate', 1], ['none', 'No usable candidate', 1]]);
   assert.equal(preselected.stripWidth, 350);
-  assert.equal(preselected.summary, '4 records, 1 with several candidates, 1 with one candidate, 1 without a usable candidate.');
+  assert.equal(preselected.summary, '4 records, 1 record with several candidates, 1 record with one candidate, 1 record without a usable candidate.');
 });
 
 test('candidates are listed left to right as the figure draws them, undrawn ones last', () => {

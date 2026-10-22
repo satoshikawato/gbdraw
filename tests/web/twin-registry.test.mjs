@@ -64,7 +64,8 @@ test('a twin the registry does not list fails, and so does a row without its twi
   const check = checkTwinRegistry(REGISTRY, extra);
   assert.deepEqual(check.unregistered, ['function:migrateExtraTwin', `vector:${vector}`]);
   assert.deepEqual(check.stale, []);
-  const [first] = /** @type {{ twins: { id: string }[] }} */ (REGISTRY).twins.filter(({ id }) => /^(?:vector|function):/.test(id));
+  const [first] = /** @type {{ twins: { id: string, pending?: true }[] }} */ (REGISTRY).twins
+    .filter(({ id, pending }) => !pending && /^(?:vector|function):/.test(id));
   assert.ok(first, 'the registry has a detected row');
   const gone = checkTwinRegistry(REGISTRY, detectTwins(SOURCES).filter(({ id }) => id !== first.id));
   assert.deepEqual(gone.stale, [first.id]);

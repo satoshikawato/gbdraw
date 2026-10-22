@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FontFamilyName } from './font-families.js' */
+import { joinSentences, listText, t, tn } from '../utils/i18n.js';
 import { customFontFamilies, isGenericFamily, parseFontFamilyList, resolveWebFontFamily } from './font-families.js';
 
 // What a Session says about its fonts (custom fonts D-02, D-03; Product
@@ -16,10 +17,6 @@ export const SESSION_FONT_ACTIONS = Object.freeze({
   SUBSTITUTE: 'substitute'
 });
 
-/** @param {readonly string[]} names "A", "A and B", "A, B, and C" */
-const nameList = (names) => (names.length < 3
-  ? names.join(' and ')
-  : `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`);
 
 /** @template T @param {readonly T[]} values @returns {T[]} */
 const unique = (values) => [...new Set(values)];
@@ -34,7 +31,7 @@ const unique = (values) => [...new Set(values)];
 export const customFontSaveWarnings = (fontFamilies, registeredFamilies) => {
   const registered = [...registeredFamilies];
   return unique(fontFamilies.flatMap((fontFamily) => customFontFamilies(fontFamily, registered)))
-    .map((family) => `The Session keeps the font name ${family}, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.`);
+    .map((family) => t('The Session keeps the font name {family}, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.', { family }));
 };
 
 /**
@@ -72,26 +69,29 @@ export const missingSessionFonts = (fontFamilies, registeredFamilies) => {
  *   `loadedFamily`: the family of the font just loaded, when it is not the one the Session names.
  */
 export const sessionFontQuestion = ({ missing, nearest }, { installedFontsSupported, loadedFamily }) => {
-  const one = missing.length === 1;
-  const names = nameList(missing);
-  const substitutes = nameList(nearest);
+  const names = listText(missing);
+  const substitutes = listText(nearest);
   return {
-    title: 'This Session uses a font that is not available',
-    description: `Its text is set in ${names}, which ${one ? 'is' : 'are'} not part of gbdraw and ${one ? 'is' : 'are'} not loaded in this page.`,
-    items: loadedFamily ? [`The loaded font is ${loadedFamily}, not ${names}.`] : [],
-    note: `Load with ${substitutes}: the Session opens and its text is drawn in ${substitutes}, `
-      + `the nearest available font${nearest.length === 1 ? '' : 's'}. `
-      + (one
-        ? `The Font setting keeps the name ${names}, so the font is used again once it is loaded. `
-        : `The Font setting keeps the names ${names}, so the fonts are used again once they are loaded. `)
-      + 'The saved preview keeps its look until you Generate.',
+    title: t('This Session uses a font that is not available'),
+    description: tn(missing.length,
+      'Its text is set in {names}, which is not part of gbdraw and is not loaded in this page.',
+      'Its text is set in {names}, which are not part of gbdraw and are not loaded in this page.', { names }),
+    items: loadedFamily ? [t('The loaded font is {loaded}, not {names}.', { loaded: loadedFamily, names })] : [],
+    note: joinSentences(
+      tn(nearest.length,
+        'Load with {substitutes}: the Session opens and its text is drawn in {substitutes}, the nearest available font.',
+        'Load with {substitutes}: the Session opens and its text is drawn in {substitutes}, the nearest available fonts.', { substitutes }),
+      tn(missing.length,
+        'The Font setting keeps the name {names}, so the font is used again once it is loaded.',
+        'The Font setting keeps the names {names}, so the fonts are used again once they are loaded.', { names }),
+      t('The saved preview keeps its look until you Generate.')),
     actions: [
-      { id: SESSION_FONT_ACTIONS.FILE, label: 'Load font file…', tone: /** @type {const} */ ('primary') },
+      { id: SESSION_FONT_ACTIONS.FILE, label: t('Load font file…'), tone: /** @type {const} */ ('primary') },
       ...(installedFontsSupported
-        ? [{ id: SESSION_FONT_ACTIONS.INSTALLED, label: 'Use installed font…', tone: /** @type {const} */ ('secondary') }]
+        ? [{ id: SESSION_FONT_ACTIONS.INSTALLED, label: t('Use installed font…'), tone: /** @type {const} */ ('secondary') }]
         : []),
-      { id: SESSION_FONT_ACTIONS.SUBSTITUTE, label: `Load with ${substitutes}`, tone: /** @type {const} */ ('secondary') }
+      { id: SESSION_FONT_ACTIONS.SUBSTITUTE, label: t('Load with {substitutes}', { substitutes }), tone: /** @type {const} */ ('secondary') }
     ],
-    cancelLabel: 'Cancel'
+    cancelLabel: t('Cancel')
   };
 };

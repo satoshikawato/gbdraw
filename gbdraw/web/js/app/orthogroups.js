@@ -11,6 +11,8 @@ import {
 } from '../services/losat-normalization.js';
 import {
   isInternalProteinDisplayId,
+  locationPartBound,
+  locationRangeText,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -23,12 +25,14 @@ import {
   STABLE_FEATURE_ID_KEYS,
   featureIdentity,
   identityMatches,
+  indexFeatureIdentities,
   nonnegativeIntegerAliasStatus,
   orthogroupIdStatus,
   renderedFeatureIdentity,
   textAliasStatus,
   uniqueOrthogroupEntries
 } from '../services/feature-identity.js';
+import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
@@ -56,53 +60,14 @@ const COPY_FEEDBACK_DURATION_MS = 1500;
 // stores; a missing status reads undefined.
 /** @type {Readonly<Record<string, string | undefined>>} */
 const COPY_FEEDBACK_LABELS = Object.freeze({
-  success: 'Copied!',
-  failure: 'Copy failed'
+  success: msg('Copied!'),
+  failure: msg('Copy failed')
 });
 
 /** @param {unknown} value */
 const normalizeText = (value) => String(value ?? '').trim();
 /** @param {unknown} value */
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
-
-// Narrow the search by supplied fields; identityMatches still owns all matching semantics.
-/**
- * @template T
- * @param {readonly T[]} entries
- * @param {(entry: T) => FeatureIdentity} identityOf
- * @returns {(reference: FeatureIdentity) => T[]}
- */
-const indexFeatureIdentities = (entries, identityOf) => {
-  /** @type {readonly ('recordIndex' | 'sourceIndex' | 'recordKey' | 'biologicalId' | 'stableId' | 'renderedId')[]} */
-  const fields = ['recordIndex', 'sourceIndex', 'recordKey', 'biologicalId', 'stableId', 'renderedId'];
-  const indexes = new Map(fields.map((field) => [field, new Map()]));
-  for (const entry of entries) {
-    const identity = identityOf(entry);
-    if (!identity.usable) continue;
-    for (const field of fields) {
-      const status = identity[field];
-      if (!status.supplied) continue;
-      // `fields` lists every key of `indexes`, so the lookup always finds a map.
-      const index = /** @type {Map<any, any[]>} */ (indexes.get(field));
-      if (!index.has(status.value)) index.set(status.value, []);
-      // The line above stores a list under this value when none exists.
-      /** @type {any[]} */ (index.get(status.value)).push(entry);
-    }
-  }
-  return (reference) => {
-    if (!reference.usable) return [];
-    let candidates = entries;
-    for (const field of fields) {
-      const status = reference[field];
-      if (!status.supplied) continue;
-      // `fields` lists every key of `indexes`, so the lookup always finds a map.
-      const matches = /** @type {Map<any, any[]>} */ (indexes.get(field)).get(status.value) || [];
-      if (matches.length < candidates.length) candidates = matches;
-    }
-    return candidates.filter((entry) => identityMatches(reference, identityOf(entry), { includeRendered: true }));
-  };
-};
-
 
 /** @param {OrthogroupMember | null | undefined} member */
 const memberStableFeatureId = (member) => {
@@ -189,8 +154,8 @@ const getMemberSequence = (member, sequenceKind) => (
 
 /** @param {OrthogroupMember | null | undefined} member */
 const memberLocationText = (member) => {
-  const start = Number(member?.start);
-  const end = Number(member?.end);
+  const start = locationPartBound(member, 'start');
+  const end = locationPartBound(member, 'end');
   if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
   const normalizedStrand = normalizeMemberStrand(member?.strand);
   const strand = normalizedStrand ? `(${normalizedStrand})` : '';
@@ -501,7 +466,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   ) => {
     const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
     const status = copyFeedbackByKey[key]?.status;
-    return (status && COPY_FEEDBACK_LABELS[status]) || String(originalLabel || 'Copy');
+    return (status && tm(COPY_FEEDBACK_LABELS[status] ?? '')) || String(originalLabel || t('Copy'));
   };
 
   if (typeof watch === 'function') {
@@ -771,27 +736,56 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
         recordIndex,
         // The record as every panel names it (OV-369, OV-436).
         recordLabel: recordIndex >= 0
-          ? names.get(String(cardOf(recordIndex)?.uid ?? ''))?.label || `Record ${recordIndex + 1}`
-          : 'Record',
+          ? names.get(String(cardOf(recordIndex)?.uid ?? ''))?.label || t('Record {n}', { n: recordIndex + 1 })
+          : t('Record'),
         members
       }));
   };
-
-  const selectedOrthogroupMembersByRecord = computed(() => {
-    const group = selectedOrthogroup.value;
-    return groupOrthogroupMembersByRecord(getEnrichedOrthogroupMembers(group));
-  });
 
   /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const getOrthogroupSequenceCount = (groupOrId, sequenceKind) =>
     getEnrichedOrthogroupMembers(groupOrId).filter((member) => getMemberSequence(member, sequenceKind)).length;
 
-  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
-  const hasOrthogroupSequence = (groupOrId, sequenceKind) => getOrthogroupSequenceCount(groupOrId, sequenceKind) > 0;
-
   /** @param {OrthogroupMember} member @param {unknown} sequenceKind */
   const hasOrthogroupMemberSequence = (member, sequenceKind) =>
     Boolean(getMemberSequence(enrichOrthogroupMember(member), sequenceKind));
+
+  // OV-920: what the drawer shows of the selected group, built when the group
+  // or a sequence source changes. Every render of the app reads it, with the
+  // drawer closed too, so the template asks no helper that enriches members.
+  /**
+   * @typedef {object} SelectedOrthogroupDetail
+   * @property {OrthogroupGroup} group
+   * @property {unknown} id the id the drawer's controls pass (`group.id`)
+   * @property {OrthogroupMember[]} members the enriched members
+   * @property {ReturnType<typeof groupOrthogroupMembersByRecord>} membersByRecord
+   * @property {{ nt: boolean, aa: boolean }} hasSequence whether a member has an nt or aa sequence
+   * @property {(member: OrthogroupMember, sequenceKind: 'nt' | 'aa') => boolean} hasMemberSequence
+   */
+  /** @type {{ readonly value: SelectedOrthogroupDetail | null }} */
+  const selectedOrthogroupDetail = computed(() => {
+    const group = selectedOrthogroup.value;
+    if (!group) return null;
+    const members = getEnrichedOrthogroupMembers(group);
+    /** @type {Map<OrthogroupMember, { nt: boolean, aa: boolean }>} */
+    const memberSequences = new Map(members.map((member) => [member, {
+      nt: hasOrthogroupMemberSequence(member, 'nt'),
+      aa: hasOrthogroupMemberSequence(member, 'aa')
+    }]));
+    return {
+      group,
+      id: group.id,
+      members,
+      membersByRecord: groupOrthogroupMembersByRecord(members),
+      hasSequence: {
+        nt: members.some((member) => getMemberSequence(member, 'nt')),
+        aa: members.some((member) => getMemberSequence(member, 'aa'))
+      },
+      hasMemberSequence: (/** @type {OrthogroupMember} */ member, /** @type {'nt' | 'aa'} */ sequenceKind) => (
+        Boolean(memberSequences.get(member)?.[sequenceKind])
+      )
+    };
+  });
 
   /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
@@ -985,9 +979,11 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     orthogroupCount,
     filteredOrthogroups,
     selectedOrthogroup,
-    selectedOrthogroupMembersByRecord,
+    selectedOrthogroupDetail,
     getEnrichedOrthogroupMembers,
     groupOrthogroupMembersByRecord,
+    // The location text of a member row of `groupOrthogroupMembersByRecord`.
+    memberRangeText: locationRangeText,
     getOrthogroupById,
     resolveOrthogroupName,
     resolveOrthogroupDescription,
@@ -997,9 +993,9 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     orthogroupRows,
     isOrthogroupRenamed,
     getOrthogroupSequenceCount,
-    hasOrthogroupSequence,
     hasOrthogroupMemberSequence,
     orthogroupCopyFeedbackLabel,
+    clearCopyFeedback,
     copyOrthogroupSequences,
     downloadOrthogroupSequences,
     copyOrthogroupMemberSequence,

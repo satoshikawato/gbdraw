@@ -151,7 +151,7 @@ const strokeOf = (page, key) => page.evaluate(async ({ strokeKey, strokeColor, s
 // Saves the Session and loads it into a fresh page; returns the loaded strokes.
 const strokesAfterSessionRoundTrip = async (page, browser, testInfo, keys, name) => {
   const saved = testInfo.outputPath(`${name}.gbdraw-session.json`);
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   try {
     const fresh = await context.newPage();
@@ -190,7 +190,7 @@ for (const [mode, otherMode] of [['circular', 'linear'], ['linear', 'circular']]
       const otherKey = await strokeFirstCds(page);
       await settle(page);
       expect(otherKey).not.toBe(key);
-      const bytes = await download(page, 'Save Session', testInfo.outputPath(`${mode}-stroke.gbdraw-session.json`));
+      const bytes = await download(page, 'Save Session', testInfo.outputPath(`${mode}-stroke.gbdraw-session.json`), { title: '' });
       const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
       expect(saved.modes[mode].editorState.featureStrokes.overrides[key]).toMatchObject(STROKE);
       expect(saved.modes[otherMode].editorState.featureStrokes.overrides[otherKey]).toMatchObject(STROKE);

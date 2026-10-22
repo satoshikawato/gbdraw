@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { answerLoadRepairs, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
 
@@ -526,6 +526,11 @@ test('imported comparison resolutions are explicit and create one History entry 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
   });
+  // Load lists the comparison that names a resource the Session lacks (OV-951);
+  // the Comparisons panel still asks for a decision after Load.
+  await answerLoadRepairs(page, [
+    'Settings: renderRequest.comparisons[0] names a file or record this Session does not hold; it is left out.'
+  ]);
   await expectSessionLoadedWithoutWarnings(page);
   await expect(resolution).toContainText('Saved comparison needs a decision');
   await expect(resolution).toContainText('missing a required resource');
@@ -730,7 +735,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       name: 'Pairwise display max hits per protein'
     }).count(),
     groupHits: await page.getByRole('spinbutton', {
-      name: 'Member hits per protein'
+      name: 'Max hits per protein for groups'
     }).count(),
     collinearGap: await page.getByRole('spinbutton', {
       name: 'Collinear max unit gap'
@@ -740,13 +745,17 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     }).count(),
     matchHeight: await page.getByRole('spinbutton', {
       name: 'Comparison match height'
+    }).count(),
+    // OV-1128 B: under the closed Advanced disclosure.
+    paralogLinks: await page.getByRole('spinbutton', {
+      name: 'Paralog links per group', exact: true, includeHidden: true
     }).count()
   });
   await chooseLosatMode('LOSATN');
   await expect(losatpMode).toHaveCount(0);
   expect(await controlCounts()).toEqual({
     blastnTask: 1, gencode: 0, pairwiseHits: 0, groupHits: 0, collinearGap: 0,
-    matchStyle: 1, matchHeight: 1
+    matchStyle: 1, matchHeight: 1, paralogLinks: 0
   });
   await expect(page.getByRole('combobox', {
     name: 'LOSATN task'
@@ -756,7 +765,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   await expect(losatpMode).toHaveCount(0);
   expect(await controlCounts()).toEqual({
     blastnTask: 0, gencode: 3, pairwiseHits: 0, groupHits: 0, collinearGap: 0,
-    matchStyle: 1, matchHeight: 1
+    matchStyle: 1, matchHeight: 1, paralogLinks: 0
   });
   const recordOptions = page.locator('details[data-linear-record-options]').first();
   const recordSummary = recordOptions.locator(':scope > summary');
@@ -780,15 +789,15 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   const proteinCases = [
     ['orthogroup', {
       blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 0,
-      matchStyle: 1, matchHeight: 1
+      matchStyle: 1, matchHeight: 1, paralogLinks: 1
     }],
     ['collinear', {
       blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 1,
-      matchStyle: 1, matchHeight: 1
+      matchStyle: 1, matchHeight: 1, paralogLinks: 0
     }],
     ['pairwise', {
       blastnTask: 0, gencode: 0, pairwiseHits: 1, groupHits: 0, collinearGap: 0,
-      matchStyle: 1, matchHeight: 1
+      matchStyle: 1, matchHeight: 1, paralogLinks: 0
     }]
   ];
   for (const [value, expected] of proteinCases) {
@@ -803,6 +812,21 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       });
       await expect(scope).toHaveValue('adjacent');
       await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
+      // Collinear shows Paralog links per group only while it infers orthogroups.
+      const infer = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true });
+      const paralogLinks = page.getByRole('spinbutton', {
+        name: 'Paralog links per group', exact: true, includeHidden: true
+      });
+      await infer.check();
+      await expect(paralogLinks).toHaveCount(1);
+      await expect(page.locator('[data-linear-advanced-comparison]'))
+        .toContainText('Advanced collinear search');
+      await infer.uncheck();
+      await expect(paralogLinks).toHaveCount(0);
+    }
+    if (value === 'orthogroup') {
+      await expect(page.locator('[data-linear-advanced-comparison]'))
+        .toContainText('Advanced similarity group settings');
     }
   }
 
@@ -848,7 +872,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   await expect(losatpMode).toHaveValue('pairwise');
 
   // The disabled options say why; the one way out is the command that compares every pair.
-  await expect(losatpMode.locator('option[value="orthogroup"]')).toHaveText('Similarity groups (all pairs only)');
+  await expect(losatpMode.locator('option[value="orthogroup"]')).toHaveText('Similarity groups (all adjacent pairs only)');
   await expect(comparisonCard(page).locator('[data-linear-comparison-issues]')).toHaveCount(0);
   // The command needs loaded sequences to compare.
   await page.evaluate((contents) => {
@@ -1013,7 +1037,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const pairwiseMax = page.getByRole('spinbutton', {
     name: 'Pairwise display max hits per protein'
   });
-  const memberHits = page.getByRole('spinbutton', { name: 'Member hits per protein' });
+  const memberHits = page.getByRole('spinbutton', { name: 'Max hits per protein for groups' });
   const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });
   const matchStyle = page.getByRole('combobox', { name: 'Comparison match style' });
   const matchHeight = page.getByRole('spinbutton', { name: 'Comparison match height' });
@@ -1044,7 +1068,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   await expect(candidate).toBeVisible();
   await expect(candidate).toHaveValue('5');
   await expect(memberHits).toHaveValue('5');
-  const inference = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  const inference = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches' });
   await expect(inference).not.toBeChecked();
   await candidate.fill('23');
   await memberHits.fill('11');
@@ -1346,7 +1370,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change setting', mode: 'pairwise', plan: 'selected' });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await history()).toEqual(before);
-  await issues.getByRole('button', { name: 'Run LOSAT for all pairs', exact: true }).click();
+  await issues.getByRole('button', { name: 'Run LOSAT for all adjacent pairs', exact: true }).click();
   await settled();
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change comparisons', mode: 'collinear', plan: 'adjacent' });
   // A LOSAT runtime failure has no pair issue: Show in Comparison opens
@@ -1527,6 +1551,20 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
     { role: 'query', available: true, reason: '' },
     { role: 'subject', available: true, reason: '' }
   ]);
+  // OV-1264: in a narrow popup a span line wraps between its parts, never
+  // inside a coordinate pair or between a length and its unit.
+  await matchDialog.evaluate((dialog) => { dialog.style.width = '240px'; });
+  const spanLines = matchDialog.locator('[data-match-span-line]');
+  await expect(spanLines).toHaveCount(2);
+  const unbroken = await spanLines.evaluateAll((lines) => lines.map((line) => ({
+    lines: Math.round(line.getBoundingClientRect().height / parseFloat(getComputedStyle(line).lineHeight)),
+    parts: [...line.querySelectorAll('.whitespace-nowrap')].map((part) => [part.textContent, part.getClientRects().length])
+  })));
+  expect(unbroken.some(({ lines }) => lines > 1)).toBe(true);
+  for (const { parts } of unbroken) {
+    expect(parts.map(([text]) => text)).toEqual([expect.stringMatching(/^\d+\.\.\d+$/), expect.stringMatching(/^[\d,]+ bp$/)]);
+    expect(parts.map(([, rects]) => rects)).toEqual([1, 1]);
+  }
   await matchDialog.getByRole('button', { name: 'Close match popup' }).click();
 
   // CO-05: a short row reports its line through the reader's diagnostic.

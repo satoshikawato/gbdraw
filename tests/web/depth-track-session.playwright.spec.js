@@ -25,6 +25,12 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
+// A loading Session publishes its Result about 45 ms before it finishes; the
+// app refuses edits until then (OV-1023).
+const waitForLoadedSessionResult = (page) => page.waitForFunction(
+  () => window.__GBDRAW_APP__?.results?.length > 0 && !window.__GBDRAW_APP__.sessionImportPending
+);
+
 const storedZipEntryNames = (path) => {
   const bytes = readFileSync(path);
   const names = [];
@@ -432,6 +438,159 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   expect(outcome.underlayCount).toBeGreaterThan(0);
 });
 
+// Two Depth series nobody named are Depth 1 and Depth 2 wherever the app names
+// them, as the figure and the CLI do: the series cards of both modes, the Linear
+// File card rows, the Depth row's series options and the Depth row's legend-label
+// placeholder (OV-1508). The name is figure text, English in every UI language.
+// A Depth row's height edit on a series without stored settings gives it the
+// series owner's defaults: no name and the series color (OV-1510).
+test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface that names them', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  const files = () => [1, 2].map((n) => new File([`position\tdepth\n1\t${n}0\n`], `reads-${n}.tsv`, { type: 'text/tab-separated-values' }));
+  const names = () => page.evaluate(() => {
+    const text = (element) => element?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+    const titles = [...document.querySelectorAll('input[aria-label="Depth legend title"], input[aria-label$=" legend title"][aria-label^="Depth "]')]
+      .filter((input) => input.offsetParent);
+    return {
+      cards: titles.map((input) => text(input.closest('.rounded')?.querySelector('.truncate'))),
+      placeholders: titles.map((input) => input.placeholder),
+      // Each File card lists every series; the rows of all cards name them alike.
+      fileRows: [...new Set([...document.querySelectorAll('[data-linear-source-depth-series]')].map((row) => text(row.querySelector('.truncate'))))],
+      // Each Depth row's series menu lists every series.
+      options: [...new Set([...document.querySelectorAll('select[aria-label^="Depth track index"] option')].map(text))],
+      slotPlaceholders: [...document.querySelectorAll('input[aria-label$=" Depth legend label"]')]
+        .filter((input) => input.offsetParent).map((input) => [input.value, input.placeholder])
+    };
+  });
+  await page.evaluate((source) => {
+    const app = window.__GBDRAW_APP__;
+    const [first, second] = new Function(`return (${source})`)()();
+    app.setDiagramMode('linear');
+    app.addLinearSeq();
+    app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, second);
+    app.setDepthTrackLabel(0, '');
+    app.setDepthTrackLabel(1, '');
+    app.resetLinearTrackSlotsFromSimpleControls();
+    app.setLinearTrackSlotsEnabled(true);
+    if (!app.linearTrackSlotsPanelOpen) app.toggleLinearTrackSlotsPanel();
+  }, files.toString());
+  await openLinearFileCards(page);
+  await expect.poll(names).toEqual({
+    cards: ['#1 Depth 1', '#2 Depth 2'],
+    placeholders: ['Depth 1', 'Depth 2'],
+    fileRows: ['#1 Depth 1', '#2 Depth 2'],
+    options: [expect.stringMatching(/^0 · Depth 1 · /), expect.stringMatching(/^1 · Depth 2 · /)],
+    slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
+  });
+  const heightEdit = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    // Series 2 has no stored settings yet, as after a Session that saved one series.
+    app.adv.depth_tracks.splice(1);
+    const row = app.adv.linear_track_slots.find((slot) => slot.renderer === 'depth' && slot.params.track_index === 1);
+    app.setLinearTrackSlotHeight(row, '40');
+    return app.adv.depth_tracks.map(({ label, color, height }) => ({ label, color, height }));
+  });
+  expect(heightEdit).toEqual([
+    { label: '', color: expect.any(String), height: null },
+    { label: '', color: '#E45756', height: 40 }
+  ]);
+  await expect.poll(async () => (await names()).cards).toEqual(['#1 Depth 1', '#2 Depth 2']);
+  await page.evaluate((source) => {
+    const app = window.__GBDRAW_APP__;
+    const [first, second] = new Function(`return (${source})`)()();
+    app.setDiagramMode('circular');
+    app.setCircularDepthFile(0, first);
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, second);
+    app.setDepthTrackLabel(0, '');
+    app.setDepthTrackLabel(1, '');
+    app.setTrackShown('show_depth', true);
+    app.setCircularTrackSlotsEnabled(true);
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
+  }, files.toString());
+  await expect.poll(async () => {
+    const { cards, placeholders, slotPlaceholders } = await names();
+    return { cards, placeholders, slotPlaceholders };
+  }).toEqual({
+    cards: ['#1 Depth 1', '#2 Depth 2'],
+    placeholders: ['Depth 1', 'Depth 2'],
+    slotPlaceholders: [['', 'Depth 1'], ['', 'Depth 2']]
+  });
+});
+
+// Generate stores the Depth series settings a series edit stores (OV-1510): a
+// series without settings gets the owner's defaults, so Generate draws series 2
+// in its own color, not in series 1's; a Depth row whose series the drawing
+// does not have keeps only its own height and adds no series (TK-03).
+test('Linear Generate gives Depth series the settings a series edit gives them', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
+  await openApp(page);
+  await page.evaluate((genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    const depthFile = (n) => new File([
+      'reference_name\tposition\tdepth\n' +
+      `NC_001454.1\t1\t${n * 10}\n` +
+      `NC_001454.1\t80\t${n * 10 + 5}\n`
+    ], `series-${n}.tsv`, { type: 'text/tab-separated-values', lastModified: 30 + n });
+    app.setDiagramMode('linear');
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'repeat-region.gbk', {
+      type: 'text/plain',
+      lastModified: 29
+    }));
+    app.setLinearDepthFile(app.linearSeqs[0], 0, depthFile(1));
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, depthFile(2));
+    Object.assign(app.form, {
+      show_gc: false,
+      show_skew: false,
+      show_depth: true,
+      show_labels_linear: 'none',
+      legend: 'none'
+    });
+    app.resetLinearTrackSlotsFromSimpleControls();
+    app.setLinearTrackSlotsEnabled(true);
+  }, genbank);
+  await page.waitForFunction(() => window.__GBDRAW_APP__.adv.depth_tracks.length === 2);
+  const generate = (edit) => evaluateWithRetainedPromise(page, async (editName) => {
+    const app = window.__GBDRAW_APP__;
+    if (editName === 'series-2-without-settings') {
+      // Series 2 has no stored settings, as after a Session that saved one series.
+      app.adv.depth_tracks.splice(1);
+    } else {
+      // A switched-off Depth row on a series the drawing does not have.
+      app.adv.linear_track_slots.push({
+        id: 'depth_far',
+        renderer: 'depth',
+        enabled: false,
+        side: 'above',
+        z: 0,
+        height: '40px',
+        params: { track_index: 3 }
+      });
+    }
+    app.results.splice(0, app.results.length);
+    const result = await app.runAnalysis();
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      tracks: app.adv.depth_tracks.map(({ color, height }) => ({ color, height })),
+      farHeight: app.adv.linear_track_slots.find((slot) => slot.id === 'depth_far')?.height ?? null,
+      drawsSeries2Color: String(app.results?.[0]?.content || '').toUpperCase().includes('#E45756')
+    };
+  }, edit);
+  const tracks = [{ color: '#4A90E2', height: null }, { color: '#E45756', height: null }];
+  expect.soft(await generate('series-2-without-settings')).toEqual({
+    result: { status: 'ok' }, errorSummary: '', tracks, farHeight: null, drawsSeries2Color: true
+  });
+  expect.soft(await generate('row-past-the-series')).toEqual({
+    result: { status: 'ok' }, errorSummary: '', tracks, farHeight: '40px', drawsSeries2Color: true
+  });
+});
+
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
@@ -620,7 +779,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await firstSourceSummary.press('Enter');
   await expect(firstSource).toHaveAttribute('open', '');
   expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(closedHeight);
-  await expect(page.getByRole('button', { name: /Add Depth TSV series from file/ })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Add Depth TSV series to all files/ })).toHaveCount(1);
 
   await page.getByTestId('linear-source-depth-1-1').setInputFiles({
     name: 'common.tsv',
@@ -637,7 +796,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
 
   await page.getByRole('button', {
-    name: 'Add Depth TSV series from file 1', exact: true
+    name: 'Add Depth TSV series to all files (file 1)', exact: true
   }).click();
   await expect(firstSourceSummary).toHaveText('1 depth track attached');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
@@ -1240,7 +1399,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await waitForLoadedSessionResult(page);
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
 
@@ -1296,7 +1455,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       }
     );
     app.adv.linear_track_slots_axis_index = 0;
-    app.setLinearTrackSlotsEnabled(true);
+    const refused = app.setLinearTrackSlotsEnabled(true);
+    if (refused) throw new Error(`Custom track slots stayed off: ${JSON.stringify(refused)}`);
     app.form.plot_title = 'Failed Generate attempt title';
     await window.Vue.nextTick();
     app.editableLabels = [{
@@ -1462,7 +1622,7 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
 
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await waitForLoadedSessionResult(page);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.errorLog.value = {
@@ -1562,12 +1722,67 @@ test('Session preflight rejects invalid canonical data without resetting live st
     });
     expect(dialogs).toEqual([]);
   };
-  await expectSchemaRejection(1, 'RECORDS_REQUIRED');
+  // The one stored-request reader leaves a request with no record (or no
+  // layout) unread, and a Session 31 to 41 keeps nothing without it: the
+  // Session-fields error, as for a request of schema 5 to 9 (PR-D).
+  await expectSchemaRejection(1, 'FIELDS');
   expect(await snapshot()).toEqual(before);
 
+  const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Session preflight fixture.
+ACCESSION   PREFLIGHT
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  // A schema 2 request in the form its writers stored (every tracks key), which
+  // Load reads without a row, so each Session below reaches its own check.
+  const writtenTracks = {
+    circularTrackSlots: null, circularTrackAxisIndex: null,
+    linearTrackSlots: null, linearTrackAxisIndex: null, centerReservedRadius: null
+  };
+  const readableRequest = {
+    schema: 2,
+    mode: 'linear',
+    records: [{
+      recordKey: 'record-1',
+      source: { kind: 'genbank', resourceId: 'record-1-genbank' },
+      selector: null,
+      region: null,
+      presentation: {
+        label: null, subtitle: null, reverseComplement: false,
+        gridRow: null, gridColumn: null
+      }
+    }],
+    diagramOptions: {
+      configOverrides: {},
+      tracks: {
+        ...writtenTracks,
+        linearTrackSlots: ['features:features@side=overlay'],
+        linearTrackAxisIndex: 0
+      }
+    },
+    layout: {},
+    comparisons: [],
+    output: {
+      prefix: 'preflight', formats: ['interactive_svg'], overwrite: true,
+      interactiveMetadataPolicy: 'auto'
+    }
+  };
+  const recordResources = {
+    'record-1-genbank': {
+      kind: 'genbank', name: 'record.gb', type: 'text/plain',
+      size: Buffer.byteLength(recordText), lastModified: 0,
+      encoding: 'base64', data: Buffer.from(recordText).toString('base64')
+    }
+  };
+
   const invalidSlotSchemaSession = {
-    ...invalidCanonicalSession,
+    format: 'gbdraw-session',
     version: 33,
+    renderRequest: readableRequest,
+    resources: {},
     config: {
       adv: {
         linear_track_slots_schema_version: '1',
@@ -1580,54 +1795,18 @@ test('Session preflight rejects invalid canonical data without resetting live st
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidSlotSchemaSession))
   });
-  await expectSchemaRejection(2, 'TRACK_SCHEMA');
+  // The slot list of an unknown schema is read in the current schema (OV-758),
+  // so it no longer refuses; the request names a record file the Session does
+  // not hold, and a Session 31 to 41 keeps nothing without its request: the
+  // Session-fields error, before the slot reading changes anything.
+  await expectSchemaRejection(2, 'FIELDS');
   expect(await snapshot()).toEqual(before);
 
-  const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
-DEFINITION  Session preflight fixture.
-ACCESSION   PREFLIGHT
-FEATURES             Location/Qualifiers
-ORIGIN
-        1 atgc
-//
-`;
   const unknownAuthoritySession = {
     format: 'gbdraw-session',
     version: 33,
-    renderRequest: {
-      schema: 2,
-      mode: 'linear',
-      records: [{
-        recordKey: 'record-1',
-        source: { kind: 'genbank', resourceId: 'record-1-genbank' },
-        selector: null,
-        region: null,
-        presentation: {
-          label: null, subtitle: null, reverseComplement: false,
-          gridRow: null, gridColumn: null
-        }
-      }],
-      diagramOptions: {
-        configOverrides: {},
-        tracks: {
-          linearTrackSlots: ['features:features@side=overlay'],
-          linearTrackAxisIndex: 0
-        }
-      },
-      layout: {},
-      comparisons: [],
-      output: {
-        prefix: 'preflight', formats: ['interactive_svg'], overwrite: true,
-        interactiveMetadataPolicy: 'auto'
-      }
-    },
-    resources: {
-      'record-1-genbank': {
-        kind: 'genbank', name: 'record.gb', type: 'text/plain',
-        size: Buffer.byteLength(recordText), lastModified: 0,
-        encoding: 'base64', data: Buffer.from(recordText).toString('base64')
-      }
-    },
+    renderRequest: readableRequest,
+    resources: recordResources,
     unknownSemanticState: { shouldNotBeAccepted: true },
     config: {
       adv: {
@@ -1652,7 +1831,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(unknownAuthoritySession))
   });
-  await expectSchemaRejection(3, 'SESSION_FIELDS');
+  // An unknown top-level field is not a refusal class (receipt 〔拒否〕): Load
+  // lists it before it changes anything (BA-D25), and Cancel keeps the work.
+  await answerLoadRepairs(page, ['Session file: the field unknownSemanticState could not be read and was left out.'], 'cancel');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
+  expect(await page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(2);
   expect(await snapshot()).toEqual(before);
 
   const invalidLegacyConfig = {
@@ -1666,8 +1849,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidLegacyConfig))
   });
-  await expectSchemaRejection(4, 'TRACK_SCHEMA');
-  expect(await snapshot()).toEqual(before);
+  // A Circular slot list without a schema version is an older file's list:
+  // the configuration loads with the older-file notice and no dialog.
+  await expect(page.locator('[data-app-notice]')).toContainText('Configuration loaded from an older gbdraw.', { timeout: 120_000 });
+  expect(await page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(2);
+  expect(dialogs).toEqual([]);
 
   const repairedCanonicalSession = {
     ...unknownAuthoritySession,
@@ -1681,7 +1867,7 @@ ORIGIN
           legend: 'bottom',
           plotTitlePosition: 'top'
         },
-        tracks: {}
+        tracks: writtenTracks
       }
     },
     config: {
@@ -1696,6 +1882,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
+  // A Session 31 to 33 drew an invalid comparison height; Load lists it
+  // before it leaves the height unset (B17, D-OD05).
+  await answerLoadRepairs(page, [
+    'Settings: the value "-2" (renderRequest.diagramOptions.configOverrides.comparison_height) cannot be used; it is left unset.'
+  ]);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: repaired-canonical.gbdraw-session.json', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   expect(dialogs).toEqual([]);
@@ -2471,6 +2662,118 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   expect(await browserDraft()).toEqual(resetDraft);
 });
 
+// Extend to (to_slot, LP-D17 / LP-D65): the slot editor's select stretches an
+// Overlay annotation from its anchor to a second slot; Undo restores None, and
+// Generate draws the span over both slots' bands. The row's Layer and Extend
+// to are set in the editor only: Underlay gives it the z below its anchor in
+// the same History step, and Generate accepts it (OV-1297).
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: Extend to draws an Overlay annotation from its anchor to the chosen slot`, async ({ page }) => {
+    test.setTimeout(300000);
+    const Mode = mode === 'circular' ? 'Circular' : 'Linear';
+    await openApp(page);
+    await page.evaluate(async ({ diagramMode, genbankText }) => {
+      const app = window.__GBDRAW_APP__;
+      app.setDiagramMode(diagramMode);
+      const file = new File([genbankText], 'extend-to.gbk', { type: 'text/plain', lastModified: 41 });
+      if (diagramMode === 'circular') {
+        app.cInputType = 'gb';
+        app.files.c_gb = file;
+      } else {
+        app.lInputType = 'gb';
+        app.setLinearSeqPrimaryFile(0, 'gb', file);
+      }
+      app.annotationSets.splice(0, app.annotationSets.length);
+      const set = app.addAnnotationSet('regions');
+      app.addCoordinateAnnotation(set, { start: 2000, end: 6000 });
+      const off = diagramMode === 'circular' ? 'inside' : 'below';
+      const row = (id, renderer, side, z, params) => ({ id, renderer, enabled: true, side, z, params,
+        ...(diagramMode === 'circular'
+          ? { width: null, radius: null, inner_gap_px: null, outer_gap_px: null }
+          : { height: '', spacing: '' }) });
+      const slots = app.adv[`${diagramMode}_track_slots`];
+      slots.splice(0, slots.length,
+        row('features', 'features', 'overlay', 0, diagramMode === 'circular' ? { lane_direction: 'split' } : {}),
+        row('gc', 'dinucleotide_content', off, 0, { nt: 'GC' }),
+        row('regions', 'annotations', 'overlay', 0,
+          { set_id: set.id, anchor_slot: 'features', layer: 'foreground', padding_px: 0, show_labels: false }));
+      app.adv[`${diagramMode}_track_slots_axis_index`] = 0;
+      app.adv[`${diagramMode}_track_slots_enabled`] = true;
+      await window.Vue.nextTick();
+    }, { diagramMode: mode, genbankText: readFileSync(hmmtDnaPath, 'utf8') });
+    const panelButton = await reveal(page.locator(`button[aria-controls="${mode}-custom-track-slots-panel"]`));
+    if (await panelButton.getAttribute('aria-expanded') !== 'true') await panelButton.click();
+    const regionsRow = () => page.evaluate((key) => {
+      const slot = window.__GBDRAW_APP__.adv[key].find((candidate) => candidate.id === 'regions');
+      return { layer: slot.params.layer, z: slot.z };
+    }, `${mode}_track_slots`);
+    const layer = await reveal(page.getByRole('combobox', { name: `${Mode} track slot regions Annotation layer`, exact: true }));
+    await layer.selectOption('underlay');
+    await expect.poll(regionsRow).toEqual({ layer: 'underlay', z: -1 });
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(regionsRow).toEqual({ layer: 'foreground', z: 0 });
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect.poll(regionsRow).toEqual({ layer: 'underlay', z: -1 });
+    const extendTo = await reveal(page.getByRole('combobox', { name: `${Mode} track slot regions Extend to`, exact: true }));
+    const toSlot = () => page.evaluate((key) => window.__GBDRAW_APP__.adv[key]
+      .find((slot) => slot.id === 'regions').params.to_slot ?? null, `${mode}_track_slots`);
+    // None stands for an unset to_slot; the anchor is not offered (SAME-REJECT, LP-D21).
+    await expect(extendTo.locator('option:checked')).toHaveText('None');
+    expect(await extendTo.locator('option').evaluateAll((options) => options.map((option) => option.value))).toEqual(['', 'gc']);
+    await extendTo.selectOption('gc');
+    await expect.poll(toSlot).toBe('gc');
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(toSlot).toBe(null);
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect.poll(toSlot).toBe('gc');
+    expect(await regionsRow()).toEqual({ layer: 'underlay', z: -1 });
+
+    await generateAndWaitForResult(page);
+    const drawn = await page.evaluate(async (diagramMode) => {
+      const app = window.__GBDRAW_APP__;
+      const { state } = await import('./js/state.js');
+      const record = state.trackSlotResolvedGeometry.value.records[0];
+      const slots = Object.fromEntries(record.slots.map((slot) => [slot.slotId, slot]));
+      const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+      const regionGroup = svg.querySelector('[data-gbdraw-slot-id="regions"]');
+      if (diagramMode === 'circular') {
+        const band = (slot) => {
+          const centre = slot.radiusFactor * record.axisRadiusPx;
+          return [centre - slot.widthPx / 2, centre + slot.widthPx / 2];
+        };
+        const path = regionGroup.querySelector('path');
+        const radii = [...path.getAttribute('d').matchAll(/A ([0-9.]+),/g)].map((match) => Number(match[1]));
+        return { features: band(slots.features), gc: band(slots.gc), regions: band(slots.regions),
+          drawn: [Math.min(...radii), Math.max(...radii)] };
+      }
+      const band = (slot) => (slot.renderer === 'features'
+        ? [slot.paintBand.topPx, slot.paintBand.bottomPx]
+        : slot.renderer === 'annotations'
+          ? [slot.resolvedOriginPx, slot.resolvedOriginPx + slot.heightPx]
+          : [slot.resolvedOriginPx - slot.heightPx / 2, slot.resolvedOriginPx + slot.heightPx / 2]);
+      const rect = regionGroup.querySelector('rect');
+      return { features: band(slots.features), gc: band(slots.gc), regions: band(slots.regions),
+        drawnHeight: Number(rect.getAttribute('height')) };
+    }, mode);
+    // The span runs from the far edge of gc over the whole features slot.
+    // Circular: gc lies inside the features ring, whose recorded band is its
+    // primary band; the span covers every feature lane (LANES-ALL, LP-D21), so
+    // it reaches at least that band's outer edge. Linear: gc lies below the
+    // axis, and the features paint band holds every lane.
+    if (mode === 'circular') {
+      expect(drawn.gc[1]).toBeLessThan(drawn.features[0]);
+      expect(drawn.regions[0]).toBeCloseTo(drawn.gc[0], 3);
+      expect(drawn.regions[1]).toBeGreaterThanOrEqual(drawn.features[1] - 1e-6);
+      drawn.drawn.forEach((edge, index) => expect(edge).toBeCloseTo(drawn.regions[index], 2));
+    } else {
+      expect(drawn.features[1]).toBeLessThan(drawn.gc[0]);
+      expect(drawn.regions[0]).toBeCloseTo(drawn.features[0], 3);
+      expect(drawn.regions[1]).toBeCloseTo(drawn.gc[1], 3);
+      expect(drawn.drawnHeight).toBeCloseTo(drawn.regions[1] - drawn.regions[0], 2);
+    }
+  });
+}
+
 test('Session commit failure restores the pre-import state', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
@@ -2499,7 +2802,15 @@ ORIGIN
           gridRow: null, gridColumn: null
         }
       }],
-      diagramOptions: { configOverrides: {}, tracks: {} },
+      // Every tracks key, as the schema 2 writers stored them: Load reads the
+      // request without a row and reaches the commit.
+      diagramOptions: {
+        configOverrides: {},
+        tracks: {
+          circularTrackSlots: null, circularTrackAxisIndex: null,
+          linearTrackSlots: null, linearTrackAxisIndex: null, centerReservedRadius: null
+        }
+      },
       layout: {},
       comparisons: [],
       output: {
@@ -3316,6 +3627,29 @@ test('a Circular Session keeps a Depth series without a file and a row whose fil
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   expect(await depthState()).toEqual(before);
+});
+
+test('a Load takes the loaded Session\'s Depth series, not the previous document\'s (OV-1164)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const depthTsv = 'NC_012920.1\t1\t10\nNC_012920.1\t3001\t11';
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'depth_a.tsv', { type: 'text/tab-separated-values' }));
+    app.addCircularDepthTrack();
+    app.addCircularDepthTrack();
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const depthState = () => page.evaluate(() => ({
+    series: window.__GBDRAW_APP__.adv.depth_tracks.length,
+    panel: window.__GBDRAW_APP__.circularDepthTrackRows.length
+  }));
+  expect(await depthState()).toEqual({ series: 3, panel: 3 });
+  await page.locator('input[accept^=".json,"]').first()
+    .setInputFiles(join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await expectSessionLoadedWithoutWarnings(page);
+  await page.evaluate(() => window.Vue.nextTick());
+  expect(await depthState()).toEqual({ series: 1, panel: 1 });
 });
 
 test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {

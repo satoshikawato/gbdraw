@@ -211,7 +211,7 @@ for (const width of [1440, 390]) {
         // Invalid pixels do not coerce a combined Result or its warning to a new artifact.
         const field = row.getByTitle(titles[0], { exact: true });
         await field.fill('10em'); await field.press('Tab');
-        await expect(row.getByRole('alert')).toContainText('finite');
+        await expect(row.getByRole('alert')).toContainText('pixels (px optional)');
         const beforeFailure = await inspect(page, mode);
         await page.getByRole('button', { name: 'Generate Diagram', exact: true }).press('Enter');
         await expect.poll(async () => { const current = await inspect(page, mode); return { completed: current.completed, processing: current.processing }; }, { timeout: 180000 })
@@ -224,7 +224,14 @@ for (const width of [1440, 390]) {
         await field.fill('1e1px');
         await generate(page);
         const final = await inspect(page, mode);
-        await row.getByTitle('Enabled', { exact: true }).uncheck();
+        // Save refuses a stack whose enabled row names a disabled slot, so a row
+        // that extends to or anchors on the GC track (the Circular tint,
+        // `to_slot=gc_content`) is turned off and on with it.
+        const linked = final.slots.filter(slot => slot.enabled !== false
+          && [slot.params?.to_slot, slot.params?.anchor_slot].includes('gc_content')).map(slot => slot.id);
+        for (const id of [...linked, 'gc_content']) {
+          await page.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Enabled', { exact: true }).uncheck();
+        }
         const sessionPath = testInfo.outputPath('combined-disabled.gbdraw-session.json.gz');
         const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
         expect(saved.runMetadata.annotationWarnings).toEqual(final.warnings);
@@ -236,7 +243,9 @@ for (const width of [1440, 390]) {
         expect(artifact(loaded)).toEqual(artifact(final)); expect(loaded.rules).toEqual(final.rules);
         expect((await getDiagramWorkerActivity(restored)).runs).toBe(0);
         await openStack(restored, mode);
-        await restored.locator(`[data-capture="${mode}-track-slot-gc_content"]`).getByTitle('Disabled', { exact: true }).check();
+        for (const id of ['gc_content', ...linked]) {
+          await restored.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Disabled', { exact: true }).check();
+        }
         await generate(restored);
         const regenerated = await inspect(restored, mode);
         expect(artifact(regenerated)).toEqual(artifact(final));
@@ -267,12 +276,15 @@ from pathlib import Path
 from gbdraw.session import materialize_session,render_session
 from gbdraw.render.track_slot_metadata import collect_track_slot_geometry_records,build_track_slot_geometry_run_metadata
 with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
- result=render_session(session)
- svg=result.drawing.tostring()
+ rendered=render_session(session)
+ # The Circular Gallery Session keeps its command line's grouping: one diagram per record.
+ [result]=getattr(rendered,'items',None) or (rendered,)
+ drawing=result.drawing
+ svg=drawing.tostring()
  Path(sys.argv[2],'native.svg').write_text(svg)
  root=E.fromstring(svg)
  captions={n.get('data-legend-key'):next((p.get('fill') for p in n.iter() if p.tag.endswith('path') and p.get('fill') not in (None,'none')),None) for n in root.iter() if n.get('data-legend-key')}
- geometry=build_track_slot_geometry_run_metadata(mode=result.mode,records=collect_track_slot_geometry_records(result.drawing,result_index=0,result_name=result.output_paths[0].name))['trackSlotGeometry']
+ geometry=build_track_slot_geometry_run_metadata(mode=result.mode,records=collect_track_slot_geometry_records(drawing,result_index=0,result_name=result.output_paths[0].name))['trackSlotGeometry']
  print(json.dumps({'geometry':geometry,'captions':captions,'rules':result.request.options.colors.color_table['caption'].tolist(),'warnings':[w.code for w in result.annotation_warnings],'skippedMark':'SKIPPED-INTEGRATION' in svg}))
 `, activePath, testInfo.outputPath('native')], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }));
         expect(native.geometry).toEqual(final.geometry);

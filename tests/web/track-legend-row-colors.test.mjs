@@ -8,15 +8,22 @@ import { test } from 'node:test';
 
 import { compileDirectEditorMutationPlan, draftLegendPanelColors, draftLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { buildLinearTrackSlotPayload, normalizeLinearTrackSlots } from '../../gbdraw/web/js/services/linear-track-slot-model.js';
-import { drawnTracks, loadedTracks, skewTrackColor, trackLegendRows, trackRowColor } from '../../gbdraw/web/js/services/track-legend-rows.js';
+import {
+  draftDrawsDepth, drawnTrackHidden, drawnTracks, hiddenTrackLegendKeys, loadedTracks, skewTrackColor, trackLegendRows, trackRowColor
+} from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture as paintFixture } from './helpers/svg-style-fixture.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const HMMT_AT_SKEW = readJson('../../gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
 // Python's rows of a Result by their keys, where a case reads no drawn fill.
 const drawnRows = (keys) => new Map(keys.map((key) => [key, { key, color: null }]));
-const requestOf = ({ mode, dinucleotide, slots }) => ({
-  mode, diagramOptions: { dinucleotide, tracks: mode === 'linear' ? { linearTrackSlots: slots } : { circularTrackSlots: slots } }
+const requestOf = ({ mode, dinucleotide, slots, depthTracks }) => ({
+  mode,
+  diagramOptions: {
+    dinucleotide,
+    tracks: mode === 'linear' ? { linearTrackSlots: slots } : { circularTrackSlots: slots },
+    ...(depthTracks ? { depthTracks } : {})
+  }
 });
 
 // The slots of the HmmtDNA_ATskew Gallery Session (its AT skew slot has its
@@ -86,18 +93,20 @@ test('the tracks of the HmmtDNA_ATskew Gallery Session name the slot and the own
 // runs the same vectors through Python's slot parsers and Legend table). The
 // Web app reads the whole table of the Result: each key's palette key, slot
 // and fill, and no track for a row whose palette key the vector leaves null.
-const readRows = (tracks, expected, palette) => {
-  const rows = trackLegendRows(tracks, drawnRows(expected.map(([key]) => key)));
+// A Depth row (`depth`) names its series' slot; its series fills it (OV-1198).
+const readRows = (tracks, expected, palette, shared = []) => {
+  const rows = trackLegendRows(tracks, drawnRows(expected.map(([key]) => key)), new Set(shared));
   assert.equal(rows.size, expected.filter(([, paletteKey]) => paletteKey).length, 'no key beside the rows of the Result');
   return expected.map(([key, , , fill]) => {
     const row = rows.get(key);
-    return row ? [key, row.paletteKey, row.slotId, trackRowColor(row, palette)] : [key, null, null, fill];
+    if (!row) return [key, null, null, fill];
+    return row.kind === 'depth' ? [key, 'depth', row.slotId, fill] : [key, row.paletteKey, row.slotId, trackRowColor(row, palette)];
   });
 };
 
-for (const { name, palette, rows: expected, ...request } of readJson('../fixtures/legend_track_slot_rows.json').cases) {
+for (const { name, palette, rows: expected, shared, ...request } of readJson('../fixtures/legend_track_slot_rows.json').cases) {
   test(`track rows of slot entries are Python's: ${name}`, () => {
-    assert.deepEqual(readRows(drawnTracks(requestOf(request)), expected, palette), expected);
+    assert.deepEqual(readRows(drawnTracks(requestOf(request)), expected, palette, shared), expected);
   });
 }
 
@@ -146,6 +155,7 @@ test('the tracks of a Result loaded without a request are those of its loaded se
   // the request Generate writes from the same slots.
   const slots = normalizeLinearTrackSlots([
     { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+    { id: 'share', renderer: 'dinucleotide_content', enabled: true, side: 'below', params: { legend_label: 'Share' } },
     { id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { positive_color: '#ff0000', negative_color: '#0000ff' } },
     { id: 'named', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { nt: 'GC', legend_label: 'Skew' } },
     { id: 'off', renderer: 'dinucleotide_skew', enabled: false, side: 'below', params: {} }
@@ -155,7 +165,7 @@ test('the tracks of a Result loaded without a request are those of its loaded se
     mode: 'linear', dinucleotide: 'AT', slots: slots.filter((slot) => slot.enabled).map(buildLinearTrackSlotPayload)
   })).map(asSaved));
   assert.deepEqual(tracks.map(({ slotId, label, positiveColor }) => [slotId, label, positiveColor]),
-    [[null, 'AT content', null], ['own', 'AT skew', '#ff0000'], ['named', 'Skew', null]]);
+    [['share', 'Share', null], ['own', 'AT skew', '#ff0000'], ['named', 'Skew', null]]);
 });
 
 // The loaded settings are the Session's saved draft: a slot added after the
@@ -232,4 +242,49 @@ test('a palette edit leaves a skew track the request names no slot for', () => {
   const { actions, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], { slots: ['other:dinucleotide_skew'] });
   actions.applyPaletteToSvg();
   assert.deepEqual(skewFills, ['#6dded3', '#ad72e3']);
+});
+
+// OV-1198, OV-1215: the rows that leave with a track the draft hides, by the
+// predicate the track hide reads (Circular Hide GC Content / Hide GC Skew,
+// Linear Show GC Content / Show GC Skew, Show Depth in both modes).
+test('the rows of a hidden drawn track are the rows of its kind', () => {
+  const vector = readJson('../fixtures/legend_track_slot_rows.json').cases;
+  const linear = vector.find((each) => each.mode === 'linear' && each.depthTracks);
+  const rows = trackLegendRows(drawnTracks(requestOf(linear)), drawnRows(linear.rows.map(([key]) => key)));
+  const shown = { show_gc: true, show_skew: true, show_depth: true };
+  /** @param {Record<string, unknown>} form @param {Record<string, unknown>} [adv] */
+  const draft = (form, adv = {}) => ({ form, adv });
+  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft(shown)), []);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft({ ...shown, show_depth: false })), ['Depth 1', 'Reads B']);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft({ ...shown, show_gc: false })), ['GC content']);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft({ ...shown, show_skew: false })), ['GC skew (+)', 'GC skew (-)']);
+  const circular = trackLegendRows(drawnTracks(requestOf({ mode: 'circular', dinucleotide: 'GC', slots: null })),
+    drawnRows(['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)']));
+  const circularShown = { suppress_gc: false, suppress_skew: false, show_depth: true };
+  assert.deepEqual(hiddenTrackLegendKeys(circular, 'circular', draft({ ...circularShown, suppress_gc: true })), ['GC content']);
+  assert.deepEqual(hiddenTrackLegendKeys(circular, 'circular', draft({ ...circularShown, suppress_skew: true })), ['GC skew (+)', 'GC skew (-)']);
+  assert.equal(drawnTrackHidden('content', 'circular', draft({ show_gc: false })), false, 'Circular reads Hide GC Content');
+});
+
+// R2-H1: with a custom stack on, its enabled slots name the tracks the request
+// draws; the toggles the stack disables keep a stale value that hides nothing.
+test('a custom track stack, not its disabled toggles, says which drawn track is hidden', () => {
+  const hiddenForm = { show_gc: false, show_skew: false, show_depth: false, suppress_gc: false, suppress_skew: false };
+  const depthSlot = { id: 'depth_1', renderer: 'depth', enabled: true };
+  for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const on = mode === 'linear' ? 'linear_track_slots_enabled' : 'circular_track_slots_enabled';
+    const slots = mode === 'linear' ? 'linear_track_slots' : 'circular_track_slots';
+    const stack = (/** @type {unknown[]} */ list) => ({ form: hiddenForm, adv: { [on]: true, [slots]: list } });
+    assert.equal(draftDrawsDepth(mode, stack([depthSlot])), true, mode);
+    assert.equal(drawnTrackHidden('depth', mode, stack([depthSlot])), false, mode);
+    assert.equal(drawnTrackHidden('depth', mode, stack([{ ...depthSlot, enabled: false }])), true, mode);
+    assert.equal(drawnTrackHidden('depth', mode, { form: { show_depth: true }, adv: { [on]: true, [slots]: [] } }), true, mode);
+    assert.equal(drawnTrackHidden('depth', mode, { form: hiddenForm, adv: { [slots]: [depthSlot] } }), true, `${mode} stack off`);
+  }
+  const linearStack = { form: hiddenForm, adv: { linear_track_slots_enabled: true } };
+  assert.equal(drawnTrackHidden('content', 'linear', linearStack), false);
+  assert.equal(drawnTrackHidden('skew', 'linear', linearStack), false);
+  const circularStack = { form: { suppress_gc: true, suppress_skew: true }, adv: { circular_track_slots_enabled: true } };
+  assert.equal(drawnTrackHidden('content', 'circular', circularStack), true, 'Circular keeps Hide GC Content');
+  assert.equal(drawnTrackHidden('skew', 'circular', circularStack), true, 'Circular keeps Hide GC Skew');
 });

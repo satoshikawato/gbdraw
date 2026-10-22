@@ -28,34 +28,22 @@ assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
   mode: 'circular',
   storedConfig
 }));
-// OV-575: a record display draft row's selector is text in the Sessions whose
-// drafts Python checks, 41 and newer (gbdraw/session_io.py:661-662, :853-857).
-// A Session 40 draft keeps the verdict it had (OV-634 for the number).
+// OV-575, OV-639: a record display draft row's selector is text, in every
+// Session version: Save refuses another, and Load drops the row with a dialog
+// row (`readRecordDisplayDrafts`).
 {
-  const checkDraftSelector = (selector, sessionVersion) => validateCurrentWriterActiveConfig({
+  const checkDraftSelector = (selector) => validateCurrentWriterActiveConfig({
     mode: 'circular',
     storedConfig: { ...storedConfig, recordDisplayDrafts: [{
       scope: 'circular', sourceUid: 'circular', selector, recordId: 'same', topologyOverride: null,
       startCoordinate: 25, reverseComplementOverride: null, anchorIntent: null
     }] },
-    scopedDrafts: true,
-    sessionVersion
+    scopedDrafts: true
   });
-  for (const sessionVersion of [40, 41, 42, 44, undefined]) {
-    assert.doesNotThrow(() => checkDraftSelector('#1', sessionVersion), `Session ${sessionVersion}`);
+  assert.doesNotThrow(() => checkDraftSelector('#1'));
+  for (const selector of [['#1'], [['#1']], 1]) {
+    assert.throws(() => checkDraftSelector(selector), /^Error: INPUT_INVALID\/FIELDS$/, JSON.stringify(selector));
   }
-  for (const sessionVersion of [41, 42, 44, undefined]) for (const selector of [['#1'], [['#1']], 1]) assert.throws(
-    () => checkDraftSelector(selector, sessionVersion),
-    /^Error: Invalid record display draft; only source-bound requested intent is supported\.$/,
-    `Session ${sessionVersion}: ${JSON.stringify(selector)}`
-  );
-  for (const selector of [['#1'], [['#1']]]) {
-    assert.doesNotThrow(() => checkDraftSelector(selector, 40), JSON.stringify(selector));
-  }
-  assert.throws(
-    () => checkDraftSelector(1, 40),
-    /^Error: Record display requires a source UID and exact record selector\.$/
-  );
 }
 assert.deepEqual(CURRENT_WRITER_FORM_FIELDS, [
   ...Object.keys(createDefaultForm()),
@@ -113,7 +101,7 @@ assert.throws(
     mode: 'circular',
     storedConfig: unsafeStoredConfig
   }),
-  /unsafe key __proto__/
+  { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
 );
 
 for (const [candidateLimit, collinearSearchScope] of [[null, 'adjacent'], [9, 'all']]) {

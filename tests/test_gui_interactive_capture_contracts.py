@@ -9,6 +9,7 @@ from PIL import Image
 
 from docs.capture.config import chapter_for
 from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION
+from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
 
@@ -99,7 +100,7 @@ def test_interactive_flows_use_raw_inputs_and_visible_actions() -> None:
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_role("searchbox", name="Search features", exact=True)',
         'name="Open active feature", exact=True',
-        'name="Apply color and caption to selected features"',
+        'name="Apply color and legend name to selected features"',
         'name="Apply visibility to selected features", exact=True',
         'name="Apply stroke to selected features", exact=True',
         'name="Toggle layout edit mode", exact=True',
@@ -172,7 +173,7 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
 
 def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None:
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
-    assert CURRENT_SESSION_VERSION == 47
+    assert CURRENT_SESSION_VERSION == 48
     for value in (
         f"CURRENT_SESSION_VERSION = {CURRENT_SESSION_VERSION}",
         "CURRENT_RENDER_REQUEST_SCHEMA = 9",
@@ -222,9 +223,9 @@ def test_h_gui_15_validates_every_actual_export() -> None:
 
 
 def test_interactive_accessibility_labels_are_public_ui_contracts() -> None:
-    source = INDEX_PATH.read_text(encoding="utf-8")
+    source = read_english_index(INDEX_PATH)
     for label in (
-        ':aria-label="`Feature details: ${clickedFeature.label}`"',
+        ':aria-label="t(\'Feature details: {label}\', { label: clickedFeature.label })"',
         'aria-label="Close feature popup"',
         'aria-label="Feature legend name"',
         'aria-label="Feature visibility"',

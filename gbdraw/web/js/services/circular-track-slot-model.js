@@ -6,10 +6,12 @@
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
-import { parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
+import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
+import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
+/** @import { FieldLeaf } from '../utils/field-reading.js' */
 
 /**
  * A Circular track-slot row as the editor and the request projection hold it.
@@ -353,39 +355,50 @@ export const migrateLegacyCircularTrackSlot = (slot) => {
   return source;
 };
 
-/** @param {unknown} spec */
-export const migrateLegacyCircularTrackSlotSpec = (spec) => {
+/**
+ * A legacy Circular slot spec under current tokens, and the legacy spacing
+ * token it consumed: the last token of the first of `spacingKeys` the spec
+ * holds, as stored, with its value and whether it applied to a gap the spec
+ * leaves unset. `gapOf` gives the gap value a spacing fills, or null when it
+ * fills none.
+ * @param {unknown} spec
+ * @param {readonly string[]} [spacingKeys] the keys read as the spacing, in lower case, the first one first
+ * @param {(value: string) => string | null} [gapOf]
+ * @returns {{ spec: string, spacing: { stored: string, value: string, filled: boolean } | null }}
+ */
+export const readLegacyCircularTrackSlotSpec = (spec, spacingKeys = ['spacing'], gapOf = (value) => value) => {
   const text = String(spec || '').trim();
   const atIndex = text.indexOf('@');
-  if (atIndex < 0) return text;
+  if (atIndex < 0) return { spec: text, spacing: null };
 
   const head = text.slice(0, atIndex).trim();
-  const retained = [];
-  /** @type {string | null} */
-  let legacySpacing = null;
-  let hasInnerGap = false;
-  let hasOuterGap = false;
-  text.slice(atIndex + 1).split(',').forEach((token) => {
+  const tokens = text.slice(atIndex + 1).split(',').flatMap((token) => {
     const equalsIndex = token.indexOf('=');
-    if (equalsIndex < 0) return;
+    if (equalsIndex < 0) return [];
     const key = token.slice(0, equalsIndex).trim();
-    const normalizedKey = key.toLowerCase();
-    const rawValue = token.slice(equalsIndex + 1).trim();
-    if (normalizedKey === 'spacing') {
-      legacySpacing = rawValue;
-      return;
-    }
-    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedKey)) return;
-    if (normalizedKey === 'inner_gap_px') hasInnerGap = true;
-    if (normalizedKey === 'outer_gap_px') hasOuterGap = true;
-    retained.push(`${key}=${rawValue}`);
+    return [{ stored: token.trim(), key, normalizedKey: key.toLowerCase(), value: token.slice(equalsIndex + 1).trim() }];
   });
-  if (legacySpacing !== null && legacySpacing !== '') {
-    if (!hasInnerGap) retained.push(`inner_gap_px=${legacySpacing}`);
-    if (!hasOuterGap) retained.push(`outer_gap_px=${legacySpacing}`);
-  }
-  return retained.length > 0 ? `${head}@${retained.join(',')}` : head;
+  const spacingKey = spacingKeys.find((name) => tokens.some(({ normalizedKey }) => normalizedKey === name));
+  const consumed = tokens.filter(({ normalizedKey }) => normalizedKey === spacingKey).at(-1);
+  const retained = tokens.filter(({ normalizedKey }) => (
+    normalizedKey !== spacingKey && !OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedKey)
+  ));
+  const filled = consumed && consumed.value !== ''
+    ? ['inner_gap_px', 'outer_gap_px'].filter((name) => !retained.some(({ normalizedKey }) => normalizedKey === name))
+    : [];
+  const gap = consumed && filled.length > 0 ? gapOf(consumed.value) : null;
+  const options = [
+    ...retained.map(({ key, value }) => `${key}=${value}`),
+    ...(gap === null ? [] : filled.map((name) => `${name}=${gap}`))
+  ];
+  return {
+    spec: options.length > 0 ? `${head}@${options.join(',')}` : head,
+    spacing: consumed ? { stored: consumed.stored, value: consumed.value, filled: filled.length > 0 } : null
+  };
 };
+
+/** @param {unknown} spec */
+export const migrateLegacyCircularTrackSlotSpec = (spec) => readLegacyCircularTrackSlotSpec(spec).spec;
 
 /** @param {unknown} value */
 export const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
@@ -482,13 +495,15 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
 /**
  * @param {unknown} value
  * @param {unknown} slotCount
+ * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').
  * @returns {number | null} null when value is no integer.
  */
-export const clampCircularTrackAxisIndex = (value, slotCount) => {
+export const clampCircularTrackAxisIndex = (value, slotCount, losses = null) => {
   const length = Math.max(0, Number(slotCount) || 0);
   const numeric = Number(value);
-  if (!Number.isInteger(numeric)) return null;
-  return Math.min(Math.max(numeric, 0), length);
+  const read = Number.isInteger(numeric) ? Math.min(Math.max(numeric, 0), length) : null;
+  noteReplacedLeaf(losses, '', value, read);
+  return read;
 };
 
 /**
@@ -551,11 +566,24 @@ export const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => 
  * @param {number | null} [axisIndex]
  * @returns {CircularTrackSlot[]}
  */
-export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
+export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => (
+  placeCircularTrackStack(slots, defaultNt, preset, axisIndex).slots
+);
+
+/**
+ * The placed stack and the Axis index its sides were set from. Generate stores this index, so
+ * the request never carries an index the sides conflict with (OV-1263).
+ * @param {unknown} slots
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @param {unknown} [axisIndex]
+ * @returns {{ slots: CircularTrackSlot[], axisIndex: number }}
+ */
+export const placeCircularTrackStack = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
   const normalized = normalizeCircularTrackSlots(slots, defaultNt, preset);
   const resolvedAxis = syncSlotsFromAxisIndex(normalized, axisIndex, preset);
   enforceSingleOnAxisSlot(normalized, resolvedAxis, preset);
-  return normalized;
+  return { slots: normalized, axisIndex: resolvedAxis };
 };
 
 /**
@@ -831,14 +859,17 @@ export const applyCircularGeometryShortcuts = (slots, values = {}) => {
  * @param {number} [index]
  * @param {string} [defaultNt]
  * @param {string} [preset]
+ * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758;
+ *   `at` under the stack, `[1].renderer`); a migration that keeps the meaning records nothing.
  * @returns {CircularTrackSlot}
  */
-export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
+export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin', losses = null) => {
   /** @type {Record<string, unknown>} */
   const source = slot && typeof slot === 'object' && !Array.isArray(slot) ? slot : {};
   assertCurrentCircularTrackSlotShape(source);
   const resolved = circularRendererName(source.renderer);
   const renderer = SUPPORTED_RENDERERS.includes(resolved) ? resolved : 'dinucleotide_skew';
+  if (renderer !== resolved) noteReplacedLeaf(losses, `[${index}].renderer`, source.renderer, renderer);
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const inheritsPresetDefaults = isLegacyDefaultWebSlotShape(source, renderer, defaultNt, preset);
   /** @type {Record<string, unknown>} */
@@ -880,13 +911,17 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
         ? tickLabelLayoutFromSides(params.label_side, params.tick_side)
         : params.tick_label_layout
     );
+    const storedLayout = params.tick_label_layout;
     params.tick_label_layout = normalizeTickLabelLayout(legacyLayout);
+    noteReplacedLeaf(losses, `[${index}].params.tick_label_layout`, storedLayout, params.tick_label_layout);
     delete params.label_side;
     delete params.tick_side;
     if (normalizeOptionalText(params.preset) === null) {
       delete params.preset;
     } else {
+      const storedPreset = params.preset;
       params.preset = normalizeCircularTrackPreset(params.preset);
+      noteReplacedLeaf(losses, `[${index}].params.preset`, storedPreset, params.preset);
     }
   }
   if (renderer === 'features') {
@@ -904,11 +939,14 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
         side,
         params: { ...params, lane_direction: rawLaneDirection }
       }, preset);
+      noteReplacedLeaf(losses, `[${index}].params.${isUnsetValue(params.lane_direction) ? 'lanes' : 'lane_direction'}`,
+        rawLaneDirection, placement.laneDirection);
       params.lane_direction = placement.laneDirection;
       side = placement.side;
     }
   }
   if (renderer === 'depth') {
+    const storedTrackIndex = params.track_index;
     const parsedTrackIndex = normalizeTrackIndex(params.track_index);
     const idMatch = cleanToken(source.id, fallbackId).match(/^depth_(\d+)$/);
     if (parsedTrackIndex !== null) {
@@ -918,39 +956,10 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     } else {
       delete params.track_index;
     }
+    if (parsedTrackIndex === null) noteReplacedLeaf(losses, `[${index}].params.track_index`, storedTrackIndex, params.track_index);
   }
   if (renderer === 'annotations') {
-    params.set_id = String(params.set_id || '').trim();
-    params.overflow = ['error', 'compress', 'clip'].includes(String(params.overflow || '').toLowerCase())
-      ? String(params.overflow).toLowerCase()
-      : 'error';
-    params.show_labels = params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false';
-    params.layer = String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground';
-    if (Array.isArray(params.marks)) {
-      params.marks = Array.from(new Set(
-        params.marks
-          .map((mark) => String(mark || '').trim().toLowerCase())
-          .filter(Boolean)
-      ));
-      // params.marks is the array assigned just above.
-      if (/** @type {unknown[]} */ (params.marks).length === 0) delete params.marks;
-    }
-    for (const [field, defaultValue] of [['lane_gap_px', 3], ['padding_px', 2]]) {
-      if (params[field] === null || params[field] === undefined || params[field] === '') {
-        delete params[field];
-        continue;
-      }
-      const numeric = Number(params[field]);
-      if (Number.isFinite(numeric) && numeric >= 0) {
-        if (numeric === defaultValue) delete params[field];
-        else params[field] = numeric;
-      }
-    }
-    if (params.cover_anchor === true || String(params.cover_anchor).toLowerCase() === 'true') {
-      params.cover_anchor = true;
-    } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
-      delete params.cover_anchor;
-    }
+    normalizeAnnotationSlotParams(params, `[${index}].params`, losses);
     if (side === null) side = 'outside';
   }
 
@@ -972,13 +981,15 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
  * @param {unknown} slots
  * @param {string} [defaultNt]
  * @param {string} [preset]
+ * @param {FieldLeaf[] | null} [losses] As `normalizeCircularTrackSlot`'s; a stack that is no list is recorded at ''.
  * @returns {CircularTrackSlot[]}
  */
-export const normalizeCircularTrackSlots = (slots, defaultNt = 'GC', preset = 'tuckin') => {
+export const normalizeCircularTrackSlots = (slots, defaultNt = 'GC', preset = 'tuckin', losses = null) => {
   const base = Array.isArray(slots)
     ? slots
     : createDefaultCircularTrackSlots({ nt: defaultNt, preset });
-  return base.map((slot, index) => normalizeCircularTrackSlot(slot, index, defaultNt, preset));
+  if (base !== slots) noteReplacedLeaf(losses, '', slots, base);
+  return base.map((slot, index) => normalizeCircularTrackSlot(slot, index, defaultNt, preset, losses));
 };
 
 /**
@@ -1057,37 +1068,6 @@ export const parseCircularTrackSlotSpecs = (specs, defaultNt = 'GC', preset = 't
     ? specs.map((spec, index) => parseCircularTrackSlotSpec(spec, index, defaultNt, preset))
     : []
 );
-
-/**
- * @param {Record<string, unknown>} params
- * @returns {Record<string, unknown>}
- */
-const canonicalAnnotationParams = (params) => {
-  const next = { ...params };
-  if (!Array.isArray(next.marks) || next.marks.length === 0) {
-    delete next.marks;
-  } else {
-    next.marks = Array.from(new Set(
-      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
-    ));
-  }
-  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
-    ? null
-    : Number(next.lane_gap_px);
-  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
-  else next.lane_gap_px = laneGap;
-  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
-    ? null
-    : Number(next.padding_px);
-  if (padding === null || padding === 2) delete next.padding_px;
-  else next.padding_px = padding;
-  if (next.cover_anchor !== true) delete next.cover_anchor;
-  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
-  if (next.show_labels !== false) delete next.show_labels;
-  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
-  if (!String(next.anchor_slot || '').trim()) delete next.anchor_slot;
-  return next;
-};
 
 /**
  * @param {Pick<CircularTrackSlot, 'renderer' | 'params'>} slot

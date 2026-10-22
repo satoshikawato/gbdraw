@@ -42,7 +42,13 @@ from gbdraw.api import (
     upgrade_session_document,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.session_drawings import _result_set, _view, replace_session_drawings, write_session_drawings
+from gbdraw.session_drawings import (
+    _merged_shared,
+    _result_set,
+    _view,
+    replace_session_drawings,
+    write_session_drawings,
+)
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
 
@@ -79,7 +85,7 @@ def _linear_result_state(request: LinearDiagramRequest, tmp_path: Path) -> dict:
         )
     return {
         "results": web["results"],
-        "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
+        "editorState": {"featureCatalog": web["featureCatalog"]},
     }
 
 
@@ -494,3 +500,31 @@ def test_a_result_set_keeps_the_key_order_of_its_source() -> None:
         assert [key for key in view if key in fields] == order[0]
         assert [key for key in view["editorState"] if key in editor] == order[1]
         assert list(view["ui"]) == order[2]
+
+
+def _legacy_envelopes(states: list[str], evidence: int) -> dict[str, object]:
+    return {
+        "proteinRawCandidates": {
+            "schema": 1,
+            "entries": [{"key": f"candidate-{index}", "state": state} for index, state in enumerate(states)],
+        },
+        "proteinDerivedEvidence": {
+            "schema": 1,
+            "entries": [{"key": f"evidence-{index}"} for index in range(evidence)],
+        },
+    }
+
+
+@pytest.mark.parametrize("linear_first", [True, False])
+def test_the_linear_view_owns_the_written_legacy_protein_artifacts(linear_first: bool) -> None:
+    linear = {"renderRequest": {"mode": "linear"}, "legacyArtifacts": _legacy_envelopes(["pending"] * 9, 8)}
+    circular = {"renderRequest": {"mode": "circular"}, "legacyArtifacts": _legacy_envelopes(["pending"] * 34, 8)}
+    views = [linear, circular] if linear_first else [circular, linear]
+
+    assert _merged_shared(views)["legacyArtifacts"] == linear["legacyArtifacts"]
+
+
+def test_a_linear_view_without_legacy_protein_artifacts_writes_none() -> None:
+    circular = {"renderRequest": {"mode": "circular"}, "legacyArtifacts": _legacy_envelopes(["pending"] * 34, 8)}
+
+    assert "legacyArtifacts" not in _merged_shared([circular, {"renderRequest": {"mode": "linear"}}])

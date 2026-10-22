@@ -9,7 +9,6 @@ import base64
 import binascii
 import copy
 import csv
-import functools
 import gzip
 import hashlib
 import io
@@ -17,8 +16,8 @@ import json
 import math
 import os
 import re
-import sys
 import tempfile
+import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -33,13 +32,30 @@ from .analysis.protein_colinearity import (
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
 )
-from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
+from .comparisons.losat_jobs import (
+    NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    losat_pair_filename,
+)
+from .core.numeric import (
+    ASCII_NONNEGATIVE_INTEGER_PATTERN,
+    JS_MAX_SAFE_INTEGER,
+    JS_WHITESPACE,
+    ascii_float,
+    parse_ascii_integer,
+    parse_ascii_nonnegative_integer,
+)
+from .config.models.root import read_stored_font_size
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import is_user_color, named_color_hex
+from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
-from .render.output_paths import commit_staged_output_file
+from .render.output_paths import OutputExistsError, commit_staged_output_file
+from .session_legacy_values import (
+    LEGACY_FEATURE_SHAPES,
+    LEGACY_FEATURE_TYPES,
+    LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+)
 from .session_contract import (
     FeatureOverrideDraftRow,
     FlatDraftFields,
@@ -52,6 +68,7 @@ from .session_contract import (
     SessionRunMetadata,
     keys_of,
 )
+from .tracks.circular import _LEGACY_SPACING_PARAM, _migrate_legacy_circular_track_slot_spec
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -67,22 +84,28 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 47
+CURRENT_SESSION_VERSION = 48
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
 # version 47 keys a slice's Legend color and stroke edits by the row key
 # (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5)
-# and adds each slice's ``adv.font_family`` (PD-OI-098).
+# and adds each slice's ``adv.font_family`` (PD-OI-098); version 48 stores
+# the protein results of a reverse-complemented Linear record in its search
+# frame (OV-1145) and what each file card's file put into a slice, for Remove
+# on the card (OV-1280).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
+# From version 48 a Session without a Web draft (CLI, Python API) holds each
+# table only as its file card's file: the Web reads every row as that file's.
+FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -93,8 +116,16 @@ FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
-    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, 47: CURRENT_FEATURE_CATALOG_SCHEMA,
+    CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
+# The fields of a record display draft row (Session 41+), the two that Session
+# 44 added, and the fields of its anchor intent.
+RECORD_DISPLAY_DRAFT_FIELDS = frozenset({"sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate"})
+TYPED_RECORD_DISPLAY_DRAFT_FIELDS = frozenset({"reverseComplementOverride", "anchorIntent"})
+RECORD_ANCHOR_INTENT_FIELDS = frozenset(
+    {"schema", "recordKey", "biologicalFeatureId", "placement", "anchor", "offsetBp", "orientForward"}
+)
 # The field sets below are the keys of the Session document's declaration
 # (gbdraw.session_contract).
 # Every top-level key a Session of a supported version may hold.
@@ -142,10 +173,9 @@ FEATURE_OVERRIDE_DRAFT_FIELDS = keys_of(FeatureOverrideDraftRow)
 _SESSION_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
-JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
-_SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
+_SLOT_PART_RE = re.compile(rf"([^\[\]]+)|\[({ASCII_NONNEGATIVE_INTEGER_PATTERN})\]")
 # A Circular source record ``#N`` (N from 1, ASCII digits as the Web reads it,
 # OV-611): a record display draft's selector and a slice's OFF record key.
 _SOURCE_RECORD_SELECTOR = re.compile(r"#[1-9][0-9]*")
@@ -570,21 +600,32 @@ def load_session(path: str | Path) -> dict[str, Any]:
 
     from .session import _validate_document
 
-    session_path = Path(path)
-    try:
-        payload = json.loads(
-            _read_session_text(session_path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
-    except OSError as exc:
-        raise ValidationError(f"Could not read session file: {session_path}") from exc
+    payload = _read_session_json(path)
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
     _validate_document(payload)
     return payload
+
+
+def _read_session_json(path: str | Path) -> object:
+    """Parse a plain or gzip Session file; every unreadable file is a ``ValidationError``.
+
+    A truncated or corrupt gzip stream and text that is not UTF-8 are "not a
+    valid JSON session file", as malformed JSON is (OV-1251); a duplicate key
+    raises its own ``ValidationError``.
+    """
+
+    session_path = Path(path)
+    try:
+        return json.loads(
+            _read_session_text(session_path),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, EOFError, zlib.error, gzip.BadGzipFile) as exc:
+        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
+    except OSError as exc:
+        raise ValidationError(f"Could not read session file: {session_path}") from exc
 
 
 def _read_session_text(path: str | Path) -> str:
@@ -660,8 +701,8 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_top_level_fields(session)
         _validate_mode_scoped_fields(session, version)
-        _validate_current_retired_active_config_paths(session)
-        _validate_current_comparison_authority(session)
+        _validate_current_retired_active_config_paths(session, version)
+        _validate_current_comparison_authority(session, version)
         _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
         _validate_other_mode_result(session, version)
@@ -675,7 +716,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, 46, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, 46, 47, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -731,9 +772,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, 46, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    if current and (session.get("version") not in (41, 42, 44, 46, 47, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, 46, or {CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, 46, 47, or {CURRENT_SESSION_VERSION} and c_gb."
         )
     resources = session.get("resources", {})
 
@@ -821,9 +862,10 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     config = session.get("config", {})
     if not isinstance(config, Mapping):
         return
+    ui = session.get("ui")
     _validate_display_placement_draft_config(
         config,
-        mode=(session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode"),
+        mode=(session.get("renderRequest") or {}).get("mode") or (ui.get("mode") if isinstance(ui, Mapping) else None),
         scoped=True,
         current=session.get("version", 0) >= TYPED_DRAFT_SESSION_MIN_VERSION,
     )
@@ -832,7 +874,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
 def _validate_display_placement_draft_config(
     config: Mapping[str, Any],
     *,
-    mode: str,
+    mode: object,
     scoped: bool,
     current: bool,
 ) -> None:
@@ -848,13 +890,11 @@ def _validate_display_placement_draft_config(
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
-    expected_fields = {
-        "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
-    }
+    expected_fields = set(RECORD_DISPLAY_DRAFT_FIELDS)
     if scoped:
         expected_fields.add("scope")
     if current:
-        expected_fields |= {"reverseComplementOverride", "anchorIntent"}
+        expected_fields |= TYPED_RECORD_DISPLAY_DRAFT_FIELDS
     keys = set()
     for row in drafts:
         if not isinstance(row, Mapping) or set(row) != expected_fields:
@@ -874,14 +914,10 @@ def _validate_display_placement_draft_config(
                 )
             intent = row["anchorIntent"]
             if intent is not None:
-                intent_fields = {
-                    "schema", "recordKey", "biologicalFeatureId", "placement",
-                    "anchor", "offsetBp", "orientForward",
-                }
                 offset = intent.get("offsetBp") if isinstance(intent, Mapping) else None
                 if (
                     not isinstance(intent, Mapping)
-                    or set(intent) != intent_fields
+                    or set(intent) != RECORD_ANCHOR_INTENT_FIELDS
                     or intent.get("schema") != 1
                     or isinstance(intent.get("schema"), bool)
                     or not isinstance(intent.get("recordKey"), str)
@@ -898,7 +934,7 @@ def _validate_display_placement_draft_config(
                     )
                     or not isinstance(offset, int)
                     or isinstance(offset, bool)
-                    or abs(offset) > 9_007_199_254_740_991
+                    or abs(offset) > JS_MAX_SAFE_INTEGER
                     or not isinstance(intent.get("orientForward"), bool)
                 ):
                     raise ValidationError("Invalid record display anchor intent.")
@@ -1137,6 +1173,7 @@ def _validate_mode_slice_fields(value: object, mode: str, container: str = "") -
 
 def _validate_current_retired_active_config_paths(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Reject the two retired v40 circular-track draft paths."""
 
@@ -1149,12 +1186,13 @@ def _validate_current_retired_active_config_paths(
     for field in ("cli_circular_track_order", "cli_circular_track_slots"):
         if field in advanced:
             raise ValidationError(
-                f"Session version 40 cannot contain config.adv.{field}."
+                f"Session version {version} cannot contain config.adv.{field}."
             )
 
 
 def _validate_current_comparison_authority(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Reject retired v40 comparison fields and validate an optional Web draft."""
 
@@ -1178,15 +1216,15 @@ def _validate_current_comparison_authority(
 
     if "blastSource" in config or "blastSource" in adv:
         raise ValidationError(
-            "Session version 40 cannot contain retired blastSource state."
+            f"Session version {version} cannot contain retired blastSource state."
         )
     if "blastSource" in ui:
         raise ValidationError(
-            "Session version 40 cannot contain ui.blastSource."
+            f"Session version {version} cannot contain ui.blastSource."
         )
     if layout is not None and "comparisons" in layout:
         raise ValidationError(
-            "Session version 40 cannot contain "
+            f"Session version {version} cannot contain "
             "config.linearRecordLayout.comparisons."
         )
 
@@ -1197,11 +1235,11 @@ def _validate_current_comparison_authority(
                 continue
             if "blast" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record BLAST bindings."
+                    f"Session version {version} cannot contain per-record BLAST bindings."
                 )
             if "losat_filename" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     linear_metadata = web_files.get("linearRecordMetadata")
     if isinstance(linear_metadata, list):
@@ -1210,11 +1248,11 @@ def _validate_current_comparison_authority(
                 continue
             if "losatFilename" in metadata or "losat_filename" in metadata:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     if "linearCanonicalComparisons" in bindings:
         raise ValidationError(
-            "Session version 40 cannot bind comparison artifacts outside "
+            f"Session version {version} cannot bind comparison artifacts outside "
             "the committed request."
         )
 
@@ -1560,7 +1598,7 @@ def _validate_current_feature_catalog_authority(
         duplicated = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS & set(features)
         if duplicated:
             raise ValidationError(
-                "Session version 40 cannot contain derived feature payloads in "
+                f"Session version {version} cannot contain derived feature payloads in "
                 f"features: {', '.join(sorted(duplicated))}."
             )
     elif "features" in session:
@@ -1570,7 +1608,7 @@ def _validate_current_feature_catalog_authority(
     if isinstance(orthogroup_state, Mapping):
         if "groups" in orthogroup_state:
             raise ValidationError(
-                "Session version 40 cannot contain derived orthogroupState.groups."
+                f"Session version {version} cannot contain derived orthogroupState.groups."
             )
     elif "orthogroupState" in session:
         raise ValidationError(
@@ -1579,14 +1617,14 @@ def _validate_current_feature_catalog_authority(
 
     results = session.get("results")
     if "results" not in session or not isinstance(results, list):
-        raise ValidationError("Session version 40 requires a results array.")
+        raise ValidationError(f"Session version {version} requires a results array.")
     editor_state = session.get("editorState")
     if (
         not isinstance(editor_state, Mapping)
         or "featureCatalog" not in editor_state
     ):
         raise ValidationError(
-            "Session version 40 "
+            f"Session version {version} "
             + (
                 "Results require editorState.featureCatalog."
                 if results
@@ -1610,7 +1648,7 @@ def _validate_current_feature_catalog_authority(
         return
     if not isinstance(catalog, Mapping):
         raise ValidationError(
-            "Session version 40 Results require editorState.featureCatalog."
+            f"Session version {version} Results require editorState.featureCatalog."
         )
     items = catalog.get("items")
     if (
@@ -1855,12 +1893,8 @@ def _migrate_session_feature_placements(placements: object) -> object:
     return migrated
 
 
-# The Web readers' ``String(value ?? '')`` and ``.trim()`` (ECMAScript white
-# space and line terminators), so the twins below read text as the Web does.
-_JS_WHITESPACE = (
-    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
-    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
+# The Web readers' ``String(value ?? '')`` and ``.trim()`` (JS_WHITESPACE), so
+# the twins below read text as the Web does.
 
 
 def _js_string(value: object) -> str:
@@ -1880,7 +1914,7 @@ def _js_string(value: object) -> str:
 
 
 def _js_text(value: object) -> str:
-    return _js_string(value).strip(_JS_WHITESPACE)
+    return _js_string(value).strip(JS_WHITESPACE)
 
 
 def _feature_identity_key(scope: object, record_key: object, feature_id: object) -> str:
@@ -1893,8 +1927,8 @@ def _feature_identity_key(scope: object, record_key: object, feature_id: object)
         scope in DRAFT_SCOPES
         and isinstance(record_key, str)
         and isinstance(feature_id, str)
-        and record_key.strip(_JS_WHITESPACE)
-        and feature_id.strip(_JS_WHITESPACE)
+        and record_key.strip(JS_WHITESPACE)
+        and feature_id.strip(JS_WHITESPACE)
         and "\0" not in record_key + feature_id
     ):
         return _draft_identity_key(str(scope), record_key, feature_id)
@@ -1926,7 +1960,6 @@ _FEATURE_VISIBILITY_EDIT_VALUES = {
     "suppress": "exclude_matching",
 }
 _FEATURE_EDIT_DRAFT_FIELDS = ("featureVisibility", "labelVisibility", "labelText", "labelSourceText")
-_JS_MAX_SAFE_INTEGER = 2**53 - 1
 
 
 def _rendered_id_without_part(rendered_id: object) -> str:
@@ -1963,7 +1996,7 @@ def _safe_integer(value: object) -> int | None:
         return None
     if isinstance(value, float) and value.is_integer():
         value = int(value)
-    if isinstance(value, int) and abs(value) <= _JS_MAX_SAFE_INTEGER:
+    if isinstance(value, int) and abs(value) <= JS_MAX_SAFE_INTEGER:
         return value
     return None
 
@@ -2033,7 +2066,7 @@ def _nonnegative_integer(value: object) -> int | None:
     if value is None or value == "":
         return None
     number = _js_number(value)
-    if math.isfinite(number) and number.is_integer() and 0 <= number <= _JS_MAX_SAFE_INTEGER:
+    if math.isfinite(number) and number.is_integer() and 0 <= number <= JS_MAX_SAFE_INTEGER:
         return int(number)
     return None
 
@@ -2551,7 +2584,7 @@ def migrate_session_feature_edits(
 
         def assign_label_text(row: dict[str, Any], value: object) -> bool:
             label_text = re.sub(r"[\t\r\n\0]+", " ", _js_string(value))
-            if label_text.strip(_JS_WHITESPACE):
+            if label_text.strip(JS_WHITESPACE):
                 if row["labelText"] is None:
                     row["labelText"] = label_text
             elif row["labelVisibility"] != "on":
@@ -2960,18 +2993,6 @@ def _normalize_palette_colors(colors: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-@functools.cache
-def _color_palettes() -> dict[str, Any]:
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-    from importlib import resources
-
-    with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as handle:
-        return tomllib.load(handle)
-
-
 def _palette_colors(name: object) -> dict[str, Any]:
     """A palette's normalized colors, or none (``paletteColorsFromDefinitions``).
 
@@ -2981,10 +3002,10 @@ def _palette_colors(name: object) -> dict[str, Any]:
     """
 
     palette = _js_text(name)
-    colors = _color_palettes().get(palette) if palette != "title" else None
-    if not isinstance(colors, Mapping) or not colors:
+    colors = packaged_color_palettes().get(palette)
+    if not colors:
         return {}
-    return _normalize_palette_colors({str(key): str(value) for key, value in colors.items()})
+    return _normalize_palette_colors(dict(colors))
 
 
 def _merges_override_colors(config: object) -> bool:
@@ -3084,7 +3105,7 @@ def _annotation_binding_mode(annotation: object) -> DiagramMode | None:
     # A record key starts with its source key, a JSON array whose first item
     # is the mode (``annotationSourceKey``).
     try:
-        source_key, _ = _JSON_DECODER.raw_decode(binding.strip(_JS_WHITESPACE))
+        source_key, _ = _JSON_DECODER.raw_decode(binding.strip(JS_WHITESPACE))
     except ValueError:
         return None
     return _diagram_mode(source_key[0]) if isinstance(source_key, list) and source_key else None
@@ -3628,7 +3649,7 @@ def _js_integer(value: object) -> bool:
 def _current_option_value(value: object, fallback: str, supported: tuple[str, ...], label: str) -> str:
     """``requireCurrentValue`` in the Web ``services/current-option-values.js``."""
 
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or fallback
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or fallback
     if normalized not in supported:
         raise ValidationError(
             f"{label} must be one of: {', '.join(supported)}.", diagnostic=_SESSION_FIELDS_INVALID
@@ -3637,13 +3658,13 @@ def _current_option_value(value: object, fallback: str, supported: tuple[str, ..
 
 
 def _migrated_linear_track_layout(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "middle"
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "middle"
     normalized = {"spreadout": "above", "tuckin": "below"}.get(normalized, normalized)
     return _current_option_value(normalized, "middle", ("above", "middle", "below"), "Linear track layout")
 
 
 def _migrated_linear_label_placement(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
         "above_feature" if normalized == "on_feature" else normalized,
         "auto",
@@ -3653,9 +3674,9 @@ def _migrated_linear_label_placement(value: object) -> str:
 
 
 def _migrated_circular_multi_record_size_mode(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
-        "auto" if normalized == "sqrt" else normalized,
+        LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(normalized, normalized),
         "auto",
         ("auto", "linear", "equal"),
         "Circular multi-record size mode",
@@ -3668,7 +3689,9 @@ def migrate_persisted_web_option_values(config: object) -> object:
     Linear track layout ``spreadout``/``tuckin`` becomes ``above``/``below``,
     label placement ``on_feature`` becomes ``above_feature``, and multi-record
     size ``sqrt`` becomes ``auto``; any other value must be a current one. The
-    twin of the option-value steps of ``migratePersistedWebOptionValues``.
+    twin of the Web's strict readers (``migratePersisted*`` in
+    ``current-option-values.js``); Web Load reads these values with its reader
+    table, which reads an unknown one as the default with a row (E-OD02).
     """
 
     if not isinstance(config, Mapping):
@@ -3752,7 +3775,7 @@ def _without_legacy_null_circular_slot_spacing(config: Mapping[str, Any]) -> Map
 
 
 def _linear_track_renderer(value: object) -> str:
-    text = (_js_string(value) if _js_truthy(value) else "features").strip(_JS_WHITESPACE).lower()
+    text = (_js_string(value) if _js_truthy(value) else "features").strip(JS_WHITESPACE).lower()
     renderer = _LINEAR_TRACK_RENDERER_ALIASES.get(text) or text
     return renderer if renderer in _LINEAR_TRACK_RENDERERS else "features"
 
@@ -3763,7 +3786,8 @@ def migrate_imported_linear_track_slots(config: object, source_version: object) 
     A Session up to 32 saved them with schema-1 meaning whatever it stored;
     later ones state their schema. A schema-1 features slot loses its height and
     spacing, and every slot gets its own ``params`` object. The twin of
-    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``.
+    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``;
+    a stack it refuses, Web Load reads with ``readImportedTrackSlots`` (E-OD02).
     """
 
     adv = config.get("adv") if isinstance(config, Mapping) else None
@@ -3818,13 +3842,16 @@ def _with_legacy_repeat_region_shape(config: Mapping[str, Any]) -> Mapping[str, 
     if not isinstance(adv, Mapping):
         return config
     features = adv.get("features")
-    if isinstance(features, list) and "repeat_region" not in features:
-        return config
     shapes = adv.get("feature_shapes")
     shapes = shapes if isinstance(shapes, Mapping) else {}
-    if "repeat_region" in shapes:
+    missing = {
+        feature_type: shape
+        for feature_type, shape in LEGACY_FEATURE_SHAPES.items()
+        if (not isinstance(features, list) or feature_type in features) and feature_type not in shapes
+    }
+    if not missing:
         return config
-    return {**config, "adv": {**adv, "feature_shapes": {**shapes, "repeat_region": "rectangle"}}}
+    return {**config, "adv": {**adv, "feature_shapes": {**shapes, **missing}}}
 
 
 def migrate_session_draft_values(config: object, source_version: int) -> object:
@@ -3882,7 +3909,7 @@ def _js_number(value: object) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
-        text = value.strip(_JS_WHITESPACE)
+        text = value.strip(JS_WHITESPACE)
         if not text:
             return 0.0
         try:
@@ -3899,7 +3926,7 @@ def _js_integral(value: float) -> int | float:
 
 
 def _clean_id(value: object, fallback: str) -> str:
-    return (_js_string(value) if _js_truthy(value) else "").strip(_JS_WHITESPACE) or fallback
+    return (_js_string(value) if _js_truthy(value) else "").strip(JS_WHITESPACE) or fallback
 
 
 def _draft_annotation_target(target: object) -> dict[str, Any]:
@@ -4251,7 +4278,16 @@ def normalize_current_session_artifacts(
     for index, entry in enumerate(source_raw_entries):
         classification = classify_raw_losat_cache_entry(entry)
         if classification in {"protein-current", "nucleotide-current"}:
-            current_raw_entries.append(_json_clone(entry))
+            clone = _json_clone(entry)
+            # As the Web writes it: a shown entry keeps its text name or gets
+            # the default `losat_pair_<n>.tsv` (OV-1007); a hidden entry is
+            # cache only and has no name (OV-1013).
+            clone["filename"] = (
+                ""
+                if entry.get("display") is False
+                else losat_pair_filename(entry, index + 1)
+            )
+            current_raw_entries.append(clone)
         elif classification == "protein-legacy":
             imported_legacy_entries.append(_json_clone(entry))
         else:
@@ -5600,10 +5636,7 @@ def _write_validated_session_json(
             overwrite=overwrite,
         )
     except FileExistsError as exc:
-        raise ValidationError(
-            f"Session output already exists: {output_path}. "
-            "Pass overwrite=True to replace it."
-        ) from exc
+        raise OutputExistsError((output_path,), subject="Session output") from exc
     except OSError as exc:
         raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
     finally:
@@ -5834,9 +5867,9 @@ def _canonicalize_legacy_session_cli_args(
             continue
         if separator:
             if mode == "circular" and option == "--circular_track_slot":
-                inline_value = _migrate_legacy_circular_slot_cli_value(inline_value)
-            if option == "--multi_record_size_mode" and inline_value == "sqrt":
-                inline_value = "auto"
+                inline_value = _migrate_legacy_circular_track_slot_spec(inline_value)
+            if option == "--multi_record_size_mode":
+                inline_value = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(inline_value, inline_value)
             elif mode == "linear" and option == "--label_placement":
                 inline_value = {
                     "on_feature": "above_feature",
@@ -5851,8 +5884,8 @@ def _canonicalize_legacy_session_cli_args(
             token = option
             if canonical_args:
                 previous_option = canonical_args[-1].partition("=")[0]
-                if previous_option == "--multi_record_size_mode" and token == "sqrt":
-                    token = "auto"
+                if previous_option == "--multi_record_size_mode" and token in LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES:
+                    token = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES[token]
                 elif (
                     mode == "linear"
                     and previous_option == "--label_placement"
@@ -5862,7 +5895,7 @@ def _canonicalize_legacy_session_cli_args(
                 elif mode == "linear" and previous_option == "--track_layout":
                     token = {"spreadout": "above", "tuckin": "below"}.get(token, token)
                 elif mode == "circular" and previous_option == "--circular_track_slot":
-                    token = _migrate_legacy_circular_slot_cli_value(token)
+                    token = _migrate_legacy_circular_track_slot_spec(token)
         source_to_canonical_index[source_index] = len(canonical_args)
         canonical_args.append(token)
     if pending_retired is not None:
@@ -5870,29 +5903,6 @@ def _canonicalize_legacy_session_cli_args(
         source_to_canonical_index[option_index] = len(canonical_args)
         canonical_args.append(retired.option)
     return canonical_args, source_to_canonical_index
-
-
-def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
-    """Move retired slot fields into the private persisted-data transport."""
-
-    head, separator, raw_options = str(value).partition("@")
-    if not separator:
-        return str(value)
-    migrated: list[str] = []
-    for raw_part in raw_options.split(","):
-        part = raw_part.strip()
-        if not part or "=" not in part:
-            migrated.append(part)
-            continue
-        raw_key, raw_value = part.split("=", 1)
-        key = raw_key.strip().lower()
-        if key in {"strict", "compress", "reserve"}:
-            continue
-        if key == "spacing":
-            migrated.append(f"__gbdraw_legacy_spacing={raw_value.strip()}")
-        else:
-            migrated.append(part)
-    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def canonicalize_cli_invocation(
@@ -6020,21 +6030,18 @@ def _gui_session_to_cli_args(
     form = form_value if isinstance(form_value, Mapping) else {}
     adv_value = config.get("adv")
     adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
+    # A stored font size <= 0 replays as Auto (no option), as Web Load reads it (OV-1282).
+    for key in [key for key in adv if str(key).endswith("font_size")]:
+        adv[key] = read_stored_font_size(adv[key], path=f"config.adv.{key}")
     if int(session.get("version", 0)) <= 30:
         effective_features = adv.get("features")
         if not isinstance(effective_features, list):
-            effective_features = [
-                "CDS",
-                "rRNA",
-                "tRNA",
-                "tmRNA",
-                "ncRNA",
-                "misc_RNA",
-                "repeat_region",
-            ]
-        if "repeat_region" in effective_features:
+            effective_features = list(LEGACY_FEATURE_TYPES)
+        legacy_shapes = [item for item in LEGACY_FEATURE_SHAPES.items() if item[0] in effective_features]
+        if legacy_shapes:
             feature_shapes = dict(adv.get("feature_shapes") or {})
-            feature_shapes.setdefault("repeat_region", "rectangle")
+            for feature_type, shape in legacy_shapes:
+                feature_shapes.setdefault(feature_type, shape)
             adv["feature_shapes"] = feature_shapes
 
     run_args: list[str] = []
@@ -6255,7 +6262,7 @@ def _migrate_legacy_circular_track_table(table_path: Path) -> None:
         values = values[: len(header)]
         spacing = values[spacing_index].strip()
         if spacing:
-            legacy_param = f"__gbdraw_legacy_spacing={spacing}"
+            legacy_param = f"{_LEGACY_SPACING_PARAM}={spacing}"
             existing_params = values[params_index].strip()
             values[params_index] = (
                 f"{existing_params},{legacy_param}"
@@ -6403,11 +6410,8 @@ def _append_circular_gui_args(
     ):
         value = adv.get(key)
         if value not in (None, "", False):
-            if (
-                key == "multi_record_size_mode"
-                and str(value).strip().lower() == "sqrt"
-            ):
-                value = "auto"
+            if key == "multi_record_size_mode":
+                value = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(str(value).strip().lower(), value)
             _append_pair(run_args, invocation_args, option, str(value))
 
     input_type = str(ui.get("cInputType") or "gb")
@@ -6630,7 +6634,10 @@ def _append_linear_definition_line_style_args(
         if not isinstance(raw_style, Mapping):
             continue
         parts: list[str] = []
-        font_size = raw_style.get("font_size")
+        font_size = read_stored_font_size(
+            raw_style.get("font_size"),
+            path=f"config.adv.linear_definition_line_styles.{line_kind}.font_size",
+        )
         if font_size not in (None, "", False):
             parts.append(f"size={font_size}")
         font_weight = str(raw_style.get("font_weight") or "").strip()
@@ -6976,7 +6983,10 @@ def _parse_slot(slot: str) -> list[str | int]:
             if key is not None:
                 parts.append(key)
             elif index is not None:
-                parts.append(int(index))
+                number = parse_ascii_nonnegative_integer(index)
+                if number is None:
+                    raise ValidationError(f"Invalid session slot: {slot}")
+                parts.append(number)
         if position != len(raw_part):
             raise ValidationError(f"Invalid session slot: {slot}")
     return parts
@@ -7021,11 +7031,8 @@ def _decode_depth_run(reference_name: str, run: Any, lines: list[str]) -> int:
 
 
 def _parse_positive_safe_integer(value: object) -> int | None:
-    text = str(value or "").strip()
-    if not re.fullmatch(r"[+-]?\d+", text):
-        return None
-    parsed = int(text)
-    if parsed <= 0 or parsed > JS_MAX_SAFE_INTEGER:
+    parsed = parse_ascii_integer(str(value or "").strip())
+    if parsed is None or parsed <= 0 or parsed > JS_MAX_SAFE_INTEGER:
         return None
     return parsed
 
@@ -7035,7 +7042,7 @@ def _is_depth_text(value: object) -> bool:
     if not text:
         return False
     try:
-        parsed = float(text)
+        parsed = ascii_float(text)
     except ValueError:
         return False
     return math.isfinite(parsed) and parsed >= 0
@@ -7108,20 +7115,15 @@ def migrate_legacy_repeat_feature_shape_args(
     effective_features = (
         {item.strip() for item in features_raw.split(",") if item.strip()}
         if features_raw is not None
-        else {
-            "CDS",
-            "rRNA",
-            "tRNA",
-            "tmRNA",
-            "ncRNA",
-            "misc_RNA",
-            "repeat_region",
-        }
+        else set(LEGACY_FEATURE_TYPES)
     )
-    if (
-        "repeat_region" in effective_features
-        and "repeat_region" not in _feature_shapes_from_cli_args(migrated)
-    ):
+    recorded_shapes = _feature_shapes_from_cli_args(migrated)
+    legacy_shapes = [
+        f"{feature_type}={shape}"
+        for feature_type, shape in LEGACY_FEATURE_SHAPES.items()
+        if feature_type in effective_features and feature_type not in recorded_shapes
+    ]
+    for legacy_shape in legacy_shapes:
         insertion_index = next(
             (
                 index
@@ -7130,10 +7132,7 @@ def migrate_legacy_repeat_feature_shape_args(
             ),
             len(migrated),
         )
-        migrated[insertion_index:insertion_index] = [
-            "--feature_shape",
-            "repeat_region=rectangle",
-        ]
+        migrated[insertion_index:insertion_index] = ["--feature_shape", legacy_shape]
     return migrated
 
 
@@ -7210,6 +7209,7 @@ __all__ = [
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
+    "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION",
     "MODE_SCOPED_SESSION_MIN_VERSION",
     "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",

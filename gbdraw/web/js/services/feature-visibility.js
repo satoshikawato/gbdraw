@@ -12,9 +12,12 @@ import {
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 import { pythonLegendRows } from './legend-svg.js';
+import { createRuleLegendCaptions } from './specific-color-rules.js';
 /** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { PythonLegendKey } from './legend-svg.js' */
+/** @import { SvgLegendRowFacts } from './svg-result-ingestion.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -545,8 +548,8 @@ const colorRuleMatcher = (context) => {
 
 // "Is this feature drawn?" as Generate answers it
 // (gbdraw/features/visibility.py::should_render_feature): the feature's
-// identity-keyed override decides when On or Off, and Exclude from matching
-// skips the rules; else the first matching visibility rule decides when Show
+// identity-keyed override decides when On or Off, and Leave out of protein
+// search skips the rules; else the first matching visibility rule decides when Show
 // or Off; else the selected feature types, where a feature of another type is
 // drawn when a specific color rule matches it. Python matches the rules
 // (app/rule-matching.js, R4); the shared vectors in
@@ -576,6 +579,13 @@ export const resolveFeatureDrawn = (feature, context) => {
   return colorRuleMatcher(context).matchesAny(feature);
 };
 
+/**
+ * What the Legend readers take of the displayed Result's committed metadata (svg-result-ingestion.js
+ * `CommittedSvgResultMetadata`).
+ * @typedef {{ renderedFeatureIdentities?: { renderedIds?: unknown } | null, legendRowFacts?: SvgLegendRowFacts | null }}
+ *   DisplayedResultLegendMetadata
+ */
+
 // The features the displayed Result draws, as its Legend rows are read
 // (`LegendRowContext.features`, N-06): those Python drew in it at its last
 // render (the rendered IDs of its committed metadata; every read feature for a
@@ -583,7 +593,7 @@ export const resolveFeatureDrawn = (feature, context) => {
 // answer keeps a feature). Read when iterated.
 /**
  * @param {{ extractedFeatures?: { value?: unknown },
- *   displayedResultMetadata?: () => { renderedFeatureIdentities?: { renderedIds?: unknown } | null } | null | undefined }} state
+ *   displayedResultMetadata?: () => DisplayedResultLegendMetadata | null | undefined }} state
  * @param {Parameters<typeof featureDrawnContext>[0]} drawing
  * @returns {Iterable<{ svg_id?: unknown, type?: unknown, fill_color?: unknown }>}
  */
@@ -607,19 +617,30 @@ export const displayedDrawnFeatures = (state, drawing) => ({
  * }} DisplayedLegendState
  */
 
+/** @type {ReadonlySet<PythonLegendKey>} */
+const NO_LEGEND_KEYS = new Set();
+
+/**
+ * The Legend state of the displayed Result, and Python's keys of it that no row draws (its Legend row
+ * facts' `suppressed`, which hold the shared keys `trackLegendRows` reads; none for a Result without facts).
+ * @typedef {LegendRowContext & { sharedLegendKeys: ReadonlySet<PythonLegendKey> }} DisplayedLegendRowContext
+ */
+
 // The Legend state of the displayed Result that every caller of the N-06
-// allocation (specific-color-rules.js) reads: the compile, the Legend panel, the feature popup, the
-// Legend editor and the rule commit.
+// allocation (specific-color-rules.js) and of the track rows (track-legend-rows.js) reads: the compile,
+// the Legend panel, the feature popup, the Legend editor and the rule commit.
 /**
  * @param {DisplayedLegendState} state
  * @param {Parameters<typeof displayedDrawnFeatures>[1] & { manualSpecificRules: readonly Partial<SpecificColorRule>[] }} drawing
- * @returns {LegendRowContext}
+ * @returns {DisplayedLegendRowContext}
  */
 export const displayedLegendRowContext = (state, drawing) => ({
   rules: drawing.manualSpecificRules,
   pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
   features: displayedDrawnFeatures(state, drawing),
-  originalLegendOrder: state.originalLegendOrder?.value || []
+  originalLegendOrder: state.originalLegendOrder?.value || [],
+  sharedLegendKeys: /** @type {ReadonlySet<PythonLegendKey> | undefined} */ (state.displayedResultMetadata?.()?.legendRowFacts?.suppressed)
+    ?? NO_LEGEND_KEYS
 });
 
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else
@@ -715,25 +736,22 @@ const legendRuleCaption = (rule) => String(rule?.cap ?? '').trim();
 // the color live. This is the input of the rows, not the rows: Python stays
 // their only derivation (Owner decision 2026-10-06, option A), and an edit
 // that changes a Result's source asks for the automatic rerender (OV-42).
-// The color of a rule is in it only for a batch: with one Result the
-// rows keep their captions and the Legend follows the color live
-// (`ruleLegendCaptions` gives the caption of a rule whose caption names another
-// row), while another batch Result shows the row it was drawn with until
-// Python draws it again (OV-44). A source is null while a rule match it needs
-// is unknown; null equals no source (`sameLegendSources`).
+// A rule is used by its caption and its color, as Python draws a row for each
+// (caption, color) pair a drawn feature uses: hiding the only feature of one
+// color of a caption written in several colors removes that row (OV-1236).
+// A source is null while a rule match it needs is unknown; null equals no
+// source (`sameLegendSources`).
 /**
  * @param {LegendCatalogFeatures} catalogFeatures
  * @param {FeatureDrawnContext} context
- * @param {{ asRendered: boolean, withColors: boolean }} options
+ * @param {{ asRendered: boolean }} options
  */
-const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) => {
+const legendSourceOf = (catalogFeatures, context, { asRendered }) => {
   const caption = legendRuleCaption;
   /** @param {{ color?: unknown } | null | undefined} rule */
   const colorOf = (rule) => String(rule?.color ?? '').trim().toLowerCase();
-  /** @param {{ color?: unknown } | null | undefined} rule */
-  const color = (rule) => (withColors ? colorOf(rule) : '');
   /** @param {{ cap?: unknown, color?: unknown } | null | undefined} rule */
-  const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
+  const usage = (rule) => JSON.stringify([caption(rule), colorOf(rule)]);
   const rules = context.colorRules;
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered });
   if (!drawn) return null;
@@ -777,7 +795,7 @@ const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) =>
   return JSON.stringify([
     [...typesByRecord],
     rules.filter((rule) => caption(rule) && counted(rule) && used.has(usage(rule)))
-      .map((rule) => [String(rule.feat ?? ''), caption(rule), color(rule)]),
+      .map((rule) => [String(rule.feat ?? ''), caption(rule), colorOf(rule)]),
     [...defaultTypes].sort(),
     [...plainTypes].sort(),
     [...new Set(rules.filter(counted).map(caption).filter(Boolean))].sort()
@@ -794,9 +812,7 @@ export const resultLegendSources = (state, context, { asRendered = false } = {})
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
     const catalogFeatures = resultCatalogFeatures(state, index);
-    return catalogFeatures
-      ? legendSourceOf(catalogFeatures, context, { asRendered, withColors: results.length > 1 })
-      : '';
+    return catalogFeatures ? legendSourceOf(catalogFeatures, context, { asRendered }) : '';
   });
 };
 
@@ -805,24 +821,33 @@ export const sameLegendSources = (left, right) => left.length === right.length
   && left.every((source, index) => source !== null && source === right[index]);
 
 // U3a 1d (R14-8): the Legend row of each feature a Result draws, as Python
-// keys it (prepare_legend_table): the caption of the captioned rule that wins
-// it; else the "other <type>s" row of a type whose drawn features use a
-// captioned rule, or no row when an uncaptioned rule colors it; else its
-// type's row. This tells which rows a rule change regroups; Python still
-// derives the rows and their order. Null while a match is unknown, when a
-// wildcard rule has a caption, or when a used caption names a row Python
-// generates (it suffixes the caption by color, PD-OI-042).
-/** @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context */
-const legendRowKeysOf = (catalogFeatures, context) => {
+// keys it (prepare_legend_table): the key the whole rule table allocates to
+// the row of the captioned rule that wins it (`<caption> [<fill>]` for a
+// caption written in several colors, OV-1235); else the "other <type>s" row of
+// a type whose drawn features use a captioned rule, or no row when an
+// uncaptioned rule colors it; else its type's row. This tells which rows a
+// rule change regroups; Python still derives the rows and their order. Null
+// while a match is unknown, when a wildcard rule has a caption, or when a used
+// caption names a row Python generates (it suffixes the caption by color,
+// PD-OI-042). Without `byColor`, a rule row is keyed by its caption (a History
+// restore, D-15-38: a restored table whose caption is written in several
+// colors shows its rows live, accepted residual OV-357).
+/**
+ * @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context
+ * @param {{ byColor: boolean }} options
+ */
+const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
   if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
   const ruleTypes = new Set(drawn.filter(({ winner }) => legendRuleCaption(winner)).map(({ type }) => type));
+  const ruleRowKey = byColor ? createRuleLegendCaptions(context.colorRules) : legendRuleCaption;
   /** @type {Map<string, string | null>} */
   const keys = new Map();
   const generated = new Set();
   for (const { feature, type, winner } of drawn) {
     const caption = legendRuleCaption(winner);
-    let key = caption || null;
+    /** @type {string | null} */
+    let key = caption ? ruleRowKey(winner) : null;
     if (!caption && !ruleTypes.has(type)) key = type;
     else if (!caption && !winner) key = type === 'CDS' ? 'other proteins' : `other ${type}s`;
     if (key && !caption) generated.add(key);
@@ -832,21 +857,32 @@ const legendRowKeysOf = (catalogFeatures, context) => {
 };
 
 // The row keys of every committed Result, in Result order (an empty map for
-// a Result without a catalog).
-/** @param {{ results?: { value?: unknown } }} state @param {FeatureDrawnContext} context */
-export const resultLegendRowKeys = (state, context) => {
+// a Result without a catalog); `byColor`: as `legendRowKeysOf`.
+/**
+ * @param {{ results?: { value?: unknown } }} state @param {FeatureDrawnContext} context
+ * @param {{ byColor?: boolean }} [options]
+ */
+export const resultLegendRowKeys = (state, context, { byColor = true } = {}) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
     const catalogFeatures = resultCatalogFeatures(state, index);
-    return catalogFeatures ? legendRowKeysOf(catalogFeatures, context) : new Map();
+    return catalogFeatures ? legendRowKeysOf(catalogFeatures, context, { byColor }) : new Map();
   });
 };
 
 // The place of each rule row in Python's Legend: the index of the first rule
-// of its caption in the rule table (prepare_legend_table walks the rules in
-// table order and skips a caption it has drawn); -1 for a row no rule names.
-/** @param {readonly { cap?: unknown }[]} rules @returns {(key: string) => number} */
-export const legendRuleOrder = (rules) => (key) => rules.findIndex((rule) => legendRuleCaption(rule) === key);
+// drawn in the row of the key, by the key the rule table allocates to its
+// rule rows (`legendRowKeysOf`; prepare_legend_table walks the rules in table
+// order and skips a row it has drawn); -1 for a row no rule names.
+// `byColor`: as `legendRowKeysOf`.
+/**
+ * @param {Partial<SpecificColorRule>[]} rules @param {{ byColor?: boolean }} [options]
+ * @returns {(key: string) => number}
+ */
+export const legendRuleOrder = (rules, { byColor = true } = {}) => {
+  const ruleRowKey = byColor ? createRuleLegendCaptions(rules) : legendRuleCaption;
+  return (key) => rules.findIndex((rule) => Boolean(legendRuleCaption(rule)) && ruleRowKey(rule) === key);
+};
 
 // Whether the displayed Result shows the Legend rows a change of the row keys
 // regroups, so Python need not draw them (R14-8). Every drawn feature stays

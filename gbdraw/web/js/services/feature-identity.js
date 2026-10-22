@@ -20,9 +20,10 @@
  */
 /**
  * A record of the committed request, as the pure checks below, the record
- * display and the alignment read it. The committed request can be one of an
- * older schema that a Session keeps until the next Generate, so this is not
- * the generated `CanonicalRecord`.
+ * display and the alignment read it. The committed request is of the current
+ * schema, but the alignment owner's port (`getCommittedSession`) is not yet
+ * typed, so this names only the fields they read rather than the generated
+ * `CanonicalRecord`.
  * @typedef {{
  *   recordKey: string,
  *   cardinality?: string,
@@ -218,25 +219,85 @@ export const identityMatches = (reference, candidate, { includeRendered = false 
   ));
 };
 
+/** @typedef {'recordIndex' | 'sourceIndex' | 'recordKey' | 'biologicalId' | 'stableId' | 'renderedId'} IdentityField */
+
+/**
+ * Index entries by the fields their identities supply, and return a lookup of
+ * the entries a reference identity matches (`identityMatches`, which still owns
+ * the matching rule; the index only narrows the candidates). Entries whose
+ * identity is not usable never match.
+ * @template T
+ * @param {readonly T[]} entries
+ * @param {(entry: T) => FeatureIdentity} identityOf
+ * @param {{ includeRendered?: boolean }} [options]
+ * @returns {(reference: FeatureIdentity) => T[]}
+ */
+export const indexFeatureIdentities = (entries, identityOf, { includeRendered = true } = {}) => {
+  /** @type {IdentityField[]} */
+  const fields = ['recordIndex', 'sourceIndex', 'recordKey', 'biologicalId', 'stableId'];
+  if (includeRendered) fields.push('renderedId');
+  /** @type {Map<IdentityField, Map<string | number | null, T[]>>} */
+  const indexes = new Map(fields.map((field) => [field, new Map()]));
+  for (const entry of entries) {
+    const identity = identityOf(entry);
+    if (!identity.usable) continue;
+    for (const field of fields) {
+      const status = identity[field];
+      if (!status.supplied) continue;
+      // `fields` lists every key of `indexes`, so the lookup always finds a map.
+      const index = /** @type {Map<string | number | null, T[]>} */ (indexes.get(field));
+      const bucket = index.get(status.value);
+      if (bucket) bucket.push(entry);
+      else index.set(status.value, [entry]);
+    }
+  }
+  return (reference) => {
+    if (!reference.usable) return [];
+    let candidates = entries;
+    for (const field of fields) {
+      const status = reference[field];
+      if (!status.supplied) continue;
+      const matches = /** @type {Map<string | number | null, T[]>} */ (indexes.get(field)).get(status.value) || [];
+      if (matches.length < candidates.length) candidates = matches;
+    }
+    return candidates.filter((entry) => identityMatches(reference, identityOf(entry), { includeRendered }));
+  };
+};
+
+/**
+ * The lookup of the one member of `members` that is a feature: both identities
+ * supply the same fields with the same values, the rendered ID included, and no
+ * other member does. The members are indexed once, so a caller that resolves
+ * many features against one group builds the lookup once (OV-914).
+ * @template M
+ * @param {M[] | null | undefined} members
+ * @returns {(feature: AliasSource | null | undefined) => M | null}
+ */
+export const uniqueOrthogroupMemberResolver = (members) => {
+  // A member is a record of alias fields; callers hold it under their own shape.
+  const entries = (Array.isArray(members) ? members : []).map((member) => ({
+    member,
+    identity: featureIdentity(/** @type {AliasSource | null | undefined} */ (member))
+  }));
+  const candidatesFor = indexFeatureIdentities(entries, (entry) => entry.identity);
+  return (feature) => {
+    const reference = renderedFeatureIdentity(feature);
+    if (!reference.usable) return null;
+    const matches = candidatesFor(reference)
+      .filter(({ identity }) => identityMatches(identity, reference, { includeRendered: true }));
+    return matches.length === 1 ? matches[0].member : null;
+  };
+};
+
 /**
  * @template M
  * @param {AliasSource | null | undefined} feature
  * @param {M[] | null | undefined} [members]
  * @returns {M | null}
  */
-export const resolveUniqueOrthogroupMemberForFeature = (feature, members = []) => {
-  const featureIdentityValue = renderedFeatureIdentity(feature);
-  if (!featureIdentityValue.usable) return null;
-  const matches = (Array.isArray(members) ? members : []).filter((member) => {
-    // A member is a record of alias fields; callers hold it under their own shape.
-    const memberIdentityValue = featureIdentity(/** @type {AliasSource | null | undefined} */ (member));
-    return (
-      identityMatches(featureIdentityValue, memberIdentityValue, { includeRendered: true }) &&
-      identityMatches(memberIdentityValue, featureIdentityValue, { includeRendered: true })
-    );
-  });
-  return matches.length === 1 ? matches[0] : null;
-};
+export const resolveUniqueOrthogroupMemberForFeature = (feature, members = []) => (
+  uniqueOrthogroupMemberResolver(members)(feature)
+);
 
 // The committed request record that draws a record key: the record itself, or
 // one record of a source drawn whole (`cardinality: 'all'`, `<recordKey>:<n>`).

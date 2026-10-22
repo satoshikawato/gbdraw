@@ -8,7 +8,7 @@ globalThis.window = { Vue: {
 const { state } = await import('../../gbdraw/web/js/state.js');
 const {
   adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner,
-  getCommittedCanonicalRenderRequest, buildConfigData, applyConfigData
+  getCommittedCanonicalRenderRequest, buildConfigData, applyCapturedConfigData
 } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
@@ -28,7 +28,7 @@ assert.strictEqual(a.committedCanonicalSession.renderRequest, getCommittedCanoni
 state.activeDrawing().form.labels_mode = 'out';
 state.results.value = [{ name: 'a.svg', content: '<svg id="a"/>' }];
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData
+  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
 snapshots.setGeneratedArtifactRuntimeOwner(canonicalRenderArtifactOwner);
 const history = createHistoryManager({

@@ -12,6 +12,7 @@ from typing import Literal, Mapping, TypeAlias, cast
 from pandas import DataFrame
 
 from gbdraw.core.color import HEX_COLOR_DIGITS, normalize_hex_color
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import COLOR_NAMES, resolve_color_to_hex
 from gbdraw.io.record_select import RecordSelector
@@ -20,7 +21,7 @@ from gbdraw.io.record_select import RecordSelector
 def _finite(value: object, name: str, *, positive: bool = False, nonnegative: bool = False) -> float:
     try:
         # TypeError/ValueError from non-numeric input is reported below.
-        number = float(cast("float | str", value))
+        number = ascii_float(cast("float | str", value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{name} must be numeric.") from exc
     if not isfinite(number):
@@ -201,6 +202,7 @@ class RegionAnnotationStyle:
     fill_opacity: float = 0.2
     hatch: HatchStyle | None = None
     label_color: str = "#202020"
+    # None: the font size of the feature labels of the drawing (annotation_label_font_size).
     label_font_size: float | None = None
     label_orientation: Literal["auto", "horizontal", "tangent", "radial", "arc"] = "auto"
     label_position: Literal["center", "start", "end"] = "center"
@@ -360,6 +362,16 @@ class AnnotationTrackParams:
             object.__setattr__(self, name, slot_id)
 
 
+def linear_annotation_labels_above(side: str, params: AnnotationTrackParams) -> bool:
+    """Whether a Linear annotation slot puts its labels above its marks.
+
+    Labels go above a slot on the ``above`` side and above an underlay
+    overlay; every other slot puts them below.
+    """
+
+    return side == "above" or (side == "overlay" and params.layer == "underlay")
+
+
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:
     """Normalize raw TrackSlot params into the typed annotation contract."""
 
@@ -481,6 +493,13 @@ def effective_annotation_style(
     return params.style_override or annotation.style
 
 
+def annotation_label_font_size(style: RegionAnnotationStyle, feature_label_font_size: float) -> float:
+    """A region label's font size: its style's own, else ``feature_label_font_size``, the font size the
+    feature labels of its drawing use."""
+
+    return float(feature_label_font_size if style.label_font_size is None else style.label_font_size)
+
+
 __all__ = [
     "AnnotationOptions",
     "AnnotationSet",
@@ -495,7 +514,9 @@ __all__ = [
     "ResolvedAnnotationBundle",
     "ResolvedRegionAnnotation",
     "ResolutionWarning",
+    "annotation_label_font_size",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
+    "linear_annotation_labels_above",
     "parse_feature_selector",
 ]

@@ -38,6 +38,8 @@ Select exactly one:
   after conclusion. Use `N/A` when not applicable; full tables remain limited
   to `ARCHITECTURE_EXCEPTION`.
 - `architecture-change` label, if relevant:
+- Persisted contract: `N/A`, or the items that "Persisted contract co-change" in
+  `docs/internal/WEB_CHANGE_POLICY.md` lists:
 
 ## Rollback
 

@@ -9,6 +9,38 @@ Its decompressed SHA-256 is
 The schema-v2 fixture is the older supported compatibility case. Its expected
 projection is recorded in the adjacent `.expected.json` file.
 
+`lambda_basic_linear.v31-schema1.gbdraw-session.json.gz` and
+`HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz` are the positive
+fixtures of request schema 1, copied unchanged and compressed with
+`gzip -n -9`. The first is the version 31 Linear Gallery Session from
+first-parent `main` commit `10d3a3d28b3c9faa42db01c8bd0bd36b9be8433c`
+(`gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json`); its
+decompressed SHA-256 is
+`15c8f32338453ede2c11e9976a7d972483483b1e2e85820d13398d3304326596`. The second
+is the version 32 Circular Gallery Session from first-parent `main` commit
+`be13a5c030bbfba9e874cbaf22a74d08015532a9`
+(`gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json`); its
+decompressed SHA-256 is
+`e565f29c358a0c372d967a29a2c58654c87417fa120800a90a05f6e1528b3429`.
+
+`../legacy-render-request-vectors.json` is the shared vector of the Web lift
+of request schemas 1 and 2 and Python's decoder
+(`tests/web/legacy-render-request.test.mjs`,
+`tests/test_legacy_render_request_lift.py`). Its `requests` are every distinct
+request schema 1 and 2 `renderRequest` stored in a Gallery Session of
+first-parent `main` history (23 requests in 47 Session blobs, from `10d3a3d2`
+to the last schema-2 writer before `17e2c9de`), as stored, each with the
+commit, path, blob and Session version of every place that holds it; the four
+committed (33, 2) fixtures are listed by reference (`fixtureReferences`). Its
+`cases` are forms the corpus does not hold, written by hand: a corpus request
+with edits, what the lift writes and lists, and whether Python decodes both
+alike, the finding of a deliberate difference, or that Python refuses both;
+a case may instead expect the lift to refuse a form no writer stored (a
+field of a later schema, or an output without `outputPrefix`). Its SHA-256 is
+`e0aa2c6e0fa29580418b1e94e8f74ed96aa03e77fb94664e1c5956143cc38c18`.
+`legacy-request-load.expected.json` records what the Web Load and Save Session
+do with the six full legacy fixtures (`tests/web/legacy-request-sessions.test.mjs`).
+
 `HmmtDNA_basic_circular.issue-469.json.gz` preserves the unmodified JSON from
 `0f00436da728402d06d4a8fdce80cff63b552488:gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json`.
 Its decompressed SHA-256 is
@@ -110,6 +142,20 @@ feature with `_record_2`. It is the positive fixture for the reader that names
 such `hash` rules by source hash. The steps, inputs, and hashes are in
 `hash-color-rule-linear-rc.provenance.json`.
 
+`mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz` and
+`mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz` are Web
+**Save Session** downloads from release tag `0.13.0` (Session 30), compressed
+with `gzip -n -9`. Each was saved after Generate and a switch to the other
+mode, so its Result is of one mode while `ui.mode` names the other; the
+Result's mode is in `cliInvocation.mode` (0.13.0 writes no
+`ui.generatedMode`). Release tag `0.12.0` (Session 29) writes the same
+field (`gbdraw/web/js/services/config.js:1935` and
+`gbdraw/web/js/app/run-info.js:151` at that tag). Both releases write it only
+for a Generate whose file bindings the CLI can replay, so a Session saved
+after, for example, a Linear LOSAT run has none. They are the positive
+fixtures for the reader of a Session 27–30 Result's mode (OV-677). The steps,
+inputs, and hashes are in `mode-switch.provenance.json`.
+
 `lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
 `HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz` preserve the released
 version 44, request schema 8, feature catalog schema 4 Gallery Sessions from
@@ -182,6 +228,15 @@ became the file name without the extension (D-03,
 `test_losat_circular_rings.py`). The commands and hashes are in
 `precomputed-ring.provenance.json`.
 
+`legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz` and
+`legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz` are Linear and
+Circular CLI Sessions written by release tag `0.13.0` with `--label_font_size 0`
+(and, Circular, `--legend_font_size 0`) in `cliInvocation`. That writer drew
+them. They are the positive fixtures for the legacy replay, which reads a
+stored font size of 0 or less as Auto with the Web's notice (OV-1282, D-PYB-7,
+`test_stored_font_size.py`). The commands and hashes are in
+`legacy-font-size.provenance.json`.
+
 `cli-linear-tables.v40-early.gbdraw-session.json.gz`,
 `cli-linear-tables.v40.gbdraw-session.json.gz`,
 `cli-linear-tables.v41.gbdraw-session.json.gz`,
@@ -235,3 +290,54 @@ config overrides name `objects.text.font_family`, and the Web app of the same
 commit loaded it and saved it again, keeping that path as a preserved override
 in its draft. `font-family-preserved.provenance.json` records the writers and
 the decompressed SHA-256 values.
+
+`BGC0000708-BGC0000713.v29.gbdraw-session.json.gz` is the unchanged Session
+`tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json` of first-parent
+`main` commit `10d3a3d28`, the only tracked version 29 Session of a size for a
+fixture, compressed with `gzip -n -9`. It is the version 29 base of the
+admission description's soundness test (`tests/test_session_contract.py`). Its
+decompressed SHA-256 is
+`71b923ce1a2b8fb587ed394e51571e5b15f289df58574fbc84734a1b2042b220`.
+
+`BGC0000708-BGC0000713.v47.gbdraw-session.json.gz` is the Gallery Session of
+first-parent `main` commit `150d26706` (bytes unchanged, `gzip -n -9`; see its
+`.provenance.json`). Its record 5 is reverse complemented, and Session 47
+stored that record's LOSATP table (`comparison-canonical-protein-4`) and its
+`orthogroupResult` members in the drawn frame.
+`majanivirus_collinear-rc.v47.gbdraw-session.json.gz` holds two records of the
+majanivirus Gallery Session, the second reverse complemented, with the
+`collinearityResult` that `main`'s Web converter (the Python of
+`python-helpers.js` at `150d26706`, run natively) computes from that pair's raw
+LOSATP entries, stored as `main`'s Web Session writer lays it out;
+`tools/build_main_collinear_v47_fixture.py` rebuilds it from a worktree at
+`150d26706` (command in its `.provenance.json`). Both are the positive fixtures of the
+Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.py`
+replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
+`e8b460772` drew (equal to `main`'s replay); the BGC replay was redrawn after the
+Linear label packing changed its record rows and again after the label boxes
+added white boxes to its turned labels, whose text is unchanged, once more for float last bits when one
+owner placed the Linear records, and when `above_feature` labels kept their row gap
+(`.v47.provenance.json`), and `tests/test_api_session.py`
+upgrades and re-saves the BGC Session.
+
+`BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
+`BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz` hold the first two
+records of the BGC Gallery Session, the second reverse complemented, with the
+pairwise LOSATP table that `main`'s Web writer computes from that pair's raw
+LOSATP entry (the Python of `python-helpers.js` and the JavaScript of
+`session-request.js` `addCanonicalTable` at `cdd310134` (Session 39) and
+`7aad9e3e0` (Session 40 before `3bca0e8d9`), run natively), stored as
+`comparison-resolved-1`, with the Result of `main`'s CLI replay.
+`tools/build_main_pairwise_rc_fixture.py` rebuilds each byte for byte (command
+in its `.provenance.json`). The table names the reversed record's drawn-frame
+features in `*_feature_svg_id` and has no `*_view_feature_svg_id` column; both
+are the positive fixtures of that reading (OV-1183) and of the Session 39 Web
+Load conversion (OV-1181): `tests/test_session_compat.py` converts and replays
+them.
+
+`file-card-imports-circular.v48.gbdraw-session.json.gz` is a Web **Save
+Session** download of the current writer (Session 48, OV-1280, D-ORIGIN-2):
+Circular holds no genome, the five file cards, and hand edits made before and
+after each load. It pins the rows each card marks, the Default colors and
+Blacklist words in `config.fileImports`, and the rows a hand edit made the
+user's. The steps and inputs are in `file-card-imports.provenance.json`.

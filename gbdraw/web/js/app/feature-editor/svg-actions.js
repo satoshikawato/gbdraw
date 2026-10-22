@@ -1,11 +1,12 @@
 // @ts-check
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
-/** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
-/** @import { AliasSource } from '../../services/feature-identity.js' */
+/** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
+/** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
+/** @import { PopupRow } from '../pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
-import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
+import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -25,10 +26,14 @@ import { featureIdentityKeyOf, featureOverrideValue } from '../../services/featu
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
 import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
+import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
+  ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR
+} from '../../services/drawn-groups.js';
+import {
   featureIdentity,
-  identityMatches,
+  indexFeatureIdentities,
   renderedFeatureIdentity
 } from '../../services/feature-identity.js';
 import {
@@ -42,6 +47,13 @@ import {
   getFeatureIdentity,
   normalizeFeatureIdentity
 } from '../../services/feature-dom.js';
+import { t } from '../../utils/i18n.js';
+
+// The hover highlight of a feature or band is written once the pointer has
+// rested on it this long (OV-900, D-01): a pointer passing over bands writes
+// none, so the browser re-rasters no band area. It comes before the hover
+// summary (180 ms).
+export const HOVER_HIGHLIGHT_DWELL_MS = 70;
 
 export {
   FEATURE_ID_ATTRIBUTE,
@@ -70,7 +82,7 @@ export {
 
 /**
  * The hover summary of a pairwise match, as the match popup builds it.
- * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: Array<{ label: string, value: string }> }} MatchHoverSummary
+ * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: PopupRow[] }} MatchHoverSummary
  */
 
 /**
@@ -108,6 +120,13 @@ export {
  */
 
 /**
+ * The pane's way to show the settings section of a drawn element beside the
+ * clicked point: in a popup placed inside `bounds`, beside `anchor` and clear
+ * of the clicked item when there is room. Returns whether the section is shown.
+ * @typedef {(section: import('../../services/settings-sections.js').DrawnElementSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowElementSettings
+ */
+
+/**
  * @typedef {object} FeatureSvgActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
@@ -121,17 +140,45 @@ export {
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
+ * @property {ShowElementSettings} [showElementSettings]
+ * @property {() => unknown} [closeElementSettings] The pane's closing of the popup that holds a settings section.
  */
 
 /**
- * The state of the feature and match hover summary. The tooltip element is
- * created on the first hover; `lastEvent` holds the last pointer position seen.
+ * One row of the hover summary: its label and value text nodes.
+ * @typedef {{ row: HTMLElement, label: Text, valueElement: HTMLElement, value: Text }} HoverSummaryRowView
+ */
+
+/**
+ * The hover summary's DOM, built once (OV-933): a show rewrites its text nodes,
+ * the swatch colour and which rows are shown, so it adds or removes no node and
+ * changes a class only when a row's clamping changes. The vendored Tailwind
+ * runtime rescans every class on a node or class change.
+ * @typedef {object} HoverSummaryView
+ * @property {HTMLElement} element
+ * @property {HTMLElement} swatch
+ * @property {Text} heading
+ * @property {Text} subtitle
+ * @property {HoverSummaryRowView[]} rows
+ */
+
+/**
+ * What one hover summary shows: a feature's or a match's.
+ * @typedef {object} HoverSummaryContent
+ * @property {string} color
+ * @property {string} heading
+ * @property {string} subtitle
+ * @property {Array<{ label: string, value: unknown, clamp: boolean }>} rows
+ */
+
+/**
+ * The state of the feature and match hover summary. The tooltip is built on the
+ * first show; `lastEvent` holds the last pointer position seen.
  * @typedef {object} HoverSummaryState
- * @property {HTMLElement | null} element
+ * @property {HoverSummaryView | null} view
  * @property {number | null} timer
  * @property {number | null} frame
  * @property {boolean} visible
- * @property {string} activeSvgId
  * @property {{ clientX?: number, clientY?: number } | null} lastEvent
  */
 
@@ -174,13 +221,19 @@ export {
  * @property {Map<string, Element[]> | null} comparisonElementsByOrthogroupId
  * @property {Map<string, Element[]> | null} comparisonElementsByCollinearityBlockId
  * @property {Map<string, Element[]> | null} comparisonElementsByMatchId
+ * @property {((reference: FeatureIdentity) => RenderedIdentityEntry[]) | null} renderedFeatureIdentities
+ * @property {Set<Element>} selectedMatchElements The match elements marked as the open match popup's.
  * @property {boolean} pairwiseAffordancesPrepared
  * @property {string | null} activeHoverSvgId
  * @property {string} activeHoverKey
  * @property {Element | null} activeMatchHoverElement
  * @property {string} activeMatchHoverKey
  * @property {Element | null} pendingMatchElement
+ * @property {{ clientX: number, clientY: number } | null} pressPoint Where the last press on the Result began.
  * @property {Set<Element>} activeHoverElements
+ * @property {string} hoverHighlightKey The hover whose highlight is written ('' for none).
+ * @property {string} pendingHoverHighlightKey The hover whose highlight waits for the dwell.
+ * @property {number | null} hoverHighlightTimer
  * @property {{ clientX: number, clientY: number } | null} transformPointer
  * @property {boolean} reconcileHoverAfterTransform
  * @property {number | null} hoverReconcileFrame
@@ -194,7 +247,15 @@ export {
  * @property {((options?: { restore?: boolean }) => void) | null} clearAlignmentCandidatePreview
  * @property {((eventLike: any, kind?: string) => void) | null} beginPreviewTransformInteraction
  * @property {((options?: { reconcile?: boolean }) => void) | null} endPreviewTransformInteraction
+ * @property {((match: SelectedPairwiseMatch | null) => void) | null} markSelectedMatch
  * @property {(() => void) | null} cleanup
+ */
+
+/** @typedef {{ svgId: string, identity: FeatureIdentity }} RenderedIdentityEntry */
+
+/**
+ * The open match popup's payload, as far as it names the bands it shows.
+ * @typedef {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown }} SelectedPairwiseMatch
  */
 
 /** @param {FeatureSvgActionsOptions} options */
@@ -209,7 +270,9 @@ export const createFeatureSvgActions = ({
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
   previewTransformInteraction = null,
-  previewPopupsHeld = () => false
+  previewPopupsHeld = () => false,
+  showElementSettings = () => false,
+  closeElementSettings = () => {}
 }) => {
   const {
     orthogroups,
@@ -233,13 +296,15 @@ export const createFeatureSvgActions = ({
   );
   /** @type {HoverSummaryState} */
   const hoverSummaryState = {
-    element: null,
+    view: null,
     timer: null,
     frame: null,
     visible: false,
-    activeSvgId: '',
     lastEvent: null
   };
+  // The fine-pointer query, asked once; its `matches` follows the device (OV-938).
+  /** @type {MediaQueryList | null | undefined} */
+  let finePointerQuery;
 
   /** @param {unknown} value */
   const getOrthogroupIds = (value) =>
@@ -265,6 +330,17 @@ export const createFeatureSvgActions = ({
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'suppress') return 'exclude_matching';
     return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
+  };
+
+  // The Result shows one popup: the feature popup, the match frame (a match, a
+  // Legend row, a record definition), or the settings section of a drawn
+  // element. Opening one closes the others.
+  /** @param {'feature' | 'match' | 'settings'} opening */
+  const closeOtherPopups = (opening) => {
+    hideHoverSummary();
+    if (opening !== 'feature') clickedFeature.value = null;
+    if (opening !== 'match' && clickedPairwiseMatch) clickedPairwiseMatch.value = null;
+    if (opening !== 'settings') closeElementSettings();
   };
 
   // OV-371: a popup opened at a clicked point is placed beside it with an
@@ -324,26 +400,20 @@ export const createFeatureSvgActions = ({
     ''
   );
 
-  /** @param {string} tagName @param {string} [className] @param {string} [text] */
-  const createHoverSummaryElement = (tagName, className = '', text = '') => {
+  /** @param {string} tagName @param {string} [className] */
+  const createHoverSummaryElement = (tagName, className = '') => {
     const element = document.createElement(tagName);
     if (className) element.className = className;
-    if (text !== '') element.textContent = text;
     return element;
   };
 
-  /** @param {Element} container @param {string} label @param {unknown} value @param {{ clamp?: boolean }} [options] */
-  const addHoverSummaryRow = (container, label, value, { clamp = false } = {}) => {
-    const normalizedValue = String(value === null || value === undefined ? '' : value).trim();
-    if (!normalizedValue) return;
-    const row = createHoverSummaryElement('div', 'feature-hover-summary-row');
-    row.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-label', label));
-    row.appendChild(createHoverSummaryElement(
-      'div',
-      `feature-hover-summary-value${clamp ? ' is-clamped' : ''}`,
-      normalizedValue
-    ));
-    container.appendChild(row);
+  /** @param {HTMLElement} parent @param {string} className */
+  const appendHoverSummaryText = (parent, className) => {
+    const element = createHoverSummaryElement('div', className);
+    const text = document.createTextNode('');
+    element.appendChild(text);
+    parent.appendChild(element);
+    return { element, text };
   };
 
   /** @param {FeatureLike} feat @param {string} primaryLabel */
@@ -358,15 +428,15 @@ export const createFeatureSvgActions = ({
     /** @type {Array<[string, unknown, boolean?]>} */
     const rows = [];
 
-    if (gene && gene !== primaryLabel) rows.push(['Gene', gene]);
-    if (locusTag && locusTag !== primaryLabel) rows.push(['Locus', locusTag]);
-    if (product && product !== primaryLabel) rows.push(['Product', product, true]);
-    if (note && note !== primaryLabel && note !== product) rows.push(['Note', note, true]);
-    rows.push(['Length', formatFeatureLength(feat)]);
-    rows.push(['Location', locationText]);
-    rows.push(['Record', feat?.record_id || '']);
-    if (feat?.orthogroupId) rows.push(['Similarity group', feat.orthogroupId]);
-    if (legendName && legendName !== primaryLabel) rows.push(['Legend', legendName]);
+    if (gene && gene !== primaryLabel) rows.push([t('Gene'), gene]);
+    if (locusTag && locusTag !== primaryLabel) rows.push([t('Locus'), locusTag]);
+    if (product && product !== primaryLabel) rows.push([t('Product'), product, true]);
+    if (note && note !== primaryLabel && note !== product) rows.push([t('Note'), note, true]);
+    rows.push([t('Length'), formatFeatureLength(feat)]);
+    rows.push([t('Location'), locationText]);
+    rows.push([t('Record'), feat?.record_id || '']);
+    if (feat?.orthogroupId) rows.push([t('Similarity group'), feat.orthogroupId]);
+    if (legendName && legendName !== primaryLabel) rows.push([t('Legend'), legendName]);
     return rows;
   };
 
@@ -375,9 +445,9 @@ export const createFeatureSvgActions = ({
   // Similarity group section its group.
   /** @param {FeatureLike} feat */
   const buildDetailRows = (feat) => [
-    { key: 'type', label: 'Feature type', value: feat.type },
-    { key: 'length', label: 'Length', value: formatFeatureLength(feat) },
-    { key: 'protein_id', label: 'Protein ID', value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
+    { key: 'type', label: t('Feature type'), value: feat.type },
+    { key: 'length', label: t('Length'), value: formatFeatureLength(feat) },
+    { key: 'protein_id', label: t('Protein ID'), value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
   ]
     .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
     .filter((row) => row.value !== '');
@@ -403,6 +473,20 @@ export const createFeatureSvgActions = ({
     const featureEl = target.closest(FEATURE_SELECTOR);
     if (!featureEl || !svg.contains(featureEl)) return null;
     return featureEl;
+  };
+
+  /**
+   * The annotation a click on `target` selects. A region label drawn in front of the leader lines
+   * (LP-D82) is outside its annotation's group and names that group by id.
+   * @param {MaybeElementTarget | null | undefined} target @param {Element} svg
+   */
+  const getAnnotationTarget = (target, svg) => {
+    if (!target || typeof target.closest !== 'function') return null;
+    const front = target.closest(REGION_LABEL_FRONT_SELECTOR)?.getAttribute(REGION_LABEL_FOR_ATTRIBUTE);
+    const annotationEl = front
+      ? svg.querySelector(`[id="${CSS.escape(front)}"]${ANNOTATION_SELECTOR}`)
+      : target.closest(ANNOTATION_SELECTOR);
+    return annotationEl && svg.contains(annotationEl) ? annotationEl : null;
   };
 
   /** @param {MaybeElementTarget | null | undefined} target @param {Element} svg */
@@ -550,7 +634,7 @@ export const createFeatureSvgActions = ({
       orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
       orthogroupMember: feat.orthogroupMember || null,
       hasEditableLabel: false,
-      labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
+      labelUnavailableReason: t('No editable feature label for this feature in current diagram.')
     };
   };
 
@@ -585,8 +669,7 @@ export const createFeatureSvgActions = ({
     const featureElements = renderedSvgId ? getFeatureElements(svg, renderedSvgId) : [];
     if (renderedSvgId && featureElements.length === 0) return null;
 
-    hideHoverSummary();
-    if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
+    closeOtherPopups('feature');
     const featureElement = renderedSvgId
       ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
       : null;
@@ -639,24 +722,45 @@ export const createFeatureSvgActions = ({
     if (clickedFeature.value) return false;
     if (clickedPairwiseMatch?.value) return false;
     if (isPreviewTransformInteractionActive()) return false;
-    if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    if (finePointerQuery === undefined) {
+      finePointerQuery = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
+    }
+    if (finePointerQuery && !finePointerQuery.matches) {
       return false;
     }
     return true;
   };
 
-  const ensureHoverSummaryElement = () => {
-    if (hoverSummaryState.element?.isConnected) return hoverSummaryState.element;
+  /** @returns {HoverSummaryView} */
+  const ensureHoverSummaryView = () => {
+    if (hoverSummaryState.view?.element.isConnected) return hoverSummaryState.view;
     const element = createHoverSummaryElement('div', 'feature-hover-summary');
     element.hidden = true;
     element.setAttribute('role', 'tooltip');
+    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
+    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
+    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
+    const heading = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-heading').text;
+    const subtitle = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-subtitle').text;
+    title.appendChild(swatch);
+    title.appendChild(titleTextWrap);
+    element.appendChild(title);
     document.body.appendChild(element);
-    hoverSummaryState.element = element;
-    return element;
+    hoverSummaryState.view = { element, swatch, heading, subtitle, rows: [] };
+    return hoverSummaryState.view;
+  };
+
+  /** @param {HTMLElement} container @returns {HoverSummaryRowView} */
+  const appendHoverSummaryRow = (container) => {
+    const row = createHoverSummaryElement('div', 'feature-hover-summary-row');
+    const label = appendHoverSummaryText(row, 'feature-hover-summary-label').text;
+    const { element: valueElement, text: value } = appendHoverSummaryText(row, 'feature-hover-summary-value');
+    container.appendChild(row);
+    return { row, label, valueElement, value };
   };
 
   const positionHoverSummary = (eventLike = hoverSummaryState.lastEvent) => {
-    const element = hoverSummaryState.element;
+    const element = hoverSummaryState.view?.element;
     if (!element || element.hidden || !eventLike) return;
     const margin = 12;
     const offset = 14;
@@ -689,110 +793,82 @@ export const createFeatureSvgActions = ({
     });
   };
 
-  /** @param {FeatureLike | null | undefined} feat @param {Element | null | undefined} featureElement @param {HoverPoint | null | undefined} eventLike */
-  const renderHoverSummary = (feat, featureElement, eventLike) => {
-    if (!feat || !hoverSummaryIsAllowed()) {
-      hideHoverSummary();
-      return;
-    }
-    const element = ensureHoverSummaryElement();
+  /**
+   * @param {FeatureLike} feat
+   * @param {Element | null | undefined} featureElement
+   * @returns {HoverSummaryContent}
+   */
+  const featureHoverContent = (feat, featureElement) => {
     const primaryLabel = getHoverSummaryPrimaryLabel(feat);
     const featureType = String(feat?.type || 'Feature').trim() || 'Feature';
-    const titleText = primaryLabel ? `${featureType}: ${primaryLabel}` : featureType;
-    const locationText = formatFeatureLocation(feat);
-    const color = resolveColorToHex(
-      featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
-    ) || '#94a3b8';
-
-    element.replaceChildren();
-    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
-    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
-    swatch.style.backgroundColor = color;
-    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', titleText));
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', locationText));
-    title.appendChild(swatch);
-    title.appendChild(titleTextWrap);
-    element.appendChild(title);
-
-    buildHoverSummaryRows(feat, primaryLabel).forEach(([label, value, clamp]) => {
-      addHoverSummaryRow(element, label, value, { clamp: Boolean(clamp) });
-    });
-
-    element.hidden = false;
-    hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = renderedFeatureSvgId(feat);
-    scheduleHoverSummaryPosition(eventLike);
-    positionHoverSummary(eventLike);
-  };
-
-  /** @param {FeatureLike | null | undefined} feat @param {Element | null | undefined} featureElement @param {HoverPoint | null | undefined} eventLike */
-  const scheduleHoverSummary = (feat, featureElement, eventLike) => {
-    if (hoverSummaryState.timer) {
-      window.clearTimeout(hoverSummaryState.timer);
-      hoverSummaryState.timer = null;
-    }
-    if (!feat || !hoverSummaryIsAllowed()) {
-      hideHoverSummary();
-      return;
-    }
-    scheduleHoverSummaryPosition(eventLike);
-    const show = () => {
-      hoverSummaryState.timer = null;
-      renderHoverSummary(feat, featureElement, eventLike);
+    return {
+      color: resolveColorToHex(
+        featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
+      ) || '#94a3b8',
+      heading: primaryLabel ? `${featureType}: ${primaryLabel}` : featureType,
+      subtitle: formatFeatureLocation(feat),
+      rows: buildHoverSummaryRows(feat, primaryLabel)
+        .map(([label, value, clamp]) => ({ label, value, clamp: Boolean(clamp) }))
     };
-    if (hoverSummaryState.visible) {
-      show();
-      return;
-    }
-    hoverSummaryState.timer = window.setTimeout(show, 180);
   };
 
-  /** @param {MatchHoverSummary | null} summary @param {HoverPoint | null | undefined} eventLike */
-  const renderMatchHoverSummary = (summary, eventLike) => {
-    if (!summary || !hoverSummaryIsAllowed()) {
+  /**
+   * @param {MatchHoverSummary | null} summary
+   * @returns {HoverSummaryContent | null}
+   */
+  const matchHoverContent = (summary) => summary && {
+    color: resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8',
+    heading: summary.title,
+    subtitle: summary.subtitle || summary.id || '',
+    rows: summary.rows.map((row) => ({ ...row, clamp: row.id === 'Query' || row.id === 'Subject' }))
+  };
+
+  // The rows without a value are not shown; the view keeps its other rows
+  // empty and hidden.
+  /** @param {HoverSummaryContent | null} content @param {HoverPoint | null | undefined} eventLike */
+  const renderHoverSummary = (content, eventLike) => {
+    if (!content || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
-    const element = ensureHoverSummaryElement();
-    const color = resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8';
-
-    element.replaceChildren();
-    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
-    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
-    swatch.style.backgroundColor = color;
-    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', summary.title));
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', summary.subtitle || summary.id || ''));
-    title.appendChild(swatch);
-    title.appendChild(titleTextWrap);
-    element.appendChild(title);
-
-    summary.rows.forEach((row) => {
-      addHoverSummaryRow(element, row.label, row.value, { clamp: row.label === 'Query' || row.label === 'Subject' });
+    const view = ensureHoverSummaryView();
+    view.swatch.style.backgroundColor = content.color;
+    view.heading.data = content.heading;
+    view.subtitle.data = content.subtitle;
+    const rows = content.rows
+      .map((row) => ({ ...row, value: String(row.value === null || row.value === undefined ? '' : row.value).trim() }))
+      .filter((row) => row.value);
+    while (view.rows.length < rows.length) view.rows.push(appendHoverSummaryRow(view.element));
+    view.rows.forEach((rowView, index) => {
+      const row = rows[index];
+      rowView.row.style.display = row ? '' : 'none';
+      rowView.label.data = row?.label || '';
+      rowView.value.data = row?.value || '';
+      if (row) rowView.valueElement.classList.toggle('is-clamped', row.clamp);
     });
-
-    element.hidden = false;
+    view.element.hidden = false;
     hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = String(summary.id || '').trim();
+    // Placed in the next frame, before it paints (OV-938): measuring here would
+    // force a style pass right after the highlight writes.
     scheduleHoverSummaryPosition(eventLike);
-    positionHoverSummary(eventLike);
   };
 
-  /** @param {MatchHoverSummary | null} summary @param {HoverPoint | null | undefined} eventLike */
-  const scheduleMatchHoverSummary = (summary, eventLike) => {
+  // The summary is built when it shows, 180 ms after the pointer rests or at
+  // once while one is shown, not on every pointer entry (OV-915).
+  /** @param {(() => HoverSummaryContent | null) | null} buildContent @param {HoverPoint | null | undefined} eventLike */
+  const scheduleHoverSummary = (buildContent, eventLike) => {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
       hoverSummaryState.timer = null;
     }
-    if (!summary || !hoverSummaryIsAllowed()) {
+    if (!buildContent || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
     scheduleHoverSummaryPosition(eventLike);
     const show = () => {
       hoverSummaryState.timer = null;
-      renderMatchHoverSummary(summary, eventLike);
+      renderHoverSummary(buildContent(), eventLike);
     };
     if (hoverSummaryState.visible) {
       show();
@@ -810,11 +886,10 @@ export const createFeatureSvgActions = ({
       window.cancelAnimationFrame(hoverSummaryState.frame);
       hoverSummaryState.frame = null;
     }
-    if (hoverSummaryState.element) {
-      hoverSummaryState.element.hidden = true;
+    if (hoverSummaryState.view) {
+      hoverSummaryState.view.element.hidden = true;
     }
     hoverSummaryState.visible = false;
-    hoverSummaryState.activeSvgId = '';
     hoverSummaryState.lastEvent = null;
   }
 
@@ -849,8 +924,7 @@ export const createFeatureSvgActions = ({
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
     const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
-    hideHoverSummary();
-    clickedFeature.value = null;
+    closeOtherPopups('match');
     clickedPairwiseMatch.value = payload;
     placePopupAt(clickedPairwiseMatchPos, eventLike, 460);
     return payload;
@@ -875,8 +949,7 @@ export const createFeatureSvgActions = ({
     const anchor = Number.isFinite(eventLike?.clientX)
       ? eventLike
       : { clientX: rect.left + rect.width / 2, clientY: rect.bottom };
-    hideHoverSummary();
-    clickedFeature.value = null;
+    closeOtherPopups('match');
     // A Legend row's feature count reads the rule matches: the popup opens at
     // once and counts when they are prepared.
     const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
@@ -937,13 +1010,19 @@ export const createFeatureSvgActions = ({
       comparisonElementsByOrthogroupId: null,
       comparisonElementsByCollinearityBlockId: null,
       comparisonElementsByMatchId: null,
+      renderedFeatureIdentities: null,
+      selectedMatchElements: new Set(),
       pairwiseAffordancesPrepared: false,
       activeHoverSvgId: null,
       activeHoverKey: '',
       activeMatchHoverElement: null,
       activeMatchHoverKey: '',
       pendingMatchElement: null,
+      pressPoint: null,
       activeHoverElements: new Set(),
+      hoverHighlightKey: '',
+      pendingHoverHighlightKey: '',
+      hoverHighlightTimer: null,
       transformPointer: null,
       reconcileHoverAfterTransform: false,
       hoverReconcileFrame: null,
@@ -957,6 +1036,7 @@ export const createFeatureSvgActions = ({
       clearAlignmentCandidatePreview: null,
       beginPreviewTransformInteraction: null,
       endPreviewTransformInteraction: null,
+      markSelectedMatch: null,
       cleanup: null
     };
 
@@ -1091,6 +1171,16 @@ export const createFeatureSvgActions = ({
       /** @param {Element | null | undefined} element @param {string} name */
       const matchAttr = (element, name) => String(element?.getAttribute?.(name) || '').trim();
 
+      // A similarity-group ribbon, as opposed to a pairwise match or a collinear
+      // block that names groups.
+      /** @param {Element} element */
+      const isOrthogroupRibbon = (element) => {
+        const kind = matchAttr(element, 'data-match-kind').toLowerCase();
+        return kind === 'orthogroup' || (
+          !kind && !element.hasAttribute('data-collinearity-block-id') && Boolean(matchAttr(element, 'data-orthogroup-id'))
+        );
+      };
+
       /** @param {Element | null | undefined} matchElement */
       const getMatchHoverKey = (matchElement) => {
         const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
@@ -1129,65 +1219,125 @@ export const createFeatureSvgActions = ({
         });
       };
 
-      const clearActiveFeatureHover = () => {
-        if (!handlerState.activeHoverSvgId) return;
+      // The hover highlight (OV-900): one hover's styles are written at a time,
+      // once the pointer has rested on it for HOVER_HIGHLIGHT_DWELL_MS. Until
+      // then the written highlight stays, so a move from one target straight
+      // to the next swaps the two in one step and never shows neither.
+      const cancelPendingHoverHighlight = () => {
+        if (handlerState.hoverHighlightTimer !== null) window.clearTimeout(handlerState.hoverHighlightTimer);
+        handlerState.hoverHighlightTimer = null;
+        handlerState.pendingHoverHighlightKey = '';
+      };
+
+      /** @param {string} key @param {() => void} write */
+      const showHoverHighlight = (key, write) => {
+        cancelPendingHoverHighlight();
+        if (handlerState.hoverHighlightKey) clearTrackedHoverStyles();
+        write();
+        handlerState.hoverHighlightKey = key;
+      };
+
+      /** @param {string} key @param {() => void} write */
+      const requestHoverHighlight = (key, write) => {
+        if (key === handlerState.pendingHoverHighlightKey) return;
+        cancelPendingHoverHighlight();
+        if (key === handlerState.hoverHighlightKey) return;
+        handlerState.pendingHoverHighlightKey = key;
+        handlerState.hoverHighlightTimer = window.setTimeout(() => {
+          handlerState.hoverHighlightTimer = null;
+          showHoverHighlight(key, write);
+        }, HOVER_HIGHLIGHT_DWELL_MS);
+      };
+
+      const clearHoverHighlight = () => {
+        cancelPendingHoverHighlight();
         clearTrackedHoverStyles();
+        handlerState.hoverHighlightKey = '';
+      };
+
+      // The hovered target, for the summary, the overlay, and the restore after
+      // a Review alignment preview; the highlight follows it after the dwell.
+      const forgetFeatureHover = () => {
         handlerState.activeHoverSvgId = null;
         handlerState.activeHoverKey = '';
       };
 
-      const clearActiveMatchHover = () => {
-        if (!handlerState.activeMatchHoverElement) return;
-        clearTrackedHoverStyles();
+      const forgetMatchHover = () => {
         handlerState.activeMatchHoverElement = null;
         handlerState.activeMatchHoverKey = '';
       };
 
+      const clearHover = () => {
+        clearHoverHighlight();
+        forgetFeatureHover();
+        forgetMatchHover();
+      };
+
+      /** @param {string} svgId */
+      const featureHighlightKey = (svgId) => `feature|${getFeatureHoverKey(svgId)}`;
+      /** @param {Element} matchElement */
+      const matchHighlightKey = (matchElement) => `match|${getMatchHoverKey(matchElement)}`;
+
       const clearAlignmentCandidatePreview = ({ restore = true } = {}) => {
         if (!handlerState.alignmentCandidateSvgId && !handlerState.alignmentCandidateRestore) return;
-        clearTrackedHoverStyles();
+        clearHoverHighlight();
         handlerState.alignmentCandidateSvgId = '';
         handlerState.alignmentOverlay?.setHover(null);
         const previous = handlerState.alignmentCandidateRestore;
         handlerState.alignmentCandidateRestore = null;
         if (!restore || !previous) return;
-        if (previous.featureSvgId && ensureFeatureLookup().has(previous.featureSvgId)) {
-          setHoverHighlight(previous.featureSvgId);
-          handlerState.activeHoverSvgId = previous.featureSvgId;
-          handlerState.activeHoverKey = getFeatureHoverKey(previous.featureSvgId);
+        // The hover under the pointer comes back at once: the pointer has rested there.
+        const featureSvgId = previous.featureSvgId;
+        if (featureSvgId && ensureFeatureLookup().has(featureSvgId)) {
+          showHoverHighlight(featureHighlightKey(featureSvgId), () => setHoverHighlight(featureSvgId));
+          handlerState.activeHoverSvgId = featureSvgId;
+          handlerState.activeHoverKey = getFeatureHoverKey(featureSvgId);
           return;
         }
-        if (previous.matchElement?.isConnected) {
-          setMatchHover(previous.matchElement);
-          handlerState.activeMatchHoverElement = previous.matchElement;
-          handlerState.activeMatchHoverKey = getMatchHoverKey(previous.matchElement);
+        const matchElement = previous.matchElement;
+        if (matchElement?.isConnected) {
+          showHoverHighlight(matchHighlightKey(matchElement), () => setMatchHover(matchElement));
+          handlerState.activeMatchHoverElement = matchElement;
+          handlerState.activeMatchHoverKey = getMatchHoverKey(matchElement);
         }
+      };
+
+      // The rendered features by identity, indexed once per mounted root: the
+      // Review alignment asks for one feature per candidate (OV-935).
+      const ensureRenderedFeatureIdentities = () => {
+        if (!handlerState.renderedFeatureIdentities) {
+          /** @type {RenderedIdentityEntry[]} */
+          const entries = Array.from(ensureFeatureLookup(), ([svgId, feature]) => ({
+            svgId, identity: renderedFeatureIdentity(feature)
+          }));
+          handlerState.renderedFeatureIdentities = indexFeatureIdentities(
+            entries, (entry) => entry.identity, { includeRendered: false }
+          );
+        }
+        return handlerState.renderedFeatureIdentities;
+      };
+
+      // The rendered feature an anchor names, when exactly one is.
+      /** @param {AliasSource} anchor */
+      const uniqueRenderedSvgId = (anchor) => {
+        const requested = featureIdentity(anchor);
+        if (!requested.usable) return '';
+        const matches = ensureRenderedFeatureIdentities()(requested);
+        return matches.length === 1 ? matches[0].svgId : '';
       };
 
       /** @param {AliasSource} anchor */
       const previewAlignmentCandidate = (anchor) => {
-        const requested = featureIdentity(anchor);
-        if (!requested.usable) return false;
-        const matches = Array.from(ensureFeatureLookup().entries())
-          .filter(([, feature]) => {
-            const candidate = renderedFeatureIdentity(feature);
-            return candidate.usable
-              && identityMatches(requested, candidate);
-          });
-        if (matches.length !== 1) return false;
+        const svgId = uniqueRenderedSvgId(anchor);
+        if (!svgId) return false;
         const restore = handlerState.alignmentCandidateRestore || {
           featureSvgId: handlerState.activeHoverSvgId,
           matchElement: handlerState.activeMatchHoverElement
         };
-        if (handlerState.alignmentCandidateSvgId) {
-          clearTrackedHoverStyles();
-          handlerState.alignmentCandidateSvgId = '';
-        }
-        clearActiveFeatureHover();
-        clearActiveMatchHover();
+        handlerState.alignmentCandidateSvgId = '';
+        clearHover();
         hideHoverSummary();
         handlerState.alignmentCandidateRestore = restore;
-        const [svgId] = matches[0];
         setFeatureHover(svgId);
         handlerState.alignmentCandidateSvgId = svgId;
         handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
@@ -1205,13 +1355,8 @@ export const createFeatureSvgActions = ({
       // the alignment centres that whole span.
       /** @param {AliasSource} anchor */
       const uniqueRenderedFeature = (anchor) => {
-        const requested = featureIdentity(anchor);
-        if (!requested.usable) return null;
-        const matches = Array.from(ensureFeatureLookup().entries()).filter(([, feature]) => (
-          identityMatches(requested, renderedFeatureIdentity(feature))
-        ));
-        if (matches.length !== 1) return null;
-        const [svgId] = matches[0];
+        const svgId = uniqueRenderedSvgId(anchor);
+        if (!svgId) return null;
         const blocks = getFeatureFillElements(svg, svgId, ensureFeaturePaths());
         return blocks.length && blocks.every(isDrawnBlock) ? { svgId, blocks } : null;
       };
@@ -1430,6 +1575,8 @@ export const createFeatureSvgActions = ({
         const update = () => {
           overlay.frame = 0;
           if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
+          // Hidden while the preview pans or zooms; the end of the gesture places it again (OV-936).
+          if (isPreviewTransformInteractionActive()) return;
           const frame = viewport.getBoundingClientRect();
           const paper = svgContainer.value.getBoundingClientRect();
           const referenceBox = boxIn(referenceFeature?.blocks, frame);
@@ -1492,6 +1639,32 @@ export const createFeatureSvgActions = ({
       handlerState.showAlignmentOverlay = showAlignmentOverlay;
       handlerState.clearAlignmentOverlay = clearAlignmentOverlay;
 
+      // The bands of the open match popup: a similarity group's ribbons, or one
+      // match's fragments. Only the bands that change are written (OV-937).
+      /** @param {SelectedPairwiseMatch | null} match */
+      handlerState.markSelectedMatch = (match) => {
+        const matchId = String(match?.id || '').trim();
+        const orthogroupId = String(match?.matchKind === 'orthogroup' ? match?.orthogroupId : '').trim();
+        /** @type {Element[]} */
+        let selected = [];
+        if (orthogroupId || matchId) {
+          ensureComparisonIndexes();
+          // ensureComparisonIndexes above has set all three comparison maps.
+          selected = orthogroupId
+            ? (/** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByOrthogroupId).get(orthogroupId) || [])
+              .filter((element) => element.matches(PAIRWISE_MATCH_SELECTOR) && isOrthogroupRibbon(element))
+            : /** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByMatchId).get(matchId) || [];
+        }
+        const next = new Set(selected);
+        handlerState.selectedMatchElements.forEach((element) => {
+          if (!next.has(element)) element.classList.toggle('gbdraw-match-selected', false);
+        });
+        next.forEach((element) => {
+          if (!handlerState.selectedMatchElements.has(element)) element.classList.toggle('gbdraw-match-selected', true);
+        });
+        handlerState.selectedMatchElements = next;
+      };
+
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
         matchFragments(handlerState.pendingMatchElement).forEach((element) => element.classList.remove('gbdraw-match-pending'));
@@ -1519,37 +1692,31 @@ export const createFeatureSvgActions = ({
 
       /** @param {Element} featureEl @param {HoverPoint | null | undefined} eventLike */
       const activateFeatureHover = (featureEl, eventLike) => {
-        clearActiveMatchHover();
+        forgetMatchHover();
         const svgId = getFeatureIdentity(featureEl);
-        if (!svgId) return false;
+        if (!svgId) {
+          clearHover();
+          return false;
+        }
         const hoverKey = getFeatureHoverKey(svgId);
-        if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
-          clearActiveFeatureHover();
-        }
-        if (handlerState.activeHoverKey !== hoverKey) {
-          setHoverHighlight(svgId);
-        }
+        requestHoverHighlight(featureHighlightKey(svgId), () => setHoverHighlight(svgId));
         handlerState.activeHoverSvgId = svgId;
         handlerState.activeHoverKey = hoverKey;
         handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
-        scheduleHoverSummary(ensureFeatureLookup().get(svgId), featureEl, eventLike);
+        const feat = ensureFeatureLookup().get(svgId);
+        scheduleHoverSummary(feat ? () => featureHoverContent(feat, featureEl) : null, eventLike);
         return true;
       };
 
       /** @param {Element} matchEl @param {HoverPoint | null | undefined} eventLike */
       const activateMatchHover = (matchEl, eventLike) => {
         handlerState.alignmentOverlay?.setHover(null);
-        clearActiveFeatureHover();
+        forgetFeatureHover();
         const matchKey = getMatchHoverKey(matchEl);
-        if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
-          clearActiveMatchHover();
-        }
-        if (handlerState.activeMatchHoverKey !== matchKey) {
-          setMatchHover(matchEl);
-        }
+        requestHoverHighlight(matchHighlightKey(matchEl), () => setMatchHover(matchEl));
         handlerState.activeMatchHoverElement = matchEl;
         handlerState.activeMatchHoverKey = matchKey;
-        scheduleMatchHoverSummary(buildMatchHoverSummary(matchEl), eventLike);
+        scheduleHoverSummary(() => matchHoverContent(buildMatchHoverSummary(matchEl)), eventLike);
         return true;
       };
 
@@ -1564,8 +1731,7 @@ export const createFeatureSvgActions = ({
           handlerState.activeHoverSvgId || handlerState.activeMatchHoverElement
         );
         rememberTransformPointer(eventLike);
-        clearActiveFeatureHover();
-        clearActiveMatchHover();
+        clearHover();
         hideHoverSummary();
         recordStructuralMetric('previewTransformHoverCleanupCount', 1, { kind });
       };
@@ -1646,23 +1812,29 @@ export const createFeatureSvgActions = ({
           rememberTransformPointer(e);
           return;
         }
+        // A move straight onto another target leaves the highlight to that
+        // target's hover; a move off every target clears it at once.
+        const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
+        const relatedMatch = relatedFeature ? null : getPairwiseMatchTarget(e.relatedTarget, svg);
+        const leave = () => {
+          if (!relatedFeature && !relatedMatch) clearHoverHighlight();
+          hideHoverSummary();
+        };
         const featureEl = getFeatureTarget(e.target, svg);
         if (featureEl) {
           const svgId = getFeatureIdentity(featureEl);
           if (!svgId || handlerState.activeHoverSvgId !== svgId) return;
-          const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
           if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
-          clearActiveFeatureHover();
+          forgetFeatureHover();
           handlerState.alignmentOverlay?.setHover(null);
-          hideHoverSummary();
+          leave();
           return;
         }
         const matchEl = getPairwiseMatchTarget(e.target, svg);
         if (!matchEl || handlerState.activeMatchHoverElement !== matchEl) return;
-        const relatedMatch = getPairwiseMatchTarget(e.relatedTarget, svg);
         if (relatedMatch && getMatchHoverKey(relatedMatch) === handlerState.activeMatchHoverKey) return;
-        clearActiveMatchHover();
-        hideHoverSummary();
+        forgetMatchHover();
+        leave();
       };
 
       /** @param {MouseEvent} e */
@@ -1691,13 +1863,13 @@ export const createFeatureSvgActions = ({
           }
           return;
         }
-        const annotationEl = /** @type {MaybeElementTarget | null} */ (e.target)?.closest?.('[data-gbdraw-annotation-id]');
-        if (annotationEl && svg.contains(annotationEl)) {
+        const annotationEl = getAnnotationTarget(/** @type {MaybeElementTarget | null} */ (e.target), svg);
+        if (annotationEl) {
           e.preventDefault();
           e.stopPropagation();
           if (selectedAnnotation) {
             selectedAnnotation.value = {
-              id: annotationEl.getAttribute('data-gbdraw-annotation-id') || '',
+              id: annotationEl.getAttribute(ANNOTATION_ID_ATTRIBUTE) || '',
               setId: annotationEl.getAttribute('data-gbdraw-annotation-set-id') || '',
               trackId: annotationEl.getAttribute('data-gbdraw-annotation-track-id') || ''
             };
@@ -1743,12 +1915,38 @@ export const createFeatureSvgActions = ({
           e.preventDefault();
           return;
         }
+        if (openDrawnElementSettings(e)) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
           if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
         }
+      };
+
+      // A click on a drawn element whose settings have a section (the scale, a
+      // dinucleotide track, the plot title) shows that section in a popup
+      // beside the click, inside the Result's canvas and clear of the clicked
+      // item, as a click on a Legend row shows its popup: it takes the place of
+      // an open popup, and a feature selection stays. Nothing opens while
+      // Layout edit is on (a press drags there), while a review holds the
+      // popups, or when the press moved: a pan of the figure ends in a click
+      // on the element it began on.
+      /** @param {MouseEvent} e */
+      const openDrawnElementSettings = (e) => {
+        if (state.layoutRepositionMode?.value || previewPopupsHeld() || !isClickAtPress(handlerState.pressPoint, e)) return false;
+        const section = drawnElementSection(e.target);
+        const canvas = /** @type {Element | null} */ (state.canvasContainerRef?.value);
+        if (!section || !canvas) return false;
+        const { left, top, right, bottom } = /** @type {Element} */ (e.target).getBoundingClientRect();
+        const anchor = { x: e.clientX, y: e.clientY, avoid: { left, top, right, bottom } };
+        if (!showElementSettings(section, anchor, popupBoundsWithin(canvas.getBoundingClientRect()))) return false;
+        closeOtherPopups('settings');
+        return true;
       };
 
       /** @param {KeyboardEvent} e */
@@ -1770,6 +1968,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {PointerEvent} e */
       const handlePointerDown = (e) => {
+        handlerState.pressPoint = { clientX: e.clientX, clientY: e.clientY };
         if (e.button === 0 && e.isPrimary !== false) {
           const matchEl = getPairwiseMatchClickTarget(e, svg);
           if (matchEl) {
@@ -1849,8 +2048,7 @@ export const createFeatureSvgActions = ({
         clearPendingMatch();
         clearAlignmentOverlay();
         clearAlignmentCandidatePreview({ restore: false });
-        clearActiveFeatureHover();
-        clearActiveMatchHover();
+        clearHover();
         hideHoverSummary();
       };
       delegatedFeatureHandlers = handlerState;
@@ -1880,8 +2078,8 @@ export const createFeatureSvgActions = ({
       unsubscribePreviewTransformInteraction();
     }
     cleanupDelegatedFeatureHandlers();
-    if (hoverSummaryState.element?.isConnected) hoverSummaryState.element.remove();
-    hoverSummaryState.element = null;
+    if (hoverSummaryState.view?.element.isConnected) hoverSummaryState.view.element.remove();
+    hoverSummaryState.view = null;
   };
 
   /** @param {AliasSource} anchor */
@@ -1901,6 +2099,12 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers?.clearAlignmentOverlay?.();
   };
 
+  // Marks the bands of the open match popup on the mounted Result.
+  /** @param {SelectedPairwiseMatch | null} match */
+  const markSelectedPairwiseMatch = (match) => {
+    delegatedFeatureHandlers?.markSelectedMatch?.(match);
+  };
+
   /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const preparePairwiseInteractionAffordances = ({
     root = null,
@@ -1916,14 +2120,16 @@ export const createFeatureSvgActions = ({
       if (element?.style) element.style.cursor = 'pointer';
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
-      element.setAttribute('aria-label', `Pairwise match ${index + 1}`);
+      element.setAttribute('aria-label', t('Pairwise match {n}', { n: index + 1 }));
     });
     delegatedFeatureHandlers.pairwiseAffordancesPrepared = true;
     return true;
   };
 
-  // Legend rows and record definitions are buttons that open their popup;
-  // an export strips these attributes (stripTransientPreviewState).
+  // Legend rows and record definitions are buttons that open their popup. A
+  // drawn element whose settings have a section is marked `settings` for the
+  // pointer and the hint only: the section index is the keyboard way to its
+  // section. An export strips these attributes (stripTransientPreviewState).
   /** @param {{ root?: Element | null }} [options] */
   const preparePreviewItemAffordances = ({ root = null } = {}) => {
     const svg = root || delegatedFeatureHandlers?.svg || null;
@@ -1934,6 +2140,9 @@ export const createFeatureSvgActions = ({
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
       element.setAttribute('aria-haspopup', 'dialog');
+    });
+    svg.querySelectorAll(DRAWN_ELEMENT_SELECTOR).forEach((element) => {
+      if (drawnElementSection(element)) element.setAttribute('data-gbdraw-preview-item', 'settings');
     });
     return true;
   };
@@ -1947,6 +2156,7 @@ export const createFeatureSvgActions = ({
     clearAlignmentCandidatePreview,
     showAlignmentOverlay,
     clearAlignmentOverlay,
+    markSelectedPairwiseMatch,
     showFeaturePopupAtFeature,
     preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances,

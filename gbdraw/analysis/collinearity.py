@@ -44,6 +44,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.comparisons.losat_jobs import losatp_job_specs
 from gbdraw.contract_shapes import Spellings, read_spelling
+from gbdraw.core.numeric import compensated_sum
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
@@ -756,8 +757,10 @@ def _lossless_singleton_orientation(anchor: CollinearityAnchor) -> CollinearityO
     return _anchor_strand_orientation(anchor) or "plus"
 
 
-def _lossless_block_score(anchors: Sequence[CollinearityAnchor]) -> float:
-    return float(sum(float(anchor.bitscore) for anchor in anchors))
+def _anchor_bitscore_total(anchors: Sequence[CollinearityAnchor]) -> float:
+    """Total anchor bitscore, with the same bits on every Python (OV-1237)."""
+
+    return compensated_sum(float(anchor.bitscore) for anchor in anchors)
 
 
 def _lossless_block_from_anchors(
@@ -773,7 +776,7 @@ def _lossless_block_from_anchors(
         query_record_index=int(pair[0]),
         subject_record_index=int(pair[1]),
         orientation=orientation,
-        score=_lossless_block_score(ordered),
+        score=_anchor_bitscore_total(ordered),
         anchors=ordered,
         kind="cluster" if len(ordered) > 1 else "singleton",
         block_evalue=None,
@@ -1537,11 +1540,11 @@ def _coordinate_span(anchors: Sequence[CollinearityAnchor], start_attr: str, end
 def _weighted_identity(anchors: Sequence[CollinearityAnchor]) -> float:
     total_length = sum(max(0, int(anchor.alignment_length)) for anchor in anchors)
     if total_length > 0:
-        return sum(
+        return compensated_sum(
             float(anchor.identity) * max(0, int(anchor.alignment_length))
             for anchor in anchors
         ) / total_length
-    return sum(float(anchor.identity) for anchor in anchors) / len(anchors)
+    return compensated_sum(float(anchor.identity) for anchor in anchors) / len(anchors)
 
 
 def _joined_anchor_values(anchors: Sequence[CollinearityAnchor], attr: str) -> str:
@@ -1666,7 +1669,7 @@ def convert_collinearity_blocks_to_pair_comparisons(
                 "sstart": subject_start,
                 "send": subject_end,
                 "evalue": min(float(anchor.evalue) for anchor in block.anchors),
-                "bitscore": sum(float(anchor.bitscore) for anchor in block.anchors),
+                "bitscore": _anchor_bitscore_total(block.anchors),
                 "collinearity_block_id": block.block_id,
                 "collinearity_block_kind": block.kind,
                 "collinearity_orientation": block.orientation,

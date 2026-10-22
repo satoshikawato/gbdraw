@@ -141,5 +141,77 @@
       "services/gallery-session-migration.js",
       "services/session-file.js"
     ]
+  },
+  "allowedVendorChanges": [
+    {
+      "path": "gbdraw/web/vendor/vue/vue.global.prod.js",
+      "change": "add",
+      "sha256": "78133fb37d7da6ab9fb0ede6c8ed446f38773595d1faf52a3c1b77d539b06b61",
+      "package": "vue",
+      "version": "3.5.25",
+      "source": "https://registry.npmjs.org/vue/-/vue-3.5.25.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/vue/vue.global.js",
+      "change": "remove",
+      "sha256": "6f9eae7631fa9c48f474adf6cd232bd1c95322ec8c5a978acd5e0f87cfb61e7c",
+      "package": "vue",
+      "version": "3.5.25",
+      "source": "https://unpkg.com/vue@3.5.25/dist/vue.global.js"
+    },
+    {
+      "path": "gbdraw/web/vendor/tailwindcss/tailwindcss-play.js",
+      "change": "remove",
+      "sha256": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15",
+      "package": "tailwindcss",
+      "version": "Play CDN snapshot (unversioned cdn.tailwindcss.com)",
+      "source": "https://cdn.tailwindcss.com"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-vietnamese-300-normal.woff2",
+      "change": "add",
+      "sha256": "1e3cde652acfbc67194e84d2068953d4799df8b125089f11687142c39603cd7f",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-vietnamese-400-normal.woff2",
+      "change": "add",
+      "sha256": "547ad9fdaeb0ae43487f4b8a02e47c36553c0c0cb73c8aa98f93b7b615f6b55d",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-vietnamese-500-normal.woff2",
+      "change": "add",
+      "sha256": "44e36aa5a8f12130029a29bb0e6695d0262b67446ce321e878b1fb56162b5de6",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-vietnamese-600-normal.woff2",
+      "change": "add",
+      "sha256": "1aeb94ae9db052a4a2fe6f3046f928cff1fdbd7abdf870a9a01c13cae6faeba5",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-vietnamese-700-normal.woff2",
+      "change": "add",
+      "sha256": "5fafa3829a16d9ea5ac3a67c51e54186353122790b604a3e361f96cab188da8b",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    }
+  ],
+  "persistedContractCoChange": {
+    "exemptGeneratedExports": [
+      "EXPECTED_WEB_RUNTIME_CAPABILITIES"
+    ],
+    "sessionVersionUnit": "main"
   }
 }

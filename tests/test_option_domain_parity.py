@@ -163,7 +163,10 @@ def test_cli_rejects_vector_without_traceback(monkeypatch, capsys, tmp_path, mod
         # The typed owner's message names the rejected field or setting.
         assert "ERROR:" in stderr or "error:" in stderr
         path = vector.get("configPath", "")
-        named = vector.get("field") or ("font_size" if "font_size" in path else "stroke_width")
+        setting = path.removesuffix(".short").removesuffix(".long")
+        named = vector.get("field") or next(
+            (leaf for leaf in ("font_size", "stroke_width") if leaf in path), setting
+        )
         assert named in stderr, stderr
 
 
@@ -172,6 +175,43 @@ def test_cli_accepts_vector(monkeypatch, capsys, tmp_path, mode, vector):
     code, stderr = _run_cli(monkeypatch, capsys, tmp_path, mode, vector["cli"])
     assert code in (0, None), stderr
     assert (tmp_path / "out.svg").is_file()
+
+
+LEGEND_SWATCH_PATH = "objects.legends.color_rect_size"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("size", ["0", "-3"])
+def test_cli_refuses_a_legend_swatch_size_only_when_a_legend_is_drawn(monkeypatch, capsys, tmp_path, mode, size):
+    """OV-1247 (D-10): the swatch size keeps its accepted range; a drawn Legend
+    needs a size greater than zero (it was a ValueError traceback)."""
+
+    code, stderr = _run_cli(monkeypatch, capsys, tmp_path, mode, ["--legend_box_size", size])
+    assert code not in (0, None), stderr
+    assert "Traceback" not in stderr
+    assert LEGEND_SWATCH_PATH in stderr, stderr
+    assert not (tmp_path / "out.svg").exists()
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_drawn_legend_refuses_a_zero_swatch_with_the_classified_error(mode):
+    """The Web runs this render too, so it reads the same INPUT_INVALID reason."""
+
+    import gbdraw
+    from gbdraw.exceptions import ValidationError
+
+    records = gbdraw.read_genbank(CLI_RECORD)
+    options_type = gbdraw.CircularOptions if mode == "circular" else gbdraw.LinearOptions
+    draw = gbdraw.draw_circular if mode == "circular" else gbdraw.draw_linear
+    overrides = {f"{LEGEND_SWATCH_PATH}.short": 0, f"{LEGEND_SWATCH_PATH}.long": 0}
+    with pytest.raises(ValidationError) as caught:
+        draw(records, options=options_type(config_overrides=overrides)).to_svg()
+    payload = serialize_web_error(caught.value, operation="generate", stage="render")
+    assert payload["code"] == "INPUT_INVALID"
+    assert payload["context"].get("reason") == "POSITIVE"
+    assert payload["context"].get("configPath") in {f"{LEGEND_SWATCH_PATH}.short", f"{LEGEND_SWATCH_PATH}.long"}
+    # Without a Legend the same setting draws, as on dev.
+    assert draw(records, options=options_type(config_overrides=overrides, legend="none")).to_svg()
 
 
 def test_vectors_cover_each_validated_request_field():

@@ -9,7 +9,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
@@ -150,7 +150,7 @@ const colorRow = async (page, caption, color = COLOR) => {
 
 // Save Session, then a fresh page that loads the saved file.
 const saveAndLoadFresh = async (page, browser, path) => {
-  await download(page, 'Save Session', path);
+  await download(page, 'Save Session', path, { title: '' });
   const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   const fresh = await context.newPage();
   await openFresh(fresh);
@@ -250,6 +250,45 @@ test('OV-159 label_rendering (b): Linear Above Feature does not reset Circular E
     const loaded = await readDrawings(fresh, fields);
     expect(loaded.circular.rendering, 'Circular label_rendering after Load').toBe('external_only');
     expect(loaded.linear.placement, 'Linear label_placement after Load').toBe('above_feature');
+  } finally {
+    await fresh.context().close();
+  }
+});
+
+// Label Line and Label Protection belong to their mode: the Linear Result
+// draws what they say (a halo instead of the default box, no underline), and
+// Save and Load keep each mode's pair.
+test('Label Line and Label Protection draw in their mode and survive Save and Load', async ({ page, browser }, testInfo) => {
+  test.setTimeout(300_000);
+  await openBoth(page);
+  await switchMode(page, 'linear');
+  await editStep(page, 'Labels', { 'form.show_labels_linear': 'all' });
+  await generate(page);
+  const drawn = () => page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.results[0].content), 'image/svg+xml');
+    const labelIds = new Set([...svg.querySelectorAll('text[data-label-feature-id]')].map((text) => `#${text.id}`));
+    return {
+      halos: [...svg.querySelectorAll('use')].filter((use) => labelIds.has(use.getAttribute('href') || use.getAttribute('xlink:href'))).length,
+      underlines: svg.querySelectorAll('line[data-label-feature-id][stroke="#ffffff"]').length,
+      boxes: svg.querySelectorAll('rect[data-label-feature-id]').length
+    };
+  });
+  const before = await drawn();
+  expect(before.boxes, 'default Linear boxes').toBeGreaterThan(0);
+  expect(before.underlines, 'default Linear underline casings').toBeGreaterThan(0);
+  expect(before.halos).toBe(0);
+  await editStep(page, 'Label style', { 'adv.label_line': 'none', 'adv.label_protection': 'halo' });
+  await generate(page);
+  const after = await drawn();
+  expect({ boxes: after.boxes, underlines: after.underlines }, 'Linear Halo, no line').toEqual({ boxes: 0, underlines: 0 });
+  expect(after.halos, 'Linear halos').toBeGreaterThan(0);
+
+  const fields = { line: 'adv.label_line', protection: 'adv.label_protection' };
+  const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('label-style.gbdraw-session.json'));
+  try {
+    const loaded = await readDrawings(fresh, fields);
+    expect(loaded.linear, 'Linear after Load').toEqual({ line: 'none', protection: 'halo' });
+    expect(loaded.circular, 'Circular after Load').toEqual({ line: 'none', protection: 'none' });
   } finally {
     await fresh.context().close();
   }
@@ -686,6 +725,22 @@ test('H1: Undo and Redo of an edit, a switch, and an edit in the other mode rest
     await historyStep(page, step);
     expect(await read(), `${step} to ${JSON.stringify(expected)}`).toEqual(expected);
   }
+});
+
+// OV-1249: Reset resets settings, not the loaded records.
+test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openWithGenBank(page, BATCH_FIXTURE);
+  const recordOrder = () => page.evaluate(() => window.__GBDRAW_APP__.adv.multi_record_positions
+    .map(({ selector, row }) => ({ selector, row })));
+  const loaded = await recordOrder();
+  expect(loaded).toHaveLength(2);
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.multi_record_positions[1].row = 2; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.resetSettings(); });
+  await settleLive(page);
+  // Reset returns the rows to the defaults of the loaded records, as an upload sets them.
+  expect(await recordOrder()).toEqual(loaded);
+  await expect(page.getByText('Upload a sequence file to load records.')).toHaveCount(0);
 });
 
 // H2: Reset Settings resets both drawings, and one Undo restores both modes' edits.

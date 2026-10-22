@@ -1,8 +1,9 @@
 // @ts-check
 import { resolveColorToHex } from '../utils/color-utils.js';
-import { parseSpecificRules } from './file-imports.js';
+import { markedRows, parseSpecificRules, withoutImportedRows } from './file-imports.js';
 import { legendColorIdentity as fillIdentity } from './legend-row-names.js';
 import { ruleMatcher } from './rule-matchers.js';
+import { isPlainObject } from '../utils/contract-shape.js';
 /** @import { PythonLegendKey, PythonLegendRow, SwatchColor } from './legend-svg.js' */
 
 /**
@@ -97,30 +98,42 @@ export const savedRuleCaption = (caption, color) => {
   return name.trim() ? name : caption;
 };
 /**
- * Saved rules with each caption read by `savedRuleCaption`.
+ * Saved rules with each caption read by `savedRuleCaption`; an entry that is
+ * no object stays (the rules' reader drops it, listed).
  * @template {{ readonly cap?: unknown, readonly color?: unknown }} Rule
  * @param {readonly Rule[]} rules
  * @returns {Rule[]}
  */
 export const savedSpecificRules = (rules) => rules.map((rule) => {
+  if (!rule || typeof rule !== 'object') return rule;
   const caption = String(rule.cap ?? '');
   const read = savedRuleCaption(caption, rule.color);
   return read === caption ? rule : { ...rule, cap: read };
 });
+/**
+ * The color of a per-feature color edit: an edit object's `color`, or an
+ * older bare color.
+ * @param {unknown} edit
+ * @returns {unknown}
+ */
+export const featureColorEditColor = (edit) => (
+  edit && typeof edit === 'object' && Object.hasOwn(edit, 'color') ? /** @type {{ color?: unknown }} */ (edit).color : edit
+);
 // Per-feature color edits as a saved Session is read: an older build wrote a
 // rule's rewritten caption into the edits of the features the rule colored,
 // so an edit's caption is read as its rule's is, by the edit's own color.
 /**
- * @template {Record<string, unknown>} Edits
- * @param {Edits | null | undefined} edits
- * @returns {Edits}
+ * @param {unknown} edits Unvalidated: a map of no object is no edit, as its
+ *   reader (`readFeatureColorEdits`) lists it (OV-866).
+ * @returns {Record<string, unknown>}
  */
-export const savedFeatureColorEdits = (edits) => /** @type {Edits} */ (Object.fromEntries(Object.entries(edits || {}).map(([key, edit]) => {
+export const savedFeatureColorEdits = (edits) => Object.fromEntries(Object.entries(isPlainObject(edits) ? edits : {}).map(
+  /** @param {[string, unknown]} entry @returns {[string, unknown]} */ ([key, edit]) => {
   if (!edit || typeof edit !== 'object' || typeof (/** @type {{ caption?: unknown }} */ (edit)).caption !== 'string') return [key, edit];
   const { caption, color } = /** @type {{ caption: string, color?: unknown }} */ (edit);
   const read = savedRuleCaption(caption, color);
   return [key, read === caption ? edit : { ...edit, caption: read }];
-})));
+}));
 /**
  * @param {string} caption
  * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule
@@ -380,7 +393,7 @@ export const colorRuleLegendGroups = (rules, type) => {
  * Returns rule -> the key of the Legend row Generate draws for that rule.
  * @param {Partial<SpecificColorRule>[] | null} [rules]
  * @param {RendererLegendRow[]} [rendererRows]
- * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
+ * @returns {(rule: SpecificRuleInput) => PythonLegendKey}
  */
 export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
   /** @type {Map<string, RendererLegendRow>} */
@@ -424,6 +437,78 @@ export const rekeyedRuleRows = (before, after, rendererRows = []) => {
   const groups = before.map((rule) => normalizeSpecificRule(rule)).filter((group) => kept.has(legendGroupKey(group)));
   return changedRowKeys(groups.map((group) => [group, group]),
     createRuleLegendCaptions([...before], rendererRows), createRuleLegendCaptions([...after], rendererRows));
+};
+
+// The Legend rows a Remove of rules takes from a drawing not shown, and the
+// rows it re-keys, read from the keys the drawing's Legend stores (OV-1280).
+// Its Result is not mounted, so Python's fills and swatch lines are unknown,
+// and no key is allocated again from the colors its rows list: a Legend
+// recolor, or a type row drawn in a rule's fill with its own line (D-13),
+// would read as a rule row. A rule group's row is its allocated key
+// ("<cap> [<fill>]", or "<cap> [<fill>] (n)") when the drawing lists one,
+// else its caption. `listedKeys` are the keys of every row the drawing lists,
+// deleted and dormant rows too, which Python still draws. `gone`: the rows
+// only removed groups drew; `rekeyed`: a kept group whose caption is now
+// written in one color moves to the caption, unless a row that is no rule
+// row has it (as `rekeyedRuleRows` allocates).
+/**
+ * @param {readonly Partial<SpecificColorRule>[]} before
+ * @param {readonly Partial<SpecificColorRule>[]} after The rules of `before` that stay.
+ * @param {Iterable<string>} listedKeys
+ * @returns {{ gone: RuleRowColor[], rekeyed: Map<PythonLegendKey, PythonLegendKey> }}
+ */
+export const listedRuleRowRemoval = (before, after, listedKeys) => {
+  const listed = [...listedKeys].map(captionRowKey);
+  /** @param {readonly Partial<SpecificColorRule>[]} rules @returns {Map<string, SpecificColorRule>} */
+  const groupsOf = (rules) => new Map(rules.map((rule) => normalizeSpecificRule(rule))
+    .filter((rule) => rule.cap).map((rule) => [legendGroupKey(rule), rule]));
+  const removed = groupsOf(before);
+  const kept = groupsOf(after);
+  kept.forEach((_group, id) => removed.delete(id));
+  const captions = new Set([...removed.values(), ...kept.values()].map((group) => group.cap));
+  /** @param {SpecificColorRule} group @returns {PythonLegendKey} */
+  const storedKey = (group) => captionRowKey(listed.find((key) => !captions.has(key) && isAllocatedRow(key, group)) ?? group.cap);
+  const ruleRows = new Set([...removed.values(), ...kept.values()].map(storedKey));
+  const fills = captionFills([...kept.values()]);
+  /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+  const rekeyed = new Map();
+  kept.forEach((group) => {
+    const from = storedKey(group);
+    if (from !== group.cap && fills.get(group.cap)?.size === 1 && !listed.some((key) => key === group.cap && !ruleRows.has(key))) {
+      rekeyed.set(from, captionRowKey(group.cap));
+    }
+  });
+  const held = new Set([...[...kept.values()].map(storedKey), ...rekeyed.values()]);
+  const gone = [...removed.values()].map((group) => ({ caption: storedKey(group), color: group.color }))
+    .filter(({ caption }) => !held.has(caption));
+  return { gone, rekeyed };
+};
+
+/**
+ * A rule row: its Legend key and the color its rules draw it in.
+ * @typedef {{ caption: PythonLegendKey, color: string }} RuleRowColor
+ */
+
+// OV-152: the keys of the Legend colors that copy a removed rule row's color,
+// which go with the row: left behind, a copy would paint the row Generate
+// draws for the features' palette color. A copy is stored under the row's key
+// in the row's color (the popup stores the caption's color when it recolors a
+// whole group, OV-61). A color set in the Legend editor is no copy: the editor
+// recolors the rules of a row a rule draws (legend.js), so its colors sit on
+// rows no rule draws and stay. Each removed row is read on its own, so two
+// removed groups stored under one key each retire their own copy.
+/**
+ * @param {Readonly<Record<string, string>>} overrides
+ * @param {readonly RuleRowColor[]} removedRows
+ * @returns {PythonLegendKey[]}
+ */
+export const legendColorCopies = (overrides, removedRows) => {
+  /** @type {PythonLegendKey[]} */
+  const copies = [];
+  for (const { caption, color } of removedRows) {
+    if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) copies.push(caption);
+  }
+  return copies;
 };
 
 // The rule rows the reading of saved captions re-keys (F2): a caption saved
@@ -583,10 +668,10 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
  */
 export const prepareSpecificColorImport = (text, currentRules = []) => {
   const { rules } = parseSpecificRules(text);
-  const retainedRules = (Array.isArray(currentRules) ? currentRules : [])
-    .filter((rule) => !rule?.fromFile)
-    .map((rule) => normalizeSpecificRule(rule));
-  const nextRules = [...retainedRules, ...savedSpecificRules(rules).map((rule) => normalizeSpecificRule(rule, { fromFile: true }))];
+  // The file's rows replace the rows of the card's earlier file (OV-1280).
+  const retainedRules = withoutImportedRows((Array.isArray(currentRules) ? currentRules : [])
+    .map((rule) => normalizeSpecificRule(rule)), 't_color');
+  const nextRules = [...retainedRules, ...markedRows(savedSpecificRules(rules), 't_color').map((rule) => normalizeSpecificRule(rule))];
   return {
     nextRules,
     importedCount: rules.length

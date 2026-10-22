@@ -5,12 +5,17 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 
+// tests/web/history-inputs.test.mjs loads this module with its own imports
+// only, so it declares the key marker of utils/i18n.js itself.
+/** @param {string} text @returns {string} */
+const msg = (text) => text;
+
 const DEFAULT_MAX_ACTIONS = 30;
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
 // The Session availability wording for an edit still being applied.
 const HISTORY_EDIT_BUSY = Object.freeze({
   status: 'busy',
-  reason: 'Applying an edit. Retry after the edit finishes.'
+  reason: msg('Applying an edit. Retry after the edit finishes.')
 });
 
 /**
@@ -181,7 +186,9 @@ const checkpointSvgBytes = (checkpoint) => (
 /**
  * What one History step captures about the intent: the intent, its signature, and the files it names.
  * @typedef {{ intent: HistoryIntent, signature: string, fileIds: Set<string> }} IntentRecord
- * @typedef {{ checkpoint: HistoryCheckpoint, signature: string, byteSize: number, fileIds: Set<string> }} CheckpointRecord
+ * @typedef {{ checkpoint: HistoryCheckpoint, signature: string, byteSize: number, fileIds: Set<string>, drawn?: boolean }} CheckpointRecord
+ *   `drawn`: the step's caller said whether the figure is the one its state
+ *   draws, so that restoring it needs no automatic rerender (D-24 (OV-731)).
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
  * @typedef {{ type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string> }} IntentEntry
@@ -218,11 +225,15 @@ const checkpointSvgBytes = (checkpoint) => (
  *   captureIntentCheckpoint?: IntentCheckpointHooks['capture'] | null,
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
- *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown
+ *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown,
+ *   drawn?: { before: () => boolean, change: boolean }
  * }} HistoryStepBase
  *   What a step reads from its caller; a hook that is not a function is not called. The intent
  *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
- *   declared as methods); a caller names its type on its own parameter.
+ *   declared as methods); a caller names its type on its own parameter. A checkpoint step also
+ *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`):
+ *   `before()` as the before side is captured, and `change`, whether the step's own change shows
+ *   as its state draws it, so that the after side is drawn when the before side is.
  */
 /**
  * @template [R=unknown]
@@ -244,13 +255,16 @@ const checkpointSvgBytes = (checkpoint) => (
  *   source: string,
  *   owner?: any,
  *   deferAdapterCommit?: boolean,
+ *   serial?: number,
  *   beforeSignature?: string,
  *   beforeFileIds?: Set<any>,
- *   beforeIntentCheckpoint?: any
+ *   beforeIntentCheckpoint?: any,
+ *   beforeIntent?: HistoryIntent | null
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
- *   calls that ran on it, each with the step name it started with.
+ *   calls that ran on it, each with the step name it started with. `serial`: an intent step's
+ *   number, in the order the steps began (`intentStepSerial`).
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -277,8 +291,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of an intent; History awaits it.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
- * @property {(checkpoint: HistoryCheckpoint) => unknown} applyCheckpoint
- *   The snapshot service's restore of an artifact checkpoint; History awaits it.
+ * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean }) => unknown} applyCheckpoint
+ *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored.drawn`:
+ *   whether its figure is the one its state draws.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
@@ -293,13 +308,19 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The ids of the files bound now, from the snapshot service.
  * @property {number} [maxActions] Undo entries kept.
  * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
+ * @property {(message: string) => void} [onHistoryLimit]
+ *   Told when the byte limit dropped steps, with the sentence that says so
+ *   (English, marked with `msg`); the step-count window (`maxActions`) drops
+ *   its oldest step silently.
  * @property {<T>(value: T) => { value: T }} [makeRef]
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
  *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
  * @property {(step: { type: string, changes?: unknown }) => HistoryBusy | null} [stepAvailability]
  *   The composition root's busy answer for one Undo or Redo step (E1: a step
- *   that switches the diagram mode waits as the mode buttons do).
+ *   that switches the diagram mode waits as the mode buttons do). Undo, Redo,
+ *   and their enabled state read it for the top step, so it must read
+ *   reactive state.
  */
 
 /** @param {HistoryManagerOptions} options */
@@ -316,6 +337,7 @@ export const createHistoryManager = ({
   collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
+  onHistoryLimit = () => {},
   makeRef = makeBox,
   mutationAvailability = () => null,
   stepAvailability = () => null
@@ -345,7 +367,6 @@ export const createHistoryManager = ({
   // open intent before `restoring` included (E1: the mode switch waits for them).
   const traversals = makeRef(0);
   const capturing = makeRef(false);
-  const historyLimitMessage = makeRef('');
   const diagnostics = {
     intentBuilds: 0,
     artifactCheckpointBuilds: 0,
@@ -377,7 +398,13 @@ export const createHistoryManager = ({
   // action's later write is recorded from the last recorded intent only
   // within the generation of its step.
   let intentGeneration = 0;
+  // D-40: the number of the last intent step begun; a redraw requested at
+  // serial n is drawn for the steps up to n (`adoptDrawnWrite`). A step
+  // reserves its number when `openStep` starts (some numbers stay unused).
+  let intentStepSerial = 0;
   let totalEntryBytes = 0;
+  /** @type {(changes: readonly HistoryIntentChange[] | null) => void} */
+  let settingsStepListener = () => {};
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
   // names it. Keyed by `artifactRetentionKey`.
@@ -403,8 +430,10 @@ export const createHistoryManager = ({
 
   // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
   // that still owns its intent commit, owns the current state. Undo, Redo, and
-  // their buttons and shortcuts share this one reactive availability; the
-  // Session owner words a Generate or diagram update in progress.
+  // their buttons and shortcuts share this one reactive availability; Undo,
+  // Redo, and their enabled state also read the top step's check
+  // (`topStepAvailability`, OV-1339). The Session owner words a Generate or
+  // diagram update in progress.
   const historyAvailability = () => {
     void transactionRevision.value;
     const busy = mutationAvailability();
@@ -465,21 +494,34 @@ export const createHistoryManager = ({
     return fileIds;
   };
 
-  const captureIntent = async () => {
-    capturing.value = true;
+  /**
+   * @param {HistoryIntent} intent
+   * @returns {IntentRecord}
+   */
+  const finishIntentCapture = (intent) => {
+    const signature = computeSignature(intent, 'intent');
+    emitHistoryDiagnostic({ type: 'capture', scope: 'intent' });
+    return {
+      intent,
+      signature,
+      fileIds: collectIntentFileIds(intent)
+    };
+  };
+
+  // OV-922: a synchronous capture writes no reactive state; nothing else
+  // runs while it does. `capturing` marks a capture only across its await,
+  // so a tracked control renders the app for its step, not for each capture.
+  /** @returns {IntentRecord | Promise<IntentRecord>} */
+  const captureIntent = () => {
     diagnostics.intentBuilds += 1;
-    try {
-      const intent = await buildIntent();
-      const signature = computeSignature(intent, 'intent');
-      emitHistoryDiagnostic({ type: 'capture', scope: 'intent' });
-      return {
-        intent,
-        signature,
-        fileIds: collectIntentFileIds(intent)
-      };
-    } finally {
-      capturing.value = false;
-    }
+    const intent = buildIntent();
+    if (!isPromiseLike(intent)) return finishIntentCapture(intent);
+    capturing.value = true;
+    return Promise.resolve(intent)
+      .then(finishIntentCapture)
+      .finally(() => {
+        capturing.value = false;
+      });
   };
 
   /**
@@ -628,16 +670,23 @@ export const createHistoryManager = ({
   const clearRedo = () => clearStack(redoStack);
 
   // UJ-09: the History position of the last Save or Load. Work is unsaved
-  // when an Undo or Redo step was added or traversed since then, or when an
-  // open control transaction already changed the intent it began with.
+  // when an Undo or Redo step was added or traversed since then, when an
+  // open control transaction already changed the intent it began with, or
+  // when a value outside History changed (D-07 (b): the Rich Feature Popup
+  // preference, which records no step).
   /** @param {HistoryEntry[]} stack */
   const topEntry = (stack) => stack[stack.length - 1] || null;
   /** @type {{ undo: HistoryEntry | null, redo: HistoryEntry | null }} */
   let savePoint = { undo: null, redo: null };
+  let changedOutsideHistory = false;
   const markSavePoint = () => {
     savePoint = { undo: topEntry(undoStack), redo: topEntry(redoStack) };
+    changedOutsideHistory = false;
   };
+  // Records no step and leaves Redo and an open transaction as they are.
+  const markChangeOutsideHistory = () => { changedOutsideHistory = true; };
   const hasChangesSinceSavePoint = async () => {
+    if (changedOutsideHistory) return true;
     if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
     const open = openTransaction();
     if (!open) return false;
@@ -645,22 +694,36 @@ export const createHistoryManager = ({
     return (await captureIntent()).signature !== open.beforeSignature;
   };
 
-  const enforceLimits = () => {
-    let evicted = false;
+  // OV-1260: the step just recorded, undone, or redone (`kept`) stays even
+  // when it alone is over the byte limit; the oldest other steps drop first.
+  // OV-1365: the step-count window drops silently, as an undo window does;
+  // only drops caused by the byte limit are announced.
+  /** @param {HistoryEntry | null} [kept] */
+  const enforceLimits = (kept = null) => {
+    let undoDropped = false;
+    let redoDropped = false;
     while (undoStack.length > maxActions) {
       removeEntryBytes(undoStack.shift());
-      evicted = true;
     }
 
-    while (undoStack.length > 0 && totalEntryBytes + retainedFileBytes() > maxBytes) {
+    const overLimit = () => totalEntryBytes + retainedFileBytes() > maxBytes;
+    while (undoStack.length > 0 && undoStack[0] !== kept && overLimit()) {
       removeEntryBytes(undoStack.shift());
-      evicted = true;
+      undoDropped = true;
     }
-    if (totalEntryBytes + retainedFileBytes() > maxBytes) clearRedo();
+    if (overLimit()) {
+      const keptRedo = redoStack.filter((entry) => entry === kept);
+      redoStack.filter((entry) => entry !== kept).forEach(removeEntryBytes);
+      redoDropped = keptRedo.length < redoStack.length;
+      redoStack.splice(0, redoStack.length, ...keptRedo);
+    }
 
-    historyLimitMessage.value = evicted
-      ? 'Older undo history was discarded to stay within the history limit.'
-      : '';
+    // Every byte-limit drop is announced through the one notice path, in
+    // English marked with `msg`: the notice translates it where it shows it.
+    const dropped = undoDropped && redoDropped ? msg('Older undo history and the redo history were discarded to stay within the history limit.')
+      : undoDropped ? msg('Older undo history was discarded to stay within the history limit.')
+        : redoDropped ? msg('Redo history was discarded to stay within the history limit.') : '';
+    if (dropped) onHistoryLimit(dropped);
     releaseUnreferencedFiles();
   };
 
@@ -681,13 +744,18 @@ export const createHistoryManager = ({
   // ownerless action, the same owner, or an action that owns the open commit
   // joins it; another owner first settles it.
   /**
-   * @param {string} [label]
-   * @param {HistoryStepBase} [options]
+   * @param {string} label
+   * @param {HistoryStepBase} options
+   * @param {boolean} ownedByAction `runUndoable` opens the step and commits it.
    * @returns {Promise<HistoryTransaction | null>}
    */
-  const begin = async (label = 'Edit', options = {}) => {
+  const openStep = async (label, options, ownedByAction) => {
     if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
+    // D-40 (N-A of #1091): numbered as it begins, before any wait below, so a
+    // rerender its own edit requests in this task counts it as the requester.
+    // A step that joins the open one or opens none leaves an unused number.
+    const serial = ++intentStepSerial;
     const open = openTransaction();
     if (open) {
       if (
@@ -700,7 +768,11 @@ export const createHistoryManager = ({
       if (reopened) return reopened;
     }
 
-    const before = await captureIntent();
+    // OV-946: a synchronous capture opens the step in this turn, so a
+    // control that begins meanwhile finds it and joins it; an asynchronous
+    // one holds `capturing` until it ends.
+    const capture = captureIntent();
+    const before = isPromiseLike(capture) ? await capture : capture;
     if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
     /** @type {HistoryTransaction} */
@@ -711,12 +783,20 @@ export const createHistoryManager = ({
       beforeFileIds: before.fileIds,
       closed: false,
       source: options.source || '',
-      owner: options.owner
+      owner: options.owner,
+      deferAdapterCommit: ownedByAction,
+      serial
     };
     activeTransaction = tx;
     touchTransaction();
     return tx;
   };
+
+  /**
+   * @param {string} [label]
+   * @param {HistoryStepBase} [options]
+   */
+  const begin = (label = 'Edit', options = {}) => openStep(label, options, false);
 
   /** @param {HistoryTransaction | null | undefined} transaction */
   const cancel = (transaction) => {
@@ -795,8 +875,9 @@ export const createHistoryManager = ({
       bytes: entry.byteSize
     });
     clearRedo();
-    enforceLimits();
+    enforceLimits(entry);
     touch();
+    settingsStepListener(entry.changes);
     return true;
   };
 
@@ -898,7 +979,7 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
     const open = openTransaction();
-    const tx = open || await begin(label, options);
+    const tx = open || await openStep(label, options, true);
     if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
     // OV-460: an edit made while another action is still running on the open
     // step applies at once and is a step under its own name: it names the
@@ -935,29 +1016,35 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value) return null;
     /**
      * @param {CheckpointRecord} before
+     * @param {boolean | undefined} drawn
      * @returns {HistoryTransaction}
      */
-    const createTransaction = (before) => {
+    const createTransaction = (before, drawn) => {
+      if (drawn !== undefined) before.drawn = drawn;
       if (currentCheckpoint !== null) setCurrentCheckpoint(before);
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
       return {
         label,
         before,
+        // The settings a committed checkpoint changed name the live values it asks to apply.
+        beforeIntent: currentIntent,
         closed: false,
         source: options.source || ''
       };
     };
     const captureBefore = () => {
       notifyCheckpointCapture(options, 'before-start');
+      // Read as the capture starts; the snapshot service takes the figure at once.
+      const drawn = options.drawn?.before();
       const before = captureCheckpoint();
       return isPromiseLike(before)
         ? Promise.resolve(before).then((record) => {
-            const transaction = createTransaction(record);
+            const transaction = createTransaction(record, drawn);
             notifyCheckpointCapture(options, 'before-end');
             return transaction;
           })
         : (() => {
-            const transaction = createTransaction(before);
+            const transaction = createTransaction(before, drawn);
             notifyCheckpointCapture(options, 'before-end');
             return transaction;
           })();
@@ -975,6 +1062,7 @@ export const createHistoryManager = ({
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
     const after = await captureCheckpoint();
+    if (options.drawn) after.drawn = transaction.before.drawn === true && options.drawn.change;
     const intent = await captureIntent();
     transaction.closed = true;
     setCurrentCheckpoint(after);
@@ -1013,9 +1101,10 @@ export const createHistoryManager = ({
       bytes: entry.byteSize
     });
     clearRedo();
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     notifyCheckpointCapture(options, 'after-end');
+    settingsStepListener(buildIntentPatch(transaction.beforeIntent ?? {}, intent.intent));
     return true;
   };
 
@@ -1063,6 +1152,69 @@ export const createHistoryManager = ({
     return isPromiseLike(transaction)
       ? Promise.resolve(transaction).then(execute)
       : execute(transaction);
+  };
+
+  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36).
+  // While the last step is a checkpoint and nothing is open, the state is the
+  // one its after side holds, so a side not yet drawn keeps the figure the
+  // rerender drew: Redo then shows it without another Python run.
+  const keepRedrawnResult = async () => {
+    const entry = topEntry(undoStack);
+    if (entry?.type !== 'checkpoint') return false;
+    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false
+      && !openTransaction() && !activeCheckpoint && !activeReplacement && !restoring.value && !capturing.value;
+    if (!keeps()) return false;
+    const after = await captureCheckpoint();
+    if (!keeps()) return false;
+    after.drawn = true;
+    removeEntryBytes(entry);
+    entry.after = after;
+    entry.byteSize = entry.before.byteSize + after.byteSize;
+    entry.fileIds = new Set([...entry.before.fileIds, ...after.fileIds]);
+    addEntryBytes(entry);
+    setCurrentCheckpoint(after);
+    enforceLimits(entry);
+    return true;
+  };
+
+  // OV-872: what a rerender writes as its figure is shown (the Results it
+  // replaces, OV-873, and the Legend rows Python drew) is drawn state, not an
+  // edit: an intent step that began after the rerender was requested takes it
+  // into the state it began from, so no step records it, as when no step is
+  // open. Its own changes stay in it. The step that requested the rerender
+  // (begun at `requestedAt` or earlier) keeps the write as its own, so its
+  // Undo restores the rows from before its edit (D-24 (OV-731), D-40). Both
+  // ways rest on the serial a step takes as it begins (`openStep`): a step
+  // begun after the request is numbered above it, and a step whose own edit
+  // made the request is numbered at or below it, also when it first waits for
+  // another owner's step to settle. A request no step made, read while a step
+  // is open, counts that step as the requester, so the write stays in it (as
+  // before D-40; no such request source exists now). The
+  // intent is read on both sides of the write in the same task, so the
+  // binder's timing does not change; a snapshot service that builds the
+  // intent asynchronously keeps the write in the step.
+  // Arrays are leaves (`buildIntentPatch`): a drawn array replaces the whole
+  // array in the step's `before`, so a write the step made to the same array
+  // before the rerender binds drops out of the step (no action does so now).
+  // While an intent capture runs (`capturing`, as a step begins) the write
+  // is not adopted and the step that begins may record it.
+  /**
+   * @param {() => void} write
+   * @param {{ requestedAt: number }} request `intentStepSerial()` when the rerender was requested.
+   */
+  const adoptDrawnWrite = (write, { requestedAt }) => {
+    const open = restoring.value || capturing.value ? null : openTransaction();
+    if (!open || (open.serial ?? 0) <= requestedAt) { write(); return; }
+    const before = buildIntent();
+    write();
+    if (isPromiseLike(before)) return;
+    const after = buildIntent();
+    diagnostics.intentBuilds += 2;
+    if (isPromiseLike(after)) return;
+    const changes = buildIntentPatch(before, after);
+    if (changes.length === 0) return;
+    open.before = applyIntentPatch(open.before, changes, 'redo');
+    open.beforeSignature = computeSignature(open.before, 'intent');
   };
 
   /**
@@ -1285,7 +1437,7 @@ export const createHistoryManager = ({
     });
     pushUndoEntry(entry);
     clearRedo();
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     emitHistoryDiagnostic({
       type: 'commit',
@@ -1455,7 +1607,7 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
     pushUndoEntry(command);
     clearRedo();
-    enforceLimits();
+    enforceLimits(command);
     touch();
     return true;
   };
@@ -1478,16 +1630,21 @@ export const createHistoryManager = ({
       signature,
       fileIds: collectIntentFileIds(nextIntent)
     });
+    // The restored live setting values return to the Result once applied (6.4).
+    settingsStepListener(entry.changes);
   };
 
   /** @param {CheckpointRecord} record */
   const applyCheckpointEntry = async (record) => {
     restoring.value = true;
     try {
-      await applyCheckpoint(record.checkpoint);
+      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
     } finally {
       restoring.value = false;
     }
+    // A checkpoint's figure can predate the apply of its live values (the
+    // Redo of Reset Settings); one already equal applies nothing.
+    settingsStepListener(null);
     setCurrentCheckpoint(record);
     await refreshCurrentIntent();
   };
@@ -1536,6 +1693,13 @@ export const createHistoryManager = ({
     return historyAvailability();
   };
 
+  // OV-1339: the busy answer for the step an Undo (or Redo) takes next, the
+  // top of its stack. The action and its enabled state read this one check.
+  /** @param {HistoryEntry[]} stack */
+  const topStepAvailability = (stack) => (
+    stack.length > 0 ? stepAvailability(stack[stack.length - 1]) : null
+  );
+
   /** @param {() => Promise<unknown>} step */
   const traverse = async (step) => {
     traversals.value += 1;
@@ -1550,9 +1714,9 @@ export const createHistoryManager = ({
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || undoStack.length === 0) return false;
-    const entry = undoStack[undoStack.length - 1];
-    const stepBusy = stepAvailability(entry);
+    const stepBusy = topStepAvailability(undoStack);
     if (stepBusy) return stepBusy;
+    const entry = undoStack[undoStack.length - 1];
     if (entry.type === 'command') {
       const reverted = await applyCommandWithFlag(entry, 'undo');
       if (!reverted) {
@@ -1569,7 +1733,7 @@ export const createHistoryManager = ({
     }
     undoStack.pop();
     redoStack.push(entry);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     return true;
   });
@@ -1578,9 +1742,9 @@ export const createHistoryManager = ({
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || redoStack.length === 0) return false;
-    const entry = redoStack[redoStack.length - 1];
-    const stepBusy = stepAvailability(entry);
+    const stepBusy = topStepAvailability(redoStack);
     if (stepBusy) return stepBusy;
+    const entry = redoStack[redoStack.length - 1];
     if (entry.type === 'command') {
       const applied = await applyCommandWithFlag(entry, 'redo');
       if (!applied) {
@@ -1597,17 +1761,31 @@ export const createHistoryManager = ({
     }
     redoStack.pop();
     undoStack.push(entry);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     return true;
   });
 
-  const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
-  const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
+  /** @param {HistoryEntry[]} stack */
+  const canTraverse = (stack) => (
+    stack.length > 0 && !restoring.value && !historyAvailability() && !topStepAvailability(stack)
+  );
+  const canUndo = () => canTraverse(undoStack);
+  const canRedo = () => canTraverse(redoStack);
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
+  /**
+   * The one listener of the settings a History step records, a checkpoint
+   * commits, or an Undo or Redo restores (`null`: any setting, a checkpoint
+   * restore). The composition root registers it once both History and the
+   * automatic rerender exist (R1 (c), PD-OI-102).
+   * @param {(changes: readonly HistoryIntentChange[] | null) => void} listener
+   */
+  const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
+
   return {
+    setSettingsStepListener,
     mutationPending: () => {
       void transactionRevision.value;
       return Boolean(restoring.value || capturing.value || intentCommitOwnedByAction());
@@ -1630,8 +1808,11 @@ export const createHistoryManager = ({
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
     hasChangesSinceSavePoint,
+    markChangeOutsideHistory,
     historyAvailability,
-    historyLimitMessage,
+    keepRedrawnResult,
+    adoptDrawnWrite,
+    intentStepSerial: () => intentStepSerial,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,
     markSavePoint,

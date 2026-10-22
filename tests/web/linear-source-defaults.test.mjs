@@ -306,24 +306,24 @@ test('the File card template takes its name fields from the one decision and one
   assert.match(uses[0], /v-if="linearFileCardRecord\(source\)"/);
   assert.match(uses[1], /v-if="!linearFileCardRecord\(source\)"/);
   // The record's fields exist once: in the component both places render.
-  for (const label of ['`Definition for sequence ${idx + 1}`', '`Subtitle / title for sequence ${idx + 1}`']) {
+  for (const label of ["t('Definition for sequence {n}', { n: idx + 1 })", "t('Subtitle / title for sequence {n}', { n: idx + 1 })"]) {
     assert.equal(lines.filter((line) => line.includes(label)).length, 1, label);
   }
   const template = html.slice(html.indexOf('id="linear-record-names-template"'));
-  assert.ok(template.indexOf('`Definition for sequence ${idx + 1}`') > 0, 'the fields live in the component template');
+  assert.ok(template.indexOf("t('Definition for sequence {n}', { n: idx + 1 })") > 0, 'the fields live in the component template');
   assert.match(template.slice(0, template.indexOf('</script>')), /v-model="seq\.definition"[\s\S]*v-model="seq\.record_subtitle"/);
 });
 
 test('a blank record Definition placeholder previews the inherited definition Generate draws', async () => {
   const { readFileSync } = await import('node:fs');
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const input = html.split('\n').find((line) => line.includes('`Definition for sequence ${idx + 1}`'));
+  const input = html.split('\n').find((line) => line.includes("t('Definition for sequence {n}', { n: idx + 1 })"));
   assert.ok(input, 'record Definition input not found');
   // One rule: the placeholder uses the function that resolves the drawn text,
   // so File default, then the inferred definition, then the example text.
   assert.match(
     input,
-    /:placeholder="resolveLinearRecordEffectiveDefinition\(seq, source\) \|\| 'e\.g\., Escherichia coli O157:H7 Sakai'"/
+    /:placeholder="resolveLinearRecordEffectiveDefinition\(seq, source\) \|\| t\('e\.g\., \{example\}', \{ example: 'Escherichia coli O157:H7 Sakai' \}\)"/
   );
 
   const inferredOnly = createLinearSeq({ inferred_definition: '<i>Vibrio</i> sp.' });

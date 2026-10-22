@@ -1,0 +1,747 @@
+{
+  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A start or end is a number or ASCII number text (gbdraw.core.numeric.ascii_float) truncated toward zero; anything else, including a boolean and a truncation beyond the safe integers, is missing. A display or strand is text without surrounding ASCII whitespace, the first such text of a list, or a safe integer's digits; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. Each featureCoordinateCases input is a feature without parts and expected its start and end in the written feature (interactive_svg._feature_coordinates, standalone-interactivity.js featureCoordinates): they are read like a part's start and end, because the viewer builds the feature's one part from them. The Web app's reader of a start or end (services/feature-utils.js locationPartNumber and locationPartBound) and the viewer script's copy (locationPartBound in standalone-interactivity-assets.js) read each featureCoordinateCases value with the same rule (tests/web/feature-search-scope.test.mjs).",
+  "cases": [
+    {
+      "name": "whole-number start and end give a 1-based display",
+      "input": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "+"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "+",
+          "display": "11..20"
+        }
+      ]
+    },
+    {
+      "name": "a fractional start and end truncate toward zero",
+      "input": [
+        {
+          "start": 10.5,
+          "end": 20.9,
+          "strand": "-"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "-",
+          "display": "11..20"
+        }
+      ]
+    },
+    {
+      "name": "a fraction below one truncates to zero",
+      "input": [
+        {
+          "start": 0.5,
+          "end": 3
+        }
+      ],
+      "expected": [
+        {
+          "start": 0,
+          "end": 3,
+          "strand": "",
+          "display": "1..3"
+        }
+      ]
+    },
+    {
+      "name": "negative whole numbers are kept",
+      "input": [
+        {
+          "start": -5,
+          "end": -1
+        }
+      ],
+      "expected": [
+        {
+          "start": -5,
+          "end": -1,
+          "strand": "",
+          "display": "-4..-1"
+        }
+      ]
+    },
+    {
+      "name": "a negative fraction truncates to zero",
+      "input": [
+        {
+          "start": -0.5,
+          "end": 3
+        }
+      ],
+      "expected": [
+        {
+          "start": 0,
+          "end": 3,
+          "strand": "",
+          "display": "1..3"
+        }
+      ]
+    },
+    {
+      "name": "a null start is missing, not zero",
+      "input": [
+        {
+          "start": null,
+          "end": 20
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        }
+      ]
+    },
+    {
+      "name": "an absent start is missing, not zero",
+      "input": [
+        {
+          "end": 20
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        }
+      ]
+    },
+    {
+      "name": "an empty or blank end is missing, not zero",
+      "input": [
+        {
+          "start": 10,
+          "end": ""
+        },
+        {
+          "start": 10,
+          "end": "  "
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        },
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        }
+      ]
+    },
+    {
+      "name": "a non-numeric string is missing",
+      "input": [
+        {
+          "start": 5,
+          "end": "x"
+        }
+      ],
+      "expected": [
+        {
+          "start": 5,
+          "end": null,
+          "strand": "",
+          "display": "6.."
+        }
+      ]
+    },
+    {
+      "name": "numeric strings are numbers",
+      "input": [
+        {
+          "start": "10",
+          "end": "20.5"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "",
+          "display": "11..20"
+        }
+      ]
+    },
+    {
+      "name": "an object or list is not a number",
+      "input": [
+        {
+          "start": {},
+          "end": [
+            5
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "a part with neither start nor end and no display is dropped",
+      "input": [
+        {
+          "strand": "+"
+        },
+        {
+          "start": null,
+          "end": null
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "a part with neither start nor end keeps its display",
+      "input": [
+        {
+          "start": null,
+          "end": null,
+          "display": "join(1..2,5..6)"
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": null,
+          "strand": "",
+          "display": "join(1..2,5..6)"
+        }
+      ]
+    },
+    {
+      "name": "a display is kept as written, trimmed",
+      "input": [
+        {
+          "start": 10,
+          "end": 20,
+          "display": "  <11..20  "
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "",
+          "display": "<11..20"
+        }
+      ]
+    },
+    {
+      "name": "a strand is trimmed and a missing strand is empty",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": " + "
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": null
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "+",
+          "display": "2..2"
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": "",
+          "display": "4..4"
+        }
+      ]
+    },
+    {
+      "name": "entries that are not objects are skipped",
+      "input": [
+        1,
+        "x",
+        null,
+        [
+          1,
+          2
+        ],
+        {
+          "start": 1,
+          "end": 2
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "",
+          "display": "2..2"
+        }
+      ]
+    },
+    {
+      "name": "input that is not a list gives no parts",
+      "input": null,
+      "expected": []
+    },
+    {
+      "name": "a string is not a list of parts",
+      "input": "1..2",
+      "expected": []
+    },
+    {
+      "name": "an object is not a list of parts",
+      "input": {
+        "start": 1,
+        "end": 2
+      },
+      "expected": []
+    },
+    {
+      "name": "a boolean start or end is missing, not 1 or 0",
+      "input": [
+        {
+          "start": true,
+          "end": 20
+        },
+        {
+          "start": 10,
+          "end": false
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        },
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        }
+      ]
+    },
+    {
+      "name": "hexadecimal text is not a number",
+      "input": [
+        {
+          "start": "0x10",
+          "end": 20
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        }
+      ]
+    },
+    {
+      "name": "text with an underscore is not a number",
+      "input": [
+        {
+          "start": 5,
+          "end": "1_0"
+        }
+      ],
+      "expected": [
+        {
+          "start": 5,
+          "end": null,
+          "strand": "",
+          "display": "6.."
+        }
+      ]
+    },
+    {
+      "name": "text with non-ASCII digits or spaces is not a number",
+      "input": [
+        {
+          "start": "\u0661\u0660",
+          "end": 20
+        },
+        {
+          "start": 5,
+          "end": "\u00a020"
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        },
+        {
+          "start": 5,
+          "end": null,
+          "strand": "",
+          "display": "6.."
+        }
+      ]
+    },
+    {
+      "name": "ASCII number text keeps its sign, exponent, and surrounding ASCII whitespace",
+      "input": [
+        {
+          "start": " +1e1\t",
+          "end": ".5e2"
+        },
+        {
+          "start": "-5.",
+          "end": "\n7\n"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 50,
+          "strand": "",
+          "display": "11..50"
+        },
+        {
+          "start": -5,
+          "end": 7,
+          "strand": "",
+          "display": "-4..7"
+        }
+      ]
+    },
+    {
+      "name": "a number too large for a float or beyond the safe integers is missing",
+      "input": [
+        {
+          "start": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+          "end": 20
+        },
+        {
+          "start": 10,
+          "end": 1e+20
+        },
+        {
+          "start": "inf",
+          "end": "nan"
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        },
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        }
+      ]
+    },
+    {
+      "name": "a display or strand of 0 is kept as text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": 0,
+          "display": 0
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "0",
+          "display": "0"
+        }
+      ]
+    },
+    {
+      "name": "a whole-number display or strand is its digits, a fraction is no text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": -1.0,
+          "display": 1.5
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "-1",
+          "display": "2..2"
+        }
+      ]
+    },
+    {
+      "name": "a list display or strand gives its first non-blank text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": [
+            null,
+            " ",
+            "-",
+            "+"
+          ],
+          "display": [
+            "",
+            [
+              " join(2..2) "
+            ],
+            "x"
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "-",
+          "display": "join(2..2)"
+        }
+      ]
+    },
+    {
+      "name": "a boolean or object display or strand is no text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": true,
+          "display": {}
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": {},
+          "display": false
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "",
+          "display": "2..2"
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": "",
+          "display": "4..4"
+        }
+      ]
+    },
+    {
+      "name": "only ASCII whitespace is trimmed from a display",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "display": "\ufeff<2..2\u00a0 "
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "",
+          "display": "\ufeff<2..2\u00a0"
+        }
+      ]
+    }
+  ],
+  "featureCoordinateCases": [
+    {
+      "name": "whole-number start and end are kept",
+      "input": {
+        "start": 10,
+        "end": 20
+      },
+      "expected": {
+        "start": 10,
+        "end": 20
+      }
+    },
+    {
+      "name": "a null start is missing, not zero",
+      "input": {
+        "start": null,
+        "end": 20
+      },
+      "expected": {
+        "start": null,
+        "end": 20
+      }
+    },
+    {
+      "name": "an absent start and end are missing",
+      "input": {},
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "an empty or blank start or end is missing, not zero",
+      "input": {
+        "start": "",
+        "end": "  "
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "ASCII number text is a number",
+      "input": {
+        "start": "10",
+        "end": " 20 "
+      },
+      "expected": {
+        "start": 10,
+        "end": 20
+      }
+    },
+    {
+      "name": "non-numeric text and a boolean are missing",
+      "input": {
+        "start": "abc",
+        "end": true
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "a list is missing, not zero",
+      "input": {
+        "start": [],
+        "end": [
+          5
+        ]
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "a fraction truncates toward zero",
+      "input": {
+        "start": 10.7,
+        "end": 20.2
+      },
+      "expected": {
+        "start": 10,
+        "end": 20
+      }
+    },
+    {
+      "name": "a negative whole number is kept",
+      "input": {
+        "start": -5,
+        "end": -1
+      },
+      "expected": {
+        "start": -5,
+        "end": -1
+      }
+    },
+    {
+      "name": "a number beyond the safe integers is missing",
+      "input": {
+        "start": 9007199254740993,
+        "end": 1e+300
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "hex and underscore text are missing",
+      "input": {
+        "start": "0x10",
+        "end": "1_0"
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "non-ASCII digits and a non-ASCII space are missing",
+      "input": {
+        "start": "\u0661",
+        "end": "\u00a020"
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "a fraction and exponent text truncate toward zero",
+      "input": {
+        "start": 1.5,
+        "end": " 2.5e1 "
+      },
+      "expected": {
+        "start": 1,
+        "end": 25
+      }
+    },
+    {
+      "name": "a whole number one beyond the safe integers is missing",
+      "input": {
+        "start": 0,
+        "end": 9007199254740993
+      },
+      "expected": {
+        "start": 0,
+        "end": null
+      }
+    },
+    {
+      "name": "no-value words are missing",
+      "input": {
+        "start": "none",
+        "end": "Infinity"
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    }
+  ]
+}

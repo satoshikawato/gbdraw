@@ -1,18 +1,19 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
-/** @import { SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
+import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
-import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
+import { isCardRow, parseSpecificRules, serializeSpecificRules, specificRulesFileCaptions, unmarkCardRow, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendRowRules, prepareSpecificColorImport, rekeyedRuleRows,
-  ruleCommitLegendRows, ruleLegendCaptions
+  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
+  rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -44,6 +45,8 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @typedef {object} RuleActionsPorts
  * @property {() => boolean} requestAutomaticRerender
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
+ * @property {(drawing: DrawingState) => boolean} isRedrawOwed
+ *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
  */
 
 /**
@@ -71,10 +74,22 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  */
 
 /**
+ * The Legend owner's move of a drawing's Legend records to the re-keyed keys
+ * (`moveLegendRecords` in app/legend/entry-actions.js); with `hidden`, for a
+ * drawing not shown, it also drops the records of the `removed` rows (with
+ * the Legend colors that copy them, `legendColorCopies`) and writes the
+ * drawing's Legend list.
+ * @typedef {(drawing: DrawingState, entries: LegendEntry[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
+ *   hidden?: { removed: readonly RuleRowColor[] } | null) => unknown} MoveLegendRecordsPort
+ */
+
+/**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
+ * @property {MoveLegendRecordsPort} moveLegendRecords
+ *   The Legend owner's move of a drawing's Legend records; this owner calls it only for a drawing not shown.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
@@ -95,7 +110,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -223,14 +238,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const placed = rows
       ? (/** @type {string} */ key, /** @type {string} */ nextKey) => replaced.get(key) === nextKey
       : (/** @type {string} */ key, /** @type {string} */ nextKey) => legendRowTakesPlace(svg, key, nextKey);
+    // A commit keys rule rows as Python does (OV-1235); a restore by caption (D-15-38).
+    const byColor = Boolean(rows);
     return !legendRowsShowable(
-      resultLegendRowKeys(state, legendSourceContext(drawing, before)),
-      resultLegendRowKeys(state, legendSourceContext(drawing, after)),
+      resultLegendRowKeys(state, legendSourceContext(drawing, before), { byColor }),
+      resultLegendRowKeys(state, legendSourceContext(drawing, after), { byColor }),
       {
         displayed: Number(state.selectedResultIndex?.value) || 0,
         shows,
         placed,
-        firstRule: legendRuleOrder(before),
+        firstRule: legendRuleOrder(before, { byColor }),
         restored: rows ? null : (/** @type {string} */ key) => shownPythonLegendRow(svg, key)
       }
     ) || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !holdsRow(caption));
@@ -246,6 +263,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // rerender, as the edit did. A removed whole-type rule asks for it only
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
+  // The composition root does not call this for a figure History recorded as
+  // drawn (D-24 (OV-731)).
   /** @param {Partial<SpecificColorRule>[]} previousRules */
   const followRestoredRules = (previousRules) => {
     const drawing = state.activeDrawing();
@@ -276,15 +295,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // win at Generate over the recolored rule, so a commit that recolors the row
   // retires it; `afterCommit` may store a new one.
   // OV-152: a commit that removes a rule row (Clear All, a deleted or
-  // recaptioned rule) retires that copy too; left behind, it would paint the
-  // row Generate draws for the features' palette color. A copy has the removed
-  // rule's caption and color. A color set in the Legend editor is no copy: the
-  // editor recolors the rules of a row a rule draws (legend.js), so its colors
-  // sit on rows no rule draws and stay.
+  // recaptioned rule) retires that copy too (`legendColorCopies`).
   /**
    * @param {DrawingState} drawing
    * @param {{ caption: string, color: string }[]} intents
-   * @param {{ caption: string, color: string }[]} removedRuleRows
+   * @param {readonly RuleRowColor[]} removedRuleRows
    */
   const retireSupersededLegendColors = (drawing, intents, removedRuleRows) => {
     const overrides = drawing.legendColorOverrides;
@@ -293,11 +308,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         delete overrides[caption];
       }
     }
-    for (const { caption, color } of removedRuleRows) {
-      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) {
-        delete overrides[caption];
-      }
-    }
+    legendColorCopies(overrides, removedRuleRows).forEach((key) => { delete overrides[key]; });
   };
   // OV-444 (OV-443, OV-445): this owner is the one writer of the rule table,
   // and every write goes through one line (`queueRuleWrite`), in the order it
@@ -343,7 +354,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {string} [label]
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitSpecificRules = (build, label = 'Change specific color rules', options = {}) => {
+  const commitSpecificRules = (build, label = msg('Change specific color rules'), options = {}) => {
     const drawing = options.drawing || state.activeDrawing();
     return queueRuleWrite(() => runSpecificRuleWrite(drawing, build, label, options));
   };
@@ -433,24 +444,33 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       && resolveColorToHex(intent.color) === resolveColorToHex(legendPlacement.color))?.caption : undefined;
     /** @type {Map<PythonLegendKey, PythonLegendKey>} */
     const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
+    // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
+    const inPlace = new Map([...rekeyed, ...replaced]);
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
       placement: placedKey && legendPlacement && !legendPlacement.replaces ? { caption: placedKey, after: legendPlacement.at } : null,
-      rekeyed: new Map([...rekeyed, ...replaced])
+      rekeyed: inPlace
     });
     if (!legend) return false;
     const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
       rows: { add: legend.diff.add, retire: legend.diff.remove.map(({ caption }) => caption) },
-      replaced
+      replaced: inPlace
     });
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
     // draws (R13); a checkpoint when the legend gains or loses a row.
     const transact = legend.diff.add.length || legend.diff.remove.length
       ? runUndoableCheckpoint : runUndoable;
+    // D-24 (OV-731): a checkpoint step records whether the figure of each
+    // side is the one its state draws, so Undo and Redo of a drawn side ask
+    // for no Python run. The figure the commit starts from is drawn unless a
+    // rerender asked for is still owed when History captures it (D-36). The
+    // commit's own figure is drawn when it also shows every row; otherwise
+    // History keeps the figure of the rerender the commit asks for once that
+    // is shown, while the step is the last one (`keepRedrawnResult`).
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
       drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
@@ -461,7 +481,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         return row;
       }));
       patternDrafts.reconcile();
-      drawing.fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
+      drawing.fileLegendCaptions.value = specificRulesFileCaptions(candidate.rules);
       drawing.addedLegendCaptions.value = new Set([
         ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
@@ -476,7 +496,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       // is an operation of the one compile (OV-146).
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
-    }, { joinsOpenStep });
+    }, { joinsOpenStep, drawn: { before: () => !ports.isRedrawOwed(drawing), change: !redrawsLegend } });
     if (applied) appliedWrites += 1;
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;
@@ -531,12 +551,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
     patternDrafts.suspend();
     const token = patternDrafts.begin(row, value);
+    // OV-1133 (S4-Q5): the edit stays current while its draft does. A Result
+    // or catalog that an automatic rerender replaces meanwhile makes its
+    // preparation stale, and the write prepares again (`runSpecificRuleWrite`).
     return queueRuleWrite(async () => {
-      const snapshot = rulePreparation.snapshot();
-      const current = () => patternDrafts.isCurrent(row, token) && rulePreparation.isCurrent(snapshot) && isPatternEditAvailable();
+      const current = () => patternDrafts.isCurrent(row, token) && isPatternEditAvailable();
       try {
         const applied = await runSpecificRuleWrite(drawing, reviseRow(row, { val: String(value ?? ''), fromFile: false }),
-          'Edit specific color rule', { isCurrent: current });
+          msg('Edit specific color rule'), { isCurrent: current });
         if (applied && patternDrafts.isCurrent(row, token)) patternDrafts.revert(row);
         return applied;
       } catch (cause) {
@@ -571,7 +593,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!current) return;
     if (field === 'val') return applySpecificRulePattern(drawing, current, value);
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
-    return commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), 'Edit specific color rule', () => {}, input).finally(() => {
+    return commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), msg('Edit specific color rule'), () => {}, input).finally(() => {
       if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
     });
   };
@@ -589,14 +611,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       rows.splice(from, 1);
       rows.splice(target, 0, row);
       return rows;
-    }, 'Move specific color rule');
+    }, msg('Move specific color rule'));
   };
 
   const downloadSpecificRulesTsv = () => {
     const drawing = state.activeDrawing();
     const text = serializeSpecificRules(drawing.manualSpecificRules);
     if (!text.trim()) {
-      showNotice({ text: 'There are no color rules to export.' });
+      showNotice({ text: t('There are no color rules to export.') });
       return;
     }
     downloadTextFile('gbdraw_specific_rules.tsv', text);
@@ -700,6 +722,22 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (busy) return busy;
     drawing.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
   };
+  // An edited row is the user's: it loses its file card (OV-1280).
+  /**
+   * @param {number} index
+   * @param {'feat' | 'qual' | 'key'} field
+   * @param {string} value
+   */
+  const editWhitelistRule = (index, field, value) => {
+    const drawing = state.activeDrawing();
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    const row = drawing.manualWhitelist[index];
+    if (!row) return undefined;
+    row[field] = value;
+    unmarkCardRow(row, 'whitelist');
+    return undefined;
+  };
   /** @param {number} index */
   const removeWhitelistRule = (index) => {
     const drawing = state.activeDrawing();
@@ -722,7 +760,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!newPriorityRule.order) return;
     const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat?: string, order?: string }} */ r) => r.feat === newPriorityRule.feat);
     if (idx >= 0) {
-      drawing.manualPriorityRules[idx].order = newPriorityRule.order;
+      // The row is the user's now: it loses its file card (OV-1280).
+      drawing.manualPriorityRules.splice(idx, 1, { feat: newPriorityRule.feat, order: newPriorityRule.order });
     } else {
       drawing.manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
     }
@@ -737,18 +776,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     // One question names every reason the pattern may match slowly.
     const pattern = String(newSpecRule.val);
     const risks = [
-      pattern.length > 50 ? 'It is longer than 50 characters.' : '',
+      pattern.length > 50 ? t('It is longer than 50 characters.') : '',
       /\(.+[\+\*]\)[\+\*]/.test(pattern) || /\(.*\)\+/.test(pattern)
-        ? 'It repeats a group, as in (a+)+, which can make the page stop responding.'
+        ? t('It repeats a group, as in (a+)+, which can make the page stop responding.')
         : ''
     ].filter(Boolean);
     if (risks.length > 0) {
       const choice = await askChoice({
-        title: 'Add this color rule?',
-        description: 'This pattern may make color matching slow:',
+        title: t('Add this color rule?'),
+        description: t('This pattern may make color matching slow:'),
         items: risks,
-        actions: [{ id: 'add', label: 'Add rule', tone: 'primary' }],
-        cancelLabel: 'Edit pattern'
+        actions: [{ id: 'add', label: t('Add rule'), tone: 'primary' }],
+        cancelLabel: t('Edit pattern')
       });
       if (choice !== 'add' || newSpecRule.val !== pattern) return;
       const busy = state.sessionOperationAvailability?.();
@@ -762,7 +801,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    return commitPrepared(drawing, (current) => [...current, rule], 'Add specific color rule', () => {
+    return commitPrepared(drawing, (current) => [...current, rule], msg('Add specific color rule'), () => {
       if (newSpecRule.val === rule.val) newSpecRule.val = '';
     }, document.querySelector?.('[data-new-specific-rule-pattern]'));
   };
@@ -777,8 +816,46 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const importSpecificRules = async (text, { drawing = state.activeDrawing(), isCurrent = () => true } = {}) => {
     const { importedCount } = prepareSpecificColorImport(text);
     const applied = await commitSpecificRules((current) => prepareSpecificColorImport(text, [...current]).nextRules,
-      'Import specific color rules', { drawing, isCurrent });
+      msg('Import specific color rules'), { drawing, isCurrent });
     return applied === true ? importedCount : false;
+  };
+  // OV-1280 (D-19): Remove on the Specific rules card takes back the rows its
+  // file added (`fromFile`, D-ORIGIN-1); true when there were none. The shown
+  // drawing commits as any rule write does. A drawing that is not shown is
+  // written at once, inside the card's History step, as History restores it
+  // (`history-snapshot.js`, the other mode's config and Legend records), from
+  // nothing the shown figure holds (REVIEW-1 B1): its rows, and the Legend
+  // records of the rows only the file's rules drew, found by the keys the
+  // drawing stores for them (`listedRuleRowRemoval`); a kept rule's row whose
+  // key changes moves to it (REVIEW-3 R3-B1). The Legend owner writes the
+  // Legend records, with the Legend color copies of the removed rows
+  // (`moveLegendRecords`). So a Save, an Undo or a Redo
+  // finds the whole change. When it is shown, the display draws its figure
+  // again if its Legend cannot show the rules (app-setup.js, the rule table
+  // its Result was last shown with).
+  /** @param {DrawingState} drawing Not shown. */
+  const takeBackFileRulesOfHiddenDrawing = (drawing) => {
+    /** @type {SpecificColorRule[]} */
+    const before = [...drawing.manualSpecificRules];
+    const kept = withoutImportedRows(before, 't_color');
+    /** @type {LegendEntry[][]} */
+    const [entries, deletedEntries, dormantEntries] = [drawing.legendEntries, drawing.deletedLegendEntries, drawing.dormantLegendEntries]
+      .map((list) => list.value || []);
+    const { gone, rekeyed } = listedRuleRowRemoval(before, kept, [...entries, ...deletedEntries, ...dormantEntries].map(legendEntryKey));
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
+    drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
+    moveLegendRecords(drawing, entries, rekeyed, { removed: gone });
+  };
+  /** @param {DrawingState} drawing */
+  const removeImportedSpecificRules = (drawing) => {
+    if (!drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => isCardRow(rule, 't_color'))) return Promise.resolve(true);
+    if (drawing === state.activeDrawing()) {
+      return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
+    }
+    return queueRuleWrite(async () => {
+      takeBackFileRulesOfHiddenDrawing(drawing);
+      return true;
+    });
   };
 
   const applySpecificRulePreset = async () => {
@@ -790,7 +867,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!presetId) return;
     const preset = specificRulePresets.find((/** @type {{ id: string, path: string }} */ entry) => entry.id === presetId);
     if (!preset) {
-      showNotice({ text: 'That rule preset is not available.', tone: 'warning' });
+      showNotice({ text: t('That rule preset is not available.'), tone: 'warning' });
       return;
     }
 
@@ -807,7 +884,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         const text = await response.text();
         const { rules } = parseSpecificRules(text);
         if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)) return;
-        return await runSpecificRuleWrite(drawing, () => rules, 'Apply specific color preset', {
+        return await runSpecificRuleWrite(drawing, () => rules, msg('Apply specific color preset'), {
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
             if (presetId === 'bakta') {
@@ -896,8 +973,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       ? override.color
       : override;
   };
-
-  const canEditFeatureColor = () => true;
 
   // Python matches a single-feature color rule only by the stable generation
   // hash, so duplicate record instances that share one hash share the rule.
@@ -1035,16 +1110,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     setLabelFilterMode,
     addWhitelistRule,
     removeWhitelistRule,
+    editWhitelistRule,
     removePriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
-    canEditFeatureColor,
     clearAllSpecificRules: () => {
       const drawing = state.activeDrawing();
-      return commitPrepared(drawing, () => [], 'Clear specific color rules');
+      return commitPrepared(drawing, () => [], msg('Clear specific color rules'));
     },
     commitSpecificRules,
     importSpecificRules,
+    removeImportedSpecificRules,
     followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,
@@ -1079,7 +1155,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       const drawing = state.activeDrawing();
       const row = drawing.manualSpecificRules[index];
       return commitPrepared(drawing, (current) => (current.includes(row) ? current.filter(rule => rule !== row) : null),
-        'Remove specific color rule');
+        msg('Remove specific color rule'));
     },
     setSpecificRuleField
   };

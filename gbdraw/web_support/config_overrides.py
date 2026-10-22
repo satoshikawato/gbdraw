@@ -16,7 +16,11 @@ from gbdraw.config.modify import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.filtering import DERIVED_LABEL_FILTERING_KEYS
-from gbdraw.session_request_codec import with_automatic_scale_interval
+from gbdraw.session_request_codec import (
+    migrate_flat_config_overrides,
+    migrate_legacy_full_config,
+    with_automatic_scale_interval,
+)
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 
@@ -163,26 +167,64 @@ def validate_and_project_web_config_overrides(
     return projected
 
 
+def validate_and_project_stored_request_config_overrides(
+    *,
+    mode: Literal["circular", "linear"],
+    config: object = None,
+    overrides: object = None,
+    managed_paths: object = None,
+) -> dict[str, object]:
+    """The check of a stored request's ``diagramOptions``, as the decoder reads them.
+
+    The decoder's migrations read the stored full config (OV-790) and the flat
+    (persisted) override names (OV-799) first. A draft's unmanaged overrides
+    and Python's Session reader use ``validate_and_project_web_config_overrides``
+    without them (D-OD11).
+    """
+
+    if mode in {"circular", "linear"}:
+        if isinstance(config, Mapping):
+            config = migrate_legacy_full_config(config, mode=mode, path="diagramOptions.config")
+        if isinstance(overrides, Mapping):
+            overrides = migrate_flat_config_overrides(overrides, mode=mode, path="diagramOptions.configOverrides")
+    return validate_and_project_web_config_overrides(
+        mode=mode, config=config, overrides=overrides, managed_paths=managed_paths
+    )
+
+
+_CONFIG_CHECK_SOURCES = ("draft", "storedRequest")
+
+
 def validate_web_config_overrides_json(
     mode: object,
     config_json: object,
     overrides_json: object,
     managed_paths_json: object,
-    require_unmanaged_only: object = False,
+    source: object,
 ) -> str:
-    """JSON boundary used by the existing diagram-Worker helper channel."""
+    """JSON boundary used by the existing diagram-Worker helper channel.
+
+    ``source`` names the check: ``"draft"`` checks a draft's unmanaged
+    overrides, ``"storedRequest"`` a stored request's ``diagramOptions``.
+    """
 
     try:
+        if source not in _CONFIG_CHECK_SOURCES:
+            raise ValidationError("Unknown configuration check.", diagnostic={"code": "HELPER_PROTOCOL"})
         config = json.loads(str(config_json))
         overrides = json.loads(str(overrides_json))
         managed_paths = json.loads(str(managed_paths_json))
-        projected = validate_and_project_web_config_overrides(
-            # The function re-validates the mode and raises ValidationError.
-            mode=cast(Literal["circular", "linear"], str(mode)),
-            config=config,
-            overrides=overrides,
-            managed_paths=managed_paths,
-            require_unmanaged_only=bool(require_unmanaged_only),
+        # The functions re-validate the mode and raise ValidationError.
+        checked_mode = cast(Literal["circular", "linear"], str(mode))
+        projected = (
+            validate_and_project_web_config_overrides(
+                mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths,
+                require_unmanaged_only=True,
+            )
+            if source == "draft"
+            else validate_and_project_stored_request_config_overrides(
+                mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths
+            )
         )
     except ValidationError as exc:
         return json.dumps({"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")}, ensure_ascii=False)
@@ -195,6 +237,7 @@ def validate_web_config_overrides_json(
 
 
 __all__ = [
+    "validate_and_project_stored_request_config_overrides",
     "validate_and_project_web_config_overrides",
     "validate_web_config_overrides_json",
 ]

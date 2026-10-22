@@ -25,6 +25,7 @@ import {
   featureOverrideKey,
   getFeatureOverride
 } from '../../services/feature-override-identity.js';
+import { msg } from '../../utils/i18n.js';
 
 /**
  * The rule owner's actions this owner reads (a whole-object port, R13).
@@ -130,12 +131,13 @@ import {
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
- * @property {WriteLegendRowColorPort} [writeLegendRowColor]
+ * @property {WriteLegendRowColorPort} writeLegendRowColor The Legend owner's writer of a row's own color: a type's
+ *   default color releases the row's own color through it.
  */
 
 /**
  * The Legend color of the rows of some keys (the Legend owner's `writeLegendRowColor`, D-35).
- * @typedef {(keys: readonly PythonLegendKey[], color: string) => void} WriteLegendRowColorPort
+ * @typedef {(keys: readonly PythonLegendKey[], color: string, options?: { inherit?: readonly PythonLegendKey[] }) => void} WriteLegendRowColorPort
  */
 /**
  * Whether `typed` names the Legend row that shows the key `caption`: its key, its name, or the name
@@ -175,6 +177,16 @@ import {
  * @typedef {() => readonly DrawnTrack[]} ReadDrawnTracksPort
  */
 
+// Why the Legend Name Conflict dialog asks; a rule's name in the row's own color: its type (OV-649).
+/** @param {{ name: string, ruleOnly: boolean, deleted: boolean, mergeAvailable: boolean, sameColor: boolean }} conflict */
+const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sameColor }) => {
+  const named = `"${name}"`;
+  if (ruleOnly) return `${named} is the name of a color rule ${sameColor ? 'for another feature type' : 'with another color'}.`;
+  const row = deleted ? 'is a deleted Legend item' : 'already exists';
+  if (!mergeAvailable) return `${named} ${row} and draws a different feature type, so the two cannot be merged.`;
+  return deleted ? `${named} ${row}.` : `${named} ${row} with another color.`;
+};
+
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
@@ -203,8 +215,7 @@ export const createFeatureColorActions = ({
     return found ? legendEntryKey(found) : null;
   },
   keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false }),
-  // Without a Legend owner (a test of this owner), no Legend color is written.
-  writeLegendRowColor = () => {}
+  writeLegendRowColor
 }) => {
   const {
     extractedFeatures,
@@ -589,8 +600,7 @@ export const createFeatureColorActions = ({
    *   strokeWidth?: number | null,
    *   existingCaption?: { caption: string, color: string, rule: Record<string, any> | null } | null,
    *   defaultColorType?: string | null,
-   *   replacedDefaultColor?: string | null,
-   *   closePopup?: boolean
+   *   replacedDefaultColor?: string | null
    * }} options
    */
   const openFeatureStyleScopeDialog = ({
@@ -602,8 +612,7 @@ export const createFeatureColorActions = ({
     strokeWidth = null,
     existingCaption = null,
     defaultColorType = null,
-    replacedDefaultColor = null,
-    closePopup = false
+    replacedDefaultColor = null
   }) => {
     featureStyleScopeDialog.show = true;
     featureStyleScopeDialog.kind = kind;
@@ -625,7 +634,6 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.existingCaptionColor = existingCaption?.color || null;
     featureStyleScopeDialog.defaultColorType = defaultColorType;
     featureStyleScopeDialog.replacedDefaultColor = replacedDefaultColor;
-    if (closePopup) clickedFeature.value = null;
   };
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
@@ -677,12 +685,16 @@ export const createFeatureColorActions = ({
     return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
 
+  // The popup shows the fill an edit gave its feature; scope dialogs leave it open (OV-1278).
+  /** @param {ColorFeature | null | undefined} feat @param {string} color */
+  const showClickedFeatureColor = (feat, color) => {
+    if (feat && clickedFeature.value?.svg_id === feat.svg_id) clickedFeature.value.color = color;
+  };
+
   /** @param {ColorFeature | null | undefined} feat @param {string} caption @param {string | null} [color] */
   const updateClickedFeatureLegendState = (feat, caption, color = null) => {
     if (!clickedFeature.value || !feat || clickedFeature.value.svg_id !== feat.svg_id) return;
-    if (color) {
-      clickedFeature.value.color = color;
-    }
+    if (color) showClickedFeatureColor(feat, color);
     clickedFeature.value.legendName = caption;
     clickedFeature.value.appliedLegendName = caption;
   };
@@ -719,7 +731,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.deletedTargetKey = '';
-    legendRenameDialog.targetRuleOnly = false;
+    legendRenameDialog.reason = '';
     legendRenameDialog.keepBothName = '';
     legendRenameDialog.targetNameAfter = '';
     legendRenameDialog.keepBothRestores = false;
@@ -944,7 +956,7 @@ export const createFeatureColorActions = ({
         : (current) => featureRuleCandidate(current, features, color, caption);
       const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
       const oldEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === request.sourceKey);
-      return commitRuleWrite(rules, 'Rename legend item', {
+      return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: oldEntry.color }] : [],
         // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
@@ -974,7 +986,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = Math.max(0, siblingCount);
     legendRenameDialog.deletedTargetKey = '';
-    legendRenameDialog.targetRuleOnly = false;
+    legendRenameDialog.reason = '';
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -998,7 +1010,8 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.deletedTargetKey = deletedTargetKey;
-    legendRenameDialog.targetRuleOnly = target.ruleOnly;
+    legendRenameDialog.reason = legendNameConflictReason({ name: request.newCaption, ruleOnly: target.ruleOnly,
+      deleted: deletedTargetKey !== '', mergeAvailable, sameColor: colorsMatch(target.color, request.currentColor) });
     legendRenameDialog.keepBothName = keepBoth.keepBothName;
     legendRenameDialog.targetNameAfter = keepBoth.targetNameAfter ?? '';
     legendRenameDialog.keepBothRestores = keepBoth.keepBothRestores;
@@ -1186,7 +1199,7 @@ export const createFeatureColorActions = ({
     const replacesExistingGroup = existingEntry && contributors.length > 0
       && features.every(feature => captionsMatch(captionOf(feature), caption))
       && contributors.every(feature => selectedIds.has(feature.svg_id));
-    return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), 'Change feature color', {
+    return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), msg('Change feature color'), {
       drawing,
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: legendEntryKey(existingEntry), color: existingEntry.color }] : [],
@@ -1220,6 +1233,25 @@ export const createFeatureColorActions = ({
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
   };
 
+  // OIC-029: a palette row's color is its type's default color; the rows merged into it (D-35) follow. The one
+  // route of both the scope choice and the Legend popup (`setTypeDefaultColor`): the row first releases its own
+  // Legend color through the Legend owner, so it follows its type's default color again.
+  /** @param {DrawingState} drawing @param {string} type @param {string} color */
+  const applyDefaultColorToLegendRow = async (drawing, type, color) => {
+    writeLegendRowColor([], color, { inherit: [/** @type {PythonLegendKey} */ (type)] });
+    const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (type));
+    setDefaultColor(drawing, type, color);
+    const merged = keys.filter((key) => key !== type);
+    if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
+  };
+
+  // OV-1281: the type whose default color draws the row of `key`, else null (reads prepared rule matches).
+  /** @param {DrawingState} drawing @param {string} key */
+  const legendRowDefaultColorType = (drawing, key) => {
+    const features = getFeaturesForLegendCaption(key);
+    return features.length > 0 ? paletteRowType(drawing, key, features) : null;
+  };
+
   // The rules of the rows of `keys` (a Legend row and the rows merged into it,
   // `legendRowKeys`) take `color`; a key without rules takes it as its Legend
   // color in the rule commit's step, so a merged row stays one row (D-35).
@@ -1236,7 +1268,7 @@ export const createFeatureColorActions = ({
     );
     const rowRuleSet = new Set(rowRules);
     return commitRuleWrite((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
-      .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), 'Change legend color',
+      .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), msg('Change legend color'),
     { drawing, afterCommit: () => { if (legendOnly.length) writeLegendRowColor(legendOnly, color); } });
   };
 
@@ -1245,9 +1277,8 @@ export const createFeatureColorActions = ({
    * @param {ColorFeature} feat
    * @param {string} color
    * @param {string | null} [requestedLegendName]
-   * @param {{ closePopupOnDialog?: boolean }} [options]
    */
-  const requestFeatureColorChange = async (drawing, feat, color, requestedLegendName = null, options = {}) => {
+  const requestFeatureColorChange = async (drawing, feat, color, requestedLegendName = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!feat) return;
@@ -1266,8 +1297,7 @@ export const createFeatureColorActions = ({
         existingCaption: findExistingCaptionColor(drawing, feat, scope.legendName),
         // The dialog's line under "Apply to all" (D-15, Q2 B).
         defaultColorType,
-        replacedDefaultColor,
-        closePopup: options.closePopupOnDialog
+        replacedDefaultColor
       });
       return;
     }
@@ -1291,7 +1321,7 @@ export const createFeatureColorActions = ({
     const feat = clickedFeature.value.feat;
     if (!feat) return;
     const customName = popupLegendCaption();
-    await requestFeatureColorChange(drawing, feat, color, customName, { closePopupOnDialog: true });
+    await requestFeatureColorChange(drawing, feat, color, customName);
   };
 
   // The caption the popup's Legend name field holds: the key of the feature's
@@ -1405,7 +1435,10 @@ export const createFeatureColorActions = ({
     if (!entry) return;
 
     const requestedCaption = normalizeCaption(newCaption);
-    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption) || legendRowIsNamed(legendEntryKey(entry), requestedCaption)) {
+    const key = legendEntryKey(entry);
+    // The row's name or drawn name is no rename; its key names a renamed row back (OV-1216).
+    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption)
+      || (requestedCaption !== key && legendRowIsNamed(key, requestedCaption))) {
       drawing.legendEntries.value = [...drawing.legendEntries.value];
       return;
     }
@@ -1414,11 +1447,11 @@ export const createFeatureColorActions = ({
     await continueLegendRenameRequest(drawing, {
       source: 'legend',
       oldCaption: normalizeCaption(entry.caption),
-      sourceKey: legendEntryKey(entry),
+      sourceKey: key,
       newCaption: requestedCaption,
       currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',
-      features: getFeaturesForLegendCaption(legendEntryKey(entry)),
-      sourceScope: getFeaturesForLegendCaption(legendEntryKey(entry)).length > 0 ? 'group' : 'manual'
+      features: getFeaturesForLegendCaption(key),
+      sourceScope: getFeaturesForLegendCaption(key).length > 0 ? 'group' : 'manual'
     });
   };
 
@@ -1434,7 +1467,7 @@ export const createFeatureColorActions = ({
 
     if (choice === 'rule') {
       if (matchingRule) await commitRuleWrite((current, revise) => current.map(rule => (rule === matchingRule
-        ? revise(rule, { color }) : rule)), 'Change specific color rule', { drawing });
+        ? revise(rule, { color }) : rule)), msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
       if (!targetLegendName) {
@@ -1445,12 +1478,11 @@ export const createFeatureColorActions = ({
       const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (targetLegendName));
       // The choice does what the dialog showed: its default-color line, or rules.
       if (defaultColorType) {
-        // The row's swatch follows the default color again (svg-styles.js).
-        delete drawing.legendColorOverrides[defaultColorType];
-        setDefaultColor(drawing, defaultColorType, color);
-        const merged = keys.filter((key) => key !== defaultColorType);
-        if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
-      } else if (!(await applyColorToLegendSpecificRules(drawing, keys, color))) {
+        await applyDefaultColorToLegendRow(drawing, defaultColorType, color);
+        showClickedFeatureColor(feat, color);
+      } else if (await applyColorToLegendSpecificRules(drawing, keys, color)) {
+        showClickedFeatureColor(feat, color);
+      } else {
         const siblings = keys.flatMap((key) => findFeaturesWithSameLegendItem(feat, key));
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], legendRowName(targetLegendName), color);
       }
@@ -1550,8 +1582,7 @@ export const createFeatureColorActions = ({
         feat,
         scope,
         strokeColor: normalizedStrokeColor,
-        strokeWidth: normalizedStrokeWidth,
-        closePopup: true
+        strokeWidth: normalizedStrokeWidth
       });
       return false;
     }
@@ -1704,7 +1735,7 @@ export const createFeatureColorActions = ({
       }
       return rules;
     };
-    const applied = await commitRuleWrite(reset, 'Reset feature color', { drawing });
+    const applied = await commitRuleWrite(reset, msg('Reset feature color'), { drawing });
     if (applied) clickedFeature.value = null;
     return applied;
   };
@@ -1863,7 +1894,7 @@ export const createFeatureColorActions = ({
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
-      return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color', { drawing });
+      return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), msg('Reset feature color'), { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
       return applyColorToFeatureGroup(drawing, [feature], legendRowName(normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type)), 'none');
@@ -1900,6 +1931,10 @@ export const createFeatureColorActions = ({
     setFeatureColor: colorAction(setFeatureColor),
     setFeatureColorValue: colorAction(setFeatureColorValue),
     updateClickedFeatureColor: colorAction(updateClickedFeatureColor, { targetRules: false }),
-    updateClickedFeatureStroke: strokeAction(updateClickedFeatureStroke)
+    updateClickedFeatureStroke: strokeAction(updateClickedFeatureStroke),
+    /** @param {string} key */
+    legendRowDefaultColorType: (key) => legendRowDefaultColorType(state.activeDrawing(), key),
+    preparedLegendRowDefaultColorType: colorAction(legendRowDefaultColorType, { targetRules: false }),
+    setTypeDefaultColor: colorAction(applyDefaultColorToLegendRow, { targetRules: false })
   };
 };

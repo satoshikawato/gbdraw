@@ -185,8 +185,12 @@ for (const mode of ['circular', 'linear']) {
     const audit = await auditButtons(page);
     expect(audit.count).toBeGreaterThan(40);
     expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
+    // loadMode opens every disclosure, so the audit above covered the open Row
+    // actions menus: a row's Axis moves are items named by their text inside
+    // the row's group (Owner decision 2026-10-18).
     const move = mode === 'circular' ? 'Move outside Axis' : 'Move above Axis';
-    await expect(page.getByRole('button', { name: new RegExp(`^${mode} track slot \\S+ ${move}$`, 'i') }).first()).toBeVisible();
+    const row = page.locator(`[data-capture^="${mode}-track-slot-"]:visible`).first();
+    await expect(row.locator('.track-slot-row-menu').getByRole('button', { name: move, exact: true })).toBeVisible();
     expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
   });
 
@@ -422,12 +426,14 @@ const NAME_OF = (element) => {
     .map((id) => content(document.getElementById(id) || document.createTextNode(''))).join(' '))
     || text(element.getAttribute('aria-label'))
     || text(Array.from(element.labels || []).map((label) => content(label)).join(' '))
-    || (element.matches('button, [role="button"]') ? text(content(element)) : '');
+    || (element.matches('button, [role="button"], summary') ? text(content(element)) : '');
 };
 
 // UI-04, TK-16 (R12): a stack row's controls and help tips carry the slot id,
 // so no two controls in one Custom Track Slots panel share a name, and every
-// help tip on the page is named after the label it explains.
+// help tip on the page is named after the label it explains. loadMode opens
+// every <details>, so every Row actions menu is open here: an item is named
+// within its menu, and the menu (its toggle and its group) names the row.
 for (const mode of ['circular', 'linear']) {
   test(`${mode} Custom Track Slots names are unique and help tips name their labels`, async ({ page }) => {
     test.setTimeout(240_000);
@@ -437,8 +443,14 @@ for (const mode of ['circular', 'linear']) {
       const name = new Function(`return (${nameOf})`)();
       const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
       const panel = document.getElementById(`${mode}-custom-track-slots-panel`);
-      const controls = Array.from(panel?.querySelectorAll('input:not([type="file"]), select, textarea, button') || [])
-        .filter(visible).map(name);
+      // An item of an open Row actions menu is met inside that menu, so its
+      // name counts with the menu's own name, which must name the row.
+      const inContext = (element) => {
+        const menu = element.closest('.action-menu');
+        return menu && element !== menu.querySelector(':scope > summary') ? `${name(menu)} > ${name(element)}` : name(element);
+      };
+      const controls = Array.from(panel?.querySelectorAll('input:not([type="file"]), select, textarea, button, summary') || [])
+        .filter(visible).map(inContext);
       const tips = Array.from(document.querySelectorAll('.help-tip > button')).filter(visible).map(name);
       return { controls, tips };
     }, { mode, nameOf: NAME_OF.toString() });
@@ -448,6 +460,40 @@ for (const mode of ['circular', 'linear']) {
     expect(names.tips.length).toBeGreaterThan(60);
     expect(names.tips.filter((name) => !/^Help: \S/.test(name)), 'help tips not named after a label').toEqual([]);
     await expect(page.getByRole('button', { name: 'Help: Window', exact: true })).toHaveCount(1);
+  });
+}
+
+// R12 for the Extend to select of an Overlay annotation row (to_slot): its
+// name is its visible label with the slot id, and its help tip is a reachable
+// disclosure that the select references.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode} Overlay annotation row names its Extend to select and help tip`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await loadMode(page, mode);
+    await page.evaluate(async (diagramMode) => {
+      const app = window.__GBDRAW_APP__;
+      const slots = app.adv[`${diagramMode}_track_slots`];
+      slots.push({ id: 'regions', renderer: 'annotations', enabled: true, side: 'overlay', z: -1,
+        params: { set_id: app.annotationSets[0].id, anchor_slot: 'features', layer: 'underlay' },
+        ...(diagramMode === 'circular'
+          ? { width: null, radius: null, inner_gap_px: null, outer_gap_px: null }
+          : { height: '', spacing: '' }) });
+      await window.Vue.nextTick();
+    }, mode);
+    const Mode = mode === 'circular' ? 'Circular' : 'Linear';
+    const select = page.getByRole('combobox', { name: `${Mode} track slot regions Extend to`, exact: true });
+    await expect(select).toHaveCount(1);
+    await expect(select).toBeVisible();
+    await expect(select).toHaveAccessibleDescription(/Stretch the overlay from its anchor to this slot/);
+    const field = select.locator('xpath=..');
+    await expect(field.locator('.track-slot-field-label')).toHaveText(/^\s*Extend to/);
+    await expect(field.getByRole('button', { name: /^Help: .*Extend to$/ })).toHaveCount(1);
+    const audit = await auditPage(page);
+    expect(audit.unnamed, 'controls without an author-provided name').toEqual([]);
+    expect(audit.tips, 'help tips that are not reachable disclosures').toEqual([]);
+    expect(audit.duplicateIds, 'duplicate ids').toEqual([]);
+    expect(audit.danglingDescriptions, 'aria-describedby without a target').toEqual([]);
   });
 }
 

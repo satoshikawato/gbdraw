@@ -4,7 +4,7 @@ from .gc_content import GcContentGroup
 from .gc_skew import GcSkewGroup
 from .depth import DepthGroup
 from .conservation import ConservationGroup
-from .definition import DefinitionGroup
+from .definition import CircularDefinitionStyle, DefinitionGroup
 from .legend import LegendGroup
 from .ticks import TickGroup
 from .axis import AxisGroup
@@ -13,6 +13,7 @@ from .labels import LabelsGroup
 
 __all__ = [
     "AxisGroup",
+    "CircularDefinitionStyle",
     "ConservationGroup",
     "DefinitionGroup",
     "DepthGroup",

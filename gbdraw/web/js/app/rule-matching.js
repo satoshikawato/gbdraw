@@ -3,6 +3,7 @@ import { normalizeSpecificRule } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { toRaw } from '../utils/vue-raw.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
 } from '../services/rule-matchers.js';
@@ -76,7 +77,7 @@ const payloads = new WeakMap();
  * @returns {RuleFeaturePayload}
  */
 export const ruleFeaturePayload = (feature, label = '') => {
-  const source = globalThis.window?.Vue?.toRaw?.(feature) ?? feature;
+  const source = toRaw(feature);
   const known = label === '' ? payloads.get(source) : undefined;
   if (known) return known;
   const payload = buildRuleFeaturePayload(feature, label);
@@ -220,9 +221,23 @@ export const createRulePreparation = ({
       if (!view) blocking.value = --blockingCount > 0;
     };
   };
-  const features = () => [...new Set([
-    ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
-  ])];
+  // The catalog and biological features, each once, built again only when
+  // either array is replaced (CW-06 row M1). Both arrays are replaced
+  // wholesale, never changed in place after adoption, so their raw identities
+  // key the union; callers read it and do not change it.
+  /** @type {{ catalog: unknown, biology: unknown, union: RuleFeature[] } | null} */
+  let union = null;
+  /** @returns {RuleFeature[]} */
+  const features = () => {
+    const catalog = toRaw(state.extractedFeatures.value);
+    const biology = toRaw(state.biologicalFeatures?.value);
+    if (!union || union.catalog !== catalog || union.biology !== biology) {
+      union = { catalog, biology, union: [...new Set([
+        ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
+      ])] };
+    }
+    return union.union;
+  };
   // The drawing inputs the matches depend on, as JSON. Each is a computed of
   // the active drawing: it is stringified again only after one of the reactive
   // values it read changed, not on each currency check (a rule commit runs

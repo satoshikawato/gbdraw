@@ -8,14 +8,15 @@
 //
 // What counts: each JSDoc type node whose type, as the TypeScript checker of
 // the R14 guard config (tests/web/types/tsconfig.json) resolves it, is
-// intrinsic `any`: `any`, `*`, `Object` (which JSDoc reads as `any` while
-// `noImplicitAny` is off), and each use of a type that resolves to `any`, such
-// as a typedef alias of `any`, so an alias does not hide it. A node inside a
-// counted node is not counted again; `Record<string, any>` counts once, for
-// its `any` argument. `unknown`, `object`, and `Function` do not count.
+// intrinsic `any`: `any`, `*`, and each use of a type that resolves to `any`,
+// such as a typedef alias of `any`, so an alias does not hide it (with
+// `noImplicitAny` on, JSDoc `Object` is the `Object` type, not `any`). A node
+// inside a counted node is not counted again; `Record<string, any>` counts
+// once, for its `any` argument. `unknown`, `object`, and `Function` do not
+// count.
 // Every `.js` module is counted, generated modules included. Workers are
 // outside the guard config; the checker resolves them in its inferred
-// project, whose `noImplicitAny` is off as well.
+// project, where JSDoc `Object` is also the `Object` type.
 //
 // EXPLICIT_ANY_BASELINE is a registered design-rule allowlist
 // (tools/web-design-rule-guards.json, R14, kind `count-map`): adding an entry
@@ -33,7 +34,7 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 8,
   'app/annotations/record-catalog.js': 3,
-  'app/app-setup.js': 15,
+  'app/app-setup.js': 14,
   'app/candidate-render.js': 1,
   'app/circular-track-slots.js': 4,
   'app/feature-editor.js': 21,
@@ -59,49 +60,48 @@ const EXPLICIT_ANY_BASELINE = {
   'app/legend/stroke-actions.js': 1,
   'app/legend/track-data-styles.js': 7,
   'app/linear-track-slots.js': 4,
-  'app/orthogroups.js': 9,
+  'app/orthogroups.js': 4,
   'app/preview-runtime.js': 20,
   'app/record-display-options.js': 15,
   'app/record-display/feature-record-rotation.js': 14,
   'app/results.js': 1,
   'app/right-drawer.js': 2,
   'app/rule-matching.js': 15,
-  'app/run-analysis.js': 121,
+  'app/run-analysis.js': 99,
   'app/run-info.js': 5,
-  'app/similarity-alignment.js': 37,
+  'app/similarity-alignment.js': 35,
   'app/svg-styles.js': 6,
   'app/track-slot-edits.js': 4,
   'app/ui.js': 3,
   'app/watchers.js': 19,
   'services/annotation-state.js': 1,
   'services/artifact-slot.js': 10,
-  'services/config.js': 85,
-  'services/depth-track-state.js': 4,
+  'services/config.js': 78,
+  'services/depth-track-state.js': 1,
   'services/diagram-generation.js': 1,
-  'services/feature-catalog.js': 6,
+  'services/feature-catalog.js': 3,
   'services/feature-edit-migration.js': 13,
   'services/feature-metadata-extraction.js': 3,
   'services/feature-placement.js': 12,
   'services/feature-utils.js': 2,
   'services/feature-visibility.js': 11,
   'services/file-imports.js': 1,
-  'services/gallery-session-migration.js': 13,
+  'services/gallery-session-migration.js': 12,
   'services/gallery-session-publication.js': 10,
   'services/history-snapshot.js': 67,
   'services/history.js': 9,
   'services/linear-comparisons.js': 2,
   'services/losat-cache.js': 8,
   'services/losat.js': 2,
-  'services/main-session-comparison-frame.js': 2,
   'services/match-sequences.js': 11,
   'services/mode-scoped-migration.js': 26,
   'services/result-normalization.js': 1,
   'services/right-drawer-state.js': 8,
   'services/rule-matchers.js': 10,
   'services/session-active-config-contract.js': 23,
-  'services/session-authority.js': 17,
+  'services/session-authority.js': 14,
   'services/session-file.js': 1,
-  'services/session-request.js': 36,
+  'services/session-request.js': 32,
   'services/session-resources.js': 4,
   'services/specific-color-rules.js': 1,
   'services/svg-result-ingestion.js': 3,

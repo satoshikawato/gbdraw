@@ -11,6 +11,7 @@ import {
 import { resolveCircularTrackFeaturePlacement } from '../../services/circular-track-slot-model.js';
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../../services/linear-track-slot-model.js';
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
+import { msg, t } from '../../utils/i18n.js';
 
 /**
  * A feature the placement control lists: a row of the Features list or a clicked feature.
@@ -30,6 +31,13 @@ import { validateCustomTrackPlan } from '../../services/track-slot-validation.js
  */
 
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
+/** The shown name of a side's first lane, one whole key each. @type {Record<string, () => string>} */
+const LANE_ONE_LABEL = {
+  outward: () => t('Outward lane 1'),
+  inward: () => t('Inward lane 1'),
+  above: () => t('Above lane 1'),
+  below: () => t('Below lane 1')
+};
 
 // The placement targets of a draft's feature slot: the one availability
 // predicate of the popup choices and of a layout change (R3, R10). It resolves
@@ -132,9 +140,8 @@ export const createFeaturePlacementActions = ({
         if (value === 'auto') return true;
         return targets.some((target) => value === 'main' ? target.kind === 'main' : target.side === value);
       });
-      return { value, enabled, label: value === 'auto' ? 'Auto' : value === 'main' ? 'Main'
-        : `${value[0].toUpperCase()}${value.slice(1)} lane 1`,
-      reason: enabled ? '' : 'Unavailable in the current draft feature slot.' };
+      return { value, enabled, label: value === 'auto' ? t('Auto') : value === 'main' ? t('Main') : LANE_ONE_LABEL[value](),
+      reason: enabled ? '' : t('Unavailable in the current draft feature slot.') };
     });
   };
   /**
@@ -147,7 +154,7 @@ export const createFeaturePlacementActions = ({
     if (busy) return busy;
     const choice = choices(features).find((entry) => entry.value === value);
     if (!choice?.enabled) throw new Error(choice?.reason || 'Unknown feature placement.');
-    return runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {
+    return runUndoable(features.length === 1 ? msg('Change feature placement') : msg('Change selected feature placements'), () => {
       for (const feature of features) {
         const key = featureIdentityKeyOf(feature);
         if (value === 'auto') delete drawing.featurePlacementOverrides[key];
@@ -208,13 +215,13 @@ export const createFeaturePlacementActions = ({
     if (!lost.length) return result;
     restoreTrackLayout(drawing, saved);
     const checkbox = control?.type === 'checkbox';
-    const value = checkbox ? (control.checked ? 'On' : 'Off') : control?.selectedOptions?.[0]?.text || '';
+    const value = checkbox ? (control.checked ? t('On') : t('Off')) : control?.selectedOptions?.[0]?.text || '';
     // The checkbox shows the kept value again; a bound select re-renders to it.
     if (checkbox) control.checked = !control.checked;
     pendingLayout = { control, apply };
     Object.assign(layoutChange, { open: true, count: lost.length, value,
       setting: control?.getAttribute?.('aria-label') || control?.labels?.[0]?.textContent.trim()
-        || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || 'This change' });
+        || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || '' });
     // The primary choice of the layout dialog is a button.
     void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (globalThis.document?.querySelector('[data-placement-layout-primary]')));
     return false;
@@ -226,12 +233,15 @@ export const createFeaturePlacementActions = ({
     pendingLayout = null;
     layoutChange.open = false;
     if (!change) return false;
-    const result = choice === 'reset' && await runUndoable('Change setting and reset Feature placements', () => {
+    const result = choice === 'reset' && await runUndoable(msg('Change setting and reset Feature placements'), () => {
       const before = laneSides(drawing);
       change.apply();
       for (const key of lostLaneKeys(drawing, before)) delete drawing.featurePlacementOverrides[key];
     });
-    void focusAfterRender(() => change.control);
+    // A Row actions item closed its menu when it ran: focus returns to the menu's toggle.
+    void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (
+      change.control?.closest?.('details:not([open])')?.querySelector(':scope > summary')
+    ) ?? change.control);
     return result;
   };
   /**

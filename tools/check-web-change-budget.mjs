@@ -3,6 +3,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, posix, resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   detectPrivilegedWebCapabilities,
   detectReportOnlySourceFacts,
@@ -362,10 +363,6 @@ const productionTotals = productionPaths.reduce((totals, path) => {
 const productionGrossChurn = productionTotals.additions + productionTotals.deletions;
 const productionNetAdditions = productionTotals.additions - productionTotals.deletions;
 
-const addedBinaryRuntimePaths = productionPaths.filter((path) => {
-  const counts = numstat.get(path);
-  return changed.get(path) === 'A' && counts?.additions === '-' && counts?.deletions === '-';
-});
 const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbdraw/web/vendor/'));
 const policyPath = 'tools/web-change-policy.json';
 const architectureRulesPath = 'tools/web-architecture-rules.json';
@@ -499,7 +496,8 @@ const DESIGN_RULE_ALLOWLIST_COMPARISONS = {
 };
 const isPythonAllowlistKind = (kind) => kind.startsWith('py-');
 // A JSON list of entries with ids: `json-entries` compares each entry's text,
-// `json-ids` only the ids (a shrink-only id set whose rows may change).
+// `json-ids` the ids and the length of each row's lists (a shrink-only id set
+// whose lists only shrink; a renamed item and the other fields may change).
 const JSON_ALLOWLIST_KINDS = new Set(['json-entries', 'json-ids']);
 const parseDesignRuleGuardRegistry = (source) => {
   const errors = [];
@@ -820,6 +818,12 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
 const mapObjectValues = (value, convert) => Object.fromEntries(
   Object.entries(value).map(([key, item]) => [key, convert(item)])
 );
+// A JSON entry's list items as slots `field#index`: a further item is a new
+// slot and a renamed one keeps its slot (R9: an owner added to a twin row is
+// authority-only, a renamed owner is not).
+const listSlots = (text) => Object.fromEntries(Object.entries(JSON.parse(text))
+  .filter(([, item]) => Array.isArray(item))
+  .flatMap(([field, items]) => items.map((_item, index) => [`${field}#${index}`, ''])));
 // The literal of one registered allowlist in the shape its comparison reads:
 // a path -> names map compares as a writer-map without categories, and a
 // Python `(count, note)` value as its count.
@@ -829,7 +833,7 @@ const readAllowlistLiteral = (source, symbol, kind) => {
     : JSON_ALLOWLIST_KINDS.has(kind) ? readJsonEntries : readJavaScriptLiteral;
   const { status, value } = read(source, symbol);
   if (status !== 'ok') return { status, value: null };
-  if (kind === 'json-ids') return { status, value: mapObjectValues(value, (byId) => mapObjectValues(byId, () => '')) };
+  if (kind === 'json-ids') return { status, value: mapObjectValues(value[symbol], listSlots) };
   if (kind === 'set-map') {
     if (!isPlainObject(value) || !Object.values(value).every(isStringList)) return UNREADABLE_ALLOWLIST;
     return { status, value: mapObjectValues(value, (names) => Object.fromEntries(names.map((name) => [name, '']))) };
@@ -1265,6 +1269,33 @@ const cycleDelta = summarizeArchitectureInventory(
   headCycleResult.cycles.map(({ subject }) => subject)
 );
 
+// JSON.parse keeps the last copy of a repeated key, so authority could hide an entry.
+// Call only on source that JSON.parse accepted: every string token is then terminated.
+const repeatedJsonKeys = (source) => {
+  const repeated = new Set();
+  const scopes = [];
+  const colon = /\s*:/y;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '{') scopes.push(new Set());
+    else if (character === '[') scopes.push(null);
+    else if (character === '}' || character === ']') scopes.pop();
+    else if (character === '"') {
+      let end = index + 1;
+      while (source[end] !== '"') end += source[end] === '\\' ? 2 : 1;
+      const keys = scopes.at(-1);
+      colon.lastIndex = end + 1;
+      if (keys && colon.test(source)) {
+        const key = JSON.parse(source.slice(index, end + 1));
+        if (keys.has(key)) repeated.add(key);
+        keys.add(key);
+      }
+      index = end;
+    }
+  }
+  return [...repeated].sort();
+};
+
 const parsePolicy = (source, revision) => {
   if (source === null) throw new Error(`Missing ${policyPath} at ${revision}`);
   let policy;
@@ -1272,6 +1303,10 @@ const parsePolicy = (source, revision) => {
     policy = JSON.parse(source);
   } catch (error) {
     throw new Error(`Cannot parse ${policyPath} at ${revision}: ${error.message}`);
+  }
+  const repeatedKeys = repeatedJsonKeys(source);
+  if (repeatedKeys.length) {
+    throw new Error(`${policyPath} at ${revision} repeats the key(s) ${repeatedKeys.join(', ')}`);
   }
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
     if (!policy[section] || typeof policy[section] !== 'object' || Array.isArray(policy[section])) {
@@ -1302,11 +1337,16 @@ const isRetiredPolicyKey = (section, name) => (
   section === 'allowedPrivilegedOwners' && !detectedCapabilityKeys.has(name)
 );
 let policyTopLevelKeysMatch = true;
+// Every policy value outside the two privileged sections stays unchanged in a safe contraction.
+let policyOtherSectionsMatch = true;
 if (basePolicySource !== null && changed.has(policyPath)) {
   proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
   const baseTopLevelKeys = Object.keys(policy).sort();
   const proposedTopLevelKeys = Object.keys(proposedPolicy).sort();
   policyTopLevelKeysMatch = JSON.stringify(baseTopLevelKeys) === JSON.stringify(proposedTopLevelKeys);
+  policyOtherSectionsMatch = baseTopLevelKeys
+    .filter((key) => !['allowedPrivilegedImporters', 'allowedPrivilegedOwners'].includes(key))
+    .every((key) => JSON.stringify(policy[key]) === JSON.stringify(proposedPolicy[key]));
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
     Object.keys(proposedPolicy[section]).forEach((name) => {
       if (!Object.hasOwn(policy[section], name)) addedPolicyKeys.push(`${section}.${name}`);
@@ -1338,6 +1378,511 @@ const privilegedImporterPermissionDelta = summarizeArchitectureInventory(
   permissionEntries(policy, 'allowedPrivilegedImporters'),
   permissionEntries(proposedOrBasePolicy, 'allowedPrivilegedImporters')
 );
+
+// Vendored runtime changes (WEB_CHANGE_POLICY.md, Gate FAIL). Only the trusted base listing
+// authorizes a change; a candidate listing is validated as inert data and authorizes nothing.
+const vendorRoot = 'gbdraw/web/vendor/';
+const vendorChangeKindByStatus = Object.freeze({ A: 'add', M: 'replace', D: 'remove' });
+const vendorChangeKinds = Object.values(vendorChangeKindByStatus);
+const vendorListingKeys = Object.freeze(['change', 'package', 'path', 'sha256', 'source', 'version']);
+const validateVendorListing = (candidatePolicy) => {
+  const listing = candidatePolicy.allowedVendorChanges;
+  if (listing === undefined) return { entries: [], errors: [] };
+  if (!Array.isArray(listing)) {
+    return { entries: [], errors: ['allowedVendorChanges must be an array'] };
+  }
+  const errors = [];
+  const listedPaths = new Set();
+  const nonEmpty = (value) => typeof value === 'string' && value.trim() !== '';
+  listing.forEach((entry, index) => {
+    const label = `allowedVendorChanges[${index}]`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    if (Object.keys(entry).sort().join() !== vendorListingKeys.join()) {
+      errors.push(`${label} must have exactly the keys ${vendorListingKeys.join(', ')}`);
+    }
+    const { path } = entry;
+    if (
+      typeof path !== 'string'
+      || !path.startsWith(vendorRoot)
+      || path.endsWith('/')
+      || path.includes('\\')
+      || posix.normalize(path) !== path
+    ) {
+      errors.push(`${label}.path must be a normalized path under ${vendorRoot}`);
+    } else if (listedPaths.has(path)) {
+      errors.push(`${label} lists ${path} twice`);
+    } else {
+      listedPaths.add(path);
+    }
+    if (!vendorChangeKinds.includes(entry.change)) {
+      errors.push(`${label}.change must be one of ${vendorChangeKinds.join(', ')}`);
+    }
+    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(entry.sha256)) {
+      errors.push(`${label}.sha256 must be 64 lowercase hexadecimal digits`);
+    }
+    ['package', 'version'].forEach((field) => {
+      if (!nonEmpty(entry[field])) errors.push(`${label}.${field} must be a non-empty string`);
+    });
+    if (typeof entry.source !== 'string' || !/^https:\/\/\S+$/.test(entry.source)) {
+      errors.push(`${label}.source must be an https URL`);
+    }
+  });
+  return { entries: errors.length ? [] : listing, errors };
+};
+const readRevisionBytes = (revision, path) => {
+  try {
+    return execFileSync(
+      'git',
+      ['-C', repositoryRoot, 'cat-file', 'blob', `${revision}:${path}`],
+      { maxBuffer: 512 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+  } catch (_error) {
+    return null;
+  }
+};
+const readHeadBytes = (path) => {
+  if (head) return readRevisionBytes(head, path);
+  const absolutePath = join(repositoryRoot, path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath) : null;
+};
+const sha256OfBytes = (bytes) => (
+  bytes === null ? 'unreadable' : createHash('sha256').update(bytes).digest('hex')
+);
+// The bootstrap fallback above reads the head policy; the listing never comes from the head.
+const trustedVendorListing = basePolicySource === null
+  ? { entries: [], errors: [] }
+  : validateVendorListing(policy);
+const candidateVendorListing = changed.has(policyPath)
+  ? validateVendorListing(proposedPolicy || policy)
+  : null;
+const vendorEntryKey = (entry) => JSON.stringify(entry);
+const trustedVendorEntryKeys = new Set(trustedVendorListing.entries.map(vendorEntryKey));
+const candidateVendorEntryKeys = new Set((candidateVendorListing?.entries || []).map(vendorEntryKey));
+const addedVendorEntries = (candidateVendorListing?.entries || [])
+  .filter((entry) => !trustedVendorEntryKeys.has(vendorEntryKey(entry)));
+const removedVendorEntries = candidateVendorListing && !candidateVendorListing.errors.length
+  ? trustedVendorListing.entries.filter((entry) => !candidateVendorEntryKeys.has(vendorEntryKey(entry)))
+  : [];
+const describeVendorEntry = (entry) => (
+  `${entry.path}: ${entry.change} sha256=${entry.sha256} package=${entry.package} `
+  + `version=${entry.version} source=${entry.source}`
+);
+// A new entry that cannot apply to the base tree fails in the pull request that adds it.
+const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
+  const label = `${entry.path}: ${entry.change}`;
+  const baseBytes = readRevisionBytes(base, entry.path);
+  if (entry.change === 'add') {
+    if (baseBytes !== null) return [`${label} for a path the base already has`];
+    // A tree (directory) at the path has no blob bytes but still occupies it.
+    const occupied = spawnSync(
+      'git',
+      ['-C', repositoryRoot, 'cat-file', '-e', `${base}:${entry.path}`],
+      { stdio: 'ignore' }
+    ).status === 0;
+    return occupied ? [`${label} for a path that is not a file in the base`] : [];
+  }
+  if (baseBytes === null) return [`${label} for a path the base lacks`];
+  const baseSha256 = sha256OfBytes(baseBytes);
+  if (entry.change === 'remove' && baseSha256 !== entry.sha256) {
+    return [`${label} lists sha256 ${entry.sha256}, but the base bytes hash to ${baseSha256}`];
+  }
+  if (entry.change === 'replace' && baseSha256 === entry.sha256) {
+    return [`${label} lists the bytes the base already has`];
+  }
+  return [];
+});
+// An entry pins the bytes the change leaves (add, replace) or removes (remove).
+// The diff is two-dot. When the head does not contain the base and leaves a path as their
+// merge base had it, the path changed only in the base: the branch is behind, not wrong.
+let baseAncestryResult = null;
+const baseAncestry = () => {
+  if (baseAncestryResult) return baseAncestryResult;
+  baseAncestryResult = { contained: true, mergeBase: null };
+  if (!head) return baseAncestryResult;
+  const ancestry = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
+    { stdio: 'ignore' }
+  );
+  if (ancestry.status === 0) return baseAncestryResult;
+  const mergeBase = ancestry.status === 1
+    ? spawnSync(
+      'git',
+      ['-C', repositoryRoot, 'merge-base', base, head],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    )
+    : null;
+  baseAncestryResult = {
+    contained: false,
+    mergeBase: mergeBase?.status === 0 ? mergeBase.stdout.trim() : null
+  };
+  return baseAncestryResult;
+};
+const vendorMergeBase = changedVendorPaths.length ? baseAncestry().mergeBase : null;
+const vendorChanges = changedVendorPaths.map((path) => {
+  const status = changed.get(path);
+  const change = vendorChangeKindByStatus[status] || `unsupported status ${status}`;
+  const entry = trustedVendorListing.entries.find((candidate) => candidate.path === path);
+  if (!entry) return { path, change, reason: 'not listed' };
+  const pinned = sha256OfBytes(
+    change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path)
+  );
+  if (entry.change === change && pinned === entry.sha256) return { path, change, entry, reason: '' };
+  if (
+    vendorMergeBase
+    && sha256OfBytes(readHeadBytes(path)) === sha256OfBytes(readRevisionBytes(vendorMergeBase, path))
+  ) {
+    return {
+      path,
+      change,
+      reason: 'changed only in the base since this branch forked; '
+        + 'the branch is behind its base: update it from dev'
+    };
+  }
+  if (entry.change !== change) {
+    return { path, change, reason: `listed as ${entry.change}, but the change is ${change}` };
+  }
+  return { path, change, reason: `sha256 ${pinned} does not match the listed ${entry.sha256}` };
+});
+const unlistedVendorChanges = vendorChanges.filter(({ reason }) => reason);
+const listedVendorChanges = vendorChanges.filter(({ reason }) => !reason);
+// An added binary runtime file fails unless it is a listed vendored add: the trusted base
+// lists its path as add and its head bytes hash to the listed sha256.
+const listedVendorPaths = new Set(listedVendorChanges.map(({ path }) => path));
+const addedBinaryRuntimePaths = productionPaths.filter((path) => {
+  const counts = numstat.get(path);
+  return changed.get(path) === 'A' && counts?.additions === '-' && counts?.deletions === '-'
+    && !listedVendorPaths.has(path);
+});
+
+// Persisted contract co-change (WEB_CHANGE_POLICY.md). The generated modules under
+// contractModuleRoot equal their Python owners (tools/generate_web_contracts.py --check), so a
+// changed description there is a changed persisted contract. Only the trusted base turns the
+// rule on and names exemptions; a candidate key is validated as inert data.
+const contractModuleRoot = 'gbdraw/web/js/contracts/';
+const contractSchemaModulePath = `${contractModuleRoot}schema.generated.js`;
+const contractDescriptionModules = Object.freeze({
+  [`${contractModuleRoot}request-shape.generated.js`]: 'request-description',
+  [`${contractModuleRoot}session-shape.generated.js`]: 'session-admission'
+});
+const sessionFormatHistoryPath = 'docs/internal/SESSION_FORMAT_HISTORY.md';
+const compatibilityReferencePath = 'docs/REFERENCE/session-and-request-compatibility.md';
+const contractFixtureRoot = 'tests/fixtures/';
+const sessionFixtureRoot = `${contractFixtureRoot}sessions/`;
+const CONTRACT_VERSION_EXPORTS = Object.freeze({
+  SESSION_VERSION: 'session-version',
+  SUPPORTED_SESSION_VERSIONS: 'session-version',
+  CANONICAL_REQUEST_SCHEMA: 'request-schema',
+  SUPPORTED_CANONICAL_REQUEST_SCHEMAS: 'request-schema'
+});
+// Each block after an owner comment holds one `export const`; the statement without whitespace
+// outside strings is compared, the owner comment and JSDoc are not. null: unreadable.
+const generatedContractExports = (source) => {
+  if (source === null) return null;
+  const blocks = source.split(/^\/\/ gbdraw\/\S+\.py: \S+$/m);
+  if (/\bexport\b/.test(blocks[0])) return null;
+  const exports = new Map();
+  for (const block of blocks.slice(1)) {
+    const statement = block.slice(Math.max(block.indexOf('export const '), 0)).trim();
+    const name = /^export const ([A-Z][A-Z0-9_]*) = /.exec(statement)?.[1];
+    if (!name || exports.has(name) || statement.includes('export ', 1)) return null;
+    exports.set(name, statement.replace(/('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")|\s+/g, '$1'));
+  }
+  return exports;
+};
+// Reads a literal that tools/generate_web_contracts.py `_frozen_json` renders: JSON values,
+// `Object.freeze(` wrappers and bare keys. null: not such a literal.
+const parseFrozenLiteral = (text) => {
+  let open = 0;
+  let valid = true;
+  const json = text.replace(
+    /("(?:[^"\\\n]|\\.)*")|(Object\.freeze\()|([A-Za-z_$][\w$]*)(?=\s*:)|([()])/g,
+    (match, string, freeze, key, paren) => {
+      if (string) return string;
+      if (freeze) open += 1;
+      else if (key) return JSON.stringify(key);
+      else if (paren === ')' && open > 0) open -= 1;
+      else valid = false;
+      return '';
+    }
+  );
+  if (!valid || open) return null;
+  try {
+    return JSON.parse(json);
+  } catch (_error) {
+    return null;
+  }
+};
+const contractExportValue = (statement) => (
+  statement ? parseFrozenLiteral(statement.replace(/^export\s*const\s*\w+\s*=\s*/, '').replace(/;$/, '')) : null
+);
+// The description with each type reference inlined from its root, so type names and their
+// order do not count; a reference back into the inline stack keeps its distance instead.
+const canonicalDescription = (source) => {
+  const statements = (source || '').split(/^(?=export )/m).filter((part) => part.startsWith('export '));
+  const description = statements.length === 1 ? contractExportValue(statements[0].trim()) : null;
+  if (!isPlainObject(description) || !isPlainObject(description.types)) return null;
+  const { types, ...rest } = description;
+  const inline = (node, stack) => {
+    if (Array.isArray(node)) return node.map((item) => inline(item, stack));
+    if (!isPlainObject(node)) return node;
+    if (node.kind === 'ref' && typeof node.name === 'string') {
+      const index = stack.lastIndexOf(node.name);
+      if (index !== -1) return { kind: 'ref', up: stack.length - index };
+      if (!Object.hasOwn(types, node.name)) return { kind: 'ref', missing: node.name };
+      return inline(types[node.name], [...stack, node.name]);
+    }
+    return Object.fromEntries(Object.keys(node).sort().map((key) => [key, inline(node[key], stack)]));
+  };
+  const ref = (name) => ({ kind: 'ref', name });
+  if (typeof rest.root === 'string') rest.root = ref(rest.root);
+  if (Array.isArray(rest.bands)) {
+    rest.bands = rest.bands.map((band) => (
+      isPlainObject(band) && typeof band.root === 'string' ? { ...band, root: ref(band.root) } : band
+    ));
+  }
+  return JSON.stringify(inline(rest, []));
+};
+const persistedContractPolicyKey = 'persistedContractCoChange';
+// `unit`: the branch whose Session version a breaking change must raise (sessionVersionUnit).
+const validatePersistedContractPolicy = (candidatePolicy, headExports = null) => {
+  const data = candidatePolicy[persistedContractPolicyKey];
+  if (data === undefined) return { active: false, exempt: [], unit: null, errors: [] };
+  const errors = [];
+  const names = data?.exemptGeneratedExports;
+  if (
+    !isPlainObject(data)
+    || !Object.hasOwn(data, 'exemptGeneratedExports')
+    || Object.keys(data).some((key) => !['exemptGeneratedExports', 'sessionVersionUnit'].includes(key))
+  ) {
+    errors.push(
+      `${persistedContractPolicyKey} must be an object with the key exemptGeneratedExports `
+      + 'and optionally sessionVersionUnit'
+    );
+  }
+  if (isPlainObject(data) && Object.hasOwn(data, 'sessionVersionUnit') && data.sessionVersionUnit !== 'main') {
+    errors.push(`${persistedContractPolicyKey}.sessionVersionUnit must be "main"`);
+  }
+  if (
+    !Array.isArray(names)
+    || names.some((name) => typeof name !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(name))
+    || new Set(names).size !== names.length
+  ) {
+    errors.push(`${persistedContractPolicyKey}.exemptGeneratedExports must be unique export names`);
+  } else {
+    names.filter((name) => Object.hasOwn(CONTRACT_VERSION_EXPORTS, name)).forEach((name) => {
+      errors.push(`${persistedContractPolicyKey} exempts the version export ${name}`);
+    });
+    if (headExports !== null) {
+      names.filter((name) => !headExports?.has(name)).forEach((name) => {
+        errors.push(`${persistedContractPolicyKey} exempts ${name}, which ${contractSchemaModulePath} does not export`);
+      });
+    }
+  }
+  return {
+    active: true,
+    exempt: errors.length ? [] : names,
+    unit: errors.length ? null : data.sessionVersionUnit || null,
+    errors
+  };
+};
+const trustedPersistedContractPolicy = basePolicySource === null
+  ? validatePersistedContractPolicy({})
+  : validatePersistedContractPolicy(policy);
+const candidatePersistedContractPolicy = changed.has(policyPath)
+  ? validatePersistedContractPolicy(
+    proposedPolicy || policy,
+    generatedContractExports(readHeadFile(contractSchemaModulePath))
+  )
+  : null;
+const addedPersistedContractExemptions = (candidatePersistedContractPolicy?.exempt || [])
+  .filter((name) => !trustedPersistedContractPolicy.exempt.includes(name));
+const removedPersistedContractExemptions = candidatePersistedContractPolicy
+  && !candidatePersistedContractPolicy.errors.length
+  ? trustedPersistedContractPolicy.exempt
+    .filter((name) => !candidatePersistedContractPolicy.exempt.includes(name))
+  : [];
+// Kinds (with the exports or modules behind each) and review-only additions and renames. The
+// JSDoc modules (request.generated.js, session.generated.js) hold no values and never count.
+// A branch behind its base is measured from the merge base: what the pull request itself changes.
+const classifyPersistedContractChange = () => {
+  const kinds = new Map();
+  const note = (kind, subject) => kinds.set(kind, [...(kinds.get(kind) || []), subject]);
+  const addedExports = [];
+  const addedModules = [];
+  const renamedExports = [];
+  const versions = {};
+  const from = baseAncestry().mergeBase || base;
+  const paths = new Set(from === base ? changedPaths : runGit(repositoryRoot, [
+    'diff', '--no-renames', '--name-only', from, head, '--'
+  ]).split('\n').filter(Boolean));
+  const baseSchema = readRevisionFile(from, contractSchemaModulePath);
+  if (paths.has(contractSchemaModulePath) && baseSchema === null) {
+    addedModules.push(contractSchemaModulePath);
+  } else if (paths.has(contractSchemaModulePath)) {
+    const before = generatedContractExports(baseSchema);
+    const headSchema = readHeadFile(contractSchemaModulePath);
+    const after = headSchema === null ? new Map() : generatedContractExports(headSchema);
+    if (!before || !after) {
+      // Unreadable: every kind the module can carry counts, and unread versions fail below.
+      ['session-version', 'request-schema', 'schema-constant'].forEach((kind) => (
+        note(kind, `${contractSchemaModulePath} (unreadable)`)
+      ));
+    } else {
+      // A removed export whose value reappears under a new name is a rename. Version exports
+      // are excepted: this checker reads them by name.
+      const value = (statement) => statement.replace(/^exportconst[A-Z][A-Z0-9_]*=/, '');
+      const added = [...after.keys()].filter((name) => !before.has(name));
+      before.forEach((statement, name) => {
+        if (after.has(name) || Object.hasOwn(CONTRACT_VERSION_EXPORTS, name)) return;
+        const index = added.findIndex((candidate) => value(after.get(candidate)) === value(statement));
+        if (index !== -1) renamedExports.push(`${name} -> ${added.splice(index, 1)[0]}`);
+      });
+      const renamed = new Set(renamedExports.map((rename) => rename.split(' -> ')[0]));
+      before.forEach((statement, name) => {
+        if (
+          after.get(name) === statement
+          || renamed.has(name)
+          || trustedPersistedContractPolicy.exempt.includes(name)
+        ) {
+          return;
+        }
+        note(CONTRACT_VERSION_EXPORTS[name] || 'schema-constant', name);
+      });
+      addedExports.push(...added);
+    }
+    Object.keys(CONTRACT_VERSION_EXPORTS).forEach((name) => {
+      versions[name] = {
+        before: contractExportValue(before?.get(name)),
+        after: contractExportValue(after?.get(name))
+      };
+    });
+  }
+  Object.entries(contractDescriptionModules).forEach(([path, kind]) => {
+    if (!paths.has(path)) return;
+    const before = readRevisionFile(from, path);
+    if (before === null) {
+      addedModules.push(path);
+      return;
+    }
+    const canonicalBefore = canonicalDescription(before);
+    const canonicalAfter = canonicalDescription(readHeadFile(path));
+    if (canonicalBefore === null || canonicalBefore !== canonicalAfter) {
+      if (kind !== 'request-description' || !kinds.has('request-schema')) note(kind, path);
+    }
+  });
+  return { kinds, addedExports, addedModules, renamedExports, versions, paths };
+};
+const persistedContractChange = trustedPersistedContractPolicy.active
+  && changedPaths.some((path) => path.startsWith(contractModuleRoot))
+  ? classifyPersistedContractChange()
+  : { kinds: new Map(), addedExports: [], addedModules: [], renamedExports: [], versions: {}, paths: new Set() };
+const persistedContractCoChangeGaps = ({ kinds, versions, paths }) => {
+  if (!kinds.size) return [];
+  const gaps = [sessionFormatHistoryPath, compatibilityReferencePath]
+    .filter((path) => !paths.has(path))
+    .map((path) => `${path} in the diff`);
+  if (![...paths].some((path) => path.startsWith(contractFixtureRoot))) {
+    gaps.push(`a changed path under ${contractFixtureRoot}`);
+  }
+  // The checker reads the version exports by name and shape (an integer, or a list of integers
+  // for SUPPORTED_*): one the base has must keep both.
+  const versionValue = (name, value) => (name.startsWith('SUPPORTED_')
+    ? Array.isArray(value) && value.every((item) => Number.isInteger(item))
+    : Number.isInteger(value));
+  Object.entries(versions).forEach(([name, { before, after }]) => {
+    if (versionValue(name, before) && !versionValue(name, after)) {
+      gaps.push(`a renamed or removed version export (${name}) needs a checker change`);
+    }
+  });
+  const headings = (readHeadFile(sessionFormatHistoryPath) || '').split('\n')
+    .filter((line) => line.startsWith('## '));
+  const versionHeading = (name, label, pattern) => {
+    const { before, after } = versions[name] || {};
+    if (!versionValue(name, before) || !versionValue(name, after)) {
+      if (!versionValue(name, before)) gaps.push(`${name} readable at base`);
+      return null;
+    }
+    if (before !== after && !headings.some((line) => pattern(after).test(line))) {
+      gaps.push(`a "## " heading in ${sessionFormatHistoryPath} naming ${label} ${after}`);
+    }
+    return before !== after ? before : null;
+  };
+  if (kinds.has('session-version')) {
+    const older = versionHeading(
+      'SESSION_VERSION',
+      'Session',
+      (version) => new RegExp(`\\bSession (version )?${version}\\b`, 'i')
+    );
+    const supported = versions.SUPPORTED_SESSION_VERSIONS?.after;
+    // An unreadable supported list fails above; the fixture is needed while the old version is listed.
+    if (older !== null && Array.isArray(supported) && supported.includes(older)) {
+      const fixtures = runGit(repositoryRoot, head
+        ? ['ls-tree', '-r', '--name-only', head, '--', sessionFixtureRoot]
+        : ['ls-files', '--cached', '--others', '--exclude-standard', '--', sessionFixtureRoot])
+        .split('\n');
+      const oldFixture = new RegExp(
+        `^${sessionFixtureRoot}[^/]+\\.v${older}(-[^./]+)?\\.(gbdraw-session\\.)?json(\\.gz)?$`
+      );
+      if (!fixtures.some((path) => oldFixture.test(path))) {
+        gaps.push(
+          `a fixture of Session ${older} under ${sessionFixtureRoot} (*.v${older}.*), since it stays supported`
+        );
+      }
+    }
+  }
+  if (kinds.has('request-schema')) {
+    versionHeading(
+      'CANONICAL_REQUEST_SCHEMA',
+      'request schema',
+      (version) => new RegExp(`\\brequest schema ${version}\\b`, 'i')
+    );
+  }
+  return gaps;
+};
+const persistedContractGaps = persistedContractCoChangeGaps(persistedContractChange);
+const persistedContractKinds = [...persistedContractChange.kinds]
+  .map(([kind, subjects]) => `${kind}: ${subjects.join(', ')}`)
+  .join('; ');
+const persistedContractAdditions = [
+  ...persistedContractChange.addedExports,
+  ...persistedContractChange.addedModules
+];
+// Session version unit (WEB_CHANGE_POLICY.md): a breaking change that reaches main raises the
+// Session version to main's + 1, and later ones fold into that version until it reaches main, so
+// a pull request that changes SESSION_VERSION may set only main's or main's + 1. main's version
+// comes from origin/main, which the trusted checkout fetches with every branch.
+const sessionVersionUnitRef = 'refs/remotes/origin/main';
+const sessionVersionIn = (source) => contractExportValue(
+  generatedContractExports(source)?.get('SESSION_VERSION')
+);
+const sessionVersionUnit = (() => {
+  if (trustedPersistedContractPolicy.unit === null || !persistedContractChange.kinds.size) return null;
+  const main = sessionVersionIn(readRevisionFile(sessionVersionUnitRef, contractSchemaModulePath));
+  const headVersion = sessionVersionIn(readHeadFile(contractSchemaModulePath));
+  const { before, after } = persistedContractChange.versions.SESSION_VERSION || {};
+  const unit = { main, head: headVersion, violation: '', review: '' };
+  const unreadable = [
+    !Number.isInteger(main) && `main (${sessionVersionUnitRef}; fetch main and rerun)`,
+    !Number.isInteger(headVersion) && 'the head'
+  ].filter(Boolean);
+  if (unreadable.length) {
+    unit.violation = `SESSION_VERSION cannot be read at ${unreadable.join(' or ')}`;
+  } else if (headVersion === main) {
+    unit.review = `Material behavior/output risk: the head and main both write Session ${main}; `
+      + `confirm that main reads what the head writes the same way, or raise SESSION_VERSION to ${main + 1}`;
+  } else if (before !== after && headVersion !== main + 1) {
+    unit.violation = `SESSION_VERSION changes ${before} -> ${after}, but main (${sessionVersionUnitRef}) `
+      + `writes Session ${main}, so the head may write only Session ${main} or ${main + 1}; until `
+      + `Session ${main + 1} reaches main, later breaking changes fold into it: rewrite its history entry `
+      + 'and fixtures, and remove the reader of any version that never reached main';
+  }
+  return unit;
+})();
+
 const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
 const candidateArchitectureErrors = [];
 const candidateArchitectureObservations = [];
@@ -1912,6 +2457,7 @@ const pureSafePolicyContraction = Boolean(
   && !retiredPolicyKeys.length
   && !addedPolicyKeys.length
   && policyTopLevelKeysMatch
+  && policyOtherSectionsMatch
   && !unapprovedCapabilities.length
   && !proposedPolicyExclusions.length
 );
@@ -1964,7 +2510,10 @@ newProductionDependencies.push(
   ...newBareImports.map((entry) => `bare production import ${entry}`)
 );
 dependencyChanges.push(...newBareImports.map((entry) => `bare production import: ${entry}`));
-dependencyChanges.push(...changedVendorPaths.map((path) => `vendored runtime file changed: ${path}`));
+dependencyChanges.push(...vendorChanges.map(({ path, change, entry }) => (
+  `vendored runtime file changed: ${path}`
+  + (entry ? ` (listed ${change}: ${entry.package} ${entry.version})` : '')
+)));
 
 const sizeReviewReasons = [];
 if (productionPaths.length > selectedProfile.productionFiles) {
@@ -2046,6 +2595,58 @@ if (architectureAuthorityDelta.changes.length) {
     + `(${architectureAuthorityDelta.changes.length} change(s))`
   );
 }
+if (addedVendorEntries.length || removedVendorEntries.length) {
+  reviewReasons.push(
+    'Governance and authority: vendored runtime listing changed '
+    + `(added=${addedVendorEntries.length}, removed=${removedVendorEntries.length}; `
+    + 'see the vendored runtime listing sections)'
+  );
+}
+if (addedPersistedContractExemptions.length || removedPersistedContractExemptions.length) {
+  reviewReasons.push(
+    'Governance and authority: persisted-contract exemptions changed '
+    + `(added=${addedPersistedContractExemptions.length}, removed=${removedPersistedContractExemptions.length})`
+  );
+}
+if (
+  candidatePersistedContractPolicy
+  && candidatePersistedContractPolicy.active !== trustedPersistedContractPolicy.active
+) {
+  reviewReasons.push(
+    `Governance and authority: persisted-contract rule turned ${candidatePersistedContractPolicy.active ? 'on' : 'off'}`
+  );
+}
+if (
+  candidatePersistedContractPolicy
+  && !candidatePersistedContractPolicy.errors.length
+  && candidatePersistedContractPolicy.unit !== trustedPersistedContractPolicy.unit
+) {
+  reviewReasons.push(
+    'Governance and authority: Session version unit changed '
+    + `(${trustedPersistedContractPolicy.unit || 'none'} -> ${candidatePersistedContractPolicy.unit || 'none'})`
+  );
+}
+if (persistedContractKinds) {
+  reviewReasons.push(`Material behavior/output risk: persisted contract changed (${persistedContractKinds})`);
+}
+if (sessionVersionUnit?.review) reviewReasons.push(sessionVersionUnit.review);
+if (persistedContractChange.renamedExports.length) {
+  reviewReasons.push(
+    'Material behavior/output risk: generated contract export(s) renamed '
+    + `(${persistedContractChange.renamedExports.join(', ')}); confirm each keeps its meaning`
+  );
+}
+if (persistedContractAdditions.length) {
+  reviewReasons.push(
+    'Material behavior/output risk: new generated contract export(s) '
+    + `(${persistedContractAdditions.join(', ')}); confirm each projects an existing value`
+  );
+}
+listedVendorChanges.forEach(({ path, change, entry }) => {
+  reviewReasons.push(
+    `Vendored runtime: listed ${change} of ${path} (${entry.package} ${entry.version})`
+  );
+});
 if (designRuleAllowlistExpansions.length) {
   reviewReasons.push(
     'Governance and authority: registered design-rule allowlists expanded '
@@ -2129,8 +2730,37 @@ if (newProductionDependencies.length) {
 if (addedBinaryRuntimePaths.length) {
   blockingViolations.push('added binary runtime files are not allowed');
 }
-if (changedVendorPaths.length) {
-  blockingViolations.push('changes under gbdraw/web/vendor/ are not allowed');
+if (unlistedVendorChanges.length) {
+  blockingViolations.push(
+    'changes under gbdraw/web/vendor/ are not allowed unless the trusted base lists them '
+    + `in ${policyPath} allowedVendorChanges (`
+    + `${unlistedVendorChanges.map(({ path, reason }) => `${path}: ${reason}`).join('; ')})`
+  );
+}
+blockingViolations.push(...trustedVendorListing.errors.map((error) => (
+  `trusted vendored runtime listing: ${error}`
+)));
+blockingViolations.push(...[
+  ...(candidateVendorListing?.errors || []),
+  ...impossibleVendorEntries
+].map((error) => `candidate vendored runtime listing: ${error}`));
+blockingViolations.push(...trustedPersistedContractPolicy.errors.map((error) => (
+  `trusted persisted-contract policy: ${error}`
+)));
+blockingViolations.push(...(candidatePersistedContractPolicy?.errors || []).map((error) => (
+  `candidate persisted-contract policy: ${error}`
+)));
+if (persistedContractGaps.length) {
+  blockingViolations.push(
+    `persisted-contract.co-change: the persisted contract changed (${persistedContractKinds}) `
+    + `without: ${persistedContractGaps.join('; ')}`
+    + (baseAncestry().contained || baseAncestry().mergeBase
+      ? ''
+      : '; if this branch is behind dev, update it from dev first')
+  );
+}
+if (sessionVersionUnit?.violation) {
+  blockingViolations.push(`persisted-contract.fold: ${sessionVersionUnit.violation}`);
 }
 if (
   productionPaths.length
@@ -2784,6 +3414,36 @@ const report = [
   '## Changed vendored runtime files',
   '',
   ...list(changedVendorPaths),
+  '',
+  '## Added vendored runtime listing entries',
+  '',
+  ...list(addedVendorEntries.map(describeVendorEntry)),
+  '',
+  '## Removed vendored runtime listing entries',
+  '',
+  ...list(removedVendorEntries.map(describeVendorEntry)),
+  '',
+  '## Persisted contract',
+  '',
+  `- Rule: ${trustedPersistedContractPolicy.active ? 'active' : 'off'} `
+    + `(trusted base ${policyPath} ${persistedContractPolicyKey}); `
+    + `exempt: ${trustedPersistedContractPolicy.exempt.join(', ') || 'none'}; `
+    + `Session version unit: ${trustedPersistedContractPolicy.unit || 'none'}`,
+  ...(sessionVersionUnit
+    ? [
+      `- Session version: main ${sessionVersionUnit.main ?? 'unreadable'}, `
+        + `head ${sessionVersionUnit.head ?? 'unreadable'}`
+    ]
+    : []),
+  ...(candidatePersistedContractPolicy?.active && !candidatePersistedContractPolicy.errors.length
+    ? [
+      `- Candidate rule data: valid; exempt: ${candidatePersistedContractPolicy.exempt.join(', ') || 'none'}; `
+        + `Session version unit: ${candidatePersistedContractPolicy.unit || 'none'}`
+    ]
+    : []),
+  `- Changed: ${persistedContractKinds || 'none'}`,
+  `- New exports or modules: ${persistedContractAdditions.join(', ') || 'none'}`,
+  `- Renamed exports: ${persistedContractChange.renamedExports.join(', ') || 'none'}`,
   '',
   '## Dependency changes',
   '',

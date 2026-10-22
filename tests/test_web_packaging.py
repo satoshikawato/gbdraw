@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+from tests.utils.web_markup import read_english_index
 
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -44,6 +45,7 @@ PREPRINT_TITLE = "gbdraw: a genome diagram generator for microbes and organelles
 PREPRINT_DOI = "10.64898/2026.04.07.716863"
 BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/assets/",
+    "gbdraw/web/css/",
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
     "gbdraw/web/presets/",
@@ -330,9 +332,38 @@ def test_index_links_to_open_source_notices() -> None:
     assert "Open Source Notices" in index_html
 
 
+def test_index_loads_the_vue_production_build_its_notice_names() -> None:
+    from gbdraw._web_assets import WEB_ASSET_NOTICES
+
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    loaded = re.findall(r'<script src="\./(vendor/vue/[^"]+)"', index_html)
+    (vue_notice,) = [notice for notice in WEB_ASSET_NOTICES if notice.display_name == "Vue.js"]
+    assert loaded == [vue_notice.bundled_path] == ["vendor/vue/vue.global.prod.js"]
+    assert sorted(path.name for path in (WEB_ROOT / "vendor" / "vue").iterdir()) == [
+        "vue.global.prod.js"
+    ]
+
+
+def test_web_asset_notices_name_only_files_the_package_ships() -> None:
+    from gbdraw._web_assets import WEB_ASSET_NOTICES
+
+    for notice in WEB_ASSET_NOTICES:
+        assert (WEB_ROOT / notice.bundled_path).exists(), notice.bundled_path
+    # The Tailwind compiler is a maintenance input of the stylesheet generator
+    # (tools/vendor/tailwindcss/); the package ships only the generated CSS.
+    assert not list(WEB_ROOT.rglob("tailwindcss-play.js"))
+    # The Tailwind notice names the version the generated stylesheet reports.
+    (tailwind_notice,) = [n for n in WEB_ASSET_NOTICES if n.bundled_path == "css/tailwind.css"]
+    banner = re.search(
+        r"tailwindcss v(\S+) \| MIT License",
+        (WEB_ROOT / tailwind_notice.bundled_path).read_text(encoding="utf-8"),
+    )
+    assert banner is not None and banner.group(1) == tailwind_notice.version
+
+
 @pytest.mark.gallery
 def test_index_links_to_hosted_interactive_gallery() -> None:
-    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    index_html = read_english_index(WEB_ROOT / "index.html")
     assert "Interactive Gallery" in index_html
     assert "./gallery/" not in index_html
 
@@ -672,7 +703,7 @@ def test_runnable_gallery_support_downloads_exist() -> None:
         "tobacco-chloroplast": {
             "./files/chloroplast_specific_table.tsv",
             "./files/qualifier_priority.tsv",
-            "./files/nicotiana-tabacum-regions.tsv",
+            "./files/nicotiana-tabacum-regions-span.tsv",
         },
         "BGC0000708-BGC0000713": {
             "./files/BGC0000708-BGC0000713_default_colors.tsv",
@@ -927,25 +958,28 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
         .get("annotations", {})
         .get("sets", [])
     )
-    assert len(annotation_sets) == 1
-    assert annotation_sets[0]["id"] == "plastome_regions"
-    annotations = annotation_sets[0]["annotations"]
-    assert [annotation["label"] for annotation in annotations] == [
-        "LSC",
-        "IRb",
-        "SSC",
-        "IRa",
+    # The named region lines, then the tint the Underlay span draws.
+    assert [annotation_set["id"] for annotation_set in annotation_sets] == [
+        "plastome_regions",
+        "plastome_tint",
     ]
-    actual_spans = [
-        (annotation["target"]["start"], annotation["target"]["end"])
-        for annotation in annotations
-    ]
-    assert actual_spans == [
+    expected_spans = [
         (1, 86686),
         (86687, 112029),
         (112030, 130600),
         (130601, 155943),
     ]
+    for annotation_set, labels in zip(
+        annotation_sets,
+        (["LSC", "IRb", "SSC", "IRa"], ["", "", "", ""]),
+        strict=True,
+    ):
+        annotations = annotation_set["annotations"]
+        assert [annotation["label"] for annotation in annotations] == labels
+        assert [
+            (annotation["target"]["start"], annotation["target"]["end"])
+            for annotation in annotations
+        ] == expected_spans
 
 
 @pytest.mark.gallery
@@ -1032,7 +1066,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
 
 
 @pytest.mark.browser
-def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
+def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     tmp_path: Path,
 ) -> None:
     from gbdraw._build_support import read_project_version
@@ -1062,12 +1096,10 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
     assert "gtag('config', 'G-GG6JMKM02Y');" in index_html
     assert "static.cloudflareinsights.com" not in index_html
     assert "cloudflareinsights.com" not in index_html
-    assert "Hosted Site Analytics" in index_html
-    assert "uses Google Analytics 4 for aggregate page-usage metrics" in index_html
-    assert (
-        "Uploaded genome files and generated diagrams are still processed locally in your browser"
-        in index_html
-    )
+    # The bundle carries the flag; the About notice is the source template's,
+    # translated like the rest of the page, and shows only when it is set.
+    assert index_html.count(cloudflare_module.HOSTED_ANALYTICS_FLAG) == 1
+    assert "The hosted {site} deployment uses Google Analytics 4" in index_html
     assert (
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;"
         in index_html
@@ -1140,6 +1172,32 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
     assert (
         bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg"
     ).exists()
+
+
+def test_hosted_analytics_flag_is_set_only_by_the_cloudflare_bundle(
+    tmp_path: Path,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    flag = cloudflare_module.HOSTED_ANALYTICS_FLAG
+    # The page reads the flag by the same meta name (utils/hosted-build.js).
+    reader = (REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "hosted-build.js").read_text(
+        encoding="utf-8"
+    )
+    assert f"meta[name=\"{cloudflare_module.HOSTED_ANALYTICS_META_NAME}\"]" in reader
+    assert f'name="{cloudflare_module.HOSTED_ANALYTICS_META_NAME}"' in flag
+    # A non-hosted build (the package's web assets, a stamped build) has no flag.
+    source_index = (REPO_ROOT / "gbdraw" / "web" / "index.html").read_text(encoding="utf-8")
+    assert cloudflare_module.HOSTED_ANALYTICS_META_NAME not in source_index
+    assert "GOOGLE_ANALYTICS_NOTICE" not in source_index
+    stamped_root = tmp_path / "stamped"
+    stamped_root.mkdir()
+    (stamped_root / "index.html").write_text(source_index, encoding="utf-8")
+    cloudflare_module._load_stamp_web_build_module().stamp_web_build(
+        stamped_root, commit_sha="abcdef1234567890abcdef1234567890abcdef12"
+    )
+    stamped_index = (stamped_root / "index.html").read_text(encoding="utf-8")
+    assert cloudflare_module.HOSTED_ANALYTICS_META_NAME not in stamped_index
+    assert "googletagmanager" not in stamped_index
 
 
 def test_cloudflare_gallery_remote_base_rejects_mutable_refs(
@@ -1363,7 +1421,7 @@ def test_conda_recipe_does_not_copy_entire_web_tree() -> None:
     assert "gbdraw/web/open-source-notices.html" in build_sh
     assert "gbdraw/web/gbdraw-*.whl" in build_sh
     assert (
-        "for web_asset_dir in assets js presets tutorial-data vendor wasm" in build_sh
+        "for web_asset_dir in assets css js presets tutorial-data vendor wasm" in build_sh
     )
 
 
@@ -1388,6 +1446,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
 
     required = [
         build_root / "gbdraw" / "web" / "index.html",
+        build_root / "gbdraw" / "web" / "css" / "tailwind.css",
         build_root / "gbdraw" / "web" / "open-source-notices.html",
         build_root / "gbdraw" / "web" / "assets" / "favicon.ico",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo.svg",
@@ -1395,13 +1454,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title.png",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title-outlined.svg",
         build_root / "gbdraw" / "web" / verify_module._parse_wheel_name(),
-        build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.js",
-        build_root
-        / "gbdraw"
-        / "web"
-        / "vendor"
-        / "tailwindcss"
-        / "tailwindcss-play.js",
+        build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.prod.js",
         build_root
         / "gbdraw"
         / "web"

@@ -11,6 +11,7 @@ import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-edito
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
+import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
@@ -100,6 +101,8 @@ const setup = ({
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     readUserDefaultColor: palette.readUserDefaultColor,
+    // app/feature-editor.js: the Legend owner's writer of a row's own color.
+    writeLegendRowColor: createLegendManager({ state, commitLegendRowRules: () => assert.fail('no Legend editor commit') }).writeLegendRowColor,
     setDefaultColor: (drawing, key, color) => {
       stages.push('setDefaultColor');
       palette.setDefaultColor(drawing, key, color);

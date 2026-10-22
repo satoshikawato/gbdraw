@@ -5,18 +5,14 @@ from math import isfinite
 import re
 from typing import Literal
 
+from gbdraw.core.numeric import JS_WHITESPACE, parse_ascii_finite_float
+
 ScalarUnit = Literal["px", "factor"]
 
 
-# Match JavaScript whitespace, including BOM, at both text boundaries.
-_PIXEL_WHITESPACE = (
-    " \t\n\r\f\v\u00a0\u1680"
-    + "".join(map(chr, range(0x2000, 0x200B)))
-    + "\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
 _PIXEL_TEXT = re.compile(
     r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?:["
-    + re.escape(_PIXEL_WHITESPACE)
+    + re.escape(JS_WHITESPACE)
     + r"]*[pP][xX])?"
 )
 
@@ -30,7 +26,7 @@ def parse_optional_pixel(
     relation = "nonnegative" if allow_zero else "positive"
     message = f"{field_name} must be {relation} finite number of pixels (px optional)"
     if isinstance(raw, str):
-        text = raw.strip(_PIXEL_WHITESPACE)
+        text = raw.strip(JS_WHITESPACE)
         if not text:
             return None
         match = _PIXEL_TEXT.fullmatch(text)
@@ -49,6 +45,13 @@ def parse_optional_pixel(
     return value
 
 
+def _finite_scalar(text: str, raw: object) -> float:
+    value = parse_ascii_finite_float(text)
+    if value is None:
+        raise ValueError(f"track scalar must be a finite number (px or % optional), not {raw!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class ScalarSpec:
     """A scalar value with an explicit unit."""
@@ -62,10 +65,10 @@ class ScalarSpec:
         if not s:
             raise ValueError("empty scalar")
         if s.endswith("px"):
-            return cls(value=float(s[:-2]), unit="px")
+            return cls(value=_finite_scalar(s[:-2], raw), unit="px")
         if s.endswith("%"):
-            return cls(value=float(s[:-1]) / 100.0, unit="factor")
-        return cls(value=float(s), unit="factor")
+            return cls(value=_finite_scalar(s[:-1], raw) / 100.0, unit="factor")
+        return cls(value=_finite_scalar(s, raw), unit="factor")
 
     def resolve(self, reference: float) -> float:
         return self.value if self.unit == "px" else (self.value * reference)

@@ -2,8 +2,10 @@
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
-import { validateWebFileBindings } from './session-resource-backing.js';
-import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
+import {
+  POSITIONAL_BINDING_LISTS, readSessionResources, validateWebFileBindings, webFileBindingFaults, webFileBindingPath
+} from './session-resource-backing.js';
+import { SESSION_INPUT_TYPES, alignmentResetReceiptShapeHolds, requireActiveConfigContainers } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
@@ -11,8 +13,14 @@ import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, validateModeSliceFields } from './mode-scoped-migration.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { SESSION_ADMISSION_DESCRIPTION } from '../contracts/session-shape.generated.js';
+import { repairByDescription } from '../utils/contract-repair.js';
+import { isPlainObject } from '../utils/contract-shape.js';
+import { SESSION_PART_PATHS, loadRepair } from '../utils/load-repairs.js';
 import {
   CANONICAL_SESSION_MIN_VERSION,
+  CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
   FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
@@ -23,12 +31,20 @@ import {
   OTHER_MODE_RESULT_LEGEND_FIELDS,
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
+  ROW_KEYED_LEGEND_SESSION_VERSION,
   SESSION_VERSION,
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
-/** @import { SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js' */
+/**
+ * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46,
+ *   SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js'
+ */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { AlignmentResetRequest } from './session-active-config-contract.js' */
+/** @import { ContractRepair, RepairPolicy } from '../utils/contract-repair.js' */
+/** @import { ContractShape } from '../utils/contract-shape.js' */
+/** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
 
 /**
  * How code reads an unvalidated value: through its properties `K`, each of
@@ -45,31 +61,38 @@ import {
 // draft of each diagram mode in `modes` (PD-OI-086) and keys per-feature
 // edits by source identity (design Q4).
 
-// One class per top-level key of a Session: the keys are `SessionInput`'s.
-export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze(/** @satisfies {Record<keyof SessionInput, string>} */ ({
-  format: 'document',
-  version: 'document',
-  createdAt: 'document',
-  title: 'document',
-  renderRequest: 'canonical-render',
-  resources: 'resource',
-  webFiles: 'resource-binding',
-  config: 'legacy-or-editor-metadata',
-  ui: 'editor-metadata',
-  files: 'legacy-fallback',
-  results: 'artifact',
-  features: 'artifact-or-legacy-semantic',
-  editorState: 'artifact',
-  orthogroupState: 'artifact',
-  losatCache: 'artifact',
-  losatDerivedCache: 'artifact',
-  proteinIdentityManifest: 'artifact',
-  legacyArtifacts: 'artifact',
-  runMetadata: 'artifact',
-  otherModeResult: 'artifact',
-  cliInvocation: 'provenance',
-  modes: 'editor-metadata',
-  cliOptions: 'provenance'
+// One class per top-level key of a Session (the keys are `SessionInput`'s),
+// and the content part it holds (receipt 〔拒否〕: settings, request, Result,
+// input files, edits, cache), or null for a key that holds no content: R4
+// refuses a file whose every held part Load dropped (`restoresNothing`).
+/**
+ * @typedef {'settings' | 'request' | 'results' | 'input-files' | 'edits' | 'cache'} SessionContentPart
+ * @typedef {{ readonly authority: string, readonly part: SessionContentPart | null }} SessionTopLevelKey
+ */
+export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze(/** @satisfies {Record<keyof SessionInput, SessionTopLevelKey>} */ ({
+  format: { authority: 'document', part: null },
+  version: { authority: 'document', part: null },
+  createdAt: { authority: 'document', part: null },
+  title: { authority: 'document', part: null },
+  renderRequest: { authority: 'canonical-render', part: 'request' },
+  resources: { authority: 'resource', part: 'input-files' },
+  webFiles: { authority: 'resource-binding', part: 'input-files' },
+  config: { authority: 'legacy-or-editor-metadata', part: 'settings' },
+  ui: { authority: 'editor-metadata', part: null },
+  files: { authority: 'legacy-fallback', part: 'input-files' },
+  results: { authority: 'artifact', part: 'results' },
+  features: { authority: 'artifact-or-legacy-semantic', part: 'edits' },
+  editorState: { authority: 'artifact', part: 'edits' },
+  orthogroupState: { authority: 'artifact', part: 'edits' },
+  losatCache: { authority: 'artifact', part: 'cache' },
+  losatDerivedCache: { authority: 'artifact', part: 'cache' },
+  proteinIdentityManifest: { authority: 'artifact', part: 'cache' },
+  legacyArtifacts: { authority: 'artifact', part: 'cache' },
+  runMetadata: { authority: 'artifact', part: null },
+  otherModeResult: { authority: 'artifact', part: 'results' },
+  cliInvocation: { authority: 'provenance', part: null },
+  modes: { authority: 'editor-metadata', part: 'settings' },
+  cliOptions: { authority: 'provenance', part: null }
 }));
 
 // The homes that Session 46 moved into `modes` (and app-level `ui`): a
@@ -132,15 +155,20 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
   ...RENDERED_ID_FEATURE_EDIT_FIELDS
 ]);
 
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-const isPlainObject = (value) => (
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-);
-
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
+// The versions this reader takes, in words, for the refusal of another
+// version (OV-1253): "27–33, 39–42, 44, and 46–48".
+const READ_SESSION_VERSIONS = (() => {
+  /** @type {[number, number][]} */
+  const runs = [];
+  for (const version of SUPPORTED_SESSION_VERSIONS) {
+    const last = runs[runs.length - 1];
+    if (last && version === last[1] + 1) last[1] = version;
+    else runs.push([version, version]);
+  }
+  const words = runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`));
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
+})();
 const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
 
 /**
@@ -161,10 +189,391 @@ export const readSessionInput = (value) => {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_TOO_OLD' });
   }
   if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
-    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    // OV-1253: a Session names its version, as the CLI does; another file keeps the generic refusal.
+    throw diagnosticError('INPUT_INVALID', value.format !== 'gbdraw-session' ? { field: 'schema', reason: 'FIELDS' }
+      : version > SESSION_VERSION
+        ? { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: version, latestSessionVersion: SESSION_VERSION }
+        : { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: version, readSessionVersions: READ_SESSION_VERSIONS });
   }
   if (value.format !== 'gbdraw-session') throw formatInvalid();
   return /** @type {SessionEnvelope} */ (value); // `format` and `version` were checked above
+};
+
+// The band of a checked Session (`SessionChecked`, describe_session_admission()).
+// TypeScript does not narrow a version's literal union by `>=`, so these four
+// are the version tests that narrow it; each starts at its band's generated
+// threshold (tests/web/session-authority.test.mjs compares them with the bands).
+/** @param {SessionChecked} document @returns {document is SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} */
+export const isCanonicalBand = (document) => document.version >= CANONICAL_SESSION_MIN_VERSION;
+/** @param {SessionChecked} document @returns {document is SessionChecked39 | SessionChecked40 | SessionChecked46} */
+export const isArtifactBand = (document) => document.version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION;
+/** @param {SessionChecked} document @returns {document is SessionChecked40 | SessionChecked46} */
+export const isAuthorityBand = (document) => document.version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+/** @param {SessionChecked} document @returns {document is SessionChecked46} */
+export const isModeScopedBand = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
+
+/**
+ * A value that holds nothing: `null`, `[]` or `{}` (E-OD06; R4's held parts).
+ * @param {unknown} value
+ */
+export const holdsNothing = (value) => value === undefined || value === null
+  || (Array.isArray(value) ? value.length === 0 : isPlainObject(value) && Object.keys(value).length === 0);
+
+/**
+ * What the Session reader knows that its description does not (data beside
+ * `SESSION_ADMISSION_DESCRIPTION`, D1c 2.3):
+ * - `positionalArrays`: arrays other places name by position (a catalog item,
+ *   `ui.selectedResultIndex`), whose elements are never dropped one by one;
+ * - `slices`: the mode slices, each a part of `modes`;
+ * - `requestOwned`: fields the stored request's reader reads, absent ones
+ *   included (`readSessionRequests`, K22);
+ * - `readerOwnedObjects`: types whose keys and values the reader table reads
+ *   (config-field-readers.js): the reader checks only that each is an object;
+ * - `readerOwnedValues`: types whose values the reader table reads: the reader
+ *   checks their keys and kind;
+ * - `resultSetMembers`: what names a Result set's Results, dropped with them;
+ *   `features`: the feature state a Session 27-39 recovered from its Results,
+ *   which a Session 40+ holds in its catalog (OV-789).
+ * Every top-level key is a part (rule 6), and a cache part is dropped with no
+ * row (E-OD05).
+ */
+export const SESSION_PART_RULES = Object.freeze({
+  positionalArrays: Object.freeze(['results', 'otherModeResult.results']),
+  slices: Object.freeze(SLICE_MODES.map((mode) => `modes.${mode}`)),
+  requestOwned: Object.freeze(['renderRequest']),
+  readerOwnedObjects: Object.freeze(['CheckedSessionModeSliceConfig']),
+  readerOwnedValues: Object.freeze(['CheckedSessionModeSliceFeatures']),
+  resultSetMembers: Object.freeze({
+    session: Object.freeze(['runMetadata', 'cliInvocation']),
+    ui: Object.freeze(['selectedResultIndex', ...ARTIFACT_UI_FIELDS]),
+    features: CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS
+  })
+});
+
+/** @type {ContractShape} */
+const READER_OWNED_VALUE = Object.freeze({ kind: 'unknown' });
+/**
+ * The admission description as the Session reader applies it: the places the
+ * reader table and the request reader read are left to them.
+ */
+const SESSION_READ_TYPES = Object.freeze(Object.fromEntries(Object.entries(SESSION_ADMISSION_DESCRIPTION.types).map(([name, shape]) => {
+  if (shape.kind !== 'object') return [name, shape];
+  if (SESSION_PART_RULES.readerOwnedObjects.includes(name)) {
+    return [name, Object.freeze({ kind: 'object', fields: Object.freeze({}), optional: Object.freeze([]), open: true })];
+  }
+  const fields = SESSION_PART_RULES.readerOwnedValues.includes(name)
+    ? Object.fromEntries(Object.keys(shape.fields).map((field) => [field, READER_OWNED_VALUE]))
+    : shape.fields;
+  const optional = [...shape.optional, ...SESSION_PART_RULES.requestOwned.filter((field) => Object.hasOwn(fields, field) && !shape.optional.includes(field))];
+  return [name, Object.freeze({ ...shape, fields: Object.freeze(fields), optional: Object.freeze(optional) })];
+})));
+
+/** @type {RepairPolicy} */
+const SESSION_REPAIR_POLICY = Object.freeze({
+  positionalArrays: SESSION_PART_RULES.positionalArrays,
+  partBoundary: (/** @type {string} */ pattern) => !pattern.includes('.') || SESSION_PART_RULES.slices.includes(pattern)
+});
+
+/** @param {string} path @returns {string} */
+const topLevelKey = (path) => path.split(/[.[]/, 1)[0];
+/**
+ * The stored value at a row's path (`.key` and `[i]` steps; no key of a
+ * place the reader repairs holds a dot).
+ * @param {unknown} root
+ * @param {string} path
+ */
+const storedAt = (root, path) => path.split('.').flatMap((step) => {
+  const [key, ...indices] = step.split('[');
+  return [key, ...indices.map((index) => Number(index.slice(0, -1)))];
+}).reduce((/** @type {unknown} */ value, step) => (
+  value !== null && typeof value === 'object' ? /** @type {Record<string | number, unknown>} */ (value)[step] : undefined
+), root);
+
+/**
+ * Whether the band holds the top-level `key` (a field it names, not as `never`).
+ * @param {string} root The band's root type.
+ * @param {string} key
+ */
+const bandHolds = (root, key) => {
+  const shape = SESSION_READ_TYPES[root];
+  const field = shape.kind === 'object' ? shape.fields[key] : undefined;
+  return field !== undefined && !(field.kind === 'literal' && field.values.length === 0);
+};
+
+/**
+ * The dialog row of one repair of the description, or null when it lists
+ * none: a value that holds nothing dropped from an optional field (rule 1,
+ * E-OD06) and a retired home whose place a slice fills (E-OD03, A7f) have
+ * none; a cache part's rows are not listed (E-OD05). A part the band holds
+ * is named as a part; any other place, as a field.
+ * @param {ContractRepair<never>} row
+ * @param {SessionEnvelope} stored
+ * @param {string} root The band's root type.
+ * @returns {LoadRepair | null}
+ */
+const bandRepair = (row, stored, root) => {
+  if (row.rule === 4 && holdsNothing(storedAt(stored, row.path))) return null;
+  const key = topLevelKey(row.path);
+  if (row.path === key && isModeScopedVersion(stored) && FLAT_DRAFT_TOP_LEVEL_FIELDS.includes(key)) return null;
+  const part = Object.hasOwn(SESSION_TOP_LEVEL_AUTHORITY, key)
+    ? SESSION_TOP_LEVEL_AUTHORITY[/** @type {keyof SessionInput} */ (key)].part : null;
+  // The legacy `files` of a Session 40+ is named with the inputs it held,
+  // which load from no other place (A6c).
+  const inputs = row.path === 'files' ? heldInputNames(storedAt(stored, 'files')) : [];
+  return loadRepair({
+    code: part === 'cache' ? 'cache-entry-dropped'
+      : bandHolds(root, key) && SESSION_PART_PATHS.includes(row.path) ? 'session-part-dropped' : 'session-field-dropped',
+    path: row.path,
+    effect: row.effect,
+    ...(inputs.length ? { label: inputs.join(', ') } : {})
+  });
+};
+
+/**
+ * The names of the input files a value holds: each `name` text of an object
+ * in it, in order, once.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+const heldInputNames = (value) => {
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @param {unknown} item */
+  const visit = (item) => {
+    if (Array.isArray(item)) item.forEach(visit);
+    else if (isPlainObject(item)) {
+      if (typeof item.name === 'string' && item.name.trim()) names.add(item.name.trim());
+      Object.values(item).forEach(visit);
+    }
+  };
+  visit(value);
+  return [...names];
+};
+
+/** @param {SessionEnvelope} document */
+const isModeScopedVersion = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
+
+/**
+ * Drops the members of a Result set whose Results the reader dropped.
+ * @param {unknown} document
+ * @returns {unknown}
+ */
+const withoutResultSetMembers = (document) => {
+  if (!isPlainObject(document)) return document;
+  const { session, ui: uiMembers, features: featureMembers } = SESSION_PART_RULES.resultSetMembers;
+  const next = Object.fromEntries(Object.entries(document).filter(([key]) => !session.includes(key)));
+  if (isPlainObject(document.ui)) {
+    next.ui = Object.fromEntries(Object.entries(document.ui).filter(([key]) => !uiMembers.includes(key)));
+  }
+  if (Object.hasOwn(document, 'features')) next.features = withoutFields(document.features, (field) => featureMembers.includes(field));
+  if (isPlainObject(document.editorState)) next.editorState = { ...document.editorState, featureCatalog: null };
+  return next;
+};
+
+/**
+ * The keys a Session 27-39 holds that no writer of its version wrote: a key
+ * outside `SESSION_TOP_LEVEL_AUTHORITY`, and a Session 46 key (TB6, OV-590,
+ * A7a, OV-638). Python reads none of them (`validate_session` accepts them).
+ * @type {readonly string[]}
+ */
+const MODE_SCOPED_TOP_LEVEL_KEYS = Object.freeze(['modes', 'cliOptions']);
+
+/**
+ * `container` without `fields`, or `container` itself when it holds none.
+ * @template T
+ * @param {T} container
+ * @param {(field: string) => boolean} drop
+ */
+const withoutFields = (container, drop) => (isPlainObject(container) && Object.keys(container).some(drop)
+  ? /** @type {T} */ (Object.fromEntries(Object.entries(container).filter(([field]) => !drop(field)))) : container);
+
+/**
+ * The Web-only part of the band reader: what the description leaves open
+ * that no writer of the version wrote. A Session 27-39 key no writer of its
+ * version wrote is dropped with a row; a Session 46's retired homes, whose
+ * place its slices fill, and a Session 40+'s derived orthogroup `groups`
+ * are dropped with none (A7f, A7c, BA-OD93 a); a development-branch feature
+ * field is dropped with a row (J3).
+ * @param {SessionChecked} document
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const readWebOnlyFields = (document, repairs) => {
+  /** @type {Record<string, unknown>} */
+  let next = document;
+  /** @param {string} key @param {unknown} value */
+  const set = (key, value) => { if (next[key] !== value) next = { ...next, [key]: value }; };
+  if (!isAuthorityBand(document)) {
+    const unread = Object.keys(document).filter((key) => !Object.hasOwn(SESSION_TOP_LEVEL_AUTHORITY, key) || MODE_SCOPED_TOP_LEVEL_KEYS.includes(key));
+    unread.forEach((path) => repairs.push(loadRepair({ code: 'session-field-dropped', path, effect: 'dropped' })));
+    next = withoutFields(next, (key) => unread.includes(key));
+  } else {
+    const features = isPlainObject(next.features) ? next.features : {};
+    CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter((field) => Object.hasOwn(features, field)).forEach((field) => repairs.push(
+      loadRepair({ code: 'session-field-dropped', path: `features.${field}`, effect: 'dropped' })
+    ));
+    set('features', withoutFields(next.features, (field) => CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.includes(field)));
+    set('orthogroupState', withoutFields(next.orthogroupState, (field) => field === 'groups'));
+  }
+  if (isModeScopedBand(document)) {
+    RETIRED_MODE_SCOPED_FIELDS.forEach(([domain, fields]) => {
+      if (!domain) return; // the top-level homes are not in the band's description
+      const [key, child] = domain.split('.');
+      const container = next[key];
+      if (child === undefined) set(key, withoutFields(container, (field) => fields.has(field)));
+      else if (isPlainObject(container)) set(key, { ...container, [child]: withoutFields(container[child], (field) => fields.has(field)) });
+    });
+  }
+  return /** @type {SessionChecked} */ (next); // only fields the description leaves open were dropped
+};
+
+/**
+ * The input files of a Session as the app reads them (A8, A6b): a resource
+ * whose descriptor cannot be read is dropped, with a row when a binding or
+ * a request names it, and so is each
+ * binding that names a resource the Session does not hold (the slot it
+ * filled is named), or that cannot be read; an inventory that is no object or
+ * of a schema no writer wrote is dropped whole. The request's references to a
+ * dropped resource are its reader's (`readSessionRequests`).
+ * @param {SessionChecked} document
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const readSessionInputs = (document, repairs) => {
+  /** @type {Record<string, unknown>} */
+  let next = document;
+  const resources = readSessionResources(next.resources);
+  // A resource nothing names is dropped with no row (E-OD06, A15).
+  const named = collectCanonicalResourceIds([next.renderRequest, /** @type {UnvalidatedFields<'renderRequest'>} */ (next.otherModeResult)?.renderRequest,
+    /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles)?.bindings]);
+  resources.dropped.filter((id) => named.has(id.trim())).forEach((id) => repairs.push(
+    loadRepair({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' })
+  ));
+  if (resources.value !== next.resources) next = { ...next, resources: resources.value };
+  const webFiles = /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles);
+  const faults = webFileBindingFaults(webFiles,
+    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (next.resources));
+  if (!faults.length || !isPlainObject(webFiles)) return /** @type {SessionChecked} */ (next);
+  if (faults.some(({ at }) => at === null)) {
+    repairs.push(loadRepair({ code: 'session-field-dropped', path: 'webFiles.bindings', effect: 'dropped' }));
+    const { bindings: _dropped, ...kept } = webFiles;
+    return /** @type {SessionChecked} */ ({ ...next, webFiles: kept }); // the inventory is optional in every band
+  }
+  // `webFileBindingFaults` found an object inventory.
+  const bindings = /** @type {Record<string, unknown>} */ (JSON.parse(JSON.stringify(webFiles.bindings)));
+  /** @type {Map<unknown[], Set<number>>} */
+  const removed = new Map();
+  faults.forEach(({ at, field }) => {
+    const keys = /** @type {ReadonlyArray<string | number>} */ (at); // no inventory fault is left
+    repairs.push(loadRepair({ code: field ? 'session-field-dropped' : 'file-entry-dropped', path: `webFiles.bindings.${webFileBindingPath(keys)}`, effect: 'dropped' }));
+    const last = /** @type {string | number} */ (keys.at(-1));
+    // `webFileBindingFaults` reached the binding through these keys: each one holds an object or a list.
+    /** @type {unknown} */
+    const parent = keys.slice(0, -1).reduce((container, key) => /** @type {Record<string | number, unknown>} */ (container)[key], /** @type {unknown} */ (bindings));
+    if (Array.isArray(parent) && !field && !POSITIONAL_BINDING_LISTS.has(String(keys.findLast((key) => typeof key === 'string')))) {
+      removed.set(parent, (removed.get(parent) ?? new Set()).add(Number(last)));
+    } else if (field) delete /** @type {Record<string | number, unknown>} */ (parent)[last];
+    else /** @type {Record<string | number, unknown>} */ (parent)[last] = null;
+  });
+  removed.forEach((indices, list) => {
+    [...indices].sort((a, b) => b - a).forEach((index) => list.splice(index, 1));
+  });
+  return /** @type {SessionChecked} */ ({ ...next, webFiles: { ...webFiles, bindings } }); // bindings read as above
+};
+
+/**
+ * The one reader of a parsed Session document (D1c 2.1): its envelope
+ * (`readSessionInput`, R2 and R3), then its version band of
+ * `SESSION_ADMISSION_DESCRIPTION`, repaired by `repairByDescription` with
+ * `SESSION_PART_RULES`, and the band's Web-only rows. The value is copied
+ * where repaired; the document itself is never changed.
+ * @param {unknown} value
+ * @returns {Repaired<SessionChecked>}
+ */
+export const readSessionDocument = (value) => {
+  const envelope = readSessionInput(value);
+  // `readSessionInput` admits no version below the first band's.
+  const band = SESSION_ADMISSION_DESCRIPTION.bands.findLast(({ minVersion }) => envelope.version >= minVersion)
+    ?? SESSION_ADMISSION_DESCRIPTION.bands[0];
+  const read = repairByDescription(envelope, { type: band.root, path: '' }, { root: band.root, types: SESSION_READ_TYPES },
+    SESSION_REPAIR_POLICY);
+  /** @type {LoadRepair[]} */
+  const repairs = read.rows.flatMap((row) => bandRepair(row, envelope, band.root) ?? []);
+  const repaired = read.rows.some(({ path }) => path === 'results') ? withoutResultSetMembers(read.value) : read.value;
+  const checked = /** @type {SessionChecked} */ (repaired); // the band's description holds, as repaired
+  return {
+    value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(withNullRequestAsMissing(checked), repairs), repairs), repairs),
+    repairs
+  };
+};
+
+/**
+ * R2-B1 (E-OD29): a null request marks a settings-only Session; a file whose
+ * request is null but that holds saved Results or a feature list, which only
+ * a Session with a request holds, is a full Session whose request is null.
+ * Its request reads as a missing one, which has one reading: the request
+ * reader's `request-dropped` row and the settings-only Session of that row
+ * (K22), R4 when nothing is left. A new object.
+ * @param {SessionChecked} document
+ * @returns {SessionChecked}
+ */
+const withNullRequestAsMissing = (document) => {
+  if (!isSettingsOnlySessionDocument(document)) return document;
+  const editorState = /** @type {UnvalidatedFields<'featureCatalog'>} */ (document.editorState);
+  const results = /** @type {unknown} */ (document.results);
+  if (!(Array.isArray(results) && results.length > 0) && !isPlainObject(editorState?.featureCatalog)) return document;
+  const { renderRequest: _null, ...missing } = document;
+  return /** @type {SessionChecked} */ (missing); // the request is optional in the band of a settings-only form
+};
+
+/**
+ * R4 (receipt 〔拒否〕): Load restores nothing of a file whose every content
+ * part it holds was dropped or replaced by its default, and of a
+ * settings-only file, whose content is its settings, when its settings hold
+ * nothing or were dropped (D1a: `modes` null or text). A file that holds no
+ * part (an envelope-only Session 27-30) loads as before (BA-D20). Each
+ * producer that drops a part records the part's key (or `key.member` for
+ * each member it drops) as its path; a part dropped with no row still
+ * counts (E-OD21): the `request-dropped` row of a
+ * request Load cannot read (K22) loads the file as settings only, which drops
+ * every other part, so it is judged as a settings-only file (OV-864); a
+ * Session of a version with no settings-only form (31-41) has nothing to load
+ * without its request, so that row alone restores nothing (C-OD17, BA-OD63 d).
+ * More repairs never turn a verdict of true to false, so Load may ask before
+ * every producer ran, once a row has decided it.
+ * @param {SessionEnvelope} stored The document as the file holds it.
+ * @param {readonly LoadRepair[]} repairs The repairs of the Load so far.
+ */
+export const restoresNothing = (stored, repairs) => {
+  const requestDropped = repairs.some(({ code }) => code === 'request-dropped');
+  if (requestDropped && !hasSettingsOnlyForm(stored)) return true;
+  // The other mode's set dropped for its request is the part `otherModeResult`.
+  const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
+    .map(({ code, path }) => (code === 'other-result-set-dropped' ? 'otherModeResult' : path)));
+  /**
+   * What a part holds: the members of an object part that hold something
+   * (`key.member`; a part whose members hold nothing holds nothing), the
+   * value of another part (`key`).
+   * @param {string} key
+   */
+  const members = (key) => {
+    const value = stored[/** @type {keyof SessionInput} */ (key)];
+    if (!isPlainObject(value)) return holdsNothing(value) ? [] : [key];
+    return Object.entries(/** @type {Record<string, unknown>} */ (value))
+      .filter(([, member]) => !holdsNothing(member)).map(([member]) => `${key}.${member}`);
+  };
+  // A part is dropped whole, or member by member (both slices of `modes`, OV-865).
+  /** @param {string} key */
+  const lost = (key) => dropped.has(key) || members(key).every((path) => dropped.has(path));
+  /** @param {SessionContentPart | null} [only] */
+  const held = (only) => Object.entries(SESSION_TOP_LEVEL_AUTHORITY)
+    .filter(([key, { part }]) => part !== null && (only === undefined || part === only) && members(key).length > 0)
+    .map(([key]) => key);
+  if (isSettingsOnlySessionDocument(stored) || requestDropped) {
+    return held('settings').every(lost);
+  }
+  const parts = held();
+  return parts.length > 0 && parts.every(lost);
 };
 
 const adoptedCurrentDocuments = new WeakSet();
@@ -252,9 +661,11 @@ const validateLinearComparisonPlan = (plan) => {
 
 /**
  * @param {SessionInput} sessionData Unvalidated Session data.
+ * @param {{ load?: boolean }} [options] Load reads the plan (its readers list
+ *   what they change, OV-764); Save requires it as written.
  * @returns {void}
  */
-export const validateCurrentComparisonAuthority = (sessionData) => {
+export const validateCurrentComparisonAuthority = (sessionData, { load = false } = {}) => {
   // Session 46: the comparison draft is the Linear drawing's.
   const draftConfig = Number(sessionData.version) >= MODE_SCOPED_SESSION_VERSION
     ? /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config'>>} */ (sessionData.modes)?.linear?.config
@@ -323,7 +734,9 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
   const bindingEntries = Array.isArray(bindings.linearComparisons) ? bindings.linearComparisons : [];
   if (!hasWebComparisonDraft && bindingEntries.length === 0) return;
 
-  const edgeIds = validateLinearComparisonPlan(config.linearComparisonPlan);
+  // Load reads the plan as the drawing reads it; Save requires it as written.
+  const edges = load ? normalizeLinearComparisonPlan(config.linearComparisonPlan).edges : null;
+  const edgeIds = edges ? new Set(edges.map(({ id }) => id)) : validateLinearComparisonPlan(config.linearComparisonPlan);
   /** @type {Set<string>} */
   const boundIds = new Set();
   bindingEntries.forEach((binding) => {
@@ -343,13 +756,16 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
     if (boundIds.has(id)) {
       throw new Error(`Current comparison file binding is duplicated: ${id}.`);
     }
-    if (!isPlainObject(binding.file)) {
+    // Load drops a file binding it cannot read (`readSessionInputs`) and the
+    // Files apply leaves that edge with no file and none active, as the pair
+    // card's Remove does (`setComparisonEdgeFile`, OV-899).
+    if (!isPlainObject(binding.file) && !(load && binding.file === null)) {
       throw new Error('Each current comparison file binding requires a file resource binding.');
     }
     boundIds.add(id);
   });
   // `validateLinearComparisonPlan` above proved the plan's edges: objects with a string `id` and a boolean `fileActive`.
-  /** @type {{ edges: { id: string, fileActive: boolean }[] }} */ (config.linearComparisonPlan).edges.forEach((edge) => {
+  (edges ?? /** @type {{ edges: { id: string, fileActive: boolean }[] }} */ (config.linearComparisonPlan).edges).forEach((edge) => {
     if (edge.fileActive && !boundIds.has(edge.id)) {
       throw new Error(
         `Active comparison file is missing its Web file binding: ${edge.id}.`
@@ -395,13 +811,21 @@ export const hasBiologicalSessionInputs = (files = {}) => (
 );
 
 /**
- * @param {SessionEnvelope | null | undefined} data
+ * @param {SessionInput | null | undefined} data
  * @returns {boolean}
  */
-export const isSettingsOnlySessionDocument = data => data != null && [42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(data.version)
+export const isSettingsOnlySessionDocument = data => data != null && typeof data.version === 'number'
+  && [42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
-/** @typedef {UnvalidatedFields<'entries', UnvalidatedFields<'length'>>} ArtifactCacheFields */
+/**
+ * Whether a Session's version has a settings-only form (42, 44, 46, 47, 48): one
+ * whose request cannot be read loads as settings only (K22, C-OD07).
+ * @param {SessionInput | null | undefined} data
+ * @returns {boolean}
+ */
+export const hasSettingsOnlyForm = (data) => data != null && isSettingsOnlySessionDocument({ ...data, renderRequest: null });
+
 /**
  * The request schemas a file stored, read before Load promoted its requests:
  * a check that depends on what the writer wrote reads them (RK-1).
@@ -414,19 +838,6 @@ const EMPTY_WEB_BINDINGS = Object.freeze({
   c_conservation_blasts_source: null, c_conservation_fastas: [], c_conservation_sequence_sources: [], d_color: null,
   t_color: null, blacklist: null, whitelist: null, qualifier_priority: null, linearSeqs: [], linearComparisons: []
 });
-
-/**
- * Whether a Session holds the settings its settings-only form keeps: the flat
- * Web draft `config` of a Session 42 or 44, the mode slices `modes` of a
- * Session 46 or 47. A Session 42, 44 or 47 the CLI or the Python API wrote
- * holds none (no `config` / `modes`; its settings are its request), so when
- * its request cannot be read, nothing can be restored (R4).
- * @param {SessionEnvelope} session
- * @returns {boolean}
- */
-export const holdsSettingsOnlyContent = (session) => isPlainObject(
-  /** @type {Record<string, unknown>} */ (session)[Number(session.version) >= MODE_SCOPED_SESSION_VERSION ? 'modes' : 'config']
-);
 
 /**
  * The settings-only Session of a Session whose request cannot be read (K22):
@@ -482,34 +893,122 @@ export const settingsOnlySessionCandidate = (session) => {
   });
 };
 
-/** @param {SessionEnvelope} data */
-const validateSettingsOnlyDocument = data => {
+/** The GenBank, GFF and FASTA bindings of a Web input inventory (`hasBiologicalSessionInputs`). */
+const BIOLOGICAL_BINDINGS = Object.freeze(['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']);
+/**
+ * What a settings-only Session holds that one may not: Save refuses each
+ * (`validateSettingsOnlyDocument`), Load drops each before the dialog
+ * (`readSettingsOnlyParts`; A15, E-OD06).
+ * @param {SessionEnvelope} data
+ */
+const settingsOnlyFaults = (data) => {
+  // Read as dev's Save read them (E-OD02): a value of another kind with a
+  // length or keys counts as held, as Python's `validate_session` refuses it.
+  /** @param {unknown} value */
+  const holdsKeys = (value) => Object.keys(value || {}).length > 0;
+  /** @param {unknown} cache */
+  const holdsCacheEntries = (cache) => (/** @type {{ entries?: { length?: unknown } } | null | undefined} */ (cache)?.entries || []).length;
   const bindings = /** @type {UnvalidatedFields<'bindings'>} */ (data.webFiles)?.bindings;
-  if (!isPlainObject(data.resources) || !isPlainObject(bindings)
-    || !Array.isArray(bindings.linearSeqs)
-    || ['c_gb', 'c_gff', 'c_fasta'].some(key => !Object.hasOwn(bindings, key))) {
-    throw new Error('Settings-only Session requires resources and an explicit Web input inventory.');
-  }
+  const inventory = isPlainObject(data.resources) && isPlainObject(bindings) && Array.isArray(bindings.linearSeqs)
+    && ['c_gb', 'c_gff', 'c_fasta'].every(key => Object.hasOwn(bindings, key));
   // Every Linear row is an object, as Python's reader requires
   // (`_validate_settings_only_session`); `validateWebFileBindings` lets a
   // null row through (OV-566).
-  if (bindings.linearSeqs.some((/** @type {unknown} */ row) => !isPlainObject(row))
-    || hasBiologicalSessionInputs(bindings)
+  const rows = inventory && Array.isArray(bindings.linearSeqs) && bindings.linearSeqs.every(isPlainObject);
+  /** @type {Set<unknown>} */
+  const referenced = new Set();
+  /** @param {unknown} value */
+  const visit = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Object.hasOwn(value, 'resourceId')) referenced.add(/** @type {NonNullable<UnvalidatedFields<'resourceId'>>} */ (value).resourceId);
+    Object.values(value).forEach(visit);
+  };
+  visit(bindings);
+  return {
+    // `inventory` proved `bindings` an object that holds the explicit inventory.
+    inventory,
+    rows,
+    biological: rows && hasBiologicalSessionInputs(/** @type {Record<string, unknown>} */ (bindings)),
+    results: /** @type {UnvalidatedFields<'length'>} */ (data.results)?.length !== 0,
+    artifacts: /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog !== null
+      || data.cliInvocation != null || holdsKeys(data.runMetadata)
+      || Boolean(holdsCacheEntries(data.losatCache) || holdsCacheEntries(data.losatDerivedCache))
+      || holdsKeys(data.legacyArtifacts)
+      || ['proteinSets', 'recordAnalyses', 'recordInstances']
+        .some(key => Object.keys(/** @type {UnvalidatedFields<string>} */ (data.proteinIdentityManifest)?.[key] || {}).length > 0)
+      || /** @type {UnvalidatedFields<'c_conservation_blasts_source'>} */ (bindings)?.c_conservation_blasts_source === 'losat-cache',
+    unboundResources: Object.keys(isPlainObject(data.resources) ? data.resources : {}).filter(id => !referenced.has(id))
+  };
+};
+
+/**
+ * A settings-only Session's Linear rows that are no object, dropped with a
+ * row: Python's reader requires each row to be an object (OV-566, A6b).
+ * @param {SessionChecked} document
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const withoutLinearRowsOfAnotherKind = (document, repairs) => {
+  const webFiles = /** @type {UnvalidatedFields<'bindings'>} */ (document.webFiles);
+  const bindings = /** @type {UnvalidatedFields<'linearSeqs'>} */ (webFiles?.bindings);
+  const rows = bindings?.linearSeqs;
+  if (!Array.isArray(rows) || rows.every(isPlainObject)) return document;
+  rows.forEach((row, index) => {
+    if (!isPlainObject(row)) repairs.push(loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.linearSeqs[${index}]`, effect: 'dropped' }));
+  });
+  // `rows` was read from `webFiles.bindings`, so both are objects.
+  return /** @type {SessionChecked} */ ({ ...document, webFiles: { ...webFiles, bindings: { ...bindings, linearSeqs: rows.filter(isPlainObject) } } });
+};
+
+/**
+ * Load: a settings-only Session's Results and GenBank, GFF and FASTA inputs
+ * are dropped with a row; its other committed artifacts and the resources no
+ * binding names are dropped with none, as the settings-only Session of an
+ * unreadable request drops them (`settingsOnlySessionCandidate`; A15, J4).
+ * A Web input inventory the file does not hold is the empty one, with no row
+ * (E-OD06; OV-860: a full Session whose request is null holds none).
+ * @param {SessionChecked} stored
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const readSettingsOnlyParts = (stored, repairs) => {
+  if (!isSettingsOnlySessionDocument(stored)) return stored;
+  const document = withoutLinearRowsOfAnotherKind(stored, repairs);
+  const faults = settingsOnlyFaults(document);
+  if (faults.rows && !(faults.biological || faults.results || faults.artifacts || faults.unboundResources.length)) return document;
+  if (faults.results) repairs.push(loadRepair({ code: 'session-part-dropped', path: 'results', effect: 'dropped' }));
+  const bindings = /** @type {UnvalidatedFields<'bindings'>} */ (document.webFiles)?.bindings;
+  if (isPlainObject(bindings)) {
+    BIOLOGICAL_BINDINGS.filter((key) => hasBiologicalSessionInputs({ [key]: bindings[key] })).forEach((key) => repairs.push(
+      loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.${key}`, effect: 'dropped' })
+    ));
+    (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((row, index) => {
+      if (hasBiologicalSessionInputs({ linearSeqs: [row] })) {
+        repairs.push(loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.linearSeqs[${index}]`, effect: 'changed' }));
+      }
+    });
+  }
+  return /** @type {SessionChecked} */ (settingsOnlySessionCandidate(document)); // the band's shape, with parts emptied
+};
+
+/**
+ * @param {SessionEnvelope} data
+ * @param {{ load?: boolean }} [options] Load drops the parts `readSettingsOnlyParts` drops, and reads a missing settings container as its default.
+ */
+const validateSettingsOnlyDocument = (data, { load = false } = {}) => {
+  const faults = settingsOnlyFaults(data);
+  if (!faults.inventory) {
+    throw new Error('Settings-only Session requires resources and an explicit Web input inventory.');
+  }
+  if (!faults.rows || faults.biological
     // `data.webFiles` holds the `bindings` object read above, so it is neither null nor undefined.
     || Object.keys(/** @type {NonNullable<UnvalidatedFields<'bindings'>>} */ (data.webFiles)).some(key => key !== 'bindings')) {
     throw new Error('Settings-only Session cannot contain biological sources.');
   }
-  if (/** @type {UnvalidatedFields<'length'>} */ (data.results)?.length !== 0
-    || /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog !== null
-    || data.cliInvocation != null || Object.keys(data.runMetadata || {}).length
-    || (/** @type {ArtifactCacheFields} */ (data.losatCache)?.entries || []).length
-    || (/** @type {ArtifactCacheFields} */ (data.losatDerivedCache)?.entries || []).length
-    || Object.keys(data.legacyArtifacts || {}).length
-    || ['proteinSets', 'recordAnalyses', 'recordInstances']
-      .some(key => Object.keys(/** @type {UnvalidatedFields<string>} */ (data.proteinIdentityManifest)?.[key] || {}).length)
-    || bindings.c_conservation_blasts_source === 'losat-cache') {
+  if (faults.results || faults.artifacts) {
     throw new Error('Settings-only Session cannot contain committed render artifacts.');
   }
+  if (load) return;
   // Session 46: each mode's slice holds that mode's settings draft, with its
   // `form` and `adv` (`_validate_settings_only_session`, OV-591).
   if (data.version >= MODE_SCOPED_SESSION_VERSION) {
@@ -525,16 +1024,7 @@ const validateSettingsOnlyDocument = data => {
   } else {
     validateSettingsOnlyFlatDraft(data);
   }
-  /** @type {Set<unknown>} */
-  const referenced = new Set();
-  /** @param {unknown} value */
-  const visit = value => {
-    if (!value || typeof value !== 'object') return;
-    if (Object.hasOwn(value, 'resourceId')) referenced.add(/** @type {NonNullable<UnvalidatedFields<'resourceId'>>} */ (value).resourceId);
-    Object.values(value).forEach(visit);
-  };
-  visit(bindings);
-  if (Object.keys(data.resources).some(id => !referenced.has(id))) {
+  if (faults.unboundResources.length > 0) {
     throw new Error('Settings-only Session contains an unbound resource.');
   }
 };
@@ -566,106 +1056,163 @@ const validateSettingsOnlyFlatDraft = (data) => {
       featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
     };
   }
-  // `validateCurrentWriterActiveConfig` is the check of `mode` and of the configuration.
-  validateCurrentWriterActiveConfig({
-    mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig, scopedDrafts: true,
-    sessionVersion: data.version
-  });
+  // The check of `mode` and of the configuration's containers; Load reads
+  // the values inside them with the reader table (`configFieldRepairs`).
+  requireActiveConfigContainers({ mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig });
 };
 
 // One committed Result set: the top-level fields, or `otherModeResult`, whose
 // fields mirror them.
 /**
- * @param {Record<string, any>} set
+ * One thing a committed Result set holds that its Results cannot be restored
+ * with: Save refuses the first (`validateCommittedResultSet`), Load repairs
+ * each (`readCommittedResultSet`).
+ * - `results`: no list, or a Result that is no named plain SVG (A7b, A20);
+ * - `editorState`: no editor state that holds `featureCatalog`;
+ * - `receipt-missing`: no alignment reset receipt where the request needs one;
+ * - `receipt`: a receipt that is not of the request's plan (A19);
+ * - `catalog`: a feature catalog of another schema; `catalog-null`: none for
+ *   saved Results (A9).
+ * @typedef {{ kind: 'results' | 'editorState' | 'receipt-missing' | 'receipt' | 'catalog' | 'catalog-null' }} ResultSetFault
+ */
+/** @param {unknown} result */
+const isPlainSvgResult = (result) => {
+  const resultName = isPlainObject(result) && typeof result.name === 'string' ? result.name.trim() : '';
+  const content = isPlainObject(result) ? result.content : null;
+  return Boolean(resultName) && !resultName.toLowerCase().endsWith('.interactive.svg')
+    && typeof content === 'string' && content.includes('<svg')
+    && !content.includes('gbdraw-interactive-feature-metadata') && !content.includes('gbdraw-interactive-feature-script');
+};
+
+/** @param {SessionInput} set */
+const storedRequestSchema = (set) => /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema;
+
+/**
+ * @param {SessionInput} set
+ * @param {number | string} version
+ * @param {unknown} [storedSchema] The schema the file stored, before Load read the request (RK-1).
+ * @returns {ResultSetFault[]}
+ */
+const committedResultSetFaults = (set, version, storedSchema = storedRequestSchema(set)) => {
+  /** @type {ResultSetFault[]} */
+  const faults = [];
+  const results = set.results;
+  if (!Array.isArray(results) || !results.every(isPlainSvgResult)) faults.push({ kind: 'results' });
+  const editorState = isPlainObject(set.editorState) ? set.editorState : {};
+  if (!Object.hasOwn(editorState, 'featureCatalog')) faults.push({ kind: 'editorState' });
+  // Load read the request before (`readSessionRequests`); Save holds a canonical one.
+  const request = /** @type {AlignmentResetRequest | null | undefined} */ (set.renderRequest);
+  if (Number(storedSchema) >= 8 && request?.layout?.similarityAlignment && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
+    faults.push({ kind: 'receipt-missing' });
+  } else if (!alignmentResetReceiptShapeHolds(editorState.alignmentResetReceipt, request)) {
+    faults.push({ kind: 'receipt' });
+  }
+  const featureCatalog = Object.hasOwn(editorState, 'featureCatalog') ? editorState.featureCatalog : null;
+  const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
+  if (featureCatalog !== null && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)) {
+    faults.push({ kind: 'catalog' });
+  } else if (Array.isArray(results) && results.length > 0 && featureCatalog === null && faults[0]?.kind !== 'results') {
+    faults.push({ kind: 'catalog-null' });
+  }
+  return faults;
+};
+
+/**
+ * Save: refuses the first fault of a committed Result set.
+ * @param {readonly { kind: string }[]} faults
+ */
+const refuseFirstFault = ([fault]) => {
+  if (!fault) return;
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  if (fault.kind === 'receipt') throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+};
+
+/**
+ * Where a committed Result set is in a Session: the top level or the other
+ * mode's set (the prefix of its paths).
+ * @typedef {'' | 'otherModeResult.'} ResultSetPath
+ */
+/**
+ * Load: a committed Result set as far as it can be restored (A7b, A9, A19,
+ * A20). Results that cannot be read are dropped with the members that name
+ * them (positional: rule 6); an absent editor state reads as an empty one; a
+ * stale receipt reads as none, with a row; a catalog that cannot be read is
+ * dropped, and the Results stay without one (`feature-recovery-failed`).
+ * @param {SessionInput} set
+ * @param {readonly ResultSetFault[]} faults Of `set` (`committedResultSetFaults`).
+ * @param {ResultSetPath} at
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionInput}
+ */
+const readCommittedResultSet = (set, faults, at, repairs) => {
+  if (!faults.length) return set;
+  const kinds = new Set(faults.map(({ kind }) => kind));
+  const editorState = { ...(isPlainObject(set.editorState) ? set.editorState : {}) };
+  if (kinds.has('editorState')) {
+    if (!holdsNothing(set.editorState) && !isPlainObject(set.editorState)) {
+      repairs.push(loadRepair({ code: 'session-part-dropped', path: `${at}editorState`, effect: 'defaulted' }));
+    }
+    editorState.featureCatalog = null;
+  }
+  // A receipt the file does not hold reads as none (E-OD06).
+  if (kinds.has('receipt-missing')) editorState.alignmentResetReceipt = null;
+  if (kinds.has('receipt')) {
+    repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
+    editorState.alignmentResetReceipt = null;
+  }
+  if (kinds.has('catalog') || kinds.has('catalog-null')) {
+    repairs.push(loadRepair({ code: 'feature-recovery-failed', path: `${at}editorState.featureCatalog`, effect: 'dropped' }));
+    editorState.featureCatalog = null;
+  }
+  if (!kinds.has('results')) return { ...set, editorState };
+  repairs.push(loadRepair({ code: 'session-part-dropped', path: `${at}results`, effect: 'dropped' }));
+  return /** @type {SessionInput} */ (withoutResultSetMembers({ ...set, results: [], editorState }));
+};
+
+/**
+ * @param {SessionInput} set
  * @param {number | string} version
  * @param {unknown} [storedSchema] The schema the file stored, before Load read the request (RK-1).
  */
-const validateCommittedResultSet = (set, version, storedSchema = set.renderRequest?.schema) => {
-  if (!Array.isArray(set.results)) {
-    throw new Error(`Session version ${String(version)} requires a results array.`);
-  }
-  set.results.forEach((result) => {
-    const resultName = (
-      isPlainObject(result) && typeof result.name === 'string'
-        ? result.name.trim()
-        : ''
-    );
-    const content = isPlainObject(result) ? result.content : null;
-    if (
-      !resultName
-      || resultName.toLowerCase().endsWith('.interactive.svg')
-      || typeof content !== 'string'
-      || !content.includes('<svg')
-      || content.includes('gbdraw-interactive-feature-metadata')
-      || content.includes('gbdraw-interactive-feature-script')
-    ) {
-      throw new Error('Each current Session Result must be a named plain SVG.');
-    }
-  });
-  const editorState = set.editorState;
-  if (
-    !isPlainObject(editorState)
-    || !Object.prototype.hasOwnProperty.call(editorState, 'featureCatalog')
-  ) {
-    throw new Error(
-      `Session version ${String(version)} requires editorState.featureCatalog.`
-    );
-  }
-  if (Number(storedSchema) >= 8
-    && set.renderRequest?.layout?.similarityAlignment
-    && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
-    throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
-  }
-  validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, set.renderRequest);
-  const featureCatalog = editorState.featureCatalog;
-  const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
-  if (
-    featureCatalog !== null
-    && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
-  ) {
-    throw new Error(
-      `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
-    );
-  }
-  if (
-    Array.isArray(set.results)
-    && set.results.length > 0
-    && featureCatalog === null
-  ) {
-    throw new Error(
-      `Session version ${String(version)} requires a feature catalog for saved results.`
-    );
-  }
+const validateCommittedResultSet = (set, version, storedSchema = storedRequestSchema(set)) => {
+  refuseFirstFault(committedResultSetFaults(set, version, storedSchema));
 };
 
 // E1: Session 46 keeps the other diagram mode's Result set beside the
 // top-level set. It needs a committed top-level request of the other mode, at
 // least one Result, and resources in the top-level table.
 /**
- * @param {Record<string, any>} sessionData
+ * What the other mode's Result set holds that it cannot be restored with:
+ * `set` and `request` faults come first; `set` faults of its committed Result
+ * set follow (`committedResultSetFaults`). Run notices are read by
+ * `readSessionAuthorityParts`.
+ * @param {SessionInput} sessionData
  * @param {number | string} version
  * @param {StoredRequestSchemas} storedSchemas
+ * @returns {{ kind: 'set' | 'request' | ResultSetFault['kind'] }[]}
  */
-const validateOtherModeResult = (sessionData, version, storedSchemas) => {
+const otherModeResultFaults = (sessionData, version, storedSchemas) => {
   const other = sessionData.otherModeResult;
   if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
-    throw new Error('Session otherModeResult must contain only a committed Result set.');
+    return [{ kind: 'set' }];
   }
   const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
   if (!isPlainObject(sessionData.renderRequest) || !isPlainObject(other.renderRequest)
     || !(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode) || mode === sessionData.renderRequest.mode) {
-    throw new Error('Session otherModeResult requires a committed request of the other mode.');
+    return [{ kind: 'request' }];
   }
-  validateCommittedResultSet(other, version, storedSchemas.otherModeResult ?? other.renderRequest?.schema);
-  // `validateCommittedResultSet` proved `results` an array of named SVG Results and `editorState` an object.
+  const setFaults = committedResultSetFaults(other, version, storedSchemas.otherModeResult ?? storedRequestSchema(other));
+  if (setFaults.some(({ kind }) => kind === 'results' || kind === 'editorState')) return setFaults;
+  /** @type {{ kind: 'set' | ResultSetFault['kind'] }[]} */
+  const faults = [...setFaults];
+  // The checks above proved `results` an array of named SVG Results and `editorState` an object.
   const results = /** @type {SessionResult[]} */ (other.results);
   const editorState = /** @type {Record<string, unknown>} */ (other.editorState);
-  if (results.length === 0) throw new Error('Session otherModeResult requires a Result.');
-  const missing = [...collectCanonicalResourceIds(other.renderRequest)]
-    .filter((resourceId) => !Object.hasOwn(sessionData.resources || {}, resourceId));
-  if (missing.length > 0) {
-    throw new Error(`Session otherModeResult names missing resource(s): ${missing.join(', ')}`);
-  }
+  if (results.length === 0) faults.push({ kind: 'set' });
+  const namesMissing = [...collectCanonicalResourceIds(other.renderRequest)]
+    .some((resourceId) => !(isPlainObject(sessionData.resources) && Object.hasOwn(sessionData.resources, resourceId)));
+  if (namesMissing) faults.push({ kind: 'set' });
   // One rule with gbdraw/session_io.py: a present field is an object (null is not).
   const ui = Object.hasOwn(other, 'ui') ? other.ui : {};
   const legend = Object.hasOwn(editorState, 'legend') ? editorState.legend : {};
@@ -673,21 +1220,135 @@ const validateOtherModeResult = (sessionData, version, storedSchemas) => {
   if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.includes(key))
     || Object.keys(editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.includes(key))
     || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.includes(key))) {
-    throw new Error('Session otherModeResult editorState and ui hold only that Result set\'s fields.');
+    faults.push({ kind: 'set' });
   }
   if (!isPlainObject(runMetadata)
     || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.includes(key))) {
-    throw new Error('Session otherModeResult.runMetadata holds only that Result set\'s metadata.');
+    faults.push({ kind: 'set' });
   }
-  validateAnnotationWarnings(runMetadata.annotationWarnings, results);
-  validateFeatureIdentityNotices(runMetadata.featureIdentityNotices, results);
-  validateComparisonWarnings(runMetadata.comparisonWarnings, results);
+  return faults;
+};
+
+/**
+ * Save: the other mode's Result set (E1).
+ * @param {SessionInput} sessionData
+ * @param {number | string} version
+ * @param {StoredRequestSchemas} storedSchemas
+ */
+const validateOtherModeResult = (sessionData, version, storedSchemas) => {
+  refuseFirstFault(otherModeResultFaults(sessionData, version, storedSchemas));
+  // The check above proved the set an object.
+  validateRunNotices(/** @type {SessionInput} */ (sessionData.otherModeResult));
+};
+
+/**
+ * A Result set's Results, read by index (unvalidated).
+ * @param {SessionInput} set
+ */
+const storedResults = (set) => /** @type {{ readonly [index: number]: UnvalidatedFields<'name'> } | null | undefined} */ (set.results);
+
+/**
+ * The run notices of a Result set's run metadata, each with the check
+ * Generate and Save apply to it against the set's Results. They are derived
+ * run metadata (annotation warnings, feature identity notices, comparison
+ * warnings): the next Generate reports them again, and the figure needs none.
+ * @type {Readonly<Record<'annotationWarnings' | 'featureIdentityNotices' | 'comparisonWarnings', (value: unknown, set: SessionInput) => unknown>>}
+ */
+const RUN_NOTICE_CHECKS = Object.freeze({
+  annotationWarnings: (value, set) => validateAnnotationWarnings(value, storedResults(set)),
+  featureIdentityNotices: (value, set) => validateFeatureIdentityNotices(value, set.results),
+  comparisonWarnings: (value, set) => validateComparisonWarnings(value, storedResults(set))
+});
+const RUN_NOTICE_FIELDS = /** @type {(keyof typeof RUN_NOTICE_CHECKS)[]} */ (Object.keys(RUN_NOTICE_CHECKS));
+
+/**
+ * Save: refuses run notices that do not match the set's Results.
+ * @param {SessionInput} set A Session or the other mode's Result set.
+ */
+const validateRunNotices = (set) => {
+  const runMetadata = /** @type {UnvalidatedFields<keyof typeof RUN_NOTICE_CHECKS>} */ (set.runMetadata);
+  RUN_NOTICE_FIELDS.forEach((field) => RUN_NOTICE_CHECKS[field](runMetadata?.[field], set));
+};
+
+/**
+ * Load: `runMetadata` without the run notices that do not match `results`,
+ * dropped with no row (OV-638, J2, E-OD16); Generate and Save refuse them.
+ * @template {SessionInput} T
+ * @param {T} set A Session or the other mode's Result set.
+ * @returns {T}
+ */
+const withReadRunNotices = (set) => {
+  const runMetadata = set.runMetadata;
+  if (!isPlainObject(runMetadata)) return set;
+  const stale = RUN_NOTICE_FIELDS.filter((field) => {
+    try {
+      RUN_NOTICE_CHECKS[field](runMetadata[field], set);
+      return false;
+    } catch {
+      // Each check is pure: it throws only for notices that do not hold.
+      return true;
+    }
+  });
+  if (stale.length === 0) return set;
+  const kept = Object.fromEntries(Object.entries(runMetadata).filter(([field]) => !(/** @type {string[]} */ (stale)).includes(field)));
+  return /** @type {T} */ ({ ...set, runMetadata: kept });
+};
+
+/**
+ * Load: the committed Result sets of a Session, read after its requests
+ * (the receipts are checked against the requests Load read, RK-2): what
+ * Save refuses in them (`validateSessionAuthorityInventory`) is repaired
+ * before the dialog (E-OD02). The other mode's set is dropped whole when it
+ * cannot be restored: without its request (`other-result-set-dropped`, A7g),
+ * or with a fault of its own (`session-part-dropped`).
+ * A set whose Results Load could not admit or compose (A20, `uncomposedSets`:
+ * its path prefix) has a `results` fault: Load reads the file again without
+ * them (E-OD16), in every band (OV-789, E-OD17).
+ * @template {SessionInput} T
+ * @param {T} sessionData
+ * @param {number} version
+ * @param {StoredRequestSchemas} storedSchemas
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @param {readonly ResultSetPath[]} [uncomposedSets]
+ * @returns {T}
+ */
+export const readSessionAuthorityParts = (sessionData, version, storedSchemas, repairs, uncomposedSets = []) => {
+  /** @param {ResultSetPath} at @returns {ResultSetFault[]} */
+  const uncomposed = (at) => (uncomposedSets.includes(at) ? [{ kind: 'results' }] : []);
+  // A Session 27-39 holds no committed Result set Save checks: only Load's own fault.
+  const topFaults = version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
+    ? committedResultSetFaults(sessionData, version, storedSchemas.renderRequest ?? storedRequestSchema(sessionData)) : [];
+  /** @type {SessionInput} */
+  let data = readCommittedResultSet(sessionData, [...topFaults, ...uncomposed('')], '', repairs);
+  if (version < CANONICAL_SESSION_MIN_VERSION) return /** @type {T} */ (data);
+  if (Object.hasOwn(data, 'otherModeResult')) {
+    const faults = [...otherModeResultFaults(data, version, storedSchemas), ...uncomposed('otherModeResult.')];
+    const { otherModeResult: other, ...rest } = data;
+    if (faults.some(({ kind }) => kind === 'request')) {
+      const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (other)?.renderRequest?.mode;
+      repairs.push(loadRepair({
+        code: 'other-result-set-dropped', path: 'otherModeResult.renderRequest', effect: 'dropped',
+        ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
+      }));
+      data = rest;
+    } else if (faults.some(({ kind }) => !['receipt', 'receipt-missing'].includes(kind))) {
+      repairs.push(loadRepair({ code: 'session-part-dropped', path: 'otherModeResult', effect: 'dropped' }));
+      data = rest;
+    } else {
+      // `otherModeResultFaults` found no `set` fault: the set is an object.
+      // Without `set` and `request` faults, the rest are the set's own (`committedResultSetFaults`).
+      const setFaults = /** @type {ResultSetFault[]} */ (faults.filter(({ kind }) => kind !== 'set' && kind !== 'request'));
+      const kept = withReadRunNotices(readCommittedResultSet(/** @type {SessionInput} */ (other), setFaults, 'otherModeResult.', repairs));
+      data = { ...data, otherModeResult: kept };
+    }
+  }
+  return /** @type {T} */ (withReadRunNotices(data));
 };
 
 // Session 46 keeps each mode's draft in `modes` (registry fields only) and
 // none of it in its former homes; `ui.losatExecution` holds only the LOSAT
 // execution settings (plan 4.1).
-/** @param {Record<string, any>} sessionData */
+/** Save: @param {Record<string, unknown>} sessionData */
 const validateModeScopedFields = (sessionData) => {
   // A field outside the Session 46 shape is a Session-format error (plan 4.1).
   const fieldsInvalid = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
@@ -703,7 +1364,7 @@ const validateModeScopedFields = (sessionData) => {
   // Session 46 keeps the draft of each mode in `modes`, never in a former home.
   if (retired.length > 0) throw fieldsInvalid();
   // `ui.losatExecution` holds only the LOSAT execution settings.
-  const execution = sessionData.ui?.losatExecution;
+  const execution = /** @type {UnvalidatedFields<'losatExecution'>} */ (sessionData.ui)?.losatExecution;
   if (execution !== undefined && (!isPlainObject(execution)
     || Object.keys(execution).some((field) => !LOSAT_EXECUTION_FIELDS.includes(field)))) throw fieldsInvalid();
   if (!Object.hasOwn(sessionData, 'modes')) return;
@@ -714,16 +1375,12 @@ const validateModeScopedFields = (sessionData) => {
 };
 
 /**
- * @param {SessionEnvelope} sessionData Unvalidated Session data.
+ * Save: the keys and kinds of the band of the version it writes. Load reads
+ * them (`readSessionDocument`): it drops what Save refuses here (E-OD02).
+ * @param {Record<string, unknown>} sessionData
  * @param {number | string} version
- * @param {StoredRequestSchemas} [storedSchemas] The request schemas the file stored, when Load read them.
- * @returns {void}
  */
-export const validateSessionAuthorityInventory = (sessionData, version, storedSchemas = {}) => {
-  if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
-    throw new Error('Session authority inventory requires an object.');
-  }
-  assertSafeObjectKeys(sessionData, 'Session');
+const validateBandFields = (sessionData, version) => {
   if (Number(version) < MODE_SCOPED_SESSION_VERSION) {
     for (const field of ['otherModeResult', 'modes', 'cliOptions']) {
       if (Object.hasOwn(sessionData, field)) {
@@ -733,6 +1390,58 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   } else {
     validateModeScopedFields(sessionData);
   }
+  if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
+  const unknown = Object.keys(sessionData).filter((key) => !Object.hasOwn(SESSION_TOP_LEVEL_AUTHORITY, key));
+  if (unknown.length > 0) {
+    throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
+  }
+  if (Number(version) < CURRENT_AUTHORITY_SESSION_MIN_VERSION) return;
+  if (Object.hasOwn(sessionData, 'files')) {
+    throw new Error(`Session version ${String(version)} cannot contain legacy files; use resources and webFiles.`);
+  }
+  if (Object.hasOwn(sessionData, 'features') && !isPlainObject(sessionData.features)) {
+    throw new Error('Session features must be an object when present.');
+  }
+  const features = isPlainObject(sessionData.features) ? sessionData.features : {};
+  const forbiddenFeatureFields = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter((field) => Object.hasOwn(features, field));
+  if (forbiddenFeatureFields.length > 0) {
+    throw new Error(`Session version ${String(version)} contains branch-only feature field(s): ${forbiddenFeatureFields.join(', ')}`);
+  }
+  if (Number(version) >= MODE_SCOPED_SESSION_VERSION) {
+    SLICE_MODES.forEach((mode) => {
+      const sliceFeatures = /** @type {UnvalidatedFields<string, UnvalidatedFields<'features'>>} */ (sessionData.modes)?.[mode]?.features;
+      if (!isPlainObject(sliceFeatures) || !Object.hasOwn(sliceFeatures, 'featureOverrides')) return;
+      if (!isPlainObject(sliceFeatures.featureOverrides)) {
+        throw new Error(`Session modes.${mode}.features.featureOverrides must be an object.`);
+      }
+      canonicalFeatureOverrides(sliceFeatures.featureOverrides);
+    });
+  }
+  if (Object.hasOwn(sessionData, 'orthogroupState') && !isPlainObject(sessionData.orthogroupState)) {
+    throw new Error('Session orthogroupState must be an object when present.');
+  }
+  if (isPlainObject(sessionData.orthogroupState) && Object.hasOwn(sessionData.orthogroupState, 'groups')) {
+    throw new Error(`Session version ${String(version)} cannot contain duplicated orthogroup groups.`);
+  }
+};
+
+/**
+ * Save's check of the Session it writes, and Load's (`load`), which leaves the
+ * values of the drawings' settings to the reader table: Load drops what it
+ * cannot read with a dialog row before it applies the file (E-OD02).
+ * @param {SessionEnvelope} sessionData Unvalidated Session data.
+ * @param {number | string} version
+ * @param {StoredRequestSchemas} [storedSchemas] The request schemas the file stored, when Load read them.
+ * @param {{ load?: boolean }} [options]
+ * @returns {void}
+ */
+export const validateSessionAuthorityInventory = (sessionData, version, storedSchemas = {}, { load = false } = {}) => {
+  if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
+    throw new Error('Session authority inventory requires an object.');
+  }
+  assertSafeObjectKeys(sessionData);
+  // Load read the keys and kinds of its band (`readSessionDocument`).
+  if (!load) validateBandFields(sessionData, version);
   const bindings = validateWebFileBindings(
     /** @type {UnvalidatedFields<'bindings'>} */ (sessionData.webFiles),
     /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (sessionData.resources)
@@ -741,94 +1450,43 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   const linearRecordsOff = /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config', UnvalidatedFields<'recordsOff'>>>} */ (
     sessionData.modes
   )?.linear?.config?.recordsOff;
-  if (Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
+  // Load drops a record that names no card (`readRecordsOff`).
+  if (!load && Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
     const boundUids = new Set(/** @type {unknown[]} */ (Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((sequence) => /** @type {UnvalidatedFields<'uid'>} */ (sequence)?.uid));
     if (/** @type {unknown[]} */ (linearRecordsOff).some((uid) => !boundUids.has(uid))) {
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(Number(version))) {
-    throw new Error(`Web binding schema 2 requires session version 41, 42, 44, ${MODE_SCOPED_SESSION_VERSION}, or ${SESSION_VERSION}.`);
+  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION]
+    .includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, 44, '
+      + `${MODE_SCOPED_SESSION_VERSION}, ${ROW_KEYED_LEGEND_SESSION_VERSION}, or ${SESSION_VERSION}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
-  if (
-    Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION &&
-    Object.prototype.hasOwnProperty.call(sessionData, 'files')
-  ) {
-    throw new Error(
-      `Session version ${String(version)} cannot contain legacy files; use resources and webFiles.`
-    );
-  }
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
-    validateCurrentComparisonAuthority(sessionData);
-    for (const field of ['cInputType', 'lInputType']) {
+    validateCurrentComparisonAuthority(sessionData, { load });
+    // Load reads an input type of no type as GenBank, with a row (`readSessionInputType`, OV-594).
+    for (const field of load ? [] : ['cInputType', 'lInputType']) {
       if (
         Object.prototype.hasOwnProperty.call(sessionData.ui || {}, field)
         // The own-property check passed, so `ui` is an object that holds `field`.
-        && !(/** @type {readonly unknown[]} */ (['gb', 'gff'])).includes(/** @type {Record<string, unknown>} */ (sessionData.ui)[field])
+        && !(/** @type {readonly unknown[]} */ (SESSION_INPUT_TYPES)).includes(/** @type {Record<string, unknown>} */ (sessionData.ui)[field])
       ) {
         throw new Error(`Session ui.${field} must be gb or gff when present.`);
       }
     }
-    if (
-      Object.prototype.hasOwnProperty.call(sessionData, 'features')
-      && !isPlainObject(sessionData.features)
-    ) {
-      throw new Error('Session features must be an object when present.');
+    // Load read the committed Result sets (`readSessionAuthorityParts`): it
+    // keeps Results whose catalog it dropped, which Save refuses.
+    if (!load) {
+      validateCommittedResultSet(sessionData, version,
+        storedSchemas.renderRequest ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
     }
-    const features = isPlainObject(sessionData.features) ? sessionData.features : {};
-    const forbiddenFeatureFields = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter(
-      (field) => Object.prototype.hasOwnProperty.call(features, field)
-    );
-    if (forbiddenFeatureFields.length > 0) {
-      throw new Error(
-        `Session version ${String(version)} contains branch-only feature field(s): `
-        + forbiddenFeatureFields.join(', ')
-      );
-    }
-    if (Number(version) >= MODE_SCOPED_SESSION_VERSION) {
-      SLICE_MODES.forEach((mode) => {
-        const sliceFeatures = /** @type {UnvalidatedFields<string, UnvalidatedFields<'features'>>} */ (sessionData.modes)?.[mode]?.features;
-        if (!isPlainObject(sliceFeatures) || !Object.hasOwn(sliceFeatures, 'featureOverrides')) return;
-        if (!isPlainObject(sliceFeatures.featureOverrides)) {
-          throw new Error(`Session modes.${mode}.features.featureOverrides must be an object.`);
-        }
-        canonicalFeatureOverrides(sliceFeatures.featureOverrides);
-      });
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(sessionData, 'orthogroupState')
-      && !isPlainObject(sessionData.orthogroupState)
-    ) {
-      throw new Error('Session orthogroupState must be an object when present.');
-    }
-    if (
-      isPlainObject(sessionData.orthogroupState)
-      && Object.prototype.hasOwnProperty.call(sessionData.orthogroupState, 'groups')
-    ) {
-      throw new Error(
-        `Session version ${String(version)} cannot contain duplicated orthogroup groups.`
-      );
-    }
-    validateCommittedResultSet(sessionData, version,
-      storedSchemas.renderRequest ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
   }
-  if (Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
-  const unknown = Object.keys(sessionData).filter(
-    (key) => !Object.prototype.hasOwnProperty.call(SESSION_TOP_LEVEL_AUTHORITY, key)
-  );
-  if (unknown.length > 0) {
-    throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
-  }
-  const runMetadata = /** @type {UnvalidatedFields<'annotationWarnings' | 'featureIdentityNotices' | 'comparisonWarnings'>} */ (
-    sessionData.runMetadata
-  );
-  // A Session 31-39 reaches these checks with `results` unvalidated: they read it by index only.
-  const results = /** @type {UnvalidatedFields<string, UnvalidatedFields<'name'>>} */ (sessionData.results);
-  validateAnnotationWarnings(runMetadata?.annotationWarnings, results);
-  validateFeatureIdentityNotices(runMetadata?.featureIdentityNotices, results);
-  validateComparisonWarnings(runMetadata?.comparisonWarnings, results);
-  if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData);
+  if (!load && Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
+  // Load read the run notices (`readSessionAuthorityParts`). A Session 31-39
+  // reaches these checks with `results` unvalidated: they read it by index only.
+  if (!load) validateRunNotices(sessionData);
+  if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData, { load });
 };
 
 /**
@@ -858,7 +1516,7 @@ export const adoptRuntimeCanonicalSession = (canonical) => {
  * @returns {{ document: SessionEnvelope, canonical: Record<string, any> | null }}
  */
 export const adoptCurrentSessionDocument = (sessionData, currentVersion, storedSchemas = {}) => {
-  validateSessionAuthorityInventory(sessionData, currentVersion, storedSchemas);
+  validateSessionAuthorityInventory(sessionData, currentVersion, storedSchemas, { load: true });
   if (sessionData.version !== currentVersion) {
     throw new Error('Only the current session schema can use adoptive ownership.');
   }

@@ -528,7 +528,7 @@ def _assert_feature_presentation_svg(report: dict[str, Any]) -> None:
         if not any(
             row.get("product") == "ATP synthase F0 subunit 6" for row in metadata
         ):
-            raise AssertionError("Exclude from matching incorrectly hid ATP6")
+            raise AssertionError("Leave out of protein search incorrectly hid ATP6")
 
     foreground = [feature for feature in features if not feature.get("underlay")]
     if not foreground:
@@ -676,21 +676,6 @@ def _fit_finished_circular_preview(page: Page) -> None:
         raise AssertionError("Could not reach the documented 60% preview zoom")
 
 
-def _park_feature_search(page: Page) -> None:
-    """Drag the public search palette above the clipped preview viewport."""
-
-    search = page.get_by_role("searchbox", name="Search features", exact=True)
-    box = search.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the feature-search palette")
-    x = box["x"] - 4
-    y = box["y"] + box["height"] + 3
-    page.mouse.move(x, y)
-    page.mouse.down()
-    page.mouse.move(x, 2, steps=10)
-    page.mouse.up()
-
-
 def _pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
     """Use the public canvas gesture to reveal the right-side legend."""
 
@@ -816,7 +801,6 @@ def capture_gui_styling(
         final_report = generate_and_inspect(
             page, _inspect_presentation_svg, _assert_style_svg
         )
-        _park_feature_search(page)
         zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
         zoom_out.click()
         expect(
@@ -957,15 +941,23 @@ def capture_gui_feature_presentation(
         final_report = generate_and_inspect(
             page, _inspect_presentation_svg, _assert_feature_presentation_svg
         )
-        _park_feature_search(page)
+        # The last rule's Action at the foot of the sidebar keeps every rule
+        # of the list in the frame.
         page.get_by_label(
-            "Visibility rule 1 record ID", exact=True
-        ).scroll_into_view_if_needed()
+            f"Visibility rule {len(EXPECTED_VISIBILITY_RULES)} action", exact=True
+        ).evaluate("(element) => element.scrollIntoView({ block: 'end' })")
+        expect(
+            page.get_by_label("Visibility rule 1 record ID", exact=True)
+        ).to_be_in_viewport(ratio=1)
         screenshot_bytes["presentation-settings.png"] = capture_screenshot(
             page, output_paths["presentation-settings.png"], "Circular"
         )
         toggle_disclosure(features_panel)
         _fit_finished_circular_preview(page)
+        # The pan starts after the zoom has finished. A drag that starts while
+        # the zoom still runs moves the canvas in some captures and not in
+        # others, so the image was not reproducible.
+        _wait_for_preview_transform(page)
         _pan_preview_left(page, 0.06)
         _wait_for_preview_transform(page)
         screenshot_bytes["presentation-result.png"] = capture_screenshot(

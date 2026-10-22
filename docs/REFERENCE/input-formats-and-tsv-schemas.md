@@ -14,7 +14,12 @@ GFF3 must be paired with FASTA from the same biological source. GFF3 column 1
 and the first token of the matching FASTA header must agree exactly. The
 records are the FASTA sequences that have GFF3 rows, including a row that only
 declares a `region`; a FASTA sequence with no GFF3 row is not a record, in the
-command line and the Web app alike.
+command line and the Web app alike. A FASTA file must not repeat the ID of a
+sequence that a GFF3 record names; such a repeat is an error that names the
+file and the ID. Repeats among sequences without GFF3 rows are ignored. Sequence
+letters may be upper or lower case: GC content, GC skew, and the GC percent of
+a circular definition count soft-masked (lower-case) bases like upper-case
+ones.
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
 source annotation model.
@@ -115,11 +120,10 @@ One records-table row represents one displayed record. A table uses either
 GenBank rows or GFF3/FASTA rows; it cannot mix the two forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
-The two apply in different orders: `region=1000-9000:rc` crops 1000..9000 of
-the record as stored in the file and then reverse-complements the crop, while
-`reverse_complement=1` reverse-complements the whole record first, so a
-`region` in the same row counts its coordinates on the reverse-complemented
-record. `--region` and `--reverse_complement` follow the same order.
+A region is always counted on the record as stored in the file:
+`region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both
+crop 1000..9000 and then reverse-complement the crop. `--region` and
+`--reverse_complement` follow the same order.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
 sort before blank values; equal values keep table order. When placement is
@@ -163,6 +167,11 @@ target. `mark` accepts `line`, `bracket`, `band`, or `highlight`.
   `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`,
   `label_color`, `label_font_size`, `label_orientation`, `label_position`, and
   `label_offset`.
+- A label without `label_font_size` takes the font size of the feature labels
+  of the same drawing: `--label_font_size` when it is set, otherwise the
+  automatic feature label size. In Linear that is one size for the whole
+  diagram, set by the longest record in label scope as for feature labels. An
+  explicit size (table column, set or slot style) wins.
 
 Coordinate targets are 1-based and inclusive. `wraps_origin=true` is
 Circular-only; split an origin-crossing Linear range into two rows. A feature
@@ -223,6 +232,13 @@ error that names the file and line; a missing cell is reported as a missing
 value. The [feature override
 table](#feature-override-table) is different: it quotes a `label_text` that
 contains `"`.
+
+A Label whitelist `keyword` is a case-insensitive regular expression searched
+in the values of the row's qualifier. An empty `keyword` cell, as in
+`CDS<TAB>product<TAB>`, matches every value of that qualifier, so every CDS
+with a `product` keeps its label. A row without the third cell, or with an
+empty `feature_type` or `qualifier`, is reported as a missing value. In this
+table, cells such as `NA` and `null` are values, not blanks.
 
 A Specific-colors `color` is `none` (no fill), an SVG color name, both in any
 letter case, `#RGB`, or `#RRGGBB`. Other values, including hex colors with

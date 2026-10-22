@@ -35,6 +35,7 @@ from gbdraw._web_assets import (
     REQUIRED_UI_FONT_FILES,
     UI_FONT_ASSETS,
     VENDOR_ROOT,
+    VUE_RUNTIME_FILE,
     WEB_ROOT,
 )
 
@@ -112,8 +113,7 @@ def vendor_assets() -> None:
     with tempfile.TemporaryDirectory(prefix="gbdraw-offline-assets-") as tmpdir:
         tmp = Path(tmpdir)
         for path in [
-            VENDOR_ROOT / "vue",
-            VENDOR_ROOT / "tailwindcss",
+            (WEB_ROOT / VUE_RUNTIME_FILE).parent,
             PYODIDE_RUNTIME_DIR,
             VENDOR_ROOT / "browser_wasi_shim" / "dist",
             VENDOR_ROOT / "jspdf",
@@ -125,13 +125,9 @@ def vendor_assets() -> None:
         ]:
             path.mkdir(parents=True, exist_ok=True)
 
-        vue_archive = tmp / "vue.global.js"
+        vue_archive = tmp / VUE_RUNTIME_FILE.name
         _download(ASSET_URLS["vue"], vue_archive)
-        shutil.copy2(vue_archive, VENDOR_ROOT / "vue" / "vue.global.js")
-
-        tailwind_archive = tmp / "tailwindcss-play.js"
-        _download(ASSET_URLS["tailwindcss"], tailwind_archive)
-        shutil.copy2(tailwind_archive, VENDOR_ROOT / "tailwindcss" / "tailwindcss-play.js")
+        shutil.copy2(vue_archive, WEB_ROOT / VUE_RUNTIME_FILE)
 
         pyodide_archive = tmp / "pyodide-core.tar.bz2"
         _download(ASSET_URLS["pyodide_core"], pyodide_archive)
@@ -229,14 +225,14 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "assets" / "gbdraw-logo-title.svg",
         WEB_ROOT / "assets" / "gbdraw-logo-title.png",
         WEB_ROOT / "assets" / "gbdraw-logo-title-outlined.svg",
+        WEB_ROOT / "css" / "tailwind.css",
         WEB_ROOT / "js" / "app.js",
         WEB_ROOT / "js" / "services" / "losat.js",
         WEB_ROOT / "js" / "workers" / "losat-worker.js",
         WEB_ROOT / "js" / "workers" / "losat-threaded-worker.js",
         WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js",
         *(WEB_ROOT / path for path in REQUIRED_TUTORIAL_DATA_FILES),
-        WEB_ROOT / "vendor" / "vue" / "vue.global.js",
-        WEB_ROOT / "vendor" / "tailwindcss" / "tailwindcss-play.js",
+        WEB_ROOT / VUE_RUNTIME_FILE,
         *(WEB_ROOT / path for path in REQUIRED_UI_FONT_FILES),
         *(PYODIDE_RUNTIME_DIR / filename for filename in PYODIDE_CORE_FILES),
         *(PYODIDE_RUNTIME_DIR / filename for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()),
@@ -1222,6 +1218,7 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/assets/gbdraw-logo-title.svg",
         "gbdraw/web/assets/gbdraw-logo-title.png",
         "gbdraw/web/assets/gbdraw-logo-title-outlined.svg",
+        "gbdraw/web/css/tailwind.css",
         "gbdraw/web/js/app.js",
         "gbdraw/web/js/services/losat.js",
         "gbdraw/web/js/workers/losat-worker.js",
@@ -1230,8 +1227,7 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/wasm/losat/losat.wasm",
         "gbdraw/web/wasm/losat/losat-threaded.wasm",
         expected_browser_wheel,
-        "gbdraw/web/vendor/vue/vue.global.js",
-        "gbdraw/web/vendor/tailwindcss/tailwindcss-play.js",
+        f"gbdraw/web/{VUE_RUNTIME_FILE.as_posix()}",
         "gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.js",
         "gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.asm.wasm",
         "gbdraw/web/vendor/jspdf/jspdf.umd.min.js",

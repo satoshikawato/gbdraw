@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-comparisons-'));
 // The modules keep their js/ layout, so their relative imports resolve.
-for (const path of ['services/linear-comparisons.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+for (const path of ['services/linear-comparisons.js', 'services/record-draw-selection.js', 'utils/download-names.js', 'utils/i18n.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, path));
 }
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
@@ -16,12 +16,14 @@ const {
   LINEAR_COMPARISON_MODES,
   adjacentRowPairs,
   buildLinearComparisonTimeline,
+  buildLosatJobSpecs,
   buildPairwiseLosatJobSpecs,
   canonicalGridDisplayPairs,
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
+  numberLosatDisplayPairs,
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
@@ -736,4 +738,110 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   // A record without a canonical grid cell leaves the decision to the plan's edges.
   assert.equal(canonicalGridDisplayPairs(drawn, [cell('a', 1), { uid: 'c', row: 3 }, cell('d', 4)]), null);
   assert.equal(canonicalGridDisplayPairs([{ uid: 'a' }], rows), null);
+}
+
+{
+  // OV-980, OV-985: LOSATP Collinear, Search between All records, a CLI
+  // Session grid whose rows put record a below c. Each search names the
+  // edge of its own two records, in either orientation, so the search a->c
+  // is shown and numbered by the edge c->a; a pair no edge joins takes an
+  // edge by ordinal.
+  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const gridSequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  const gridRows = [cell('b', 1), cell('c', 2), cell('a', 3)];
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: gridSequences, layout: gridRows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  assert.deepEqual(resolution.edges.map((edge) => [edge.edgeKey, edge.ordinal]), [['b->c', 0], ['c->a', 1]]);
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'collinear',
+    collinearInferOrthogroups: false, collinearSearchScope: 'all'
+  });
+  assert.deepEqual(specs.map((spec) => [`${spec.queryUid}->${spec.subjectUid}`, spec.edgeKey, spec.ordinal]), [
+    ['a->b', 'b->c', 0], ['b->a', 'b->c', 0],
+    ['a->c', 'c->a', 1], ['c->a', 'c->a', 1],
+    ['b->c', 'b->c', 0], ['c->b', 'b->c', 0]
+  ]);
+  const displayed = canonicalGridDisplayPairs(gridSequences, gridRows);
+  assert.deepEqual(
+    specs.filter((spec) => displayed(spec.queryIndex, spec.subjectIndex)).map((spec) => [spec.edgeKey, spec.ordinal]),
+    [['c->a', 1], ['b->c', 0]],
+    'each displayed search has its own card and number'
+  );
+}
+
+{
+  // OV-1069: every displayed pair of a LOSATP Collinear grid, Search between
+  // All records, has its own number. A 2x2 grid with an uploaded a->d edge
+  // and a 1x4 grid with row 2 OFF (closed up) are the reachable layouts with
+  // several adjacent-row pairs per row boundary; each such pair is its own
+  // ADJACENT edge. A Selected plan with repeated ordinals is refused.
+  const cell = (uid, row, column = 1) => ({
+    uid, row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
+  });
+  const displayedNumbers = (drawn, rows, plan) => {
+    const resolution = resolveLinearComparisonPlan({
+      plan, sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
+    });
+    assert.equal(resolution.error, '');
+    const specs = buildLosatJobSpecs({
+      resolution, recordCount: drawn.length, recordUids: drawn.map(({ uid }) => uid), program: 'blastp',
+      blastpMode: 'collinear', collinearInferOrthogroups: true, collinearSearchScope: 'all'
+    });
+    const numbers = numberLosatDisplayPairs(specs, resolution.edges, canonicalGridDisplayPairs(drawn, rows));
+    assert.deepEqual(numbers.map(({ pairIndex }) => pairIndex), specs.map(({ ordinal }) => ordinal));
+    return specs.flatMap((spec, index) => (
+      numbers[index].displayPair ? [[`${spec.queryUid}->${spec.subjectUid}`, numbers[index].pairIndex]] : []
+    ));
+  };
+  const square = [cell('a', 1, 1), cell('b', 1, 2), cell('c', 2, 1), cell('d', 2, 2)];
+  const upload = createLinearComparisonEdge({
+    queryUid: 'a', subjectUid: 'd', source: 'upload', fileActive: true, file: file('a-d.tsv')
+  });
+  assert.deepEqual(
+    displayedNumbers(sequences, square, {
+      mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [upload]
+    }),
+    [['a->c', 0], ['a->d', 1], ['b->c', 2], ['b->d', 3]]
+  );
+  const column = [cell('a', 1), cell('b', 2), cell('c', 3), cell('d', 4)];
+  assert.deepEqual(
+    displayedNumbers([{ uid: 'a' }, { uid: 'c' }, { uid: 'd' }], column, {
+      mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: []
+    }),
+    [['a->c', 0], ['c->d', 1]]
+  );
+  const selected = resolveLinearComparisonPlan({
+    plan: {
+      mode: LINEAR_COMPARISON_MODES.SELECTED, defaultSource: 'losat',
+      edges: [createLinearComparisonEdge({ queryUid: 'a', subjectUid: 'c', source: 'losat' })]
+    },
+    sequences, layout: square, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  assert.match(selected.error, /Pairwise/);
+}
+
+{
+  // Review F2: the Web's search order and pair numbers of a 2x2 grid match
+  // the vector that the Python API test checks too.
+  const vector = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'losat_job_plan_cases.json'), 'utf8')).proteinGridCases[0];
+  const uids = vector.grid.map((_, index) => String.fromCharCode(97 + index));
+  const drawn = uids.map((uid) => ({ uid }));
+  const rows = vector.grid.map(([row, column], index) => ({
+    uid: uids[index], row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
+  }));
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: uids.length, recordUids: uids, program: 'blastp', blastpMode: 'collinear',
+    collinearInferOrthogroups: vector.inferOrthogroups, collinearSearchScope: vector.searchScope
+  });
+  const numbers = numberLosatDisplayPairs(specs, resolution.edges, canonicalGridDisplayPairs(drawn, rows));
+  assert.deepEqual(
+    specs.map((spec, index) => [spec.queryIndex, spec.subjectIndex, numbers[index].displayPair, numbers[index].pairIndex]),
+    vector.searches
+  );
 }

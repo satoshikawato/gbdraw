@@ -235,7 +235,11 @@ const OCCURRENCE_COUNTERS = Object.freeze([
   'generatedArtifactRollbackCount',
   'historyReplacementCount',
   'previewDuplicateBindRejectedCount',
-  'previewReadyReceiptRejectedCount'
+  'previewReadyReceiptRejectedCount',
+  // Step 3a: a Generate admits a sent catalog or keeps the held one, never both.
+  'featureCatalogAdmissionCount',
+  'featureCatalogReuseCount',
+  'featureCatalogSecondaryTraversalCount'
 ]);
 
 const observedOccurrenceCounters = (snapshot) => {

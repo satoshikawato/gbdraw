@@ -8,6 +8,7 @@ import {
   recordKeyBelongsToRequest
 } from './feature-placement.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { tn } from '../utils/i18n.js';
 
 /** @import { AnnotationRecordSelector, AnnotationSet, AnnotationTarget } from './annotation-state.js' */
 
@@ -635,10 +636,9 @@ export const migrateSessionFeatureEdits = ({ features, mode, catalog = null, leg
 };
 
 /** @param {number} count */
-export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => (
-  `${count} annotation(s) from an older Session named a feature by hash=. Each now names that feature by its source,`
-  + ' so it stays on the feature when the crop or orientation changes.'
-);
+export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => tn(count,
+  '{count} annotation from an older Session named a feature by hash=. It now names that feature by its source, so it stays on the feature when the crop or orientation changes.',
+  '{count} annotations from an older Session named a feature by hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.');
 
 // The records the renderer binds an annotation target in (the request's drawn
 // records in order, gbdraw/annotations/resolve.py::_bind_record) and the

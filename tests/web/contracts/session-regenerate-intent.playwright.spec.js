@@ -34,33 +34,8 @@ const DIRECT_LABEL_TEXT = 'Loaded preview direct label';
 const DIRECT_LEGEND_COLOR = '#f43f5e';
 const DIRECT_LEGEND_STROKE = '#1d4ed8';
 const DIRECT_LEGEND_STROKE_WIDTH = 3;
-const DIRECT_REGENERATED_TITLE = 'Loaded preview direct edit regeneration';
-
-const ACTIVE_CONFIG_DOMAINS = Object.freeze([
-  'form',
-  'adv',
-  'losat',
-  'cliOptions',
-  'colors',
-  'palette',
-  'paletteInstantPreviewEnabled',
-  'rules',
-  'qualifierPriorityRules',
-  'filterMode',
-  'whitelist',
-  'blacklistText',
-  'losatProgram',
-  'circularConservation',
-  'annotationSets',
-  'recordDisplayDrafts',
-  'featurePlacementOverrides',
-  'modeProfiles',
-  'unmanagedConfigOverrides',
-  'linearRecordLayout',
-  'linearComparisonPlan',
-  'importedComparisonResolution',
-  'webEdits'
-]);
+const DIRECT_REGENERATED_SPECIES = 'Loaded preview direct edit regeneration';
+const DIRECT_REGENERATED_STRAIN = 'direct edit strain';
 
 const stableValue = (value) => {
   if (Array.isArray(value)) return value.map((item) => stableValue(item));
@@ -185,7 +160,14 @@ const loadCurrentSession = async (page, filePath, session) => {
   expect(probe.metrics.currentWriterActiveConfigRestoreCount).toBe(1);
   expect(probe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
 
-  const suppliedDomains = ACTIVE_CONFIG_DOMAINS.filter((domain) => (
+  // The domains Load restores from a draft are the runtime's list (pinned in
+  // session-draft-authority.test.mjs); this case checks that Load took exactly
+  // the ones the Session's own draft supplied.
+  const activeConfigDomains = await page.evaluate(async () => (
+    (await import('/gbdraw/web/js/services/session-active-config-contract.js'))
+      .CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
+  ));
+  const suppliedDomains = activeConfigDomains.filter((domain) => (
     Object.prototype.hasOwnProperty.call(sessionDraft(session).config || {}, domain)
   ));
   const restored = probe.details.find(
@@ -378,7 +360,6 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       for (const entry of groupedEntries) {
         feature = app.extractedFeatures.find((candidate) => (
           entry.featureIds.includes(featureId(candidate))
-          && app.canEditFeatureColor(candidate)
           && hasFeatureElement(featureId(candidate))
         ));
         if (feature) {
@@ -390,9 +371,7 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
         fillLegendEntry = app.legendEntries.find(
           (entry) => hasLegendEntry(String(entry?.caption || ''))
         ) || null;
-        feature = app.extractedFeatures.find((candidate) => (
-          app.canEditFeatureColor(candidate) && hasFeatureElement(featureId(candidate))
-        ));
+        feature = app.extractedFeatures.find((candidate) => hasFeatureElement(featureId(candidate)));
       }
     }
     if (!feature || !fillLegendEntry) {
@@ -1232,9 +1211,7 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
     }]
   }));
 
-  const feature = app.extractedFeatures.find((candidate) => (
-    candidate.type === 'CDS' && app.canEditFeatureColor(candidate)
-  )) || app.extractedFeatures.find((candidate) => app.canEditFeatureColor(candidate));
+  const feature = app.extractedFeatures.find((candidate) => candidate.type === 'CDS') || app.extractedFeatures[0];
   if (!feature) throw new Error('No editable Feature is available for the round-trip contract.');
   const featureId = String(feature.svg_id || feature.id || '');
   const fillApplied = await app.setFeatureColorValue(
@@ -1723,11 +1700,10 @@ test('loaded current preview supports direct edits before the first Generate', a
   });
   await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true);
 
-  const titleSummary = page.locator('summary[aria-label="Titles and Record Labels"]');
-  const titleDetails = titleSummary.locator('..');
-  if ((await titleDetails.getAttribute('open')) === null) await titleSummary.press('Enter');
-  await page.getByRole('textbox', { name: 'Plot Title', exact: true }).fill(DIRECT_REGENERATED_TITLE);
-  await page.getByLabel('Plot Title Position').selectOption('top');
+  // A draft config that applies on Generate (Species and Strain; the Plot
+  // Title and its position are live edits since PD-OI-103).
+  await page.locator('#circular-species').fill(DIRECT_REGENERATED_SPECIES);
+  await page.locator('input[aria-label="Strain"]').fill(DIRECT_REGENERATED_STRAIN);
   await settleMountedDom(page);
   const afterDraftConfig = await captureLoadedPreviewDirectEditState(page);
   expect(afterDraftConfig.result.sha256).toBe(afterLegend.result.sha256);
@@ -1747,10 +1723,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   )));
   const savedDraft = sessionDraft(saved.session);
   expect(savedDraft.config).toMatchObject({
-    form: { plot_title: DIRECT_REGENERATED_TITLE }
-  });
-  expect(savedDraft.ui).toMatchObject({
-    layoutPreferences: { single: { plotTitlePosition: 'top' } }
+    form: { species: DIRECT_REGENERATED_SPECIES, strain: DIRECT_REGENERATED_STRAIN }
   });
   expect(savedDraft.features.featureColorOverrides?.[target.featureOverrideKey]).toBeUndefined();
   const fillType = await page.evaluate(() => window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type);

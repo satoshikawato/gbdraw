@@ -1,6 +1,7 @@
 // @ts-check
 import { state } from './state.js';
 import {
+  colorSwatchView,
   colorValueForMode,
   colorValueMode,
   toNativeColorInputValue
@@ -8,14 +9,19 @@ import {
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
+import { parseMarkupInertly } from './utils/inert-markup.js';
+import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
+import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
+/** @import { TranslationParams } from './utils/i18n.js' */
+/** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
 /** @import { SettingsPaneView } from './app/settings-pane.js' */
 
-const { ref, reactive, computed, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
+const { h, ref, reactive, computed, inject, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
 /** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | SVGElement | null }} FocusScope */
 /** @type {FocusScope[]} */
@@ -40,6 +46,8 @@ export const dialogFocus = {
     const target = element.querySelector('[data-dialog-initial-focus]')
       || dialog?.querySelector('button:not(:disabled)') || dialog;
     if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    // A text field that starts with text has it selected, so typing replaces it.
+    if (target instanceof HTMLInputElement) target.select();
   },
   /** @param {HTMLElement} element */
   beforeUnmount(element) {
@@ -102,15 +110,38 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in. `label` names a tip whose holder has no such text;
+// the row group it is in (this function). The name comes from the page text,
+// so the tip reads it when it mounts and again after a UI locale switch has
+// re-rendered the page. `label` names a tip whose holder has no such text;
 // the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;
   const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
   const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
-  const name = `${group} ${label}`.replace(/\s+/g, ' ').trim();
-  return name ? `Help: ${name}` : 'Help';
+  return `${group} ${label}`.replace(/\s+/g, ' ').trim();
+};
+
+// A sentence with elements inside it, kept as one translation key (D-04 of the
+// translation work): `text` is the shown text of the key, `t('…')` without
+// values; a `{name}` placeholder with a slot of that name shows the slot, and
+// `params` fill the others (`textParts`). With `textClass`, the text around
+// the slots is in spans of that class (`sr-only`: only the slots are seen).
+// Registered globally in app.js.
+export const I18nText = {
+  props: {
+    text: { type: String, required: true },
+    params: { type: Object, default: null },
+    textClass: { type: String, default: null }
+  },
+  /**
+   * @param {{ text: string, params: TranslationParams | null, textClass: string | null }} props
+   * @param {{ slots: Readonly<Record<string, (() => unknown[]) | undefined>> }} context
+   */
+  setup: (props, { slots }) => () => textParts(props.text, Object.keys(slots), props.params ?? undefined)
+    .flatMap((part) => ('slot' in part
+      ? (slots[part.slot]?.() ?? [])
+      : [props.textClass ? h('span', { class: props.textClass }, part.text) : part.text]))
 };
 
 // Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the
@@ -142,7 +173,7 @@ export const HelpTip = {
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
-    const name = ref('Help');
+    const name = ref('');
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -193,8 +224,83 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    onMounted(() => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); });
+    const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
+    onMounted(readName);
+    watch(uiLocale, () => nextTick(readName));
     return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+  }
+};
+
+// OV-912: the preview zoom and pan change on every wheel tick and pan. Only
+// the zoom label and the preview surface read them, so a change renders the
+// label and writes the surface transform instead of rendering the whole app.
+// The values stay in `state` for History, the Session, and the pan and zoom
+// owner (app/ui.js), which also writes the transform during a gesture.
+export const PreviewZoomPercent = {
+  setup: () => ({ zoom: state.zoom }),
+  template: '{{ Math.round(zoom * 100) }}%'
+};
+
+/** @type {WeakMap<HTMLElement, () => void>} */
+const previewTransformStops = new WeakMap();
+// `v-preview-transform` on the preview surface: its transform follows the pan
+// and zoom from its creation (before it is inserted) until it unmounts.
+export const previewTransform = {
+  /** @param {HTMLElement} element */
+  beforeMount: (element) => {
+    previewTransformStops.set(element, watch(
+      () => /** @type {const} */ ([state.canvasPan.x, state.canvasPan.y, state.zoom.value, state.isPanning.value]),
+      (/** @type {readonly [number, number, number, boolean]} */ [x, y, zoom, panning]) => {
+        element.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+        element.style.transformOrigin = 'top center';
+        element.style.transition = panning ? 'none' : 'transform 0.2s';
+      },
+      { immediate: true }
+    ));
+  },
+  /** @param {HTMLElement} element */
+  unmounted: (element) => {
+    previewTransformStops.get(element)?.();
+    previewTransformStops.delete(element);
+  }
+};
+
+/** @type {WeakMap<HTMLElement, () => void>} */
+const previewPanningStops = new WeakMap();
+// `v-preview-panning` on the preview viewport: its attribute
+// `data-preview-panning` follows the panning flag, which the stylesheet reads
+// (an item shows the canvas's cursor and no hint while the figure is panned),
+// so the app template does not read the flag (OV-912). An attribute, not a
+// class: the viewport's class binding rewrites its classes.
+export const previewPanning = {
+  /** @param {HTMLElement} element */
+  beforeMount: (element) => {
+    previewPanningStops.set(element, watch(
+      () => state.isPanning.value,
+      (/** @type {boolean} */ panning) => { element.toggleAttribute('data-preview-panning', panning); },
+      { immediate: true }
+    ));
+  },
+  /** @param {HTMLElement} element */
+  unmounted: (element) => {
+    previewPanningStops.get(element)?.();
+    previewPanningStops.delete(element);
+  }
+};
+
+// `v-preview-markup="svgContent"` on the preview surface: its children are the
+// Result's markup, as `v-html` would set them, at the same points of the
+// patch. The markup is parsed outside the page document (OV-1030).
+/** @param {HTMLElement} element @param {string | null | undefined} markup */
+const setPreviewMarkup = (element, markup) => {
+  element.replaceChildren(parseMarkupInertly(markup));
+};
+export const previewMarkup = {
+  /** @param {HTMLElement} element @param {{ value: string | null | undefined }} binding */
+  beforeMount: (element, { value }) => setPreviewMarkup(element, value),
+  /** @param {HTMLElement} element @param {{ value: string | null | undefined, oldValue: string | null | undefined }} binding */
+  beforeUpdate: (element, { value, oldValue }) => {
+    if (value !== oldValue) setPreviewMarkup(element, value);
   }
 };
 
@@ -204,17 +310,48 @@ export const SettingsSectionTitle = {
   props: { section: { type: String, required: true } },
   /** @param {{ section: SettingsSectionKey }} props */
   setup: (props) => ({ entry: SETTINGS_SECTIONS.find((section) => section.key === props.section) }),
-  template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ entry.title }}'
+  template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ tm(entry.title) }}'
+};
+
+// The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),
+// placed inside that row's `data-setting` scope: "Applies on Generate" with
+// `data-applies-on-generate="<key>"`, "Live edit" for a live block inside a
+// Generate scope, or the row's own qualified note as a hint line. A live
+// setting row the shown Result cannot draw says "Applies on Generate"
+// (the injected `SETTING_NOTE_APPLIES` predicate of the committed request).
+export const SettingNote = {
+  props: { setting: { type: String, required: true } },
+  /** @param {{ setting: SettingApplicationId }} props */
+  setup: (props) => {
+    const applies = /** @type {(requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => true));
+    return { note: computed(() => settingApplicationNote(props.setting, applies)) };
+  },
+  template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
+    :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"
+    class="ph ph-clock" aria-hidden="true"></i> {{ note.text }}</span>`
 };
 
 // `v-settings-section="'<key>'"` on the element of a settings section: it
 // names the section (`data-settings-section`) and tells the stylesheet whether
 // the docked rail entry shows it (`data-settings-in-dock`). The pane says which
-// display shows, so the stacked display ignores the second attribute.
+// display shows, so the stacked display ignores the second attribute. A section
+// in the popup beside the Result (`data-settings-floating`) is open there; back
+// in the pane its disclosure is open or closed as it was, which the attribute
+// remembers.
 /** @param {HTMLElement} element @param {{ value: SettingsSectionKey }} binding */
 export const settingsSection = (element, { value }) => {
   element.dataset.settingsSection = value;
   element.dataset.settingsInDock = String(settingsEntryOf(value) === state.settingsPaneDocked.value);
+  const floating = state.settingsPopup.value?.section === value;
+  const details = /** @type {HTMLDetailsElement | null} */ (element.querySelector(':scope > details'));
+  if (!details || floating === ('settingsFloating' in element.dataset)) return;
+  if (floating) {
+    element.dataset.settingsFloating = String(details.open);
+    details.open = true;
+  } else {
+    details.open = element.dataset.settingsFloating === 'true';
+    delete element.dataset.settingsFloating;
+  }
 };
 
 // The section index of the settings: one button per section of the shown
@@ -232,8 +369,8 @@ export const settingsSection = (element, { value }) => {
 //   marked entry is the docked one, and the close button leaves the rail alone.
 //   A column too low for its entries scrolls: the docked entry and the focused
 //   one are brought into view.
-// An entry never closes a section and writes no setting. Both forms bring a
-// section into view through `reveal`, the pane's one way to show a setting.
+// An entry never closes a section and writes no setting. Both forms open a
+// section through `reveal`, the pane's one way to open a section by its key.
 // The text shown for a hovered or keyboard-focused button (the section title,
 // or the words of a switch or of the close button) is the index's own: each
 // button is named by its aria-label ("Go to <title>" for an entry; the
@@ -242,9 +379,9 @@ export const settingsSection = (element, { value }) => {
 // column scrolls, the text of a hovered entry goes and the text of the focused
 // entry follows it.
 /**
- * The pane's way to bring a section into view: its top at the top edge of the
- * settings, the focus on `focus`.
- * @typedef {(section: HTMLElement, options: { align: 'start', focus: HTMLElement }) => unknown} RevealSection
+ * The pane's way to open a section: open, its top at the top edge of the
+ * settings, the focus on its heading, or on `focus` when one is given.
+ * @typedef {(key: SettingsSectionKey, focus?: HTMLElement | null) => unknown} RevealSection
  */
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
@@ -292,7 +429,7 @@ export const SettingsSectionIndex = {
 
     const area = () => /** @type {HTMLElement} */ (document.getElementById(props.controls));
     /** @param {SettingsSectionKey} key */
-    const sectionOf = (key) => /** @type {HTMLElement | null} */ (area().querySelector(`[data-settings-section="${key}"]`));
+    const sectionOf = (key) => settingsSectionElement(area(), key);
     /** @param {string} selector A button of the index. */
     const focusButton = (selector) => /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(selector))
       ?.focus({ preventScroll: true });
@@ -304,17 +441,13 @@ export const SettingsSectionIndex = {
       current.value = (reached.at(-1) ?? entries.value[0]).key;
     };
     // Opens a section and brings it to the top. The focus goes to its heading
-    // (the summary of a card that is one disclosure, or the heading element
-    // that takes the focus: Input Genomes, Comparison) unless `focus` names a
-    // button of the index.
+    // unless `focus` names a button of the index.
     /** @param {SettingsSectionKey} key @param {string} [focus] */
     const bringToTop = async (key, focus) => {
-      const section = /** @type {HTMLElement} */ (sectionOf(key));
-      const heading = /** @type {HTMLElement} */ (section.querySelector(':scope > details:first-child > summary, :scope > [tabindex="-1"]'));
-      if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
-      await props.reveal(section, { align: 'start', focus: /** @type {HTMLElement} */ (focus ? root.value?.querySelector(focus) : heading) });
+      await props.reveal(key, focus ? /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(focus)) : null);
       // A section without an entry in this form (About & Citation in the row) leaves the mark to the geometry.
-      held = entries.value.some((entry) => entry.key === key) ? { key, top: section.getBoundingClientRect().top } : null;
+      const top = sectionOf(key)?.getBoundingClientRect().top;
+      held = top !== undefined && entries.value.some((entry) => entry.key === key) ? { key, top } : null;
       if (held) current.value = key; else mark();
     };
     /** @param {SettingsSectionKey} key */
@@ -414,14 +547,17 @@ export const SettingsSectionIndex = {
       if (rail.value) root.value?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
     }));
     // A mode change may remove the entry whose text is shown, and the marked
-    // section; so may a display that changes with the layout (the phone width).
-    watch(() => [props.mode, props.view.display], () => {
+    // section; so may the phone width, which changes the display of a rail and
+    // the layout of the stacked settings, and a section that leaves the pane
+    // for the popup or returns. One source each: one getter that returns them
+    // all would also run when only the docked section changes.
+    watch([() => props.mode, () => props.view.display, () => props.view.switchable, () => props.view.floating], () => {
       hideTip();
       held = null;
       nextTick(mark);
     });
 
-    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn };
+    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn, settingsShortText };
   }
 };
 
@@ -437,27 +573,91 @@ export const AutoValueField = {
 
 /**
  * One item of an action menu. `live` announces a label that changes after the
- * action (Copied!, Copy failed).
- * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, describedby?: string, run: () => unknown }} ActionMenuItem
+ * action (Copied!, Copy failed); `tone: 'danger'` marks an item that removes work.
+ * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, describedby?: string,
+ *   tone?: 'danger', run: (event: MouseEvent) => unknown }} ActionMenuItem
  * @typedef {{ section: string, help?: string, helpLabel?: string, helpId?: string }} ActionMenuSection
  *   A heading that groups the items after it, with an optional help tip.
  */
 
+/** @param {Element | null | undefined} menu */
+const focusMenuToggle = (menu) => {
+  /** @type {HTMLElement | null | undefined} */ (menu?.querySelector(':scope > summary'))?.focus({ preventScroll: true });
+};
+
 // A disclosure that holds a group of secondary actions, such as the copy and
 // FASTA actions of the similarity popups (UX-B01..B03). The items open in
-// place, inside the popup's scroll area, so no item is clipped.
+// place, inside the popup's scroll area, so no item is clipped. Arrow Down and
+// Arrow Up move through the enabled items (Arrow Down on the toggle opens the
+// menu), and Escape closes it and returns to the toggle. With `closeOnRun`
+// (the rows of a list, such as the track slot rows), an item closes the menu
+// and focus returns to its toggle; when the item removed the menu's row, focus
+// goes to the menu now in its place in the `[data-action-menu-list]` around
+// it, else the one before it, else that list's `[data-action-menu-list-fallback]`.
+// `ariaLabel` names a menu repeated in a list after its row (it begins with the
+// visible label), so its toggle and the group around its items are unambiguous.
 export const ActionMenu = {
   components: { HelpTip },
   props: {
     label: { type: String, required: true },
     icon: { type: String, default: '' },
     title: { type: String, default: '' },
+    ariaLabel: { type: String, default: '' },
+    closeOnRun: { type: Boolean, default: false },
     /** @type {{ type: ArrayConstructor, default: () => (ActionMenuItem | ActionMenuSection)[] }} */
     items: { type: Array, default: () => [] }
   },
+  /** @param {{ closeOnRun: boolean }} props */
+  setup(props) {
+    /** @type {{ value: HTMLDetailsElement | null }} */
+    const root = ref(null);
+    /** @param {KeyboardEvent} event */
+    const onKeydown = (event) => {
+      const menu = root.value;
+      if (!menu) return;
+      if (event.key === 'Escape' && menu.open) {
+        event.preventDefault();
+        event.stopPropagation();
+        menu.open = false;
+        focusMenuToggle(menu);
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      menu.open = true;
+      event.preventDefault();
+      void nextTick(() => {
+        const enabled = /** @type {HTMLButtonElement[]} */ (Array.from(menu.querySelectorAll('.action-menu-item:not(:disabled)')));
+        if (!enabled.length) return;
+        const at = enabled.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+        enabled[at < 0 ? (step > 0 ? 0 : enabled.length - 1) : (at + step + enabled.length) % enabled.length].focus();
+      });
+    };
+    /** @param {ActionMenuItem} item @param {MouseEvent} event */
+    const runItem = (item, event) => {
+      const menu = root.value;
+      const list = menu?.closest('[data-action-menu-list]') ?? null;
+      const menusOf = () => (list ? Array.from(list.querySelectorAll('.action-menu')) : []);
+      const index = menu ? menusOf().indexOf(menu) : -1;
+      item.run(event);
+      if (!props.closeOnRun || !menu) return;
+      menu.open = false;
+      void nextTick(() => {
+        // A dialog the item opened keeps its focus.
+        const active = document.activeElement;
+        if (active && active !== document.body && !menu.contains(active)) return;
+        if (menu.isConnected) return focusMenuToggle(menu);
+        const now = menusOf();
+        const next = now[index] ?? now[index - 1];
+        if (next) return focusMenuToggle(next);
+        /** @type {HTMLElement | null | undefined} */ (list?.querySelector('[data-action-menu-list-fallback]'))?.focus({ preventScroll: true });
+      });
+    };
+    return { root, onKeydown, runItem };
+  },
   template: `
-    <details class="action-menu" data-nodrag="true">
-      <summary class="action-menu-toggle" :title="title || label">
+    <details ref="root" class="action-menu" data-nodrag="true" :aria-label="ariaLabel || null" @keydown="onKeydown">
+      <summary class="action-menu-toggle" :title="title || label" :aria-label="ariaLabel || null">
         <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span>{{ label }}</span>
         <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
       </summary>
@@ -467,10 +667,10 @@ export const ActionMenu = {
             <span>{{ item.section }}</span>
             <help-tip v-if="item.help" :id="item.helpId" :label="item.helpLabel" :text="item.help"></help-tip>
           </div>
-          <button v-else type="button" class="action-menu-item"
+          <button v-else type="button" :class="['action-menu-item', item.tone === 'danger' && 'action-menu-item-danger']"
                   :disabled="item.disabled" :title="item.title || item.label" :aria-describedby="item.describedby || null"
                   :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
-                  @click="item.run()">
+                  @click="runItem(item, $event)">
             <i v-if="item.icon" :class="['ph', item.icon]" aria-hidden="true"></i><span>{{ item.label }}</span>
           </button>
         </template>
@@ -479,12 +679,43 @@ export const ActionMenu = {
   `
 };
 
+/**
+ * The swatch of one color, by `colorSwatchView`: a color of none shows empty (OV-1386). Its size and border are
+ * the parent's classes.
+ */
+export const ColorSwatch = {
+  props: { color: { type: String, default: '' } },
+  /** @param {{ color: string }} props */
+  setup(props) {
+    return { swatch: computed(() => colorSwatchView(props.color)) };
+  },
+  template: `<span :class="{ 'color-swatch-none': swatch.none }" :style="{ backgroundColor: swatch.fill }" :title="swatch.label" :data-color-none="swatch.none ? '' : null"></span>`
+};
+
+/** The OIC-029 line from `defaultColorScopeLine`: the sentence for a Legend item choice that sets a type's default color. */
+export const DefaultColorScopeLine = {
+  components: { ColorSwatch },
+  props: { line: { type: Object, required: true } },
+  /** @param {{ line: { color: string | null } }} props */
+  setup(props) {
+    return { swatch: computed(() => colorSwatchView(props.line.color)) };
+  },
+  template: `
+    <span data-default-color-scope-sentence>
+      <i18n-text v-if="line.kind === 'replaces'" :text="t('Replaces your {type} default color {color}.')" :params="{ type: line.type }">
+        <template #color><color-swatch class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :color="line.color"></color-swatch><span :class="{ 'font-mono': !swatch.none }">{{ swatch.label }}</span></template>
+      </i18n-text>
+      <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
+    </span>
+  `
+};
+
 export const ColorValueControl = {
   props: {
     modelValue: { default: null },
     fallback: { type: String, default: '#000000' },
     allowNone: { type: Boolean, default: true },
-    ariaLabel: { type: String, default: 'Color value' },
+    ariaLabel: { type: String, default: '' },
     ariaDescribedby: { type: String, default: null }
   },
   emits: ['update:modelValue'],
@@ -498,6 +729,12 @@ export const ColorValueControl = {
     const pickerValue = computed(() => (
       toNativeColorInputValue(props.modelValue, props.fallback)
     ));
+    // Controlled: a parent that refuses the emit (a cancelled scope dialog) leaves the props unchanged, so Vue
+    // does not patch the native input; put the shown value back to the prop's.
+    const settleControl = async (/** @type {HTMLInputElement | HTMLSelectElement} */ target, /** @type {() => string} */ shown) => {
+      await nextTick();
+      if (target.isConnected && target.value !== shown()) target.value = shown();
+    };
     const updateMode = (/** @type {{ target: HTMLSelectElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
@@ -506,6 +743,7 @@ export const ColorValueControl = {
         'update:modelValue',
         colorValueForMode(nextMode, props.modelValue, props.fallback)
       );
+      return settleControl(event.target, () => mode.value);
     };
     const updateColor = (/** @type {{ target: HTMLInputElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
@@ -514,6 +752,7 @@ export const ColorValueControl = {
         'update:modelValue',
         toNativeColorInputValue(event?.target?.value, props.fallback)
       );
+      return settleControl(event.target, () => pickerValue.value);
     };
     return { mode, pickerValue, updateMode, updateColor, controlAvailable };
   },
@@ -524,12 +763,12 @@ export const ColorValueControl = {
         :disabled="!controlAvailable"
         @change="updateMode"
         class="form-input form-input-compact min-w-0"
-        :aria-label="\`\${ariaLabel} mode\`"
+        :aria-label="t('{name} mode', { name: ariaLabel || t('Color value') })"
         :aria-describedby="ariaDescribedby"
       >
-        <option value="auto">Auto</option>
-        <option v-if="allowNone" value="none">None</option>
-        <option value="color">Color</option>
+        <option value="auto">{{ t('Auto') }}</option>
+        <option v-if="allowNone" value="none">{{ t('None') }}</option>
+        <option value="color">{{ t('Color') }}</option>
       </select>
       <input
         type="color"
@@ -537,7 +776,7 @@ export const ColorValueControl = {
         @input="updateColor"
         :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
-        :aria-label="ariaLabel"
+        :aria-label="ariaLabel || t('Color value')"
         :aria-describedby="ariaDescribedby"
       >
     </div>
@@ -552,7 +791,8 @@ export const ColorValueControl = {
  * @property {boolean | string} [multiple]
  * @property {boolean | string} [requestClear]
  * @property {boolean} [artifactHistory]
- * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored; a result of `false` is not committed
+ * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored, and after
+ *   a Remove with the removed file (OV-1280); a result of `false` is not committed
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -577,10 +817,10 @@ export const FileUploader = {
     const selectedLabel = computed(() => {
       const items = selectedFiles.value;
       if (items.length === 0) return '';
-      if (items.length === 1) return items[0]?.name || 'Selected file';
-      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || 'file').join(', ');
+      if (items.length === 1) return items[0]?.name || t('Selected file');
+      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || t('file')).join(', ');
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
-      return `${items.length} files: ${firstNames}${suffix}`;
+      return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
     const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
@@ -600,9 +840,9 @@ export const FileUploader = {
         return await props.afterChange?.(nextFiles[0]);
       };
       if (props.artifactHistory) {
-        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+        void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', apply);
+        void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         update();
       }
@@ -615,12 +855,18 @@ export const FileUploader = {
         emit('clearRequest', event?.currentTarget || null);
         return;
       }
+      // One History step holds the Remove and what it takes back (OV-1280).
+      const removed = /** @type {File | undefined} */ (selectedFiles.value[0]);
       const history = window.__GBDRAW_HISTORY__;
-      if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', async () => {
-          emit('update:modelValue', props.multiple ? [] : null);
-          await nextTick();
-        });
+      const apply = async () => {
+        emit('update:modelValue', props.multiple ? [] : null);
+        await nextTick();
+        return await props.afterChange?.(removed);
+      };
+      if (props.artifactHistory) {
+        void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+      } else if (history?.runUndoable) {
+        void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         emit('update:modelValue', props.multiple ? [] : null);
       }
@@ -685,8 +931,9 @@ export const OperationError = {
   /** @param {{ error: string | Record<string, unknown> | null | undefined, recovery: string | null | undefined }} props */
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
-    const title = computed(() => operationErrorTitle(model.value?.operation));
-    const recoveryText = computed(() => generationRecoveryGuidance(props.recovery));
+    // The title and the recovery line are rows of the wording owner's tables, shown translated.
+    const title = computed(() => tm(operationErrorTitle(model.value?.operation)));
+    const recoveryText = computed(() => tm(generationRecoveryGuidance(props.recovery)));
     const diagnostics = computed(() => (model.value?.details || []).map((/** @type {UserFacingError['details'][number]} */ section) =>
       `${section.label}\n${section.text}`).join('\n\n'));
     const details = ref(null);
@@ -707,10 +954,10 @@ export const OperationError = {
       try {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
         await navigator.clipboard.writeText(text);
-        if (props.error === displayed) copyStatus.value = 'Diagnostics copied.';
+        if (props.error === displayed) copyStatus.value = t('Diagnostics copied.');
       } catch (_) {
         if (props.error !== displayed) return;
-        copyStatus.value = 'Clipboard unavailable. Select diagnostics and copy manually.';
+        copyStatus.value = t('Clipboard unavailable. Select diagnostics and copy manually.');
       }
     };
     return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,
@@ -732,7 +979,7 @@ export const SpecificRuleRows = {
 // field; nothing when the text has no markup.
 export const MarkupPreview = {
   props: ['text'],
-  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">{{ t('Preview:') + ' ' }}</span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
   /** @param {{ text?: string | null }} props */
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };

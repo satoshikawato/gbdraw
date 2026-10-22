@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -7,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -268,16 +270,16 @@ const RESULT_REPLACEMENT_CAPABILITIES = Object.freeze([
   'Result content commit',
   'SVG serialization'
 ]);
-const resultReplacementCount = (detected, path, capability) => (
+const operatorCount = (detected, path, capability) => (
   detected.operatorMatchesByCapability[capability]
     .find((entry) => entry.path === path)?.count || 0
 );
-const resultReplacementOperators = (detected, path, capability) => {
-  const count = resultReplacementCount(detected, path, capability);
+const operatorEntries = (detected, path, capability) => {
+  const count = operatorCount(detected, path, capability);
   return count ? [{ path, count }] : [];
 };
 const totalResultReplacementCount = (detected, path) => RESULT_REPLACEMENT_CAPABILITIES
-  .reduce((total, capability) => total + resultReplacementCount(detected, path, capability), 0);
+  .reduce((total, capability) => total + operatorCount(detected, path, capability), 0);
 
 // IN-01 and GE-02 (Web GUI audit 2026-09-30, D-04 and D-05) retire the live
 // definition and stroke rewrites, and A1 of the post-audit follow-ups (W8 G-J)
@@ -303,7 +305,7 @@ const retiringReplacementOperators = (detected, path, capability) => {
   const ceiling = RETIRING_REPLACEMENT_CEILINGS[path];
   assert.ok(totalResultReplacementCount(detected, path) <= ceiling,
     `${path}: retiring Result replacement may only contract (ceiling ${ceiling})`);
-  return resultReplacementOperators(detected, path, capability);
+  return operatorEntries(detected, path, capability);
 };
 // The retiring owners that sort before `boundary`, in detector (path) order.
 const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
@@ -312,16 +314,32 @@ const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
   .flatMap((path) => retiringReplacementOperators(detected, path, capability));
 // After A1, the Result switch and Save flushes of the remaining owners never
 // write (T6 of the post-audit follow-ups). Their Result content commit counts
-// may shrink without editing this guard; they may not grow.
+// may shrink without editing this guard; they may not grow. Generate's second
+// commit (the label reflow) may leave app/run-analysis.js for the artifact
+// owner of its Result's drawing (OV-111, D-15-49).
 const RESULT_COMMIT_KEEPER_CEILINGS = Object.freeze({
   'app/preview-runtime.js': 4,
+  'app/run-analysis.js': 2,
   'services/config.js': 4
 });
 const keeperCommitOperators = (detected, path) => {
   const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
-  assert.ok(resultReplacementCount(detected, path, 'Result content commit') <= ceiling,
+  assert.ok(operatorCount(detected, path, 'Result content commit') <= ceiling,
     `${path}: Result content commit may only contract (ceiling ${ceiling})`);
-  return resultReplacementOperators(detected, path, 'Result content commit');
+  return operatorEntries(detected, path, 'Result content commit');
+};
+// DRAWINGS-A moves the History transactions out of the composition root into
+// History's own owner (D-15-55): app/app-setup.js may only shed its History
+// operators, and services/history.js may hold only what app/app-setup.js sheds.
+const HISTORY_SHED_CEILING = 3;
+const HISTORY_ROUTER_CEILING = 10;
+const historyOperators = (detected, path) => {
+  const shed = operatorCount(detected, 'app/app-setup.js', 'History');
+  assert.ok(shed <= HISTORY_SHED_CEILING,
+    `app/app-setup.js: History operators may only contract (ceiling ${HISTORY_SHED_CEILING})`);
+  assert.ok(shed + operatorCount(detected, 'services/history.js', 'History') <= HISTORY_ROUTER_CEILING,
+    `services/history.js: History operators may only take what app/app-setup.js sheds (ceiling ${HISTORY_ROUTER_CEILING} together)`);
+  return operatorEntries(detected, path, 'History');
 };
 const importersWithRetiringOwners = (target, required, retiring) => {
   const actual = importersOf(target);
@@ -814,15 +832,15 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'workers/losat-threaded-worker.js', count: 2 }
     ],
     History: [
-      { path: 'app/app-setup.js', count: 3 },
+      ...historyOperators(detected, 'app/app-setup.js'),
       { path: 'services/history-snapshot.js', count: 2 },
-      { path: 'services/history.js', count: 7 }
+      ...historyOperators(detected, 'services/history.js')
     ],
     'Result content commit': [
       ...retiringOperatorsBefore(detected, 'app/preview-runtime.js', 'Result content commit'),
       ...keeperCommitOperators(detected, 'app/preview-runtime.js'),
       ...retiringReplacementOperators(detected, 'app/results.js', 'Result content commit'),
-      { path: 'app/run-analysis.js', count: 2 },
+      ...keeperCommitOperators(detected, 'app/run-analysis.js'),
       ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'Result content commit'),
       ...keeperCommitOperators(detected, 'services/config.js')
     ],
@@ -950,6 +968,23 @@ test('kept Result content commit owners may contract but never grow', () => {
       } else {
         assert.throws(() => keeperCommitOperators(detected, path), /may only contract/);
       }
+    }
+  }
+});
+
+test('History operators may move from the composition root into History but never grow', () => {
+  const historyCode = (count) => 'beginCheckpoint(label);\n'.repeat(count);
+  for (const [shed, owner] of [[3, 7], [0, 10], [2, 8], [0, 0], [3, 0], [4, 6], [3, 8], [0, 11]]) {
+    const detected = detectPrivilegedWebCapabilities(new Map([
+      ['app/app-setup.js', historyCode(shed)], ['services/history.js', historyCode(owner)]
+    ]));
+    assert.equal(operatorCount(detected, 'app/app-setup.js', 'History'), shed);
+    assert.equal(operatorCount(detected, 'services/history.js', 'History'), owner);
+    if (shed <= HISTORY_SHED_CEILING && shed + owner <= HISTORY_ROUTER_CEILING) {
+      assert.deepEqual(historyOperators(detected, 'services/history.js'),
+        owner ? [{ path: 'services/history.js', count: owner }] : []);
+    } else {
+      assert.throws(() => historyOperators(detected, 'services/history.js'), /may only (contract|take)/);
     }
   }
 });
@@ -1849,11 +1884,13 @@ test('steady-state topology removes legacy main producers without changing final
   assert.equal([...BASE_POLICY_WORKFLOW.matchAll(/name: Promotion \/ gate/g)].length, 1);
   assert.deepEqual(WORKFLOW_NAMES, [
     'ci-inventory.yml',
+    'codeql.yml',
     'deploy_web.yml',
     'gallery-publication.yml',
     'losat-distribution.yml',
     'release.yml',
     'test.yml',
+    'translation-review.yml',
     'web-base-policy.yml'
   ]);
   assert.doesNotMatch(TEST_WORKFLOW, /needs: web-change-budget/);
@@ -4316,6 +4353,983 @@ test('dependency, vendor, binary, and runtime/guard rules are non-waivable', () 
   });
 });
 
+const VENDOR_LIBRARY_PATH = 'gbdraw/web/vendor/library.js';
+const VENDOR_LIBRARY_UPDATE = 'globalThis.vendorLibrary = false;\n';
+const sha256Hex = (content) => createHash('sha256').update(content).digest('hex');
+const vendorChangeEntry = (overrides = {}) => ({
+  path: VENDOR_LIBRARY_PATH,
+  change: 'replace',
+  sha256: sha256Hex(VENDOR_LIBRARY_UPDATE),
+  package: 'library',
+  version: '1.0.1',
+  source: 'https://example.invalid/library@1.0.1/library.js',
+  ...overrides
+});
+const writeVendorChangeListing = (write, entries) => {
+  writeBudgetPolicy(write, { ...cloneBudgetPolicy(), allowedVendorChanges: entries });
+};
+// Merges the listing as an earlier authority-only pull request (and, when given, a later
+// merged change), then evaluates the next pull request against that trusted base.
+const runListedVendorChangeCase = (entries, mutate, merged = null) => withChangeBudgetRepository(
+  ({ commit, execute, git, root, write }) => {
+    const writeOrRemove = (path, content) => (
+      content === null ? rmSync(join(root, path)) : write(path, content)
+    );
+    if (entries) writeVendorChangeListing(write, entries);
+    if (merged) merged(writeOrRemove);
+    const base = entries
+      ? commit('authority-only vendored runtime listing')
+      : git(['rev-parse', 'HEAD']).stdout.trim();
+    mutate(writeOrRemove);
+    const head = commit('vendored runtime change');
+    return execute({ base, head });
+  }
+);
+const assertVendorGateFailure = (result, pattern, context) => {
+  assert.equal(result.status, 1, `${context}\n${result.output}`);
+  assert.match(result.output, /Gate: \*\*FAIL\*\*/, context);
+  assert.match(result.output, pattern, context);
+};
+const UNLISTED_VENDOR_CHANGE = /changes under gbdraw\/web\/vendor\/ are not allowed unless the trusted base lists them/;
+
+test('a vendored runtime change passes only when the trusted base lists its exact bytes', () => {
+  const unlisted = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/other.js', change: 'add' })],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
+  );
+  assertVendorGateFailure(unlisted, UNLISTED_VENDOR_CHANGE, 'unlisted path');
+  assert.match(unlisted.output, /gbdraw\/web\/vendor\/library\.js: not listed/);
+
+  const listedCases = [
+    {
+      name: 'replace',
+      entry: vendorChangeEntry(),
+      mutate: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
+    },
+    {
+      name: 'add',
+      entry: vendorChangeEntry({
+        path: 'gbdraw/web/vendor/library.prod.js',
+        change: 'add'
+      }),
+      mutate: (write) => write('gbdraw/web/vendor/library.prod.js', VENDOR_LIBRARY_UPDATE)
+    },
+    {
+      name: 'remove',
+      entry: vendorChangeEntry({
+        change: 'remove',
+        sha256: sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+      }),
+      mutate: (write) => write(VENDOR_LIBRARY_PATH, null)
+    }
+  ];
+  listedCases.forEach(({ name, entry, mutate }) => {
+    const result = runListedVendorChangeCase([entry], mutate);
+    assert.equal(result.status, 0, `${name}\n${result.output}`);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/, name);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/, name);
+    assert.ok(
+      result.output.includes(`Vendored runtime: listed ${name} of ${entry.path} (library 1.0.1)`),
+      `${name}\n${result.output}`
+    );
+  });
+});
+
+test('a listed vendored runtime change fails on a hash or kind mismatch', () => {
+  const mismatch = runListedVendorChangeCase(
+    [vendorChangeEntry({ sha256: sha256Hex('globalThis.vendorLibrary = 0;\n') })],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
+  );
+  assertVendorGateFailure(mismatch, UNLISTED_VENDOR_CHANGE, 'hash mismatch');
+  assert.match(
+    mismatch.output,
+    new RegExp(`library\\.js: sha256 ${sha256Hex(VENDOR_LIBRARY_UPDATE)} does not match the listed`)
+  );
+
+  const kind = runListedVendorChangeCase(
+    [vendorChangeEntry()],
+    (write) => write(VENDOR_LIBRARY_PATH, null)
+  );
+  assertVendorGateFailure(kind, /library\.js: listed as replace, but the change is remove/, 'kind');
+});
+
+test('an added binary vendored file passes only when the trusted base lists it as add with its bytes', () => {
+  const fontPath = 'gbdraw/web/vendor/fonts/latin.woff2';
+  const fontBytes = Buffer.from([0x77, 0x4f, 0x46, 0x32, 0, 1, 2, 3]);
+  const entry = vendorChangeEntry({ path: fontPath, change: 'add', sha256: sha256Hex(fontBytes) });
+  const addedBinarySection = (output) => output.split('## Added binary runtime files')[1].split('\n## ')[0];
+
+  const listed = runListedVendorChangeCase([entry], (write) => write(fontPath, fontBytes));
+  assert.equal(listed.status, 0, `listed\n${listed.output}`);
+  assert.match(listed.output, /Gate: \*\*PASS\*\*/);
+  assert.match(listed.output, /Review: \*\*REQUIRED\*\*/);
+  assert.doesNotMatch(listed.output, /added binary runtime files are not allowed/);
+  assert.ok(
+    listed.output.includes(`Vendored runtime: listed add of ${fontPath} (library 1.0.1)`),
+    listed.output
+  );
+  assert.equal(addedBinarySection(listed.output).trim(), '- None', listed.output);
+
+  const otherBytes = runListedVendorChangeCase([entry], (write) => write(fontPath, Buffer.from([0, 9, 9, 9])));
+  assertVendorGateFailure(otherBytes, /added binary runtime files are not allowed/, 'other bytes');
+  assert.match(otherBytes.output, UNLISTED_VENDOR_CHANGE);
+  assert.match(otherBytes.output, /latin\.woff2: sha256 [0-9a-f]{64} does not match the listed/);
+  assert.ok(addedBinarySection(otherBytes.output).includes(`- ${fontPath}`), otherBytes.output);
+
+  const unlisted = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/other.js', change: 'add' })],
+    (write) => write(fontPath, fontBytes)
+  );
+  assertVendorGateFailure(unlisted, /added binary runtime files are not allowed/, 'unlisted');
+  assert.match(unlisted.output, /latin\.woff2: not listed/);
+});
+
+test('a vendored runtime listing in the pull request head authorizes nothing', () => {
+  // The candidate lists its own change: the trusted base has no entry, so the vendored
+  // file stays unlisted, and the listing beside runtime is a guard co-change as well.
+  const result = runListedVendorChangeCase(null, (write) => {
+    writeVendorChangeListing(write, [vendorChangeEntry()]);
+    write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE);
+  });
+  assertVendorGateFailure(result, UNLISTED_VENDOR_CHANGE, 'head-only listing');
+  assert.match(result.output, /gbdraw\/web\/vendor\/library\.js: not listed/);
+  assert.match(result.output, /production runtime files and Web guard\/CI files changed together/);
+});
+
+test('a vendored runtime change cannot edit the listing in the same pull request', () => {
+  // The trusted base lists the change, but the pull request also edits the listing.
+  const consumed = runListedVendorChangeCase([vendorChangeEntry()], (write) => {
+    writeVendorChangeListing(write, []);
+    write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE);
+  });
+  assertVendorGateFailure(
+    consumed,
+    /production runtime files and Web guard\/CI files changed together/,
+    'listing removed beside the vendored file'
+  );
+
+  // A safe privileged contraction may change the policy beside runtime, but not the listing.
+  const otherEntry = vendorChangeEntry({ path: 'gbdraw/web/vendor/other.js', change: 'add' });
+  const contraction = runListedVendorChangeCase([otherEntry], (write) => {
+    const policy = cloneBudgetPolicy();
+    removePolicyPath(policy, 'allowedPrivilegedOwners', 'Diagram Worker', 'app/editor.js');
+    writeBudgetPolicy(write, {
+      ...policy,
+      allowedVendorChanges: [otherEntry, vendorChangeEntry()]
+    });
+    removeEditorOwnerUse(write);
+  });
+  assertVendorGateFailure(
+    contraction,
+    /production runtime files and Web guard\/CI files changed together/,
+    'listing added beside a safe contraction'
+  );
+});
+
+test('a malformed vendored runtime listing fails closed in the base and the candidate', () => {
+  const malformed = [
+    [vendorChangeEntry({ sha256: 'ABC' }), /sha256 must be 64 lowercase hexadecimal digits/],
+    [vendorChangeEntry({ path: 'gbdraw/web/js/app/editor.js' }), /path must be a normalized path under gbdraw\/web\/vendor\//],
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/../js/app/editor.js' }), /path must be a normalized path under gbdraw\/web\/vendor\//],
+    [vendorChangeEntry({ change: 'move' }), /change must be one of add, replace, remove/],
+    [vendorChangeEntry({ source: 'http://example.invalid/library.js' }), /source must be an https URL/],
+    [vendorChangeEntry({ version: '' }), /version must be a non-empty string/],
+    [{ ...vendorChangeEntry(), note: 'extra' }, /must have exactly the keys change, package, path, sha256, source, version/]
+  ];
+  malformed.forEach(([entry, pattern]) => {
+    const candidate = runChangeBudgetCase((write) => writeVendorChangeListing(write, [entry]));
+    assertVendorGateFailure(candidate, /candidate vendored runtime listing: /, `candidate ${pattern}`);
+    assert.match(candidate.output, pattern);
+  });
+
+  const duplicate = runChangeBudgetCase((write) => writeVendorChangeListing(
+    write,
+    [vendorChangeEntry(), vendorChangeEntry({ change: 'remove' })]
+  ));
+  assertVendorGateFailure(duplicate, /lists gbdraw\/web\/vendor\/library\.js twice/, 'duplicate');
+
+  const trusted = runListedVendorChangeCase(
+    [vendorChangeEntry({ sha256: 'ABC' })],
+    (write) => write('gbdraw/web/js/app/secondary.js', 'export const editSecondaryOwner = () => 2;\n')
+  );
+  assertVendorGateFailure(trusted, /trusted vendored runtime listing: /, 'trusted base');
+});
+
+const describedVendorEntry = (entry) => (
+  `- ${entry.path}: ${entry.change} sha256=${entry.sha256} package=${entry.package} `
+  + `version=${entry.version} source=${entry.source}`
+);
+
+test('an authority-only vendored runtime listing passes with review and reports each entry', () => {
+  const entry = vendorChangeEntry();
+  const added = runChangeBudgetCase((write) => writeVendorChangeListing(write, [entry]));
+  assert.equal(added.status, 0, added.output);
+  assert.match(added.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(added.output, /vendored runtime listing changed \(added=1, removed=0;/);
+  assert.ok(
+    reportSection(added.output, 'Added vendored runtime listing entries').includes(describedVendorEntry(entry)),
+    added.output
+  );
+
+  const removed = runListedVendorChangeCase([entry], (write) => writeVendorChangeListing(write, []));
+  assert.equal(removed.status, 0, removed.output);
+  assert.match(removed.output, /vendored runtime listing changed \(added=0, removed=1;/);
+  assert.ok(
+    reportSection(removed.output, 'Removed vendored runtime listing entries').includes(describedVendorEntry(entry)),
+    removed.output
+  );
+});
+
+// Persisted contract co-change (WEB_CHANGE_POLICY.md). The base carries the real schema module,
+// small description modules in the generator's format, the two documents, and an old fixture.
+// Every head edit derives from the values the real module holds today.
+const CONTRACT_SCHEMA_PATH = 'gbdraw/web/js/contracts/schema.generated.js';
+const CONTRACT_REQUEST_SHAPE_PATH = 'gbdraw/web/js/contracts/request-shape.generated.js';
+const CONTRACT_SESSION_SHAPE_PATH = 'gbdraw/web/js/contracts/session-shape.generated.js';
+const SESSION_HISTORY_PATH = 'docs/internal/SESSION_FORMAT_HISTORY.md';
+const COMPATIBILITY_REFERENCE_PATH = 'docs/REFERENCE/session-and-request-compatibility.md';
+const CONTRACT_SCHEMA_SOURCE = readFileSync(join(REPOSITORY_ROOT, CONTRACT_SCHEMA_PATH), 'utf8');
+const PERSISTED_CONTRACT_KEY = Object.freeze({
+  exemptGeneratedExports: ['EXPECTED_WEB_RUNTIME_CAPABILITIES']
+});
+const contractExportPattern = (name) => new RegExp(`export const ${name} = ([^;]*);`);
+const contractExportLiteral = (name) => {
+  const literal = contractExportPattern(name).exec(CONTRACT_SCHEMA_SOURCE)?.[1];
+  assert.ok(literal, name);
+  return literal;
+};
+const withContractExport = (source, name, value) => {
+  const changed = source.replace(contractExportPattern(name), `export const ${name} = ${value};`);
+  assert.notEqual(changed, source, `${name} = ${value} leaves the module unchanged`);
+  return changed;
+};
+const CURRENT_SESSION_VERSION = Number(contractExportLiteral('SESSION_VERSION'));
+const NEXT_SESSION_VERSION = CURRENT_SESSION_VERSION + 1;
+const CURRENT_SUPPORTED_SESSION_VERSIONS = JSON.parse(
+  contractExportLiteral('SUPPORTED_SESSION_VERSIONS').replace(/^Object\.freeze\(([\s\S]*)\)$/, '$1')
+);
+const NEXT_LOSAT_CACHE_SCHEMA = Number(contractExportLiteral('PROTEIN_LOSAT_CACHE_SCHEMA')) + 1;
+const requestShapeModule = ({ modeType = 'Mode', modes = '"circular", "linear"', reflow = false } = {}) => {
+  const fields = `Object.freeze({mode: Object.freeze({kind: "ref", name: "${modeType}"}), "x-y": Object.freeze({kind: "string"})})`;
+  const separator = reflow ? ',\n      ' : ', ';
+  return [
+    '// @ts-check',
+    '// Generated by tools/generate_web_contracts.py from describe_canonical_request(); do not edit manually.',
+    '',
+    '/** @type {ContractDescription} */',
+    'export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({',
+    '  root: "Request",',
+    '  types: Object.freeze({',
+    `    ${modeType}: Object.freeze({kind: "literal", values: Object.freeze([${modes}])}),`,
+    `    Request: Object.freeze({kind: "object"${separator}fields: ${fields}${separator}optional: Object.freeze([])${separator}open: false})`,
+    '  })',
+    '});',
+    ''
+  ].join('\n');
+};
+const sessionShapeModule = ({
+  versions = [CURRENT_SESSION_VERSION - 1, CURRENT_SESSION_VERSION],
+  extraField = ''
+} = {}) => [
+  '// @ts-check',
+  '// Generated by tools/generate_web_contracts.py from describe_session_admission(); do not edit manually.',
+  '',
+  '/** @type {BandedContractDescription} */',
+  'export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({',
+  `  bands: Object.freeze([Object.freeze({minVersion: ${versions[0]}, versions: Object.freeze([${versions.join(', ')}]), root: "SessionCurrent"})]),`,
+  '  types: Object.freeze({',
+  `    SessionCurrent: Object.freeze({kind: "object", fields: Object.freeze({tree: Object.freeze({kind: "ref", name: "Node"})${extraField}}), optional: Object.freeze([]), open: true}),`,
+  '    Node: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "Node"})})',
+  '  })',
+  '});',
+  ''
+].join('\n');
+const PERSISTED_CONTRACT_BASE_FILES = Object.freeze({
+  [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE,
+  [CONTRACT_REQUEST_SHAPE_PATH]: requestShapeModule(),
+  [CONTRACT_SESSION_SHAPE_PATH]: sessionShapeModule(),
+  [SESSION_HISTORY_PATH]: `# Session format history\n\n## Unreleased: Session ${CURRENT_SESSION_VERSION} keys the Legend edits\n`,
+  [COMPATIBILITY_REFERENCE_PATH]: `# Compatibility\n\nSession ${CURRENT_SESSION_VERSION}.\n`,
+  [`tests/fixtures/sessions/x.v${CURRENT_SESSION_VERSION - 1}.gbdraw-session.json`]: '{}\n',
+  'gbdraw/session_io.py': `CURRENT_SESSION_VERSION = ${CURRENT_SESSION_VERSION}\n`
+});
+const contractPolicyFile = (key) => ({
+  'tools/web-change-policy.json': `${JSON.stringify(
+    key === null ? cloneBudgetPolicy() : { ...cloneBudgetPolicy(), persistedContractCoChange: key },
+    null,
+    2
+  )}\n`
+});
+// Commits the base (with the rule data when `policyKey` is not null), then the head files. With
+// `dev`, the base moves on after the head's branch point, so the head is behind its base. With
+// `main`, refs/remotes/origin/main points at the base with those files applied (`{}`: the base).
+const runPersistedContractCase = ({
+  policyKey = PERSISTED_CONTRACT_KEY,
+  main = null,
+  base = {},
+  dev = null,
+  head
+}) => (
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const writeAll = (files) => Object.entries(files).forEach(([path, content]) => (
+      content === null ? rmSync(join(root, path)) : write(path, content)
+    ));
+    const baseFiles = { ...PERSISTED_CONTRACT_BASE_FILES, ...contractPolicyFile(policyKey), ...base };
+    let mainRevision = '';
+    if (main && Object.keys(main).length) {
+      writeAll({ ...baseFiles, ...main });
+      mainRevision = commit('main');
+    }
+    writeAll(baseFiles);
+    const branchPoint = commit('persisted contract base');
+    if (main) {
+      assert.equal(git(['update-ref', 'refs/remotes/origin/main', mainRevision || branchPoint]).status, 0);
+    }
+    let baseRevision = branchPoint;
+    if (dev) {
+      writeAll(dev);
+      baseRevision = commit('dev moves on');
+      assert.equal(git(['checkout', '--quiet', branchPoint]).status, 0);
+    }
+    writeAll(head);
+    return execute({ base: baseRevision, head: commit('persisted contract change') });
+  })
+);
+const PERSISTED_CONTRACT_FAILURE = /persisted-contract\.co-change: /;
+const PERSISTED_CONTRACT_REVIEW = /Material behavior\/output risk: persisted contract changed/;
+const historyWith = (text) => `${PERSISTED_CONTRACT_BASE_FILES[SESSION_HISTORY_PATH]}\n${text}\n`;
+const LOSAT_SCHEMA_CHANGE = Object.freeze({
+  [CONTRACT_SCHEMA_PATH]: withContractExport(
+    CONTRACT_SCHEMA_SOURCE,
+    'PROTEIN_LOSAT_CACHE_SCHEMA',
+    String(NEXT_LOSAT_CACHE_SCHEMA)
+  ),
+  [COMPATIBILITY_REFERENCE_PATH]: `# Compatibility\n\nLOSAT cache schema ${NEXT_LOSAT_CACHE_SCHEMA}.\n`,
+  'tests/fixtures/losat-cache.json': `{"schema": ${NEXT_LOSAT_CACHE_SCHEMA}}\n`
+});
+
+test('persisted contract: a changed schema constant without the history fails the Gate', () => {
+  const result = runPersistedContractCase({ head: LOSAT_SCHEMA_CHANGE });
+  assertVendorGateFailure(result, PERSISTED_CONTRACT_FAILURE, 'missing history');
+  const failure = result.output.split('\n').find((line) => PERSISTED_CONTRACT_FAILURE.test(line));
+  assert.match(failure, /schema-constant: PROTEIN_LOSAT_CACHE_SCHEMA/);
+  assert.ok(failure.includes(SESSION_HISTORY_PATH), failure);
+  assert.ok(!failure.includes(COMPATIBILITY_REFERENCE_PATH), failure);
+  assert.ok(!failure.includes('tests/fixtures/'), failure);
+  assert.ok(!failure.includes('behind dev'), failure);
+
+  const complete = runPersistedContractCase({
+    head: { ...LOSAT_SCHEMA_CHANGE, [SESSION_HISTORY_PATH]: historyWith('LOSAT cache schema changed.') }
+  });
+  assert.equal(complete.status, 0, complete.output);
+  assert.match(complete.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(complete.output, /persisted contract changed \(schema-constant: PROTEIN_LOSAT_CACHE_SCHEMA\)/);
+});
+
+test('persisted contract: a refactor that keeps every description passes without the rule', () => {
+  const reflowedSupported = withContractExport(
+    CONTRACT_SCHEMA_SOURCE,
+    'SUPPORTED_SESSION_VERSIONS',
+    `Object.freeze([\n  ${CURRENT_SUPPORTED_SESSION_VERSIONS.join(',\n  ')}\n])`
+  ).replace(
+    '// gbdraw/session_io.py: CURRENT_SESSION_VERSION',
+    '// gbdraw/session_version.py: CURRENT_SESSION_VERSION'
+  );
+  const result = runPersistedContractCase({
+    head: {
+      'gbdraw/session_io.py': 'from gbdraw.session_version import CURRENT_SESSION_VERSION\n',
+      [CONTRACT_SCHEMA_PATH]: reflowedSupported,
+      [CONTRACT_REQUEST_SHAPE_PATH]: requestShapeModule({ modeType: 'RenderMode', reflow: true })
+    }
+  });
+  assert.equal(result.status, 0, result.output);
+  assert.doesNotMatch(result.output, PERSISTED_CONTRACT_FAILURE);
+  assert.doesNotMatch(result.output, /persisted contract changed|new generated contract export|renamed \(/);
+});
+
+test('persisted contract: the rule is off while the base policy has no rule data', () => {
+  const result = runPersistedContractCase({ policyKey: null, head: LOSAT_SCHEMA_CHANGE });
+  assert.equal(result.status, 0, result.output);
+  assert.doesNotMatch(result.output, PERSISTED_CONTRACT_FAILURE);
+  assert.doesNotMatch(result.output, PERSISTED_CONTRACT_REVIEW);
+});
+
+test('persisted contract: a new Session version needs its heading and an old-version fixture', () => {
+  const sessionBump = {
+    [CONTRACT_SCHEMA_PATH]: withContractExport(
+      withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(NEXT_SESSION_VERSION)),
+      'SUPPORTED_SESSION_VERSIONS',
+      `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION].join(', ')}])`
+    ),
+    [CONTRACT_SESSION_SHAPE_PATH]: sessionShapeModule({
+      versions: [CURRENT_SESSION_VERSION - 1, CURRENT_SESSION_VERSION, NEXT_SESSION_VERSION]
+    }),
+    [COMPATIBILITY_REFERENCE_PATH]: `# Compatibility\n\nSession ${NEXT_SESSION_VERSION}.\n`,
+    [`tests/fixtures/sessions/x.v${NEXT_SESSION_VERSION}.gbdraw-session.json`]: '{}\n'
+  };
+
+  const noHeading = runPersistedContractCase({
+    head: { ...sessionBump, [SESSION_HISTORY_PATH]: historyWith(`Session ${NEXT_SESSION_VERSION} in prose only.`) }
+  });
+  assertVendorGateFailure(noHeading, PERSISTED_CONTRACT_FAILURE, 'no heading');
+  assert.match(noHeading.output, /session-version: SESSION_VERSION, SUPPORTED_SESSION_VERSIONS/);
+  assert.ok(noHeading.output.includes(
+    `a "## " heading in ${SESSION_HISTORY_PATH} naming Session ${NEXT_SESSION_VERSION}`
+  ), noHeading.output);
+
+  const withHeading = {
+    ...sessionBump,
+    [SESSION_HISTORY_PATH]: historyWith(`## Unreleased: Session ${NEXT_SESSION_VERSION} adds a key`)
+  };
+  const noOldFixture = runPersistedContractCase({ head: withHeading });
+  assertVendorGateFailure(noOldFixture, PERSISTED_CONTRACT_FAILURE, 'no old fixture');
+  assert.ok(noOldFixture.output.includes(
+    `a fixture of Session ${CURRENT_SESSION_VERSION} under tests/fixtures/sessions/`
+  ), noOldFixture.output);
+  assert.doesNotMatch(noOldFixture.output, /naming Session /);
+
+  const complete = runPersistedContractCase({
+    head: {
+      ...withHeading,
+      [`tests/fixtures/sessions/x.v${CURRENT_SESSION_VERSION}-schema9.gbdraw-session.json.gz`]: 'old\n'
+    }
+  });
+  assert.equal(complete.status, 0, complete.output);
+  assert.match(complete.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(
+    complete.output,
+    /persisted contract changed \(session-version: SESSION_VERSION, SUPPORTED_SESSION_VERSIONS; session-admission: /
+  );
+});
+
+test('persisted contract: an exempt export and a new export need review only', () => {
+  const capabilities = contractExportLiteral('EXPECTED_WEB_RUNTIME_CAPABILITIES');
+  const renderProtocol = Number(/renderProtocol: (\d+)/.exec(capabilities)?.[1]);
+  assert.ok(Number.isInteger(renderProtocol), capabilities);
+  const schema = `${withContractExport(
+    CONTRACT_SCHEMA_SOURCE,
+    'EXPECTED_WEB_RUNTIME_CAPABILITIES',
+    capabilities.replace(`renderProtocol: ${renderProtocol}`, `renderProtocol: ${renderProtocol + 1}`)
+  )}\n// gbdraw/session_io.py: NEW_SCHEMA\nexport const NEW_SCHEMA = "new";\n`;
+  const result = runPersistedContractCase({ head: { [CONTRACT_SCHEMA_PATH]: schema } });
+  assert.equal(result.status, 0, result.output);
+  assert.doesNotMatch(result.output, PERSISTED_CONTRACT_REVIEW);
+  assert.match(result.output, /new generated contract export\(s\) \(NEW_SCHEMA\)/);
+});
+
+test('persisted contract: malformed rule data fails closed in the base and the candidate', () => {
+  const trusted = runPersistedContractCase({
+    policyKey: { exemptGeneratedExports: 'EXPECTED_WEB_RUNTIME_CAPABILITIES' },
+    head: { 'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 2;\n' }
+  });
+  assertVendorGateFailure(trusted, /trusted persisted-contract policy: /, 'trusted base');
+  const trustedUnit = runPersistedContractCase({
+    policyKey: { ...PERSISTED_CONTRACT_KEY, sessionVersionUnit: 'dev' },
+    head: { 'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 2;\n' }
+  });
+  assertVendorGateFailure(
+    trustedUnit,
+    /trusted persisted-contract policy: .*sessionVersionUnit must be "main"/,
+    'trusted unit'
+  );
+
+  const candidates = [
+    [{ exemptGeneratedExports: ['SESSION_VERSION'] }, /exempts the version export SESSION_VERSION/],
+    [{ exemptGeneratedExports: ['NOT_AN_EXPORT'] }, /exempts NOT_AN_EXPORT, which .* does not export/],
+    [{ exemptGeneratedExports: [], note: 'extra' }, /must be an object with the key exemptGeneratedExports and/],
+    [{ sessionVersionUnit: 'main' }, /must be an object with the key exemptGeneratedExports and/],
+    [{ exemptGeneratedExports: [], sessionVersionUnit: 'dev' }, /sessionVersionUnit must be "main"/],
+    [{ exemptGeneratedExports: ['lower', 'lower'] }, /must be unique export names/]
+  ];
+  candidates.forEach(([key, pattern]) => {
+    const candidate = runPersistedContractCase({ policyKey: null, head: contractPolicyFile(key) });
+    assertVendorGateFailure(candidate, /candidate persisted-contract policy: /, `candidate ${pattern}`);
+    assert.match(candidate.output, pattern);
+  });
+
+  const activation = runPersistedContractCase({ policyKey: null, head: contractPolicyFile(PERSISTED_CONTRACT_KEY) });
+  assert.equal(activation.status, 0, activation.output);
+  assert.match(activation.output, /persisted-contract rule turned on/);
+  assert.match(activation.output, /persisted-contract exemptions changed \(added=1, removed=0\)/);
+});
+
+test('persisted contract: removing the rule data needs governance review', () => {
+  [PERSISTED_CONTRACT_KEY, { exemptGeneratedExports: [] }].forEach((policyKey) => {
+    const result = runPersistedContractCase({ policyKey, head: contractPolicyFile(null) });
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Governance and authority: persisted-contract rule turned off/);
+  });
+});
+
+test('persisted contract: a changed Session admission description needs the compatibility reference', () => {
+  const result = runPersistedContractCase({
+    head: {
+      [CONTRACT_SESSION_SHAPE_PATH]: sessionShapeModule({ extraField: ', note: Object.freeze({kind: "string"})' }),
+      [SESSION_HISTORY_PATH]: historyWith('The current Session admits a note.'),
+      'tests/fixtures/session_admission_vectors.json': '{}\n'
+    }
+  });
+  assertVendorGateFailure(result, PERSISTED_CONTRACT_FAILURE, 'missing reference');
+  assert.match(result.output, /session-admission: gbdraw\/web\/js\/contracts\/session-shape\.generated\.js/);
+  assert.ok(result.output.includes(`${COMPATIBILITY_REFERENCE_PATH} in the diff`), result.output);
+});
+
+test('persisted contract: a branch behind its base is measured from the merge base', () => {
+  // The base gained an export and a history entry after the branch point; the branch did not.
+  const devAddsExport = {
+    [CONTRACT_SCHEMA_PATH]: `${CONTRACT_SCHEMA_SOURCE}\n// gbdraw/session_io.py: NEW_SCHEMA\nexport const NEW_SCHEMA = "new";\n`,
+    [SESSION_HISTORY_PATH]: historyWith('NEW_SCHEMA added.'),
+    [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nNEW_SCHEMA.\n',
+    'tests/fixtures/new-schema.json': '{}\n'
+  };
+  const unrelated = runPersistedContractCase({
+    dev: devAddsExport,
+    head: { 'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 2;\n' }
+  });
+  assert.equal(unrelated.status, 0, unrelated.output);
+  assert.doesNotMatch(unrelated.output, PERSISTED_CONTRACT_FAILURE);
+  assert.doesNotMatch(unrelated.output, /persisted contract changed|new generated contract export/);
+
+  // The branch's own change still needs its own history entry; the base's entry does not count.
+  const ownChange = runPersistedContractCase({ dev: devAddsExport, head: LOSAT_SCHEMA_CHANGE });
+  assertVendorGateFailure(ownChange, PERSISTED_CONTRACT_FAILURE, 'behind with its own change');
+  assert.match(ownChange.output, /schema-constant: PROTEIN_LOSAT_CACHE_SCHEMA\) without: docs\/internal\/SESSION_FORMAT_HISTORY\.md in the diff$/m);
+});
+
+test('persisted contract: a renamed export with the same value needs review only', () => {
+  const rename = (from, to) => {
+    const source = CONTRACT_SCHEMA_SOURCE.replace(
+      new RegExp(`^export const ${from} = `, 'm'),
+      `export const ${to} = `
+    );
+    assert.notEqual(source, CONTRACT_SCHEMA_SOURCE, from);
+    return source;
+  };
+  const renamed = runPersistedContractCase({
+    head: { [CONTRACT_SCHEMA_PATH]: rename('PROTEIN_LOSAT_CACHE_SCHEMA', 'PROTEIN_LOSAT_CACHE_VERSION') }
+  });
+  assert.equal(renamed.status, 0, renamed.output);
+  assert.match(
+    renamed.output,
+    /generated contract export\(s\) renamed \(PROTEIN_LOSAT_CACHE_SCHEMA -> PROTEIN_LOSAT_CACHE_VERSION\)/
+  );
+  assert.doesNotMatch(renamed.output, PERSISTED_CONTRACT_REVIEW);
+  assert.doesNotMatch(renamed.output, /new generated contract export/);
+
+  // The checker reads version exports by name, so renaming any of them stays a failure, even
+  // with every document and fixture present.
+  const documented = {
+    [SESSION_HISTORY_PATH]: historyWith('A version export renamed.'),
+    [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nRenamed.\n',
+    'tests/fixtures/renamed.json': '{}\n'
+  };
+  const assertVersionRenameFails = (name, source, extra = {}) => {
+    const result = runPersistedContractCase({ head: { ...documented, [CONTRACT_SCHEMA_PATH]: source, ...extra } });
+    assertVendorGateFailure(result, PERSISTED_CONTRACT_FAILURE, `renamed ${name}`);
+    assert.ok(
+      result.output.includes(`a renamed or removed version export (${name}) needs a checker change`),
+      result.output
+    );
+  };
+  assertVersionRenameFails('SESSION_VERSION', rename('SESSION_VERSION', 'CURRENT_SESSION_VERSION'));
+  assertVersionRenameFails(
+    'SUPPORTED_CANONICAL_REQUEST_SCHEMAS',
+    rename('SUPPORTED_CANONICAL_REQUEST_SCHEMAS', 'SUPPORTED_REQUEST_SCHEMAS')
+  );
+  // A version export that keeps its name but changes shape is unreadable to the checker too.
+  assertVersionRenameFails(
+    'SESSION_VERSION',
+    withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', `Object.freeze([${NEXT_SESSION_VERSION}])`)
+  );
+  assertVersionRenameFails(
+    'SUPPORTED_SESSION_VERSIONS',
+    withContractExport(CONTRACT_SCHEMA_SOURCE, 'SUPPORTED_SESSION_VERSIONS', String(NEXT_SESSION_VERSION))
+  );
+  // A new Session version whose supported list is renamed cannot skip the old-version fixture.
+  assertVersionRenameFails(
+    'SUPPORTED_SESSION_VERSIONS',
+    withContractExport(
+      withContractExport(
+        rename('SUPPORTED_SESSION_VERSIONS', 'SESSION_VERSIONS_SUPPORTED'),
+        'SESSION_VERSIONS_SUPPORTED',
+        `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION].join(', ')}])`
+      ),
+      'SESSION_VERSION',
+      String(NEXT_SESSION_VERSION)
+    ),
+    {
+      [SESSION_HISTORY_PATH]: historyWith(`## Unreleased: Session ${NEXT_SESSION_VERSION} adds a key`),
+      [`tests/fixtures/sessions/x.v${NEXT_SESSION_VERSION}.gbdraw-session.json`]: '{}\n'
+    }
+  );
+});
+
+// Session version unit: main's SESSION_VERSION (refs/remotes/origin/main) is the unit.
+const SESSION_UNIT_KEY = Object.freeze({ ...PERSISTED_CONTRACT_KEY, sessionVersionUnit: 'main' });
+const SESSION_UNIT_FAILURE = /persisted-contract\.fold: /;
+const SESSION_UNIT_REVIEW = /the head and main both write Session /;
+const sessionVersionSchema = (version) => withContractExport(
+  withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(version)),
+  'SUPPORTED_SESSION_VERSIONS',
+  `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION, version]
+    .filter((item, index, items) => item <= version && items.indexOf(item) === index).join(', ')}])`
+);
+// Raises the Session version from `from` to `to` with every co-change the Gate asks for.
+const sessionRaise = (from, to) => ({
+  [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(to),
+  [SESSION_HISTORY_PATH]: historyWith(`## Unreleased: Session ${to} adds a key`),
+  [COMPATIBILITY_REFERENCE_PATH]: `# Compatibility\n\nSession ${to}.\n`,
+  [`tests/fixtures/sessions/x.v${from}.gbdraw-session.json`]: '{}\n'
+});
+const SESSION_ADMISSION_CHANGE = Object.freeze({
+  [CONTRACT_SESSION_SHAPE_PATH]: sessionShapeModule({ extraField: ', note: Object.freeze({kind: "string"})' }),
+  [SESSION_HISTORY_PATH]: historyWith('The current Session admits a note.'),
+  [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nA note.\n',
+  'tests/fixtures/session_admission_vectors.json': '{}\n'
+});
+
+test('persisted contract: a Session version above main takes later breaking changes', () => {
+  // dev already writes NEXT, which main (CURRENT) has not reached; raising it again fails.
+  const raiseAgain = {
+    main: { [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE },
+    base: { [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(NEXT_SESSION_VERSION) },
+    head: sessionRaise(NEXT_SESSION_VERSION, NEXT_SESSION_VERSION + 1)
+  };
+  const folded = runPersistedContractCase({ ...raiseAgain, policyKey: SESSION_UNIT_KEY });
+  assertVendorGateFailure(folded, SESSION_UNIT_FAILURE, 'raised again');
+  assert.ok(folded.output.includes(
+    `SESSION_VERSION changes ${NEXT_SESSION_VERSION} -> ${NEXT_SESSION_VERSION + 1}, `
+    + `but main (refs/remotes/origin/main) writes Session ${CURRENT_SESSION_VERSION}, so the head may write `
+    + `only Session ${CURRENT_SESSION_VERSION} or ${NEXT_SESSION_VERSION}`
+  ), folded.output);
+  assert.doesNotMatch(folded.output, PERSISTED_CONTRACT_FAILURE);
+  assert.match(folded.output, new RegExp(`Session version: main ${CURRENT_SESSION_VERSION}, head `));
+
+  // A jump of two from main fails the same way.
+  const jump = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: sessionRaise(CURRENT_SESSION_VERSION, NEXT_SESSION_VERSION + 1)
+  });
+  assertVendorGateFailure(jump, SESSION_UNIT_FAILURE, 'jump of two');
+
+  // Lowering it below main fails too.
+  const lowered = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    base: { [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(NEXT_SESSION_VERSION) },
+    head: {
+      [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE,
+      [SESSION_HISTORY_PATH]: historyWith('Session version lowered.'),
+      [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nLowered.\n',
+      'tests/fixtures/sessions/lowered.json': '{}\n'
+    }
+  });
+  assertVendorGateFailure(lowered, SESSION_UNIT_FAILURE, 'lowered below main');
+  assert.doesNotMatch(lowered.output, PERSISTED_CONTRACT_FAILURE);
+
+  // A version already more than one above main that the pull request leaves alone passes.
+  const inherited = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: { [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE },
+    base: { [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(NEXT_SESSION_VERSION + 1) },
+    head: SESSION_ADMISSION_CHANGE
+  });
+  assert.equal(inherited.status, 0, inherited.output);
+  assert.doesNotMatch(inherited.output, /persisted-contract\.fold|both write Session/);
+
+  // Without sessionVersionUnit in the base policy the rule is off.
+  const inert = runPersistedContractCase(raiseAgain);
+  assert.equal(inert.status, 0, inert.output);
+  assert.doesNotMatch(inert.output, /persisted-contract\.fold|both write Session|Session version: main/);
+
+  // Folding a change into the version above main passes without the main question.
+  const fold = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: raiseAgain.main,
+    base: raiseAgain.base,
+    head: SESSION_ADMISSION_CHANGE
+  });
+  assert.equal(fold.status, 0, fold.output);
+  assert.match(fold.output, PERSISTED_CONTRACT_REVIEW);
+  assert.doesNotMatch(fold.output, SESSION_UNIT_REVIEW);
+});
+
+test('persisted contract: raising the Session version above main passes', () => {
+  const result = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: sessionRaise(CURRENT_SESSION_VERSION, NEXT_SESSION_VERSION)
+  });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /persisted contract changed \(session-version: /);
+  assert.doesNotMatch(result.output, /persisted-contract\.fold|both write Session/);
+});
+
+test('persisted contract: a change while the head writes main\'s Session version asks whether it breaks main', () => {
+  const result = runPersistedContractCase({ policyKey: SESSION_UNIT_KEY, main: {}, head: SESSION_ADMISSION_CHANGE });
+  assert.equal(result.status, 0, result.output);
+  assert.ok(result.output.includes(
+    `the head and main both write Session ${CURRENT_SESSION_VERSION}; confirm that main reads what the head `
+    + `writes the same way, or raise SESSION_VERSION to ${NEXT_SESSION_VERSION}`
+  ), result.output);
+
+  // A contract change that leaves the schema module alone reads the head's version too.
+  const losat = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: { ...LOSAT_SCHEMA_CHANGE, [SESSION_HISTORY_PATH]: historyWith('LOSAT cache schema raised.') }
+  });
+  assert.equal(losat.status, 0, losat.output);
+  assert.match(losat.output, SESSION_UNIT_REVIEW);
+
+  // A new export alone is not a persisted contract change and asks nothing.
+  const added = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    head: {
+      [CONTRACT_SCHEMA_PATH]: `${CONTRACT_SCHEMA_SOURCE}\n// gbdraw/session_io.py: NEW_SCHEMA\n`
+        + 'export const NEW_SCHEMA = "new";\n'
+    }
+  });
+  assert.equal(added.status, 0, added.output);
+  assert.match(added.output, /new generated contract export\(s\) \(NEW_SCHEMA\)/);
+  assert.doesNotMatch(added.output, /persisted-contract\.fold|both write Session/);
+});
+
+test('persisted contract: main\'s Session version that cannot be read fails closed', () => {
+  const result = runPersistedContractCase({ policyKey: SESSION_UNIT_KEY, head: SESSION_ADMISSION_CHANGE });
+  assertVendorGateFailure(result, SESSION_UNIT_FAILURE, 'no origin/main');
+  assert.match(result.output, /SESSION_VERSION cannot be read at main \(refs\/remotes\/origin\/main; fetch main/);
+  assert.match(result.output, /Session version: main unreadable/);
+
+  // An unreadable head names the head, not main.
+  const head = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: {
+      ...SESSION_ADMISSION_CHANGE,
+      [CONTRACT_SCHEMA_PATH]: withContractExport(
+        CONTRACT_SCHEMA_SOURCE,
+        'SESSION_VERSION',
+        `Object.freeze([${NEXT_SESSION_VERSION}])`
+      )
+    }
+  });
+  assertVendorGateFailure(head, SESSION_UNIT_FAILURE, 'unreadable head');
+  assert.match(head.output, /persisted-contract\.fold: SESSION_VERSION cannot be read at the head/);
+});
+
+test('persisted contract: setting or removing the Session version unit needs governance review', () => {
+  const set = runPersistedContractCase({ head: contractPolicyFile(SESSION_UNIT_KEY) });
+  assert.equal(set.status, 0, set.output);
+  assert.match(set.output, /Governance and authority: Session version unit changed \(none -> main\)/);
+  assert.match(set.output, /Candidate rule data: valid; exempt: [A-Z_]+; Session version unit: main/);
+
+  const removed = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    head: contractPolicyFile(PERSISTED_CONTRACT_KEY)
+  });
+  assert.equal(removed.status, 0, removed.output);
+  assert.match(removed.output, /Governance and authority: Session version unit changed \(main -> none\)/);
+});
+
+test('a repeated key in the change policy fails closed', () => {
+  const policyBody = JSON.stringify(cloneBudgetPolicy(), null, 2).slice(0, -2);
+  const entry = JSON.stringify(vendorChangeEntry());
+  [
+    `${policyBody},\n  "allowedVendorChanges": [],\n  "allowedVendorChanges": [${entry}]\n}\n`,
+    `${policyBody},\n  "allowedVendorChanges": [],\n  "allowedVendor\\u0043hanges": [${entry}]\n}\n`
+  ].forEach((source, index) => {
+    const result = runChangeBudgetCase((write) => write('tools/web-change-policy.json', source));
+    assertVendorGateFailure(result, /repeats the key\(s\) allowedVendorChanges/, `variant ${index}`);
+  });
+});
+
+test('a vendored runtime listing entry that cannot apply to the base fails where it is added', () => {
+  const cases = [
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/missing.js' }), /missing\.js: replace for a path the base lacks/],
+    [
+      vendorChangeEntry({ path: 'gbdraw/web/vendor/missing.js', change: 'remove' }),
+      /missing\.js: remove for a path the base lacks/
+    ],
+    [vendorChangeEntry({ change: 'add' }), /library\.js: add for a path the base already has/],
+    [vendorChangeEntry({ change: 'remove' }), /library\.js: remove lists sha256 [0-9a-f]{64}, but the base bytes hash to/],
+    [
+      vendorChangeEntry({ sha256: sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH]) }),
+      /library\.js: replace lists the bytes the base already has/
+    ]
+  ];
+  cases.forEach(([entry, pattern]) => {
+    const result = runChangeBudgetCase((write) => writeVendorChangeListing(write, [entry]));
+    assertVendorGateFailure(result, /candidate vendored runtime listing: /, String(pattern));
+    assert.match(result.output, pattern);
+  });
+});
+
+test('vendored runtime listing edge cases fail closed', () => {
+  // Bootstrap: the base has no policy file, so the head policy supplies no vendored entries.
+  const bootstrap = withChangeBudgetRepository(({ commit, execute, root, write }) => {
+    rmSync(join(root, 'tools/web-change-policy.json'));
+    const base = commit('base without a change policy');
+    writeVendorChangeListing(write, [vendorChangeEntry()]);
+    write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE);
+    const head = commit('policy and vendored change');
+    return execute({ base, head });
+  });
+  assertVendorGateFailure(bootstrap, /gbdraw\/web\/vendor\/library\.js: not listed/, 'bootstrap');
+
+  // A rename is a remove and an add; each side needs its own entry.
+  const renamedPath = 'gbdraw/web/vendor/library-renamed.js';
+  const original = BUDGET_FIXTURE[VENDOR_LIBRARY_PATH];
+  const addRenamed = vendorChangeEntry({ path: renamedPath, change: 'add', sha256: sha256Hex(original) });
+  const rename = (write) => {
+    write(VENDOR_LIBRARY_PATH, null);
+    write(renamedPath, original);
+  };
+  const renameHalf = runListedVendorChangeCase([addRenamed], rename);
+  assertVendorGateFailure(renameHalf, /library\.js: not listed/, 'rename with one entry');
+  const renameBoth = runListedVendorChangeCase(
+    [vendorChangeEntry({ change: 'remove', sha256: sha256Hex(original) }), addRenamed],
+    rename
+  );
+  assert.equal(renameBoth.status, 0, renameBoth.output);
+
+  const replaceForAdd = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/new.js' })],
+    (write) => write('gbdraw/web/vendor/new.js', VENDOR_LIBRARY_UPDATE)
+  );
+  assertVendorGateFailure(replaceForAdd, /new\.js: listed as replace, but the change is add/, 'replace for add');
+
+  const typeChange = withChangeBudgetRepository(({ commit, execute, root, write }) => {
+    writeVendorChangeListing(write, [vendorChangeEntry()]);
+    const base = commit('listing');
+    rmSync(join(root, VENDOR_LIBRARY_PATH));
+    symlinkSync('library-target.js', join(root, VENDOR_LIBRARY_PATH));
+    const head = commit('vendored file becomes a symlink');
+    return execute({ base, head });
+  });
+  assertVendorGateFailure(
+    typeChange,
+    /library\.js: listed as replace, but the change is unsupported status T/,
+    'type change'
+  );
+
+  const malformedTrusted = runListedVendorChangeCase(
+    [vendorChangeEntry({ sha256: 'ABC' })],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
+  );
+  assertVendorGateFailure(malformedTrusted, /trusted vendored runtime listing: /, 'malformed trusted');
+  assert.match(malformedTrusted.output, /library\.js: not listed/);
+
+  [
+    [{}, /allowedVendorChanges must be an array/],
+    [[1], /allowedVendorChanges\[0\] must be an object/]
+  ].forEach(([listing, pattern]) => {
+    const result = runChangeBudgetCase((write) => writeVendorChangeListing(write, listing));
+    assertVendorGateFailure(result, pattern, String(pattern));
+  });
+});
+
+// The listing merges first (fork), the listed change merges after it (base); the head either
+// forks from the listing commit (behind) or builds on the base (up to date).
+const runForkedVendorChangeCase = ({ entry, merged, branch, behind }) => withChangeBudgetRepository(
+  ({ commit, execute, git, root, write }) => {
+    const writeOrRemove = (path, content) => (
+      content === null ? rmSync(join(root, path)) : write(path, content)
+    );
+    writeVendorChangeListing(write, [entry]);
+    const fork = commit('authority-only vendored runtime listing');
+    let head = '';
+    if (behind) {
+      branch(writeOrRemove);
+      head = commit('branch forked before the vendored change merged');
+      assert.equal(git(['checkout', '--quiet', fork]).status, 0);
+    }
+    merged(writeOrRemove);
+    const base = commit('listed vendored change merged');
+    if (!behind) {
+      branch(writeOrRemove);
+      head = commit('branch on the current base');
+    }
+    return execute({ base, head });
+  }
+);
+const BEHIND_BASE = /the branch is behind its base: update it from dev/;
+
+test('only a branch that is really behind its base is told to update', () => {
+  const prodPath = 'gbdraw/web/vendor/library.prod.js';
+  const unrelated = (write) => write(
+    'gbdraw/web/js/app/secondary.js',
+    'export const editSecondaryOwner = () => 2;\n'
+  );
+  [
+    {
+      name: 'add',
+      entry: vendorChangeEntry({ path: prodPath, change: 'add' }),
+      merged: (write) => write(prodPath, VENDOR_LIBRARY_UPDATE)
+    },
+    {
+      name: 'replace',
+      entry: vendorChangeEntry(),
+      merged: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
+    },
+    {
+      name: 'remove',
+      entry: vendorChangeEntry({
+        change: 'remove',
+        sha256: sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+      }),
+      merged: (write) => write(VENDOR_LIBRARY_PATH, null)
+    }
+  ].forEach(({ name, entry, merged }) => {
+    const result = runForkedVendorChangeCase({ entry, merged, branch: unrelated, behind: true });
+    assertVendorGateFailure(result, BEHIND_BASE, `behind ${name}`);
+  });
+
+  // Up to date: the base merged the listed replace, and the head changes the file again.
+  const tampered = runForkedVendorChangeCase({
+    entry: vendorChangeEntry(),
+    merged: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+    branch: (write) => write(VENDOR_LIBRARY_PATH, 'EVIL\n'),
+    behind: false
+  });
+  assertVendorGateFailure(
+    tampered,
+    new RegExp(`library\\.js: sha256 ${sha256Hex('EVIL\n')} does not match the listed`),
+    'up-to-date tampering'
+  );
+  assert.doesNotMatch(tampered.output, BEHIND_BASE);
+
+  // Up to date: the head deletes a file that a spent add entry still lists.
+  const spentAdd = runForkedVendorChangeCase({
+    entry: vendorChangeEntry({ path: prodPath, change: 'add' }),
+    merged: (write) => write(prodPath, VENDOR_LIBRARY_UPDATE),
+    branch: (write) => write(prodPath, null),
+    behind: false
+  });
+  assertVendorGateFailure(
+    spentAdd,
+    /library\.prod\.js: listed as add, but the change is remove/,
+    'spent add deleted'
+  );
+  assert.doesNotMatch(spentAdd.output, BEHIND_BASE);
+});
+
+test('an add entry for a path that is a directory in the base fails', () => {
+  const result = withChangeBudgetRepository(({ commit, execute, write }) => {
+    write('gbdraw/web/vendor/bundle/index.js', 'globalThis.bundle = true;\n');
+    const base = commit('vendored directory');
+    writeVendorChangeListing(write, [vendorChangeEntry({ path: 'gbdraw/web/vendor/bundle', change: 'add' })]);
+    const head = commit('add entry for the directory path');
+    return execute({ base, head });
+  });
+  assertVendorGateFailure(
+    result,
+    /bundle: add for a path that is not a file in the base/,
+    'directory add'
+  );
+});
+
 test('malformed authority and unsupported accepted-violation authority fail canonically', () => {
   const malformedPolicy = runChangeBudgetCase((write) => {
     write('tools/web-change-policy.json', '{\n');
@@ -6593,11 +7607,11 @@ test('every count-baseline test counts only with counting code or guard paths', 
     }
   }
   assert.ok(seen.has('tests/web/helpers/count-baseline.mjs') && seen.has('tools/report-web-owner-graph.mjs'));
-  // The type ratchets count with tsc (explicit-any-ratchet's TSCONFIG,
-  // no-implicit-any-ratchet's RATCHET_CONFIG and what it extends): every file
-  // their configs include outside the package (a declaration file can type a
-  // read as `any`) is counting code, and no glob there reaches outside it.
-  const typeConfigs = ['tests/web/types/tsconfig.json', 'tests/web/types/tsconfig.no-implicit-any.json'];
+  // The type ratchet counts with tsc (explicit-any-ratchet's TSCONFIG and
+  // what it extends): every file its config includes outside the package (a
+  // declaration file can type a read as `any`) is counting code, and no glob
+  // there reaches outside it.
+  const typeConfigs = ['tests/web/types/tsconfig.json'];
   const included = [];
   for (let config = typeConfigs.pop(); config; config = typeConfigs.pop()) {
     const parsed = JSON.parse(readFileSync(join(REPOSITORY_ROOT, config), 'utf8'));
@@ -6660,16 +7674,18 @@ test('a count-baseline test follows a runtime move by path alongside runtime fil
 
 // BA-D10: a rule's text is authority. The Gate checks the candidate registry
 // whenever it changes; an unchanged trusted registry is not re-checked.
-// json-ids (schema 2): the ids of a JSON list are a shrink-only set; a row's
-// other fields (owners, reason, retireWhen) change freely.
-test('a json-ids allowlist compares only the entry ids', () => {
+// json-ids (schema 2): the ids of a JSON list are a shrink-only set, and so is
+// the length of each row's lists (R9: an owner added to a twin row is
+// authority-only); a renamed item and the row's other fields change freely.
+test('a json-ids allowlist compares the entry ids and the length of each row list', () => {
   const TWINS_PATH = 'tools/twins.json';
   const row = (id, extra = {}) => ({ id, pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f'], reason: 'r', retireWhen: 'w', ...extra });
   const twins = (rows) => `${JSON.stringify({ schemaVersion: 1, twins: rows }, null, 2)}\n`;
   const rules = designRuleRules2();
   rules[0].allowlists.push({ path: TWINS_PATH, symbol: 'twins', kind: 'json-ids' });
   const subject = `R10 ${TWINS_PATH}#twins`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const base = [row('function:a'), row('function:b')];
+  const rowA = (extra = {}) => row('function:a', { pythonOwner: ['gbdraw/a.py:f', 'gbdraw/a.py:g'], ...extra });
+  const base = [rowA(), row('function:b', { pending: true })];
   const run = (rows) => withDesignRuleGuardRepository(({ execute, write }) => {
     runtimeChange(write);
     write(TWINS_PATH, twins(rows));
@@ -6684,9 +7700,18 @@ test('a json-ids allowlist compares only the entry ids', () => {
   const removed = run([base[0]]);
   assert.equal(removed.status, 0, removed.output);
   assert.match(removed.output, new RegExp(`- contraction: ${subject}\\n`));
-  const edited = run([row('function:a', { jsOwner: ['gbdraw/web/js/services/b.js:f'], reason: 'moved', retireWhen: 'later' }), base[1]]);
+  const edited = run([rowA({ jsOwner: ['gbdraw/web/js/services/b.js:f'], reason: 'moved', retireWhen: 'later' }), row('function:b')]);
   assert.equal(edited.status, 0, edited.output);
   assert.doesNotMatch(edited.output, new RegExp(subject));
+  const ownerAdded = run([rowA({ jsOwner: ['gbdraw/web/js/services/a.js:f', 'gbdraw/web/js/services/b.js:f'] }), base[1]]);
+  assert.equal(ownerAdded.status, 1, ownerAdded.output);
+  assert.match(ownerAdded.output, new RegExp(`design-rule\\.co-change: [^\\n]*${subject} \\(expansion\\)`));
+  const ownerMoved = run([rowA({ pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f', 'gbdraw/web/js/services/b.js:f'] }), base[1]]);
+  assert.equal(ownerMoved.status, 1, ownerMoved.output);
+  assert.match(ownerMoved.output, new RegExp(`design-rule\\.co-change: [^\\n]*${subject} \\(expansion\\)`));
+  const ownerRemoved = run([rowA({ pythonOwner: ['gbdraw/a.py:f'] }), base[1]]);
+  assert.equal(ownerRemoved.status, 0, ownerRemoved.output);
+  assert.match(ownerRemoved.output, new RegExp(`- contraction: ${subject}\\n`));
 });
 
 test('a candidate guard registry names only authority paths as rule files', () => {

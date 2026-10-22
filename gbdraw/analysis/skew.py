@@ -72,6 +72,16 @@ def _window_counts(
     return counts
 
 
+def counted_sequence(seq: object) -> str:
+    """The bases as every GC and skew count reads them.
+
+    Case is ignored, so soft-masked FASTA bases count, and U is counted as T
+    (D-26).
+    """
+
+    return str(seq).upper().replace("U", "T")
+
+
 def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, str]:
     """Return the display pair, the two counted bases, and the counted sequence.
 
@@ -81,7 +91,7 @@ def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, str
 
     pair = validate_dinucleotide(nt)
     counted = pair.replace("U", "T")
-    return pair, counted[0], counted[1], str(record.seq).upper().replace("U", "T")
+    return pair, counted[0], counted[1], counted_sequence(record.seq)
 
 
 def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
@@ -132,6 +142,12 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     return df
 
 
-__all__ = ["calculate_dinucleotide_skew", "counted_dinucleotide", "skew_df", "sliding_window"]
+__all__ = [
+    "calculate_dinucleotide_skew",
+    "counted_dinucleotide",
+    "counted_sequence",
+    "skew_df",
+    "sliding_window",
+]
 
 

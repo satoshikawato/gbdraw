@@ -69,7 +69,7 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 47
+CURRENT_SESSION_VERSION = 48
 CURRENT_RENDER_REQUEST_SCHEMA = 9
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
@@ -286,7 +286,7 @@ def _search_and_open_feature(
     search = page.get_by_role("searchbox", name="Search features", exact=True)
     search.fill(query)
     field_control = page.get_by_role(
-        "combobox", name="Search field", exact=True
+        "combobox", name="Field to search", exact=True
     )
     field_control.select_option(field)
     expect(field_control).to_have_value(field)
@@ -414,12 +414,12 @@ def _edit_selected_features(page: Page, feature_ids: tuple[str, ...]) -> None:
     fill.fill(EDIT_FILL)
     expect(fill).to_have_value(EDIT_FILL)
     caption = page.get_by_role(
-        "textbox", name="Selected feature legend caption", exact=True
+        "textbox", name="Selected feature legend name", exact=True
     )
     caption.fill(EDIT_LEGEND)
     page.get_by_role(
         "button",
-        name="Apply color and caption to selected features",
+        name="Apply color and legend name to selected features",
         exact=True,
     ).click()
     expect(result_region.locator("#legend")).to_contain_text(
@@ -1145,15 +1145,15 @@ def _save_current_session(
     *,
     title: str = SESSION_TITLE,
 ) -> Path:
-    page.once("dialog", lambda dialog: dialog.accept(title))
     with page.expect_download(timeout=ACTION_TIMEOUT_MS) as download_info:
-        with page.expect_event("dialog", timeout=ACTION_TIMEOUT_MS) as dialog_info:
-            page.get_by_role(
-                "button", name="Save Session", exact=True
-            ).click()
-        dialog = dialog_info.value
-        if dialog.type != "prompt" or dialog.message != "Session title":
-            raise AssertionError(f"Unexpected session-save dialog: {dialog.message}")
+        page.get_by_role("button", name="Save Session", exact=True).click()
+        # Save without a title asks for one in the app's dialog.
+        title_dialog = page.get_by_role("dialog", name="Save Session", exact=True)
+        field = title_dialog.get_by_role("textbox", name="Session title", exact=True)
+        expect(field).to_be_focused(timeout=ACTION_TIMEOUT_MS)
+        field.fill(title)
+        field.press("Enter")
+        expect(title_dialog).to_have_count(0)
     download = download_info.value
     if download.failure() is not None:
         raise AssertionError(f"Session download failed: {download.failure()}")

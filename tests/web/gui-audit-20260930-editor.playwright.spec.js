@@ -17,13 +17,15 @@ const {
 } = require('./helpers/audit-browser.cjs');
 const fs = require('node:fs/promises');
 const { download, generate, load } = require('./helpers/mode-transition.cjs');
+const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
 
 test.describe.configure({ retries: 0 });
 
 // A feature a live edit hides keeps its glyph with display none until the
-// rerender that the edit asks for (a rule that changes the Legend) leaves it
-// out of the drawing, as Generate does.
-const notDrawn = (value) => value === null || /\|hidden$/.test(value);
+// rerender that the edit asks for (a rule that changes the Legend, or an edit
+// made while a rerender runs) leaves it out of the drawing and of the Result's
+// feature catalog (no presentation), as Generate does.
+const notDrawn = (value) => value == null || /\|hidden$/.test(value);
 
 test('batch drawer lists and edits the features of the displayed Result', async ({ page }) => {
   test.setTimeout(300_000);
@@ -102,7 +104,8 @@ test('batch edits shown on another Result reach its export, its Session, and Und
   await selectResult(page, 1);
   const shown = await featurePresentation(page, ['TESTB_0001', 'TESTB_0004']);
   expect(shown.TESTB_0001.results[1]).toBe('#ff0000|shown');
-  expect(shown.TESTB_0004.results[1]).toMatch(/\|hidden$/);
+  expect(notDrawn(shown.TESTB_0004.mounted)).toBe(true);
+  expect(notDrawn(shown.TESTB_0004.results[1])).toBe(true);
   expect(await legendCaptions(page, { source: 'result' })).not.toContain('GC content');
 
   const [exportDownload] = await Promise.all([
@@ -123,7 +126,7 @@ test('batch edits shown on another Result reach its export, its Session, and Und
       timeout: 60_000
     }).toBe('#ff0000|shown');
     await settle(fresh);
-    expect((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted).toMatch(/\|hidden$/);
+    expect(notDrawn((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted)).toBe(true);
     expect(await legendCaptions(fresh)).not.toContain('GC content');
   } finally {
     await fresh.context().close();
@@ -312,36 +315,60 @@ test('changing the Linear legend position after a legend-free Generate raises no
   }
 });
 
-// D-30 (PD-OI-084): the in-place Linear side move could not match the
-// renderer (PV-10 measurement in docs/internal/web-gui-audit-20260930), so a
-// Linear legend side applies on Generate and the Result is unchanged until then.
-test('a Linear legend side change leaves the Result unchanged until Generate applies it', async ({ browser }) => {
+// PD-OI-084 A (D-30, PARITY-OR-APPLY-ON-GENERATE): a Linear legend side move
+// either applies on Generate, with the note beside the control, and leaves the
+// Result unchanged until then, or shows at once as Generate draws it. The note
+// (OIC-024) tells which applies.
+test('a Linear legend side change applies on Generate with the note, or at once as Generate draws it', async ({ browser }) => {
   test.setTimeout(600_000);
   const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
   try {
     await generate(page);
+    // The side, the canvas and where each legend row is drawn, in SVG units.
     const read = () => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
       const mounted = app.svgContainer.querySelector('svg');
+      const toRoot = mounted.getScreenCTM().inverse();
       return {
         result: app.results[app.selectedResultIndex].content,
         mountedSide: JSON.parse(mounted.getAttribute('data-gbdraw-composition')).legendSide,
-        viewBox: mounted.getAttribute('viewBox')
+        viewBox: mounted.getAttribute('viewBox'),
+        legendRows: [...mounted.querySelectorAll('g[data-legend-key]')].map((row) => {
+          const box = row.getBBox();
+          const { a, b, c, d, e, f } = toRoot.multiply(row.getScreenCTM());
+          return [row.getAttribute('data-legend-key'),
+            (a * box.x + c * box.y + e).toFixed(1), (b * box.x + d * box.y + f).toFixed(1)];
+        })
       };
     });
+    const placement = ({ mountedSide, viewBox, legendRows }) => ({ mountedSide, viewBox, legendRows });
     const before = await read();
-    const position = page.getByLabel('Legend position', { exact: true });
+    expect(before.legendRows.length).toBeGreaterThan(0);
+    const position = page.locator('#legend-position');
     for (const details of await position.locator('xpath=ancestor::details').all()) {
       if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
     }
-    await expect(page.locator('[data-applies-on-generate="legend"]')).toBeVisible();
-    await position.selectOption('top');
-    await settle(page);
-    expect(await read()).toEqual(before);
-    await generate(page);
+    const note = page.locator('[data-setting="legend"] [data-applies-on-generate="legend"]');
+    const noted = await note.count() > 0;
+    let settled;
+    if (noted) {
+      await expect(note).toBeVisible();
+      await position.selectOption('top');
+      await settle(page);
+      settled = await read();
+      expect(settled).toEqual(before);
+      await generate(page);
+    } else {
+      await position.selectOption('top');
+      await expect.poll(async () => (await read()).mountedSide).toBe('top');
+      await settle(page);
+      settled = await read();
+      await expectLiveEqualsGenerate(page, { label: 'a Linear legend side change' });
+    }
     const after = await read();
     expect(after.mountedSide).toBe('top');
     expect(after.viewBox).not.toBe(before.viewBox);
+    if (!noted) expect(placement(settled)).toEqual(placement(after));
   } finally {
     await page.context().close();
   }

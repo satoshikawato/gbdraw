@@ -52,11 +52,10 @@ files selected.
 ### Step 1: Load the five Linear records
 
 Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
-the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
-Genomes** header four times and upload the remaining files in the table order.
+the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** below the File list four times and upload the remaining files in the table order.
 Keep each record whole: leave all optional Region fields blank.
 
-In the fifth row, open **Record options** and turn on
+In **File 5**, open **Record options** and turn on
 **Reverse complement** only for `BGC0000713`. This changes only its display
 orientation; it does not crop, split, or alter the source record.
 
@@ -88,19 +87,19 @@ to **Curve**, then enter the filter values and the deterministic
 | Settings / Result filters | Min length | `0` |
 | Settings / Performance | Execution | Serial |
 | Settings / Performance | Total threads | `1` |
-| Settings / Performance | Parallel runs | `1 run` |
+| Settings / Performance | Parallel runs | `1 parallel run` |
 | Settings / Performance | Threads per run | `1` |
 | Layout | Separate Strands | Off |
 | Basic | Output Prefix | `bgc_losatp_groups` |
 
-Match the Interactive SVG Gallery presentation with these display settings:
+Apply these display settings. They follow the Interactive SVG Gallery entry but omit its stroke and accession/length colors:
 
 | Control | Value |
 |---|---|
-| Palette | Orange |
+| Palette | `orange` |
 | Default colors file | `BGC0000708-BGC0000713_default_colors.tsv` |
 | Specific rules file | `BGC0000708-BGC0000713_specific_colors.tsv` |
-| Show Labels | First record |
+| Show Labels | First Record Only |
 | Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
 | Label Font Size | `18` |
 | Label Placement / Rotation | Above feature / `45` |
@@ -146,8 +145,8 @@ rerunning LOSATP and shifts each record so its `og_1` member shares one
 x-coordinate. If ambiguity opens **Review alignment**, select the
 **Recommended** candidate in each card under **Choose a gene**, leave **Keep as
 is** selected and choose **Apply**. Inspect and accept a refreshed
-preview with another Apply if requested. This is the alignment used by the
-Interactive SVG Gallery.
+preview with another Apply if requested. The Interactive SVG Gallery entry aligns on `og_6` (neoU) instead; both
+are valid anchors.
 
 ![Five whole BGC records aligned to similarity group og_1](../images/t-gui-04/05-comparison-result.png)
 

@@ -26,6 +26,13 @@ def chloroplast_session():
     return json.loads(SESSION.read_text())
 
 
+def _build(document, tmp_path):
+    # The published Session is the CLI command's one-record batch.
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        (item,) = plan_request(session_to_request(materialized)).item_plans()
+        return item.build()
+
+
 @pytest.mark.parametrize("separate", [False, True])
 @pytest.mark.parametrize("scope", ["both", "outer"])
 @pytest.mark.parametrize("reverse_placement", [False, True])
@@ -34,8 +41,8 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
 ):
     document = copy.deepcopy(chloroplast_session)
     options = document["renderRequest"]["diagramOptions"]
-    options["config"]["canvas"]["strandedness"] = separate
-    options["config"]["labels"]["circular"]["scope"] = scope
+    options["configOverrides"]["canvas.strandedness"] = separate
+    options["configOverrides"]["labels.circular.scope"] = scope
     selected = {}
     for feature in document["editorState"]["featureCatalog"]["items"][0]["biologicalFeatures"]:
         if feature["type"] != "CDS" or feature["qualifiers"].get("gene", [""])[0] not in {
@@ -61,8 +68,7 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
         return labels
 
     monkeypatch.setattr(assemble, "prepare_label_list", capture)
-    with materialize_session(document, output_directory=tmp_path) as materialized:
-        drawing = plan_request(session_to_request(materialized)).build()
+    drawing = _build(document, tmp_path)
     result = drawing._gbdraw_circular_assembly_result
     features, radial, labels = measured[-1]
     step = radial.features.width_px + radial.axis.radius_px * 0.01
@@ -109,23 +115,26 @@ def _render_layouts(document, monkeypatch, tmp_path):
         return layout
 
     monkeypatch.setattr(assemble, "resolve_circular_radial_layout", capture)
-    with materialize_session(document, output_directory=tmp_path) as materialized:
-        plan_request(session_to_request(materialized)).build()
+    _build(document, tmp_path)
     return layouts
 
 
 def _bands(layout):
-    return {
-        slot.id: (slot.anchor_radius_px, slot.packing_band_px.inner_px, slot.packing_band_px.outer_px)
-        for slot in layout.slots
-    }
+    # An overlay span has no packing band; its drawn band is what it covers.
+    bands = {}
+    for slot in layout.slots:
+        band = slot.packing_band_px or slot.draw_band_px
+        bands[slot.id] = (slot.anchor_radius_px, band.inner_px, band.outer_px)
+    return bands
 
 
 def test_published_chloroplast_stack_keeps_its_bands(chloroplast_session, monkeypatch, tmp_path):
     # The bands that dev 98d4bc13 resolves for the published Session (after the label reflow).
+    # The region tint spans from the GC track's inner edge to the feature row's outer edge.
     layout = _render_layouts(chloroplast_session, monkeypatch, tmp_path)[-1]
     expected = {
         "features": (406.7216, 386.1630, 427.2802),
+        "plastome_tint": (314.7057, 202.1311, 427.2802),
         "plastome_regions": (253.5, 243.5, 263.5),
         "gc_content": (218.4, 202.1311, 234.6689),
     }

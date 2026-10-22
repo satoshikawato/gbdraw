@@ -90,12 +90,18 @@ class LinearComparison:
     when the planner produced ``matches`` from a LOSAT search or the Session
     decoder read them from a ``nucleotideBlast`` resource; the Session persists
     it as a ``nucleotideBlast`` resource, as the Web does.
+
+    ``drawn_feature_ids`` marks a table of a Session up to 40 without
+    ``*_view_feature_svg_id`` columns: main's writers before ``3bca0e8d9``
+    stored the drawn-frame feature ID there in ``*_feature_svg_id``, which is
+    read as the view ID (OV-1183).
     """
 
     query_record_index: int
     subject_record_index: int
     matches: DataFrame
     search_frame_text: str | None = field(default=None, repr=False, compare=False)
+    drawn_feature_ids: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("query_record_index", "subject_record_index"):
@@ -166,7 +172,8 @@ def validate_linear_comparison_topology(
             raise ValidationError(
                 "Linear comparison endpoint is outside the loaded records: "
                 f"query=#{query_index + 1}, subject=#{subject_index + 1}, "
-                f"record_count={record_count}."
+                f"record_count={record_count}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
             )
         query_row = int(rows_by_record[query_index])
         subject_row = int(rows_by_record[subject_index])
@@ -174,13 +181,15 @@ def validate_linear_comparison_topology(
             raise ValidationError(
                 "Linear comparison endpoints must be in different rows: "
                 f"query=#{query_index + 1} row={query_row + 1}, "
-                f"subject=#{subject_index + 1} row={subject_row + 1}."
+                f"subject=#{subject_index + 1} row={subject_row + 1}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
             )
         if abs(query_row - subject_row) != 1:
             raise ValidationError(
                 "Linear comparison endpoints must be in adjacent rows: "
                 f"query=#{query_index + 1} row={query_row + 1}, "
-                f"subject=#{subject_index + 1} row={subject_row + 1}."
+                f"subject=#{subject_index + 1} row={subject_row + 1}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
             )
 
 
@@ -313,6 +322,25 @@ def reverse_unbound_endpoint_rows(
             for column in columns:
                 updated.loc[frame.index, column] = int(length) + 1 - pd.to_numeric(frame[column]).astype(int)
     return replace(comparison, matches=updated)
+
+
+def reverse_unbound_endpoint_span(
+    start: int,
+    end: int,
+    strand: int | None,
+    endpoint: tuple[int, bool],
+) -> tuple[int, int, int | None]:
+    """Map one 1-based span of a reversed endpoint ``(L, True)`` as its rows map.
+
+    x -> L + 1 - x and the strand negates; the map is its own inverse. A typed
+    item without feature tags (a Session 39 collinearity anchor) is decided by
+    its record this way, as :func:`reverse_unbound_endpoint_rows` decides rows.
+    """
+
+    length, reverse = endpoint
+    if not reverse:
+        return start, end, strand
+    return int(length) + 1 - int(start), int(length) + 1 - int(end), -strand if strand in (-1, 1) else strand
 
 
 def reverse_endpoint_table_text(
@@ -465,6 +493,7 @@ __all__ = [
     "ProteinComparisonFrames",
     "merge_linear_comparisons",
     "project_search_frame_comparisons",
+    "reverse_unbound_endpoint_span",
     "validate_linear_comparison_record_ids",
     "validate_linear_comparison_topology",
 ]

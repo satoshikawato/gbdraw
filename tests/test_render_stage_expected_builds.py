@@ -96,8 +96,10 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
             "scale_font_size", "scale_style", "show_replicon", "align_center (rows)", "axis_stroke_width",
             "multi_record_column_gap_ratio", "multi_record_row_gap_ratio",
             # The legend wraps at the content width, which a tick label or a
-            # line stroke changes.
-            "gc_content_tick_font_size", "line_stroke_width",
+            # line stroke changes. The definition column keeps its gap from the
+            # GC% tick labels, so an option that changes them moves that width.
+            "gc_content_tick_font_size", "line_stroke_width", "gc_content_mode", "gc_content_max_percent",
+            "show_gc_content_axis", "show_gc_content_ticks",
         ),
         _LEGEND_LAYOUT,
     ),
@@ -112,10 +114,13 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("feature_override_table", "feature_placement_table"), _FEATURE_EDIT),
     "feature_visibility_table": _FEATURE_EDIT | {"visibility_rules"},
     "annotation_table": _LEGEND | {"catalog_normalization", "interactive_context"},
-    **dict.fromkeys(("depth_window", "depth_step", "depth_min", "depth_max", "depth_log_scale"), _DEPTH_FRAME),
+    **dict.fromkeys(("depth_min", "depth_log_scale"), _DEPTH_FRAME),
+    # The definition column keeps its gap from the depth tick labels, so these move the content width.
+    **dict.fromkeys(("depth_window", "depth_step", "depth_max"), _DEPTH_FRAME | _LEGEND_LAYOUT),
+    "show_depth_axis": _DEPTH_DATA | _LEGEND_LAYOUT,
     **dict.fromkeys(
         (
-            "depth_track_large_tick_interval", "depth_track_small_tick_interval", "show_depth_axis",
+            "depth_track_large_tick_interval", "depth_track_small_tick_interval",
             "show_depth_ticks", "depth_large_tick_interval", "depth_small_tick_interval", "share_depth_axis",
         ),
         _DEPTH_DATA,
@@ -237,12 +242,9 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
         ),
         frozenset({"definition_content"}),
     ),
-    # The Circular definition reads the definition section, which holds the
-    # plot title font size (the shared-common profile draws the title in it).
-    "plot_title_font_size": frozenset({"circular_definition_content"}),
-    # Linear: the definition; Circular: the definition and the plot title, a
-    # shared-common definition that reads the definition section (section
-    # granularity; it draws in its own font size).
+    # Linear: the definition; Circular: the record definition and the plot
+    # title, which draws with the definition line interval that follows the
+    # definition font size.
     "definition_font_size": frozenset(
         {"definition_content", "circular_definition_content", "circular_plot_title_content"}
     ),
@@ -424,3 +426,19 @@ def test_a_gc_toggle_rebuilds_neither_the_circular_definition_nor_the_title(tabl
     outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
     assert outcome.error is None
     assert not {"circular_definition_content", "circular_plot_title_content"} & set(outcome.stages.builds)
+
+
+def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definition(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-1115: only the shared-common plot title draws in the plot title font size."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["plot_title_font_size"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "circular_plot_title_content" in outcome.stages.builds
+    assert "circular_definition_content" not in outcome.stages.builds

@@ -47,11 +47,13 @@ const copyModule = async (source, destination) => {
 };
 
 await copyModule('utils/error-normalization.js', 'utils/error-normalization.js');
+await copyModule('utils/i18n.js', 'utils/i18n.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
 await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
+await copyModule('services/drawn-groups.js', 'services/drawn-groups.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
 await copyModule('services/json-clone.js', 'services/json-clone.js');
@@ -117,6 +119,12 @@ await writeFile(
 await writeFile(
   join(tempDir, 'app', 'preview-item-popup.js'),
   'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";\nexport const previewItemTarget = () => null;\n',
+  'utf8'
+);
+// No drawn element in these fixtures opens a settings section.
+await writeFile(
+  join(tempDir, 'services', 'settings-sections.js'),
+  'export const DRAWN_ELEMENT_SELECTOR = "g[data-gbdraw-slot-renderer]";\nexport const drawnElementSection = () => null;\n',
   'utf8'
 );
 
@@ -601,7 +609,7 @@ const state = {
   skipCaptureBaseConfig: ref(false),
   richFeaturePopup: ref(false)
 };
-const { createFeatureSvgActions } = await import(
+const { createFeatureSvgActions, HOVER_HIGHLIGHT_DWELL_MS } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js'))
 );
 const featureActions = createFeatureSvgActions({
@@ -648,6 +656,9 @@ assert.equal(featureOne.style.cursor, '');
 completeCase('pairwise keyboard affordance remains separate from Feature cursor ownership');
 
 svg.dispatch('mouseover', eventAtFeature);
+// The highlight is written once the pointer has rested (OV-900).
+assert.equal(featureOne.style.opacity, '');
+runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
 assert.equal(metrics.filter((metric) => metric.name === 'featureDomFullScanCount').length, 1);
 assert.equal(featureOne.style.opacity, '0.7');
 assert.equal(featureTwo.style.opacity, '0.7');
@@ -699,6 +710,7 @@ runTimersAtDelay(220);
 featureInteractionWrapper.dispatch('transitionend', { propertyName: 'transform' });
 assert.equal(featurePanZoom.previewTransformInteraction.isActive(), false);
 flushFrames();
+runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
 assert.equal(featureOne.style.opacity, '0.7');
 assert.equal(metrics.filter((metric) => metric.name === 'previewTransformHoverReconcileCount').length, 1);
 assert.equal(metrics.filter((metric) => metric.name === 'featureDomFullScanCount').length, 1);
@@ -777,7 +789,7 @@ const svgActionsSource = await readFile(
   'utf8'
 );
 const trackedClearSource = svgActionsSource.match(
-  /const clearTrackedHoverStyles = \(\) => \{[\s\S]*?const clearActiveMatchHover = \(\) => \{[\s\S]*?\n\s*\};/
+  /const clearTrackedHoverStyles = \(\) => \{[\s\S]*?const clearHover = \(\) => \{[\s\S]*?\n\s*\};/
 )?.[0] || '';
 assert.match(trackedClearSource, /activeHoverElements/);
 assert.doesNotMatch(
@@ -796,7 +808,10 @@ assert.match(
 );
 completeCase('preview replacement cancels the canonical lifecycle before rebinding');
 
-assert.match(indexHtml, /transition:\s*isPanning\s*\?\s*'none'\s*:\s*'transform 0\.2s'/);
+// OV-912: the surface's `v-preview-transform` (components.js) writes the transition.
+const componentsSource = await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'components.js'), 'utf8');
+assert.match(indexHtml, /ref="svgContainer"[^>]*\sv-preview-transform[\s>]/);
+assert.match(componentsSource, /transition\s*=\s*panning\s*\?\s*'none'\s*:\s*'transform 0\.2s'/);
 assert.match(indexHtml, /@pointercancel="endPan"/);
 assert.match(indexHtml, /@lostpointercapture="endPan"/);
 completeCase('template preserves transition and routes interrupted pan cleanup');

@@ -92,8 +92,12 @@ lists the format choices and what to archive.
 
 ### Why do my CLI and browser renders differ slightly?
 
-Small differences in label placement and legend sizing are expected. The CLI
-uses kerning-aware font metrics, while the web app uses browser text metrics.
+The web app draws with the same Python engine as the CLI, so a difference has
+an input cause: a font that exists on one machine but not the other (custom or
+installed fonts; see [Fonts](./REFERENCE/output-formats-and-export.md#fonts)),
+different gbdraw versions, or settings that differ because the web app starts
+from its own defaults (for example legend side and **Arrange in rows**; see
+[Browser defaults](./REFERENCE/web-app.md#browser-defaults)).
 
 ### Can I use my own font, and will others see it?
 
@@ -184,8 +188,8 @@ lists the cases that give an empty result.
 ### How do I draw several Linear records without comparing them in the web app?
 
 Fresh Linear pages and **Reset Settings** start with **No comparison**. If a
-comparison is active, select **No comparison** in the **Comparison** command
-group. The three buttons there apply one choice to every adjacent pair, and the
+comparison is active, select **No comparison** among the three buttons at the top of **Comparison**.
+They apply one choice to every adjacent pair, and the
 button that matches the effective plan is pressed. Open **Selected pairs
 (N)** to inspect or edit a custom pair plan. Choosing **No comparison** keeps
 the pair files and raw-result names you already loaded, inactive, so you can
@@ -255,7 +259,11 @@ describes content and skew for reversed pairs.
 ### Why does SVG export work but PNG/PDF/EPS/PS export fail?
 
 Command-line and Python conversion to those formats requires CairoSVG and its
-runtime libraries. See [output names, dependencies, and
+runtime libraries. In a conda environment, PDF, EPS, or PS export can also abort
+with `free(): invalid pointer` when pandas loads conda-forge `pyarrow` (its `orc`
+2.1.2 ships its own zlib). Remove `pyarrow` from that environment
+or export SVG; a pip install is not affected. In Python, `import cairocffi` before
+`import pandas` or `import gbdraw` also avoids the abort. See [output names, dependencies, and
 overwrite](./REFERENCE/output-formats-and-export.md#names-dependencies-and-overwrite).
 
 ### Are there known visualization or conversion limitations?

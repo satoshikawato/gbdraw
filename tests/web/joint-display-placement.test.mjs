@@ -36,6 +36,15 @@ const stateFor = (mode) => {
 };
 const text = 'LOCUS       same 100 bp DNA circular\n//\nLOCUS       same 100 bp DNA circular\n//\n';
 const file = { name: 'same.gb', size: text.length, type: 'text/plain', lastModified: 0, data: btoa(text) };
+// The request of a fresh drawing after `edit` changed its draft.
+const requestAfter = (mode, edit) => {
+  const state = stateFor(mode);
+  edit(state);
+  const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
+  return buildCanonicalRenderRequest({ state, drawing: state, filesData, comparisonPlanSnapshot: mode === 'linear'
+    ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' })
+    : null }).renderRequest;
+};
 
 test('schema 7 canonical placement uses code-point ordering and rejects transient or invalid wire intent', () => {
   const rows = [target('z'), target('A'), target('a'), target('\u{10000}'), target('\ue000')];
@@ -60,7 +69,9 @@ test('inactive rotation retains raw intent but cannot emit an invalid effective 
   assert.equal(requestedRecordDisplay(row, draft(row, 1)).startCoordinate, 1);
   assert.equal(requestedRecordDisplay(row, draft(row, null)).startCoordinate, null);
   assert.throws(() => requestedRecordDisplay(row, draft(row, 101)), /between 1 and 100/);
-  assert.throws(() => validateRecordDisplayDrafts([saved, saved]), /Duplicate/);
+  // A duplicate draft is one fault of the reader Load repairs with (E-OD02); Save refuses it with the typed
+  // Session-fields error, which replaced an unclassified plain Error (R6; R2-m8).
+  assert.throws(() => validateRecordDisplayDrafts([saved, saved]), /INPUT_INVALID\/FIELDS/);
 });
 
 for (const mode of ['circular', 'linear']) {
@@ -313,4 +324,29 @@ test('historical session 40 schema 6 promotes without Generate and preserves car
   assert.ok(current.records.every((record) => record.display.isCircular === null && record.display.startCoordinate === null));
   assert.deepEqual(current.diagramOptions.featurePlacements, []);
   assert.deepEqual(session.renderRequest, before);
+});
+
+// OV-826 (BA-OD112, R7): a cleared Feature overlap tolerance (the number input
+// stores '') is a blank, so the request leaves the key out and Python uses its
+// default, as for null; a number is sent as it is.
+test('a blank Feature overlap tolerance leaves the request override out', () => {
+  for (const mode of ['circular', 'linear']) {
+    const overridesFor = (value) => requestAfter(mode, (state) => { state.adv.feature_overlap_tolerance_bp = value; })
+      .diagramOptions.configOverrides;
+    for (const blank of ['', null]) {
+      assert.equal(Object.hasOwn(overridesFor(blank), 'canvas.feature_overlap_tolerance_bp'), false, `${mode} ${JSON.stringify(blank)}`);
+    }
+    assert.equal(overridesFor(5)['canvas.feature_overlap_tolerance_bp'], 5, mode);
+  }
+});
+
+// OV-828 (BA-D30): a cleared Linear record gap (the number input stores '')
+// or a null one is its default, 24 px, as R7 reads a blank; any other value
+// is projected as before (a negative or a non-number as 0, true as 1).
+test('a blank Linear record gap projects its default, 24 px, and other values as before (OV-828)', () => {
+  const gapOf = (value) => requestAfter('linear', (state) => {
+    state.linearRecordLayoutEnabled.value = true;
+    state.linearRecordGap.value = value;
+  }).layout.recordGapPx;
+  assert.deepEqual(['', null, 0, 40, -5, 'abc', true].map(gapOf), [24, 24, 0, 40, 0, 0, 1]);
 });

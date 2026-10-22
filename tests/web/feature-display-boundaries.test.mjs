@@ -1,28 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-display-boundaries-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await writeFile(
-  join(tempDir, 'feature-utils.js'),
-  await readFile('gbdraw/web/js/services/feature-utils.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'feature-sequence-fasta.js'),
-  await readFile('gbdraw/web/js/services/feature-sequence-fasta.js', 'utf8'),
-  'utf8'
-);
+await mkdir(join(tempDir, 'services'));
+await mkdir(join(tempDir, 'utils'));
+for (const path of [
+  'services/feature-utils.js',
+  'services/feature-sequence-fasta.js',
+  'utils/optional-positive-number.js',
+  'utils/error-normalization.js'
+]) {
+  await writeFile(join(tempDir, path), await readFile(`gbdraw/web/js/${path}`, 'utf8'), 'utf8');
+}
 
 const { buildFeatureSequenceFastas } = await import(
-  pathToFileURL(join(tempDir, 'feature-sequence-fasta.js'))
+  pathToFileURL(join(tempDir, 'services', 'feature-sequence-fasta.js'))
 );
 const { getFeatureCaption } = await import(
-  pathToFileURL(join(tempDir, 'feature-utils.js'))
+  pathToFileURL(join(tempDir, 'services', 'feature-utils.js'))
 );
 
 const runtimeHandle = `h_${'a'.repeat(26)}`;
@@ -67,6 +67,24 @@ test('FASTA uses NCBI-style coordinates, identifiers, and wrapping', () => {
   assert.equal(fallback.nucleotideFasta, '>seq1:c6-1 fallback protein\nATGAAA');
   assert.match(fallback.aminoAcidFasta, /^>LOC_1 fallback protein\n/);
   assert.match(fallback.aminoAcidFasta, /M{60}\nM$/);
+});
+
+// OV-968: a null or blank start or end is missing, not 0: the header names
+// no coordinates for that part (the record ID and `feature`, when nothing else).
+test('FASTA headers read a missing location bound as missing', () => {
+  const header = (feature) => buildFeatureSequenceFastas({
+    record_id: 'rec', strand: '+', nucleotide_sequence: 'ACGT', ...feature
+  }).nucleotideFasta.split('\n')[0];
+  for (const missing of [null, '', '  ']) {
+    assert.equal(header({ location_parts: [{ start: missing, end: 20, strand: '+' }] }), '>rec:feature', JSON.stringify(missing));
+    assert.equal(header({ start: missing, end: 20 }), '>rec:feature', JSON.stringify(missing));
+    assert.equal(
+      header({ location_parts: [{ start: missing, end: 20 }, { start: 30, end: 40 }] }),
+      '>rec:31-40',
+      JSON.stringify(missing)
+    );
+  }
+  assert.equal(header({ location_parts: [{ start: 0, end: 20, strand: '+' }] }), '>rec:1-20');
 });
 
 test('protein FASTA skips internal IDs and uses biological aliases', () => {

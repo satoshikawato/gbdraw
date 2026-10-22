@@ -1,19 +1,21 @@
 // The display of the settings pane (services/settings-pane-state.js): the
-// stacked settings or the icon rail, and the rail entry whose sections are
-// docked beside it. Every transition is here; the display is 'stacked'
-// whenever nothing is docked by the rail, and a docked entry is always one the
-// shown mode has.
+// stacked settings or the icon rail, the rail entry whose sections are docked
+// beside it, and the section in the popup beside the Result. Every transition
+// is here; the display is 'stacked' whenever nothing is docked by the rail, a
+// docked entry is always one the shown mode has, and a section is never in
+// the dock and in the popup.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  SETTINGS_PANE_DISPLAYS, closeDockedSettingsEntry, dockSettingsSection, reconcileSettingsPaneState,
-  showSettingsRail, showSettingsStacked
+  SETTINGS_PANE_DISPLAYS, closeDockedSettingsEntry, dockSettingsSection, floatSettingsSection, moveSettingsPopup,
+  reconcileSettingsPaneState, returnSettingsSection, showSettingsRail, showSettingsStacked
 } from '../../gbdraw/web/js/services/settings-pane-state.js';
 
 const paneState = (display = 'stacked', docked = null) => ({
   settingsPaneDisplay: { value: display },
-  settingsPaneDocked: { value: docked }
+  settingsPaneDocked: { value: docked },
+  settingsPopup: { value: null }
 });
 const read = (state) => [state.settingsPaneDisplay.value, state.settingsPaneDocked.value];
 
@@ -87,4 +89,40 @@ test('a mode change docks the entry of the same title, or Input, in place of an 
   const stacked = paneState('stacked', null);
   reconcileSettingsPaneState(stacked, 'circular');
   assert.deepEqual(read(stacked), ['stacked', null]);
+});
+
+test('the popup holds one section until it returns, its entry is docked, or the mode changes', () => {
+  const at = { x: 500, y: 200, maxHeight: 600 };
+  const state = paneState('rail', 'layout');
+  floatSettingsSection(state, 'dinucleotide', at);
+  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', ...at });
+  floatSettingsSection(state, 'titles', { ...at, x: 40 });
+  assert.deepEqual(state.settingsPopup.value, { section: 'titles', x: 40, y: 200, maxHeight: 600 }, 'one popup: the section is swapped');
+  // Docking another entry, closing the dock, and the stacked display leave it open.
+  dockSettingsSection(state, 'circular', 'labels');
+  closeDockedSettingsEntry(state);
+  assert.equal(state.settingsPopup.value.section, 'titles');
+  dockSettingsSection(state, 'circular', 'titles');
+  assert.deepEqual([...read(state), state.settingsPopup.value], ['rail', 'titles', null], 'the dock shows the section');
+  floatSettingsSection(state, 'circular-axis', at);
+  showSettingsRail(state, 'circular', 'circular-axis');
+  assert.equal(state.settingsPopup.value, null);
+  floatSettingsSection(state, 'dinucleotide', at);
+  showSettingsStacked(state);
+  assert.equal(state.settingsPopup.value.section, 'dinucleotide');
+  reconcileSettingsPaneState(state, 'linear');
+  assert.equal(state.settingsPopup.value, null, 'a mode change closes the popup');
+  floatSettingsSection(state, 'titles', at);
+  returnSettingsSection(state);
+  assert.equal(state.settingsPopup.value, null);
+});
+
+// A drag, the placement by the popup's rendered size, and a window that changed size move the popup.
+test('moving the popup keeps its section, and moves nothing while no section is in it', () => {
+  const state = paneState();
+  moveSettingsPopup(state, { x: 10, y: 20, maxHeight: 0 });
+  assert.equal(state.settingsPopup.value, null);
+  floatSettingsSection(state, 'titles', { x: 500, y: 200, maxHeight: 600 });
+  moveSettingsPopup(state, { x: 10, y: 20, maxHeight: 0 });
+  assert.deepEqual(state.settingsPopup.value, { section: 'titles', x: 10, y: 20, maxHeight: 0 });
 });

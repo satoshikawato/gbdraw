@@ -7,6 +7,7 @@ import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { evaluatePython } from './helpers/python-evaluator.mjs';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-run-info-'));
@@ -110,20 +111,22 @@ const canonical = ({ mode, records, resources, comparisons = [], webFiles = {} }
   resources,
   webFiles
 });
-const assertCliParserAccepts = (recipe) => {
+const assertCliParserAccepts = async (recipe) => {
   const visibleArgs = recipe.args.map((token) => recipe.fileMetadata.get(token)?.name || token);
-  const script = [
-    'import json, sys',
+  const parsed = await evaluatePython([
+    'import contextlib, io',
     'from gbdraw.circular import _get_args as circular_args',
     'from gbdraw.linear import _get_args as linear_args',
-    '(linear_args if sys.argv[1] == "linear" else circular_args)(json.loads(sys.argv[2]))'
-  ].join('; ');
-  const parsed = spawnSync(
-    process.env.PYTHON || 'python',
-    ['-c', script, recipe.mode, JSON.stringify(visibleArgs)],
-    { cwd: repoRoot, encoding: 'utf8' }
-  );
-  assert.equal(parsed.status, 0, parsed.stderr || parsed.stdout);
+    'stderr = io.StringIO()',
+    'try:',
+    '    with contextlib.redirect_stderr(stderr):',
+    '        (linear_args if payload["mode"] == "linear" else circular_args)(payload["args"])',
+    '    status = 0',
+    'except SystemExit as error:',
+    '    status = error.code',
+    'result = {"status": status, "stderr": stderr.getvalue()}'
+  ].join('\n'), { mode: recipe.mode, args: visibleArgs });
+  assert.equal(parsed.status, 0, parsed.stderr);
 };
 
 const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
@@ -172,6 +175,14 @@ const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
   return outputPath;
 };
 
+const sourceFeatureIds = (genbank) => evaluatePython([
+  'import io',
+  'from Bio import SeqIO',
+  'from gbdraw.features.source import build_source_feature_catalog',
+  'record = SeqIO.read(io.StringIO(payload), "genbank")',
+  'result = [entry.biological_feature_id for entry in build_source_feature_catalog(record)]'
+].join('\n'), genbank);
+
 assert.equal(quoteShellArg('simple.tsv'), 'simple.tsv');
 assert.equal(quoteShellArg('two words.tsv'), "'two words.tsv'");
 assert.equal(quoteShellArg("Bob's genome.gbk"), "'Bob'\\''s genome.gbk'");
@@ -195,7 +206,7 @@ for (const { fixture, mode } of [
   assert.ok(sourceRecipe.args.includes('--gbk'), `${fixture}: expected direct GenBank input`);
   assert.ok(sourceRecipe.args.includes('-o'), `${fixture}: expected output prefix`);
   assert.ok(sourceRecipe.args.includes('-f'), `${fixture}: expected output formats`);
-  assertCliParserAccepts(sourceRecipe);
+  await assertCliParserAccepts(sourceRecipe);
   const info = buildRunInfo({ mode: sourceRecipe.mode, sourceRecipe });
   await materializeAndRunRecipe(session, sourceRecipe, info, fixture);
 }
@@ -374,7 +385,7 @@ test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty 
   const emptyRecipe = await buildSourceRecipe(empty);
   assert.equal(emptyRecipe.available, true, emptyRecipe.unavailableReason);
   assert.equal(emptyRecipe.args.includes('-k'), false);
-  assertCliParserAccepts(emptyRecipe);
+  await assertCliParserAccepts(emptyRecipe);
   const emptyInfo = buildRunInfo({ mode: 'circular', sourceRecipe: emptyRecipe });
   await materializeAndRunRecipe(empty, emptyRecipe, emptyInfo, 'empty-selected-features');
 
@@ -391,7 +402,7 @@ test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty 
   const featureOptionIndex = nonEmptyRecipe.args.indexOf('-k');
   assert.notEqual(featureOptionIndex, -1);
   assert.equal(nonEmptyRecipe.args[featureOptionIndex + 1], 'CDS,tRNA');
-  assertCliParserAccepts(nonEmptyRecipe);
+  await assertCliParserAccepts(nonEmptyRecipe);
 });
 
 test('source recipe preserves canonical string track slots', async () => {
@@ -404,7 +415,7 @@ test('source recipe preserves canonical string track slots', async () => {
   assert.notEqual(slotOptionIndex, -1);
   assert.equal(stringRecipe.args[slotOptionIndex + 1], 'ticks:ticks');
   assert.equal(stringRecipe.args.includes('gc_skew:dinucleotide_skew'), false);
-  assertCliParserAccepts(stringRecipe);
+  await assertCliParserAccepts(stringRecipe);
   const stringInfo = buildRunInfo({ mode: 'circular', sourceRecipe: stringRecipe });
   await materializeAndRunRecipe(stringSlot, stringRecipe, stringInfo, 'ticks-string-slot');
 });
@@ -432,13 +443,41 @@ test('source recipe serializes validated object slots without dropping child fie
     objectRecipe.args[optionIndex + 1],
     /^ticks:ticks@tick_label_layout=label_out_tick_in$/
   );
-  assertCliParserAccepts(objectRecipe);
+  await assertCliParserAccepts(objectRecipe);
 
   const unsupportedChild = structuredClone(objectSlot);
   unsupportedChild.renderRequest.diagramOptions.tracks.circularTrackSlots[0].params.nt = 'GC';
   const unsupportedRecipe = await buildSourceRecipe(unsupportedChild);
   assert.equal(unsupportedRecipe.available, false);
   assert.match(unsupportedRecipe.unavailableReason, /params\.nt|losslessly/i);
+});
+
+// The slot editor's Extend to writes to_slot; the recipe carries it as the CLI reads it.
+test('source recipe carries an annotation slot\'s to_slot in both modes', async () => {
+  for (const mode of ['circular', 'linear']) {
+    const session = structuredClone(mode === 'circular' ? circularGallerySession : linearGallerySession);
+    const row = (id, renderer, side, z, params) => (mode === 'circular'
+      ? { kind: 'circularTrackSlot', id, renderer, enabled: true, side, radius: null, width: null, z, params, innerGapPx: null, outerGapPx: null }
+      : { kind: 'linearTrackSlot', id, renderer, enabled: true, side, height: null, spacing: null, z, params });
+    const tracks = session.renderRequest.diagramOptions.tracks;
+    tracks[`${mode}TrackSlots`] = [
+      row('features', 'features', 'overlay', 0, mode === 'circular' ? { lane_direction: 'split' } : {}),
+      row('gc', 'dinucleotide_content', mode === 'circular' ? 'inside' : 'below', 0, { nt: 'GC' }),
+      row('regions', 'annotations', 'overlay', -1,
+        { set_id: 'regions', anchor_slot: 'features', to_slot: 'gc', layer: 'underlay' })
+    ];
+    tracks[`${mode}TrackAxisIndex`] = 0;
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, `${mode}: ${recipe.unavailableReason}`);
+    const tokens = recipe.args.filter((_, index) => recipe.args[index - 1] === `--${mode}_track_slot`);
+    const regions = tokens.find((token) => token.startsWith('regions:'));
+    const parsed = await evaluatePython([
+      `from gbdraw.tracks.${mode} import parse_${mode}_track_slot`,
+      `result = dict(parse_${mode}_track_slot(payload).params)`
+    ].join('\n'), regions);
+    assert.equal(parsed.to_slot, 'gc', `${mode}: ${regions}`);
+    assert.equal(parsed.anchor_slot, 'features');
+  }
 });
 
 test('source recipe distinguishes absent, null, and explicit empty track slots', async () => {
@@ -523,7 +562,7 @@ test('allocated helper names propagate into comparisons.tsv and the executable r
   const info = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
 
   assert.equal(recipe.available, true, recipe.unavailableReason);
-  assertCliParserAccepts(recipe);
+  await assertCliParserAccepts(recipe);
   const generatedFiles = recipe.generatedFiles;
   assert.ok(Array.isArray(generatedFiles));
   const blast = generatedFiles.find(
@@ -589,13 +628,13 @@ test('circular source recipe names comparison genomes with --conservation_sequen
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   assert.ok(sourceRecipe.args.includes('--conservation_sequence'));
   assert.ok(!sourceRecipe.args.includes('--conservation_fasta'));
-  assertCliParserAccepts(sourceRecipe);
+  await assertCliParserAccepts(sourceRecipe);
 });
 
 {
   const sourceRecipe = await buildSourceRecipe(circularCanonical);
   assert.equal(sourceRecipe.available, true);
-  assertCliParserAccepts(sourceRecipe);
+  await assertCliParserAccepts(sourceRecipe);
   const info = buildRunInfo({
     mode: 'circular',
     sourceRecipe,
@@ -665,7 +704,7 @@ test('circular source recipe names comparison genomes with --conservation_sequen
   const sourceRecipe = await buildSourceRecipe(multiRecord);
 
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
-  assertCliParserAccepts(sourceRecipe);
+  await assertCliParserAccepts(sourceRecipe);
   assert.ok(sourceRecipe.args.includes('--records_table'));
   assert.ok(sourceRecipe.args.includes('--multi_record_canvas'));
   assert.equal(sourceRecipe.args.includes('--multi_record_position'), false);
@@ -732,7 +771,7 @@ const linearCanonical = canonical({
   };
   const directPositions = await buildSourceRecipe(positioned);
   assert.equal(directPositions.available, true, directPositions.unavailableReason);
-  assertCliParserAccepts(directPositions);
+  await assertCliParserAccepts(directPositions);
   assert.deepEqual(directPositions.args.filter((arg) => /^#[12]@/.test(arg)), ['#1@1', '#2@2']);
   positioned.renderRequest.records[0].presentation.gridColumn = 1;
   const tablePositions = await buildSourceRecipe(positioned);
@@ -755,7 +794,7 @@ const linearCanonical = canonical({
 {
   const direct = await buildSourceRecipe(linearCanonical);
   assert.equal(direct.available, true);
-  assertCliParserAccepts(direct);
+  await assertCliParserAccepts(direct);
   const info = buildRunInfo({
     mode: 'linear',
     sourceRecipe: direct,
@@ -1103,18 +1142,15 @@ test('slot legend labels with a comma or an inline comment marker stay lossless 
       : { label, unavailable: true });
   }
   const tokens = outcomes.filter(({ token }) => token).map(({ token }) => token);
-  const parsed = spawnSync(process.env.PYTHON || 'python', ['-c', [
-    'import json, sys',
+  const labels = await evaluatePython([
     'from gbdraw.tracks.circular import parse_circular_track_slot',
     'def label(token):',
     '    try:',
     '        return parse_circular_track_slot(token).params.get("legend_label")',
     '    except ValueError as error:',
     '        return f"rejected: {error}"',
-    'print(json.dumps([label(token) for token in json.loads(sys.argv[1])]))'
-  ].join('\n'), JSON.stringify(tokens)], { cwd: repoRoot, encoding: 'utf8' });
-  assert.equal(parsed.status, 0, parsed.stderr);
-  const labels = JSON.parse(parsed.stdout);
+    'result = [label(token) for token in payload]'
+  ].join('\n'), tokens);
   outcomes.filter(({ token }) => token).forEach((outcome, index) => { outcome.parsed = labels[index]; });
   for (const outcome of outcomes) {
     assert.ok(outcome.unavailable || outcome.parsed === outcome.label, JSON.stringify(outcome));
@@ -1219,15 +1255,7 @@ test('placement recipe names one of two identical features and the CLI replays i
     '//',
     ''
   ].join('\n');
-  const catalog = spawnSync(process.env.PYTHON || 'python', ['-c', [
-    'import io, json, sys',
-    'from Bio import SeqIO',
-    'from gbdraw.features.source import build_source_feature_catalog',
-    'record = SeqIO.read(io.StringIO(sys.argv[1]), "genbank")',
-    'print(json.dumps([entry.biological_feature_id for entry in build_source_feature_catalog(record)]))'
-  ].join('\n'), genbank], { cwd: repoRoot, encoding: 'utf8' });
-  assert.equal(catalog.status, 0, catalog.stderr);
-  const [first, second] = JSON.parse(catalog.stdout);
+  const [first, second] = await sourceFeatureIds(genbank);
   assert.equal(first.replace(/~0$/, '~1'), second);
   const session = canonical({
     mode: 'circular',
@@ -1275,17 +1303,6 @@ const IDENTITY_GENBANK = [
   '//',
   ''
 ].join('\n');
-const identityIds = () => {
-  const catalog = spawnSync(process.env.PYTHON || 'python', ['-c', [
-    'import io, json, sys',
-    'from Bio import SeqIO',
-    'from gbdraw.features.source import build_source_feature_catalog',
-    'record = SeqIO.read(io.StringIO(sys.argv[1]), "genbank")',
-    'print(json.dumps([entry.biological_feature_id for entry in build_source_feature_catalog(record)]))'
-  ].join('\n'), IDENTITY_GENBANK], { cwd: repoRoot, encoding: 'utf8' });
-  assert.equal(catalog.status, 0, catalog.stderr);
-  return JSON.parse(catalog.stdout);
-};
 const identityEditSession = (mode, featureOverrides) => {
   const session = canonical({
     mode,
@@ -1312,7 +1329,7 @@ const edit = (biologicalFeatureId, values) => ({
 });
 
 test('feature edit recipe writes --feature_override_table and the CLI draws the Web Result', async () => {
-  const [first, second, third] = identityIds();
+  const [first, second, third] = await sourceFeatureIds(IDENTITY_GENBANK);
   assert.equal(first.replace(/~0$/, '~1'), second);
   for (const mode of ['linear', 'circular']) {
     const session = identityEditSession(mode, [
@@ -1373,7 +1390,7 @@ test('feature edit recipe writes --feature_override_table and the CLI draws the 
 });
 
 test('feature edit rows that the table cannot read back make the Source recipe unavailable', async () => {
-  const [first] = identityIds();
+  const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
   for (const row of [
     edit(first, { labelText: 'tab\tinside' }),
     edit(first, { featureVisibility: 'hidden' }),
@@ -1387,7 +1404,7 @@ test('feature edit rows that the table cannot read back make the Source recipe u
 });
 
 test('a feature edit or placement whose feature the source lacks makes the Source recipe unavailable', async () => {
-  const [first, second] = identityIds();
+  const [first, second] = await sourceFeatureIds(IDENTITY_GENBANK);
   const session = identityEditSession('linear', [edit(first, { featureVisibility: 'off' })]);
   session.renderRequest.diagramOptions.featurePlacements = [
     { recordKey: 'dup', biologicalFeatureId: second, placement: { kind: 'main' } }

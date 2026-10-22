@@ -30,7 +30,7 @@ for (const [name, gene, action] of cases) {
       });
       page = await context.newPage();
       page.on('pageerror', (error) => errors.push(error.message));
-      page.on('dialog', (dialog) => dialog.type() === 'prompt' ? dialog.accept(name) : dialog.dismiss());
+      page.on('dialog', (dialog) => dialog.dismiss());
       await page.addInitScript(() => {
         const post = Worker.prototype.postMessage;
         Worker.prototype.postMessage = function (message, ...rest) {

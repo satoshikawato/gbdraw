@@ -467,3 +467,104 @@ test('N-18: a gesture owner settles the focused control before its own transacti
     assert.equal(h.state.prefix, 'audit');
   } finally { h.cleanup(); }
 });
+
+// A value written without a keydown (a paste, a number spinner, Playwright
+// `fill`) reaches the field as an `input` event; its own listener (v-model)
+// writes the value at the target.
+const writeWithoutKeydown = (h, value) => h.dispatch('input', h.controls.text, {
+  atTarget: () => { h.state.prefix = value; }
+});
+
+// OV-1116: Enter commits a text field's value (`change`) and the field keeps
+// focus. The next value, typed, pasted, or set by a number spinner (no keydown
+// before it), is a step of its own; leaving the field with the committed value
+// adds none.
+for (const [name, write] of [
+  ['typed', async (h, value) => { await h.key(h.controls.text, value.at(-1)); h.state.prefix = value; }],
+  ['pasted without a keydown', writeWithoutKeydown]
+]) {
+  test(`OV-1116: each Enter in a still-focused text field records one step (${name})`, async () => {
+    const h = await createBoundaryHarness();
+    globalThis.document.activeElement = h.controls.text;
+    h.controls.text.ownerDocument = globalThis.document;
+    const enter = async () => {
+      await h.key(h.controls.text, 'Enter');
+      await h.dispatch('change', h.controls.text);
+      await settleTasks();
+    };
+    try {
+      await h.dispatch('focusin', h.controls.text);
+      await settleTasks();
+      for (const [index, value] of ['A', 'B', 'C'].entries()) {
+        await write(h, value);
+        await enter();
+        assert.deepEqual(h.counts(), [index + 1, 0], `value ${value}`);
+      }
+      globalThis.document.activeElement = null;
+      await h.dispatch('focusout', h.controls.text);
+      await settleTasks();
+      assert.deepEqual(h.counts(), [3, 0]);
+      await h.history.undo();
+      assert.equal(h.state.prefix, 'B');
+      await h.history.undo();
+      assert.equal(h.state.prefix, 'A');
+    } finally { h.cleanup(); }
+  });
+}
+
+// The field keeps focus: the document's active element is the field.
+const focusText = async (h) => {
+  globalThis.document.activeElement = h.controls.text;
+  h.controls.text.ownerDocument = globalThis.document;
+  await h.dispatch('focusin', h.controls.text);
+  await settleTasks();
+};
+const enterInText = async (h) => {
+  await h.key(h.controls.text, 'Enter');
+  await h.dispatch('change', h.controls.text);
+  await settleTasks();
+};
+
+// OV-1131: Undo or Redo settles the field's step while the field keeps focus.
+// A value written next without a keydown is still a step of its own.
+for (const settle of ['undo', 'redo']) {
+  test(`OV-1131: a value pasted after ${settle} in a still-focused text field records one step`, async () => {
+    const h = await createBoundaryHarness();
+    try {
+      await focusText(h);
+      for (const value of ['A', 'B']) {
+        await writeWithoutKeydown(h, value);
+        await enterInText(h);
+      }
+      await h.history.undo();
+      if (settle === 'redo') await h.history.redo();
+      await settleTasks();
+      await writeWithoutKeydown(h, 'C');
+      await enterInText(h);
+      const kept = settle === 'redo' ? ['B', 'A', ''] : ['A', ''];
+      assert.deepEqual(h.counts(), [kept.length, 0]);
+      for (const value of kept) {
+        await h.history.undo();
+        assert.equal(h.state.prefix, value);
+      }
+    } finally { h.cleanup(); }
+  });
+}
+
+// OV-1130: after Enter, no step of the field stays open, so an action run while
+// the field keeps focus is a step of its own under its own name.
+test('OV-1130: an action after Enter in a still-focused text field keeps its own name', async () => {
+  const h = await createBoundaryHarness();
+  try {
+    await focusText(h);
+    await writeWithoutKeydown(h, 'A');
+    await enterInText(h);
+    await h.history.runUndoable('Reset record definition', () => { h.state.mode = 'linear'; });
+    await settleTasks();
+    assert.deepEqual(h.counts(), [2, 0]);
+    assert.equal(h.history.undoLabel(), 'Reset record definition');
+    await h.history.undo();
+    assert.equal(h.history.undoLabel(), 'Edit setting');
+    assert.deepEqual({ prefix: h.state.prefix, mode: h.state.mode }, { prefix: 'A', mode: 'circular' });
+  } finally { h.cleanup(); }
+});

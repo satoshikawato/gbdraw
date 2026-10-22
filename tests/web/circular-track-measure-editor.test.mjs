@@ -6,13 +6,19 @@ import {
   changeCircularMeasureUnit, projectCircularMeasureDraft
 } from '../../gbdraw/web/js/services/circular-track-measure.js';
 import {
-  parseOptionalCircularScalar, validateCustomTrackPlan
+  circularMeasureInvalidParts, parseOptionalCircularScalar, validateCustomTrackPlan
 } from '../../gbdraw/web/js/services/track-slot-validation.js';
 import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
 import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
-import { projectCanonicalSessionRequest } from '../../gbdraw/web/js/services/session-request.js';
+import { projectCanonicalSessionRequest, readStoredRenderRequest } from '../../gbdraw/web/js/services/session-request.js';
+
+// A stored request as Load reads it (the one reader lifts schemas 1 and 2).
+const readStored = (session) => readStoredRenderRequest(session.renderRequest, {
+  featureCatalog: null, legacyOrthogroupState: null,
+  resourceIds: new Set(Object.keys(session.resources)), path: 'renderRequest'
+});
 
 const fixtures = JSON.parse(await readFile(new URL(
   '../../docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/scalar-fixtures.json', import.meta.url
@@ -51,7 +57,7 @@ for (const fixture of fixtures) {
       const slot = slotFor(scalar, field);
       const config = configFor(slot);
       if (fixture.valid) {
-        assert.equal(view.error, null);
+        assert.equal(view.invalid, false);
         assert.equal(view.isAuto, fixture.canonical === null);
         assert.deepEqual(parseOptionalCircularScalar(scalar), fixture.canonical);
         assert.equal(validateRow(slot).rowIssues.size, 0);
@@ -63,7 +69,7 @@ for (const fixture of fixtures) {
         if (typeof scalar?.value === 'string') assert.equal(draft.value, scalar.value, 'numeric lexeme is not rounded');
       } else {
         assert.equal(view.isAuto, false);
-        assert.match(view.error, /^Value must be a number greater than 0, in px or ×R\.$/);
+        assert.equal(view.invalid, true);
         assert.throws(() => parseOptionalCircularScalar(scalar));
         assert.throws(() => buildCircularTrackSlotPayload(slot));
         assert.ok(validateRow(slot).rowIssues.get(0).some(issue => issue.code === 'geometry_invalid'));
@@ -120,7 +126,7 @@ test('unit edit preserves valid and invalid lexemes, is pure, and returns same s
 
 test('Auto has no canonical unit; explicit clear returns null while typed empty stays invalid on read/unit edit', () => {
   for (const scalar of [null, undefined, '']) {
-    assert.deepEqual(readCircularMeasure(scalar), { valueText: '', selectedUnit: null, isAuto: true, error: null });
+    assert.deepEqual(readCircularMeasure(scalar), { valueText: '', selectedUnit: null, isAuto: true, invalid: false });
     assert.equal(changeCircularMeasureUnit(scalar, 'px'), null);
   }
   for (const unit of ['px', 'factor']) {
@@ -128,7 +134,7 @@ test('Auto has no canonical unit; explicit clear returns null while typed empty 
     assert.equal(writeCircularMeasureValue('  ', unit), null);
     const empty = { value: '', unit };
     assert.equal(readCircularMeasure(empty).isAuto, false);
-    assert.match(readCircularMeasure(empty).error, /greater than 0/);
+    assert.equal(readCircularMeasure(empty).invalid, true);
     assert.strictEqual(projectCircularMeasureDraft(empty), empty);
   }
 });
@@ -143,18 +149,20 @@ test('tobacco Gallery pairs and precision survive read and real canonical reques
     ['gc_content', 'width', '0.08', 'factor'], ['gc_content', 'radius', '0.56', 'factor']
   ];
   const before = structuredClone(tobacco);
+  // The Circular drawing's slots (Session 46 `modes.circular`); the CLI
+  // command that writes this Session leaves them as the text it read.
+  const stored = (id, field) => tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
+  const requested = (id, field) => tobacco.renderRequest.diagramOptions.tracks.circularTrackSlots.find(slot => slot.id === id)[field];
   for (const [id, field, valueText, selectedUnit] of expected) {
-    // The Circular drawing's slots (Session 46 `modes.circular`).
-    const scalar = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
-    assert.deepEqual(readCircularMeasure(scalar), { valueText, selectedUnit, isAuto: false, error: null });
+    assert.deepEqual(readCircularMeasure(stored(id, field)), { valueText, selectedUnit, isAuto: false, invalid: false });
     const draft = writeCircularMeasureValue(valueText, selectedUnit);
-    assert.deepEqual(parseOptionalCircularScalar(draft), scalar);
+    assert.deepEqual(parseOptionalCircularScalar(draft), requested(id, field));
+    assert.deepEqual(parseOptionalCircularScalar(stored(id, field)), requested(id, field));
   }
   const projected = projectCanonicalSessionRequest(tobacco);
   for (const [id, field] of expected) {
-    const raw = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     const draft = projected.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
-    assert.deepEqual(parseOptionalCircularScalar(draft), raw);
+    assert.deepEqual(parseOptionalCircularScalar(draft), requested(id, field));
   }
   assert.deepEqual(tobacco, before, 'request/config/Result read is pure');
 });
@@ -169,26 +177,40 @@ test('current and historical request projection keeps zero pixel gaps separate f
   for (const spacing of [0, '0px', { value: 0, unit: 'px' }, { value: 5, unit: 'px' }]) {
     const historical = structuredClone(tobacco);
     historical.renderRequest.schema = 2;
+    // The schema-2 writer wrote one Circular drawing with one output.
+    historical.renderRequest.grouping = 'single';
+    historical.renderRequest.output = historical.renderRequest.output[0];
     delete historical.renderRequest.diagramOptions.featureOverrides;
     historical.renderRequest.diagramOptions.output.outputPrefix = 'legacy';
     delete historical.renderRequest.diagramOptions.featurePlacements;
     historical.renderRequest.records.forEach(record => delete record.display);
+    // The schema-2 writer's object slot (kind and every field; spacing set).
     historical.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
-      id: 'legacy', renderer: 'dinucleotide_content', enabled: true, side: 'inside',
-      width: '20px', radius: '65%', spacing, z: 0, params: { nt: 'GC' }
+      kind: 'circularTrackSlot', id: 'legacy', renderer: 'dinucleotide_content', enabled: true, side: 'inside',
+      width: { value: 20, unit: 'px' }, radius: { value: 0.65, unit: 'factor' }, spacing, z: 0, params: { nt: 'GC' },
+      innerGapPx: null, outerGapPx: null
     }];
     const before = structuredClone(historical);
-    const restored = projectCanonicalSessionRequest(historical).config.adv.circular_track_slots[0];
+    const read = readStored(historical);
+    assert.deepEqual(read.repairs, []);
+    const restored = projectCanonicalSessionRequest({ ...historical, renderRequest: read.value }).config.adv.circular_track_slots[0];
     const pixels = typeof spacing === 'object' ? spacing.value : spacing === '0px' ? 0 : spacing;
     assert.equal(restored.inner_gap_px, String(pixels));
     assert.equal(restored.outer_gap_px, String(pixels));
     assert.deepEqual(buildCircularTrackSlotPayload(restored).width, { value: 20, unit: 'px' });
     assert.deepEqual(buildCircularTrackSlotPayload(restored).radius, { value: 0.65, unit: 'factor' });
     assert.deepEqual(historical, before);
-    // A factor or percent is not a physical pixel gap; do not invent an R conversion.
-    for (const invalid of [{ value: 0.1, unit: 'factor' }, { value: 5, unit: '%' }, '5%']) {
+    // A factor or percent is not a physical pixel gap; do not invent an R
+    // conversion: Load drops it and says so (D-OD10 open 2; it was refused).
+    // The lift drops the factor and the percent text; it leaves a spacing
+    // with another unit to the reader, whose row names the slot that held it.
+    for (const [invalid, rowPath] of [[{ value: 0.1, unit: 'factor' }, '.spacing'], [{ value: 5, unit: '%' }, ''], ['5%', '.spacing']]) {
       historical.renderRequest.diagramOptions.tracks.circularTrackSlots[0].spacing = invalid;
-      assert.throws(() => projectCanonicalSessionRequest(historical), /pixels/);
+      const dropped = readStored(historical);
+      assert.deepEqual(dropped.repairs.map(({ path, effect }) => [path, effect]),
+        [[`renderRequest.diagramOptions.tracks.circularTrackSlots[0]${rowPath}`, 'dropped']], JSON.stringify(invalid));
+      const [read] = dropped.value.diagramOptions.tracks.circularTrackSlots;
+      assert.deepEqual([read.innerGapPx, read.outerGapPx, Object.hasOwn(read, 'spacing')], [null, null, false]);
     }
   }
 });
@@ -199,7 +221,7 @@ test('Width and Radius read decimal number text only (TK-12)', () => {
   for (const text of ['0x10', '0X1A', '0b11', '0o7', '0x10px', '0b1%', '1_0', ' 0x10 ', '1 0']) {
     assert.throws(() => parseOptionalCircularScalar(text, 'Width'), /^Error: Width must be a number greater than 0, in px or ×R\.$/, text);
     assert.throws(() => parseOptionalCircularScalar({ value: text, unit: 'factor' }), text);
-    assert.equal(readCircularMeasure({ value: text, unit: 'px' }, 'Radius').error, 'Radius must be a number greater than 0, in px or ×R.');
+    assert.equal(readCircularMeasure({ value: text, unit: 'px' }).invalid, true);
   }
   for (const [text, value, unit] of [['1e-1', 0.1, 'factor'], ['.5', 0.5, 'factor'], ['5.', 5, 'factor'], ['+0.5', 0.5, 'factor'],
     ['1E2px', 100, 'px'], [' 12 px ', 12, 'px'], ['50 %', 0.5, 'factor']]) {
@@ -214,5 +236,7 @@ test('an invalid Width or Radius row issue names its field (TK-12)', () => {
   for (const field of ['width', 'radius']) {
     const issues = validateRow(slotFor({ value: '0', unit: 'factor' }, field)).rowIssues.get(0);
     assert.deepEqual(issues.map(issue => [issue.code, issue.field]), [['geometry_invalid', field]]);
+    // The field shows the same sentence from the same owner (OV-1408).
+    assert.deepEqual(issues[0].parts, circularMeasureInvalidParts(field));
   }
 });

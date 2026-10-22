@@ -163,8 +163,14 @@ that policy.
 - Keep the current writer format even before it reaches `main`. If an active branch
   advances that format again, rewrite branch-owned artifacts to the newest format
   before merge and remove the superseded reader, migrator, fixture, test, and user
-  documentation. Do not chain migrations through or advertise branch-only
-  intermediate versions.
+  documentation. Do not chain migrations through, or advertise, intermediate
+  versions that never reached `main`.
+- A breaking Session change raises `SESSION_VERSION` by one over `main`'s; until
+  that version reaches `main`, later breaking changes keep it and rewrite its
+  history entry and fixtures. The unit is `main`, not a release tag.
+- A change to the generated contracts in `gbdraw/web/js/contracts/` needs the
+  history, reference, and fixture co-changes that the Gate checks; see
+  [Persisted contract co-change](docs/internal/WEB_CHANGE_POLICY.md#persisted-contract-co-change).
 
 ### Working-tree overwrite policy
 

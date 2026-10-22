@@ -14,6 +14,7 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+import { toRaw } from '../utils/vue-raw.js';
 /** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
@@ -25,6 +26,7 @@ export { cloneJsonData };
  *   featureColorOverrides?: unknown,
  *   featureVisibilityManualRules?: unknown,
  *   featureOverrides?: unknown,
+ *   labelOverrideRows?: unknown,
  *   labelTextBulkOverrides?: unknown
  * }} FeatureEditsData
  */
@@ -105,7 +107,7 @@ export { cloneJsonData };
  * The mutable intent of a generated artifact handle.
  * @typedef {object} GeneratedArtifactIntent
  * @property {IntentUiData} ui
- * @property {FeatureEditsData & { labelOverrideRows?: unknown }} features
+ * @property {FeatureEditsData} features
  * @property {EditorIntentData & { originalSvgStroke?: unknown }} editorState
  * @property {OrthogroupIntentData & GroupNameIntentData} orthogroupState
  * @property {unknown} alignmentState
@@ -214,6 +216,7 @@ const buildFeatureIntentData = (features = {}) => ({
   featureColorOverrides: clonePlainObject(features.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
   featureOverrides: clonePlainObject(features.featureOverrides),
+  labelOverrideRows: cloneLabelOverrideRows(features.labelOverrideRows),
   labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides)
 });
 
@@ -357,13 +360,17 @@ const replaceLinearComparisonPlan = (target, plan = {}) => {
   })));
 };
 
+/** @param {unknown} rows The saved label table (`canonicalLabelOverrideRows`). */
+const cloneLabelOverrideRows = (rows) => (Array.isArray(rows) ? cloneJsonData(rows) : []);
+
 /** @param {unknown} rules */
 const cloneFeatureVisibilityRules = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
 // Manual visibility rules, identity-keyed per-feature edits, and bulk label
-// edits: the feature edit intent History restores as captured (R11).
+// edits with the saved label table they replace (OV-1102): the feature edit
+// intent History restores as captured (R11).
 /**
  * @param {HistorySnapshotDrawing} drawing
  * @param {FeatureEditsData} [features]
@@ -377,6 +384,7 @@ const replaceFeatureEditState = (drawing, features = {}) => {
     );
   }
   replacePlainObject(drawing.featureOverrides, clonePlainObject(features.featureOverrides));
+  replaceRefArray(drawing.canonicalLabelOverrideRows, features.labelOverrideRows);
   replacePlainObject(drawing.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
 };
 
@@ -418,18 +426,6 @@ const setGeneratedArtifactRef = (target, value) => {
  */
 const getGeneratedArtifactRef = (target, fallback) => (
   target && typeof target === 'object' && 'value' in target ? target.value : fallback
-);
-
-// The vendored Vue is a global of the page (index.html); a unit test without a page may not set it.
-/** @type {typeof globalThis & { Vue?: { toRaw?: <T>(value: T) => T } }} */
-const vueHost = globalThis;
-/**
- * @template T
- * @param {T} value
- * @returns {T}
- */
-const artifactOwnedValue = (value) => (
-  typeof vueHost.Vue?.toRaw === 'function' ? vueHost.Vue.toRaw(value) : value
 );
 
 /** @param {Record<string, any>} state */
@@ -639,6 +635,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
   featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(drawing.featureVisibilityManualRules),
   featureOverrides: clonePlainObject(drawing.featureOverrides),
+  labelOverrideRows: cloneLabelOverrideRows(getRef(drawing.canonicalLabelOverrideRows, [])),
   labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
 });
 
@@ -972,6 +969,9 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  *   The generated Results' restore, with the checkpoint's UI state.
  * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.
  * @property {((runState: HistorySnapshotData) => unknown) | null} [applyRunStateData] The last-run restore.
+ * @property {(() => void) | null} [clearSimilarityGroupCopyFeedback]
+ *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
+ *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
  */
 
 /** @param {HistorySnapshotServiceOptions} options */
@@ -993,7 +993,8 @@ export const createHistorySnapshotService = ({
   serializeResults = null,
   applyResultsData = null,
   buildRunStateData = null,
-  applyRunStateData = null
+  applyRunStateData = null,
+  clearSimilarityGroupCopyFeedback = null
 }) => {
   if (!state || !fileStore) {
     throw new Error('createHistorySnapshotService requires state and fileStore.');
@@ -1098,59 +1099,59 @@ export const createHistorySnapshotService = ({
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
   const captureGeneratedArtifactOwnerSet = () => {
     const drawing = drawingOfMode(state, getGeneratedArtifactRef(state.generatedMode, null));
-    const results = artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
+    const results = toRaw(getGeneratedArtifactRef(state.results, []));
     return Object.freeze({
       results,
-      featureCatalog: artifactOwnedValue(getGeneratedArtifactRef(state.featureCatalog, null)),
-      extractedFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.extractedFeatures, null)),
-      biologicalFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.biologicalFeatures, null)),
-      featureRecordIds: artifactOwnedValue(getGeneratedArtifactRef(state.featureRecordIds, null)),
-      orthogroups: artifactOwnedValue(getGeneratedArtifactRef(state.orthogroups, null)),
-      featureOrthogroupIndex: artifactOwnedValue(
+      featureCatalog: toRaw(getGeneratedArtifactRef(state.featureCatalog, null)),
+      extractedFeatures: toRaw(getGeneratedArtifactRef(state.extractedFeatures, null)),
+      biologicalFeatures: toRaw(getGeneratedArtifactRef(state.biologicalFeatures, null)),
+      featureRecordIds: toRaw(getGeneratedArtifactRef(state.featureRecordIds, null)),
+      orthogroups: toRaw(getGeneratedArtifactRef(state.orthogroups, null)),
+      featureOrthogroupIndex: toRaw(
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
-      collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
-      similarityAlignmentResetReceipt: artifactOwnedValue(
+      collinearGroups: toRaw(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentResetReceipt: toRaw(
         getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)
       ),
-      similarityAlignmentPlan: artifactOwnedValue(
+      similarityAlignmentPlan: toRaw(
         getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
       ),
-      linearRecordTranslations: artifactOwnedValue(
+      linearRecordTranslations: toRaw(
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
-      linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
-      annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
-      featureIdentityNotices: artifactOwnedValue(
+      linearRecordOrientations: toRaw(captureLinearRecordOrientations()),
+      annotationWarnings: toRaw(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      featureIdentityNotices: toRaw(
         getGeneratedArtifactRef(state.featureIdentityNotices, null)
       ),
-      comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
-      labelFitReports: artifactOwnedValue(getGeneratedArtifactRef(state.labelFitReports, null)),
+      comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
+      labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
       specificRules: (drawing.manualSpecificRules || []).map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })),
       fileLegendCaptions: new Set(drawing.fileLegendCaptions?.value || []),
-      trackSlotResolvedGeometry: artifactOwnedValue(
+      trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
-      proteinIdentityManifest: artifactOwnedValue(
+      proteinIdentityManifest: toRaw(
         getGeneratedArtifactRef(state.proteinIdentityManifest, null)
       ),
-      legacyProteinRawCandidates: artifactOwnedValue(
+      legacyProteinRawCandidates: toRaw(
         getGeneratedArtifactRef(state.legacyProteinRawCandidates, null)
       ),
-      legacyProteinDerivedEvidence: artifactOwnedValue(
+      legacyProteinDerivedEvidence: toRaw(
         getGeneratedArtifactRef(state.legacyProteinDerivedEvidence, null)
       ),
-      losatCache: artifactOwnedValue(getGeneratedArtifactRef(state.losatCache, null)),
-      losatDerivedCache: artifactOwnedValue(
+      losatCache: toRaw(getGeneratedArtifactRef(state.losatCache, null)),
+      losatDerivedCache: toRaw(
         getGeneratedArtifactRef(state.losatDerivedCache, null)
       ),
-      losatCacheInfo: artifactOwnedValue(getGeneratedArtifactRef(state.losatCacheInfo, null)),
+      losatCacheInfo: toRaw(getGeneratedArtifactRef(state.losatCacheInfo, null)),
       matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
-      lastRunInfo: artifactOwnedValue(getGeneratedArtifactRef(state.lastRunInfo, null)),
-      pairwiseMatchFactors: artifactOwnedValue(
+      lastRunInfo: toRaw(getGeneratedArtifactRef(state.lastRunInfo, null)),
+      pairwiseMatchFactors: toRaw(
         getGeneratedArtifactRef(state.pairwiseMatchFactors, null)
       ),
-      editableLabels: artifactOwnedValue(getGeneratedArtifactRef(state.editableLabels, null)),
+      editableLabels: toRaw(getGeneratedArtifactRef(state.editableLabels, null)),
       generatedLegendPosition: getGeneratedArtifactRef(state.generatedLegendPosition, null),
       generatedMode: getGeneratedArtifactRef(state.generatedMode, null),
       generatedMultiRecordCanvas: getGeneratedArtifactRef(
@@ -1162,11 +1163,11 @@ export const createHistorySnapshotService = ({
         null
       ),
       appliedPaletteName: getGeneratedArtifactRef(state.appliedPaletteName, ''),
-      appliedPaletteColors: artifactOwnedValue(
+      appliedPaletteColors: toRaw(
         getGeneratedArtifactRef(state.appliedPaletteColors, null)
       ),
       pendingPaletteName: getGeneratedArtifactRef(drawing.pendingPaletteName, ''),
-      pendingPaletteColors: artifactOwnedValue(
+      pendingPaletteColors: toRaw(
         getGeneratedArtifactRef(drawing.pendingPaletteColors, null)
       )
     });
@@ -1183,6 +1184,8 @@ export const createHistorySnapshotService = ({
     }
     const drawing = drawingOfMode(state, ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
+    const replacesShownResults = toRaw(results)
+      !== toRaw(getGeneratedArtifactRef(state.results, []));
     if (typeof installResults === 'function') installResults(results);
     else setGeneratedArtifactRef(state.results, results);
     setGeneratedArtifactRef(
@@ -1258,6 +1261,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.appliedPaletteColors, ownerSet.appliedPaletteColors || {});
     setGeneratedArtifactRef(drawing.pendingPaletteName, ownerSet.pendingPaletteName || '');
     setGeneratedArtifactRef(drawing.pendingPaletteColors, ownerSet.pendingPaletteColors || {});
+    if (replacesShownResults) clearSimilarityGroupCopyFeedback?.();
   };
 
   // E1: the displayed mode's generated artifact, by reference, key by key.
@@ -1266,7 +1270,7 @@ export const createHistorySnapshotService = ({
     // `state.generatedMode` is always a ref, so the fallback `null` never applies.
     mode: /** @type {'circular' | 'linear'} */ (getGeneratedArtifactRef(state.generatedMode, null)),
     values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
-      key, artifactOwnedValue(getGeneratedArtifactRef(state[key], null))
+      key, toRaw(getGeneratedArtifactRef(state[key], null))
     ])),
     legendInventory: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
     matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
@@ -1327,7 +1331,7 @@ export const createHistorySnapshotService = ({
       fingerprint,
       ownerReferences: Object.freeze({
         ...ownerReferences,
-        results: artifactOwnedValue(committedResults)
+        results: toRaw(committedResults)
       })
     });
     currentGeneratedArtifactRetainedBytes = Math.max(
@@ -1440,9 +1444,9 @@ export const createHistorySnapshotService = ({
         drawing.featureVisibilityManualRules
       ),
       featureOverrides: clonePlainObject(drawing.featureOverrides),
-      labelOverrideRows: cloneJsonData(
+      labelOverrideRows: cloneLabelOverrideRows(
         getGeneratedArtifactRef(drawing.canonicalLabelOverrideRows, [])
-      ) || [],
+      ),
       labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
     };
     const editorState = {
@@ -1813,6 +1817,7 @@ export const createHistorySnapshotService = ({
         featureColorOverrides: drawing.featureColorOverrides,
         featureVisibilityManualRules: drawing.featureVisibilityManualRules,
         featureOverrides: drawing.featureOverrides,
+        labelOverrideRows: getRef(drawing.canonicalLabelOverrideRows, []),
         labelTextBulkOverrides: drawing.labelTextBulkOverrides
       }),
       editorState: buildEditorIntentData({
@@ -1831,7 +1836,8 @@ export const createHistorySnapshotService = ({
     };
   };
 
-  const buildHistoryIntent = async () => {
+  // Synchronous: History captures it without an await (OV-922).
+  const buildHistoryIntent = () => {
     const shownMode = getRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
     const drawing = drawingOfMode(state, shownMode);
     const ui = typeof buildUiStateData === 'function'

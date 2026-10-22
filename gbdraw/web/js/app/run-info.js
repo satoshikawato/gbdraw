@@ -13,9 +13,9 @@ import {
   parseLinearTrackSlotSpec
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
+import { t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
-import { isCurrentRequestSchema } from '../utils/request-schema.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -576,12 +576,7 @@ const coverTrackSlots = (coverage, tracks, mode) => {
     scalarFields.forEach((field) => coverTrackScalar(coverage, /** @type {Record<string, unknown>} */ (slot)[field], `${path}.${field}`));
     const params = slot.params;
     if (!isPlainObject(params)) return;
-    coverObject(coverage, params, `${path}.params`, [
-      'track_index', 'nt', 'positive_color', 'negative_color', 'tick_label_layout',
-      'preset', 'lane_direction', 'source_index', 'set_id', 'marks', 'lane_gap_px',
-      'padding_px', 'overflow', 'show_labels', 'anchor_slot', 'layer', 'cover_anchor',
-      'legend_label'
-    ]);
+    coverObject(coverage, params, `${path}.params`, TRACK_PARAM_KEY_NAMES);
   });
 };
 
@@ -602,9 +597,9 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', ...(isCurrentRequestSchema(request) ? ['display'] : [])
+      'cardinality', 'source', 'selector', 'region', 'presentation', 'display'
     ], ['recordKey']);
-    if (isCurrentRequestSchema(request)) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
+    coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
       throw new SourceRecipeUnavailable(
         `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
@@ -665,8 +660,8 @@ const validateCurrentSemanticCoverage = (request) => {
   const options = request.diagramOptions;
   coverObject(coverage, options, 'diagramOptions', new Set([
     ...DIAGRAM_OPTION_FIELDS,
-    ...(isCurrentRequestSchema(request) ? ['featurePlacements'] : []),
-    ...(isCurrentRequestSchema(request) ? ['featureOverrides'] : [])
+    'featurePlacements',
+    'featureOverrides'
   ]));
   (options.featureOverrides || []).forEach((row, index) => {
     coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
@@ -938,10 +933,10 @@ const appendInputArgs = async (args, request, files) => {
     }
   });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
-  if (isCurrentRequestSchema(request) && recordsTableRequired) {
+  if (recordsTableRequired) {
     for (const [index, record] of records.entries()) {
       if (record.cardinality === 'exactly_one') continue;
-      if (isCurrentRequestSchema(request) && await files.resourceRecordCount(
+      if (await files.resourceRecordCount(
         specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
       ) === 1) continue;
       throw new SourceRecipeUnavailable(
@@ -950,7 +945,7 @@ const appendInputArgs = async (args, request, files) => {
     }
   }
 
-  if (isCurrentRequestSchema(request) && !recordsTableRequired) {
+  if (!recordsTableRequired) {
     const loadComparison = request.mode === 'linear'
       && Array.isArray(request.comparisons)
       && request.comparisons.length > 0;
@@ -979,8 +974,8 @@ const appendInputArgs = async (args, request, files) => {
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])]
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])];
+      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start']
+      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);
@@ -1096,6 +1091,8 @@ const CIRCULAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'canvas.circular.track_type': '--track_type',
   'labels.spacing.circular': '--circular_label_spacing',
   'labels.circular.placement': '--label_placement',
+  'labels.circular.line': '--label_line',
+  'labels.circular.protection': '--label_protection',
   'objects.ticks.tick_labels.font_size': '--tick_label_font_size',
   'labels.unified_adjustment.outer_labels.x_radius_offset': '--outer_label_x_radius_offset',
   'labels.unified_adjustment.outer_labels.y_radius_offset': '--outer_label_y_radius_offset',
@@ -1108,6 +1105,8 @@ const LINEAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'labels.spacing.linear': '--linear_label_spacing',
   'labels.linear.placement': '--label_placement',
   'labels.linear.rotation': '--label_rotation',
+  'labels.linear.line': '--label_line',
+  'labels.linear.protection': '--label_protection',
   'canvas.linear.track_layout': '--track_layout',
   'canvas.linear.track_axis_gap': '--track_axis_gap',
   'canvas.linear.comparison_height': '--comparison_height',
@@ -1393,6 +1392,11 @@ const formatCanonicalTrackScalar = (value, { allowFactor = false } = {}) => {
   return unit === 'px' ? `${numeric}px` : String(numeric);
 };
 
+// The params of an annotation slot, the same in both modes.
+const ANNOTATION_TRACK_PARAM_KEYS = [
+  'set_id', 'marks', 'lane_gap_px', 'padding_px', 'overflow', 'show_labels',
+  'anchor_slot', 'to_slot', 'layer', 'cover_anchor', 'legend_label'
+];
 /** @type {Readonly<Record<'circular' | 'linear', Readonly<Record<string, Set<string>>>>>} */
 const TRACK_PARAM_KEYS = Object.freeze({
   circular: {
@@ -1402,10 +1406,7 @@ const TRACK_PARAM_KEYS = Object.freeze({
     dinucleotide_skew: new Set(['nt', 'positive_color', 'negative_color', 'legend_label']),
     depth: new Set(['track_index', 'legend_label']),
     sequence_conservation: new Set(['track_index', 'source_index', 'legend_label']),
-    annotations: new Set([
-      'set_id', 'marks', 'lane_gap_px', 'padding_px', 'overflow', 'show_labels',
-      'anchor_slot', 'layer', 'cover_anchor', 'legend_label'
-    ]),
+    annotations: new Set(ANNOTATION_TRACK_PARAM_KEYS),
     spacer: new Set(['legend_label'])
   },
   linear: {
@@ -1413,13 +1414,14 @@ const TRACK_PARAM_KEYS = Object.freeze({
     dinucleotide_content: new Set(['nt', 'legend_label']),
     dinucleotide_skew: new Set(['nt', 'positive_color', 'negative_color', 'legend_label']),
     depth: new Set(['track_index', 'legend_label']),
-    annotations: new Set([
-      'set_id', 'marks', 'lane_gap_px', 'padding_px', 'overflow', 'show_labels',
-      'anchor_slot', 'layer', 'cover_anchor', 'legend_label'
-    ]),
+    annotations: new Set(ANNOTATION_TRACK_PARAM_KEYS),
     spacer: new Set(['legend_label'])
   }
 });
+
+// Every params key a slot of either mode can carry into the recipe.
+const TRACK_PARAM_KEY_NAMES = [...new Set(Object.values(TRACK_PARAM_KEYS)
+  .flatMap((byRenderer) => Object.values(byRenderer).flatMap((keys) => [...keys])))];
 
 /**
  * @param {CanonicalRenderRequest['mode']} mode
@@ -1911,9 +1913,7 @@ export const buildSourceRecipe = async ({
     return unavailable('Source recipe unavailable: the committed render request is missing or invalid.');
   }
   try {
-    const semanticCoverage = isCurrentRequestSchema(renderRequest)
-      ? validateCurrentSemanticCoverage(renderRequest)
-      : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
+    const semanticCoverage = validateCurrentSemanticCoverage(renderRequest);
     const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
     /** @type {string[]} */
     const args = [];
@@ -1969,23 +1969,23 @@ export const buildShellCommand = (tokens) => (Array.isArray(tokens) ? tokens : [
 /** @param {unknown} elapsedMs */
 export const formatElapsedMs = (elapsedMs) => {
   const ms = Number(elapsedMs);
-  if (!Number.isFinite(ms) || ms < 0) return 'n/a';
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
+  if (!Number.isFinite(ms) || ms < 0) return t('n/a');
+  if (ms < 1000) return t('{value} ms', { value: Math.round(ms) });
+  if (ms < 60_000) return t('{value} s', { value: (ms / 1000).toFixed(ms < 10_000 ? 2 : 1) });
   const minutes = Math.floor(ms / 60_000);
   const seconds = (ms - minutes * 60_000) / 1000;
-  return `${minutes} min ${seconds.toFixed(1)} s`;
+  return t('{minutes} min {seconds} s', { minutes, seconds: seconds.toFixed(1) });
 };
 
 /** @param {unknown} level */
 export const reproducibilityLabel = (level) => {
   const normalized = String(level || '').trim();
-  if (normalized === 'source-unavailable') return 'Source recipe unavailable';
-  if (normalized === 'canonical-request') return 'Exact typed request';
-  if (normalized === 'exact-uploaded-files') return 'Source recipe ready';
-  if (normalized === 'requires-helper-files') return 'Source recipe needs helper files';
-  if (normalized === 'session-recommended') return 'Source recipe needs helper files';
-  return 'Approximate command';
+  if (normalized === 'source-unavailable') return t('Source recipe unavailable');
+  if (normalized === 'canonical-request') return t('Exact replay request (keeps parameter types)');
+  if (normalized === 'exact-uploaded-files') return t('Source recipe ready');
+  if (normalized === 'requires-helper-files') return t('Source recipe needs helper files');
+  if (normalized === 'session-recommended') return t('Source recipe needs helper files');
+  return t('Approximate command');
 };
 
 /**

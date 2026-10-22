@@ -35,32 +35,44 @@ export const normalizeSelectorText = (value) => String(value ?? '').trim();
 export const normalizeFeatureIdKey = (value) => normalizeSelectorText(value).toLowerCase();
 
 /**
+ * The qualifier names of the features, own and selector qualifiers.
  * @param {(FeatureLike | null | undefined)[] | null} [features]
- * @param {({ qual?: unknown } | null | undefined)[] | null} [rules]
- * @returns {string[]}
+ * @returns {Set<string>}
  */
-export const collectSpecificColorQualifierSuggestions = (features = [], rules = []) => {
+export const collectFeatureQualifierNames = (features = []) => {
   /** @type {Set<string>} */
-  const suggestions = new Set(SPECIFIC_COLOR_QUALIFIER_PRESETS);
-  /** @param {unknown} value */
-  const addQualifier = (value) => {
-    const qualifier = normalizeSelectorText(value);
-    if (qualifier) suggestions.add(qualifier);
-  };
+  const names = new Set();
   /** @param {unknown} qualifiers */
   const addQualifierMap = (qualifiers) => {
     if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return;
-    Object.keys(qualifiers).forEach(addQualifier);
+    Object.keys(qualifiers).forEach((key) => {
+      const qualifier = normalizeSelectorText(key);
+      if (qualifier) names.add(qualifier);
+    });
   };
-
   if (Array.isArray(features)) {
     features.forEach((feature) => {
       addQualifierMap(feature?.qualifiers);
       addQualifierMap(feature?.selector?.qualifiers);
     });
   }
+  return names;
+};
+
+/**
+ * The presets, then the other qualifier names of the features and the rules, sorted.
+ * @param {Iterable<string>} featureQualifierNames from `collectFeatureQualifierNames`
+ * @param {({ qual?: unknown } | null | undefined)[] | null} [rules]
+ * @returns {string[]}
+ */
+export const specificColorQualifierSuggestions = (featureQualifierNames, rules = []) => {
+  /** @type {Set<string>} */
+  const suggestions = new Set([...SPECIFIC_COLOR_QUALIFIER_PRESETS, ...featureQualifierNames]);
   if (Array.isArray(rules)) {
-    rules.forEach((rule) => addQualifier(rule?.qual));
+    rules.forEach((rule) => {
+      const qualifier = normalizeSelectorText(rule?.qual);
+      if (qualifier) suggestions.add(qualifier);
+    });
   }
 
   const presets = new Set(SPECIFIC_COLOR_QUALIFIER_PRESETS);

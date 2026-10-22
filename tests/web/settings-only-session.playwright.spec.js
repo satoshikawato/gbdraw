@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -26,12 +26,13 @@ const assertSourceFree = state => {
 };
 
 // `again`: the page already downloaded this Session file name, so the Save asks first.
-const save = async (page, testInfo, label, { again = false } = {}) => {
+const save = async (page, testInfo, label, { again = false, title } = {}) => {
   let downloaded;
   const listener = download => { downloaded = download; };
   page.on('download', listener);
   try {
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+    if (title !== undefined) await answerSessionTitle(page, title);
     if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
     // Await operation settlement, then assert once. Preserve the product error
     // as the red witness instead of reporting only a download timeout.
@@ -62,13 +63,14 @@ const loadFile = async (page, file, message = 'Session loaded') => {
   await expect.poll(() => input.inputValue()).toBe('');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   const actual = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
-  const expected = await page.evaluate(async field => {
+  const expected = await page.evaluate(async context => {
     const { normalizeUserFacingError } = await import('./js/utils/error-normalization.js');
     return normalizeUserFacingError({ code: 'INPUT_INVALID', operation: 'session-load', stage: 'request-validation',
-      context: { field, reason: 'FIELDS' } });
-  }, message.field);
+      context: { reason: 'FIELDS', ...context } });
+  }, message);
   expect(actual).toEqual(expected);
-  expect(JSON.stringify(actual)).not.toMatch(/absent|axis_stroke_color|Invalid managed flag|newer than/);
+  expect(JSON.stringify(actual)).not.toMatch(
+    message.reason === 'SESSION_TOO_NEW' ? /absent|axis_stroke_color|Invalid managed flag/ : /absent|axis_stroke_color|Invalid managed flag|newer than/);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(expected.summary);
   return actual;
 };
@@ -125,7 +127,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     });
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
-    page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'J08 settings' : undefined));
+    page.on('dialog', dialog => dialog.accept());
     await openApp(page);
     return page;
   };
@@ -148,7 +150,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
         missingCount: 1, message: 'Prior unmatched selector', resultIndex: 0, resultName: 'prior.svg' }];
       state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
     });
-    const saved = await save(page, testInfo, 'first');
+    const saved = await save(page, testInfo, 'first', { title: 'J08 settings' });
     expect(saved.document.version).toBe(CURRENT_SESSION_VERSION);
     expect(saved.document).not.toHaveProperty('runMetadata');
     // Each mode's settings are its slice (Session 46).
@@ -216,10 +218,10 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
   }
 });
 
-test('settings-only Load replaces existing work and rejected candidates preserve the complete prior Session', async ({ page }, testInfo) => {
+test('settings-only Load replaces existing work, and canceled or refused candidates preserve the complete prior Session', async ({ page }, testInfo) => {
   test.setTimeout(1_800_000);
   page.setDefaultTimeout(20000);
-  page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Full control' : undefined));
+  page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   await loadFile(page, path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   const runMetadata = await page.evaluate(async () => {
@@ -259,24 +261,42 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   await assertCoherent(visual, 'prior valid Session');
   // A Session 47 with no `renderRequest` key loads as settings only with a
   // row (K22, OV-785; tests/web/stored-request-read.test.mjs), so it is not here.
+  // Only the receipt's refusal classes refuse (〔拒否〕: a newer version); a
+  // file Load can read in part lists what it cannot restore before it changes
+  // anything (BA-D25), and Cancel keeps the prior Session. A retired home that
+  // the mode slice fills is dropped with no row (E-OD03), so that file loads as
+  // the same Session.
+  const unbound = slot => `Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`;
+  const requestDropped = 'Saved diagram: the settings of the saved diagram (renderRequest) could not be read.'
+    + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
-    ['null-request-with-result', d => { d.renderRequest = null; }, { field: 'schema' }],
-    ['resource', d => { d.resources = {}; }, { field: 'schema' }],
-    ['config', d => { d.modes.circular.config.form = []; }, { field: 'schema' }],
-    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, { field: 'schema' }],
-    ['version', d => { d.version = 999; }, { field: 'schema' }],
+    // A null request of a file that holds Results reads as a missing one (E-OD29).
+    ['null-request-with-result', d => { d.renderRequest = null; }, [requestDropped]],
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
+    ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
+    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
+    ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: CURRENT_SESSION_VERSION }],
     // A Session 46 holds the draft in `modes` only (Session format).
-    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, { field: 'schema' }]
+    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, 'Session loaded']
   ];
-  for (const [name, mutate, error] of cases) {
+  for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);
     mutate(candidate);
     const file = testInfo.outputPath(`${name}.json`);
     await fs.writeFile(file, JSON.stringify(candidate));
-    const rejection = await loadFile(page, file, error);
-    expect(await snapshot(page), `${name}: complete state at failed Load completion`).toEqual({ ...before, error: rejection });
-    const after = await capture(page, testInfo, `rejected-${name}`);
-    await assertCoherent(after, `${name}: rejected Load`);
+    let error = null;
+    if (Array.isArray(expected)) {
+      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await answerLoadRepairs(page, expected, 'cancel');
+      // The Cancel click leaves the pointer over the diagram; its hover is not Session state.
+      await page.mouse.move(0, 0);
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+    } else {
+      error = (await loadFile(page, file, expected)) ?? null;
+    }
+    expect(await snapshot(page), `${name}: complete state at Load completion`).toEqual({ ...before, error });
+    const after = await capture(page, testInfo, `kept-${name}`);
+    await assertCoherent(after, `${name}: canceled, refused or same Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);
   }
   const priorActivity = await getDiagramWorkerActivity(page);
@@ -298,7 +318,7 @@ test('settings-only Load replaces existing work and rejected candidates preserve
 test('both modes\' settings and auxiliary file bytes survive settings-only Save Load Save', async ({ page, browser }, testInfo) => {
   test.setTimeout(1_800_000);
   page.setDefaultTimeout(20000);
-  page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Profiles and priority' : undefined));
+  page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   // Distinct explicit values in each mode's drawing.
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#13579b'; });
@@ -314,7 +334,7 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   await page.getByLabel('Priority File (TSV)', { exact: true }).setInputFiles({
     name: 'priority.tsv', mimeType: 'text/tab-separated-values', buffer: bytes
   });
-  const original = await save(page, testInfo, 'profiles');
+  const original = await save(page, testInfo, 'profiles', { title: 'Profiles and priority' });
   await assertDiagramWorkerIdle(page);
   const binding = original.document.webFiles.bindings.qualifier_priority;
   expect(Buffer.from(original.document.resources[binding.resourceId].data, 'base64')).toEqual(bytes);

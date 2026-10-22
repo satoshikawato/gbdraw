@@ -25,7 +25,8 @@ const editedColors = () => ({
 
 const setup = ({ colors = editedColors(), instant = true } = {}) => {
   const drawing = {
-    selectedPalette: ref('default'), currentColors: ref(colors), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
+    selectedPalette: ref('default'), currentColors: ref(colors), pendingPaletteName: ref(''), pendingPaletteColors: ref({}),
+    fileImports: {}
   };
   const paletteColorsDialog = {
     show: false, kind: 'switch', fromPalette: '', toPalette: '', droppedPalette: '', count: 0, keysText: ''

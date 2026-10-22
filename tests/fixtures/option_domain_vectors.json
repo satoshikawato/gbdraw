@@ -26,7 +26,8 @@
     {"id": "legend-font-size-zero", "modes": ["circular", "linear"], "cli": ["--legend_font_size", "0"], "request": {"configOverrides": {"objects.legends.font_size.long": 0}}, "code": "INPUT_INVALID", "reason": "POSITIVE", "configPath": "objects.legends.font_size.long", "web": {"adv": {"legend_font_size": 0}}},
     {"id": "definition-font-size-zero", "modes": ["circular"], "cli": ["--definition_font_size", "0"], "request": {"configOverrides": {"objects.definition.circular.font_size": 0}}, "code": "INPUT_INVALID", "reason": "POSITIVE", "configPath": "objects.definition.circular.font_size", "web": {"adv": {"def_font_size": 0}}},
     {"id": "block-stroke-width-negative", "modes": ["circular", "linear"], "cli": ["--block_stroke_width", "-1"], "request": {"configOverrides": {"objects.features.block_stroke_width.short": -1}}, "code": "INPUT_INVALID", "reason": "NONNEGATIVE", "configPath": "objects.features.block_stroke_width.short", "web": {"adv": {"block_stroke_width": -1}}},
-    {"id": "axis-stroke-width-negative", "modes": ["linear"], "cli": ["--axis_stroke_width", "-2"], "request": {"configOverrides": {"objects.axis.linear.stroke_width.long": -2}}, "code": "INPUT_INVALID", "reason": "NONNEGATIVE", "configPath": "objects.axis.linear.stroke_width.long", "web": {"adv": {"axis_stroke_width": -2}}}
+    {"id": "axis-stroke-width-negative", "modes": ["linear"], "cli": ["--axis_stroke_width", "-2"], "request": {"configOverrides": {"objects.axis.linear.stroke_width.long": -2}}, "code": "INPUT_INVALID", "reason": "NONNEGATIVE", "configPath": "objects.axis.linear.stroke_width.long", "web": {"adv": {"axis_stroke_width": -2}}},
+    {"id": "feature-overlap-tolerance-negative", "modes": ["circular", "linear"], "cli": ["--feature_overlap_tolerance_bp", "-1"], "request": {"configOverrides": {"canvas.feature_overlap_tolerance_bp": -1}}, "code": "INPUT_INVALID", "reason": "NONNEGATIVE_INTEGER", "configPath": "canvas.feature_overlap_tolerance_bp", "web": {"adv": {"feature_overlap_tolerance_bp": -1}}}
   ],
   "accepted": [
     {"id": "dinucleotide-lowercase", "modes": ["circular"], "cli": ["--nt", "at"], "request": {"dinucleotide": "at"}, "web": {"adv": {"nt": "at"}, "request": {"dinucleotide": "AT"}}},
@@ -36,6 +37,9 @@
     {"id": "label-rotation-negative", "modes": ["linear"], "request": {"configOverrides": {"labels.linear.rotation": -30}}, "web": {"adv": {"label_rotation": -30}}},
     {"id": "label-spacing-negative", "modes": ["circular"], "request": {"configOverrides": {"labels.spacing.circular": -1}}, "web": {"adv": {"circular_label_spacing": -1}}},
     {"id": "label-offset-negative", "modes": ["circular"], "request": {"configOverrides": {"labels.unified_adjustment.outer_labels.x_radius_offset": -0.5}}, "web": {"adv": {"outer_label_x_offset": -0.5}}},
-    {"id": "vertical-offset-negative", "modes": ["linear"], "request": {"configOverrides": {"canvas.linear.vertical_offset": -10}}}
+    {"id": "vertical-offset-negative", "modes": ["linear"], "request": {"configOverrides": {"canvas.linear.vertical_offset": -10}}},
+    {"id": "legend-box-size-zero-without-legend", "modes": ["circular", "linear"], "cli": ["--legend_box_size", "0", "--legend", "none"], "request": {"configOverrides": {"objects.legends.color_rect_size.long": 0, "objects.legends.color_rect_size.short": 0}}, "web": {"adv": {"legend_box_size": 0}}},
+    {"id": "legend-box-size-negative-without-legend", "modes": ["circular", "linear"], "cli": ["--legend_box_size", "-3", "--legend", "none"], "request": {"configOverrides": {"objects.legends.color_rect_size.short": -3}}, "web": {"adv": {"legend_box_size": -3}}},
+    {"id": "feature-overlap-tolerance-positive", "modes": ["circular", "linear"], "cli": ["--feature_overlap_tolerance_bp", "3"], "request": {"configOverrides": {"canvas.feature_overlap_tolerance_bp": 3}}}
   ]
 }

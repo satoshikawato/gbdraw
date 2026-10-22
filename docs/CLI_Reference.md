@@ -12,15 +12,26 @@ Every diagram run writes a base `.svg` and any additional requested formats.
 Both commands validate that complete target set before rendering and refuse to
 replace an existing file by default. Pass `--overwrite` to replace existing
 regular files selected by the current command. Directories, special files,
-dangling symlinks, and invalid parents are rejected even with that flag. Output
-generation is sequential rather than transactional, so formats completed before
-a later conversion error remain. Overwrite permission applies only to the
-current invocation and is not restored from a saved session.
+dangling symlinks, and invalid parents are rejected even with that flag. Each
+diagram writes its formats all or nothing: when a conversion fails, no existing
+file changes and no new file is left. Without CairoSVG, PNG, PDF, EPS, and PS
+are skipped with a warning and the SVG formats are still written. A Circular
+batch writes record by record, so the records before a failing one stay
+written. Overwrite permission applies only to the current invocation and is
+not restored from a saved session.
 
 The current boolean spelling is symmetric in both modes:
 `--gc` / `--no-gc` and `--skew` / `--no-skew`. Depth files use repeatable
 `--depth_track`. Current multiword long options otherwise use the underscore
 spelling shown below.
+
+`--label_blacklist` has no default in either mode: unless you pass keywords,
+the CLI hides no labels by keyword. The Web app also hides none until you
+choose **Blacklist**, whose keyword box starts as
+`hypothetical, uncharacterized, putative, unknown`. The Python API applies
+those keywords by default, from the packaged `config.toml`. Pass
+`--label_blacklist "hypothetical,uncharacterized,putative,unknown"` to apply
+them in the CLI.
 
 For retired options, the two remaining aliases, and how saved Sessions are
 rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs).
@@ -147,6 +158,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--track_type {tuckin,middle,spreadout}] [--resolve_overlaps]
               [--labels [{none,out,both}]]
               [--label_rendering {auto,embedded_only,external_only}]
+              [--label_line {none,under}] [--label_protection {none,halo,box}]
               [--label_placement {horizontal,radial}]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -444,6 +456,15 @@ options:
                         and routes others externally; "embedded_only" drops
                         external labels; "external_only" forces labels outside
                         feature bodies. Default: "auto".
+  --label_line {none,under}
+                        Line under each horizontal feature label with a
+                        leader: "under" draws one that continues the leader (a
+                        turned label gets none); "none" draws none. Default:
+                        "none".
+  --label_protection {none,halo,box}
+                        What keeps a leader passing behind a feature label off
+                        its letters: "halo" (a white outline of the letters),
+                        "box" (a white box), or "none". Default: "none".
   --label_placement {horizontal,radial}
                         External circular label placement: "horizontal" or
                         "radial". Default: "horizontal".
@@ -611,6 +632,22 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
+A `--circular_track_slot` takes only the parameters its renderer reads:
+`features` takes `lane_direction` (alias `lanes`) and `stack_preset` (alias
+`preset`); `ticks` takes `tick_label_layout` and `preset` (alias
+`track_preset`); `dinucleotide_content` takes `nt` (alias `dinucleotide`) and
+`legend_label` (alias `label`); `dinucleotide_skew` takes those and
+`positive_color` and `negative_color` (aliases `high_color`, `low_color`);
+`depth` takes `track_index` and `legend_label` (alias `label`); `sequence_conservation` takes
+`track_index` and `source_index`, and keeps the `managed` and `series_key`
+that saved Sessions store; `spacer` takes none. Every slot also accepts
+`legend_label`, `label`, and `color`, and ignores those its renderer does not
+read; saved Sessions can hold them on any row. Sessions and Python slot objects
+may also carry `fileName`, which is ignored; slot text lowercases keys, so
+`fileName` cannot be given there. Any other parameter is
+an error that names the slot and the parameter; `anchor_slot` and `to_slot`
+belong to annotation slots only.
+
 Small label defects of horizontal Circular labels, up to 100 per record
 (overlaps, crossing leader lines, and inner labels over the definition text),
 are first repaired by moving outer and inner labels slightly.
@@ -684,7 +721,7 @@ Both modes accept `--annotation_table PATH` (alias `--annotation-table`). The ta
 - coordinate: `start` and `end`, with optional `record`, `coordinate_space`, `wraps_origin`, and `out_of_bounds`;
 - feature: `feature_selector`, with optional `record`, `envelope`, and `circular_path`.
 
-Coordinates are 1-based and inclusive. Separate multiple feature selectors with semicolons. Optional display columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`.
+Coordinates are 1-based and inclusive. Separate multiple feature selectors with semicolons. Optional display columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`. A label without `label_font_size` takes the font size of the feature labels of the same drawing (`--label_font_size`, or the automatic feature label size); in Linear that is one size for the whole diagram, set by the longest record in label scope as for feature labels. An explicit size (table column, set or slot style) wins. `label_offset` (default 4) is the gap between the painted edge of a region's mark (its stroke and a bracket's end caps included) and the painted letters of its label. In Circular the gap is measured to the nearest point of the label's letters (their ink box at the label's turn) for every `label_orientation`, outward or, on an `inside` slot, inward; letters that would meet the axis circle keep the same gap beyond its stroke instead. In Circular, `label_orientation` `auto` (the default) and `arc` draw the label along its circle, centred on its place: clockwise in the upper half and anticlockwise in the lower half, so it reads upright. `tangent` draws it straight, along the circle's tangent at its place, `radial` along the radius, and `horizontal` level. A curved label longer than its circle allows (just under a whole turn, less 1 em at each end) is cut: it keeps its start followed by `…`, centred on the same place, and gbdraw warns with the count of cut region labels; see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit). A Circular annotation slot reserves the room its labels take on their side, `label_offset` beyond the letters included, so rings placed automatically keep that gap from the letters. A `to_slot` or `cover_anchor` span reserves that room past the outermost slot it covers; an `overlay` slot that covers no other slot reserves none. A ring placed at an explicit `r` keeps its radius. An `inside` GC content, GC skew, depth, or conservation ring placed at `r` with an automatic width narrows to keep the gap; any other ring placed at `r` can meet the labels. Where the rings on one side of the axis cannot make the room at all, the labels on that side can meet them, without a warning (OV-1208). In Linear, the letters also keep that gap beyond them from the axis line, the next slot, or the record edge. In both modes, for a `to_slot` or `cover_anchor` span (below), the gap is measured from the span's outer edge, or from the mark's painted edge where it passes the span's edge, so the label stays outside every slot the span covers whatever its mark. In Linear, with a lane height `h` (the span's height less twice `padding_px`, divided by its lanes), the paint passes the edge when `stroke_width` is more than twice `padding_px` for a `highlight`, twice `padding_px` plus 0.16 `h` for a `band`, and `h` plus twice `padding_px` for a `bracket` or `line`; a bracket's `arrow` end cap passes it when the cap (0.35 `h`, at most 5 px) plus half of `stroke_width` times the square root of 0.5 (about 0.354 `stroke_width`) is more than 0.5 `h` plus `padding_px`. In both modes, a label whose place would cross a feature label, a leader line, or an earlier annotation label (in Linear, also the record's name or definition text) moves along its region, its centre over one of the region's marks, to the nearest clear place (in Circular, only to places whose letters stay within the room its slot reserves); when no place is clear it goes to the place with the fewest conflicts. In Circular it is drawn there without a warning. In Linear, gbdraw then tries the empty area inside the region's filled box, moving the feature labels whose letters it meets to another row, and drawing it in front of its record's leader lines on a white box, and warns when a conflict remains; see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit). In Linear, a moved label's letters may hang past either end of the record bar into empty space, and the figure grows to hold them; the record names and definition text, and the other records of the same row (their bars, labels, and leader lines), stop them there.
 
 Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highlight` marks are automatically drawn as an underlay behind the feature track. Other marks receive an outside/above annotation slot while the normal default tracks remain present. Mixed sets are split automatically between those placements.
 
@@ -694,10 +731,10 @@ An annotation slot with `side=overlay` is drawn on another slot instead of takin
 
 - `anchor_slot=<slot id>` (required): the slot it is drawn on. The slot must be enabled and have a band: a `spacer` slot, a Circular `ticks` slot, and another `annotations` slot are rejected.
 - `layer=underlay|foreground` (default `foreground`): an underlay needs a `z` below its anchor's, a foreground overlay a `z` above it.
-- `cover_anchor=true|false` (default `false`): the overlay is centred on its anchor and as wide as its own `w` (Linear: as tall as its own `h`). With `true` it takes the anchor's band instead; Linear does this only for a `features` anchor.
-- `to_slot=<slot id>`: the overlay spans from the anchor slot to this second slot, from the innermost edge to the outermost edge of the two slots' bands in Circular and from the top edge to the bottom edge in Linear. It covers every slot between them, and the order of the two IDs does not matter. `to_slot` follows the rules of `anchor_slot`, and the `z` rule applies to both slots. It must name a slot other than `anchor_slot`. With `to_slot`, `cover_anchor`, `overflow`, and the slot's own `w` or `h` are not read, and the span adds no space between the slots. In Linear, a span with `show_labels=true` (the default) keeps room for its labels beyond its edge, above an underlay and below a foreground overlay (9 px with the default label style), so a record grows by that much when the span ends at that edge of the record. Use `show_labels=false` and name the regions in a second annotation slot to avoid it. In Circular a span adds no space.
+- `cover_anchor=true|false` (default `false`): the overlay is centred on its anchor and as wide as its own `w` (Linear: as tall as its own `h`). With `true` it takes the anchor's band instead; Linear does this only for a `features` anchor, and there the overlay follows the span rules of `to_slot` below: it adds no space, and its labels keep room beyond the feature lanes.
+- `to_slot=<slot id>`: the overlay spans from the anchor slot to this second slot, from the innermost edge to the outermost edge of the two slots' bands in Circular and from the top edge to the bottom edge in Linear. It covers every slot between them, and the order of the two IDs does not matter. `to_slot` follows the rules of `anchor_slot`, and the `z` rule applies to both slots. It must name a slot other than `anchor_slot`. On a record where it covers something, `cover_anchor`, `overflow`, and the slot's own `w` or `h` are not read and the span adds no space between the slots it covers; see below for a record where it covers nothing. In Linear, a span with `show_labels=true` (the default) keeps room for its labels beyond its edge, above an underlay and below a foreground overlay (the label's letters with their `label_offset` gap on both sides: about 17 px for a 10 pt label for every mark; it grows with the font size, which by default is the feature label size): the next slot or the axis line on that side moves out far enough to keep that room (by up to that much; less where a gap is already there), or the record grows by up to that much when the span ends at that edge of the record. Only regions with a label need the room. Use `show_labels=false` and name the regions in a second annotation slot to avoid it. In Circular a span adds no space between the slots it covers; the other tracks without a set radius (`r=`) keep clear of its labels' room beyond the outermost slot it covers ([Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit)).
 
-`padding_px` (default `2`) shrinks the overlay at both edges. The band of a GC content, GC skew, or Depth slot is its plot. For a span, the band of a `features` slot is all of its feature lanes in Circular and Linear, including the extra lanes from `--resolve_overlaps`. `cover_anchor=true` without `to_slot` still covers the first lane of each strand in Circular and all lanes in Linear. In Linear, a slot without data for a record (a Depth slot with no file there) has no band on that record and the span keeps to the other slot; in Circular a Depth slot keeps its empty ring, and the span covers it.
+`padding_px` (default `2`) shrinks the overlay at both edges. The band of a GC content, GC skew, or Depth slot is its plot. For a span, the band of a `features` slot is all of its feature lanes in Circular and Linear, including the extra lanes from `--resolve_overlaps`. `cover_anchor=true` without `to_slot` still covers the first lane of each strand in Circular and all lanes in Linear. In Linear, a slot without data for a record (a Depth slot with no file there) has no band on that record and the span keeps to the other slot. A `features` slot on a record whose only features are drawn as underlays (such as `repeat_region`) keeps its nominal lanes as its band; on a record without any feature lanes, a Linear `cover_anchor=true` overlay keeps its own `h` beside the axis. So does a Linear `to_slot` span where neither slot has a band on the record. On that record either one is drawn as an overlay that spans nothing: it takes its own `h` and the room for its labels beside its anchor, so the next slot starts beyond its mark and labels, and its labels keep `label_offset` from its mark. Its anchor then counts as present on that record, so the anchor's spacing (8 px for a Depth slot) follows the mark, even for a Depth slot without a file there. In Circular a Depth slot keeps its empty ring, and the span covers it.
 
 ```bash
 gbdraw circular --gbk genome.gb --annotation_table regions.tsv -o regions_circular \
@@ -739,7 +776,7 @@ Allowed columns:
 
 One table row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 
-A `:rc` suffix and `reverse_complement` apply in different orders. `region=1000-9000:rc` crops 1000..9000 of the record as stored in the file, then reverse-complements the crop. `reverse_complement=1` reverse-complements the whole record first, so a `region` in the same row counts its coordinates on the reverse-complemented record. `--region` and `--reverse_complement` follow the same order.
+A `:rc` suffix and `reverse_complement` draw the same window. `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both crop 1000..9000 of the record as stored in the file, then reverse-complement the crop. `--region` and `--reverse_complement` follow the same order.
 
 For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` controls only the fixed gap between them. Multi-record rows cannot be combined with `--normalize_length`.
 
@@ -885,7 +922,7 @@ The approved pure pixel text grammar is limited to Circular `inner_gap_px`/`oute
 
 Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 
-Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, and `visible`. Retired Circular keys `spacing`, `strict`, `compress`, and `reserve` are rejected whether supplied as slot fields or parameters. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
+Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, and `visible`. Retired Circular keys `spacing`, `strict`, `compress`, and `reserve` are rejected whether supplied as slot fields or parameters. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid; a key the row's renderer does not take is an error, as for `--circular_track_slot`.
 
 ```tsv
 id	renderer	side	r	w	params
@@ -1010,6 +1047,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--label_font_size LABEL_FONT_SIZE]
               [--label_placement {auto,above_feature}]
               [--label_rendering {auto,embedded_only,external_only}]
+              [--label_line {none,under}] [--label_protection {none,halo,box}]
               [--label_rotation LABEL_ROTATION]
               [--linear_label_spacing LINEAR_LABEL_SPACING]
               [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
@@ -1347,8 +1385,11 @@ options:
   --label_placement {auto,above_feature}
                         Linear label placement mode ("auto" or
                         "above_feature"; default: "auto"). "above_feature"
-                        draws labels above features (or below negative-strand
-                        features when --separate_strands is used).
+                        draws each label over its own feature (below negative-
+                        strand features when --separate_strands is used): a
+                        horizontal label starts one row off its feature with a
+                        leader, as in "auto"; a turned label
+                        (--label_rotation) sits on its feature.
   --label_rendering {auto,embedded_only,external_only}
                         Label rendering policy: "auto" embeds fitting labels
                         and routes others externally; "embedded_only" drops
@@ -1356,6 +1397,15 @@ options:
                         feature bodies. Cannot be combined with
                         --label_placement above_feature except as "auto".
                         Default: "auto".
+  --label_line {none,under}
+                        Line under each horizontal feature label with a
+                        leader: "under" draws one that continues the leader (a
+                        turned label gets none); "none" draws none. Default:
+                        "under".
+  --label_protection {none,halo,box}
+                        What keeps a leader passing behind a feature label off
+                        its letters: "halo" (a white outline of the letters),
+                        "box" (a white box), or "none". Default: "box".
   --label_rotation LABEL_ROTATION
                         Linear label rotation in degrees (optional; float;
                         default: 0). In above_feature mode, rotated labels
@@ -1537,6 +1587,19 @@ source binding. When a custom stack is active, enabled Depth slots are
 authoritative for the legend: entries follow slot order, `legend_label`
 overrides the series title, and series without an enabled slot are omitted.
 
+A `--linear_track_slot` takes only the parameters its renderer reads:
+`dinucleotide_content` takes `nt` (alias `dinucleotide`) and `legend_label`
+(alias `label`); `dinucleotide_skew` takes those and `positive_color` and
+`negative_color` (aliases `high_color`, `low_color`); `depth` takes
+`track_index` and `legend_label` (alias `label`); `features` and `spacer` take
+none. Every slot also accepts `legend_label`, `label`, and `color`, and ignores
+those its renderer does not read; saved Sessions can hold them on any row.
+Sessions and Python slot objects may also carry `fileName`, which is ignored;
+slot text lowercases keys, so `fileName` cannot be given there. Any other parameter is an error that names the slot and the parameter;
+`anchor_slot` and `to_slot` belong to annotation slots only. Each enabled content and skew slot
+draws its own legend rows, named by its `legend_label` or else by its
+dinucleotide (for example `AT content`), as in Circular.
+
 An overlay annotation's `anchor_slot` and `to_slot` must each resolve to an
 enabled drawable, non-annotation slot in the complete stack. Unknown IDs,
 non-drawing slots, and annotation-to-annotation anchor chains are rejected.
@@ -1566,7 +1629,12 @@ The placeholder is a missing value, not a zero-coverage table. gbdraw omits
 the Depth group and quantitative axis for that record while preserving the
 logical index used by labels, colors, shared axes, and custom track slots. In
 Linear mode the missing cell reserves no vertical geometry, so later numeric
-tracks compact without renumbering the logical series.
+tracks compact without renumbering the logical series. An `overlay` annotation
+slot anchored on that empty Depth slot that covers nothing there (a plain
+overlay, or a `to_slot` span whose other slot has no band on that record
+either) is the exception: the slot then counts
+as present on that record and reserves the overlay's band (see
+[Region annotations](#region-annotations)).
 
 `gbdraw linear --losat {losatn,tlosatx,losatp}` runs the comparison before
 drawing: LOSATN (`blastn`) and TLOSATX (`tblastx`) compare the records in

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import re
 from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
+from gbdraw.core.numeric import ascii_float, parse_ascii_integer, parse_ascii_nonnegative_integer
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
@@ -16,13 +16,14 @@ def _text(value: Any) -> str:
 def _int_or_none(value: Any) -> int | None:
     if value is None:
         return None
+    if isinstance(value, str):
+        return parse_ascii_integer(value.strip())
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
 
 
-_NONNEGATIVE_INTEGER_RE = re.compile(r"\d+")
 _RECORD_INDEX_KEYS = (
     "record_idx",
     "record_index",
@@ -81,9 +82,10 @@ def _consistent_nonnegative_alias(
         if raw is None or not str(raw).strip():
             continue
         text = str(raw).strip()
-        if isinstance(raw, bool) or _NONNEGATIVE_INTEGER_RE.fullmatch(text) is None:
+        parsed = None if isinstance(raw, bool) else parse_ascii_nonnegative_integer(text)
+        if parsed is None:
             return None, False
-        values.add(int(text))
+        values.add(parsed)
     if len(values) > 1:
         return None, False
     return next(iter(values), None), True
@@ -179,7 +181,7 @@ def _int_value(value: Any, default: int = 0) -> int:
 
 def _float_value(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
+        return ascii_float(value)
     except (TypeError, ValueError):
         return default
 

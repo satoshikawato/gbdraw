@@ -60,6 +60,9 @@ def test_translate_cds_applies_the_insdc_start_codon_rule(
         ({"codon_start": "4"}, "ATGAAATAG", "codon_start is outside 1..3: 4"),
         ({"phase": "3"}, "ATGAAATAG", "phase is outside 0..2: 3"),
         ({"transl_table": "7"}, "ATGAAATAG", "transl_table is invalid: 7"),
+        ({"transl_table": "١١"}, "ATGAAATAG", "transl_table is invalid: ١١"),
+        ({"transl_table": "1_1"}, "ATGAAATAG", "transl_table is invalid: 1_1"),
+        ({"transl_table": "9" * 5000}, "ATGAAATAG", "transl_table is invalid: 99999"),
         ({}, "AT", "coding sequence has no complete codon"),
     ],
 )

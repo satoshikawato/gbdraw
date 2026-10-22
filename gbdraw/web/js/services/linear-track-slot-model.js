@@ -7,7 +7,10 @@ import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
-import { parseOptionalPixel } from './track-slot-validation.js';
+import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
+import { noteReplacedLeaf } from '../utils/field-reading.js';
+
+/** @import { FieldLeaf } from '../utils/field-reading.js' */
 
 /**
  * The parameters of a slot. The renderer decides which names are read; any other
@@ -245,25 +248,33 @@ export const createDefaultLinearTrackSlots = ({
   return slots;
 };
 
-/** @param {unknown} value @param {unknown} slotCount */
-export const clampLinearTrackAxisIndex = (value, slotCount) => {
+/**
+ * @param {unknown} value
+ * @param {unknown} slotCount
+ * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').
+ */
+export const clampLinearTrackAxisIndex = (value, slotCount, losses = null) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
-  if (!Number.isInteger(numeric)) return null;
-  return Math.max(0, Math.min(Number(slotCount) || 0, numeric));
+  const read = Number.isInteger(numeric) ? Math.max(0, Math.min(Number(slotCount) || 0, numeric)) : null;
+  noteReplacedLeaf(losses, '', value, read);
+  return read;
 };
 
 /**
  * @param {(LinearTrackSlotInput | null | undefined)[] | null | undefined} slots
  * @param {string} [nt]
  * @param {unknown} [trackLayout]
+ * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` under
+ *   the stack, `[1].side`); a migration that keeps the meaning records nothing, and an empty stack holds nothing.
  * @returns {LinearTrackSlot[]}
  */
-export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middle') => {
+export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middle', losses = null) => {
   /** @type {(LinearTrackSlotInput | null | undefined)[]} */
   const source = Array.isArray(slots) && slots.length > 0
     ? slots
     : createDefaultLinearTrackSlots({ showGc: true, showSkew: true, nt, trackLayout });
+  if (!Array.isArray(slots)) noteReplacedLeaf(losses, '', slots, source);
   /** @type {Set<string>} */
   const usedIds = new Set();
   let hasFeature = false;
@@ -272,18 +283,21 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
     .filter((slot) => slot && typeof slot === 'object' && !Array.isArray(slot)))
     .map((slot, index) => {
       const renderer = normalizeRenderer(slot.renderer);
+      if (!normalizeRenderer(slot.renderer, '')) noteReplacedLeaf(losses, `[${index}].renderer`, slot.renderer, renderer);
       const params = cloneParams(slot.params);
       if (renderer === 'features') {
         hasFeature = true;
       }
       if (renderer === 'depth') {
-        const trackIndex = normalizeTrackIndex(params.track_index);
+        const storedTrackIndex = params.track_index;
+        const trackIndex = normalizeTrackIndex(storedTrackIndex);
         if (trackIndex === null) {
           if (slot.enabled === false) {
             delete params.track_index;
           } else {
             params.track_index = 0;
           }
+          noteReplacedLeaf(losses, `[${index}].params.track_index`, storedTrackIndex, params.track_index);
         } else {
           params.track_index = trackIndex;
         }
@@ -295,39 +309,7 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
           normalizeSkewColorParams(params);
         }
       }
-      if (renderer === 'annotations') {
-        params.set_id = String(params.set_id || '').trim();
-        params.overflow = ['error', 'compress', 'clip'].includes(String(params.overflow || '').toLowerCase())
-          ? String(params.overflow).toLowerCase()
-          : 'error';
-        params.show_labels = params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false';
-        params.layer = String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground';
-        if (Array.isArray(params.marks)) {
-          params.marks = Array.from(new Set(
-            params.marks
-              .map((mark) => String(mark || '').trim().toLowerCase())
-              .filter(Boolean)
-          ));
-          // `params.marks` was assigned an array on the line above.
-          if (/** @type {unknown[]} */ (params.marks).length === 0) delete params.marks;
-        }
-        for (const [field, defaultValue] of [['lane_gap_px', 3], ['padding_px', 2]]) {
-          if (params[field] === null || params[field] === undefined || params[field] === '') {
-            delete params[field];
-            continue;
-          }
-          const numeric = Number(params[field]);
-          if (Number.isFinite(numeric) && numeric >= 0) {
-            if (numeric === defaultValue) delete params[field];
-            else params[field] = numeric;
-          }
-        }
-        if (params.cover_anchor === true || String(params.cover_anchor).toLowerCase() === 'true') {
-          params.cover_anchor = true;
-        } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
-          delete params.cover_anchor;
-        }
-      }
+      if (renderer === 'annotations') normalizeAnnotationSlotParams(params, `[${index}].params`, losses);
       let id = String(slot.id || DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`).trim();
       if (!id) id = `slot_${index + 1}`;
       if (usedIds.has(id)) id = `${id}_${index + 1}`;
@@ -335,6 +317,8 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
       const side = renderer === 'features'
         ? normalizeSide(slot.side, sideForLinearTrackLayout(trackLayout))
         : normalizeSide(slot.side, renderer === 'annotations' ? 'above' : 'below');
+      const readSide = renderer !== 'features' && renderer !== 'annotations' && side === 'overlay' ? 'below' : side;
+      noteReplacedLeaf(losses, `[${index}].side`, slot.side, readSide);
       return {
         id,
         renderer,
@@ -342,7 +326,7 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
         ...(slot.depth_binding_error
           ? { depth_binding_error: String(slot.depth_binding_error) }
           : {}),
-        side: renderer !== 'features' && renderer !== 'annotations' && side === 'overlay' ? 'below' : side,
+        side: readSide,
         height: normalizePxText(slot.height, 'height'),
         spacing: normalizePxText(slot.spacing, 'spacing'),
         z: Number.isInteger(Number(slot.z)) ? Number(slot.z) : 0,
@@ -450,34 +434,6 @@ const linearScalarPayload = (value, fieldName, { allowZero }) => {
   return numeric === null ? null : { value: numeric, unit: 'px' };
 };
 
-/** @param {LinearTrackSlotParams} params */
-const canonicalLinearAnnotationParams = (params) => {
-  const next = { ...params };
-  if (!Array.isArray(next.marks) || next.marks.length === 0) {
-    delete next.marks;
-  } else {
-    next.marks = Array.from(new Set(
-      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
-    ));
-  }
-  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
-    ? null
-    : Number(next.lane_gap_px);
-  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
-  else next.lane_gap_px = laneGap;
-  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
-    ? null
-    : Number(next.padding_px);
-  if (padding === null || padding === 2) delete next.padding_px;
-  else next.padding_px = padding;
-  if (next.cover_anchor !== true) delete next.cover_anchor;
-  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
-  if (next.show_labels !== false) delete next.show_labels;
-  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
-  if (!String(next.anchor_slot || '').trim()) delete next.anchor_slot;
-  return next;
-};
-
 /** @param {{ params?: unknown, renderer?: unknown } | null | undefined} slot */
 const canonicalLinearParams = (slot) => {
   const params = cloneParams(slot?.params);
@@ -486,7 +442,7 @@ const canonicalLinearParams = (slot) => {
       delete params[key];
     }
   });
-  if (slot?.renderer === 'annotations') return canonicalLinearAnnotationParams(params);
+  if (slot?.renderer === 'annotations') return canonicalAnnotationParams(params);
   return params;
 };
 

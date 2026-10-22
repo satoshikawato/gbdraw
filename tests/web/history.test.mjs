@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
@@ -129,6 +130,56 @@ const createLayoutPreferences = () => ({
   assert.deepEqual(await history.redo(), busy);
   assert.equal(value, 0);
   assert.equal(history.getRedoCount(), 1);
+}
+
+// OV-1339: the enabled state reads the availability the action reads. While
+// the top step is busy, Undo (or Redo) and its label are off; they come back,
+// reactively and without another History change, when the busy state ends.
+// The header buttons' computed is built as app-setup.js builds it, over the
+// vendored Vue.
+{
+  const vueContext = vm.createContext({});
+  vm.runInContext(
+    await readFile(join(repoRoot, 'gbdraw', 'web', 'vendor', 'vue', 'vue.global.prod.js'), 'utf8'),
+    vueContext
+  );
+  const Vue = vm.runInContext('Vue', vueContext);
+  let value = 0;
+  const busySource = Vue.ref(false);
+  const busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => { value = snapshot.value; };
+  const history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState,
+    makeRef: Vue.ref,
+    stepAvailability: (step) => (step.type === 'intent' && busySource.value ? busy : null)
+  });
+  const canUndoHistory = Vue.computed(() => { void history.revision.value; return history.canUndo(); });
+  const canRedoHistory = Vue.computed(() => { void history.revision.value; return history.canRedo(); });
+  await history.captureBaseline('initial');
+  await history.runUndoable('Increment', () => { value = 1; });
+  assert.equal(canUndoHistory.value, true);
+  busySource.value = true;
+  assert.equal(history.canUndo(), false);
+  assert.equal(history.undoLabel(), '');
+  assert.equal(canUndoHistory.value, false);
+  assert.deepEqual(await history.undo(), busy);
+  assert.equal(history.getUndoCount(), 1);
+  busySource.value = false;
+  assert.equal(canUndoHistory.value, true);
+  assert.equal(history.undoLabel(), 'Increment');
+  assert.equal(await history.undo(), true);
+  assert.equal(canRedoHistory.value, true);
+  busySource.value = true;
+  assert.equal(history.canRedo(), false);
+  assert.equal(history.redoLabel(), '');
+  assert.equal(canRedoHistory.value, false);
+  busySource.value = false;
+  assert.equal(canRedoHistory.value, true);
+  assert.equal(history.redoLabel(), 'Increment');
 }
 
 {
@@ -524,8 +575,10 @@ const createLayoutPreferences = () => ({
     retainedBytes: 80,
     fileIds: []
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxBytes: 100,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => ({}),
@@ -545,8 +598,15 @@ const createLayoutPreferences = () => ({
     return { status: 'ok' };
   }, { shouldCommit: (result) => result.status === 'ok' });
   assert.equal(history.getDiagnostics().artifactReplacementHistoryEntryCount, 1);
-  assert.equal(history.canUndo(), false);
-  assert.match(history.historyLimitMessage.value, /discarded/);
+  // OV-1260: the Generate just taken stays undoable although it alone is over
+  // the limit; it drops no older step, so nothing is announced.
+  assert.equal(history.canUndo(), true);
+  assert.deepEqual(limitMessages, []);
+  assert.equal(await history.undo(), true);
+  assert.equal(artifact.identity.compactSignature, 'a');
+  assert.equal(history.canRedo(), true, 'the step just undone stays redoable');
+  assert.equal(await history.redo(), true);
+  assert.equal(artifact.identity.compactSignature, 'b');
 }
 
 {
@@ -648,8 +708,10 @@ const createLayoutPreferences = () => ({
   const applyState = async (snapshot) => {
     value = snapshot.value;
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxActions: 2,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -663,6 +725,9 @@ const createLayoutPreferences = () => ({
     });
   }
   assert.equal(history.getUndoCount(), 2);
+  // OV-1365: the step-count window drops its oldest step silently; only the
+  // byte limit is announced.
+  assert.deepEqual(limitMessages, []);
   await history.undo();
   assert.equal(value, 2);
   await history.undo();
@@ -676,8 +741,10 @@ const createLayoutPreferences = () => ({
   const applyState = async (snapshot) => {
     value = snapshot.value;
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxBytes: 220,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -685,11 +752,19 @@ const createLayoutPreferences = () => ({
   });
 
   await history.captureBaseline('initial');
+  await history.runUndoable('Small edit', () => {
+    value = 'tiny';
+  });
+  assert.equal(history.getUndoCount(), 1);
   await history.runUndoable('Large state', () => {
     value = 'x'.repeat(1000);
   });
-  assert.equal(history.canUndo(), false);
-  assert.equal(history.historyLimitMessage.value.length > 0, true);
+  // OV-1260: the newest step stays; the older one drops and the drop is announced.
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Large state');
+  assert.deepEqual(limitMessages, ['Older undo history was discarded to stay within the history limit.']);
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 'tiny');
 }
 
 {
@@ -1921,10 +1996,14 @@ const createLayoutPreferences = () => ({
   };
   const authorityOwnersA = captureAuthorityOwners();
   let resultAdmissionCalls = 0;
+  // D-37: installing a Generate's artifact over other shown Results clears the
+  // similarity-group copy feedback, also when both share one groups array.
+  let copyFeedbackClears = 0;
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore,
     nextTick: async () => {},
+    clearSimilarityGroupCopyFeedback: () => { copyFeedbackClears += 1; },
     buildUiStateData: () => ({
       mode: state.mode.value,
       cInputType: state.cInputType.value,
@@ -1977,6 +2056,20 @@ const createLayoutPreferences = () => ({
   }, { results: state.results.value });
 
   const handleA = snapshots.captureGeneratedArtifactHandle();
+  {
+    // A reused Generate's commit: new Results with the shown groups array.
+    const clears = copyFeedbackClears;
+    const reusedGenerate = { ...handleA.ownerSet, results: [{ ...resultA }] };
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    assert.equal(state.orthogroups.value, groupsA);
+    assert.equal(copyFeedbackClears, clears + 1);
+    // Installing the shown owner set again (a rollback before activation): no clear.
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    assert.equal(copyFeedbackClears, clears + 1);
+    snapshots.installGeneratedArtifactOwnerSet(handleA.ownerSet);
+    assert.equal(copyFeedbackClears, clears + 2);
+    assert.equal(state.results.value, handleA.ownerSet.results);
+  }
   assert.equal(Object.isFrozen(handleA), true);
   assert.equal(handleA.ownerSet.results, state.results.value);
   assert.equal(handleA.ownerSet.results[0], resultA);
@@ -2164,7 +2257,10 @@ const createLayoutPreferences = () => ({
   state.losatCache.value = new Map([['replacement', { text: 'replacement\n' }]]);
   state.losatDerivedCache.value = new Map([['replacement', { payload: {} }]]);
   state.losatCacheInfo.value = [{ key: 'replacement' }];
+  const clearsBeforeUndo = copyFeedbackClears;
   await snapshots.restoreGeneratedArtifactHandle(handleA);
+  // Undo of a Generate step clears the copy feedback.
+  assert.equal(copyFeedbackClears, clearsBeforeUndo + 1);
   assert.equal(resultAdmissionCalls, 0);
   assert.equal(state.results.value[0], resultA);
   assert.equal(state.extractedFeatures.value, extractedA);
@@ -3040,4 +3136,349 @@ for (const previousSuppressed of [false, true]) {
     }
   }
   console.log('history action remainder tests passed');
+}
+
+// OV-1260: a kept rerender that grows the last step over the byte limit
+// drops the Redo steps, and the drop is announced as an Undo drop is.
+{
+  let rules = 0;
+  let figure = 'drawn-0';
+  const limitMessages = [];
+  const history = createHistoryManager({
+    maxBytes: 1000,
+    onHistoryLimit: (message) => limitMessages.push(message),
+    buildIntent: () => ({ rules }),
+    applyIntent: (intent) => { rules = intent.rules; },
+    buildCheckpoint: () => ({ rules, figure }),
+    applyCheckpoint: (checkpoint) => { rules = checkpoint.rules; figure = checkpoint.figure; }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change feature color', () => {
+    rules = 1;
+    figure = 'shown-1';
+  }, { drawn: { before: () => true, change: false } });
+  await history.runUndoable('Edit setting', () => { rules = 2; });
+  await history.undo();
+  assert.equal(history.getRedoCount(), 1);
+  assert.deepEqual(limitMessages, []);
+  figure = 'x'.repeat(2000);
+  assert.equal(await history.keepRedrawnResult(), true);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.undoLabel(), 'Change feature color');
+  assert.deepEqual(limitMessages, ['Redo history was discarded to stay within the history limit.']);
+}
+
+// D-24 (OV-731): a checkpoint step's caller says whether the figure of each
+// side is the one its state draws, and Undo and Redo pass that on. A side not
+// yet drawn takes the figure of a rerender drawn from the current state (D-36)
+// only while its step is the last one and nothing is open.
+{
+  let rules = 0;
+  let figure = 'drawn-0';
+  const restores = [];
+  const history = createHistoryManager({
+    buildIntent: () => ({ rules }),
+    applyIntent: (intent) => { rules = intent.rules; },
+    buildCheckpoint: () => ({ rules, figure }),
+    applyCheckpoint: (checkpoint, restored) => {
+      rules = checkpoint.rules;
+      figure = checkpoint.figure;
+      restores.push(restored);
+    }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change feature color', () => {
+    rules = 1;
+    figure = 'shown-1';
+  }, { drawn: { before: () => true, change: false } });
+  figure = 'drawn-1';
+  assert.equal(await history.keepRedrawnResult(), true);
+  assert.equal(await history.keepRedrawnResult(), false, 'the kept side is drawn');
+  await history.undo();
+  await history.redo();
+  assert.deepEqual({ rules, figure }, { rules: 1, figure: 'drawn-1' });
+  assert.deepEqual(restores, [{ drawn: true }, { drawn: true }]);
+
+  // A later step, or an Undo of the step, keeps the figure out of it.
+  await history.runUndoableCheckpoint('Change feature color again', () => {
+    rules = 2;
+    figure = 'shown-2';
+  }, { drawn: { before: () => false, change: true } });
+  await history.runUndoable('Edit setting', () => { rules = 3; });
+  figure = 'drawn-3';
+  assert.equal(await history.keepRedrawnResult(), false, 'not a checkpoint step');
+  await history.undo();
+  await history.undo();
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'the before side was not drawn');
+  // The step before is the last one now; its after side is drawn already.
+  assert.equal(await history.keepRedrawnResult(), false, 'undone');
+  await history.redo();
+  assert.deepEqual(restores.at(-1), { drawn: false });
+  // A checkpoint step's side is kept only while nothing is open.
+  let release;
+  const open = history.runUndoableCheckpoint('Open step', () => new Promise((resolve) => { release = resolve; }));
+  await Promise.resolve();
+  assert.equal(await history.keepRedrawnResult(), false, 'a step is open');
+  release();
+  await open;
+  // A step without a caller's answer restores as before.
+  await history.runUndoableCheckpoint('Reset', () => { rules = 4; });
+  await history.undo();
+  assert.deepEqual(restores.at(-1), { drawn: false });
+  // N1 (review C): the before side is drawn as History captures it, not as
+  // the caller asked for the step: a step that waits for an open one reads it
+  // once that one settled.
+  let owed = false;
+  let settle;
+  const waiting = history.runUndoable('Edit setting', () => new Promise((resolve) => { settle = resolve; }));
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  assert.equal(typeof settle, 'function', 'the step is open');
+  const reads = [];
+  const recolored = history.runUndoableCheckpoint('Change feature color late', () => {
+    rules = 5;
+    figure = 'shown-5';
+  }, { drawn: { before: () => { reads.push(owed); return !owed; }, change: true } });
+  owed = true;
+  rules = 6;
+  settle();
+  await waiting;
+  await recolored;
+  assert.deepEqual(reads, [true], 'read once, when the before side is captured');
+  await history.undo();
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'owed when captured');
+  await history.redo();
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'the after side follows the before side');
+  console.log('history redrawn result tests passed');
+}
+
+// OV-872: what a shown rerender writes (the Legend rows Python drew) while an
+// action's step is open, waiting for that rerender, is no change of a step:
+// the action stays one step, its own writes stay in it, and its Undo keeps
+// the drawn rows.
+{
+  let rules = 0;
+  let legend = 'generated';
+  let setting = 0;
+  const history = createHistoryManager({
+    buildIntent: () => ({ rules, legend, setting }),
+    applyIntent: (intent) => { ({ rules, legend, setting } = intent); },
+    buildCheckpoint: () => ({ rules, legend, setting }),
+    applyCheckpoint: (checkpoint) => { ({ rules, legend, setting } = checkpoint); }
+  });
+  await history.captureBaseline('initial');
+  /** @param {(shown: Promise<void>) => Promise<unknown>} fn */
+  const whileDrawn = async (fn) => {
+    let show = () => {};
+    const shown = new Promise((resolve) => { show = resolve; });
+    // The rerender was requested before the action's step began.
+    const requestedAt = history.intentStepSerial();
+    const action = history.runUndoable('Change feature color', () => fn(shown));
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    history.adoptDrawnWrite(() => { legend = `drawn-${rules}`; }, { requestedAt });
+    show();
+    await action;
+  };
+  // An intent step: the action's write before and after the rerender.
+  await whileDrawn(async (shown) => { setting = 1; await shown; rules = 1; });
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.deepEqual({ rules, legend, setting }, { rules: 0, legend: 'drawn-0', setting: 0 });
+  await history.redo();
+  assert.deepEqual({ rules, legend, setting }, { rules: 1, legend: 'drawn-0', setting: 1 });
+  // A rule commit: a checkpoint the action opens after the rerender.
+  await whileDrawn(async (shown) => {
+    await shown;
+    await history.runUndoableCheckpoint('Change feature color', () => { rules = 2; });
+  });
+  assert.equal(history.getUndoCount(), 2, 'one step per action');
+  await history.undo();
+  assert.deepEqual({ rules, legend, setting }, { rules: 1, legend: 'drawn-1', setting: 1 });
+  // With no step open, the write is in no step, as before.
+  history.adoptDrawnWrite(() => { legend = 'drawn-again'; }, { requestedAt: history.intentStepSerial() });
+  assert.equal(history.getUndoCount(), 1);
+  console.log('history drawn write tests passed');
+}
+
+// D-40 (review S1 of #1091): the step that requested the rerender is still
+// open when it binds (the label On path waits for the "Keep without label"
+// choice). The drawn rows are its own: its Undo restores the rows from before
+// its edit, as D-24 (OV-731) keeps a redraw's figure in the step that asked
+// for it.
+{
+  let visible = false;
+  let legend = ['generated'];
+  const history = createHistoryManager({
+    buildIntent: () => ({ visible, legend }),
+    applyIntent: (intent) => { ({ visible, legend } = intent); },
+    buildCheckpoint: () => ({ visible, legend }),
+    applyCheckpoint: (checkpoint) => { ({ visible, legend } = checkpoint); }
+  });
+  await history.captureBaseline('initial');
+  let show = () => {};
+  const shown = new Promise((resolve) => { show = resolve; });
+  /** @type {number | null} */
+  let requestedAt = null;
+  const action = history.runUndoable('Change label text', async () => {
+    visible = true;
+    requestedAt = history.intentStepSerial();
+    await shown;
+  });
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  assert.notEqual(requestedAt, null, 'the step requested the rerender');
+  history.adoptDrawnWrite(() => { legend = ['generated', 'shown feature']; }, { requestedAt: Number(requestedAt) });
+  show();
+  await action;
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.deepEqual({ visible, legend }, { visible: false, legend: ['generated'] }, 'Undo restores the rows before the edit');
+  await history.redo();
+  assert.deepEqual({ visible, legend }, { visible: true, legend: ['generated', 'shown feature'] });
+
+  // The limit (N1): arrays are adopted whole. A step that began after the
+  // request and wrote the same array before the rerender binds loses that
+  // write to the drawn array: its Undo does not revert it.
+  const lateRequest = history.intentStepSerial();
+  let release = () => {};
+  const bound = new Promise((resolve) => { release = resolve; });
+  const renaming = history.runUndoable('Rename Legend entry', async () => {
+    legend = ['renamed', 'shown feature'];
+    await bound;
+  });
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  history.adoptDrawnWrite(() => { legend = ['renamed', 'shown feature', 'drawn row']; }, { requestedAt: lateRequest });
+  release();
+  await renaming;
+  assert.equal(history.getUndoCount(), 1, 'the rename is in no step: the drawn array replaced it');
+
+  // N-A (review of #1091): a step that must first settle another owner's open
+  // step is numbered when it begins, not after that wait, so a rerender its
+  // own edit requests in the same task counts it as the requester.
+  const pendingOther = await history.begin('Move legend', { owner: 'drag' });
+  const opening = history.begin('Change setting', { owner: 'checkbox' });
+  // The request is read in the task that began the step (a watcher flush).
+  const ownRequest = history.intentStepSerial();
+  const opened = await opening;
+  assert.notEqual(opened, pendingOther, 'the other owner\'s step was settled');
+  visible = false;
+  history.adoptDrawnWrite(() => { legend = ['renamed', 'shown feature', 'own row']; }, { requestedAt: ownRequest });
+  await history.commit(opened);
+  await history.undo();
+  assert.deepEqual({ visible, legend }, { visible: true, legend: ['renamed', 'shown feature', 'drawn row'] },
+    'Undo restores the rows from before the step that requested them');
+  console.log('history drawn write requester tests passed');
+}
+
+// D-07 (b) (Owner 2026-10-16 「確認を出す」): a change outside History (the
+// Rich Feature Popup preference, D-03) makes the work unsaved without a step:
+// Load Session asks before it replaces it. Save and Load clear the mark.
+{
+  let intent = { label: 'start' };
+  const history = createHistoryManager({
+    buildIntent: () => structuredClone(intent),
+    applyIntent: (restored) => { intent = structuredClone(restored); },
+    buildCheckpoint: () => structuredClone(intent),
+    applyCheckpoint: (checkpoint) => { intent = structuredClone(checkpoint); }
+  });
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Change label text', () => { intent.label = 'edited'; });
+  await history.undo();
+  history.markSavePoint();
+  assert.equal(await history.hasChangesSinceSavePoint(), false);
+  history.markChangeOutsideHistory();
+  assert.equal(await history.hasChangesSinceSavePoint(), true, 'a change outside History is unsaved');
+  assert.deepEqual([history.getUndoCount(), history.getRedoCount()], [0, 1], 'it records no step and keeps Redo');
+  history.markSavePoint();
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a Save clears the mark');
+  history.markChangeOutsideHistory();
+  await history.initializeIntentBaseline('Loaded session');
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a Load clears the mark');
+  console.log('history change outside History tests passed');
+}
+
+// OV-1102: a bulk label edit replaces the saved label table (the rules a loaded
+// Session sent) in its own step, so Undo returns both: the next Generate draws
+// the saved labels and Save writes the table again. Redo replaces it again.
+{
+  const savedRow = {
+    recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^tRNA-Phe$', labelText: 'SavedPhe'
+  };
+  const state = {
+    form: {},
+    adv: {},
+    files: {},
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    results: ref([]),
+    selectedResultIndex: ref(0),
+    mode: ref('circular'),
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    downloadDpi: ref(300),
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
+    extractedFeatures: ref([]),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: {},
+    featureVisibilityManualRules: [],
+    featureOverrides: {},
+    featureStrokeOverrides: {},
+    canonicalLabelOverrideRows: ref([savedRow]),
+    labelTextBulkOverrides: {},
+    orthogroupDormantOverrides: { OG_1: { name: 'Saved group' } },
+    orthogroups: ref([]),
+    selectedOrthogroupId: ref(''),
+    selectedOrthogroupAlignmentFeature: ref(''),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    addedLegendCaptions: ref(new Set()),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state: withDrawings(state),
+    fileStore: createHistoryFileStore(),
+    nextTick: async () => {},
+    buildConfigData: () => ({ form: state.form, adv: state.adv })
+  });
+  const history = createHistoryManager({
+    buildIntent: snapshots.buildHistoryIntent,
+    applyIntent: snapshots.applyHistoryIntent,
+    buildCheckpoint: snapshots.buildArtifactCheckpoint,
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
+  });
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Load label edits', () => {
+    state.labelTextBulkOverrides.SavedPhe = 'MyLabel';
+    state.canonicalLabelOverrideRows.value = [];
+  });
+  await history.undo();
+  assert.deepEqual(
+    [state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value],
+    [{}, [savedRow]],
+    'Undo returns the saved label table with the bulk label edits it replaced'
+  );
+  await history.redo();
+  assert.deepEqual(
+    [state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value],
+    [{ SavedPhe: 'MyLabel' }, []]
+  );
+  // R15-21: Reset Settings removes the saved label table and the dormant
+  // Similarity group names in its one step; Undo returns both.
+  await history.undo();
+  await history.runUndoableCheckpoint('Reset settings', () => {
+    delete state.labelTextBulkOverrides.SavedPhe;
+    state.canonicalLabelOverrideRows.value = [];
+    delete state.orthogroupDormantOverrides.OG_1;
+  });
+  assert.deepEqual([state.canonicalLabelOverrideRows.value, state.orthogroupDormantOverrides], [[], {}]);
+  await history.undo();
+  assert.deepEqual(
+    [state.canonicalLabelOverrideRows.value, state.orthogroupDormantOverrides],
+    [[savedRow], { OG_1: { name: 'Saved group' } }],
+    'Undo of Reset returns the saved label table and the dormant group names'
+  );
+  console.log('history saved label table tests passed');
 }

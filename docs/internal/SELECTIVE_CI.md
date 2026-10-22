@@ -11,7 +11,7 @@ classification rules.
 | --- | --- | --- |
 | PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Python 3.11 primary |
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
-| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness; outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
+| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
 PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
 with it. Integrated functional validation targets 15–20 minutes where practical.
@@ -99,6 +99,13 @@ directories, dependency installs, wheels, and browser state. The contracts job
 also runs when the trusted plan requires `web-pr-smoke`, so the pre-redesign base
 planner still requires all three original suites during rollout.
 
+The 16 `@comparison-contract` Playwright cases run once per CI run. Their pytest
+wrapper, `tests/test_linear_comparison_browser_contracts.py`, runs in
+`web-contracts-pr` only when the trusted plan does not require
+`playwright-functional`; otherwise the job deselects it and the functional shards
+run the same cases. The `dev` `browser` job always deselects the wrapper, because
+every `dev` push has functional shard evidence, run or inherited.
+
 Web unit/browser tests and their helpers route to the Web, session, Gallery, or
 LOSAT capability they exercise. Adding a normal Web regression therefore does not
 force a full PR route. Shared fixtures and unclassified tests remain conservative
@@ -141,6 +148,23 @@ push run therefore finishes with exact-SHA evidence. A SHA whose waiting run was
 replaced has no evidence of its own; the newer run tests a tree that contains
 it, and a light push on top of it inherits nothing. Pull request runs and manual
 dispatches still cancel the run they supersede.
+
+Fail-fast on pull requests: when `Core PR`, `Web contracts`,
+or `Recipes standard` fails in a pull request run, a small
+dependent job, `Fail fast (<job>)`, runs `gh run cancel` on that run, so the
+`Playwright functional` shards and other jobs still running stop. Its condition
+is `if: failure() && github.event_name == 'pull_request'`. The failed job keeps its
+`failure` conclusion; on a green run the cancel jobs are skipped. Only the
+cancel jobs get `actions: write`; the test jobs, which run third-party
+packages, keep the read-only workflow token. A `dev` push or a manual dispatch
+is never cancelled and still leaves its exact-SHA evidence. A shard cancelled
+this way loses no evidence: the commit has already failed, and `PR / gate`,
+which does not depend on the cancel jobs, still runs and fails. The three jobs
+are the ones whose failures came first in the measured pull request runs; the
+weekly CI inventory shows when another job should join them. `Web change budget`
+is excluded: the topology contract in `tests/web/architecture-contracts.test.mjs`
+keeps every job independent of it.
+`tests/ci/ci-impact-cli.test.mjs` pins the cancel jobs and their permissions.
 
 ### Light-change inheritance
 
@@ -378,6 +402,13 @@ minutes. The largest file, `linear-multi-record.playwright.spec.js` (about 17.5
 minutes on one worker), fits in one shard because its two workers share its
 cases.
 
+Since the diagram Worker boots from a Pyodide snapshot, the lists were rebuilt from
+the green `dev` runs 38944092373 and 38946503427 (all eight shards executed). The
+recorded minutes fell by about 55 percent in total, the largest file
+`live-generate-parity-legend.playwright.spec.js` from 17.4 to 7.1 minutes. The
+previous lists would have given a slowest shard of 10.6 minutes against a mean of
+9.1 (ratio 1.18); the new lists give 9.1 minutes in every shard.
+
 Rebalance when shard times drift apart, or when the inventory check reports a
 new spec file. Download the shard artifacts of a green run with
 `gh run download <run-id> -p 'playwright-functional-shard-*' -D <dir>`, then run
@@ -397,6 +428,79 @@ for the measured composite workload, setup and existing retries. The line
 reporter names the running case, and the JSON report records durations,
 retries and final results alongside traces on every completed job. A job killed
 at its limit may not reach upload; its last running case remains in the log.
+
+## Pyodide snapshot
+
+A Pyodide memory snapshot lets the diagram Worker skip its package installs in
+functional tests. Each `playwright-functional` shard builds one after `Prepare
+browser wheel` into `$RUNNER_TEMP/pyodide-snapshot` and passes that directory
+to the tests; a build failure fails the job. Other jobs build none.
+`node tools/build_pyodide_snapshot.mjs <dir>` boots Pyodide
+in Node, runs the Worker's package recipe (`installRuntimePackages`: micropip
+installs the dependency wheels with their requirements, then the gbdraw wheel),
+runs the Worker helpers, checks that every installed distribution's
+requirements are installed, and writes `snapshot.bin` (the Wasm memory),
+`state.json` (the side-module linker state and the validity key) and `fs.bin`
+(the site-packages files), about 170 MB, in 5 to 10 seconds. It needs a Node
+with WebAssembly JSPI (`WebAssembly.Suspending`), as Chromium has, such as the
+version in `.node-version`: without JSPI Pyodide's function table starts one
+entry shorter, Chromium cannot restore the snapshot, and the builder refuses
+to run. With
+`GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR` set, `playwright.config.js` serves the
+repository with `tools/serve_pyodide_snapshot.py`, which serves that directory
+at `/__pyodide-snapshot__/`
+(`tests/web/helpers/pyodide-snapshot-test-server.cjs`) and `config.js` with
+`PYODIDE_SNAPSHOT_URL` pointing at it. The Worker then restores the snapshot
+(about 0.5 seconds) instead of installing its packages (about 5 seconds
+locally), runs `_start_web_worker_state()` so each Worker has its own caches
+and cache epoch, and calls numpy and pandas once. Every restored Worker
+shares the string-hash secret of the build, so functional CI is less likely
+to expose a bug that depends on set or dict order of strings. On draft PR #1115, building it in each functional shard
+cut functional test time from 297.8 to 139.8 test-minutes. The repository's
+`config.js` keeps `PYODIDE_SNAPSHOT_URL = null`: users, smoke, browser and
+release acceptance jobs boot cold.
+
+The Worker boots cold whenever a restore fails: a missing file or one that
+takes longer than 60 seconds to download, another recipe format, wheel or
+helper source (the key in `state.json` covers the format version and the bytes
+of every wheel and of the helper source), another Pyodide build (its
+`BUILD_ID`, which Pyodide checks), a table slot or JS reference the builder
+could not name, or an error while relinking, starting the Worker state or
+calling numpy and pandas. The page
+then discards that Worker, starts one without the snapshot, and boots every
+later Worker cold. The page reports each boot as the `workerBoot` structural
+metric: `snapshot`, `cold`, or `cold after snapshot error: <reason>`.
+`tests/web/pyodide-snapshot-boot.playwright.spec.js` requires `snapshot` and a
+working fallback, so a snapshot that stops restoring fails CI instead of
+silently costing time. A case that asserts the cold boot (the wheel request)
+calls `forceColdPyodideBoot(page)`, which aborts the snapshot requests.
+
+To run specs locally with a snapshot, prepare the wheel, build the snapshot
+outside the repository, and set the variable with a free port: Playwright
+reuses a server already listening on the port locally, and a plain server
+serves no snapshot.
+
+```bash
+python tools/prepare_browser_wheel.py
+node tools/build_pyodide_snapshot.mjs /tmp/pyodide-snapshot
+GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR=/tmp/pyodide-snapshot GBDRAW_WEB_TEST_PORT=<free port> \
+  npx playwright test --config=tests/web/playwright/functional.config.js <spec>
+```
+
+Rebuild the snapshot after every wheel or helper change; a stale one only makes
+the Worker boot cold. Without the variable, the server and the Worker are
+unchanged.
+
+The restore depends on Pyodide and Emscripten internals
+(`gbdraw/web/js/workers/pyodide-snapshot.js`): `makeMemorySnapshot` saves only
+the Wasm memory, so the restore re-instantiates the side modules at the memory
+and table bases of their dlopen handles (`struct dso` offsets) and rebuilds the
+table slots, the GOT and the linker tables through the internals Pyodide
+exports on its module (`LDSO`, `GOT`, `GOTHandler`, `getDylinkMetadata`,
+`wasmTable`, `newDSO`, `mergeLibSymbols`, `setWasmTableEntry`,
+`updateTableMap`). A Pyodide or vendored-package upgrade must rebuild the
+snapshot and pass `pyodide-snapshot-boot.playwright.spec.js` before it merges,
+and a builder failure must fail the job that builds it.
 
 ## Weekly CI inventory
 

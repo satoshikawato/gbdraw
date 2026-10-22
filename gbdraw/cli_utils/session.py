@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from gbdraw.cli_utils.common import add_font_file_args, register_font_files
+from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.core.fonts import custom_font_families
 from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.exceptions import ValidationError
@@ -25,10 +26,11 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.render.formats import (
     SVG_FORMAT,
+    parse_output_formats,
     resolve_format_output_path,
     resolve_output_paths,
 )
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
@@ -49,6 +51,10 @@ from gbdraw.session_migration import (
 )
 
 if TYPE_CHECKING:
+    from gbdraw.api.request_render import (
+        CircularBatchRenderResult,
+        RequestRenderResult,
+    )
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
@@ -95,6 +101,28 @@ class SessionCliRequest:
     embed_fonts: bool = True
 
 
+def read_stored_font_size_options(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Read each replayed ``--*font_size`` option <= 0 as Auto (OV-1282, D-PYB-7).
+
+    The released CLI stored such a value in ``cliInvocation.args`` and drew it;
+    replay keeps the option's default instead (``auto`` for one value of a
+    per-track list), with the notice of the other Session readers. The options
+    are the parsed ones whose destination names a font size.
+    """
+
+    for dest, value in vars(args).items():
+        if not dest.endswith("font_size") or value is None:
+            continue
+        path = f"cliInvocation.args --{dest}"
+        if isinstance(value, list):
+            setattr(args, dest, [
+                "auto" if read_stored_font_size(item, path=path) is None and item is not None else item
+                for item in value
+            ])
+        elif read_stored_font_size(value, path=path) is None:
+            setattr(args, dest, parser.get_default(dest))
+
+
 def add_session_args(parser: argparse.ArgumentParser) -> None:
     """Add session input/output options to a diagram parser."""
 
@@ -129,6 +157,12 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         ),
         type=str,
     )
+
+
+def _format_override(value: str | None) -> str | None:
+    """Read a ``-f/--format`` override typed with ``--session`` (OV-1244)."""
+
+    return None if value is None else ",".join(parse_output_formats(value))
 
 
 def parse_session_pre_args(
@@ -176,7 +210,7 @@ def parse_session_pre_args(
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -265,7 +299,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -338,10 +372,7 @@ def preflight_session_sidecar_if_requested(
             "Choose a distinct --session_output path."
         )
     if sidecar_path.exists() and not overwrite:
-        raise ValidationError(
-            f"Session output already exists: {sidecar_path}. "
-            "Use --overwrite to replace it."
-        )
+        raise OutputExistsError((sidecar_path,), subject="Session output")
     return sidecar_path
 
 
@@ -645,14 +676,16 @@ def _session_sidecar_path(
 
 def _rendered_drawing_build(
     plan: Any,
-    rendered: Any,
+    rendered: RequestRenderResult | CircularBatchRenderResult,
     *,
     source_version: int,
 ) -> tuple[Any, dict[str, Any] | None]:
     """The re-save of one rendered drawing: its request, Results and artifacts."""
 
-    from gbdraw.api.requests import CircularBatchRequest
-    from gbdraw.session import _DrawingBuild
+    from gbdraw.api.request_render import CircularBatchRenderResult, stored_protein_result_request
+    from gbdraw.session import _DrawingBuild, require_search_frame_protein_results
+
+    require_search_frame_protein_results(rendered.migration_report)
 
     state, web_file_inventory = project_session_adjunct_for_current_write(
         copy.deepcopy(dict(plan.drawing.artifacts.fields)),
@@ -660,11 +693,13 @@ def _rendered_drawing_build(
     )
     state = with_current_artifacts(
         state,
-        losat_cache_entries=getattr(rendered, "losat_cache_entries", ()),
-        protein_identity_manifest=getattr(rendered, "protein_identity_manifest", None),
-        legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
-        legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),
-        protein_id_map=getattr(rendered, "protein_id_map", None),
+        losat_cache_entries=rendered.losat_cache_entries,
+        # A replay builds none; the Session keeps the entries it was saved with.
+        losat_derived_cache_entries=state.get("losatDerivedCache", {}).get("entries", ()),
+        protein_identity_manifest=rendered.protein_identity_manifest,
+        legacy_protein_raw_candidates=rendered.migration_report.protein_raw_candidates,
+        legacy_protein_derived_evidence=rendered.migration_report.protein_derived_evidence,
+        protein_id_map=rendered.migration_report.protein_id_map,
     )
     svg_results = [
         {"name": output.stem, "content": remove_embedded_font_css(output.read_text(encoding="utf-8"))}
@@ -675,26 +710,20 @@ def _rendered_drawing_build(
     ]
     if svg_results:
         state["results"] = svg_results
-    interactive_contexts = (
-        rendered.interactive_contexts
-        if hasattr(rendered, "interactive_contexts")
-        else (rendered.interactive_context,)
-    )
+    if isinstance(rendered, CircularBatchRenderResult):
+        interactive_contexts = rendered.interactive_contexts
+        svg_drawings = rendered.drawings
+        result_names = tuple(output.output_prefix for output in rendered.request.outputs)
+    else:
+        interactive_contexts = (rendered.interactive_context,)
+        svg_drawings = (rendered.drawing,)
+        result_names = (rendered.request.output.output_prefix,)
     replace_current_derived_feature_state(
         state,
         _feature_catalog_for_svg_results(
             [(str(result["name"]), str(result["content"])) for result in svg_results],
-            tuple(interactive_contexts),
+            interactive_contexts,
         ),
-    )
-    request = rendered.request
-    svg_drawings = (
-        rendered.drawings if hasattr(rendered, "drawings") else (rendered.drawing,)
-    )
-    result_names = (
-        tuple(output.output_prefix for output in request.outputs)
-        if isinstance(request, CircularBatchRequest)
-        else (request.output.output_prefix,)
     )
     run_metadata = build_track_slot_geometry_run_metadata(
         mode=plan.drawing.mode,
@@ -716,7 +745,11 @@ def _rendered_drawing_build(
         state.pop("runMetadata", None)
     build = _DrawingBuild(
         mode=plan.drawing.mode,
-        request=request,
+        # The Session stores the protein results this render computed (OV-1068).
+        request=stored_protein_result_request(
+            rendered.request,
+            None if isinstance(rendered, CircularBatchRenderResult) else rendered.linear_metadata,
+        ),
         state=state,
         id=plan.drawing.id,
     )
@@ -1108,7 +1141,6 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "-t": "files.t_color",
     "--table": "files.t_color",
     "--label_whitelist": "files.whitelist",
-    "--label_blacklist": "files.blacklist",
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
@@ -1202,9 +1234,6 @@ def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: boo
         return
     if slot == "files.t_color":
         files["t_color"] = entry
-        return
-    if slot == "files.blacklist":
-        files["blacklist"] = entry
         return
     if slot == "files.whitelist":
         files["whitelist"] = entry
@@ -1304,6 +1333,7 @@ __all__ = [
     "RenderedSvg",
     "SessionCliRequest",
     "add_session_args",
+    "read_stored_font_size_options",
     "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
     "collect_track_slot_geometry_records",

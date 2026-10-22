@@ -27,19 +27,19 @@ export {
 
 /** @import { FileLike } from './session-resource-backing.js' */
 
-/** @type {WeakMap<FileLike, Promise<Uint8Array>>} */
+/** @type {WeakMap<object, Promise<Uint8Array>>} */
 const fileByteCache = new WeakMap();
 
 /**
- * @param {FileLike | null | undefined} file
- * @returns {FileLike | null}
+ * @param {unknown} file
+ * @returns {object | null}
  */
 const asCacheKey = (file) => (
   file && (typeof file === 'object' || typeof file === 'function') ? file : null
 );
 
 /**
- * @param {FileLike | null | undefined} file
+ * @param {unknown} file A `File`, a Session resource view, or any value (rejected unless it has `arrayBuffer()`).
  * @returns {Promise<Uint8Array>}
  */
 export const readFileBytes = (file) => {
@@ -51,7 +51,7 @@ export const readFileBytes = (file) => {
     // A view has a backing, so its read is never null.
     if (key && isSessionResourceFileView(file)) return /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(file));
     // `key` is `file` when it is set.
-    if (!key || typeof /** @type {FileLike} */ (file).arrayBuffer !== 'function') {
+    if (!key || typeof /** @type {{ readonly arrayBuffer?: unknown }} */ (key).arrayBuffer !== 'function') {
       return Promise.reject(new TypeError(
         'A File-like object with arrayBuffer() is required.'
       ));
@@ -73,16 +73,23 @@ export const readFileBytes = (file) => {
   }
 };
 
-/** @param {FileLike | null | undefined} file */
+/**
+ * @param {unknown} file A `File`, a Session resource view, or any value (rejected unless it has
+ *   `arrayBuffer()` or `text()`): each member is tested before it is used.
+ * @returns {Promise<string>}
+ */
 export const readFileText = async (file) => {
   const lazyText = isSessionResourceFileView(file)
     ? readSessionResourceText(file)
     : null;
   if (lazyText) return lazyText;
-  if (typeof file?.arrayBuffer === 'function') {
+  // A view: the reads below test each member they use.
+  const view = /** @type {{ readonly arrayBuffer?: unknown, readonly text?: unknown } | null | undefined} */ (file);
+  if (typeof view?.arrayBuffer === 'function') {
     return bytesToText(await readFileBytes(file));
   }
-  if (typeof file?.text === 'function') return file.text();
+  // A function member is a File's or Blob's (Session JSON holds none), whose `text()` resolves to a string.
+  if (typeof view?.text === 'function') return /** @type {{ text: () => Promise<string> }} */ (file).text();
   throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
 };
 

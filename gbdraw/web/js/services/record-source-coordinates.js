@@ -18,6 +18,31 @@ const RECORD_SOURCE_ATTRIBUTES = ['start', 'end', 'step']
   .map((name) => `data-gbdraw-record-source-${name}`);
 
 /**
+ * The marked record groups of one SVG root by record index, read with one query
+ * the first time the root is asked (OV-931). The renderer writes these
+ * attributes once per record group and nothing edits them on a mounted root.
+ * @type {WeakMap<Element, Map<string, Element>>}
+ */
+const markedRecordGroupsByRoot = new WeakMap();
+
+/**
+ * @param {Element} root
+ * @returns {Map<string, Element>}
+ */
+const markedRecordGroups = (root) => {
+  let groups = markedRecordGroupsByRoot.get(root);
+  if (groups) return groups;
+  groups = new Map();
+  for (const group of root.querySelectorAll(`[data-gbdraw-record-index][${RECORD_SOURCE_ATTRIBUTES[2]}]`)) {
+    const index = group.getAttribute('data-gbdraw-record-index') || '';
+    // The first group in document order answers, as `querySelector` did.
+    if (!groups.has(index)) groups.set(index, group);
+  }
+  markedRecordGroupsByRoot.set(root, groups);
+  return groups;
+};
+
+/**
  * Read the input-file span of one displayed Linear record (PD-OI-076).
  *
  * The renderer marks only cropped or reverse-complemented records; any other
@@ -29,10 +54,8 @@ const RECORD_SOURCE_ATTRIBUTES = ['start', 'end', 'step']
 export const readRecordSourceSpan = (element, recordIndex) => {
   const root = element?.ownerSVGElement || element?.closest?.('svg') || null;
   const index = Number(recordIndex);
-  if (!root?.querySelector || !Number.isInteger(index) || index < 0) return null;
-  const group = root.querySelector(
-    `[data-gbdraw-record-index="${index}"][${RECORD_SOURCE_ATTRIBUTES[2]}]`
-  );
+  if (!root?.querySelectorAll || !Number.isInteger(index) || index < 0) return null;
+  const group = markedRecordGroups(root).get(String(index));
   if (!group) return null;
   const [start, end, step] = RECORD_SOURCE_ATTRIBUTES.map((name) => Number(group.getAttribute(name)));
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) return null;

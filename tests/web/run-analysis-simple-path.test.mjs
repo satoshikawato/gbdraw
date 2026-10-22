@@ -103,6 +103,26 @@ const assertDownloadedFilesMatchCommands = (runInfo, entries) => {
   assert.deepEqual(referenced, expected);
 };
 
+// The Worker sends the feature catalog beside the metadata with its revision
+// (step 3a); the fixtures below keep the catalog in `metadata` for the
+// generationExecutor seam. A fixture without a catalog stands for one the page
+// cannot admit, as a missing catalog was before. A payload that names its own
+// `featureCatalogRevision` is sent as written (the "unchanged" cases).
+let fakeCatalogBuilds = 0;
+const fakeCatalogRevision = (revision) => ({ revision, sha256: '0'.repeat(64), bytes: 1 });
+const asWorkerReply = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.error
+    || Object.hasOwn(payload, 'featureCatalogRevision')) return payload;
+  const { featureCatalog = {}, ...metadata } = payload.metadata || {};
+  fakeCatalogBuilds += 1;
+  return {
+    ...payload,
+    metadata,
+    featureCatalog,
+    featureCatalogRevision: fakeCatalogRevision(`fake:${fakeCatalogBuilds}`)
+  };
+};
+
 class AuditSimplePathWorker {
   constructor() {
     this.listeners = new Map();
@@ -141,7 +161,7 @@ class AuditSimplePathWorker {
         type: 'run',
         requestId: message.requestId,
         ok: true,
-        results: structuredClone(payload)
+        results: asWorkerReply(structuredClone(payload))
       })));
       return;
     }
@@ -166,6 +186,7 @@ globalThis.Worker = AuditSimplePathWorker;
 const {
   afterFrame,
   afterPaint,
+  afterTask,
   buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate
@@ -533,29 +554,9 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
   assert.equal(outcome.annotationWarnings[0].resultName, 'HmmtDNA_basic_circular');
 });
 
-test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
-  const structuralMetrics = {};
-  const lifecycleEvents = [];
-  globalThis.__GBDRAW_TEST_HOOKS__ = {
-    onStructuralMetric(metric) {
-      structuralMetrics[metric.name] = (
-        Number(structuralMetrics[metric.name] || 0) + Number(metric.value || 0)
-      );
-    },
-    onSessionLifecycleEvent({ name }) {
-      lifecycleEvents.push(name);
-    }
-  };
-  const primary = new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'active.gb', {
-    type: 'text/plain',
-    lastModified: 7
-  });
-  const fallbackPrimary = new AuditFile(['record parser fallback'], 'fallback.gb', {
-    type: 'application/octet-stream',
-    lastModified: 8
-  });
-  const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
-
+// One Circular GenBank input whose other slots hold files no run may read.
+/** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
+const installSimpleCircularInput = (primary, inactive) => {
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
   state.files.c_gb = primary;
@@ -601,6 +602,32 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     region_end: null,
     region_reverse: false
   });
+};
+
+test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
+  const structuralMetrics = {};
+  const lifecycleEvents = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      structuralMetrics[metric.name] = (
+        Number(structuralMetrics[metric.name] || 0) + Number(metric.value || 0)
+      );
+    },
+    onSessionLifecycleEvent({ name }) {
+      lifecycleEvents.push(name);
+    }
+  };
+  const primary = new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'active.gb', {
+    type: 'text/plain',
+    lastModified: 7
+  });
+  const fallbackPrimary = new AuditFile(['record parser fallback'], 'fallback.gb', {
+    type: 'application/octet-stream',
+    lastModified: 8
+  });
+  const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
+
+  installSimpleCircularInput(primary, inactive);
 
   let adoptedArtifacts = 0;
   let lastAdoptedCanonical = null;
@@ -798,6 +825,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
+  // N7 (step 3a): the first Generate holds no catalog; later renders of the
+  // shown drawing name the catalog revision it holds.
+  assert.equal(firstRunPayload.heldFeatureCatalogRevision, null);
+  const committedCatalogRevision = `fake:${fakeCatalogBuilds}`;
   assert.equal(Object.hasOwn(firstRunPayload, 'resources'), false);
   assert.ok(firstRunPayload.resourceManifest.length > 0);
   assert.ok(firstRunPayload.stagedResources.every(({ bytes }) => bytes instanceof ArrayBuffer));
@@ -847,6 +878,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(targetIntent.startCoordinate, 3);
   assert.deepEqual(state.results.value, [targetResult]);
   const targetRunPayload = workerMessages.filter(({ type }) => type === 'run').at(-1).payload;
+  assert.equal(targetRunPayload.heldFeatureCatalogRevision?.revision, committedCatalogRevision);
+  const targetCatalogRevision = `fake:${fakeCatalogBuilds}`;
   assert.equal(targetRunPayload.request.output.prefix, committedOutputPrefix);
   assert.notEqual(targetRunPayload.request.output.prefix, state.activeDrawing().form.prefix);
   assert.equal(structuralMetrics.canonicalCandidateExecutionCount, 2);
@@ -899,6 +932,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
   labelNoticeClears.length = 0;
   const failedRun = await runner.runAnalysis();
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'run').at(-1).payload.heldFeatureCatalogRevision?.revision,
+    targetCatalogRevision
+  );
   assert.equal(failedRun.status, 'error');
   assert.deepEqual(labelNoticeClears, ['build']);
   assert.equal(failedRun.error, state.errorLog.value);
@@ -1976,6 +2013,61 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
+
+    // OV-1128 B (D-114): a Similarity groups Generate draws, records and keys with the stored
+    // paralog links per group. The committed result was drawn with 3, so it is reused and the
+    // request records 3.
+    const pairwiseCommittedRequest = committedRenderRequest;
+    const pairwiseCanonicalComparisons = state.files.linearCanonicalComparisons;
+    const groupSettings = {
+      proteinBlastpCandidateLimit: null,
+      orthogroupMembershipMode: state.activeDrawing().losat.blastp.orthogroupMembershipMode,
+      orthogroupMemberMaxHits: null,
+      collinearMaxParalogLinksPerOrthogroup: 3
+    };
+    // Similarity groups compares every adjacent pair.
+    state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
+    state.activeDrawing().losat.blastp.mode = 'orthogroup';
+    state.activeDrawing().losat.blastp.orthogroupMemberMaxHits = null;
+    state.activeDrawing().losat.blastp.collinearMaxParalogLinksPerOrthogroup = 3;
+    state.files.linearCanonicalComparisons = [{
+      kind: 'orthogroupResult',
+      encoding: 'canonicalJson',
+      file: new AuditFile(['{"schema":3,"kind":"orthogroupResult","value":{}}\n'], 'groups.json')
+    }, {
+      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: groupSettings
+    }];
+    committedRenderRequest = {
+      ...pairwiseCommittedRequest,
+      comparisons: [{ kind: 'orthogroupResult' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: groupSettings
+      }]
+    };
+    const groupResult = result('lazy-linear-groups.svg', 'lazy-linear-groups');
+    workerResponses.push(response(groupResult, validCatalog(groupResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(resolveLinearComparisonPlan({
+        plan: state.activeDrawing().linearComparisonPlan,
+        sequences: state.linearSeqs,
+        layout: [],
+        losatProgram: state.activeDrawing().losatProgram.value,
+        blastpMode: state.activeDrawing().losat.blastp.mode
+      })),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 2, 'the same paralog links reuse the committed groups');
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'run').at(-1).payload.request.comparisons
+        .find(({ kind }) => kind === 'generatedProteinComparison').settings.collinearMaxParalogLinksPerOrthogroup,
+      3,
+      'a Similarity groups Generate records the stored paralog links per group'
+    );
+    state.activeDrawing().linearComparisonPlan.mode = 'selected';
+    state.activeDrawing().losat.blastp.mode = 'pairwise';
+    state.activeDrawing().losat.blastp.collinearMaxParalogLinksPerOrthogroup = 2;
+    state.files.linearCanonicalComparisons = pairwiseCanonicalComparisons;
+    committedRenderRequest = pairwiseCommittedRequest;
     committedRenderRequest = {
       ...committedRenderRequest,
       comparisons: [{ kind: 'precomputedProteinComparison' }, {
@@ -2505,4 +2597,364 @@ test('decoration candidate transform runs once after catalog validation for ever
     assert.equal(transforms, 1, kind);
     assert.deepEqual(candidate.commit.svg, { recordDelta: [9, 7], decoration: [40, 20] });
   }
+});
+
+test('a render that reuses the held catalog build keeps the catalog object the page admitted (step 3a)', async () => {
+  const metrics = {};
+  const events = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric({ name, value }) { metrics[name] = (metrics[name] || 0) + Number(value || 0); },
+    onSessionLifecycleEvent({ name }) { events.push(name); }
+  };
+  const canonical = { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} };
+  const run = (options = {}) => executeCanonicalRenderCandidate({
+    canonical,
+    mode: 'circular',
+    prepareCommit: ({ generationResponse }) => ({ generationResponse }),
+    ...options
+  });
+  const runMessages = () => workerMessages.filter(({ type }) => type === 'run');
+  const lastHeld = () => runMessages().at(-1).payload.heldFeatureCatalogRevision;
+  const unchanged = (logicalResult, revision) => ({
+    results: [logicalResult], metadata: {}, featureCatalogRevision: revision
+  });
+  const delta = (before, name) => (metrics[name] || 0) - (before[name] || 0);
+  const name = 'reuse.svg';
+  try {
+    // N1: a sent catalog C with revision R; the next render names R, and an
+    // "unchanged" reply puts C itself back.
+    workerResponses.push(response(result(name, 'one'), validCatalog(name)));
+    const first = await run();
+    assert.equal(first.status, 'ok');
+    assert.equal(lastHeld(), null);
+    const catalog = first.catalog;
+    assert.equal(first.generationResponse.metadata.featureCatalog, catalog);
+    const heldRevision = fakeCatalogRevision(`fake:${fakeCatalogBuilds}`);
+    workerResponses.push(unchanged(result(name, 'two'), heldRevision));
+    const before = { ...metrics };
+    events.length = 0;
+    const reused = await run({ heldFeatureCatalog: catalog });
+    assert.equal(reused.status, 'ok');
+    assert.deepEqual(lastHeld(), heldRevision);
+    assert.equal(reused.catalog, catalog);
+    assert.equal(reused.generationResponse.metadata.featureCatalog, reused.catalogAdmission.catalog);
+    assert.equal(delta(before, 'featureCatalogAdmissionCount'), 0);
+    assert.equal(delta(before, 'featureCatalogReuseCount'), 1);
+    assert.ok(events.includes('catalog.reused'));
+    assert.equal(events.some((event) => event.startsWith('catalog.admission-')), false);
+
+    // N2: an object the page did not receive from the Worker, or none, names nothing.
+    for (const held of [structuredClone(catalog), validCatalog(name), null]) {
+      workerResponses.push(response(result(name, 'copy'), validCatalog(name)));
+      assert.equal((await run({ heldFeatureCatalog: held })).status, 'ok');
+      assert.equal(lastHeld(), null);
+    }
+
+    // N3 (OV-136): items renamed after receipt; a rerender that keeps those
+    // names names the revision, a Generate (engine names) or other names do not.
+    workerResponses.push(response(result(name, 'renamed'), validCatalog(name)));
+    const renamedSource = await run();
+    const renamed = renamedSource.catalog;
+    const renamedRevision = fakeCatalogRevision(`fake:${fakeCatalogBuilds}`);
+    renamed.items[0].resultName = 'Saved name';
+    workerResponses.push(unchanged(result(name, 'kept'), renamedRevision));
+    const kept = await run({ heldFeatureCatalog: renamed, kind: 'reflow', resultNames: ['Saved name'] });
+    assert.equal(kept.status, 'ok');
+    assert.deepEqual(lastHeld(), renamedRevision);
+    assert.equal(kept.catalog, renamed);
+    for (const resultNames of [null, ['Other name']]) {
+      workerResponses.push(response(result(name, 'resent'), validCatalog(name)));
+      await run({ heldFeatureCatalog: renamed, resultNames }).catch(() => null);
+      assert.equal(lastHeld(), null);
+    }
+
+    // N4: "unchanged" for another revision, with nothing held, or with no revision
+    // fails the reply and ends the Worker.
+    for (const [held, reply] of [
+      [catalog, unchanged(result(name, 'other'), fakeCatalogRevision('fake:other'))],
+      [null, unchanged(result(name, 'none-held'), heldRevision)],
+      [catalog, { results: [result(name, 'neither')], metadata: {}, featureCatalogRevision: null }]
+    ]) {
+      const constructed = metrics.workerConstructionCount || 0;
+      workerResponses.push(reply);
+      await assert.rejects(run({ heldFeatureCatalog: held }), (error) => error.code === 'RESULT_INVALID');
+      workerResponses.push(response(result(name, 'after-failure'), validCatalog(name)));
+      assert.equal((await run()).status, 'ok');
+      assert.equal((metrics.workerConstructionCount || 0), constructed + 1);
+    }
+
+    // N5: a sent catalog while one is held is admitted as a new object; C keeps its record.
+    workerResponses.push(response(result(name, 'changed'), validCatalog(name)));
+    const changed = await run({ heldFeatureCatalog: catalog });
+    assert.deepEqual(lastHeld(), heldRevision);
+    assert.notEqual(changed.catalog, catalog);
+    workerResponses.push(unchanged(result(name, 'undo'), heldRevision));
+    assert.equal((await run({ heldFeatureCatalog: catalog })).catalog, catalog);
+
+    // N6: an engine error leaves the held catalog and its record.
+    workerResponses.push({ error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } });
+    assert.equal((await run({ heldFeatureCatalog: catalog })).status, 'engine-error');
+    workerResponses.push(unchanged(result(name, 'after-engine-error'), heldRevision));
+    await run({ heldFeatureCatalog: catalog });
+    assert.deepEqual(lastHeld(), heldRevision);
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+});
+
+// Step 3c B3 (D-53): after the first status a Generate yields one task, not two
+// frames, at "Preparing render inputs and session..." and "Preparing preview...".
+// The yield is the production one (`afterTask`, counted here), so a Cancel
+// queued as a task while a status shows (a click during busy work) runs
+// before the run continues (#1119 review N-2): GE-09 keeps
+// the warm Worker before the post, and a Cancel during admission ends the run
+// before it commits or mounts the candidate.
+test('a Generate yields one frame wait and two task yields, and a Cancel queued at either later status ends the run there (3c B3)', async () => {
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  const events = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent({ name }) { events.push(name); } };
+  installSimpleCircularInput(
+    new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'yield.gb', { type: 'text/plain', lastModified: 9 }),
+    new AuditInactiveFile(['unused'], 'inactive.dat')
+  );
+  const waits = { afterPaint: 0, task: 0 };
+  // The status a queued Cancel targets; the setter queues it as a task the
+  // moment the run writes that status.
+  let cancelAt = '';
+  const cancelReturns = [];
+  const statusRef = state.processingStatus;
+  let statusValue = statusRef.value;
+  Object.defineProperty(statusRef, 'value', {
+    configurable: true,
+    get: () => statusValue,
+    set: (value) => {
+      statusValue = value;
+      if (cancelAt && value === cancelAt) {
+        cancelAt = '';
+        setTimeout(() => cancelReturns.push(runner.cancelRunAnalysis()), 0);
+      }
+    }
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    previewRuntime: createImmediatePreviewRuntime({ onEvent: (name) => events.push(name) }),
+    waitForAfterPaint: async () => { waits.afterPaint += 1; },
+    yieldToTask: () => {
+      waits.task += 1;
+      return afterTask();
+    },
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  const runPosts = () => workerMessages.filter(({ type }) => type === 'run').length;
+  const statusOrder = (values) => values.filter((value) => [
+    'Preparing input files...', 'Preparing render inputs and session...', 'Preparing preview...'
+  ].includes(value)).filter((value, index, kept) => value !== kept[index - 1]);
+  try {
+    const committed = result('yield.svg', 'committed');
+    workerResponses.push(response(committed, validCatalog(committed.name)));
+    const statuses = [];
+    const recordStatuses = Object.getOwnPropertyDescriptor(statusRef, 'value').set;
+    Object.defineProperty(statusRef, 'value', {
+      configurable: true,
+      get: () => statusValue,
+      set: (value) => { statuses.push(value); recordStatuses(value); }
+    });
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(waits, { afterPaint: 1, task: 2 });
+    assert.deepEqual(statusOrder(statuses), [
+      'Preparing input files...', 'Preparing render inputs and session...', 'Preparing preview...'
+    ]);
+    assert.ok(events.includes('generate.paint-opportunity-completed'));
+    const committedResults = state.results.value;
+
+    // Cancel queued at "Preparing render inputs and session...": seen before
+    // the post, with no Worker request to end (GE-09).
+    const postsBefore = runPosts();
+    events.length = 0;
+    cancelAt = 'Preparing render inputs and session...';
+    await runner.runAnalysis();
+    assert.equal(runPosts(), postsBefore);
+    assert.deepEqual(cancelReturns.splice(0), [false]);
+    assert.equal(state.processingStatus.value, 'Canceled.');
+    assert.equal(state.results.value, committedResults);
+
+    // Cancel queued at "Preparing preview...": seen before the commit, so the
+    // candidate is neither committed nor mounted.
+    const candidate = result('yield.svg', 'candidate');
+    workerResponses.push(response(candidate, validCatalog(candidate.name)));
+    events.length = 0;
+    cancelAt = 'Preparing preview...';
+    await runner.runAnalysis();
+    assert.equal(runPosts(), postsBefore + 1);
+    assert.deepEqual(cancelReturns.splice(0), [false]);
+    assert.equal(state.processingStatus.value, 'Canceled.');
+    assert.equal(state.results.value, committedResults);
+    assert.equal(events.includes('test.preview-mounted'), false);
+    assert.deepEqual(waits, { afterPaint: 3, task: 5 });
+  } finally {
+    delete statusRef.value;
+    statusRef.value = statusValue;
+    globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+});
+
+// Generate draws a Linear Depth row at its own height on every run while the
+// row's series has no height of its own: the settings Generate gives a series
+// leave its height Auto, so a second Generate from the same state draws the
+// same figure (OV-1510, review 4 finding 2).
+test('two Linear Generates from one state draw a Depth row at the same height', async () => {
+  const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
+  const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
+  state.mode.value = 'linear';
+  state.lInputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'row-height';
+  drawing.form.show_depth = true;
+  drawing.form.multi_record_canvas = false;
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearRecordRows.splice(0);
+  drawing.linearComparisonPlan.mode = 'none';
+  drawing.linearComparisonPlan.edges.splice(0);
+  drawing.annotationSets.splice(0);
+  state.linearSeqs.splice(0, state.linearSeqs.length, {
+    uid: 'row-height',
+    gb: genbank,
+    gff: null,
+    fasta: null,
+    depth: [depthFile(1), depthFile(2)],
+    blast: null,
+    losat_gencode: 1,
+    definition: '',
+    record_subtitle: '',
+    region_record_id: '',
+    region_start: null,
+    region_end: null,
+    region_reverse: false
+  });
+  const depthRow = (id, trackIndex, height) => ({
+    id, renderer: 'depth', enabled: true, side: 'below', height, spacing: '', z: 0, params: { track_index: trackIndex }
+  });
+  Object.assign(drawing.adv, {
+    depth_height: 50,
+    // Series 2 has no stored settings, as after a Session that saved one series.
+    depth_tracks: [{
+      label: '', color: '#4A90E2', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+    }],
+    linear_track_slots_enabled: true,
+    linear_track_slots_axis_index: 0,
+    linear_track_slots: [
+      { id: 'features', renderer: 'features', enabled: true, side: 'overlay', height: '', spacing: '', z: 0, params: {} },
+      depthRow('depth_1', 0, ''),
+      depthRow('depth_2', 1, '30px')
+    ]
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
+      serializeActiveRenderFiles(state.mode.value, state, activeDrawing, snapshot)
+    ),
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  const generate = async (name) => {
+    const generated = result(`${name}.svg`, name);
+    workerResponses.push(response(generated, validCatalog(generated.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    return {
+      row: drawing.adv.linear_track_slots.find((slot) => slot.id === 'depth_2')?.height,
+      seriesHeights: drawing.adv.depth_tracks.map((track) => track.height)
+    };
+  };
+  const first = await generate('row-height-1');
+  const second = await generate('row-height-2');
+  assert.deepEqual([first.row, second.row], ['30px', '30px']);
+  assert.deepEqual([first.seriesHeights, second.seriesHeights], [[null, null], [null, null]]);
+});
+
+// Circular Generate gives a Depth series without settings the color the
+// series owner gives it, as the editor shows: series 2 the palette, not the
+// Depth color of series 1 (OV-1510).
+test('Circular Generate gives a Depth series without settings its default color', async () => {
+  const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
+  state.mode.value = 'circular';
+  state.cInputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'circular-series';
+  drawing.form.show_depth = true;
+  drawing.form.multi_record_canvas = false;
+  drawing.annotationSets.splice(0);
+  drawing.circularConservation.enabled = false;
+  drawing.circularConservation.series.splice(0);
+  Object.assign(state.files, {
+    c_gb: new AuditFile(['LOCUS circularseries\nORIGIN\n        1 acgtacgt\n//\n'], 'circular-series.gb'),
+    c_gff: null,
+    c_fasta: null,
+    c_depth: [depthFile(1), depthFile(2)],
+    c_conservation_blasts: [],
+    c_conservation_fastas: [],
+    c_conservation_sequence_sources: []
+  });
+  state.circularRecordList.value = [];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+  });
+  const depthRow = (id, trackIndex) => ({ id, renderer: 'depth', enabled: true, side: 'inside', params: { track_index: trackIndex } });
+  Object.assign(drawing.adv, {
+    depth_color: '#AA0000',
+    // Series 2 has no stored settings, as after a Session that saved one series.
+    depth_tracks: [{
+      label: '', color: '#AA0000', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+    }],
+    circular_track_slots_enabled: true,
+    circular_track_slots: [depthRow('depth_1', 0), depthRow('depth_2', 1)]
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    recordDisplayRows: { value: [] },
+    serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
+      serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
+    ),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  // The record discovery of the new source; earlier tests may leave replies queued.
+  workerHelperResponses.splice(0, workerHelperResponses.length, {
+    ok: true,
+    result: { records: [{ selector: '#1', record_id: 'circularseries', record_length: 8 }] }
+  });
+  const generated = result('circular-series.svg', 'circular-series');
+  workerResponses.push(response(generated, validCatalog(generated.name)));
+  assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+  const request = workerMessages.filter(({ type }) => type === 'run').at(-1).payload.request;
+  assert.deepEqual(
+    [drawing.adv.depth_tracks.map((track) => track.color), request.diagramOptions.depthTracks.map((track) => track.color)],
+    [['#AA0000', '#E45756'], ['#AA0000', '#E45756']]
+  );
 });

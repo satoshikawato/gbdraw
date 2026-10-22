@@ -30,6 +30,12 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   see [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
+- Draw a line under feature labels with a leader and a white box or halo
+  behind their letters (`--label_line`, `--label_protection`; **Label Line**
+  and **Label Protection** in the web app).
+- Switch the web app between English, Bahasa Indonesia, Español, Français,
+  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어 with the
+  header **Language** menu.
 
 ## In the web app
 
@@ -38,12 +44,23 @@ inputs, comparing, rendering, and finishing. When a comparison reuses a cached
 search, the status says so. The status shows stages, not a percentage or a
 time estimate. If you cancel, or the run fails, the previous Result stays.
 
+In the Result preview, **×** at the end of the **Search features** row hides the
+search bar, and **Search** in the bottom toolbar shows it again with the same
+query and matches. A click on a Legend row or a record definition in the
+preview opens the Legend item popup or the record popup while **Layout edit**
+is off.
+
+A loaded Circular Session shows its saved Result without reading the embedded
+source again: **Source records** says **Records not inspected** until you select
+**Inspect source records** or **Generate Diagram**.
+
 Circular and Linear mode now keep their own settings, edits, and Result.
 **Generate Diagram** replaces only the Result of the mode you are in, and
 switching modes changes no setting; a mode without a Result says **No Circular
-Result yet** or **No Linear Result yet**. Input files, LOSAT run settings, and
-the rich feature popup are shared by both modes. **Reset Settings** resets both
-modes, and one **Undo** restores both.
+Result yet** or **No Linear Result yet**. The Circular inputs and the Linear File
+cards stay separate inputs that a mode switch keeps; LOSAT run settings and the
+rich feature popup are shared by both modes. **Reset Settings** resets both
+modes, and one **Undo** restores both, except the rich feature popup.
 
 **Load Session** asks **Replace the current work?** before it replaces unsaved
 changes. On gbdraw.app, **Load an example** opens any Gallery example, and the **Load
@@ -56,8 +73,9 @@ and reverse-complements record 6 (LvMJNV) with that record's **Reverse complemen
 setting, so its links to the neighboring genomes no longer cross.
 
 In Linear mode, **Generate Diagram** with a pair set to **Upload BLAST TSV**
-but no file opens a **BLAST TSV missing** dialog. It offers **Choose BLAST TSV
-for #i → #j…**, **Set to No comparison and Generate**, or **Cancel**.
+but no file opens a **BLAST TSV missing** dialog. It offers **Choose file…** for each
+missing pair, **Skip these comparisons and Generate**, or **Cancel**; **Generate**
+appears once every file is chosen.
 
 Choose which records of a file are drawn. Each Linear record card has **Draw
 this record**, and a file with several records has **Choose records…**, a list
@@ -93,13 +111,57 @@ required. The fold is not saved in a Session, and Undo does not change it. A
 long file name in a file input now ends with an ellipsis instead of being cut
 at both ends.
 
-Each change of a checkbox, radio button, or button is one **Undo** step. Undo
-and Redo are unavailable while Generate runs, and the header says why. Error
+Click a drawn element to reach its settings. With Layout edit off, the Circular
+scale ticks and the Linear scale show **Axis & Scale**, a GC content or GC skew
+track shows **Dinucleotide content/skew**, and the plot title shows **Titles &
+Record Labels**, each in a popup beside the figure. The hint **Click to open
+its settings** appears when the pointer is on one of these elements. The popup
+holds the section itself: an edit there is the same setting and the same
+**Undo** step as in the settings panel, and it applies at the same time.
+Opening or closing the popup changes nothing in the figure. Popups of the preview now
+move back inside the window when you resize it.
+
+Each change of a setting's checkbox, radio button, or button is one **Undo**
+step. **Rich Feature Popup** and the search's **Regular expression** are not
+Undo steps, and Undo and Redo do not change them. Undo and Redo are unavailable while Generate runs, and
+the header says why. They are also disabled while a mode-switch step waits
+for a label rerender, **Generate Diagram**, or a Session save or load,
+instead of a click that does nothing. The notice about discarded Undo history appears only when the memory
+limit drops steps, not for the routine 30-step window. Error
 messages name the field, track row, Depth series, table line, or setting
 involved. A value gbdraw cannot use, such as a GC window of 0, is reported
 instead of being replaced by a default without notice. Every visible control
 has an accessible name, every **?** tip is a **Help** button that opens on
 hover, focus, click, or tap, and **Escape** closes only the top layer.
+
+A Legend row of color None shows an empty struck-through swatch and **None**
+in the Legend tab and in the Legend item popup, as the Palette pane does,
+and later live color edits of such a row, also after a **Generate Diagram**
+that drew it, no longer fail.
+
+The header **Language** menu switches the interface text at once, without a
+reload, between English, Bahasa Indonesia, Español, Français, Português,
+Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어. English is shown on a
+first visit whatever the browser's language, and the choice is remembered
+per browser. The figure, every export, the Session, History, and the command
+line text of **Run Info** are the same in every language; numbers keep the
+English format (1,000.5), and warnings from Python, the Gallery tutorials, and
+the documentation stay English. Translated wording may contain errors until it is
+corrected; the Bahasa Indonesia, Español, Français, Português, Tiếng Việt,
+ไทย, and 한국어 wording was drafted and checked without a native-speaker
+reviewer. The **Suggest a translation fix** link beside the menu opens the GitHub
+translation feedback form with the shown language and the gbdraw version
+filled in.
+
+Count sentences in the web app (for example "1 source record inspected") use
+the singular and plural forms of each language, and several English texts now
+use the control names the UI shows.
+The translations were checked against each other and corrected, and the
+header, settings rail, popups, and controls fit their text in every language;
+a name wraps only between words, never inside one.
+
+Documentation: the GUI images and the Gallery tutorial media show the header
+**Language** menu and the final label look.
 
 Large Sessions (thousands of features) open popups and apply color choices in
 seconds instead of freezing the page.
@@ -152,8 +214,8 @@ In the feature popup, **Edit** groups its controls by when they apply:
 (feature placement and record rotation) apply on Generate. To start a record at
 a feature, open **Rotate record using this feature** and choose **Put this
 feature at**: **Start of the record** (the default), **End of the record**, or
-**Custom position**. **Apply on Generate** collects the rotations of several
-records for one **Generate Diagram**; **Apply and regenerate** redraws that
+**Custom position**. **Apply when I Generate** collects the rotations of several
+records for one **Generate Diagram**; **Apply now** redraws that
 record at once.
 
 The Features list and **Search features** keep hidden features, each with a
@@ -225,6 +287,15 @@ final directions or reference position differ from the preview, the preview
 refreshes and you apply again. If Apply fails, your choices and the previous
 Result stay.
 
+While the panel is open, the figure is fitted again whenever its room changes:
+when you resize the window, drag the settings panel wider or narrower, switch
+it to icons or back, open or close a section beside the icons, the review
+panel moves between the side of the figure and below it, or a notice above the
+Result appears or is dismissed. A zoom or position you set by hand during the review
+stays until the next such change, and the view you had before the review
+returns when the panel closes. Dragging the settings panel's width now follows
+the pointer from the first move.
+
 The alignment is saved with every anchor and **Skip** choice. A record's
 direction is its **Reverse complement** setting. Generate, reordering
 records, and a manual **Reverse complement** keep the alignment. Changing a
@@ -255,9 +326,13 @@ each target record has one unambiguous anchor. See
 [command-line alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment),
 and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).
 
+In Linear mode, **Paralog links per group** also appears in LOSATP **Similarity
+groups** mode, and a Similarity groups Generate draws with the value it shows.
+Before, every such Generate drew with 2.
+
 ## Sessions, Run Info, and reproducing a figure
 
-gbdraw 0.14.0 saves Sessions as session version 47, with
+gbdraw 0.14.0 saves Sessions as session version 48, with
 canonical `renderRequest` schema 9. These format numbers are separate from
 the gbdraw version. A Session now keeps
 the settings and edits of Circular and Linear mode separately, and **Save
@@ -321,9 +396,17 @@ A region annotation drawn as an overlay can span several tracks: add
 `to_slot=<slot id>` next to `anchor_slot` on the annotation slot, and the
 overlay runs from one slot's band to the other's, for example one tint per
 region from the GC track to the feature track. It works in Circular and Linear,
-from the command line, Python, and a Session; the web app draws and saves it
-but cannot edit it yet. See
+from the command line, Python, a Session, and the web app, where the
+annotation slot's **Extend to** list sets it. See
 [Region annotations](./CLI_Reference.md#region-annotations).
+
+A region label without its own `label_font_size` is drawn at the feature label
+font size of its diagram. In Circular, labels with `label_orientation` `auto`
+(the default) or `arc` are drawn along their circle; a label longer than its
+circle is cut with an ellipsis and a warning. In Linear, a region label that
+meets feature labels or leader lines is moved along its region, moves those
+feature labels to another row, or is drawn in front of the leader lines; when
+none of these clears it, it warns.
 
 Small label defects of horizontal Circular labels, up to 100 per record, are
 now repaired by moving outer and inner labels slightly: overlapping labels,
@@ -345,6 +428,50 @@ the definition text in the centre, are drawn as before with the same settings as
 a warning. With 50 or more outer labels, `--circular_label_spacing` now also
 sets the gap between the packed rows when those rows fit. See [Labels that do
 not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
+
+Circular labels keep the features' angular order across the origin (the seam
+of the circle), for outer and inner labels, so fewer leaders cross. Some
+figures that stopped with "labels do not fit" now draw. When set track radii
+(`r=`) leave region labels on other tracks, the label warning counts them
+(`N region labels on other tracks`) and the figure is unchanged.
+
+A feature label with a leader line has a line and a protection setting per
+diagram mode: `--label_line {none,under}` and
+`--label_protection {none,halo,box}` (configuration `labels.<mode>.line` and
+`.protection`; web app **Label Line** and **Label Protection** under
+**Labels**). Linear defaults to `under` and `box`: an underline joined to the
+leader, under horizontal labels only (a turned label keeps its vertical
+leader and gets none), and a white box at 80 % opacity behind the letters.
+Circular defaults to `none` and `none`; `--label_protection halo` draws a
+white outline around the letters. Leaders and underlines are 0.07 em wide, at
+least 1 px. In Linear the underline takes no room in its label row, labels
+keep their rows, and region labels keep off the underline and box as off the
+letters. Neighbouring Linear feature labels in one row keep at least 0.25 em
+apart. The web app's PDF export draws labels without their halos and
+draws centred and end-aligned text where the SVG draws it.
+
+In Linear `--label_placement above_feature`, a horizontal label now starts one
+`auto` row off its own feature, with a leader from the feature, and gets the
+underline and the white box as in `auto`; a label that must move off another
+takes the next `auto` row. A turned label (`--label_rotation`) keeps its place
+on its feature and, with `--label_protection box`, gets the white box. Figures
+with horizontal `above_feature` labels change height: most get taller, and a
+figure whose labels were stuck between rows can get lower; `auto` figures
+change only where a label lay over a record's definition text, which feature
+labels now keep off. `--label_rotation` of a whole turn (360, -360, 720) places labels as
+horizontal.
+
+Figure size changes: a Circular annotation overlay that spans split feature
+lanes, or spans nothing, now reserves room for its labels, so the canvas can
+grow when it lies at the outer edge (OV-1359, OV-1360), and a `to_slot` span
+from split lanes to an inside slot no longer reserves room past that slot.
+Linear definition text keeps its `definition_gap` from the tick labels of a
+depth or GC% axis drawn at a record's left (OV-1399), and the figure's left
+edge covers those labels (OV-1403): such figures are about 20 to 35 px wider,
+and a GC% track beside a depth axis can change height by about a pixel.
+
+A CLI Session records `--label_blacklist` as keywords, not as a Blacklist
+File; an older CLI Session keeps its binding.
 
 `gbdraw render --session FILE` draws the diagrams saved in a Session;
 `--list_drawings` lists them and `--drawing ID` picks one. In Python,
@@ -391,9 +518,11 @@ An explicit output prefix keeps its dots. A Circular batch numbers the output
 of each record. gbdraw checks every output file before it draws, and an
 existing file is replaced only when you allow it (`--overwrite`). In Python,
 an export failure raises `ValidationError` or `ExportError` (both subclasses of
-`GbdrawError`), and `save_figure_to()` returns only the files it wrote. Formats
-are written one after another: when a later conversion fails, the files
-already written stay.
+`GbdrawError`), and `save_figure_to()` returns only the files it wrote. Each
+diagram writes its formats all or nothing: when a conversion fails, no existing
+file changes and no new file is left, with or without overwrite. A Circular
+batch writes record by record, so the records before a failing one stay
+written.
 
 ## Installation
 
@@ -427,6 +556,7 @@ reads the file.
 | `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
 | Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
 | Linear `--label_placement on_feature` | `--label_placement above_feature` |
+| Configuration `labels.stroke_width` (leader line width) | Removed: leaders are 0.07 em wide; an override fails with the unknown-path error |
 | Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
 | Flat `show_labels` / `allow_inner_labels` configuration | Mode-specific `labels.circular.*` / `labels.linear.*` leaves |
 | Circular slot `spacing`, `strict`, `compress`, `reserve` | Explicit `inner_gap_px` / `outer_gap_px`; geometry determines reservation and compression |
@@ -491,6 +621,12 @@ internal function `gbdraw.render.export.save_figure` now warns with
    label text edits in its label override table. A Session 27–30 replayed with
    `--session` keeps these rules as saved and warns. Other saved `hash=` values
    load as saved, and every value that cannot be renamed is reported.
+7. SVG feature IDs: of two features with the same type and location, the one
+   left drawn when the other is hidden keeps its `__instance_<source index>`
+   rendered ID (element `id`, `data-gbdraw-rendered-feature-id`,
+   `data-label-feature-id`), so the live Web Result and Generate agree. When
+   the first feature of a record is one of them, its instance is `0` instead of
+   `item`. Scripts that match these IDs need the new values (OV-1485).
 
 Some command-line input that 0.13 accepted now stops the run with a message:
 
@@ -514,7 +650,7 @@ Some command-line input that 0.13 accepted now stops the run with a message:
   an error that names the file and line. The feature override and feature
   placement tables are unchanged.
 
-In the web app, **Override File (-d)** import checks Default colors the same
+In the web app, **Default colors file** import checks Default colors the same
 way, and **Load Session** drops a stored Legend entry color outside that set and
 names the entry in the Load notice.
 
@@ -540,6 +676,9 @@ Some older figures can change:
   their former size.
 - A manual tick interval that is not a whole unit prints the decimals it needs:
   a 500 bp interval no longer reads "1 kbp, 1 kbp".
+- In the web app, unnamed Depth series are called **Depth** for one series and
+  **Depth 1**, **Depth 2**, … for more, as the CLI and Python draw them,
+  instead of **Depth**, **Depth 2**.
 - Depth TSV positions follow crops and reverse complement. Before,
   `--region chr:601-800` drew the rows of positions 1-200, and a
   reverse-complemented record drew its coverage mirrored.
@@ -611,7 +750,6 @@ each export format needs.
   listed `pairs` cannot be edited; **Inherit saved comparison** reuses it as saved.
 - A Session 31 to 39 whose Label whitelist has a row with a blank keyword loads
   in the web app, but replaying it on the command line fails.
-- A feature popup can cover header buttons such as **Undo**; close it to reach them.
 - Similarity Groups assignment reasons and path IDs can differ between the web app
   and the command line for a reverse-complemented record, because inference depends
   on the order of LOSAT hits. The drawn diagram is the same.
@@ -621,10 +759,11 @@ each export format needs.
 - After you load a Session saved by 0.13.0, its Result keeps the 0.13.0 feature IDs
   on cropped or reverse-complemented records until you click **Generate Diagram**. Colors
   are unaffected. An SVG downloaded before **Generate Diagram** carries the old IDs.
-- A label whitelist row that **Whitelist only** saved before 0.14.0, for a feature
-  without a unique qualifier, names the feature by its old drawn ID. On a cropped
-  or reverse-complemented record it no longer matches that feature, and its label
-  is no longer whitelisted. Use **Whitelist only** on the feature again to add a
-  row that matches.
+- A label whitelist row that the former **Whitelist only** action saved before 0.14.0,
+  for a feature without a unique qualifier, names the feature by its old drawn ID.
+  On a cropped or reverse-complemented record it no longer matches that feature,
+  and its label is no longer whitelisted. To show the label, set **Label visibility**
+  to **On** in the feature popup, or add a matching row under **Labels** →
+  **LABEL FILTERING** → **Whitelist**.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)

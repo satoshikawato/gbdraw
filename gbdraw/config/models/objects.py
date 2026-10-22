@@ -10,6 +10,7 @@ from gbdraw.definition_line_styles import (
     normalize_definition_line_font_size,
     normalize_definition_line_font_weight,
 )
+from gbdraw.core.numeric import ascii_float, ascii_int
 from gbdraw.exceptions import ValidationError
 
 from .common import ShortLongFloatConfig
@@ -22,6 +23,8 @@ _GC_CONTENT_MODES: tuple[GcContentMode, ...] = ("deviation", "percent")
 ScaleStyle = Literal["bar", "ruler"]
 _SCALE_STYLES: tuple[ScaleStyle, ...] = ("bar", "ruler")
 ArrowHeadLengthRatio = Literal["auto"] | float
+# The text an optional number of a config file reads as unset (None).
+UNSET_NUMBER_SPELLINGS = frozenset({"", "auto", "none", "null"})
 
 
 def normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
@@ -32,7 +35,7 @@ def normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
 
 
 def _normalize_curve_tension(value: Any) -> float:
-    tension = float(0.5 if value is None else value)
+    tension = ascii_float(0.5 if value is None else value)
     if not math.isfinite(tension) or tension < 0.0 or tension > 1.0:
         raise ValidationError("curve_tension must be a finite number in [0.0, 1.0]")
     return tension
@@ -119,8 +122,8 @@ class ObjectsGcContentConfig:
             raise ValidationError("gc_content_min_percent must be <= gc_content_max_percent")
         return cls(
             stroke_color=str(d["stroke_color"]),
-            stroke_width=float(d["stroke_width"]),
-            fill_opacity=float(d["fill_opacity"]),
+            stroke_width=ascii_float(d["stroke_width"]),
+            fill_opacity=ascii_float(d["fill_opacity"]),
             mode=_normalize_gc_content_mode(d.get("mode", "deviation")),
             min_percent=min_percent,
             max_percent=max_percent,
@@ -146,8 +149,8 @@ class ObjectsGcSkewConfig:
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsGcSkewConfig":
         return cls(
             stroke_color=str(d["stroke_color"]),
-            stroke_width=float(d["stroke_width"]),
-            fill_opacity=float(d["fill_opacity"]),
+            stroke_width=ascii_float(d["stroke_width"]),
+            fill_opacity=ascii_float(d["fill_opacity"]),
         )
 
 
@@ -156,10 +159,10 @@ def _optional_depth_bound(value: Any) -> float | None:
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
-        return float(normalized)
-    return float(value)
+        return ascii_float(normalized)
+    return ascii_float(value)
 
 
 def _optional_gc_content_bound(value: Any) -> float | None:
@@ -167,10 +170,10 @@ def _optional_gc_content_bound(value: Any) -> float | None:
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed):
         raise ValidationError("gc_content_min_percent/gc_content_max_percent must be finite numbers")
     return parsed
@@ -181,24 +184,24 @@ def _optional_gc_content_positive(value: Any) -> float | None:
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError("gc_content tick intervals and tick_font_size must be positive finite numbers")
     return parsed
 
 
 def _gc_content_opacity(value: Any) -> float:
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed) or parsed < 0.0 or parsed > 1.0:
         raise ValidationError("gc_content_percent_background_opacity must be a finite number in [0.0, 1.0]")
     return parsed
 
 
 def _gc_content_nonnegative_float(value: Any) -> float:
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed) or parsed < 0.0:
         raise ValidationError("gc_content_percent_border_width must be a finite non-negative number")
     return parsed
@@ -241,8 +244,8 @@ class ObjectsDepthConfig:
         return cls(
             fill_color=str(d.get("fill_color", "#4A90E2")),
             stroke_color=str(d.get("stroke_color", "none")),
-            stroke_width=float(d.get("stroke_width", 0)),
-            fill_opacity=float(d.get("fill_opacity", 0.8)),
+            stroke_width=ascii_float(d.get("stroke_width", 0)),
+            fill_opacity=ascii_float(d.get("fill_opacity", 0.8)),
             normalize=_bool_from_config(d.get("normalize", False), default=False),
             min_depth=_optional_depth_bound(d.get("min_depth", None)),
             max_depth=_optional_depth_bound(d.get("max_depth", None)),
@@ -266,9 +269,9 @@ class ObjectsBlastMatchConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsBlastMatchConfig":
         return cls(
-            fill_opacity=float(d["fill_opacity"]),
+            fill_opacity=ascii_float(d["fill_opacity"]),
             stroke_color=str(d["stroke_color"]),
-            stroke_width=float(d["stroke_width"]),
+            stroke_width=ascii_float(d["stroke_width"]),
             style=normalize_pairwise_match_style(d.get("style", "ribbon")),
             curve_tension=_normalize_curve_tension(d.get("curve_tension", 0.5)),
         )
@@ -279,10 +282,10 @@ def _optional_auto_positive_float(value: Any, *, field_name: str) -> float | Non
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError(f"{field_name} must be a positive finite number or auto")
     return parsed
@@ -312,13 +315,13 @@ class ObjectsConservationConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsConservationConfig":
         return cls(
-            fill_opacity=float(d.get("fill_opacity", 1.0)),
+            fill_opacity=ascii_float(d.get("fill_opacity", 1.0)),
             stroke_color=str(d.get("stroke_color", "none")),
-            stroke_width=float(d.get("stroke_width", 0)),
+            stroke_width=ascii_float(d.get("stroke_width", 0)),
             min_color=str(d.get("min_color", "#f0f1f5")),
             max_color=str(d.get("max_color", "#8b9cc1")),
             background_color=str(d.get("background_color", "#f2f2f2")),
-            background_opacity=float(d.get("background_opacity", 0.35)),
+            background_opacity=ascii_float(d.get("background_opacity", 0.35)),
             show_background=_bool_from_config(d.get("show_background", True), default=True),
             ring_width=_optional_auto_positive_float(d.get("ring_width", None), field_name="conservation ring_width"),
             ring_gap=_optional_auto_positive_float(d.get("ring_gap", None), field_name="conservation ring_gap"),
@@ -404,7 +407,7 @@ class ObjectsSlidingWindowConfig:
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsSlidingWindowConfig":
         def _pair(v: Any) -> tuple[int, int]:
             a = list(v)
-            return int(a[0]), int(a[1])
+            return ascii_int(a[0]), ascii_int(a[1])
 
         return cls(default=_pair(d["default"]), up1m=_pair(d["up1m"]), up10m=_pair(d["up10m"]))
 
@@ -421,7 +424,7 @@ class ObjectsTickLabelsConfig:
         return cls(
             stroke=str(d["stroke"]),
             fill=str(d["fill"]),
-            font_size=float(d["font_size"]),
+            font_size=ascii_float(d["font_size"]),
             font_weight=str(d["font_weight"]),
         )
 
@@ -433,7 +436,7 @@ class ObjectsTicksConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsTicksConfig":
-        return cls(tick_width=float(d["tick_width"]), tick_labels=ObjectsTickLabelsConfig.from_dict(d["tick_labels"]))
+        return cls(tick_width=ascii_float(d["tick_width"]), tick_labels=ObjectsTickLabelsConfig.from_dict(d["tick_labels"]))
 
 
 @dataclass(frozen=True)
@@ -535,7 +538,7 @@ class ObjectsDefinitionLinearConfig:
             font_weight=str(d["font_weight"]),
             text_anchor=str(d["text_anchor"]),
             dominant_baseline=str(d["dominant_baseline"]),
-            interval=int(d["interval"]),
+            interval=ascii_int(d["interval"]),
             show_replicon=bool(d.get("show_replicon", False)),
             show_accession=bool(d.get("show_accession", True)),
             show_length=bool(d.get("show_length", True)),
@@ -563,9 +566,9 @@ class ObjectsDefinitionCircularConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDefinitionCircularConfig":
         return cls(
-            interval=int(d["interval"]),
-            font_size=float(d["font_size"]),
-            plot_title_font_size=float(d.get("plot_title_font_size", d["font_size"])),
+            interval=ascii_int(d["interval"]),
+            font_size=ascii_float(d["font_size"]),
+            plot_title_font_size=ascii_float(d.get("plot_title_font_size", d["font_size"])),
         )
 
 
@@ -602,7 +605,7 @@ class ObjectsScaleConfig:
             style=_normalize_scale_style(d.get("style", "bar")),
             stroke_color=str(d["stroke_color"]),
             label_color=str(d.get("label_color", "black")),
-            stroke_width=float(d["stroke_width"]),
+            stroke_width=ascii_float(d["stroke_width"]),
             font_weight=str(d["font_weight"]),
             font_size=font_size,
             ruler_label_font_size=(
@@ -610,7 +613,7 @@ class ObjectsScaleConfig:
                 if "ruler_label_font_size" in d
                 else font_size
             ),
-            interval=int(interval) if interval is not None else None,
+            interval=ascii_int(interval) if interval is not None else None,
             show=_bool_from_config(d.get("show", True), default=True),
         )
 
@@ -651,6 +654,7 @@ class ObjectsConfig:
 
 
 __all__ = [
+    "UNSET_NUMBER_SPELLINGS",
     "ArrowHeadLengthRatio",
     "ObjectsConfig",
     "ObjectsFeaturesArrowGeometryConfig",

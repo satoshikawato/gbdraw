@@ -151,7 +151,7 @@
     },
     {
       "key": "product.saved-session-regeneration-continuity",
-      "scenarioRevision": 1,
+      "scenarioRevision": 2,
       "title": "Saved Session regeneration continuity",
       "layer": "STATE",
       "journeys": [
@@ -204,7 +204,7 @@
         {
           "id": "EFF-REGEN-ACTIVE-DRAFT-DISTINCT",
           "checkpointRef": "JRN-REGEN-001:saved-preview",
-          "statement": "The active draft remains distinct from the committed saved artifact until a successful Generate replaces it."
+          "statement": "The active draft remains distinct from the committed saved artifact until a successful Generate replaces it, or a successful live apply of changed live settings replaces those values."
         },
         {
           "id": "EFF-REGEN-CANONICAL-EXECUTION",
@@ -415,6 +415,7 @@
           "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#oipc-c07-failure-isolation",
           "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation",
           "gbdraw/web/CLAUDE.md#module-ownership",
+          "gbdraw/web/CLAUDE.md#r1-three-writers-of-the-result",
           "gbdraw/web/CLAUDE.md#reactive-availability-and-live-edit-invariants",
           "gbdraw/web/CLAUDE.md#runtime-data-flow"
         ]
@@ -528,13 +529,22 @@
           "residualRisk": "The DOM-free request contract compares one representative current Circular projection; alternate modes and browser admission are covered separately."
         },
         {
+          "ref": "tests/web/svg-result-ingestion.test.mjs::current-worker EMPTY admission of a document reply sanitizes each new piece once and performs zero application SVG work",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The focused admission contract verifies piecewise current-Worker sanitization, revision reuse and bounded empty mutation work for the pieces Python writes, without exercising every editor mutation domain."
+        },
+        {
           "ref": "tests/web/svg-result-ingestion.test.mjs::current-worker EMPTY admission sanitizes once and performs zero application SVG work",
           "checkpointRefs": [
             "JRN-REGEN-001:current-result-admission"
           ],
           "sensitivity": "DIRECT_ASSERTION",
           "execution": "PR_GATE",
-          "residualRisk": "The focused admission contract verifies current-Worker sanitization and bounded empty mutation work without exercising every editor mutation domain."
+          "residualRisk": "The focused admission contract verifies current-Worker sanitization and bounded empty mutation work for the content-string reply shape that Session and legacy paths use, not the document reply a Generate uses, without exercising every editor mutation domain."
         }
       ]
     }

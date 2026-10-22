@@ -1009,8 +1009,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var sequences = [];
     for (var index = 0; index < parts.length; index += 1) {
       var part = parts[index];
-      var start = Number(part && part.start);
-      var end = Number(part && part.end);
+      var start = locationPartBound(part, 'start');
+      var end = locationPartBound(part, 'end');
       if (
         !Number.isInteger(start)
         || !Number.isInteger(end)
@@ -1111,8 +1111,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       if (note) expanded.note = Array.from(note).slice(0, 50).join('');
     }
     var locationParts = expanded.location_parts || expanded.locationParts;
-    var start = Number(expanded.start);
-    var end = Number(expanded.end);
+    var start = locationPartBound(expanded, 'start');
+    var end = locationPartBound(expanded, 'end');
     if (
       !Array.isArray(locationParts)
       && Number.isInteger(start)
@@ -3362,7 +3362,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     var fieldSelect = createXhtmlNode('select', {
       className: 'gfs-select',
-      'aria-label': 'Search field',
+      'aria-label': 'Field to search',
       'data-search-field': 'true'
     });
     var searchFieldOptions = [
@@ -4559,6 +4559,22 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }, 0);
   }
 
+  // Mirrors services/feature-utils.js locationPartBound (locationPartNumber):
+  // the viewer's one reader of a start or end of a location part, a feature, or
+  // a group member. A number or ASCII number text (surrounding ASCII spaces
+  // allowed), truncated toward zero; anything else is NaN, never 0: missing,
+  // null or blank, a boolean, other digits, underscores, hex, any non-ASCII
+  // character, and a truncation beyond the safe integers (OV-968, OV-1010, PT-OD23).
+  function locationPartBound(part, field) {
+    var value = part && typeof part === 'object' ? part[field] : undefined;
+    var number = typeof value === 'number' ? value
+      : typeof value === 'string'
+        && /^[\\t\\n\\v\\f\\r ]*[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[eE][+-]?[0-9]+)?[\\t\\n\\v\\f\\r ]*$/.test(value)
+        ? Number(value) : NaN;
+    var truncated = Math.trunc(number) || 0;
+    return Number.isFinite(number) && Number.isSafeInteger(truncated) ? truncated : NaN;
+  }
+
   // Mirrors services/feature-utils.js formatFeatureRange/formatFeatureLocation/formatFeatureLength.
   function featureLocationParts(feature) {
     return feature && Array.isArray(feature.location_parts) && feature.location_parts.length
@@ -4570,8 +4586,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return featureLocationParts(feature).map(function (part) {
       var display = String(part && part.display || '').trim();
       if (display) return display;
-      var start = Number(part && part.start);
-      var end = Number(part && part.end);
+      var start = locationPartBound(part, 'start');
+      var end = locationPartBound(part, 'end');
       return Number.isFinite(start) && Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
     }).filter(Boolean).join(', ');
   }
@@ -4589,14 +4605,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return text;
   }
 
+  function rawBoundText(value) {
+    return String(value === null || value === undefined ? '' : value).trim();
+  }
+
   function memberLocationText(member) {
     if (!member || typeof member !== 'object') return '';
-    var start = Number(member.start);
-    var end = Number(member.end);
-    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
+    var start = locationPartBound(member, 'start');
+    var end = locationPartBound(member, 'end');
+    var startText = Number.isFinite(start) ? String(start + 1) : rawBoundText(member.start);
+    var endText = Number.isFinite(end) ? String(end) : rawBoundText(member.end);
+    var text = startText && endText ? startText + '..' + endText : startText || endText;
     var strand = strandText(member.strand);
-    if (strand) text += ' (' + strand + ')';
-    return text === '..' ? '' : text;
+    return text && strand ? text + ' (' + strand + ')' : text;
   }
 
   function getFeatureSearchDetail(feature) {
@@ -5927,8 +5948,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var parts = featureLocationParts(feature);
     var length = 0;
     for (var index = 0; index < parts.length; index += 1) {
-      var start = Number(parts[index] && parts[index].start);
-      var end = Number(parts[index] && parts[index].end);
+      var start = locationPartBound(parts[index], 'start');
+      var end = locationPartBound(parts[index], 'end');
       if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
       length += end - start;
     }
@@ -6677,6 +6698,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function closestAnnotation(node) {
     while (node && node !== svg) {
       if (node.matches && node.matches(ANNOTATION_SELECTOR)) return node;
+      var frontOf = node.getAttribute ? node.getAttribute('data-gbdraw-region-label-for') : null;
+      if (frontOf) {
+        var owner = svg.ownerDocument.getElementById(frontOf);
+        return owner && svg.contains(owner) && owner.matches(ANNOTATION_SELECTOR) ? owner : null;
+      }
       node = node.parentNode;
     }
     return null;

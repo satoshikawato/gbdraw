@@ -14,6 +14,12 @@ const deepFreeze = (value) => {
 
 export const MODE_PROFILE_DATA = deepFreeze({
   "autoSizes": {
+    "linearLabelSizeRecords": {
+      "all": "all",
+      "first": "first",
+      "none": "all",
+      "orthogroup_top": "all"
+    },
     "sizeClassThresholdBp": {
       "circular": 75000,
       "linear": 100000
@@ -45,6 +51,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "reason": "PERCENT"
     }
   },
+  "defaultFontFamily": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
   "featureTypes": [
     "CDS",
     "rRNA",
@@ -54,6 +61,17 @@ export const MODE_PROFILE_DATA = deepFreeze({
     "misc_RNA",
     "repeat_region"
   ],
+  "labelStyleChoices": {
+    "line": [
+      "none",
+      "under"
+    ],
+    "protection": [
+      "none",
+      "halo",
+      "box"
+    ]
+  },
   "modes": {
     "circular": {
       "comparison": {
@@ -61,6 +79,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "bitscore": 50.0,
         "evalue": 1e-05,
         "identity": 70.0
+      },
+      "labelStyle": {
+        "line": "none",
+        "protection": "none"
       },
       "linearAxisColor": null,
       "linearRulerAxisColor": null,
@@ -75,6 +97,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "bitscore": 50.0,
         "evalue": 0.01,
         "identity": 0.0
+      },
+      "labelStyle": {
+        "line": "under",
+        "protection": "box"
       },
       "linearAxisColor": "lightgray",
       "linearRulerAxisColor": "dimgray",

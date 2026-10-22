@@ -44,6 +44,12 @@
           "retireWhen": "never"
         },
         {
+          "path": "tests/web/feature-visibility-rule-writers.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+        },
+        {
           "path": "tests/web/mode-scoped-feature-edits.playwright.spec.js",
           "rootCause": "P2",
           "job": "playwright-functional",
@@ -68,7 +74,13 @@
           "retireWhen": "never"
         }
       ],
-      "allowlists": []
+      "allowlists": [
+        {
+          "path": "tests/web/feature-visibility-rule-writers.test.mjs",
+          "symbol": "PAINT_INTENT_WRITERS",
+          "kind": "writer-map"
+        }
+      ]
     },
     {
       "id": "R3",
@@ -327,7 +339,7 @@
           "path": "tests/web/track-layout-transition.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+          "retireWhen": "the track-layout settings get one writer module checked by tsc and the import graph (not M3: settings stay written by their controls)"
         },
         {
           "path": "tests/web/track-slot-display.test.mjs",
@@ -460,19 +472,19 @@
           "path": "tests/web/owner-graph-baseline.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices and writer imports replace the owner-graph text detectors (multi-drawing M3)"
+          "retireWhen": "never: the layer, forward-closure, heavy-derived, identity-from-display, injection-edge, and whole-object-port detectors stay; M3 retires only the state-backdoor detector, and the projection call-shape count retires with the pull-request random walk (M4)"
         },
         {
           "path": "tests/web/owner-graph-detectors.test.mjs",
           "rootCause": "P10",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices and writer imports replace the owner-graph text detectors (multi-drawing M3)"
+          "retireWhen": "never: it tests the detectors that stay; the cases of a retired detector leave with its code (checker-only pull request)"
         },
         {
           "path": "tests/web/owner-graph-replay.test.mjs",
           "rootCause": "P10",
           "job": "web-change-budget",
-          "retireWhen": "DRAWINGS typed slices and writer imports replace the owner-graph text detectors (multi-drawing M3)"
+          "retireWhen": "never"
         }
       ],
       "allowlists": [
@@ -505,12 +517,6 @@
           "retireWhen": "never"
         },
         {
-          "path": "tests/web/no-implicit-any-ratchet.test.mjs",
-          "rootCause": "P5",
-          "job": "web-contracts-pr",
-          "retireWhen": "NO_IMPLICIT_ANY_BASELINE is empty and noImplicitAny is on in tests/web/types/tsconfig.json"
-        },
-        {
           "path": "tests/web/typed-boundaries.test.mjs",
           "rootCause": "P5",
           "job": "web-contracts-pr",
@@ -521,12 +527,6 @@
           "rootCause": "P5",
           "job": "web-contracts-pr",
           "retireWhen": "never"
-        },
-        {
-          "path": "tests/web/types/tsconfig.no-implicit-any.json",
-          "rootCause": "P5",
-          "job": "web-contracts-pr",
-          "retireWhen": "NO_IMPLICIT_ANY_BASELINE is empty and noImplicitAny is on in tests/web/types/tsconfig.json"
         },
         {
           "path": "tests/web/types/web-globals.d.ts",
@@ -540,11 +540,6 @@
           "path": "tests/web/typed-boundaries.test.mjs",
           "symbol": "UNCHECKED_MODULES",
           "kind": "set"
-        },
-        {
-          "path": "tests/web/no-implicit-any-ratchet.test.mjs",
-          "symbol": "NO_IMPLICIT_ANY_BASELINE",
-          "kind": "count-map"
         },
         {
           "path": "tests/web/explicit-any-ratchet.test.mjs",
@@ -573,13 +568,13 @@
           "path": "tests/web/drawing-context.test.mjs",
           "rootCause": "P2",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices replace the key-class table (multi-drawing M3)"
+          "retireWhen": "never: its state key classes and drawing-resolution checks stay; M3 moves the drawing member list into the slices"
         },
         {
           "path": "tests/web/helpers/drawing-state.mjs",
           "rootCause": "P2",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices replace the key-class table (multi-drawing M3)"
+          "retireWhen": "never: the state key classes stay; after M3 it reads the drawing members from the slices"
         },
         {
           "path": "tests/web/mode-scoped-session.test.mjs",

@@ -4,7 +4,7 @@ import contract from './helpers/session-regeneration-contract.cjs';
 
 const { evaluateSessionRegenerationContract } = contract;
 
-const successEvents = () => [
+const successEvents = (profile = 'first-generate') => [
   'generate.processing-published',
   'generate.paint-opportunity-completed',
   'history.before-capture-started',
@@ -12,8 +12,10 @@ const successEvents = () => [
   'worker-post-start',
   'python-wrapper-start',
   'python-wrapper-end',
-  'catalog.admission-started',
-  'catalog.admission-completed',
+  // An unchanged second Generate keeps the held catalog (step 3a).
+  ...(profile === 'second-generate'
+    ? ['catalog.reused']
+    : ['catalog.admission-started', 'catalog.admission-completed']),
   'svg.admission-started',
   'svg.admission-completed',
   'artifact.candidate-completed',
@@ -39,7 +41,8 @@ const successMetrics = (profile = 'first-generate') => ({
   generatedArtifactFullSignatureCount: 0,
   generatedArtifactMutableIntentSnapshotCount: 2,
   rendererExecutionCount: 1,
-  featureCatalogAdmissionCount: 1,
+  featureCatalogAdmissionCount: profile === 'second-generate' ? 0 : 1,
+  featureCatalogReuseCount: profile === 'second-generate' ? 1 : 0,
   featureCatalogSecondaryTraversalCount: 0,
   svgSanitizationCount: 1,
   applicationSvgParseCount: 0,
@@ -75,7 +78,7 @@ const successMetrics = (profile = 'first-generate') => ({
   resourceTransferredByteCount: 0
 });
 
-const evaluateSuccess = (profile = 'first-generate', overrides = {}, events = successEvents()) => (
+const evaluateSuccess = (profile = 'first-generate', overrides = {}, events = successEvents(profile)) => (
   evaluateSessionRegenerationContract({
     profile,
     metrics: { ...successMetrics(profile), ...overrides },
@@ -89,7 +92,7 @@ const expectFailure = ({ code, profile = 'first-generate', overrides = {}, event
   const failures = evaluateSessionRegenerationContract({
     profile,
     metrics: { ...successMetrics(profile), ...overrides },
-    events: events || successEvents(),
+    events: events || successEvents(profile),
     resultCount: 1,
     state: state || { terminalOutcome: 'success', interactiveProbePassed: true }
   });
@@ -231,6 +234,27 @@ test('rejects failure commits and finalization after rollback', () => {
     code: 'FINALIZATION_AFTER_ROLLBACK',
     events: [...successEvents(), 'artifact.rollback-started', 'artifact.finalization-completed']
   });
+});
+
+test('rejects a second Generate that admits the catalog again or a missing reuse metric (step 3a)', () => {
+  expectFailure({ code: 'REGEN_CATALOG_REUSE', profile: 'second-generate', overrides: { featureCatalogReuseCount: 0 } });
+  expectFailure({ code: 'REGEN_CATALOG_ADMISSION', profile: 'second-generate', overrides: { featureCatalogAdmissionCount: 1 } });
+  expectFailure({ code: 'REGEN_CATALOG_REUSE', profile: 'first-generate', overrides: { featureCatalogReuseCount: 1 } });
+  expectFailure({ code: 'ORDER_RENDERER_BEFORE_ADMISSION', profile: 'second-generate', events: successEvents('first-generate') });
+  for (const [profile, key, code] of [
+    ['second-generate', 'featureCatalogReuseCount', 'REGEN_CATALOG_REUSE'],
+    ['first-generate', 'featureCatalogReuseCount', 'REGEN_CATALOG_REUSE'],
+    ['second-generate', 'featureCatalogSecondaryTraversalCount', 'REGEN_CATALOG_SECONDARY_TRAVERSAL']
+  ]) {
+    const metrics = { ...successMetrics(profile) };
+    delete metrics[key];
+    const failures = evaluateSessionRegenerationContract({
+      profile, metrics, events: successEvents(profile), resultCount: 1,
+      state: { terminalOutcome: 'success', interactiveProbePassed: true }
+    });
+    assert.equal(failures.some((failure) => failure.startsWith(`${code} `) && failure.includes('not observed')), true,
+      failures.join('\n'));
+  }
 });
 
 test('rejects second-Generate Worker, renderer, and resource reuse regressions', () => {

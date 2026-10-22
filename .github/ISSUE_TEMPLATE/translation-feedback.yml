@@ -1,0 +1,48 @@
+name: Translation feedback
+description: Suggest a better wording for the gbdraw Web UI in your language.
+title: "[Translation] "
+labels: ["translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve the Web UI translation. The translations are drafts and may contain errors.
+        You can write in your own language or in English.
+        Issues are public: do not include private data, unpublished sequences, or file names you do not want to share.
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      description: The language tag of the Web UI language, such as ja. The Translation feedback link in the Web UI fills it in.
+      placeholder: ja
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: gbdraw version
+      description: The output of `gbdraw --version`, or the date you used https://gbdraw.app/.
+      placeholder: 0.14.0
+  - type: textarea
+    id: where
+    attributes:
+      label: Where in the UI
+      description: The section, dialog or button where the text appears. Screenshots are welcome.
+      placeholder: Legend section, the Sort button
+  - type: textarea
+    id: current
+    attributes:
+      label: Text shown now
+      description: Copy the text as the Web UI shows it.
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested text
+      description: The text you would like to see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: Reason
+      description: Why the suggestion reads better, for example a standard term in your field or a clearer sentence.

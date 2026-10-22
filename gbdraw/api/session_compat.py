@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import json
 import logging
 import re
-from dataclasses import dataclass, field, fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Callable, Collection, Mapping, Sequence, cast
 
 from pandas import DataFrame
 
@@ -44,11 +46,17 @@ from gbdraw.session_io import (
     unmapped_hash_selector_warning,
 )
 
-from .options import LinearMultiRecordOptions, LinearRecordTranslation
+from .migration_report import SessionMigrationReport
+from .options import LinearMultiRecordOptions, LinearRecordTranslation, losatp_analysis_mode
 from .record_planning import (
+    _SOURCE_BINDING_COLUMNS,
     ResolvedRecordCollection,
     ResolvedRecordProvenance,
+    UnmatchedFrameItem,
+    comparison_record_bindings,
+    has_source_bound_results,
     project_similarity_alignment_centers,
+    project_source_bound_results,
 )
 
 from .request_render import (
@@ -63,6 +71,7 @@ from .request_render import (
     RequestRenderResult,
     _extract_linear_request_proteins,
     _build_request_plan_diagram,
+    _request_losatp_job_specs,
     plan_request,
     render_prepared_request,
 )
@@ -75,6 +84,7 @@ from .requests import (
     _with_legacy_similarity_alignment,
 )
 from ..linear_comparison import (
+    LinearComparison,
     _endpoint_frame,
     project_search_frame_comparisons,
     reverse_endpoint_table_text,
@@ -89,41 +99,6 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class SessionMigrationReport:
-    """Compatibility evidence retained when a session enters the current core."""
-
-    protein_raw_candidates: tuple[Mapping[str, Any], ...] = ()
-    protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
-    protein_id_map: Mapping[str, str] | None = None
-    warnings: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class SessionCompatibleRequestRenderResult(RequestRenderResult):
-    """A current render result paired with persisted migration evidence."""
-
-    migration_report: SessionMigrationReport = field(
-        default_factory=SessionMigrationReport
-    )
-
-    @property
-    def legacy_protein_raw_candidates(self) -> tuple[Mapping[str, Any], ...]:
-        return self.migration_report.protein_raw_candidates
-
-    @property
-    def legacy_protein_derived_evidence(self) -> tuple[Mapping[str, Any], ...]:
-        return self.migration_report.protein_derived_evidence
-
-    @property
-    def protein_id_map(self) -> Mapping[str, str]:
-        return self.migration_report.protein_id_map or {}
-
-    @property
-    def warnings(self) -> tuple[str, ...]:
-        return self.migration_report.warnings
 
 
 @dataclass(frozen=True)
@@ -356,23 +331,88 @@ def _merge_promoted_tsv_id_map(
             target[old_id] = new_id
 
 
+def written_legacy_protein_artifacts(
+    candidates: Sequence[Mapping[str, Any]],
+    evidence: Sequence[Mapping[str, Any]],
+    *,
+    promoted: Collection[int],
+    has_current_derived: bool,
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
+    """The legacy protein raw candidates and derived evidence a written Session keeps.
+
+    ``candidates`` are in their states after this write's attempts and
+    ``promoted`` are the indexes it promoted: a promoted candidate leaves the
+    envelope (its entry is a current raw entry now); every other candidate
+    stays, ``pending`` or ``rejected``. The evidence goes when this write
+    promoted a candidate and left none pending, or when the written Session
+    holds or built current derived entries (OV-1129); else it stays. The Web
+    twin is ``writtenLegacyProteinArtifacts`` (``services/losat-cache.js``);
+    ``tests/fixtures/legacy_protein_artifact_vectors.json`` pins both
+    (OV-1132, OV-1143).
+    """
+
+    kept = tuple(
+        candidate for index, candidate in enumerate(candidates) if index not in promoted
+    )
+    superseded = has_current_derived or (
+        bool(promoted) and not any(candidate.get("state") == "pending" for candidate in kept)
+    )
+    return kept, () if superseded else tuple(evidence)
+
+
+def _legacy_candidate_attempt_pairs(
+    request: LinearDiagramRequest,
+    stored_result_mode: ProteinBlastpMode | None,
+) -> tuple[tuple[int, int], ...]:
+    """The directed record pairs whose legacy candidates this drawing's protein run tries.
+
+    They are the searches of the request's LOSATP run. A request that stores
+    its protein results (mode ``"none"``) is computed again in
+    ``stored_result_mode``, the Web draft's mode, else the stored result's, as
+    the next Web Generate does. A request without a LOSATP search tries none.
+    """
+
+    search = request.options.losat_search
+    if search is None or search.program != "losatp":
+        return ()
+    mode = losatp_analysis_mode(search)
+    if mode == "none":
+        options = request.options
+        mode = stored_result_mode or (
+            "collinear"
+            if options.collinearity_blocks is not None
+            else "orthogroup" if options.orthogroups is not None else "pairwise"
+        )
+    return _request_losatp_job_specs(request, mode, search.pairs)
+
+
 def _promote_legacy_candidates(
     candidates: Sequence[Mapping[str, Any]],
     extraction: ProteinExtractionResult,
+    pairs: Sequence[tuple[int, int]],
 ) -> tuple[
     tuple[Mapping[str, Any], ...],
-    tuple[Mapping[str, Any], ...],
+    frozenset[int],
     Mapping[str, str],
 ]:
+    """Try each ``pending`` candidate on the searched record ``pairs``.
+
+    Returns the promoted current raw entries, the indexes of the candidates
+    they came from and the legacy-to-current protein ID map. An unmatched
+    candidate stays as it is; a ``rejected`` one is not tried again.
+    """
+
     manifest = extraction.identity_manifest
     if manifest is None:
         raise ValidationError("Protein cache promotion requires an identity manifest.")
     fastas = tuple(proteins_to_fasta(items) for items in extraction.proteins_by_record)
     promoted_entries: list[Mapping[str, Any]] = []
-    unresolved_candidates: list[Mapping[str, Any]] = []
+    promoted_indexes: set[int] = set()
     id_map: dict[str, str] = {}
 
-    for candidate in candidates:
+    for candidate_index, candidate in enumerate(candidates):
+        if candidate.get("state") != "pending":
+            continue
         original = candidate.get("originalEntry")
         if not isinstance(original, Mapping) or not is_legacy_protein_losat_cache_entry(
             original
@@ -387,62 +427,40 @@ def _promote_legacy_candidates(
             else ()
         )
         promotion = None
-        rejection_reasons: list[str] = []
-        for query_index, query_proteins in enumerate(extraction.proteins_by_record):
-            for subject_index, subject_proteins in enumerate(
-                extraction.proteins_by_record
-            ):
-                try:
-                    scan = promote_legacy_protein_raw_cache_entries(
-                        (candidate,),
-                        query_proteins=query_proteins,
-                        subject_proteins=subject_proteins,
-                        query_fasta=fastas[query_index],
-                        subject_fasta=fastas[subject_index],
-                        identity_manifest=manifest,
-                        expected_args=expected_args,
-                        expected_program=str(original.get("program") or "blastp"),
-                        expected_outfmt=str(original.get("outfmt") or "6"),
-                    )
-                except ValidationError as exc:
-                    rejection_reasons.append(str(exc))
-                    continue
-                if scan.promotion is not None:
-                    promotion = scan.promotion
-                    break
-                rejection_reasons.extend(item.reason for item in scan.rejections)
-            if promotion is not None:
+        for query_index, subject_index in pairs:
+            try:
+                scan = promote_legacy_protein_raw_cache_entries(
+                    (candidate,),
+                    query_proteins=extraction.proteins_by_record[query_index],
+                    subject_proteins=extraction.proteins_by_record[subject_index],
+                    query_fasta=fastas[query_index],
+                    subject_fasta=fastas[subject_index],
+                    identity_manifest=manifest,
+                    expected_args=expected_args,
+                    expected_program=str(original.get("program") or "blastp"),
+                    expected_outfmt=str(original.get("outfmt") or "6"),
+                )
+            except ValidationError:
+                continue
+            if scan.promotion is not None:
+                promotion = scan.promotion
                 break
 
         if promotion is None:
-            reason = next(
-                (
-                    item
-                    for item in reversed(rejection_reasons)
-                    if item and "hash does not match" not in item
-                ),
-                "No current record pair matched the legacy cache identity.",
-            )
-            unresolved_candidates.append(
-                make_legacy_protein_raw_candidate(
-                    original,
-                    state="rejected",
-                    rejection_reason=reason,
-                )
-            )
             continue
         if not validate_protein_raw_entry_references(promotion.entry, manifest):
             raise ValidationError(
                 "Promoted protein raw entry failed manifest validation."
             )
         promoted_entries.append(promotion.entry)
+        promoted_indexes.add(candidate_index)
         _merge_promoted_tsv_id_map(
             id_map,
             legacy_text=str(original.get("text") or ""),
             current_text=promotion.rewritten_tsv,
         )
 
-    return tuple(promoted_entries), tuple(unresolved_candidates), id_map
+    return tuple(promoted_entries), frozenset(promoted_indexes), id_map
 
 
 def _rewrite_protein_reference_string(
@@ -1123,7 +1141,121 @@ def _replace_plan_request(
     )
 
 
-_MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
+MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
+# Sessions up to 47 stored the protein results of a reversed Linear record in
+# the drawn frame; Session 48 stores them in the search frame (OV-1145).
+DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION = 47
+
+
+def describe_unmatched_frame_item(item: UnmatchedFrameItem) -> str:
+    feature = "" if item.feature_index is None else f", source feature {item.feature_index}"
+    return (
+        f"the stored {item.kind} of protein {item.protein_id!r} (record #{item.record_index + 1}{feature}) "
+        "matches neither strand of its record"
+    )
+
+
+def drawn_frame_protein_results_to_search_frame(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+) -> tuple[DiagramRequest, tuple[UnmatchedFrameItem, ...]]:
+    """Store the protein results of ``request`` in each record's search frame.
+
+    The core of the Session 47 migrator (OV-1145): every table row and typed
+    item tells its frame by its tags, so a tagged item already in the search
+    frame stays. An untagged anchor side (Session 39) of a reversed record is
+    decided by its record, so only a Session up to 47 may be converted, once.
+    An item matching neither frame stays as given and is returned; it draws
+    as stored, and a Session writer refuses it.
+    """
+
+    if not isinstance(plan, LinearRequestPlan) or not isinstance(request, LinearDiagramRequest):
+        return request, ()
+    options = request.options
+    if not has_source_bound_results(
+        options.linear_comparisons, options.protein_comparisons,
+        options.orthogroups, options.collinearity_blocks,
+    ):
+        return request, ()
+    projection = project_source_bound_results(
+        options,
+        comparison_record_bindings(plan.records, plan.provenance, search_frame=True),
+    )
+    if projection.options is options:
+        return request, projection.unmatched
+    return replace(request, options=projection.options), projection.unmatched
+
+
+_STORED_PROTEIN_RESULT_KINDS = frozenset(
+    {"precomputedProteinComparison", "orthogroupResult", "collinearityResult"}
+)
+
+
+def stores_protein_results(payload: Mapping[str, Any] | None) -> bool:
+    """Whether a stored Linear request payload holds protein results."""
+
+    comparisons = payload.get("comparisons") if isinstance(payload, Mapping) else None
+    return isinstance(payload, Mapping) and payload.get("mode") == "linear" and any(
+        isinstance(item, Mapping) and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS
+        for item in (comparisons if isinstance(comparisons, list) else ())
+    )
+
+
+def search_frame_protein_resources(
+    payload: Mapping[str, Any],
+    request: DiagramRequest,
+    converted: DiagramRequest,
+) -> dict[str, bytes]:
+    """The new bytes of the stored resources of ``payload`` that ``converted`` changed.
+
+    ``request`` is ``payload`` decoded and ``converted`` its results in the
+    search frame. Both are encoded alone; each protein item whose bytes the
+    conversion changed gets the converted bytes under its stored resource ID,
+    so the request and every other resource stay as stored (OV-1145).
+    """
+
+    from gbdraw.session_request_codec import encode_canonical_request
+    from gbdraw.session_resources import SessionResourceTable
+    from gbdraw.session_io import _embedded_resource_bytes
+
+    def protein_items(value: DiagramRequest) -> tuple[list[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]]:
+        table = SessionResourceTable()
+        encoded = encode_canonical_request(value, table=table).payload
+        return [item for item in encoded["comparisons"] if item.get("kind") in _STORED_PROTEIN_RESULT_KINDS], \
+            table.descriptors()
+
+    stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
+              and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS]
+    # ``request`` as stored: its tables encode to the bytes they were read from.
+    as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
+                 if isinstance(request, LinearDiagramRequest) else request)
+    (before, before_resources), (after, after_resources) = protein_items(as_stored), protein_items(converted)
+    if not len(stored) == len(before) == len(after):
+        raise ValidationError("Stored protein results do not match their decoded request.")
+    changed: dict[str, bytes] = {}
+    for item, old, new in zip(stored, before, after, strict=True):
+        if not item["kind"] == old["kind"] == new["kind"]:
+            raise ValidationError("Stored protein results do not match their decoded request.")
+        content = _embedded_resource_bytes(after_resources[new["resourceId"]])
+        if content == _embedded_resource_bytes(before_resources[old["resourceId"]]):
+            continue
+        resource_id = str(item["resourceId"])
+        if changed.get(resource_id, content) != content:
+            raise ValidationError(f"Stored resource {resource_id!r} holds two different protein results.")
+        changed[resource_id] = content
+    return changed
+
+
+def replace_resource_bytes(descriptor: Mapping[str, Any], content: bytes) -> dict[str, Any]:
+    """``descriptor`` holding ``content``: base64 data, size and any checksum."""
+
+    replaced = {**descriptor, "encoding": "base64", "data": base64.b64encode(content).decode("ascii"),
+                "size": len(content)}
+    checksum = descriptor.get("checksum")
+    if checksum not in (None, ""):
+        prefix = "sha256:" if str(checksum).lower().startswith("sha256:") else ""
+        replaced["checksum"] = prefix + hashlib.sha256(content).hexdigest()
+    return replaced
 
 
 def _main_display_frame_rows_to_search_frame(
@@ -1144,7 +1276,7 @@ def _main_display_frame_rows_to_search_frame(
     if (
         not isinstance(plan, LinearRequestPlan)
         or not isinstance(request, LinearDiagramRequest)
-        or drawing.version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
+        or drawing.version > MAIN_DISPLAY_FRAME_SESSION_VERSION
         or not request.options.linear_comparisons
     ):
         return request
@@ -1308,11 +1440,14 @@ def _adapt_session_plan(
         plan=plan if isinstance(plan, LinearRequestPlan) else None,
     )
     request = _main_display_frame_rows_to_search_frame(plan, request, drawing)
+    unconverted: tuple[UnmatchedFrameItem, ...] = ()
+    if drawing.version <= DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION:
+        request, unconverted = drawn_frame_protein_results_to_search_frame(plan, request)
     if request is not plan.request:
         plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
     manifest = source.protein_identity_manifest
-    unresolved = source.legacy_candidates
+    promoted_indexes: frozenset[int] = frozenset()
     id_map: dict[str, str] = {}
     extraction: ProteinExtractionResult | None = None
 
@@ -1324,9 +1459,12 @@ def _adapt_session_plan(
         current_protein = tuple(
             entry for entry in current_raw if is_protein_losat_cache_entry(entry)
         )
-        needs_extraction = bool(
-            source.legacy_candidates or reference_ids or current_protein
+        attempt_pairs = (
+            _legacy_candidate_attempt_pairs(request, source.protein_source_mode)
+            if any(candidate.get("state") == "pending" for candidate in source.legacy_candidates)
+            else ()
         )
+        needs_extraction = bool(attempt_pairs or reference_ids or current_protein)
         promoted: tuple[Mapping[str, Any], ...] = ()
         if needs_extraction:
             if plan.inputs is None:  # pragma: no cover - planner invariant.
@@ -1340,9 +1478,10 @@ def _adapt_session_plan(
             )
             extracted_manifest = extraction.identity_manifest
             assert extracted_manifest is not None
-            promoted, unresolved, promoted_id_map = _promote_legacy_candidates(
+            promoted, promoted_indexes, promoted_id_map = _promote_legacy_candidates(
                 source.legacy_candidates,
                 extraction,
+                attempt_pairs,
             )
             id_map.update(promoted_id_map)
             if reference_ids:
@@ -1378,12 +1517,6 @@ def _adapt_session_plan(
             request,
             id_map,
         )
-        has_protein_tables = request.options.protein_comparisons is not None or any(
-            "query_protein_id" in comparison.matches.columns
-            for comparison in request.options.linear_comparisons or ()
-        )
-        if has_protein_tables and promoted:
-            unresolved = ()
 
     if manifest is None and not any(
         is_protein_losat_cache_entry(entry) for entry in current_raw
@@ -1394,6 +1527,12 @@ def _adapt_session_plan(
         losat_derived_cache_entries=source.current_derived_entries,
         protein_identity_manifest=manifest,
         protein_source_mode=source.protein_source_mode,
+    )
+    unresolved, evidence = written_legacy_protein_artifacts(
+        source.legacy_candidates,
+        source.legacy_derived_evidence,
+        promoted=promoted_indexes,
+        has_current_derived=bool(source.current_derived_entries),
     )
     warnings = (
         (
@@ -1413,10 +1552,11 @@ def _adapt_session_plan(
         request=request,
         artifacts=artifacts,
         migration_report=SessionMigrationReport(
-            protein_raw_candidates=tuple(unresolved),
-            protein_derived_evidence=source.legacy_derived_evidence,
+            protein_raw_candidates=unresolved,
+            protein_derived_evidence=evidence,
             protein_id_map=id_map,
             warnings=warnings,
+            unconverted_protein_results=tuple(map(describe_unmatched_frame_item, unconverted)),
         ),
     ), extraction, plan
 
@@ -1442,19 +1582,29 @@ def adapt_session_request(
 
 def _adjust_migration_report(
     prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
-    report: SessionMigrationReport,
+    adapted: AdaptedSessionRequest,
 ) -> SessionMigrationReport:
-    if isinstance(prepared, PreparedCircularBatchRequest):
-        return report
-    evidence = (
-        ()
-        if prepared.losat_derived_cache_entries
-        else report.protein_derived_evidence
+    """The report of ``adapted``; current derived entries supersede the legacy evidence.
+
+    They are the Session's own, which a re-save writes back, or else the ones
+    this render built: only a Python API replay (``render_session_drawings``)
+    builds them; a CLI render and a batch build none.
+    """
+
+    report = adapted.migration_report
+    _candidates, evidence = written_legacy_protein_artifacts(
+        report.protein_raw_candidates,
+        report.protein_derived_evidence,
+        promoted=(),
+        has_current_derived=bool(
+            adapted.artifacts.losat_derived_cache_entries
+            or (
+                isinstance(prepared, PreparedDiagramRequest)
+                and prepared.losat_derived_cache_entries
+            )
+        ),
     )
-    return replace(
-        report,
-        protein_derived_evidence=evidence,
-    )
+    return replace(report, protein_derived_evidence=evidence)
 
 
 def build_session_compatible_request_diagram(
@@ -1491,10 +1641,7 @@ def _build_session_compatible_plan(
         artifacts=adapted.artifacts,
         protein_extraction=extraction,
     )
-    return prepared, _adjust_migration_report(
-        prepared,
-        adapted.migration_report,
-    )
+    return prepared, _adjust_migration_report(prepared, adapted)
 
 
 def render_session_compatible_request(
@@ -1503,7 +1650,10 @@ def render_session_compatible_request(
     *,
     include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Render one drawing of a released session through its sole compatibility adapter."""
+    """Render one drawing of a released session through its sole compatibility adapter.
+
+    Both result shapes carry the drawing's ``migration_report``.
+    """
 
     _require_drawing(drawing)
     plan = plan_request(request)
@@ -1519,18 +1669,91 @@ def render_session_compatible_request(
         batch_outputs_preflighted=batch_outputs_preflighted,
         include_feature_catalog=include_feature_catalog,
     )
-    if not isinstance(prepared, PreparedDiagramRequest) or not isinstance(
-        result,
-        RequestRenderResult,
-    ):
-        return result
-    return SessionCompatibleRequestRenderResult(
-        **{
-            item.name: getattr(result, item.name)
-            for item in fields(RequestRenderResult)
-        },
-        migration_report=migration_report,
+    return replace(result, migration_report=migration_report)
+
+
+# main's Web writers of Session 39, and of Session 40 before 3bca0e8d9 (#319),
+# stored a reversed record's drawn-frame feature ID in a protein table's
+# ``*_feature_svg_id`` and wrote no ``*_view_feature_svg_id``; a later Session
+# 40 writes both, so the missing column, not the version, tells them apart
+# (OV-1183).
+DRAWN_FEATURE_ID_SESSION_MAX_VERSION = 40
+
+
+def _stores_drawn_feature_ids(frame: DataFrame) -> bool:
+    # The projection's own predicate: only rows with source bindings are projected.
+    if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
+        return False
+    return any(f"{role}_view_feature_svg_id" not in frame.columns for role in ("query", "subject"))
+
+
+def decode_session_request(
+    session_version: int,
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    output_directory: str | Path,
+) -> DiagramRequest:
+    """Decode one stored request of a Session of ``session_version``.
+
+    The canonical payload is migrated first, and a stored font size <= 0 reads
+    as Auto (``with_stored_font_sizes_as_auto``); a Linear table of a Session up
+    to 40 without view ID columns is marked ``drawn_feature_ids``, so the
+    planner reads its stored IDs as views (OV-1183).
+    """
+
+    from gbdraw.session_request_codec import decode_canonical_request, with_stored_font_sizes_as_auto
+
+    request = decode_canonical_request(
+        with_stored_font_sizes_as_auto(canonical_payload_for_session_decode(session_version, payload)),
+        resource_paths=resource_paths,
+        output_directory=output_directory,
     )
+    if session_version > DRAWN_FEATURE_ID_SESSION_MAX_VERSION or not isinstance(request, LinearDiagramRequest):
+        return request
+    return _with_drawn_feature_id_marks(request, lambda comparison: _stores_drawn_feature_ids(comparison.matches))
+
+
+def _with_drawn_feature_id_marks(
+    request: LinearDiagramRequest,
+    marked: Callable[[LinearComparison], bool],
+) -> LinearDiagramRequest:
+    """``request`` whose comparisons carry ``drawn_feature_ids`` where ``marked`` says so."""
+
+    stored = request.options.linear_comparisons or ()
+    comparisons = tuple(
+        comparison if comparison.drawn_feature_ids == marked(comparison)
+        else replace(comparison, drawn_feature_ids=marked(comparison))
+        for comparison in stored
+    )
+    if all(before is after for before, after in zip(stored, comparisons, strict=True)):
+        return request
+    adapted = replace(request, options=replace(request.options, linear_comparisons=comparisons))
+    # ``replace`` drops the old-schema alignment state (an ``init=False`` field).
+    legacy = request._legacy_similarity_alignment
+    return adapted if legacy is None else _with_legacy_similarity_alignment(adapted, legacy)
+
+
+def resolve_session_write_request(request: DiagramRequest) -> DiagramRequest:
+    """Resolve ``request`` for a Session writer.
+
+    A table still read with the drawn-frame IDs of a Session up to 40 moves
+    to the search frame first, as an upgrade moves it, so the written table
+    holds source and view IDs (OV-1183). A row matching neither frame raises.
+    """
+
+    plan = plan_request(request)
+    resolved = plan.request
+    if not isinstance(resolved, LinearDiagramRequest) or not any(
+        comparison.drawn_feature_ids for comparison in resolved.options.linear_comparisons or ()
+    ):
+        return resolved
+    converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, resolved)
+    if unmatched:
+        raise ValidationError(f"Cannot write {describe_unmatched_frame_item(unmatched[0])}.")
+    legacy = resolved._legacy_similarity_alignment
+    return converted if legacy is None or not isinstance(converted, LinearDiagramRequest) else (
+        _with_legacy_similarity_alignment(converted, legacy))
 
 
 def canonical_payload_for_session_decode(
@@ -1648,14 +1871,23 @@ def _migrate_legacy_linear_track_slot_spec(spec: str) -> str:
 
 
 __all__ = [
+    "DRAWN_FEATURE_ID_SESSION_MAX_VERSION",
+    "DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION",
+    "MAIN_DISPLAY_FRAME_SESSION_VERSION",
     "AdaptedSessionRequest",
-    "SessionCompatibleRequestRenderResult",
     "SessionMigrationReport",
     "adapt_session_request",
     "build_session_compatible_request_diagram",
     "canonical_payload_for_session_decode",
+    "decode_session_request",
+    "drawn_frame_protein_results_to_search_frame",
+    "replace_resource_bytes",
+    "resolve_session_write_request",
+    "search_frame_protein_resources",
+    "stores_protein_results",
     "project_legacy_similarity_alignment_for_current_write",
     "promote_legacy_session_similarity_alignment_request",
     "render_session_compatible_request",
     "rewrite_protein_artifact_references",
+    "written_legacy_protein_artifacts",
 ]

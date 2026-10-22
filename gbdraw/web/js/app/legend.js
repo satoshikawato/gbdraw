@@ -16,6 +16,7 @@ import {
 import { legendRowRules } from '../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
 import { registeredLegendFaces } from '../services/font-store.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * @typedef {object} LegendManagerOptions
@@ -36,6 +37,8 @@ import { registeredLegendFaces } from '../services/font-store.js';
  * @property {import('./legend/entry-actions.js').LegendEntryActionsOptions['legendRowNames']} [legendRowNames]
  *   The root's reactive holder of the names the displayed Result shows for its rows; the entry owner writes it.
  * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
+ * @property {import('./legend/entry-actions.js').LegendEntryActionsOptions['readHiddenTrackRows']} [readHiddenTrackRows]
+ *   The root's keys of the rows whose drawn track a drawing hides (OV-1198), which the Legend list leaves out.
  */
 
 /** @param {LegendManagerOptions} options */
@@ -49,12 +52,13 @@ export const createLegendManager = ({
   readActiveResultIdentity = null,
   readShownLegendColor,
   legendRowNames,
-  showLegendStructure
+  showLegendStructure,
+  readHiddenTrackRows
 }) => {
   const layoutActions = createLegendLayoutActions({
     readRegisteredFontFaces: () => registeredLegendFaces(state.loadedFonts.value)
   });
-  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames, readHiddenTrackRows });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
   // The keys a listed row stands for on the displayed Result (D-35: its own
@@ -91,7 +95,7 @@ export const createLegendManager = ({
       const rowRules = rows.flatMap((row) => row.rules);
       if (rowRules.length) {
         const legendOnly = rows.filter((row) => row.rules.length === 0).map((row) => row.key);
-        return commitLegendRowRules((current, revise) => current.map(rule => (rowRules.includes(rule) ? revise(rule, { color }) : rule)), 'Change legend color',
+        return commitLegendRowRules((current, revise) => current.map(rule => (rowRules.includes(rule) ? revise(rule, { color }) : rule)), msg('Change legend color'),
           { afterCommit: () => entryActions.writeLegendRowColor(legendOnly, color) });
       }
       return entryActions.updateLegendEntryColor(index, color);

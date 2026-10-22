@@ -2,7 +2,9 @@
 // reused only when every scientific input of its identity is unchanged
 // (CO-02, CO-03). Each row changes one input and must change the cache key;
 // display-only changes must keep it. A builder that drops an input from its
-// identity fails the table (see the last test).
+// identity fails the table (see the last test). The derived protein payload
+// identity has its Python owner and its table in
+// tests/test_derived_losatp_identity.py (OV-1063).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -11,7 +13,6 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-import { buildLosatDerivedPayloadCachePayload } from '../../gbdraw/web/js/app/run-analysis.js';
 import { prepareLosatSourceBatches } from '../../gbdraw/web/js/services/linear-sources.js';
 
 const keyOf = (identity) => createHash('sha256').update(JSON.stringify(identity)).digest('hex');
@@ -30,16 +31,6 @@ export const keySensitivityProblems = (build, baseline, { scientific, displayOnl
   return problems;
 };
 
-const withRecord = (index, patch) => (input) => ({
-  ...input,
-  recordPayloads: input.recordPayloads.map((record, position) => (
-    position === index ? { ...record, ...patch(record) } : record
-  ))
-});
-const withPair = (patch) => (input) => ({
-  ...input,
-  pairPayloads: input.pairPayloads.map((pair) => ({ ...pair, ...patch(pair) }))
-});
 const set = (patch) => (input) => ({ ...input, ...patch });
 const DISPLAY_ONLY = [
   ['match style', set({ pairwiseMatchStyle: 'curve' })],
@@ -48,84 +39,6 @@ const DISPLAY_ONLY = [
   ['scale font size', set({ scaleFontSize: 27 })],
   ['ruler label font size', set({ rulerLabelFontSize: 11 })]
 ];
-
-const derivedBaseline = {
-  mode: 'orthogroup',
-  maxHits: 5,
-  bitscore: 50,
-  evalue: '1e-5',
-  identity: 70,
-  alignmentLength: 0,
-  orthogroupMembershipMode: 'anchor_core_v1',
-  orthogroupMemberMaxHits: 5,
-  recordPayloads: [
-    { recordIndex: 0, proteinCacheKey: 'protein-a', runtimeBindingHash: 'runtime-a', displayBindingHash: 'display-a', viewTransform: { length: 100, reverse: false } },
-    { recordIndex: 1, proteinCacheKey: 'protein-b', runtimeBindingHash: 'runtime-b', displayBindingHash: 'display-b', viewTransform: { length: 200, reverse: true } }
-  ],
-  pairPayloads: [{ pairIndex: 0, queryIndex: 0, subjectIndex: 1, cacheKey: 'pair-a-b', displayPair: true }]
-};
-const DERIVED_TABLE = {
-  scientific: [
-    ['the record set', (input) => ({ ...input, recordPayloads: input.recordPayloads.slice(0, 1) })],
-    ['a record region length', withRecord(0, ({ viewTransform }) => ({ viewTransform: { ...viewTransform, length: 90 } }))],
-    ['a record orientation', withRecord(0, ({ viewTransform }) => ({ viewTransform: { ...viewTransform, reverse: true } }))],
-    ['a record protein set (translation table, Feature visibility)', withRecord(1, () => ({ proteinCacheKey: 'protein-b-gencode-4' }))],
-    ['a record runtime binding', withRecord(1, () => ({ runtimeBindingHash: 'runtime-b2' }))],
-    ['a record display binding', withRecord(1, () => ({ displayBindingHash: 'display-b2' }))],
-    ['the record index of a payload', withRecord(1, () => ({ recordIndex: 2 }))],
-    ['a pair endpoint', withPair(() => ({ queryIndex: 1, subjectIndex: 0 }))],
-    ['a pair raw search', withPair(() => ({ cacheKey: 'pair-a-b-rerun' }))],
-    ['the displayed direction of a pair (displayPair)', withPair(() => ({ displayPair: false }))],
-    ['the bit score threshold', set({ bitscore: 60 })],
-    ['the E-value threshold', set({ evalue: '1e-6' })],
-    ['the identity threshold', set({ identity: 71 })],
-    ['the alignment length threshold', set({ alignmentLength: 30 })],
-    ['the comparison mode', (input) => ({ ...input, mode: input.mode === 'pairwise' ? 'collinear' : 'pairwise' })],
-    ['the orthogroup membership mode', set({ orthogroupMembershipMode: 'all_hits' })],
-    ['the orthogroup member max hits', set({ orthogroupMemberMaxHits: 6 })]
-  ],
-  displayOnly: [
-    ...DISPLAY_ONLY,
-    ['record payload order', (input) => ({ ...input, recordPayloads: [...input.recordPayloads].reverse() })]
-  ]
-};
-
-const collinearBaseline = {
-  ...derivedBaseline,
-  mode: 'collinear',
-  collinearMinAnchors: 3,
-  collinearMaxUnitGap: 2,
-  collinearUnitMode: 'auto',
-  collinearColorMode: 'orientation',
-  collinearAnchorMode: 'rbh',
-  collinearMergeOrientation: 'either',
-  collinearMaxDiagonalDrift: 5,
-  collinearMaxConflictsInMergeGap: 1,
-  collinearMaxParalogLinksPerOrthogroup: 2,
-  collinearInferOrthogroups: true,
-  collinearSearchScope: 'adjacent'
-};
-const COLLINEAR_TABLE = {
-  scientific: [
-    ...DERIVED_TABLE.scientific.filter(([name]) => name !== 'the comparison mode'),
-    ['the comparison mode', set({ mode: 'orthogroup' })],
-    ['the minimum anchors', set({ collinearMinAnchors: 4 })],
-    ['the maximum unit gap', set({ collinearMaxUnitGap: 3 })],
-    ['the unit mode', set({ collinearUnitMode: 'gene' })],
-    ['the color mode', set({ collinearColorMode: 'block' })],
-    ['the anchor mode', set({ collinearAnchorMode: 'all' })],
-    ['the merge orientation', set({ collinearMergeOrientation: 'same' })],
-    ['the maximum diagonal drift', set({ collinearMaxDiagonalDrift: 6 })],
-    ['the maximum conflicts in a merge gap', set({ collinearMaxConflictsInMergeGap: 2 })],
-    ['the maximum paralog links per orthogroup', set({ collinearMaxParalogLinksPerOrthogroup: 3 })],
-    ['orthogroup inference', set({ collinearInferOrthogroups: false })],
-    ['the search scope', set({ collinearSearchScope: 'all' })],
-    // Only the Collinear converter reads it: with the search scope 'all' it limits the
-    // output to the displayed pairs of a CLI grid row layout.
-    ['explicit display pairs (CLI grid row layout)', set({ explicitDisplayPairs: true })]
-  ],
-  displayOnly: DERIVED_TABLE.displayOnly
-};
 
 // Load a copy of the module so the probe does not share module state.
 const loadRawIdentityBuilder = async () => {
@@ -176,16 +89,6 @@ const NUCLEOTIDE_RAW_TABLE = {
   displayOnly: DISPLAY_ONLY
 };
 
-test('derived comparison identity changes with every scientific input (G-F(1))', () => {
-  for (const mode of ['orthogroup', 'pairwise']) {
-    const table = mode === 'pairwise'
-      ? { ...DERIVED_TABLE, scientific: [...DERIVED_TABLE.scientific.filter(([name]) => !name.startsWith('the orthogroup')), ['the Pairwise max hits', set({ maxHits: 6 })]] }
-      : DERIVED_TABLE;
-    assert.deepEqual(keySensitivityProblems(buildLosatDerivedPayloadCachePayload, { ...derivedBaseline, mode }, table), [], mode);
-  }
-  assert.deepEqual(keySensitivityProblems(buildLosatDerivedPayloadCachePayload, collinearBaseline, COLLINEAR_TABLE), [], 'collinear');
-});
-
 test('raw LOSAT search identity changes with every scientific input (G-F(1))', async () => {
   const build = await loadRawIdentityBuilder();
   assert.deepEqual(keySensitivityProblems(build, proteinRawBaseline, PROTEIN_RAW_TABLE), [], 'protein');
@@ -226,23 +129,15 @@ test('a source batch searches a different database when a record of it changes (
   assert.notEqual(self[0][3], withinBaseline[0][3], 'the self database differs from the within-source database');
 });
 
-test('the sensitivity table flags a builder that drops an input or keys on display state', () => {
-  const dropsOrientation = (input) => {
-    const identity = buildLosatDerivedPayloadCachePayload(input);
-    return { ...identity, records: identity.records.map(({ viewTransform, ...record }) => ({ ...record, length: viewTransform.length })) };
+test('the sensitivity table flags a builder that drops an input or keys on display state', async () => {
+  const build = await loadRawIdentityBuilder();
+  const dropsSearchContext = (input) => {
+    const { searchContext: _searchContext, ...identity } = build(input);
+    return identity;
   };
-  assert.deepEqual(keySensitivityProblems(dropsOrientation, derivedBaseline, DERIVED_TABLE),
-    ['reused after a change of a record orientation']);
-  const keysOnHeight = (input) => ({ ...buildLosatDerivedPayloadCachePayload(input), height: input.comparisonHeight });
-  assert.deepEqual(keySensitivityProblems(keysOnHeight, derivedBaseline, DERIVED_TABLE),
+  assert.deepEqual(keySensitivityProblems(dropsSearchContext, proteinRawBaseline, PROTEIN_RAW_TABLE),
+    ['reused after a change of the searched database']);
+  const keysOnHeight = (input) => ({ ...build(input), height: input.comparisonHeight });
+  assert.deepEqual(keySensitivityProblems(keysOnHeight, proteinRawBaseline, PROTEIN_RAW_TABLE),
     ['not reused after display-only comparison height']);
-  const dropsDisplayDirection = (input) => buildLosatDerivedPayloadCachePayload({
-    ...input,
-    pairPayloads: input.pairPayloads.map(({ displayPair, ...pair }) => pair)
-  });
-  assert.deepEqual(keySensitivityProblems(dropsDisplayDirection, derivedBaseline, DERIVED_TABLE),
-    ['reused after a change of the displayed direction of a pair (displayPair)']);
-  const dropsExplicitDisplayPairs = (input) => buildLosatDerivedPayloadCachePayload({ ...input, explicitDisplayPairs: undefined });
-  assert.deepEqual(keySensitivityProblems(dropsExplicitDisplayPairs, collinearBaseline, COLLINEAR_TABLE),
-    ['reused after a change of explicit display pairs (CLI grid row layout)']);
 });

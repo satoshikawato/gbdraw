@@ -1,6 +1,7 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { expect, test: baseTest } = require('@playwright/test');
+const { PYODIDE_SNAPSHOT_TEST_PATH } = require('./pyodide-snapshot-test-server.cjs');
 
 // The current canonical request schema, Session version and feature catalog
 // schema, from the constants generated from their Python owners.
@@ -16,7 +17,7 @@ const DEFAULT_APP_TIMEOUT_MS = 180_000;
 const DEFAULT_APP_PATH = '/gbdraw/web/index.html';
 const pageDiagnostics = new WeakMap();
 const workerTrackingPages = new WeakSet();
-// The pages of `warmAppTest` (below): page -> { contextOptions, baseline, ready }.
+// The pages of `warmAppTest` (below): page -> { contextOptions, baseline, ready, savedSessions }.
 const warmPages = new WeakMap();
 
 const compactJson = (value, maxLength = 6_000) => {
@@ -610,12 +611,19 @@ const WARM_RESTORE_MAX_UNDO = 40;
 // a page that has not generated has none. A global missing here costs speed,
 // not correctness: every case after a Generate falls back, naming the global.
 const GENERATE_GLOBALS = ['__GBDRAW_LAST_LOSAT_TELEMETRY__', '_origPairwiseMin', '_origPairwiseMax'];
+// A Session file name (services/config.js `buildSessionFilename`). The app
+// remembers the Session file it downloaded last and asks before it downloads
+// one of that name again; the restore cannot reach that memory, so a page
+// that saved a Session after it booted serves no later case (OV-1001).
+const SESSION_FILE = /session\.json\.gz$/;
 
 // What the restore compares: both drawings' user-owned state, the inputs and
-// Results, and what a case can leave in the page outside the app.
+// Results, the Session files saved, and what a case can leave in the page
+// outside the app.
 const readWarmFacts = async (page) => ({
   url: page.url(),
   viewport: page.viewportSize(),
+  savedSessions: [...warmPages.get(page).savedSessions],
   circular: (await snapshotUserOwnedState(page, { mode: 'circular' })),
   linear: (await snapshotUserOwnedState(page, { mode: 'linear' })),
   page: await page.evaluate(async () => {
@@ -695,7 +703,7 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
     }
     await app.resetSettings();
     for (const [mode, { config: settings }] of Object.entries(drawings)) {
-      config.applyConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
+      config.applyCapturedConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
     }
     await window.Vue.nextTick();
     for (const [mode, { ui }] of Object.entries(drawings)) {
@@ -772,7 +780,11 @@ const warmAppTest = baseTest.extend({
     if (reasons.length) {
       if (page && !page.isClosed()) await page.context().close().catch(() => {});
       page = await (await browser.newContext(options)).newPage();
-      warmPages.set(page, { contextOptions, baseline: null, ready: false });
+      const savedSessions = [];
+      page.on('download', (file) => {
+        if (SESSION_FILE.test(file.suggestedFilename())) savedSessions.push(file.suggestedFilename());
+      });
+      warmPages.set(page, { contextOptions, baseline: null, ready: false, savedSessions });
     } else {
       warmPages.get(page).ready = true;
     }
@@ -865,6 +877,17 @@ const answerChoicePrompt = async (page, title, action, { timeout = 120_000 } = {
   await prompt.locator(`[data-choice-prompt-action="${action}"]`).click();
 };
 
+// Save asks for a Session title in the app's dialog when the Session has none.
+// The spec answers with `title` ('' saves an untitled file) and Enter.
+const answerSessionTitle = async (page, title = '', { timeout = 120_000 } = {}) => {
+  const dialog = page.locator('[data-choice-prompt]').getByRole('dialog', { name: 'Save Session', exact: true });
+  const field = dialog.getByRole('textbox', { name: 'Session title', exact: true });
+  await expect(field).toBeFocused({ timeout });
+  await field.fill(title);
+  await field.press('Enter');
+  await expect(dialog).toHaveCount(0);
+};
+
 // BA-D25: a Load that cannot restore everything lists what it cannot in one
 // dialog before it changes anything. The spec names the lines it expects and
 // answers `load` or `cancel`.
@@ -893,6 +916,9 @@ const fetchRoute = async (route, options) => {
 // Serves the app cross-origin isolated (threaded LOSAT needs
 // SharedArrayBuffer): every 127.0.0.1 request gets COOP/COEP headers and other
 // hosts are aborted. `stubs` maps a path to the fulfill options served instead.
+// A served Pyodide snapshot passes through unchanged: the Worker fetches it
+// same-origin, which COEP allows without headers, and fulfilling its 100 MB
+// body from the test process closes the page (OV-1020).
 const CROSS_ORIGIN_ISOLATION_HEADERS = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp'
@@ -900,6 +926,7 @@ const CROSS_ORIGIN_ISOLATION_HEADERS = {
 const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', async (route) => {
   const url = new URL(route.request().url());
   if (url.hostname !== '127.0.0.1') return route.abort();
+  if (url.pathname.startsWith(PYODIDE_SNAPSHOT_TEST_PATH)) return route.fallback();
   const stub = stubs[url.pathname];
   if (stub) return route.fulfill({ ...stub, headers: CROSS_ORIGIN_ISOLATION_HEADERS });
   const response = await fetchRoute(route);
@@ -908,6 +935,7 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 
 module.exports = {
   answerChoicePrompt,
+  answerSessionTitle,
   expectNoLoadRepairDialog,
   expectSessionLoadedWithoutWarnings,
   answerLoadRepairs,

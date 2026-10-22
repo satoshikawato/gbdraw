@@ -225,8 +225,10 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       data: btoa('unused\n')
     };
     const recordResourceId = session.renderRequest.records[0].source.resourceId;
-    if (requestedVariant === 'invalid-size') {
-      session.resources['unused-lazy-contract'].size = -1;
+    if (requestedVariant === 'newer-version') {
+      // A Session version no writer has written yet is refused (receipt 〔拒否〕);
+      // a resource that nothing names is dropped, so its size no longer refuses a Load.
+      session.version += 1;
     } else if (requestedVariant === 'invalid-base64') {
       session.resources[recordResourceId].data = '%%%';
     }
@@ -1065,9 +1067,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const undoCountAfterSecond = history.getUndoCount();
     const redoCountAfterSecond = history.getRedoCount();
     const generateProbe = window.__GBDRAW_LAZY_SESSION_PROBE__.snapshot();
-    const editableFeature = app.extractedFeatures.find((feature) => (
-      app.canEditFeatureColor(feature)
-    ));
+    const editableFeature = app.extractedFeatures[0];
     if (!editableFeature) {
       throw new Error('The synthetic session has no editable feature for mutation isolation.');
     }
@@ -1075,18 +1075,21 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const mutationColor = currentColor === '#123456' ? '#654321' : '#123456';
     const editApplied = await app.setFeatureColorValue(editableFeature, mutationColor);
     const editedState = snapshotResultState();
-    // The Worker runs are counted once the edit's automatic rerender ends.
-    // Undo and Redo of the edit ask for the rerender again (rule-actions.js
-    // followRestoredRules), and a rerender still drawing when Undo reverts its
-    // edit runs again (OV-351), so a count taken after them depends on timing
-    // (OV-731).
+    // The Worker runs are counted once the edit's automatic rerender is
+    // shown, and again once the History sequence below settles. The edit's
+    // History step keeps the rerender's figure, so Undo and Redo of the edit
+    // and of the Generate before it ask for no Python run (D-24 (OV-731)).
     const idle = () => !app.processing && !app.labelReflowProcessing && !app.ruleMatchingPending;
-    for (let idleFrames = 0; idleFrames < 2;) {
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      idleFrames = idle() ? idleFrames + 1 : 0;
-    }
-    const runsAfterEdit = (window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.instances || [])
+    const settle = async () => {
+      for (let idleFrames = 0; idleFrames < 2;) {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        idleFrames = idle() ? idleFrames + 1 : 0;
+      }
+    };
+    const workerRuns = () => (window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.instances || [])
       .reduce((total, instance) => total + (instance.runs?.length || 0), 0);
+    await settle();
+    const runsAfterEdit = workerRuns();
     const undoEdit = await history.undo();
     const afterUndoEdit = snapshotResultState();
     const undoGenerate = await history.undo();
@@ -1095,6 +1098,8 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const afterRedoGenerate = snapshotResultState();
     const redoEdit = await history.redo();
     const afterRedoEdit = snapshotResultState();
+    await settle();
+    const runsAfterHistory = workerRuns();
     return {
       first,
       second,
@@ -1116,6 +1121,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       redoCountAfterSecond,
       generateProbe,
       runsAfterEdit,
+      runsAfterHistory,
       mutationIsolation: {
         editApplied,
         editedState,
@@ -1226,6 +1232,8 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   // Two Generates, and the automatic rerender of the color edit, which adds a
   // Legend row (OV-42, OV-43, #857).
   expect(generated.runsAfterEdit).toBe(3);
+  // Undo edit, Undo Generate, Redo Generate, and Redo edit post no run.
+  expect(generated.runsAfterHistory).toBe(3);
   expect(worker.instances).toHaveLength(1);
   expect(worker.instances[0].terminated).toBe(false);
 });
@@ -1510,11 +1518,19 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    // The retry starts a new worker: no render stage hits, and the
-    // interactive context stage builds once.
-    renderStageHitCount: 0,
+    // The retry starts a new worker: every stage it reuses was built in this
+    // render, and the interactive context stage builds once.
     'renderStageBuild:interactive_context': 1
   });
+  const retryMetrics = retryPython?.metrics ?? {};
+  expect(retryMetrics.renderStageBuildCount).toBeGreaterThan(0);
+  for (const key of Object.keys(retryMetrics)) {
+    if (key.startsWith('renderStageHit:')) {
+      expect(
+        retryMetrics[`renderStageBuild:${key.slice('renderStageHit:'.length)}`]
+      ).toBeGreaterThanOrEqual(1);
+    }
+  }
   const afterRetryWorker = await getDiagramWorkerActivity(page);
   expect(afterRetryWorker.constructions).toBe(2);
   expect(afterRetryWorker.instances[1].terminated).toBe(false);
@@ -1534,11 +1550,11 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     };
   });
 
-  const rejected = await loadSyntheticSession(page, 'invalid-size');
+  const rejected = await loadSyntheticSession(page, 'newer-version');
   expect(rejected.status).toBe('error');
   expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RESOURCE_SIZE' }
+    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'SESSION_TOO_NEW', latestSessionVersion: expect.any(Number) }
   });
   expect(rejected.message).not.toContain('unused-lazy-contract');
   expect(await page.evaluate(() => {

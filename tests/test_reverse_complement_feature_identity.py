@@ -23,6 +23,7 @@ from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from tests.utils.comparison_tables import converted_pair_rows
 
 
 INPUTS = Path(__file__).parent / "test_inputs"
@@ -216,14 +217,16 @@ def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
                 "recordIndex": 3,
                 "recordId": "other-record",
                 "proteinMap": {other_runtime_handle: other_data},
-                "proteinCacheKey": "other-record-cache",
+                "runtimeBindingHash": "other-record-cache-runtime",
+                "displayBindingHash": "other-record-cache-display",
                 "viewTransform": {"length": len(saved_source), "reverse": False},
             },
             {
                 "recordIndex": 4,
                 "recordId": saved_source.id,
                 "proteinMap": {target_runtime_handle: raw_data},
-                "proteinCacheKey": "target-record-cache",
+                "runtimeBindingHash": "target-record-cache-runtime",
+                "displayBindingHash": "target-record-cache-display",
                 "viewTransform": view_transform,
             },
         ],
@@ -274,11 +277,13 @@ def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
     assert target_member["sourceProteinId"] == "PUBLIC_ID_MUST_NOT_JOIN"
     target_row = next(
         row
-        for row in result["pairs"][0]["rows"]
+        for row in converted_pair_rows(result["pairs"][0])
         if row["subject_protein_id"] == target_runtime_handle
     )
     assert target_row["subject_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
-    assert target_row["subject_view_feature_svg_id"] == PROCESSED_FEATURE_ID
+    # The row is stored in the search frame (OV-1145): its view ID names the
+    # feature on the source strand; the planner draws it as PROCESSED_FEATURE_ID.
+    assert target_row["subject_view_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
     assert "orthogroups" not in result
 
 

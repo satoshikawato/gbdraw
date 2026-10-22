@@ -63,6 +63,170 @@ test('OV-373: annotation rows name their record before Inspect', async ({ page }
   await expect(panel).not.toContainText('unavailable');
 });
 
+// OV-513: the closed Action select of a Feature Visibility rule shows the
+// whole text of every action, at the default sidebar width and at phone width.
+// The width a select needs is the width of a copy that holds only that option.
+for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844 }]) {
+  test(`OV-513 at ${viewport.width}x${viewport.height} a Feature Visibility rule shows its whole action`, async ({ page }) => {
+    test.setTimeout(240000);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    const card = page.locator('summary[aria-label="Features"]');
+    await card.scrollIntoViewIfNeeded();
+    await card.press('Enter');
+    await page.getByRole('button', { name: 'Add feature visibility rule', exact: true }).click();
+    const action = page.getByLabel('Visibility rule 1 action', { exact: true });
+    await action.scrollIntoViewIfNeeded();
+    const missingWidth = () => action.evaluate((select) => {
+      const copy = /** @type {HTMLSelectElement} */ (select.cloneNode(false));
+      copy.removeAttribute('aria-label');
+      copy.append(select.selectedOptions[0].cloneNode(true));
+      copy.style.cssText = 'position: absolute; visibility: hidden; width: auto; min-width: 0; max-width: none;';
+      select.after(copy);
+      const needed = copy.getBoundingClientRect().width;
+      copy.remove();
+      return Math.max(0, Math.ceil(needed - select.getBoundingClientRect().width));
+    });
+    for (const [value, text] of [['show', 'Show'], ['off', 'Off'], ['exclude_matching', 'Leave out of protein search']]) {
+      await action.selectOption(value);
+      await expect(action.locator('option:checked')).toHaveText(text);
+      expect(await missingWidth(), `px missing to show "${text}"`).toBe(0);
+    }
+    // Record ID, Feature Type and Qualifier share the first line in thirds.
+    const shares = await page.evaluate(() => ['record ID', 'feature type', 'qualifier'].map((name) => {
+      const field = /** @type {HTMLElement} */ (document.querySelector(`[aria-label="Visibility rule 1 ${name}"]`));
+      return field.getBoundingClientRect().width / /** @type {HTMLElement} */ (field.parentElement).getBoundingClientRect().width;
+    }));
+    for (const share of shares) expect(share, 'a third of the line').toBeGreaterThan(0.3);
+  });
+}
+
+// Scrolls the selected-feature bar with the mouse wheel, as a user does, until
+// the control is in the bar's visible part, then checks that the control is in
+// the window and that nothing covers it.
+const expectReachableInBar = async (page, control, name) => {
+  const delta = await control.evaluate((element) => {
+    const bar = /** @type {HTMLElement} */ (element.closest('.feature-selection-toolbar'));
+    const [outer, inner] = [bar.getBoundingClientRect(), element.getBoundingClientRect()];
+    return inner.top >= outer.top && inner.bottom <= outer.bottom ? 0
+      : inner.top - outer.top - (bar.clientHeight - inner.height) / 2;
+  });
+  if (delta) {
+    const box = await page.locator('.feature-selection-toolbar').boundingBox();
+    await page.mouse.move(box.x + 6, box.y + 6);
+    await page.mouse.wheel(0, delta);
+  }
+  await expect(control, name).toBeInViewport({ ratio: 1 });
+  await expect.poll(() => control.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return [rect.left + 3, rect.left + rect.width / 2, rect.right - 3]
+      .every((x) => element.contains(document.elementFromPoint(x, rect.top + rect.height / 2)));
+  }), `${name} is not covered`).toBe(true);
+};
+
+// The selected-feature bar names the action as a Feature Visibility rule does.
+// At every width the list shows that option in full beside its Apply button,
+// the legend name stays readable, no two controls overlap and every Apply
+// button stays in the window, with the default and the widest sidebar.
+for (const viewport of [{ width: 1024, height: 768 }, { width: 1024, height: 768, sidebar: 500 },
+  { width: 1440, height: 900 }, { width: 1440, height: 900, sidebar: 500 }, { width: 390, height: 844 }]) {
+  const sidebar = viewport.sidebar ? ` with a ${viewport.sidebar} px sidebar` : '';
+  test(`at ${viewport.width}x${viewport.height}${sidebar} the selected-feature visibility list keeps its Apply button in view`, async ({ page }, testInfo) => {
+    test.setTimeout(240000);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await openApp(page);
+    await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+    await page.evaluate((width) => {
+      const app = window.__GBDRAW_APP__;
+      if (width) app.sidebarWidth = width;
+      const id = app.extractedFeatures.map((feature) => String(feature?.svg_id || '')).find(Boolean);
+      app.selectedFeatureIds = new Set([id]);
+      app.selectedFeatureAnchorId = id;
+    }, viewport.sidebar || 0);
+    // A phone user scrolls the page to the Preview; hovering its controls does
+    // that without scrolling the Preview itself.
+    await page.locator('button[aria-label="Fit to preview"]').hover();
+    // Set without a Playwright action, which would scroll the preview into
+    // place where a user cannot scroll it.
+    const list = page.locator('select[aria-label="Selected feature visibility"]');
+    await list.evaluate((select) => {
+      select.value = 'exclude_matching';
+      select.dispatchEvent(new Event('change'));
+    });
+    await expect(list.locator('option:checked')).toHaveText('Leave out of protein search');
+    await page.screenshot({ path: testInfo.outputPath('selected-feature-bar.png') });
+    // The list shows its longest option in full: the text, its padding and the
+    // arrow fit the list's own width.
+    const fit = await list.evaluate((select) => {
+      const style = getComputedStyle(select);
+      const probe = document.createElement('span');
+      probe.style.font = style.font;
+      probe.style.whiteSpace = 'pre';
+      probe.style.position = 'absolute';
+      probe.textContent = [...select.options].map((option) => option.text).sort((a, b) => b.length - a.length)[0];
+      document.body.append(probe);
+      const text = probe.getBoundingClientRect().width;
+      probe.remove();
+      return { need: text + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 16, width: select.clientWidth,
+        scrollWidth: select.scrollWidth };
+    });
+    expect(fit.scrollWidth, 'no hidden overflow').toBeLessThanOrEqual(fit.width);
+    expect(fit.need, 'the longest option and the arrow fit').toBeLessThanOrEqual(fit.width);
+    const name = page.locator('input[aria-label="Selected feature legend name"]');
+    await expect(name).toHaveValue('Selected features');
+    expect(await name.evaluate((input) => input.scrollWidth <= input.clientWidth), 'the legend name fits').toBe(true);
+    const overlaps = await list.evaluate((select) => {
+      const bar = /** @type {HTMLElement} */ (select.closest('.feature-selection-toolbar'));
+      const boxes = [...bar.querySelectorAll('input, select, button')].map((control) => ({
+        name: control.getAttribute('aria-label') || control.textContent?.trim() || control.tagName,
+        rect: control.getBoundingClientRect() })).filter(({ rect }) => rect.width > 0 && rect.height > 0);
+      return boxes.flatMap((a, i) => boxes.slice(i + 1)
+        .filter((b) => Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left) > 1
+          && Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top) > 1)
+        .map((b) => `${a.name} / ${b.name}`));
+    });
+    expect(overlaps, 'no two controls overlap').toEqual([]);
+    for (const label of ['Apply color and legend name to selected features', 'Apply visibility to selected features',
+      'Apply stroke to selected features']) {
+      // Nothing above the bar, such as the Editor drawer toggle, covers it.
+      await expectReachableInBar(page, page.locator(`button[aria-label="${label}"]`), label);
+    }
+    await expectReachableInBar(page, list, 'the visibility list');
+    if (viewport.width >= 1440 && !viewport.sidebar) {
+      // With room for them, the three edits share one row.
+      const rows = await page.locator('.feature-selection-toolbar button.btn-sm').evaluateAll((buttons) => buttons
+        .filter((button) => /^Apply /.test(button.getAttribute('aria-label') || ''))
+        .map((button) => Math.round(button.getBoundingClientRect().top)));
+      expect(Math.max(...rows) - Math.min(...rows), `one row of Apply buttons (${rows})`).toBeLessThan(4);
+    }
+    const apply = page.locator('button[aria-label="Apply visibility to selected features"]');
+    const [listBox, applyBox] = [await list.boundingBox(), await apply.boundingBox()];
+    expect(Math.abs((listBox.y + listBox.height / 2) - (applyBox.y + applyBox.height / 2)), 'one row').toBeLessThan(2);
+  });
+}
+
+// OV-1098: on a phone, a fitted diagram leaves a short preview, and the bar
+// keeps every control reachable inside it instead of running under the
+// preview controls.
+test('OV-1098 at 390x844 the selected-feature bar stays reachable in a short preview', async ({ page }, testInfo) => {
+  test.setTimeout(240000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  await page.locator('button[aria-label="Fit to preview"]').click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const id = app.extractedFeatures.map((feature) => String(feature?.svg_id || '')).find(Boolean);
+    app.selectedFeatureIds = new Set([id]);
+    app.selectedFeatureAnchorId = id;
+  });
+  for (const selector of ['select[aria-label="Selected feature visibility"]',
+    'button[aria-label="Apply stroke to selected features"]']) {
+    await expectReachableInBar(page, page.locator(selector), selector);
+  }
+  await page.screenshot({ path: testInfo.outputPath('selected-feature-bar-short.png') });
+});
+
 // A default color edited under "More colors" stays in that grid and keeps
 // focus while it is edited; the grouping does not follow each edit.
 test('a color edited under More colors stays there and keeps focus', async ({ page }) => {

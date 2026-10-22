@@ -12,7 +12,7 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.layout.spatial import Aabb
 from gbdraw.diagrams.circular.positioning import place_definition_group_on_canvas
-from gbdraw.render.groups.circular.definition import DefinitionGroup
+from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
 from svgwrite.container import Group
 
 
@@ -30,11 +30,10 @@ def _definition(
     return DefinitionGroup(
         record,
         canvas.geometry(),
-        cfg=cfg,
+        style=CircularDefinitionStyle.of(cfg, profile),
         species="<i>Testus boundsii</i>",
         strain="strain A",
         plot_title=plot_title,
-        definition_profile=profile,
         definition_group_id=("plot_title" if profile == "shared_common" else None),
         record_presentation=RecordPresentation(label=record_label, subtitle=record_subtitle),
     )

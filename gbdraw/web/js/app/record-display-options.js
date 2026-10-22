@@ -18,8 +18,12 @@ import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
+import { circularDrawingCropped } from '../services/record-options.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
+import { msg, t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -124,7 +128,7 @@ export const createRecordDisplayControls = ({
         paired: state.cInputType.value === 'gff' ? state.files.c_fasta : null,
         records: state.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
-        cropped: drawing.form.circular_region_start != null || drawing.form.circular_region_end != null,
+        cropped: circularDrawingCropped(state.circularRecordList.value, drawing),
         reverse: drawing.form.circular_reverse },
       ...state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', sourceUid: seq.uid,
         source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,
@@ -361,7 +365,7 @@ export const createRecordDisplayControls = ({
       try { return requestFeaturePlacements(drawing.featurePlacementOverrides, request.mode, request.records || []).length; }
       catch { return -1; }
     };
-    if (request.mode !== state.mode.value || tolerance !== drawing.adv.feature_overlap_tolerance_bp
+    if (request.mode !== state.mode.value || tolerance !== draftFeatureOverlapTolerance(drawing.adv)
       || placements.length !== draftPlacementCount()
       || placements.some((/** @type {{ recordKey: string, biologicalFeatureId: string, placement: Record<string, unknown> }} */ row) => {
         const target = drawing.featurePlacementOverrides[
@@ -399,8 +403,8 @@ export const createRecordDisplayControls = ({
     const failed = discoveries.find(({ status }) => status === 'error');
     return failed
       ? recordTargetError('discovery-failed',
-        (typeof failed.error === 'string' ? failed.error : failed.error?.summary) || RECORD_READ_ERROR_LABEL)
-      : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, 'The records of this feature have not been read yet.');
+        (typeof failed.error === 'string' ? failed.error : failed.error && errorText(failed.error.summaryParts)) || tm(RECORD_READ_ERROR_LABEL))
+      : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, t('The records of this feature have not been read yet.'));
   };
   // The display start and orientation that Generate would apply from this
   // committed row's draft, when either differs from the committed request.
@@ -512,27 +516,27 @@ export const createRecordDisplayControls = ({
     rowsFor: (/** @type {string} */ uid) => rows.value.filter((row) => row.sourceUid === uid),
     setTopology: (/** @type {RecordDisplayRow} */ row, /** @type {boolean | null} */ value) => {
       const drawing = state.activeDrawing();
-      return edit(drawing, row, { topologyOverride: value }, 'Change record topology');
+      return edit(drawing, row, { topologyOverride: value }, msg('Change record topology'));
     },
     setStart: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
       return state.sessionOperationAvailability?.() || edit(drawing, row, {
         startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
-      }, 'Change record display start');
+      }, msg('Change record display start'));
     },
     resetStart: (/** @type {RecordDisplayRow} */ row) => {
       const drawing = state.activeDrawing();
-      return edit(drawing, row, { startCoordinate: null, anchorIntent: null }, 'Reset record display start');
+      return edit(drawing, row, { startCoordinate: null, anchorIntent: null }, msg('Reset record display start'));
     },
     setReverseComplement: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
       return state.sessionOperationAvailability?.() || edit(drawing, row, {
         reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
-      }, 'Change record orientation');
+      }, msg('Change record orientation'));
     },
     // Apply on Generate: one undoable draft step, like the sidebar's edits.
     setResolvedTransform: (/** @type {RecordDisplayRow} */ row, /** @type {ResolvedRecordTransform} */ transform) => runUndoable(
-      'Rotate record to feature on Generate',
+      msg('Rotate record to feature on Generate'),
       () => writeResolvedTransform(row, transform)
     ),
     commitResolvedTransform: writeResolvedTransform,

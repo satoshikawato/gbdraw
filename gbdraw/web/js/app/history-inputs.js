@@ -36,17 +36,23 @@ const isEditableControl = (element) => {
   return TEXT_INPUT_TYPES.has(String(element.type || '').toLowerCase());
 };
 
+// This module stays import-free (tests/web/history-inputs.test.mjs loads it
+// alone), so it declares the key marker of utils/i18n.js itself.
+/** @param {string} text @returns {string} */
+const msg = (text) => text;
+
+// A step label is History's identity: English, marked for translation where it is shown.
 /** @param {HistoryControl | null} element */
 const controlLabel = (element) => {
-  if (!element) return 'Edit';
+  if (!element) return msg('Edit');
   const tag = String(element.tagName || '').toLowerCase();
-  if (tag === 'button') return 'Change setting';
-  if (tag === 'select') return 'Change setting';
+  if (tag === 'button') return msg('Change setting');
+  if (tag === 'select') return msg('Change setting');
   const type = String(element.type || '').toLowerCase();
-  if (type === 'file') return 'Change uploaded file';
-  if (type === 'checkbox' || type === 'radio') return 'Change setting';
-  if (type === 'color') return 'Change color';
-  return 'Edit setting';
+  if (type === 'file') return msg('Change uploaded file');
+  if (type === 'checkbox' || type === 'radio') return msg('Change setting');
+  if (type === 'color') return msg('Change color');
+  return msg('Edit setting');
 };
 
 /**
@@ -189,7 +195,10 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   // R11: a discrete control begins in the capture phase of its committing
   // event (checkbox, radio, and file input: change; button: click), so a
   // pointer, its label, the keyboard, and a picker opened by another button
-  // record the same one step. Text-like controls begin on focus.
+  // record the same one step. Text-like controls begin on focus, and on a
+  // keydown or input when no step of theirs is open (after Enter, Undo, Redo,
+  // or another owner settled it); the capture phase of `input` runs before the
+  // control's own listener writes the value.
   /** @param {PointerEvent} event */
   const onPointerDown = (event) => {
     const target = findControl(event.target);
@@ -201,8 +210,8 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
-  /** @param {FocusEvent} event */
-  const onFocusIn = (event) => {
+  /** @param {Event} event */
+  const beginEditableControl = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
     if (isEditableControl(target) || target?.isContentEditable) {
@@ -214,11 +223,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   const onKeyDown = (event) => {
     // A shortcut chord is not an edit of the focused control.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const target = findControl(event.target);
-    if (!target || isIgnoredTarget(target)) return;
-    if (isEditableControl(target) || target?.isContentEditable) {
-      void beginForElement(target);
-    }
+    beginEditableControl(event);
   };
 
   /** @param {Event} event */
@@ -226,7 +231,10 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
     const type = String(target.type || '').toLowerCase();
-    if (type === 'checkbox' || type === 'radio' || type === 'file') void beginForElement(target);
+    // A select changed without a pointer or focus first (assistive or
+    // scripted input) still records its step (OV-1071).
+    const tag = String(target.tagName || '').toLowerCase();
+    if (type === 'checkbox' || type === 'radio' || type === 'file' || tag === 'select') void beginForElement(target);
   };
 
   /** @param {Event} event */
@@ -238,9 +246,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
       return;
     }
     const tag = String(target.tagName || '').toLowerCase();
-    if (tag === 'select' || tag === 'input' || tag === 'textarea') {
-      void commitElement(target);
-    }
+    if (tag === 'select' || tag === 'input' || tag === 'textarea') void commitElement(target);
   };
 
   /** @param {FocusEvent} event */
@@ -268,8 +274,9 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   };
 
   appRoot.addEventListener('pointerdown', onPointerDown, true);
-  appRoot.addEventListener('focusin', onFocusIn, true);
+  appRoot.addEventListener('focusin', beginEditableControl, true);
   appRoot.addEventListener('keydown', onKeyDown, true);
+  appRoot.addEventListener('input', beginEditableControl, true);
   appRoot.addEventListener('change', onChangeCapture, true);
   appRoot.addEventListener('change', onChange, false);
   appRoot.addEventListener('focusout', onFocusOut, false);
@@ -278,8 +285,9 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
 
   return () => {
     appRoot.removeEventListener('pointerdown', onPointerDown, true);
-    appRoot.removeEventListener('focusin', onFocusIn, true);
+    appRoot.removeEventListener('focusin', beginEditableControl, true);
     appRoot.removeEventListener('keydown', onKeyDown, true);
+    appRoot.removeEventListener('input', beginEditableControl, true);
     appRoot.removeEventListener('change', onChangeCapture, true);
     appRoot.removeEventListener('change', onChange, false);
     appRoot.removeEventListener('focusout', onFocusOut, false);

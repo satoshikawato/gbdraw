@@ -64,9 +64,9 @@ from gbdraw.api.options import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
-from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
 MG1655_START_CODON_SUBSET = (
@@ -82,19 +82,6 @@ def _record(
     record = SeqRecord(Seq(sequence), id=record_id)
     record.features = list(features or [])
     return record
-
-
-def _orthogroup_alignment_canvas_config() -> object:
-    return type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "alignment_width": 1000.0,
-            "longest_genome": 1000,
-        },
-    )()
 
 
 def _cds(
@@ -3653,11 +3640,24 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
 
 
 @pytest.mark.linear
-def test_web_losatp_pairwise_payload_uses_display_view_transform(
+def test_web_losatp_pairwise_payload_stores_a_reversed_record_in_its_search_frame(
     tmp_path: Path,
     stage_web_losatp_transport,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     namespace = _load_web_helper_namespace()
+    # D-66: each pair's table is the text of the one canonical encoder, which
+    # the derived-entry owner (gbdraw.analysis.protein_artifacts) calls.
+    import gbdraw.session_request_codec as session_request_codec
+    from gbdraw.session_request_codec import encode_canonical_table
+
+    encoded_tables: list[str] = []
+
+    def recording_encoder(frame: object, *, name: str = "table") -> str:
+        encoded_tables.append(encode_canonical_table(frame, name=name))
+        return encoded_tables[-1]
+
+    monkeypatch.setattr(session_request_codec, "encode_canonical_table", recording_encoder)
     hits = pd.DataFrame.from_records(
         [_hit_row("qa", "sb")],
         columns=COMPARISON_COLUMNS,
@@ -3677,7 +3677,8 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
                         strand=1,
                     )
                 },
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
                 "viewTransform": {"length": 300, "reverse": True},
             },
             {
@@ -3693,7 +3694,8 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
                         strand=-1,
                     )
                 },
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
                 "viewTransform": {"length": 200, "reverse": False},
             },
         ],
@@ -3722,10 +3724,13 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    row = result["pairs"][0]["rows"][0]
+    assert [pair["canonicalTsv"] for pair in result["pairs"]] == encoded_tables
+    assert len(encoded_tables) == 1
+    row = converted_pair_rows(result["pairs"][0])[0]
     assert row["query_protein_id"] == "qa"
-    assert row["qstart"] == 300
-    assert row["qend"] == 271
+    # The reversed query record is stored in its search frame (OV-1145).
+    assert row["qstart"] == 1
+    assert row["qend"] == 30
     assert row["sstart"] == 160
     assert row["send"] == 101
 
@@ -3784,14 +3789,16 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
                 "viewTransform": {"length": 200, "reverse": False},
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
                 "viewTransform": {"length": 200, "reverse": True},
             },
         ],
@@ -3877,9 +3884,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     )
     assert subject_member["featureSvgId"] == "feature_b"
     assert "orthogroups" not in result
-    rows = result["pairs"][0]["rows"]
+    rows = converted_pair_rows(result["pairs"][0])
     assert rows[0]["subject_feature_svg_id"] == "feature_b"
-    assert rows[0]["subject_view_feature_svg_id"] == display_feature_svg_id
+    # Stored in the search frame (OV-1145); the planner draws the display ID.
+    assert rows[0]["subject_view_feature_svg_id"] == subject_map["b"]["feature_svg_id"]
     assert rows[0]["orthogroup_id"] == "og_1"
     assert rows[0]["edge_kind"] == "rbh"
     assert rows[1]["orthogroup_id"] == "og_1"
@@ -3996,7 +4004,8 @@ def _directed_display_payload(
                         end=90,
                     )
                 },
-                "proteinCacheKey": f"record-{index}-cache",
+                "runtimeBindingHash": f"record-{index}-cache-runtime",
+                "displayBindingHash": f"record-{index}-cache-display",
                 "viewTransform": {"length": 200, "reverse": False},
             }
         )
@@ -4061,7 +4070,7 @@ def test_web_losatp_payload_helper_output_follows_the_displayed_pair_direction(
         return [
             (row["query_protein_id"], row["subject_protein_id"])
             for pair in result["pairs"]
-            for row in pair["rows"]
+            for row in converted_pair_rows(pair)
         ]
 
     assert displayed_rows(forward) == [("p0", "p1")]
@@ -4126,7 +4135,7 @@ def test_web_losatp_payload_helper_output_follows_explicit_display_pairs(
     assert displayed_only["cache"]["convertedPayloadHit"] is False
 
 
-def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
+def test_pairwise_match_group_places_each_end_through_its_record_placement() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
         _record("record_b", sequence="A" * 1000),
@@ -4142,35 +4151,21 @@ def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> Non
             }
         ]
     )
-    canvas_config = _orthogroup_alignment_canvas_config()
-    blast_config = type(
-        "BlastConfig",
-        (),
-        {
-            "fill_color": "#cccccc",
-            "identity": 0,
-            "min_color": "#eeeeee",
-            "max_color": "#111111",
-            "fill_opacity": 0.5,
-            "stroke_color": "#000000",
-            "stroke_width": 0.1,
-        },
-    )()
-
-    group = PairWiseMatchGroup(
-        canvas_config,
-        {"record_a": 1000, "record_b": 1000},
-        comparison,
-        100.0,
-        1,
-        blast_config,
+    group = ribbon_group(
         records,
-        record_offsets_x={1: -300.0},
-        align_center=canvas_config.align_center,
+        comparison,
+        height=100.0,
+        subject_x=-300.0,
+        fill_color="#cccccc",
+        min_color="#eeeeee",
+        max_color="#111111",
+        fill_opacity=0.5,
+        stroke_color="#000000",
+        stroke_width=0.1,
     ).get_group()
 
     path = group.elements[0]
-    assert 'd="M 100.0,0L200.0,0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
+    assert 'd="M 100.0,0.0L200.0,0.0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
 
 
 @pytest.mark.linear
@@ -4202,6 +4197,72 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     assert frames.pairs == ()
     assert frames.ordered is not None and len(frames.ordered) == 1
     assert frames.ordered[0].equals(comparison)
+
+
+@pytest.mark.linear
+def test_protein_table_renders_alike_from_the_js_and_the_python_encoding(
+    tmp_path: Path,
+) -> None:
+    # D-66: the Web wrote protein comparison tables with a JS encoder until the
+    # Python one replaced it; Sessions keep the old bytes. Both decode to values
+    # that render the same diagram.
+    from gbdraw.session_request_codec import _read_canonical_table, encode_canonical_table
+
+    frame = pd.DataFrame.from_records(
+        [
+            {
+                **_hit_row("record_a", "record_b", identity=90.0, evalue=1e-30, bitscore=283.0),
+                "query_protein_id": "qa",
+                "subject_protein_id": "sb",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "orthogroup_id": "og_1",
+                "edge_kind": "rbh",
+                "query_orthogroup_representative": True,
+            },
+            {
+                **_hit_row(
+                    "record_a", "record_b", identity=87.5, qstart=120, qend=170,
+                    sstart=170, send=120, evalue=1e-05, bitscore=61.5,
+                ),
+                "query_protein_id": "qb",
+                "subject_protein_id": "sc",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "orthogroup_id": None,
+                "edge_kind": "coortholog",
+                "query_orthogroup_representative": False,
+            },
+        ]
+    )
+    python_text = encode_canonical_table(frame)
+    assert python_text.splitlines()[1].split("\t")[2] == "90.0"
+    # The removed JS encoder: the 12 BLAST columns, then the others sorted;
+    # numbers and booleans as JavaScript prints them.
+    js_text = (
+        "query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\t"
+        "sstart\tsend\tevalue\tbitscore\tedge_kind\torthogroup_id\t"
+        "query_orthogroup_representative\tquery_protein_id\tquery_record_index\t"
+        "subject_protein_id\tsubject_record_index\n"
+        "record_a\trecord_b\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t283\trbh\tog_1\ttrue\tqa\t0\tsb\t1\n"
+        "record_a\trecord_b\t87.5\t100\t0\t0\t120\t170\t170\t120\t0.00001\t61.5\tcoortholog\t\t"
+        "false\tqb\t0\tsc\t1\n"
+    )
+
+    def render(text: str, name: str) -> str:
+        path = tmp_path / f"{name}.tsv"
+        path.write_text(text, encoding="utf-8")
+        decoded = _read_canonical_table(path, context=name)
+        canvas = assemble_linear_diagram_from_records(
+            [_record("record_a"), _record("record_b")],
+            cfg=apply_config_overrides(None, None),
+            protein_comparisons=[decoded],
+        )
+        return canvas.tostring()
+
+    python_svg = render(python_text, "python")
+    assert "data-bitscore" in python_svg
+    assert render(js_text, "js") == python_svg
 
 
 @pytest.mark.linear

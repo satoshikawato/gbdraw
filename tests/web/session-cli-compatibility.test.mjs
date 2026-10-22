@@ -1,10 +1,12 @@
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -42,21 +44,27 @@ const {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
+const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
+const { isCardRow } = await import('../../gbdraw/web/js/services/file-imports.js');
+// The Generate's reuse test of stored protein results is module-private; a
+// copy of run-analysis.js that exports it imports the same modules.
+const runAnalysisUrl = pathToFileURL(path.join(process.cwd(), 'gbdraw/web/js/app/run-analysis.js'));
+const reuseProbeDir = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-reuse-'));
+const reuseProbePath = path.join(reuseProbeDir, 'run-analysis-reuse-probe.mjs');
+await writeFile(reuseProbePath, (await readFile(runAnalysisUrl, 'utf8'))
+  .replace('const canReuseResolvedProteinArtifacts = ({', 'export const canReuseResolvedProteinArtifacts = ({')
+  .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => `from '${new URL(specifier, runAnalysisUrl).href}'`), 'utf8');
+const { canReuseResolvedProteinArtifacts } = await import(pathToFileURL(reuseProbePath).href);
 const root = process.cwd();
 // Exercise the Worker's actual typed helper without starting a browser runtime.
-setUnmanagedConfigOverrideValidator(payload => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: root })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const lambda = path.join(root, 'tests/test_inputs/NC_001416.gb');
@@ -153,20 +161,18 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
           assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
         }
-        // A draft outside `modes` is a Session-format error, even beside a
-        // valid request (Session 46 keeps the Web draft in `modes`).
+        // A draft in its retired home outside `modes` is dropped with no row
+        // (A7f, E-OD03: the slice fills its place); Save still refuses it.
         const before = getCommittedCanonicalRenderRequest();
-        const errorLog = console.error;
-        console.error = () => {};
-        try {
-          const rejected = await load(JSON.stringify({ ...session, config: { adv: {} } }));
-          assert.equal(rejected.status, 'error');
-          assert.equal(rejected.error.code, 'INPUT_INVALID');
-          assert.deepEqual(rejected.error.context, {field:'schema',reason:'FIELDS'});
-          assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
-        } finally {
-          console.error = errorLog;
-        }
+        const retiredSession = { ...session, config: { adv: { label_font_size: 99 } } };
+        assert.throws(() => validateSessionAuthorityInventory(retiredSession, session.version),
+          (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS');
+        assert.doesNotThrow(() => validateSessionAuthorityInventory(session, session.version));
+        const retired = await load(JSON.stringify(retiredSession));
+        assert.equal(retired.status, 'ok', retired.error?.stack);
+        assert.deepEqual(retired.repairs, []);
+        assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
+        assert.notEqual(state.activeDrawing().adv.label_font_size, 99);
         input = ['--session', file];
       }
     } finally {
@@ -253,7 +259,8 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
 
 // B15: an editable CLI protein pipeline is the adjacent LOSATP comparison the
 // CLI drew. The projection states that plan (the plan normalizer no longer
-// falls back to adjacent), so Generate rebuilds the same pipeline.
+// falls back to adjacent), so a changed setting rebuilds the same pipeline;
+// with no change the first Generate reuses the stored results (OV-1068).
 await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
   try {
@@ -264,21 +271,35 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     });
     const bytes = gunzipSync(await readFile(file));
     const session = JSON.parse(bytes);
-    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode]),
-      [['generatedProteinComparison', 'orthogroup']]);
+    // OV-1068: the CLI stores the results it computed as the Web Save does.
+    const stored = [['precomputedProteinComparison', undefined], ['orthogroupResult', undefined],
+      ['generatedProteinComparison', 'none']];
+    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode]), stored);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
     assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
     assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
     assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
     const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    // ... so the first Generate after Load reuses them instead of converting again.
+    const blastp = state.activeDrawing().losat.blastp;
+    assert.equal(canReuseResolvedProteinArtifacts({
+      canonicalComparisons: filesData.linearCanonicalComparisons,
+      committedSession: getCommittedCanonicalSession(),
+      sequences: filesData.linearSeqs,
+      active: {
+        featureVisibility: '', mode: blastp.mode, candidateLimit: blastp.candidateLimit ?? null,
+        ...resolveComparisonThresholds(state.activeDrawing().adv, 'linear'),
+        orthogroupMembershipMode: blastp.orthogroupMembershipMode, memberMaxHits: blastp.orthogroupMemberMaxHits ?? null,
+        maxParalogLinks: blastp.collinearMaxParalogLinksPerOrthogroup
+      }
+    }), true);
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
     });
     const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
-    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]),
-      [['generatedProteinComparison', 'orthogroup']]);
+    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]), stored);
     // OV-296: the Python API re-save of that Session (same request, no
     // cliInvocation, no Web draft) loads with the same plan, so Generate
     // rebuilds the same pipeline.
@@ -454,9 +475,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
   // A later edit of the form's slots leaves the record of the shown Result.
   state.activeDrawing().adv.linear_track_slots[1].params.positive_color = '#00ff00';
   assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
-  // A failed Load keeps the Session that stays loaded, and its record.
+  // A failed Load keeps the Session that stays loaded, and its record (R3: too old).
   const broken = structuredClone(session);
-  broken.config.adv.circular_track_slots_enabled = true;
+  broken.version = 26;
   assert.equal((await load(Buffer.from(JSON.stringify(broken)))).status, 'error');
   assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
   assert.equal((await load(await read('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'))).status, 'ok');
@@ -471,9 +492,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
 
 // OV-38: the Web writers of Sessions 27–33 (release tags 0.12.0–0.13.0 and
 // main before Session 39) saved every schema-4 Circular track slot row with
-// `spacing: null`. With Custom Track Slots off the null is lossless, so the
-// 0.13.0 Gallery Session loads and the field is not kept; with the slots on, or
-// with a non-null value, Load fails and names the field and the row.
+// `spacing: null`. The null holds nothing, so the 0.13.0 Gallery Session loads
+// and the field is not kept, with Custom Track Slots off or on (E-OD06); a
+// non-null value is dropped with its row before the Load (OV-758, A10).
 await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without the null slot spacing', async () => {
   const bytes = gunzipSync(await readFile(path.join(
     root, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'
@@ -487,17 +508,22 @@ await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without t
   assert.equal(state.mode.value, 'linear');
   assert.equal(state.activeDrawing().adv.circular_track_slots.length, session.config.adv.circular_track_slots.length);
   assert.ok(state.activeDrawing().adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')));
-  for (const [label, edit, row] of [
-    ['Custom Track Slots on', adv => { adv.circular_track_slots_enabled = true; }, 1],
-    ['a non-null spacing', adv => { adv.circular_track_slots[1].spacing = '4px'; }, 2]
+  for (const [label, edit, enabled, rows] of [
+    ['Custom Track Slots on', adv => { adv.circular_track_slots_enabled = true; }, true, []],
+    ['a non-null spacing', adv => { adv.circular_track_slots[1].spacing = '4px'; }, false,
+      [['setting-replaced', 'config.adv.circular_track_slots[1].spacing', 'dropped']]]
   ]) {
     const document = structuredClone(session);
     edit(document.config.adv);
-    const failed = await load(JSON.stringify(document));
-    assert.equal(failed.status, 'error', label);
-    assert.equal(failed.error.code, 'TRACK_INVALID', label);
-    assert.deepEqual(failed.error.context, { field: 'spacing', reason: 'OBSOLETE_TRACK_FIELD', slotIndex: row - 1 }, label);
-    assert.match(failed.error.summary, new RegExp(`^The track settings are invalid\\. Track row ${row}\\. Field: spacing\\. `), label);
+    const loaded = await importSession({ target: {
+      files: [new File([JSON.stringify(document)], 'current.json', { type: 'application/json' })], value: 'selected'
+    } }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', label);
+    assert.deepEqual(loaded.repairs.map(({ code, path, effect }) => [code, path, effect]), rows, label);
+    const { adv } = state.drawings.circular;
+    assert.equal(adv.circular_track_slots_enabled, enabled, label);
+    assert.equal(adv.circular_track_slots.length, session.config.adv.circular_track_slots.length, label);
+    assert.ok(adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')), label);
   }
 });
 
@@ -572,7 +598,7 @@ with materialize_session(document, output_directory=directory / 'out') as materi
 // loads it. Load gives the drawing every table the request holds, so the next
 // Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
 // replay and Python save again (no Web draft either) load the same way, and so
-// do a case's Sessions 40 to 44 from older CLI writers (`legacySessions`,
+// do a case's Sessions 40 to 47 from older CLI writers (`legacySessions`,
 // OV-269). The CLI and Python cells of the matrix are
 // tests/test_cli_session_cross_surface.py.
 const crossSurface = (...args) => JSON.parse(execFileSync('python', [
@@ -592,6 +618,17 @@ const LOADED_TABLES = {
   '--qualifier_priority': (drawing, file) => drawing.manualPriorityRules.length === fixtureRows(file),
   '--feature_override_table': drawing => Object.keys(drawing.featureOverrides).length > 0
 };
+// OV-1280 (D-19): from Session 48 on, the rows and colors a CLI table option
+// gives are its file card's, so Remove on the card takes them back; an older
+// Session's rows read as rows added by hand.
+const cardRows = (rows, card) => rows.map(row => (isCardRow(row, card) ? card : null));
+const CARD_ROWS = {
+  '-t': drawing => cardRows(drawing.manualSpecificRules, 't_color'),
+  '-d': drawing => [drawing.fileImports.d_color?.CDS?.color ?? null],
+  '--label_whitelist': drawing => cardRows(drawing.manualWhitelist, 'whitelist'),
+  '--qualifier_priority': drawing => cardRows(drawing.manualPriorityRules, 'qualifier_priority')
+};
+const CARD_MARKS = { '-t': 't_color', '-d': '#123456', '--label_whitelist': 'whitelist', '--qualifier_priority': 'qualifier_priority' };
 // A Session of the request and resources the Web renders.
 const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
   format: 'gbdraw-session', version: SESSION_VERSION, createdAt: '2026-10-09T00:00:00.000Z', renderRequest,
@@ -686,6 +723,22 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
           const index = entry.args.indexOf(option);
           if (index >= 0) assert.ok(loaded(drawing, entry.args[index + 1]), `${entry.id}, ${source}: ${option}`);
         }
+        // A case's older Session (`id@v40`) is the CLI Session of its entry.
+        const marked = !(source === 'CLI Session' && entry.id.includes('@'));
+        for (const [option, rows] of Object.entries(CARD_ROWS)) {
+          const values = rows(drawing);
+          if (entry.args.includes(option)) {
+            assert.deepEqual(values, values.map(() => (marked ? CARD_MARKS[option] : null)), `${entry.id}, ${source}: ${option} card`);
+          }
+        }
+        // The CLI reads `--label_blacklist` as keywords, a path too (OV-1338), so a CLI Session no longer binds it as
+        // a Blacklist File: the card stays empty and the keyword box holds the text the CLI drew with. An older CLI
+        // Session (`id@v47`) that bound it keeps that binding through a CLI re-save, whose card holds the same text
+        // (OV-1380); the figure is the CLI's either way.
+        const blacklist = entry.args[entry.args.indexOf('--label_blacklist') + 1];
+        const keptBinding = source === 'CLI re-save' && entry.id.includes('@') && entry.args.includes('--label_blacklist');
+        assert.deepEqual(drawing.fileImports.blacklist?.words, keptBinding ? [blacklist] : undefined,
+          `${entry.id}, ${source}: blacklist card`);
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });

@@ -1,7 +1,9 @@
 // @ts-check
+import { ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
+  locationRangeText,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
@@ -17,8 +19,10 @@ import {
   featureIdentity,
   identityMatches,
   renderedFeatureIdentity,
-  textAliasStatus
+  textAliasStatus,
+  orthogroupIdStatus
 } from '../services/feature-identity.js';
+import { msg, t, tm, tmx, tn } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureLike } from '../services/feature-utils.js' */
@@ -47,8 +51,9 @@ import {
 /** @typedef {ReturnType<typeof buildGroupView>} GroupView The view of one similarity group. */
 
 /**
- * One popup table row.
- * @typedef {{ label: string, value: string }} PopupRow
+ * One popup table row. `id` is the row's English label (a `msg` key) and its
+ * identity: code finds a row by `id`, never by the shown `label` (`tm(id)`).
+ * @typedef {{ id: string, label: string, value: string }} PopupRow
  */
 
 /**
@@ -56,7 +61,8 @@ import {
  * feature sections add their list data and the Similarity group section
  * adds the copy and FASTA fields.
  * @typedef {object} PopupSection
- * @property {string} title
+ * @property {string} id The English title (a `msg` key): the section's identity.
+ * @property {string} title The shown title, `tm(id)`.
  * @property {PopupRow[]} rows
  * @property {FeatureListRow[]} [featureRows]
  * @property {MemberRow[]} [memberRows]
@@ -169,10 +175,10 @@ export const PAIRWISE_MATCH_SELECTOR = [
 ].join(', ');
 
 const MATCH_KIND_TITLES = {
-  pairwise: 'Pairwise match',
-  orthogroup: 'Similarity-group match',
-  collinear: 'Collinearity block',
-  homology: 'Homology ring match'
+  pairwise: msg('Pairwise match'),
+  orthogroup: msg('Similarity-group match'),
+  collinear: msg('Collinearity block'),
+  homology: msg('Comparison ring match')
 };
 
 const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear', 'homology']);
@@ -297,13 +303,13 @@ const normalizeMatchKind = (value, element = null) => {
 
 /**
  * @param {PopupRow[]} rows
- * @param {string} label
+ * @param {string} id The English row label (a `msg` key).
  * @param {unknown} value
  */
-const addRow = (rows, label, value) => {
+const addRow = (rows, id, value) => {
   const text = normalizeText(value);
   if (!text) return;
-  rows.push({ label, value: text });
+  rows.push({ id, label: tm(id), value: text });
 };
 
 /**
@@ -352,10 +358,6 @@ const firstArrayValue = (value) => {
   return normalizeText(value);
 };
 
-const ORTHOGROUP_ID_KEYS = Object.freeze(['id', 'orthogroupId', 'orthogroup_id']);
-/** @param {AliasSource | null | undefined} source */
-const orthogroupIdStatus = (source) => textAliasStatus(source, ORTHOGROUP_ID_KEYS);
-
 /** @param {PopupGroup | null | undefined} group */
 const groupScopeStatus = (group) => {
   const presentationValues = [
@@ -394,29 +396,73 @@ const groupScopeValue = (group) => {
 };
 
 /**
+ * @template V
+ * @param {Map<string, V[]>} buckets
+ * @param {string} key
+ * @param {V} value
+ */
+const addBucketValue = (buckets, key, value) => {
+  if (!key) return;
+  if (!buckets.has(key)) buckets.set(key, []);
+  /** @type {V[]} */ (buckets.get(key)).push(value); // Set above when absent.
+};
+
+/**
+ * The similarity groups by ID, built once per groups array (OV-930). A group
+ * answers a lookup only when its ID and scope are valid; `identified` keeps,
+ * in order, every group whose ID is valid and supplied, whatever its scope.
+ * @typedef {object} OrthogroupIndex
+ * @property {Map<string, PopupGroup[]>} byId
+ * @property {Map<string, PopupGroup[]>} byScopedId Keyed by ID and normalized scope.
+ * @property {PopupGroup[]} identified
+ */
+
+/** @type {WeakMap<PopupGroup[], OrthogroupIndex>} */
+const orthogroupIndexes = new WeakMap();
+
+/**
+ * The index of a groups array. The groups are replaced as a whole array, never
+ * edited in place, so the array's identity keys its index.
  * @param {PopupGroup[] | null | undefined} orthogroups
+ * @returns {OrthogroupIndex}
+ */
+const orthogroupIndexFor = (orthogroups) => {
+  const groups = Array.isArray(orthogroups) ? orthogroups : null;
+  const cached = groups ? orthogroupIndexes.get(groups) : null;
+  if (cached) return cached;
+  /** @type {OrthogroupIndex} */
+  const index = { byId: new Map(), byScopedId: new Map(), identified: [] };
+  for (const group of groups || []) {
+    const idStatus = orthogroupIdStatus(group);
+    if (!idStatus.valid || !idStatus.value) continue;
+    index.identified.push(group);
+    const scopeStatus = groupScopeStatus(group);
+    if (!scopeStatus.valid) continue;
+    addBucketValue(index.byId, idStatus.value, group);
+    addBucketValue(index.byScopedId, `${idStatus.value}\u001f${scopeStatus.value}`, group);
+  }
+  if (groups) orthogroupIndexes.set(groups, index);
+  return index;
+};
+
+/**
+ * The one group with this ID (and this scope, when one is asked for), or null
+ * when none or several are.
+ * @param {OrthogroupIndex} index
  * @param {unknown} orthogroupId
  * @param {unknown} [groupScope]
+ * @returns {PopupGroup | null}
  */
-const getOrthogroupById = (orthogroups, orthogroupId, groupScope = '') => {
+const orthogroupInIndex = (index, orthogroupId, groupScope = '') => {
   const id = normalizeText(orthogroupId);
   if (!id) return null;
   const requestedScope = normalizeText(groupScope)
     ? normalizeGroupMetadataScope(groupScope)
     : '';
-  /** @type {PopupGroup[]} */
-  const matches = [];
-  for (const entry of Array.isArray(orthogroups) ? orthogroups : []) {
-    const status = orthogroupIdStatus(entry);
-    const scopeStatus = groupScopeStatus(entry);
-    if (
-      status.valid
-      && scopeStatus.valid
-      && status.value === id
-      && (!requestedScope || scopeStatus.value === requestedScope)
-    ) matches.push(entry);
-  }
-  return matches.length === 1 ? matches[0] : null;
+  const candidates = requestedScope
+    ? index.byScopedId.get(`${id}\u001f${requestedScope}`) || []
+    : index.byId.get(id) || [];
+  return candidates.length === 1 ? candidates[0] : null;
 };
 
 /** @param {AliasSource | null | undefined} member */
@@ -554,7 +600,7 @@ const readPairwiseMatchDescriptor = (element) => {
       attr(element, 'data-collinearity-orientation'),
       attr(element, 'data-orientation')
     ),
-    title: MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise,
+    title: tm(MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise),
     subtitle: firstText(collinearityBlockId, orthogroupId, matchId),
     fill: firstText(attr(element, 'fill'), element?.style?.fill, '#94a3b8'),
     endpoints: {
@@ -635,18 +681,6 @@ const featureToOrthogroupMember = (feature, resolvedIdentity = null) => {
   };
 };
 
-/**
- * @template V
- * @param {Map<string, V[]>} buckets
- * @param {string} key
- * @param {V} value
- */
-const addBucketValue = (buckets, key, value) => {
-  if (!key) return;
-  if (!buckets.has(key)) buckets.set(key, []);
-  /** @type {V[]} */ (buckets.get(key)).push(value); // Set above when absent.
-};
-
 /** @param {FeatureIdentity | null | undefined} identity */
 const identityIndexKeys = (identity) => {
   if (!identity?.usable) return [];
@@ -703,20 +737,27 @@ const identityIndexKeys = (identity) => {
  */
 
 /**
- * @param {{
- *   featureLookup?: FeatureLookup,
- *   sourceFeatures?: PopupFeature[],
- *   orthogroups?: PopupGroup[],
- *   descriptor?: PairwiseMatchDescriptor | null
- * }} [options]
- * @returns {PairwisePayloadContext}
+ * The lookups of a payload that depend only on the rendered and the source
+ * features, and the member index of each group they meet. Built once per
+ * (`featureLookup`, `sourceFeatures`) pair and reused by every later popup on
+ * the same Result (OV-911).
+ * @typedef {object} PayloadFeatureIndex
+ * @property {(source: PopupFeature | PopupMember | null | undefined, mode: 'rendered' | 'standard' | 'legacy') => FeatureIdentity} cachedIdentity
+ * @property {WeakMap<object, RenderedRecord>} renderedByObject
+ * @property {Map<string, RenderedRecord[]>} renderedById
+ * @property {Map<string, PopupFeature[]>} featuresByOrthogroupId
+ * @property {WeakMap<object, ReturnType<typeof featureOrthogroupIdStatus>>} featureOrthogroupStatuses
+ * @property {WeakMap<object, SourceRecord>} sourceByObject
+ * @property {Map<string, SourceRecord[]>} sourceByIdentity
+ * @property {(group: PopupGroup | null | undefined) => { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} memberIndexForGroup
  */
-const createPairwisePayloadContext = ({
-  featureLookup = new Map(),
-  sourceFeatures = [],
-  orthogroups = [],
-  descriptor = null
-} = {}) => {
+
+/**
+ * @param {FeatureLookup} featureLookup
+ * @param {PopupFeature[]} sourceFeatures
+ * @returns {PayloadFeatureIndex}
+ */
+const buildPayloadFeatureIndex = (featureLookup, sourceFeatures) => {
   /** @type {WeakMap<object, Map<string, FeatureIdentity>>} */
   const identityCache = new WeakMap();
   /**
@@ -806,6 +847,93 @@ const createPairwisePayloadContext = ({
     });
   }
 
+  /** @type {WeakMap<object, { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }>} */
+  const groupMemberIndexes = new WeakMap();
+  /**
+   * @param {PopupGroup | null | undefined} group
+   * @returns {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }}
+   */
+  const memberIndexForGroup = (group) => {
+    if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
+    const cached = groupMemberIndexes.get(group);
+    if (cached) return cached;
+    /** @type {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} */
+    const index = { records: [], byIdentity: new Map() };
+    for (const member of Array.isArray(group.members) ? group.members : []) {
+      const record = { member, identity: cachedIdentity(member, 'standard') };
+      index.records.push(record);
+      identityIndexKeys(record.identity).forEach((key) => {
+        addBucketValue(index.byIdentity, key, record);
+      });
+    }
+    groupMemberIndexes.set(group, index);
+    return index;
+  };
+  return {
+    cachedIdentity,
+    renderedByObject,
+    renderedById,
+    featuresByOrthogroupId,
+    featureOrthogroupStatuses,
+    sourceByObject,
+    sourceByIdentity,
+    memberIndexForGroup
+  };
+};
+
+/** @type {WeakMap<object, WeakMap<PopupFeature[], PayloadFeatureIndex>>} */
+const payloadFeatureIndexes = new WeakMap();
+
+/**
+ * The feature index of a lookup and a source list. The catalogs are replaced as
+ * a whole, never edited in place, so their identities key the index.
+ * @param {FeatureLookup} featureLookup
+ * @param {PopupFeature[]} sourceFeatures
+ * @returns {PayloadFeatureIndex}
+ */
+const payloadFeatureIndexFor = (featureLookup, sourceFeatures) => {
+  if (!featureLookup || typeof featureLookup !== 'object' || !Array.isArray(sourceFeatures)) {
+    return buildPayloadFeatureIndex(featureLookup, sourceFeatures);
+  }
+  let bySource = payloadFeatureIndexes.get(featureLookup);
+  if (!bySource) {
+    bySource = new WeakMap();
+    payloadFeatureIndexes.set(featureLookup, bySource);
+  }
+  let index = bySource.get(sourceFeatures);
+  if (!index) {
+    index = buildPayloadFeatureIndex(featureLookup, sourceFeatures);
+    bySource.set(sourceFeatures, index);
+  }
+  return index;
+};
+
+/**
+ * @param {{
+ *   featureLookup?: FeatureLookup,
+ *   sourceFeatures?: PopupFeature[],
+ *   orthogroups?: PopupGroup[],
+ *   descriptor?: PairwiseMatchDescriptor | null
+ * }} [options]
+ * @returns {PairwisePayloadContext}
+ */
+const createPairwisePayloadContext = ({
+  featureLookup = new Map(),
+  sourceFeatures = [],
+  orthogroups = [],
+  descriptor = null
+} = {}) => {
+  const {
+    cachedIdentity,
+    renderedByObject,
+    renderedById,
+    featuresByOrthogroupId,
+    featureOrthogroupStatuses,
+    sourceByObject,
+    sourceByIdentity,
+    memberIndexForGroup
+  } = payloadFeatureIndexFor(featureLookup, sourceFeatures);
+
   /** @type {Set<string>} */
   const rejectedRenderedIds = new Set();
   /** @param {unknown} renderedSvgId */
@@ -852,28 +980,6 @@ const createPairwisePayloadContext = ({
       : feature;
   };
 
-  /** @type {WeakMap<object, { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }>} */
-  const groupMemberIndexes = new WeakMap();
-  /**
-   * @param {PopupGroup | null | undefined} group
-   * @returns {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }}
-   */
-  const memberIndexForGroup = (group) => {
-    if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
-    const cached = groupMemberIndexes.get(group);
-    if (cached) return cached;
-    /** @type {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} */
-    const index = { records: [], byIdentity: new Map() };
-    for (const member of Array.isArray(group.members) ? group.members : []) {
-      const record = { member, identity: cachedIdentity(member, 'standard') };
-      index.records.push(record);
-      identityIndexKeys(record.identity).forEach((key) => {
-        addBucketValue(index.byIdentity, key, record);
-      });
-    }
-    groupMemberIndexes.set(group, index);
-    return index;
-  };
   /**
    * @param {PopupGroup | null | undefined} group
    * @param {unknown} featureSvgId
@@ -908,51 +1014,22 @@ const createPairwisePayloadContext = ({
       .some((featureSvgId) => Boolean(groupMemberForFeatureId(group, featureSvgId)))
   );
 
-  /** @type {Map<string, PopupGroup[]>} */
-  const groupsById = new Map();
-  /** @type {Map<string, PopupGroup[]>} */
-  const groupsByScopedId = new Map();
-  /** @type {PopupGroup[]} */
-  const implicitGroupMatches = [];
-  for (const group of Array.isArray(orthogroups) ? orthogroups : []) {
-    const idStatus = orthogroupIdStatus(group);
-    const scopeStatus = groupScopeStatus(group);
-    if (!idStatus.valid || !idStatus.value) continue;
-    if (scopeStatus.valid) {
-      addBucketValue(groupsById, idStatus.value, group);
-      addBucketValue(
-        groupsByScopedId,
-        `${idStatus.value}\u001f${scopeStatus.value}`,
-        group
-      );
-    }
-    if (
-      descriptor
-      && !normalizeText(descriptor.orthogroupId)
-      && descriptor.matchKind !== 'collinear'
-      && (
-        groupHasFeatureIds(group, descriptor.queryFeatureSvgId)
-        || groupHasFeatureIds(group, descriptor.subjectFeatureSvgId)
-      )
-    ) implicitGroupMatches.push(group);
-  }
+  const groupIndex = orthogroupIndexFor(orthogroups);
+  const implicitGroupMatches = descriptor
+    && !normalizeText(descriptor.orthogroupId)
+    && descriptor.matchKind !== 'collinear'
+    ? groupIndex.identified.filter((group) => (
+      groupHasFeatureIds(group, descriptor.queryFeatureSvgId)
+      || groupHasFeatureIds(group, descriptor.subjectFeatureSvgId)
+    ))
+    : [];
 
   /**
    * @param {unknown} orthogroupId
    * @param {unknown} [groupScope]
    * @returns {PopupGroup | null}
    */
-  const orthogroupById = (orthogroupId, groupScope = '') => {
-    const id = normalizeText(orthogroupId);
-    if (!id) return null;
-    const requestedScope = normalizeText(groupScope)
-      ? normalizeGroupMetadataScope(groupScope)
-      : '';
-    const candidates = requestedScope
-      ? groupsByScopedId.get(`${id}\u001f${requestedScope}`) || []
-      : groupsById.get(id) || [];
-    return candidates.length === 1 ? candidates[0] : null;
-  };
+  const orthogroupById = (orthogroupId, groupScope = '') => orthogroupInIndex(groupIndex, orthogroupId, groupScope);
   const orthogroupForMatch = () => {
     const direct = orthogroupById(descriptor?.orthogroupId, descriptor?.groupScope);
     if (direct) return direct;
@@ -1114,13 +1191,14 @@ const overrideValue = (overrides, key) => {
 };
 
 /**
- * @param {string} title
+ * @param {string} id The English section title (a `msg` key).
  * @param {PopupRow[]} rows
  * @param {Partial<PopupSection>} [extras]
  * @returns {PopupSection}
  */
-const section = (title, rows, extras = {}) => ({
-  title,
+const section = (id, rows, extras = {}) => ({
+  id,
+  title: tm(id),
   rows: rows.filter((row) => normalizeText(row.value)),
   ...extras
 });
@@ -1133,18 +1211,14 @@ const orthogroupTitle = (orthogroupId, displayName) => {
   const id = normalizeText(orthogroupId);
   const name = normalizeText(displayName);
   if (id && name) return `${id}:${name}`;
-  return id || name || MATCH_KIND_TITLES.orthogroup;
+  return id || name || tm(MATCH_KIND_TITLES.orthogroup);
 };
 
 /** @param {PopupMember | null | undefined} member */
 const memberLocationText = (member) => {
   if (!member || typeof member !== 'object') return '';
-  const start = Number(member.start);
-  const end = Number(member.end);
-  const startText = Number.isFinite(start) ? String(start + 1) : normalizeText(member.start);
-  const endText = Number.isFinite(end) ? String(end) : normalizeText(member.end);
+  const range = locationRangeText(member);
   const strand = normalizeMemberStrand(member.strand);
-  const range = startText && endText ? `${startText}..${endText}` : startText || endText;
   return range && strand ? `${range} (${strand})` : range;
 };
 
@@ -1253,18 +1327,59 @@ const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) =>
   return `${makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
 };
 
-// Python's member defaults (OrthogroupMember in analysis/protein_colinearity.py).
-// The member table names a role or confidence only when it differs (UX-B02).
-const DEFAULT_MEMBER_ROLE = 'anchor';
-const DEFAULT_MEMBER_CONFIDENCE = 'high';
+/**
+ * A similarity group member field whose values Python owns
+ * (`OrthogroupMember.role` and `.confidence` in analysis/protein_colinearity.py).
+ * @typedef {'role' | 'confidence'} MemberValueField
+ */
+/**
+ * The generated values and default of a member field, and the translation
+ * context of their labels.
+ * @typedef {{ owner: Readonly<{ values: readonly string[], default: string }>, context: string }} MemberValueSource
+ */
+/** @type {Readonly<Record<MemberValueField, MemberValueSource>>} */
+const MEMBER_VALUE_SOURCES = Object.freeze({
+  role: Object.freeze({ owner: ORTHOGROUP_MEMBER_ROLE, context: 'member role' }),
+  confidence: Object.freeze({ owner: ORTHOGROUP_MEMBER_CONFIDENCE, context: 'member confidence' })
+});
 
+/**
+ * The English label of a member value: the value with spaces for `_`.
+ * @param {string} value
+ */
+const memberValueEnglish = (value) => value.replaceAll('_', ' ');
+
+/**
+ * How a member role or confidence value shows in the UI language. A value
+ * that Python does not list here (a newer Python) shows as written.
+ * @param {MemberValueField} field
+ * @param {string} value
+ * @returns {string}
+ */
+export const memberValueLabel = (field, value) => {
+  const { owner, context } = MEMBER_VALUE_SOURCES[field];
+  return owner.values.includes(value) ? tmx(context, memberValueEnglish(value)) : value;
+};
+
+/**
+ * The catalog keys of the member value labels, with their English text.
+ * @returns {{ context: string, english: string }[]}
+ */
+export const memberValueLabelKeys = () => Object.values(MEMBER_VALUE_SOURCES).flatMap(({ owner, context }) => (
+  owner.values.map((value) => ({ context, english: memberValueEnglish(value) }))
+));
+
+// The member table names a role or confidence only when it differs from
+// Python's default (UX-B02).
 /**
  * @param {string} role
  * @param {string} confidence
  */
 const memberRoleNote = (role, confidence) => [
-  role && role !== DEFAULT_MEMBER_ROLE ? role.replaceAll('_', ' ') : '',
-  confidence && confidence !== DEFAULT_MEMBER_CONFIDENCE ? `${confidence} confidence` : ''
+  role && role !== ORTHOGROUP_MEMBER_ROLE.default ? memberValueLabel('role', role) : '',
+  confidence && confidence !== ORTHOGROUP_MEMBER_CONFIDENCE.default
+    ? t('{confidence} confidence', { confidence: memberValueLabel('confidence', confidence) })
+    : ''
 ].filter(Boolean).join(' · ');
 
 /**
@@ -1473,7 +1588,7 @@ const buildFeatureListRows = ({
     const rowLocusId = featureRowLocusId(feature, locusIds[index]);
     const rowDisplayName = featureRowDisplayName(feature, displayNames[index]);
     const product = featureProduct(feature);
-    const label = firstText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, `Feature ${index + 1}`);
+    const label = firstText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, t('Feature {n}', { n: index + 1 }));
     const subLabel = featureRowSubLabel(label, rowLocusId, rowDisplayName);
     const copyText = [
       rowRecord,
@@ -1567,13 +1682,15 @@ const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) =>
  * @param {unknown} recordCoverage
  */
 export const groupCountText = (memberCount, recordCoverage) => {
-  const plural = (/** @type {unknown} */ value, /** @type {string} */ noun) => {
+  const countOf = (/** @type {unknown} */ value) => {
     const count = Number(normalizeText(value));
-    return Number.isInteger(count) && count > 0 ? `${count} ${noun}${count === 1 ? '' : 's'}` : '';
+    return Number.isInteger(count) && count > 0 ? count : 0;
   };
-  const genes = plural(memberCount, 'gene');
-  const records = plural(recordCoverage, 'record');
-  return genes && records ? `${genes} in ${records}` : genes || records;
+  const geneCount = countOf(memberCount);
+  const recordCount = countOf(recordCoverage);
+  const genes = geneCount ? tn(geneCount, '{count} gene', '{count} genes') : '';
+  const records = recordCount ? tn(recordCount, '{count} record', '{count} records') : '';
+  return genes && records ? t('{genes} in {records}', { genes, records }) : genes || records;
 };
 
 /**
@@ -1617,15 +1734,15 @@ const buildGroupView = ({
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
   /** @type {PopupRow[]} */
   const technicalRows = [];
-  addRow(technicalRows, localGroups ? 'Collinear group ID' : 'Similarity group ID', orthogroupId);
-  addRow(technicalRows, 'Description', userDescription ? '' : group?.description);
-  addRow(technicalRows, 'Scope', groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope)));
-  addRow(technicalRows, 'RBH seeds', Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
-  addRow(technicalRows, 'Group paths', firstText(
+  addRow(technicalRows, localGroups ? msg('Collinear group ID') : msg('Similarity group ID'), orthogroupId);
+  addRow(technicalRows, msg('Description'), userDescription ? '' : group?.description);
+  addRow(technicalRows, msg('Scope'), groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope)));
+  addRow(technicalRows, msg('RBH seeds'), Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
+  addRow(technicalRows, msg('Group paths'), firstText(
     group?.orthologPathCount,
     Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : ''
   ));
-  addRow(technicalRows, 'Related edges', firstText(
+  addRow(technicalRows, msg('Related edges'), firstText(
     group?.relatedEdgeCount,
     Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
   ));
@@ -1634,7 +1751,7 @@ const buildGroupView = ({
   return {
     id,
     displayName: name,
-    title: name || id || MATCH_KIND_TITLES.orthogroup,
+    title: name || id || tm(MATCH_KIND_TITLES.orthogroup),
     badge: name && id && name !== id ? id : '',
     description: normalizeText(userDescription),
     memberCount,
@@ -1680,8 +1797,8 @@ const buildBlockOrthogroups = ({
 
 // Collinear block popup (UX-B01): one summary line, the gene pairs, and the
 // block facts behind "Details".
-const COLLINEAR_ORIENTATION_TEXT = Object.freeze({ plus: 'Same orientation', minus: 'Inverted' });
-const COLLINEAR_BLOCK_NOTE = 'Block envelopes may include intergenic sequence and genes that are not anchors.';
+const COLLINEAR_ORIENTATION_TEXT = Object.freeze({ plus: msg('Same orientation'), minus: msg('Inverted') });
+const COLLINEAR_BLOCK_NOTE = msg('Block envelopes may include intergenic sequence and genes that are not anchors.');
 
 /** @param {number} value */
 const groupedInteger = (value) => value.toLocaleString('en-US');
@@ -1725,18 +1842,18 @@ const collinearDetailRows = (element, descriptor) => {
   const rows = [];
   const identity = finiteNumber(descriptor.identity);
   const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
-  addRow(rows, 'Block ID', descriptor.collinearityBlockId);
-  addRow(rows, 'Kind', attr(element, 'data-collinearity-block-kind'));
-  addRow(rows, 'Orientation', attr(element, 'data-collinearity-orientation'));
-  addRow(rows, 'Color mode', attr(element, 'data-collinearity-color-mode'));
+  addRow(rows, msg('Block ID'), descriptor.collinearityBlockId);
+  addRow(rows, msg('Kind'), attr(element, 'data-collinearity-block-kind'));
+  addRow(rows, msg('Orientation'), attr(element, 'data-collinearity-orientation'));
+  addRow(rows, msg('Color mode'), attr(element, 'data-collinearity-color-mode'));
   if (descriptor.matchKind === 'collinear') {
-    addRow(rows, 'Average identity', identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
+    addRow(rows, msg('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
     // LOSATP anchors: the summed protein alignment length.
-    addRow(rows, 'Aligned length', alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
+    addRow(rows, msg('Aligned length'), alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
   }
-  addRow(rows, 'Block score', attr(element, 'data-collinearity-block-score'));
-  addRow(rows, 'Block e-value', attr(element, 'data-collinearity-block-evalue'));
-  addRow(rows, 'Anchor', [
+  addRow(rows, msg('Block score'), attr(element, 'data-collinearity-block-score'));
+  addRow(rows, msg('Block e-value'), attr(element, 'data-collinearity-block-evalue'));
+  addRow(rows, msg('Anchor'), [
     attr(element, 'data-collinearity-anchor-index'),
     attr(element, 'data-collinearity-anchor-count')
   ].filter(Boolean).join(' / '));
@@ -1813,14 +1930,16 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
   const orientation = normalizeText(descriptor.orientation).toLowerCase();
   // Own keys only: `constructor` and `__proto__` name inherited members, not orientations (OV-322).
   const orientationText = Object.hasOwn(COLLINEAR_ORIENTATION_TEXT, orientation)
-    ? COLLINEAR_ORIENTATION_TEXT[/** @type {keyof typeof COLLINEAR_ORIENTATION_TEXT} */ (orientation)]
+    ? tm(COLLINEAR_ORIENTATION_TEXT[/** @type {keyof typeof COLLINEAR_ORIENTATION_TEXT} */ (orientation)])
     : orientation;
   const identity = finiteNumber(descriptor.identity);
-  const identityText = identity === null ? '' : `${Math.round(identity)}% identity`;
+  const identityText = identity === null ? '' : t('{identity}% identity', { identity: Math.round(identity) });
   const pairCount = genePairs.filter((pair) => pair.query && pair.subject).length;
-  const pairsLabel = `${pairCount} gene pair${pairCount === 1 ? '' : 's'}`;
+  const pairsLabel = tn(pairCount, '{count} gene pair', '{count} gene pairs');
   const facts = [orientationText, identityText, pairsLabel].filter(Boolean);
-  const groupHeading = localGroups ? 'Collinear group' : 'Similarity group';
+  const groupHeading = localGroups ? t('Collinear group') : t('Similarity group');
+  // The copied table is clipboard text: its header stays English.
+  const copiedGroupHeading = localGroups ? 'Collinear group' : 'Similarity group';
   return {
     query,
     subject,
@@ -1834,7 +1953,7 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
     pairsCopyText: [
       ['Query record', 'Query location', 'Query protein ID', 'Query product',
         'Subject record', 'Subject location', 'Subject protein ID', 'Subject product',
-        `${groupHeading} ID`, `${groupHeading} name`].join('\t'),
+        `${copiedGroupHeading} ID`, `${copiedGroupHeading} name`].join('\t'),
       ...genePairs.map((pair) => [
         ...genePairCells(pair.query),
         ...genePairCells(pair.subject),
@@ -1843,7 +1962,7 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
       ].join('\t'))
     ].join('\n'),
     detailRows: collinearDetailRows(element, descriptor),
-    note: COLLINEAR_BLOCK_NOTE
+    note: tm(COLLINEAR_BLOCK_NOTE)
   };
 };
 
@@ -1894,14 +2013,14 @@ const buildFeatureRows = ({
     locusId,
     displayName
   });
-  addRow(rows, 'Record', firstText(feature?.record_id, recordId));
-  addRow(rows, 'Location', firstText(formatFeatureLocation(feature), interval));
-  addRow(rows, displayProteinIds.includes(';') ? 'Protein IDs' : 'Protein ID', displayProteinIds);
-  addRow(rows, 'Gene', firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
-  addRow(rows, 'Locus tag', firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
-  addRow(rows, 'Product', firstText(feature?.product, qualifierFirstValue(feature, 'product')));
-  addRow(rows, 'Locus ID', locusId);
-  addRow(rows, 'Display name', displayName);
+  addRow(rows, msg('Record'), firstText(feature?.record_id, recordId));
+  addRow(rows, msg('Location'), firstText(formatFeatureLocation(feature), interval));
+  addRow(rows, displayProteinIds.includes(';') ? msg('Protein IDs') : msg('Protein ID'), displayProteinIds);
+  addRow(rows, msg('Gene'), firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
+  addRow(rows, msg('Locus tag'), firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
+  addRow(rows, msg('Product'), firstText(feature?.product, qualifierFirstValue(feature, 'product')));
+  addRow(rows, msg('Locus ID'), locusId);
+  addRow(rows, msg('Display name'), displayName);
   return section(title, rows, { featureRows });
 };
 
@@ -1916,7 +2035,7 @@ const buildMatchSpans = (element, matchKind) => {
   const sourceIndex = integerAttrStatus(element, 'data-source-index');
   const referenceSide = attr(element, 'data-reference-side').toLowerCase();
   /** @param {'query' | 'subject'} role */
-  const homologyDisplayRole = (role) => role === referenceSide ? 'Reference' : 'Comparison';
+  const homologyDisplayRole = (role) => role === referenceSide ? t('Reference') : t('Comparison');
   return [
     {
       role: 'query',
@@ -1927,7 +2046,7 @@ const buildMatchSpans = (element, matchKind) => {
       start: attr(element, 'data-qstart'),
       end: attr(element, 'data-qend'),
       sourceSpan: matchKind === 'homology' ? null : readRecordSourceSpan(element, queryRecordIndex.value),
-      displayRole: matchKind === 'homology' ? homologyDisplayRole('query') : 'Query',
+      displayRole: matchKind === 'homology' ? homologyDisplayRole('query') : t('Query'),
       sourceIndex: sourceIndex.value,
       recordIndex: queryRecordIndex.value,
       identityValid: queryRecordIndex.valid && sourceIndex.valid,
@@ -1942,7 +2061,7 @@ const buildMatchSpans = (element, matchKind) => {
       start: attr(element, 'data-sstart'),
       end: attr(element, 'data-send'),
       sourceSpan: matchKind === 'homology' ? null : readRecordSourceSpan(element, subjectRecordIndex.value),
-      displayRole: matchKind === 'homology' ? homologyDisplayRole('subject') : 'Subject',
+      displayRole: matchKind === 'homology' ? homologyDisplayRole('subject') : t('Subject'),
       sourceIndex: sourceIndex.value,
       recordIndex: subjectRecordIndex.value,
       identityValid: subjectRecordIndex.valid && sourceIndex.valid,
@@ -1971,7 +2090,7 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
       if (matchKind === 'homology' && context?.origin === 'homology-comparison' && !resolvedSource) {
         return {
           source: null,
-          reason: 'Comparison sequence was not supplied for this BLAST source.'
+          reason: t('Comparison sequence was not supplied for this BLAST source.')
         };
       }
       return resolved;
@@ -1986,7 +2105,7 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
         : { origin: 'homology-comparison', sourceIndex: span.sourceIndex };
     },
     unavailableReasonForSpan: (span) => (
-      span.identityValid ? '' : 'The sequence identity metadata for this match is invalid.'
+      span.identityValid ? '' : t('The sequence identifier metadata for this match is invalid.')
     )
   });
   // The span rows show input-file coordinates, as the Interval rows and the
@@ -2139,48 +2258,48 @@ export const buildMatchPopupPayload = (
 
   /** @type {PopupRow[]} */
   const summaryRows = [];
-  addRow(summaryRows, 'Query record', descriptor.queryRecordId);
-  addRow(summaryRows, 'Subject record', descriptor.subjectRecordId);
-  addRow(summaryRows, 'Query interval', qInterval);
-  addRow(summaryRows, 'Query table interval', descriptor.queryTableInterval);
-  addRow(summaryRows, 'Subject interval', sInterval);
-  addRow(summaryRows, 'Subject table interval', descriptor.subjectTableInterval);
-  addRow(summaryRows, 'Orientation', descriptor.orientation);
+  addRow(summaryRows, msg('Query record'), descriptor.queryRecordId);
+  addRow(summaryRows, msg('Subject record'), descriptor.subjectRecordId);
+  addRow(summaryRows, msg('Query interval'), qInterval);
+  addRow(summaryRows, msg('Query table interval'), descriptor.queryTableInterval);
+  addRow(summaryRows, msg('Subject interval'), sInterval);
+  addRow(summaryRows, msg('Subject table interval'), descriptor.subjectTableInterval);
+  addRow(summaryRows, msg('Orientation'), descriptor.orientation);
   if (matchKind === 'homology') {
-    addRow(summaryRows, 'Ring label', attr(element, 'data-track-label'));
+    addRow(summaryRows, msg('Ring label'), attr(element, 'data-track-label'));
     const rawSourceIndex = integerAttr(element, 'data-source-index');
-    addRow(summaryRows, 'Source index', rawSourceIndex !== null ? String(rawSourceIndex + 1) : '');
-    addRow(summaryRows, 'Reference side', attr(element, 'data-reference-side'));
-    addRow(summaryRows, 'Reference record', attr(element, 'data-reference-record-id'));
+    addRow(summaryRows, msg('Source index'), rawSourceIndex !== null ? String(rawSourceIndex + 1) : '');
+    addRow(summaryRows, msg('Reference side'), attr(element, 'data-reference-side'));
+    addRow(summaryRows, msg('Reference record'), attr(element, 'data-reference-record-id'));
   }
 
   /** @type {PopupRow[]} */
   const alignmentRows = [];
-  addRow(alignmentRows, 'Identity', descriptor.identity);
-  addRow(alignmentRows, 'Alignment length', attr(element, 'data-alignment-length'));
-  addRow(alignmentRows, 'E-value', attr(element, 'data-evalue'));
-  addRow(alignmentRows, 'Bit score', attr(element, 'data-bitscore'));
-  addRow(alignmentRows, 'Mismatches', attr(element, 'data-mismatches'));
-  addRow(alignmentRows, 'Gap opens', attr(element, 'data-gap-opens'));
-  addRow(alignmentRows, 'Edge kind', attr(element, 'data-edge-kind'));
-  addRow(alignmentRows, 'Render role', attr(element, 'data-render-role'));
-  addRow(alignmentRows, 'RBH seed', attr(element, 'data-rbh-orthogroup-id'));
-  addRow(alignmentRows, 'Group path ID', attr(element, 'data-ortholog-path-id'));
-  addRow(alignmentRows, 'Query group genes', attr(element, 'data-query-orthogroup-member-count'));
-  addRow(alignmentRows, 'Subject group genes', attr(element, 'data-subject-orthogroup-member-count'));
-  addRow(alignmentRows, 'Query member role', attr(element, 'data-query-orthogroup-role'));
-  addRow(alignmentRows, 'Subject member role', attr(element, 'data-subject-orthogroup-role'));
-  addRow(alignmentRows, 'Query confidence', attr(element, 'data-query-orthogroup-confidence'));
-  addRow(alignmentRows, 'Subject confidence', attr(element, 'data-subject-orthogroup-confidence'));
-  addRow(alignmentRows, 'Query assignment', attr(element, 'data-query-orthogroup-assignment-reason'));
-  addRow(alignmentRows, 'Subject assignment', attr(element, 'data-subject-orthogroup-assignment-reason'));
+  addRow(alignmentRows, msg('Identity'), descriptor.identity);
+  addRow(alignmentRows, msg('Alignment length'), attr(element, 'data-alignment-length'));
+  addRow(alignmentRows, msg('E-value'), attr(element, 'data-evalue'));
+  addRow(alignmentRows, msg('Bit score'), attr(element, 'data-bitscore'));
+  addRow(alignmentRows, msg('Mismatches'), attr(element, 'data-mismatches'));
+  addRow(alignmentRows, msg('Gap opens'), attr(element, 'data-gap-opens'));
+  addRow(alignmentRows, msg('Edge kind'), attr(element, 'data-edge-kind'));
+  addRow(alignmentRows, msg('Render role'), attr(element, 'data-render-role'));
+  addRow(alignmentRows, msg('RBH seed'), attr(element, 'data-rbh-orthogroup-id'));
+  addRow(alignmentRows, msg('Group path ID'), attr(element, 'data-ortholog-path-id'));
+  addRow(alignmentRows, msg('Query group genes'), attr(element, 'data-query-orthogroup-member-count'));
+  addRow(alignmentRows, msg('Subject group genes'), attr(element, 'data-subject-orthogroup-member-count'));
+  addRow(alignmentRows, msg('Query member role'), memberValueLabel('role', attr(element, 'data-query-orthogroup-role')));
+  addRow(alignmentRows, msg('Subject member role'), memberValueLabel('role', attr(element, 'data-subject-orthogroup-role')));
+  addRow(alignmentRows, msg('Query confidence'), memberValueLabel('confidence', attr(element, 'data-query-orthogroup-confidence')));
+  addRow(alignmentRows, msg('Subject confidence'), memberValueLabel('confidence', attr(element, 'data-subject-orthogroup-confidence')));
+  addRow(alignmentRows, msg('Query assignment'), attr(element, 'data-query-orthogroup-assignment-reason'));
+  addRow(alignmentRows, msg('Subject assignment'), attr(element, 'data-subject-orthogroup-assignment-reason'));
 
-  const sections = [section('Summary', summaryRows), section('Alignment', alignmentRows)];
+  const sections = [section(msg('Summary'), summaryRows), section(msg('Alignment'), alignmentRows)];
   const blockRows = collinearDetailRows(element, descriptor);
-  if (blockRows.length > 0) sections.push(section('Collinearity', blockRows));
+  if (blockRows.length > 0) sections.push(section(msg('Collinearity'), blockRows));
   if (matchKind !== 'homology') {
     sections.push(buildFeatureRows({
-      title: 'Query',
+      title: msg('Query'),
       feature: queryFeature,
       recordId: descriptor.queryRecordId,
       interval: qInterval,
@@ -2192,7 +2311,7 @@ export const buildMatchPopupPayload = (
       group
     }));
     sections.push(buildFeatureRows({
-      title: 'Subject',
+      title: msg('Subject'),
       feature: subjectFeature,
       recordId: descriptor.subjectRecordId,
       interval: sInterval,
@@ -2212,7 +2331,7 @@ export const buildMatchPopupPayload = (
     ...identity,
     groupScope: normalizedGroupScope,
     group: groupView,
-    sequenceTitle: 'Matched sequences',
+    sequenceTitle: t('Matched sequences'),
     sequenceBundle,
     sections: sections.filter((entry) => (
       entry.rows.length > 0 ||
@@ -2239,33 +2358,33 @@ const formatPairwiseMatchHoverRows = ({
   /** @type {PopupRow[]} */
   const rows = [];
   /**
-   * @param {string} label
+   * @param {string} id
    * @param {unknown} value
    */
-  const addFirst = (label, value) => addRow(rows, label, value);
+  const addFirst = (id, value) => addRow(rows, id, value);
   if (!matchKind) return rows;
   if (matchKind === 'orthogroup') {
-    addFirst('Kind', matchKind);
-    addFirst('Similarity group', orthogroupId);
-    addFirst('Display name', displayName);
-    addFirst('Genes', memberCount);
+    addFirst(msg('Kind'), matchKind);
+    addFirst(msg('Similarity group'), orthogroupId);
+    addFirst(msg('Display name'), displayName);
+    addFirst(msg('Genes'), memberCount);
     return rows.slice(0, 6);
   }
-  addFirst('Kind', matchKind);
-  addFirst('Identity', identity);
-  addFirst('Query', queryInterval);
-  addFirst('Subject', subjectInterval);
+  addFirst(msg('Kind'), matchKind);
+  addFirst(msg('Identity'), identity);
+  addFirst(msg('Query'), queryInterval);
+  addFirst(msg('Subject'), subjectInterval);
   if (matchKind === 'collinear') {
     addFirst(
       groupScope === 'adjacent_local'
-        ? 'Collinear groups'
-        : 'Similarity groups',
+        ? msg('Collinear groups')
+        : msg('Similarity groups'),
       String(blockOrthogroupCount ?? '')
     );
   } else {
-    addFirst('Similarity group', orthogroupId);
+    addFirst(msg('Similarity group'), orthogroupId);
   }
-  addFirst('Block', collinearityBlockId);
+  addFirst(msg('Block'), collinearityBlockId);
   return rows.slice(0, 6);
 };
 
@@ -2286,8 +2405,8 @@ export const buildPairwiseMatchHoverSummary = (
     ? (typeof orthogroups === 'function' ? orthogroups() : orthogroups)
     : [];
   const group = descriptor.matchKind === 'orthogroup'
-    ? getOrthogroupById(
-      groupValues,
+    ? orthogroupInIndex(
+      orthogroupIndexFor(groupValues),
       descriptor.orthogroupId,
       descriptor.groupScope
     )
@@ -2328,14 +2447,16 @@ export const buildPairwiseMatchHoverSummary = (
 /** @param {MatchPopupPayload | null | undefined} payload */
 export const buildPairwiseMatchHoverRows = (payload) => {
   if (!payload) return [];
-  const summary = payload.sections.find((entry) => entry.title === 'Summary');
-  const alignment = payload.sections.find((entry) => entry.title === 'Alignment');
+  // Sections and rows are found by their English identity, so a payload built in
+  // another language still gives its hover rows.
+  const summary = payload.sections.find((entry) => entry.id === 'Summary');
+  const alignment = payload.sections.find((entry) => entry.id === 'Alignment');
   /**
    * @param {PopupSection | undefined} sectionEntry
-   * @param {string} label
+   * @param {string} id
    */
-  const findValue = (sectionEntry, label) => (
-    sectionEntry?.rows.find((row) => row.label === label)?.value || ''
+  const findValue = (sectionEntry, id) => (
+    sectionEntry?.rows.find((row) => row.id === id)?.value || ''
   );
   return formatPairwiseMatchHoverRows({
     matchKind: payload.matchKind,

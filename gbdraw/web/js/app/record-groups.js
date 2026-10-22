@@ -36,7 +36,7 @@ const semanticRecordIdentity = (group) => {
 };
 
 /** @param {Element | null | undefined} group */
-export const isRecordGroup = (group) =>
+const isRecordGroup = (group) =>
   hasSemanticRecordId(group) || hasLegacyRecordId(group);
 
 /** @param {Element | null | undefined} svg */

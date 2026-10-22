@@ -104,14 +104,21 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
             svg: window.__GBDRAW_APP__.results[0].content})''')
         (download_dir / 'joint.svg').write_text(values['svg'])
         # The next action remains Save/Load; formal joint browser tests exercise fresh Load and replay.
-        page.on('dialog', lambda dialog: (print('Capture dialog:', dialog.type, dialog.message), dialog.accept('Rotated placed plastome')))
+        page.on('dialog', lambda dialog: (print('Capture dialog:', dialog.type, dialog.message), dialog.accept()))
         with page.expect_download() as pending:
             page.get_by_role('button', name='Save Session', exact=True).click()
+            # Save without a title asks for one in the app's dialog.
+            title_dialog = page.get_by_role('dialog', name='Save Session', exact=True)
+            field = title_dialog.get_by_role('textbox', name='Session title', exact=True)
+            expect(field).to_be_focused()
+            field.fill('Rotated placed plastome')
+            field.press('Enter')
+            expect(title_dialog).to_have_count(0)
         session = pending.value
         session_path = download_dir / session.suggested_filename
         session.save_as(session_path)
         saved = json.loads(gzip.decompress(session_path.read_bytes()))
-        assert saved['version'] == 47 and saved['renderRequest']['schema'] == 9
+        assert saved['version'] == 48 and saved['renderRequest']['schema'] == 9
         assert saved['renderRequest']['records'][0]['display']['startCoordinate'] == 5500
         assert saved['renderRequest']['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
         assert len(saved['renderRequest']['diagramOptions']['featurePlacements']) == 1

@@ -7,7 +7,116 @@ path and its line numbers. The public
 [session and request compatibility reference](../REFERENCE/session-and-request-compatibility.md)
 documents current support and what a user does with an older file, including
 the [retired inputs](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
-Release notes record when a format changed.
+Release notes record when a format changed. A Session version changes when a
+breaking change enters `main`; a later breaking change made before that version
+reaches `main` goes into its entry
+([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
+
+## Unreleased: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
+
+Session version 48 stores the protein results of a reverse-complemented Linear
+record in the record's search frame (the selected and cropped record on its
+source strand), as it already stored comparison tables (R5, OV-1145): saved
+LOSATP tables (`precomputedProteinComparison`), `orthogroupResult` members, and
+`collinearityResult` anchors and block orientations. Sessions 46 and 47 stored
+them after the reverse complement, in the drawn frame. Ranks, block IDs, and
+orthogroup IDs are unchanged.
+
+One owner, `gbdraw.api.record_planning.project_source_bound_results`, moves the
+results between frames, item by item, by their tags: a table row by its
+`*_view_feature_svg_id`, an orthogroup member by its span against its
+feature's spans on both strands, and an anchor side by its view feature ID.
+An anchor side without tags (Session 39 anchors have no `*_view_feature_svg_id`
+and no `*_feature_index`) follows its record: on a reversed record
+`x -> L + 1 - x` (`gbdraw.linear_comparison.reverse_unbound_endpoint_span`).
+A block's orientation flips when exactly one side moves. The planner projects
+the stored results into the drawn frame; every Python writer (CLI
+`--session_output` and `--save_session`, `save_session_document`) and the Web
+converter at Generate store the search frame.
+
+Readers convert a Session up to 47 once (`DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION`,
+`drawn_frame_protein_results_to_search_frame` in `gbdraw/api/session_compat.py`).
+A replay draws as before. An item that matches neither strand of its record
+is kept and drawn as stored; a writer of Session 48 refuses it with
+`SessionConversionError`, naming the first item. `upgrade_session_document`
+rewrites a Session 46 or 47 to 48 with each converted resource's bytes
+replaced under its stored ID; a CLI re-save writes the same bytes.
+`gbdraw/web_support/stored_protein_frames.py` is the Worker boundary of the
+same conversion. Gallery publication refuses a Session 46 or 47 that holds
+such results; `tools/refresh_gallery_sessions.py` rewrites the Gallery.
+`BGC0000708-BGC0000713.v47.gbdraw-session.json.gz` (main's Gallery Session)
+and `majanivirus_collinear-rc.v47.gbdraw-session.json.gz` (main's converter,
+Collinear) are the positive fixtures, each with its replay SVG.
+
+Main's Web writers of Session 39, and of Session 40 before `3bca0e8d9`
+(2026-08-11), stored a reversed record's drawn-frame feature ID in a saved
+LOSATP table's `*_feature_svg_id` and wrote no `*_view_feature_svg_id`
+(OV-1183). A reader of a Session up to 40
+(`DRAWN_FEATURE_ID_SESSION_MAX_VERSION`, `decode_session_request`) marks a
+table that has rows and source feature indexes and IDs but no view ID columns
+(`LinearComparison.drawn_feature_ids`); the
+projection reads its stored IDs as views and takes each source ID from the
+feature index, so the table converts like a Session 47 one; the projection
+clears the mark. A Session writer moves a still-marked table to the search
+frame first (`resolve_session_write_request`), and the request codec refuses
+one. A table with view ID columns, and every table of a later Session, is read
+strictly.
+`BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
+`BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz` (main's pairwise
+writer at `cdd310134` and `7aad9e3e0`) are the positive fixtures.
+
+The derived LOSATP identity token becomes `derived-option-conformance-v3`:
+derived entries written before are cache misses and are recomputed once from
+the raw cache, while the stored results are still reused, so no search runs
+again.
+
+Session 48 also stores what each Web file card loaded into a mode slice, so
+that **Remove** on the card gives the settings as if the file had never been
+loaded (OV-1280, D-19). One owner, `gbdraw/web/js/services/file-imports.js`,
+writes and reads it; the card key (`t_color`, `whitelist`,
+`qualifier_priority`, `d_color`, `blacklist`) is the identity:
+
+- A row that a file added carries its card's mark (`markedRows`, `isCardRow`): a `rules`
+  row keeps `fromFile: true`, the mark Sessions have stored since main's
+  2026-01-14 writer (D-ORIGIN-1), set only by the rules-file import and the CLI
+  `-t` reading: a built-in preset's rows carry no mark and are the user's
+  (D-21); a `whitelist` or `qualifierPriorityRules`
+  row carries `importedFrom` with its card key. A priority row whose hand
+  order the file replaced keeps that order in `handOrder`. A row edited by
+  hand after the load loses its mark and is the user's.
+- `config.fileImports` (registered in `gbdraw/web_support/mode_scoped_settings.py`)
+  keeps, for `d_color`, each feature type's file color and the hand color it
+  replaced (`handColor`, `null` for the palette's), and for `blacklist`, the
+  file's words and the text before the load. Remove takes a value back only
+  while it still holds the file's value.
+
+A Session up to 47 has no `importedFrom` and no `fileImports`: its whitelist
+and priority rows read as hand rows, and Remove keeps them; its `fromFile`
+rules rows are the Specific rules card's, as they were, including the rows of a
+preset, which the earlier writer stored with `fromFile` too. A Session 48 without a
+draft (CLI `--session_output`, the Python API) reads the rows its `-t`,
+whitelist, and priority files, and its `-d` and blacklist files, put into the
+request as that card's rows (`FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION` in
+`gbdraw/session_io.py`); a CLI re-save keeps the draft's marks.
+`file-card-imports-circular.v48.gbdraw-session.json.gz` (the Web writer after
+all five cards and hand edits, D-ORIGIN-2) is the positive fixture.
+
+Session 48 also stores the feature label style of each diagram mode as
+`adv.label_line` (`none`, `under`) and `adv.label_protection` (`none`, `halo`,
+`box`) in each mode's slice (`modes.<m>.config.adv`), the `copy` row of the
+mode-scoped registry. The mode-slice `adv` shape is closed, so these keys need
+a new Session version; Session 48 has not reached `main` (whose reader, Session
+47, refuses a Session 48 file), so they go into its entry. The canonical
+request carries them as `labels.<mode>.line` and `labels.<mode>.protection`
+only when they differ from the mode's packaged style, so a request of the
+default style is the request an earlier writer wrote (Gallery publication
+compares it unchanged). A Session without them loads with the packaged
+defaults of each mode (Linear `under` and `box`, Circular `none` and `halo`,
+`gbdraw.labels.label_style`); a stored value outside its list loads as the
+mode's default. The config value `labels.stroke_width` is removed: a stored
+config that holds it loads and draws the new leader width (0.07 em, at least
+1 px); an override of it fails with the unknown-path error. No other field
+changed.
 
 ## Unreleased: Session 47 keys the Legend edits by the row key
 
@@ -139,8 +248,20 @@ splits it. It keeps `ui.mode`, so the Web app still opens on the saved mode. It
 also changes these parts that both sets share:
 
 - `losatCache` holds the entries that the render returns, and
-  `losatDerivedCache` is emptied.
+  `losatDerivedCache` keeps the Session's own entries unchanged. The CLI builds
+  no derived entries, so a Session saved by a fresh CLI render has an empty
+  derived cache.
 - `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
+  A Circular render, one diagram or a batch, returns the Session's own manifest
+  and `legacyArtifacts`, so the protein entries it keeps still resolve. With
+  both drawings, `legacyArtifacts` come from the Linear one.
+- A Linear LOSATP render tries only the pending legacy protein candidates of
+  the record pairs its protein search plans. A promoted candidate moves to
+  `losatCache`; an unmatched one stays pending, with a warning, so a later Web
+  Generate can still promote it; a rejected one stays. Legacy derived evidence
+  is dropped once the Session has current derived entries, or when the render
+  promoted the last pending candidate (OV-1132, OV-1143). The Web Save follows
+  the same rule, pinned by `tests/fixtures/legacy_protein_artifact_vectors.json`.
 - When the render migrates legacy protein IDs (only Sessions 44 and older have
   them), the protein references are rewritten throughout the Session.
 - Resources that neither set's request nor the Web files name are dropped.
@@ -349,6 +470,17 @@ as typed. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
 
+## Unreleased: CLI LOSATP results in Sessions
+
+Session version 47 and the request schema are unchanged. A Linear LOSATP run
+that writes a Session (`--session_output`, `--save_session`, a Gallery
+rebuild) stores the results it computed: the request's
+`generatedProteinComparison` marker has mode `none`. Similarity groups stores
+the `precomputedProteinComparison` tables and the `orthogroupResult`; Collinear
+stores only the `collinearityResult` (no tables); Pairwise stores nothing, so
+its first Generate still searches (OV-1068). The first Web Generate after Load
+reuses what is stored instead of searching again.
+
 ## Unreleased: one LOSAT cache entry per raw key
 
 Session version 44 is unchanged. The Web app saved a raw key once per row, so a
@@ -393,8 +525,9 @@ saved LOSATP rows) follow the same search-frame rule. Sessions written by the
 instead hold a reversed record's feature-bound rows after the reverse
 complement, with `*_view_feature_svg_id` columns naming the drawn features
 (OV-399). The planner reads each row's frame from its view IDs, so these rows
-draw once and unchanged; a re-save keeps them as stored, and Gallery
-`finalize` reports them as a difference from the Web Session.
+draw once and unchanged. Until Session 48 a re-save kept them as stored and
+Gallery `finalize` reported them as a difference from the Web Session; a
+reader of a Session up to 47 converts them to the search frame (OV-1145).
 
 Linear Sessions saved by the `main` Web app write
 `orthogroupState.selectedOrthogroupAlignmentFeature: ""` when no alignment
@@ -484,9 +617,9 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 47 | 27–33, 39–42, 44, 46, and 47 |
+| gbdraw session | 48 | 27–33, 39–42, 44, and 46–48 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, 46, and 47 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–48 |
 
 Previously written Session 44 documents with request schema 7 or 8 and feature
 catalog schema 4 remain readable. Current saves write request schema 9;
@@ -601,6 +734,29 @@ Counts are exact decimal strings. Request 8 and derived envelope 3 remain
 unchanged; derived identity includes `pathRepresentation` to prevent
 reusing an old analysis payload as a current helper result. Older releases that
 only support typed schemas 1 and 2 cannot read the new typed resources.
+
+Derived envelope 3 stores each displayed pair's comparison table as
+`canonicalTsv`, the text of the Python canonical table encoder (D-66). Entries
+written from #312 (17e2c9dee) until then carry `rows` instead: they still load.
+In the Web, any derived result read from a Session (old `rows` entries
+included) is recomputed once from the raw cache.
+A zero-hit pair is accepted in either form, a header-only `canonicalTsv` or
+`rows: []`, but not both. Session version and the envelope schema are unchanged.
+A zero-hit entry (no hits) may also hold its mode's result member,
+`orthogroupResult` or `collinearityResult`, as the Web writes it, when that
+member decodes as the mode's typed result; it and every other member must hold
+no values. Python Load and the Web Load admit the same entries (OV-1127), except one
+known difference (OV-1149): an `orthogroupResult` whose typed `value.fields` is
+empty is admitted by the Web Load, which checks only the envelope, and refused
+by the Python Load, which decodes the member.
+
+OV-1063 (D-90): one Python owner (`gbdraw.analysis.protein_artifacts`) builds a
+derived entry's identity, key, provenance, and pair numbering for the Web
+lookup, the Web converter, and the Python API. The identity's `semantics` token
+was `derived-option-conformance-v2`, so entries keyed by the earlier
+identities are cache misses and are recomputed; no reader or migrator reads
+them. Session version 47 and derived envelope schema 3 were unchanged. Session
+48 raised the token to `-v3` (search-frame protein results).
 
 Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived
 references use deterministic session-internal handles of the form

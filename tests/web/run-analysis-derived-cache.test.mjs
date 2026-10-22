@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import {
-  buildLosatDerivedPayloadCachePayload,
-  hasRequiredCanonicalAnalysisResource,
-  resolveProteinBlastpCandidateLimit
-} from '../../gbdraw/web/js/app/run-analysis.js';
+import * as runAnalysis from '../../gbdraw/web/js/app/run-analysis.js';
+import { bindCanonicalTypedResource } from '../../gbdraw/web/js/services/session-request.js';
+
+const { hasRequiredCanonicalAnalysisResource, resolveProteinBlastpCandidateLimit } = runAnalysis;
 
 assert.equal(resolveProteinBlastpCandidateLimit(5), 5);
 assert.equal(resolveProteinBlastpCandidateLimit('7'), 7);
@@ -57,71 +55,44 @@ for (const appearanceOnly of [
   );
 }
 
-const baselineInput = {
-  mode: 'collinear',
-  maxHits: 5,
-  bitscore: 50,
-  evalue: '1e-5',
-  identity: 70,
-  alignmentLength: 0,
-  collinearMinAnchors: 1,
-  collinearMaxUnitGap: 0,
-  collinearUnitMode: 'cds',
-  collinearColorMode: 'orientation',
-  collinearAnchorMode: 'rbh',
-  collinearMergeOrientation: 'either',
-  collinearMaxDiagonalDrift: 0,
-  collinearMaxConflictsInMergeGap: 1,
-  collinearMaxParalogLinksPerOrthogroup: 2,
-  collinearSearchScope: 'adjacent',
-  orthogroupMembershipMode: 'anchor_core_v1',
-  orthogroupMemberMaxHits: 5,
-  recordPayloads: [
-    {
-      recordIndex: 1,
-      proteinCacheKey: 'protein-b',
-      runtimeBindingHash: 'runtime-b',
-      displayBindingHash: 'display-b',
-      viewTransform: { length: 200, reverse: true }
-    },
-    {
-      recordIndex: 0,
-      proteinCacheKey: 'protein-a',
-      runtimeBindingHash: 'runtime-a',
-      displayBindingHash: 'display-a',
-      viewTransform: { length: 100, reverse: false }
-    }
-  ],
-  pairPayloads: [
-    {
-      pairIndex: 0,
-      queryIndex: 0,
-      subjectIndex: 1,
-      cacheKey: 'pair-a-b'
-    }
-  ]
-};
+// OV-1063: the derived identity and key have one owner, gbdraw.analysis.protein_artifacts
+// (tests/test_derived_losatp_identity.py). Generate looks a payload up by the derived key of the
+// `buildProteinLosatCacheKeys` reply, and the Web hashes no derived identity of its own.
+assert.equal(Object.hasOwn(runAnalysis, 'buildLosatDerivedPayloadCachePayload'), false);
+{
+  const source = await readFile(runAnalysisPath, 'utf8');
+  assert.match(source, /\(\{ keys: proteinCacheKeys, derivedKey: derivedCacheKey \} = requireProteinLosatCacheKeys\(/);
+  assert.match(source, /getLosatDerivedCacheEntry\(\s*derivedCacheMap,\s*derivedCacheKey,/);
+  assert.doesNotMatch(source, /derived-option-conformance/);
+}
 
-const buildIdentity = (overrides = {}) => buildLosatDerivedPayloadCachePayload({
-  ...baselineInput,
-  ...overrides
-});
-const cacheKey = (identity) => createHash('sha256')
-  .update(JSON.stringify(identity))
-  .digest('hex');
-
-const baselineIdentity = buildIdentity();
-assert.equal(baselineIdentity.featureIdentity, 'stable-source-rendered-display-v1');
-const unchangedIdentity = buildIdentity({
-  recordPayloads: baselineInput.recordPayloads.map((record) => ({
-    ...record,
-    viewTransform: { ...record.viewTransform }
-  })),
-  pairPayloads: baselineInput.pairPayloads.map((pair) => ({ ...pair }))
-});
-
-assert.deepEqual(unchangedIdentity, baselineIdentity);
-assert.equal(cacheKey(unchangedIdentity), cacheKey(baselineIdentity));
+// Review F3: a converter whose identity key differs from the looked-up key is
+// a classified Result failure that names its reason. The check runs as written
+// in run-analysis.js, on the converter's reply.
+{
+  const { diagnosticError, normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const source = await readFile(runAnalysisPath, 'utf8');
+  const start = source.indexOf('              convertedPayload = /** @type {Record<string, any>} */ (response.result);');
+  const end = source.indexOf('              if (["orthogroup", "collinear"].includes(blastpMode)) {', start);
+  assert.ok(start > 0 && end > start);
+  const admit = new Function(
+    'response', 'useDerivedProteinPayloadCache', 'derivedCacheKey', 'diagnosticError',
+    `let convertedPayload;\n${source.slice(start, end)}\nreturn convertedPayload;`
+  );
+  assert.deepEqual(admit({ result: { pairs: [], identityKey: 'a'.repeat(64) } }, true, 'a'.repeat(64), diagnosticError), { pairs: [] });
+  let thrown = null;
+  try {
+    admit({ result: { pairs: [], identityKey: 'b'.repeat(64) } }, true, 'a'.repeat(64), diagnosticError);
+  } catch (error) {
+    thrown = error;
+  }
+  const failure = normalizeUserFacingError(thrown);
+  assert.equal(failure.code, 'RESULT_INVALID');
+  assert.equal(failure.stage, 'result-admission');
+  assert.equal(failure.operation, 'convertLosatpPairsToGenomicPayload');
+  assert.equal(failure.context.reason, 'DERIVED_KEY_MISMATCH');
+  assert.match(failure.summary, /does not match the settings it was looked up with/);
+}
 
 assert.equal(
   hasRequiredCanonicalAnalysisResource('collinear', {
@@ -132,100 +103,36 @@ assert.equal(
   false,
   'derived cache payloads from before typed CollinearityResult propagation must miss'
 );
+// The typed result as the analysis helper returns it: parsed from its Python bytes and bound to them.
+const boundTypedResult = (typed, kind) => {
+  const text = JSON.stringify(typed);
+  bindCanonicalTypedResource(typed, {
+    kind, type: 'application/json', size: Buffer.byteLength(text), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(text).toString('base64')
+  });
+  return typed;
+};
 assert.equal(
   hasRequiredCanonicalAnalysisResource('collinear', {
-    collinearityResult: {
+    pairs: [],
+    collinearityResult: boundTypedResult({
       schema: 3,
       kind: 'result',
       value: { type: 'CollinearityResult', fields: {} }
-    }
+    }, 'collinearity-result')
   }),
   true
 );
 assert.equal(
   hasRequiredCanonicalAnalysisResource('orthogroup', {
-    orthogroupResult: {
+    pairs: [],
+    orthogroupResult: boundTypedResult({
       schema: 3,
       kind: 'orthogroupResult',
       value: { type: 'OrthogroupGraphResult', fields: {} }
-    }
+    }, 'orthogroup-result')
   }),
   true
-);
-
-const invalidationCases = [
-  ['orthogroupMemberMaxHits', 'memberMaxHits', 7, 'orthogroup'],
-  ['collinearMinAnchors', 'minAnchors', 2],
-  ['collinearMaxUnitGap', 'maxGeneGap', 1],
-  ['collinearUnitMode', 'unitMode', 'locus'],
-  ['collinearColorMode', 'colorMode', 'orientation_identity'],
-  ['collinearAnchorMode', 'anchorMode', 'all'],
-  ['collinearMergeOrientation', 'mergeOrientation', 'strand'],
-  ['collinearMaxDiagonalDrift', 'maxDiagonalDrift', 1],
-  ['collinearMaxConflictsInMergeGap', 'maxConflictsInMergeGap', 2],
-  ['collinearMaxParalogLinksPerOrthogroup', 'maxParalogLinksPerOrthogroup', 3],
-  ['collinearSearchScope', 'searchScope', 'all']
-];
-
-for (const [inputName, identityName, changedValue, section = 'collinear'] of invalidationCases) {
-  const changedIdentity = buildIdentity({ [inputName]: changedValue });
-  assert.deepEqual(changedIdentity, {
-    ...baselineIdentity,
-    [section]: {
-      ...baselineIdentity[section],
-      [identityName]: section === 'orthogroup' ? Number(changedValue) : String(changedValue)
-    }
-  });
-  assert.notEqual(
-    cacheKey(changedIdentity),
-    cacheKey(baselineIdentity),
-    `${inputName} must invalidate the derived cache key`
-  );
-  assert.deepEqual(changedIdentity.pairs, baselineIdentity.pairs);
-}
-
-assert.deepEqual(
-  buildIdentity({ maxHits: 99, pairwiseMatchStyle: 'curve' }),
-  baselineIdentity,
-  'Collinear derived identity must ignore Pairwise-only and match-style settings'
-);
-for (const appearanceOnly of [
-  { pairwiseMatchStyle: 'curve' },
-  { comparisonHeight: 90 },
-  { comparisonDisclosureOpen: true },
-  { scaleFontSize: 27 },
-  { rulerLabelFontSize: 11 }
-]) {
-  assert.deepEqual(
-    buildIdentity(appearanceOnly),
-    baselineIdentity,
-    'render appearance and disclosure state must not change derived scientific identity'
-  );
-}
-
-const orthogroupIdentity = buildIdentity({ mode: 'orthogroup' });
-assert.equal(Object.hasOwn(orthogroupIdentity, 'pairwise'), false);
-assert.equal(Object.hasOwn(orthogroupIdentity, 'collinear'), false);
-assert.deepEqual(
-  buildIdentity({
-    mode: 'orthogroup',
-    maxHits: 99,
-    collinearUnitMode: 'locus',
-    collinearAnchorMode: 'all',
-    collinearMergeOrientation: 'strand',
-    collinearSearchScope: 'all'
-  }),
-  orthogroupIdentity,
-  'Orthogroup derived identity must ignore Pairwise-only and Collinear-only settings'
-);
-
-const pairwiseIdentity = buildIdentity({ mode: 'pairwise' });
-assert.equal(Object.hasOwn(pairwiseIdentity, 'orthogroup'), false);
-assert.equal(Object.hasOwn(pairwiseIdentity, 'collinear'), false);
-assert.notEqual(
-  cacheKey(buildIdentity({ mode: 'pairwise', maxHits: 6 })),
-  cacheKey(pairwiseIdentity),
-  'Pairwise max hits must participate in Pairwise derived identity'
 );
 
 // Old persisted resources remain readable, but do not masquerade as new cache hits.
@@ -234,13 +141,34 @@ for (const schema of [1, 2]) {
     orthogroupResult: {schema, kind: 'orthogroupResult', value: {type: 'OrthogroupResult', fields: {}}}
   }), false);
 }
-assert.equal(baselineIdentity.pathRepresentation, 'lossless-graph-v1');
-const oldIdentity = {...baselineIdentity};
-delete oldIdentity.pathRepresentation;
-assert.notEqual(cacheKey(oldIdentity), cacheKey(baselineIdentity));
-
+// OV-1040 / D-66: a derived payload is a hit only when its typed result is bound to the Python bytes and every
+// pair holds its canonical table. A result read from a Session is not bound, and a pair with only `rows` predates
+// the canonical table: both are misses, so the analysis runs again instead of encoding in JS.
+{
+  const typedText = '{"kind":"orthogroupResult","schema":3,"value":{"fields":{"score":1.0},"type":"OrthogroupGraphResult"}}';
+  const orthogroupResult = JSON.parse(typedText);
+  const payload = { pairs: [{ pair_index: 0, tsv: '', canonicalTsv: 'query\n', hit_count: 0 }], orthogroupResult };
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', payload), false, 'an unbound typed result');
+  bindCanonicalTypedResource(orthogroupResult, {
+    kind: 'orthogroup-result', type: 'application/json', size: Buffer.byteLength(typedText), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(typedText).toString('base64')
+  });
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', payload), true, 'a bound typed result');
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', {
+    ...payload, pairs: [{ pair_index: 0, tsv: '', rows: [], hit_count: 0 }]
+  }), false, 'a pair with only rows');
+  // A hit reads the payload back through Vue's reactive cache Map, as a proxy of the bound object.
+  const proxied = new Proxy(orthogroupResult, {});
+  const previousWindow = globalThis.window;
+  globalThis.window = { Vue: { toRaw: (value) => (value === proxied ? orthogroupResult : value) } };
+  try {
+    assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', { ...payload, orthogroupResult: proxied }), true);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+}
 // Current comparison data has one owner; stats can differ without duplicating it.
-const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', rows: Object.freeze([]) })]);
+const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', canonicalTsv: 'query\tsubject\n' })]);
 const immutableResource = Object.freeze({ schema: 3, kind: 'result', value: Object.freeze({
   type: 'CollinearityResult', fields: Object.freeze({ blocks: Object.freeze([]) })
 }) });
@@ -277,7 +205,8 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   });
   const active = (featureVisibility) => ({
     featureVisibility, mode: 'orthogroup', candidateLimit: null, bitscore: 50, evalue: 1e-2,
-    identity: 0, alignmentLength: 0, orthogroupMembershipMode: 'anchor_core_v1', memberMaxHits: null
+    identity: 0, alignmentLength: 0, orthogroupMembershipMode: 'anchor_core_v1', memberMaxHits: null,
+    maxParalogLinks: 2
   });
   const reuse = (session, visibility) => canReuseResolvedProteinArtifacts({
     canonicalComparisons: comparisons, committedSession: session,
@@ -290,4 +219,20 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   assert.equal(reuse(sessionWith(hideRule), hideRule), true, 'the same rules reuse');
   assert.equal(reuse(sessionWith(`${hideRule.trimEnd()}\n\n`), hideRule), true, 'rules compare after normalization');
   assert.equal(reuse({ ...sessionWith(hideRule), resources: {} }, hideRule), false, 'an unreadable committed table declines');
+
+  // OV-1128 B: Similarity groups draws with the paralog links per group, so a changed value declines reuse.
+  const reuseParalogs = (committed, current) => canReuseResolvedProteinArtifacts({
+    canonicalComparisons: comparisons,
+    committedSession: {
+      ...sessionWith(null),
+      renderRequest: {
+        ...sessionWith(null).renderRequest,
+        comparisons: [{ ...marker, settings: { collinearMaxParalogLinksPerOrthogroup: committed } }, { kind: 'orthogroupResult' }]
+      }
+    },
+    sequences: [{ uid: 'a', region_record_id: '' }],
+    active: { ...active(''), maxParalogLinks: current }
+  });
+  assert.equal(reuseParalogs(3, 3), true, 'the same paralog links reuse');
+  assert.equal(reuseParalogs(3, 2), false, 'changed paralog links decline Similarity groups reuse');
 }

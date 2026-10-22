@@ -106,6 +106,17 @@ const committedRequest = (page) => page.evaluate(async () => {
   };
 });
 
+// The rows the browser commits for tRNA-Phe of the first record; the Python test
+// test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives models exactly these.
+const overrideRow = (fields) => ({
+  recordKey: expect.stringMatching(/^linear-seq-/),
+  biologicalFeatureId: 'fb8ff22d9',
+  featureVisibility: null,
+  labelVisibility: null,
+  labelText: null,
+  ...fields
+});
+
 test('status, selection, and input build no tables; each Generate builds its label table once', async ({ page }) => {
   test.setTimeout(300_000);
   await install(page);
@@ -135,20 +146,45 @@ test('status, selection, and input build no tables; each Generate builds its lab
   expect(perFeature.counts.labelOverrideTableBuildCount || 0).toBe(0);
   expect(await committedRequest(page)).toMatchObject({
     labelOverrideFile: false,
-    featureOverrides: [expect.objectContaining({ labelVisibility: 'on' })]
+    featureOverrides: [overrideRow({ labelVisibility: 'on' })]
   });
   // CW-02: one label projection per Generate, shared by the staged copy and the request.
-  expect(await applyBulkLabelEdit(page)).toBe(1);
+  let bulkRows = null;
+  const bulkEdit = await observe(page, async () => { bulkRows = await applyBulkLabelEdit(page); });
+  expect(bulkRows).toBe(1);
   const override = await observe(page, () => clickGenerate(page));
   expect(count(override, 'labelOverrideTableBuildCount')).toBe(1);
-  expect((await committedRequest(page)).featureOverrides
-    .some((row) => row.labelText === 'CW_BULK_LABEL')).toBe(true);
-  // CW-04: every Generate renders and admits its catalog, even for unchanged input.
-  for (const op of [override, await observe(page, () => clickGenerate(page))]) {
+  // The Label TSV import replaces the visibility row with one label-text row.
+  expect((await committedRequest(page)).featureOverrides)
+    .toEqual([overrideRow({ labelText: 'CW_BULK_LABEL' })]);
+  // CW-04: every Generate renders and leaves an admitted catalog; the catalog
+  // is sent and admitted again only when a catalog item was built again. The
+  // label edit rebuilds the item, and its automatic label reflow sends and
+  // admits it; the override Generate then reuses that build and keeps the
+  // catalog (tests/test_web_render_preparation_cache.py
+  // test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives decides
+  // this outcome against a fresh cache), as does a Generate with no change.
+  const shownCatalog = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    window.__CW_SHOWN_CATALOG__ = window.Vue.toRaw(state.featureCatalog.value);
+  });
+  const sameShownCatalog = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return Boolean(window.__CW_SHOWN_CATALOG__)
+      && window.Vue.toRaw(state.featureCatalog.value) === window.__CW_SHOWN_CATALOG__;
+  });
+  expect(count(bulkEdit, 'featureCatalogAdmissionCount')).toBe(1);
+  expect(bulkEdit.counts.featureCatalogReuseCount || 0).toBe(0);
+  await shownCatalog();
+  const unchanged = await observe(page, () => clickGenerate(page));
+  for (const op of [override, unchanged]) {
     expect(op.runs).toBe(1);
-    expect(count(op, 'featureCatalogAdmissionCount')).toBe(1);
     expect(count(op, 'svgSanitizationCount')).toBeGreaterThan(0);
+    expect(count(op, 'featureCatalogReuseCount')).toBe(1);
+    expect(op.counts.featureCatalogAdmissionCount || 0).toBe(0);
+    expect(op.events).toContain('catalog.reused');
   }
+  expect(await sameShownCatalog()).toBe(true);
 
   // CW-01: operation acceptance and selection updates start no heavy work.
   const compareButton = (target) => page.getByRole('button', {
@@ -190,9 +226,29 @@ test('status, selection, and input build no tables; each Generate builds its lab
   }
   const help = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tip = await observe(page, () => help.click());
-  await expect(page.locator('[role="tooltip"]')).toContainText('Changes apply on Generate');
+  const tooltip = page.locator('[role="tooltip"]');
+  await expect(tooltip).toContainText('ON aligns Linear definitions');
   expect(tip.undo).toBe(0);
   expectNoStatusWork(tip, 'help-tip');
+
+  // PD-OI-103 (G1-LIVE): Linear Lock Definition Column either applies on
+  // Generate, as its help says, and leaves the Result unchanged until then, or
+  // applies live: the Result changes without Generate, in one History step.
+  // The help sentence (`settingApplicationSentence`) tells which applies.
+  const onGenerate = (await tooltip.textContent()).includes('Changes apply on Generate');
+  const shown = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.results[app.selectedResultIndex].content;
+  });
+  const before = await shown();
+  const lock = page.locator('input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');
+  const flip = await observe(page, () => lock.click());
+  expect(flip.undo).toBe(1);
+  if (onGenerate) {
+    expect(await shown()).toBe(before);
+    await clickGenerate(page);
+  }
+  await expect.poll(shown).not.toBe(before);
 });
 
 test('a double press on Generate starts one operation', async ({ page }) => {

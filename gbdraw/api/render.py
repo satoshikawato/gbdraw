@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import sys
-import tempfile
 from pathlib import Path
-from typing import Iterable, Sequence
+from types import ModuleType
+from typing import Sequence
 
 from svgwrite import Drawing
 
@@ -16,18 +15,20 @@ from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
 from gbdraw.render.document import write_svg_document
 from gbdraw.render.formats import (
-    CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
     classify_formats,
-    normalize_format_sequence,
-    normalize_format_token,
+    parse_output_formats,
     resolve_format_output_path,
     resolve_output_paths,
 )
 from gbdraw.render.font_embedding import FontEmbedding, embed_font_css, svg_font_embedding
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import (
+    commit_staged_outputs,
+    preflight_output_paths,
+    staged_output_files,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,19 +54,7 @@ def _font_embedding(svg_source: str, embed_fonts: bool) -> FontEmbedding:
 
 
 def _normalize_formats(formats: Sequence[str] | str | None) -> list[str]:
-    return normalize_format_sequence(formats, logger=logger)
-
-
-def _late_output_collision_message(path: str, *, overwrite: bool) -> str:
-    if overwrite:
-        return (
-            f"Output target appeared during export: {path}. "
-            "Refusing to replace it."
-        )
-    return (
-        f"Output file already exists: {path}. "
-        "Use overwrite=True to replace it."
-    )
+    return [SVG_FORMAT] if formats is None else list(parse_output_formats(formats))
 
 
 def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir: str | None) -> str:
@@ -82,19 +71,23 @@ def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir:
     return base_prefix
 
 
-def _ensure_overwrite_ok(paths: Iterable[str | Path], overwrite: bool) -> None:
-    output_paths = preflight_output_paths(paths, overwrite=overwrite)
-    if not overwrite:
-        return
-    for path in output_paths:
-        if not path.exists():
-            continue
-        try:
-            path.unlink()
-        except OSError as exc:
-            raise ExportError(
-                f"Could not replace existing output file: {path}"
-            ) from exc
+def _cairosvg_module(formats: Sequence[str]) -> ModuleType | None:
+    """The CairoSVG module for ``formats``, checked before anything is written."""
+    if not formats:
+        return None
+    if "pyodide" in sys.modules:
+        raise ValidationError(
+            "Binary file export is not available under WebAssembly (pyodide); "
+            "browser-side conversion does not create local output paths."
+        )
+    try:
+        return _export.get_cairosvg()
+    except ImportError as exc:
+        missing_formats = ", ".join([f.upper() for f in formats])
+        raise ValidationError(
+            f"Cannot generate {missing_formats}: CairoSVG is not installed. "
+            "Install with: pip install gbdraw[export]"
+        ) from exc
 
 
 def save_figure_to(
@@ -113,6 +106,9 @@ def save_figure_to(
     CairoSVG. Unlike the deprecated
     :func:`gbdraw.render.export.save_figure`, explicitly requested formats are
     strict: failure to generate any one of them raises an exception.
+    Every format is generated into staged files beside its output before any
+    output is written, so a failure changes no existing file and leaves no new
+    one, with or without ``overwrite``.
     With ``embed_fonts``, the SVG and interactive SVG carry a subset of each
     font they use that gbdraw does not bundle. PNG, PDF, EPS and PS draw with
     the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
@@ -123,10 +119,10 @@ def save_figure_to(
     fmt_list = _normalize_formats(formats)
     base_prefix = _resolve_base_prefix(canvas, output_prefix, output_dir)
     svg_filename = resolve_format_output_path(base_prefix, SVG_FORMAT)
-
     output_paths = resolve_output_paths(base_prefix, fmt_list, include_base_svg=True)
-
-    _ensure_overwrite_ok(output_paths, overwrite)
+    preflight_output_paths(output_paths, overwrite=overwrite)
+    classification = classify_formats(fmt_list)
+    cairosvg_module = _cairosvg_module(classification.cairosvg)
     try:
         Path(base_prefix).parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -134,118 +130,62 @@ def save_figure_to(
             f"Could not prepare output directory: {Path(base_prefix).parent}"
         ) from exc
 
-    try:
-        canvas.filename = svg_filename
-        document = write_svg_document(canvas)
-        embedding = _font_embedding(document.body, embed_fonts)
-        with open(svg_filename, "x", encoding="utf-8") as svg_file:
-            svg_file.write(document.prolog)
-            svg_file.write(embed_font_css(document.body, embedding))
-    except FileExistsError as exc:
-        raise ValidationError(
-            _late_output_collision_message(
-                svg_filename,
-                overwrite=overwrite,
-            )
-        ) from exc
-    except GbdrawError:
-        raise
-    except Exception as exc:
-        raise ExportError(f"Failed to generate SVG: {exc}") from exc
-    if not os.path.isfile(svg_filename):
-        raise ExportError(f"SVG export did not create the requested file: {svg_filename}")
-    logger.info("Generated SVG: %s", svg_filename)
-
-    classification = classify_formats(fmt_list)
-    if classification.interactive:
-        interactive_filename = resolve_format_output_path(base_prefix, INTERACTIVE_SVG_FORMAT)
+    labels = {svg_filename: "SVG"}
+    with staged_output_files(output_paths) as staged:
         try:
-            interactive_svg = embed_font_css(
-                enrich_svg(
-                    document.body,
-                    context=interactive_context,
-                    result_name=os.path.basename(interactive_filename),
-                ),
-                embedding,
-            )
+            canvas.filename = svg_filename
+            document = write_svg_document(canvas)
+            embedding = _font_embedding(document.body, embed_fonts)
+            with open(staged[Path(svg_filename)], "w", encoding="utf-8") as svg_file:
+                svg_file.write(document.prolog)
+                svg_file.write(embed_font_css(document.body, embedding))
         except GbdrawError:
             raise
         except Exception as exc:
-            raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
-        try:
-            with open(interactive_filename, "x", encoding="utf-8") as handle:
-                handle.write(interactive_svg)
-        except FileExistsError as exc:
-            raise ValidationError(
-                _late_output_collision_message(
-                    interactive_filename,
-                    overwrite=overwrite,
+            raise ExportError(f"Failed to generate SVG: {exc}") from exc
+
+        if classification.interactive:
+            interactive_filename = resolve_format_output_path(base_prefix, INTERACTIVE_SVG_FORMAT)
+            labels[interactive_filename] = "interactive SVG"
+            try:
+                interactive_svg = embed_font_css(
+                    enrich_svg(
+                        document.body,
+                        context=interactive_context,
+                        result_name=os.path.basename(interactive_filename),
+                    ),
+                    embedding,
                 )
-            ) from exc
-        except OSError as exc:
-            raise ExportError(f"Failed to write interactive SVG: {exc}") from exc
-        if not os.path.isfile(interactive_filename):
-            raise ExportError(
-                f"Interactive SVG export did not create the requested file: {interactive_filename}"
-            )
-        logger.info("Generated interactive SVG: %s", interactive_filename)
+            except GbdrawError:
+                raise
+            except Exception as exc:
+                raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
+            try:
+                with open(staged[Path(interactive_filename)], "w", encoding="utf-8") as handle:
+                    handle.write(interactive_svg)
+            except OSError as exc:
+                raise ExportError(f"Failed to write interactive SVG: {exc}") from exc
 
-    formats_to_process = list(classification.cairosvg)
-    if not formats_to_process:
-        return output_paths
+        if cairosvg_module is not None:
+            svg_bytes = document.body.encode("utf-8")
+            for fmt in classification.cairosvg:
+                out_file = resolve_format_output_path(base_prefix, fmt)
+                labels[out_file] = fmt.upper()
+                try:
+                    with open(staged[Path(out_file)], "wb") as output_file:
+                        _export.convert_svg_with_cairosvg(
+                            svg_bytes,
+                            fmt,
+                            write_to=output_file,
+                            cairosvg_module=cairosvg_module,
+                        )
+                except Exception as exc:
+                    raise ExportError(f"Failed to generate {fmt.upper()}: {exc}") from exc
 
-    if "pyodide" in sys.modules:
-        raise ValidationError(
-            "Binary file export is not available under WebAssembly (pyodide); "
-            "browser-side conversion does not create local output paths."
-        )
-
-    try:
-        cairosvg_module = _export.get_cairosvg()
-    except ImportError as exc:
-        missing_formats = ", ".join([f.upper() for f in formats_to_process])
-        raise ValidationError(
-            f"Cannot generate {missing_formats}: CairoSVG is not installed. "
-            "Install with: pip install gbdraw[export]"
-        ) from exc
-
-    svg_bytes = document.body.encode("utf-8")
-    for fmt in formats_to_process:
-        out_file = resolve_format_output_path(base_prefix, fmt)
-        try:
-            with tempfile.SpooledTemporaryFile(
-                max_size=8 * 1024 * 1024,
-                mode="w+b",
-            ) as staged_output:
-                _export.convert_svg_with_cairosvg(
-                    svg_bytes,
-                    fmt,
-                    write_to=staged_output,
-                    cairosvg_module=cairosvg_module,
-                )
-                staged_output.seek(0)
-                with open(out_file, "xb") as output_file:
-                    shutil.copyfileobj(staged_output, output_file)
-        except FileExistsError as exc:
-            raise ValidationError(
-                _late_output_collision_message(
-                    out_file,
-                    overwrite=overwrite,
-                )
-            ) from exc
-        except Exception as exc:
-            raise ExportError(f"Failed to generate {fmt.upper()}: {exc}") from exc
-        if not os.path.isfile(out_file):
-            raise ExportError(
-                f"{fmt.upper()} export did not create the requested file: {out_file}"
-            )
-        logger.info("Generated %s: %s", fmt.upper(), out_file)
-
-    generated_paths = [path for path in output_paths if os.path.isfile(path)]
-    if len(generated_paths) != len(output_paths):
-        missing = [path for path in output_paths if path not in generated_paths]
-        raise ExportError("Export completed without creating: " + ", ".join(missing))
-    return generated_paths
+        commit_staged_outputs(staged, overwrite=overwrite)
+    for path in output_paths:
+        logger.info("Generated %s: %s", labels[path], path)
+    return output_paths
 
 
 def render_to_bytes(
@@ -261,18 +201,13 @@ def render_to_bytes(
     the custom fonts they use.
     """
 
-    fmt_norm = normalize_format_token(fmt)
-    if not fmt_norm:
-        raise ValidationError("Format must be specified (e.g., 'svg', 'png').")
-
+    fmt_norm = parse_output_formats((fmt,))[0]
     if fmt_norm in {SVG_FORMAT, INTERACTIVE_SVG_FORMAT}:
         svg_source = write_svg_document(canvas).body
         embedding = _font_embedding(svg_source, embed_fonts)
         if fmt_norm == INTERACTIVE_SVG_FORMAT:
             svg_source = enrich_svg(svg_source, context=interactive_context)
         return embed_font_css(svg_source, embedding).encode("utf-8")
-    if fmt_norm not in CAIROSVG_FORMATS:
-        raise ValidationError(f"Unsupported format: {fmt}")
 
     if "pyodide" in sys.modules:
         raise ValidationError("Binary export is not available under WebAssembly (pyodide).")

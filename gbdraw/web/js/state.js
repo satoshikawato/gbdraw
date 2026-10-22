@@ -1,7 +1,10 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
+/** @import { FileImports, PriorityRuleRow } from './services/file-imports.js' */
+import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
-import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
+import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
+import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
 import {
   featureDrawnContext,
   listFeatureRows,
@@ -10,8 +13,6 @@ import {
 import { resultCatalogFeatures } from './services/feature-catalog.js';
 import {
   createDefaultLayoutPreferences,
-  legendPositionOrDefault,
-  normalizeCircularPlotTitlePosition,
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
 } from './services/layout-preferences.js';
@@ -35,7 +36,9 @@ import {
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
+import { toRaw } from './utils/vue-raw.js';
 import {
+  DEFAULT_PNG_DPI,
   createDefaultAdv,
   createDefaultCircularConservation,
   createDefaultForm,
@@ -44,8 +47,6 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
-/** @type {<T>(value: T) => T} */
-const toRaw = window.Vue.toRaw || ((value) => value);
 
 // System State
 const processing = ref(false);
@@ -262,7 +263,7 @@ export const createDefaultLabelFilterState = () => ({
 export const createDefaultEditorDraftState = () => ({
   selectedSpecificPreset: '',
   specificRulePresetLoading: false,
-  downloadDpi: 300,
+  downloadDpi: DEFAULT_PNG_DPI,
   featurePanelTab: 'colors',
   newColorFeat: 'gene',
   newColorVal: '#d3d3d3',
@@ -362,8 +363,11 @@ const featureCatalog = /** @type {{ value: FeatureCatalog | null }} */ (ref(null
 // Whether the rule preparation (app/rule-matching.js) is matching rules; it
 // records the matches, which live on the feature objects, before this falls back.
 const ruleMatchingPending = ref(false);
+// OV-924: the qualifier names of the drawn features, read from the raw rows
+// once per feature list; a rule edit or a mode switch only merges the rules.
+const extractedFeatureQualifierNames = computed(() => collectFeatureQualifierNames(toRaw(extractedFeatures.value)));
 const specificRuleQualifierSuggestions = computed(() =>
-  collectSpecificColorQualifierSuggestions(extractedFeatures.value, activeDrawing().manualSpecificRules)
+  specificColorQualifierSuggestions(extractedFeatureQualifierNames.value, activeDrawing().manualSpecificRules)
 );
 /**
  * What state.js reads of a listed feature (the Features list rows and the
@@ -452,6 +456,8 @@ const previewFeatureSearchMatchDetails = ref({});
 const previewFeatureSearchActiveIndex = ref(-1);
 const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
+// Whether the Preview search bar is shown; transient view state (search-bar hide D-04).
+const previewFeatureSearchVisible = ref(true);
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const autoLabelReflowEnabled = ref(false);
@@ -567,9 +573,8 @@ const legendRenameDialog = reactive({
   // R15-3 (OV-285): the Python key of the deleted row the new caption names;
   // '' when the target is listed. Its Merge restores that row first.
   deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
-  // PD-OI-061 revision 4: the new caption is the name of a color rule that no
-  // Legend row shows.
-  targetRuleOnly: false,
+  // Why the dialog asks: its one sentence (`legendNameConflictReason`, OV-649).
+  reason: '',
   // PD-OI-061 scenario revision 5: the name the renamed row is drawn with
   // after "Keep both", and the target row's drawn name after it ('' when the
   // target is not drawn or its drawn name stays).
@@ -621,12 +626,15 @@ const isResizing = ref(false);
 // The display of the settings pane and the entry docked beside its icon rail.
 // services/settings-pane-state.js holds every transition; the browser, not
 // the Session, remembers the display (app/settings-pane.js).
-/** @import { SettingsPaneDisplay } from './services/settings-pane-state.js' */
+/** @import { SettingsPaneDisplay, SettingsPopup } from './services/settings-pane-state.js' */
 /** @import { SettingsSectionKey } from './services/settings-sections.js' */
 /** @type {{ value: SettingsPaneDisplay }} */
 const settingsPaneDisplay = ref(DEFAULT_SETTINGS_PANE_DISPLAY);
 /** @type {{ value: SettingsSectionKey | null }} */
 const settingsPaneDocked = ref(null);
+// The settings section a click on its drawn element moved to a popup beside the Result.
+/** @type {{ value: SettingsPopup | null }} */
+const settingsPopup = ref(null);
 
 // Legend Editor state
 const originalLegendOrder = ref([]); // Store original order from generation
@@ -670,19 +678,6 @@ const generatedLegendPosition = ref('left');
 const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
-/** @param {unknown} value */
-const circularLegendPosition = (value) => legendPositionOrDefault(value, 'circular');
-const shouldDeferCircularPreviewUpdates = computed(() => {
-  const { form, adv } = drawings.circular;
-  return generatedMode.value === 'circular' &&
-    mode.value === 'circular' &&
-    (
-      Boolean(form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value) ||
-      circularLegendPosition(form.legend) !== circularLegendPosition(generatedLegendPosition.value) ||
-      normalizeCircularPlotTitlePosition(adv.plot_title_position) !==
-        normalizeCircularPlotTitlePosition(generatedCircularPlotTitlePosition.value)
-    );
-});
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits
@@ -763,18 +758,34 @@ const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(result
 // record, so the record picker appears only when the displayed Result shows
 // several records (FE-03).
 // The list reads of the Results only their names (the catalog admission matches
-// them) and the displayed Result's committed metadata. A write of a Result's
-// content (an editor edit, R1) keeps both, so it does not list the features
-// again. The rule matches the drawn state reads are recorded while
-// `ruleMatchingPending` holds, so the list follows its fall.
+// them) and, of the displayed Result's committed metadata, its rendered
+// identities and selected feature types. A write of a Result's content (an
+// editor edit, R1) keeps them, and so does a Generate that reuses the catalog
+// (its new metadata holds the same identities), so neither lists the features
+// again (CW-06 row M3). The rule matches the drawn state reads are recorded
+// while `ruleMatchingPending` holds, so the list follows its fall.
 /** @import { CommittedSvgResultMetadata, SvgResultEntry } from './services/svg-result-ingestion.js' */
 /** @typedef {{ list: readonly SvgResultEntry[], names: unknown[], metadata: CommittedSvgResultMetadata | null }} ListedResults */
+/**
+ * Whether two committed metadata give the list the same inputs: the same
+ * rendered identities and the same selected feature types (none only equals none).
+ * @param {CommittedSvgResultMetadata | null} previous
+ * @param {CommittedSvgResultMetadata | null} metadata
+ */
+const sameListedMetadata = (previous, metadata) => {
+  if (previous === metadata) return true;
+  if (!previous || !metadata || previous.renderedFeatureIdentities !== metadata.renderedFeatureIdentities) return false;
+  const before = previous.selectedFeatureTypes ?? null;
+  const after = metadata.selectedFeatureTypes ?? null;
+  return before === after || (before !== null && after !== null && before.length === after.length
+    && before.every((type, index) => type === after[index]));
+};
 const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
   /** @type {readonly SvgResultEntry[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
   const metadata = displayedResultMetadata();
-  return previous !== undefined && previous.metadata === metadata && previous.names.length === names.length
+  return previous !== undefined && sameListedMetadata(previous.metadata, metadata) && previous.names.length === names.length
     && previous.names.every((name, index) => name === names[index])
     ? previous : { list, names, metadata };
 });
@@ -891,13 +902,13 @@ const featureListBottomSpacerPx = computed(
 const featureEditorStatusText = computed(() => {
   const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
   if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
-    return count > 0 ? `${count.toLocaleString()} features updating...` : 'Preparing features...';
+    return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
   }
   if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
-    return 'Feature editor unavailable';
+    return t('Feature editor unavailable');
   }
-  if (count > 0) return `${count.toLocaleString()} features ready`;
-  return 'No features ready';
+  if (count > 0) return tn(count, '{count} feature ready', '{count} features ready', { count: count.toLocaleString('en-US') });
+  return t('No features ready');
 });
 
 const filteredEditableLabels = computed(() => {
@@ -913,7 +924,11 @@ const filteredEditableLabels = computed(() => {
   });
 });
 
-/** @typedef {{ status: 'busy', reason: string }} SessionBusy What `sessionOperationAvailability` returns while a Session operation blocks edits. */
+/**
+ * What `sessionOperationAvailability` returns while a Session operation blocks
+ * edits. `reason` is English marked with `msg`; show it with `tm`.
+ * @typedef {{ status: 'busy', reason: string }} SessionBusy
+ */
 
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
@@ -926,11 +941,11 @@ export const sessionOperationAvailability = (
   preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
 ) => {
   let reason = '';
-  if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
-  else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';
+  if (sessionImportPending.value) reason = msg('Loading session. Retry after loading finishes.');
+  else if (sessionSavePending.value) reason = msg('Saving session. Retry after saving finishes.');
   else if (operation === 'save' || operation === 'load' || operation === 'history') {
-    if (processing.value) reason = 'Generating diagram. Retry after generation finishes.';
-    else if (labelReflowProcessing.value) reason = 'Updating diagram. Retry after the update finishes.';
+    if (processing.value) reason = msg('Generating diagram. Retry after generation finishes.');
+    else if (labelReflowProcessing.value) reason = msg('Updating diagram. Retry after the update finishes.');
     else reason = preparationBusyReason?.() || '';
   }
   return reason ? { status: 'busy', reason } : null;
@@ -1030,7 +1045,7 @@ const createDrawingState = (drawingMode) => {
     circularConservation: reactive(createDefaultCircularConservation()),
     linearComparisonPlan,
     linearRecordLayoutEnabled,
-    linearRecordGap: ref(24),
+    linearRecordGap: ref(DEFAULT_LINEAR_RECORD_GAP_PX),
     linearRecordRows,
     recordDisplayDrafts: reactive([]),
     recordsOff,
@@ -1062,7 +1077,9 @@ const createDrawingState = (drawingMode) => {
     addedLegendCaptions: ref(new Set()),
     fileLegendCaptions: ref(new Set()),
     manualSpecificRules: reactive([]),
-    manualPriorityRules: reactive([]),
+    manualPriorityRules: reactive(/** @type {PriorityRuleRow[]} */ ([])),
+    // What the Default colors and Blacklist files set, for their Remove (OV-1280).
+    fileImports: reactive(/** @type {FileImports} */ ({})),
     filterMode: ref(labelFilters.filterMode),
     manualBlacklist: ref(labelFilters.manualBlacklist),
     manualWhitelist: reactive(labelFilters.manualWhitelist),
@@ -1217,6 +1234,7 @@ export const state = {
   previewFeatureSearchActiveIndex,
   previewFeatureSearchError,
   previewFeatureSearchRenderedCount,
+  previewFeatureSearchVisible,
   featureListScrollTop,
   featureListViewportHeight,
   featureListExpandedId,
@@ -1259,6 +1277,7 @@ export const state = {
   isResizing,
   settingsPaneDisplay,
   settingsPaneDocked,
+  settingsPopup,
   originalLegendOrder,
   originalLegendColors,
   legendStrokeOptionsOpen,
@@ -1287,7 +1306,6 @@ export const state = {
   generatedMode,
   generatedMultiRecordCanvas,
   generatedCircularPlotTitlePosition,
-  shouldDeferCircularPreviewUpdates,
   skipCaptureBaseConfig,
   skipExtractOnSvgChange,
   trustedArtifactRestoreInProgress,

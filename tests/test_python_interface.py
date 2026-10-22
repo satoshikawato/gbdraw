@@ -13,6 +13,7 @@ from svgwrite import Drawing
 import gbdraw
 import gbdraw.api.request_render as request_render_module
 import gbdraw.interface as interface
+import gbdraw.render.output_paths as output_paths_module
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api.options import (
     CircularDiagramOptions,
@@ -580,6 +581,32 @@ def test_diagram_save_does_not_follow_target_created_after_preflight(
     assert output.is_symlink()
 
 
+def test_diagram_save_keeps_the_old_file_when_the_commit_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-1152: overwrite=True replaces the file only once the new bytes are staged.
+    diagram = interface.Diagram(
+        Drawing("internal-name.svg"),
+        mode="circular",
+        records=(_record(),),
+        interactive_context=None,
+    )
+    output = tmp_path / "chosen-name.svg"
+    output.write_text("old", encoding="utf-8")
+
+    def fail_commit(staged_path, output_path, *, overwrite):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(output_paths_module, "commit_staged_output_file", fail_commit)
+
+    with pytest.raises(ExportError, match="Could not write output file"):
+        diagram.save(output, overwrite=True)
+
+    assert output.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.iterdir()) == [output]
+
+
 def test_diagram_save_rejects_windows_reserved_output_name(
     tmp_path: Path,
 ) -> None:
@@ -665,3 +692,28 @@ def test_native_diagram_exposes_immutable_warnings_and_reuses_bundle(mode, monke
     assert "PRIVATE-MISSING" not in diagram.to_svg()
     assert "PRIVATE-MISSING" not in diagram.to_svg(interactive=True)
     assert count == 1
+
+
+@pytest.mark.parametrize("types", ["CDS", b"CDS", ["CDS", ""], [1]])
+def test_feature_options_types_error_names_types(types: object) -> None:
+    """OV-1245: ``FeatureOptions(types="CDS")`` named the internal ``selected_features_set``."""
+
+    with pytest.raises(ValidationError, match=r"^types must ") as raised:
+        gbdraw.FeatureOptions(types=types)  # type: ignore[arg-type]
+    assert "selected_features_set" not in str(raised.value)
+    assert gbdraw.FeatureOptions(types=["CDS", "tRNA"]).types == ["CDS", "tRNA"]
+    assert gbdraw.FeatureOptions(types=None).types is None
+
+
+def test_read_genbank_refuses_a_file_object_and_asks_for_its_path(tmp_path: Path) -> None:
+    """OV-1245: an open file was read line by line as paths."""
+
+    source = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
+    with source.open(encoding="utf-8") as handle:
+        with pytest.raises(ValidationError, match=r"^paths must be a file path or a sequence of file paths"):
+            gbdraw.read_genbank(handle)  # type: ignore[arg-type]
+        with pytest.raises(ValidationError, match=r"^fasta_paths must be a file path or a sequence of file paths"):
+            gbdraw.read_gff(str(source), handle)  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="At least one non-empty input path is required."):
+        gbdraw.read_genbank([])
+    assert len(gbdraw.read_genbank(source)) == 1

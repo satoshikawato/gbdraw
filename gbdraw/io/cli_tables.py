@@ -10,12 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Sequence
 
+from ..core.numeric import parse_ascii_integer
 from ..exceptions import ValidationError
 from ..io.regions import parse_region_spec
 from ..tracks import (
     normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
+from ..tracks.circular import _LEGACY_SPACING_PARAM
 from ..tracks.parsing import split_kv_list
 
 
@@ -338,10 +340,7 @@ def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTa
         gencode_raw = row.values.get("losat_gencode", "").strip()
         losat_gencode: int | None = None
         if gencode_raw:
-            try:
-                losat_gencode = int(gencode_raw)
-            except ValueError:
-                losat_gencode = 0
+            losat_gencode = parse_ascii_integer(gencode_raw) or 0
             if losat_gencode <= 0:
                 raise ValidationError(
                     _cell_error(
@@ -807,13 +806,8 @@ def _parse_optional_positive_int(
     raw = row.values.get(column, "").strip()
     if not raw:
         return None
-    try:
-        parsed = int(raw)
-    except ValueError as exc:
-        raise ValidationError(
-            _cell_error(table_path, row.row_number, column, f"expected a positive integer, got {raw!r}")
-        ) from exc
-    if parsed <= 0:
+    parsed = parse_ascii_integer(raw)
+    if parsed is None or parsed <= 0:
         raise ValidationError(
             _cell_error(table_path, row.row_number, column, f"expected a positive integer, got {raw!r}")
         )
@@ -912,7 +906,7 @@ def _parse_circular_track_table_params(
         normalized_key = key.strip().lower()
         if normalized_key.startswith("_") and not (
             _allow_legacy_transport
-            and normalized_key == "__gbdraw_legacy_spacing"
+            and normalized_key == _LEGACY_SPACING_PARAM
         ):
             raise ValidationError(
                 _cell_error(

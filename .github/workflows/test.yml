@@ -190,7 +190,7 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -228,7 +228,7 @@ jobs:
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -253,6 +253,24 @@ jobs:
       - name: Verify reference outputs are unchanged
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
+
+  fail-fast-core-pr:
+    # Cancels the rest of a pull request run once core-pr has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Core PR)
+    needs: core-pr
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
@@ -285,6 +303,24 @@ jobs:
           python -m pytest tests/
           -m "recipe and not slow"
           --durations=30
+
+  fail-fast-recipes-standard:
+    # Cancels the rest of a pull request run once recipes-standard has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Recipes standard)
+    needs: recipes-standard
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   gallery:
     name: Gallery (Python 3.11)
@@ -465,9 +501,11 @@ jobs:
 
       - name: Run Python browser tests
         timeout-minutes: 10
+        # Dev always has functional shard evidence (run or inherited), which includes the comparison contracts.
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
+          --deselect tests/test_linear_comparison_browser_contracts.py
           --durations=30
 
       - name: Run package build integration
@@ -560,10 +598,32 @@ jobs:
 
       - name: Run non-slow Python browser tests
         timeout-minutes: 10
+        # The functional shards run the comparison contracts when the plan requires them.
+        env:
+          COMPARISON_CONTRACTS_DESELECT: ${{ contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') && '--deselect tests/test_linear_comparison_browser_contracts.py' || '' }}
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
+          $COMPARISON_CONTRACTS_DESELECT
           --durations=30
+
+  fail-fast-web-contracts-pr:
+    # Cancels the rest of a pull request run once web-contracts-pr has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Web contracts)
+    needs: web-contracts-pr
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   web-pr-smoke:
     name: Web PR smoke
@@ -730,11 +790,18 @@ jobs:
         if: steps.shard.outputs.files != ''
         run: python tools/prepare_browser_wheel.py
 
+      # The diagram Worker restores this snapshot instead of installing its packages;
+      # a build failure fails the job (docs/internal/SELECTIVE_CI.md "Pyodide snapshot").
+      - name: Build the Pyodide snapshot
+        if: steps.shard.outputs.files != ''
+        run: node tools/build_pyodide_snapshot.mjs "$RUNNER_TEMP/pyodide-snapshot"
+
       - name: Run Playwright functional tests
         if: steps.shard.outputs.files != ''
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/functional-report.json
           FUNCTIONAL_SPECS: ${{ steps.shard.outputs.files }}
+          GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR: ${{ runner.temp }}/pyodide-snapshot
         # Each shard runs the spec files that tests/ci/functional-shards.json assigns
         # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
         run: |
@@ -1703,3 +1770,11 @@ jobs:
           --workflow-path .github/workflows/gallery-publication.yml
           --aggregate-name "Gallery readiness / gate"
           --head-sha "${{ github.sha }}"
+
+      # New Web UI keys ship in English until the translation batch before a
+      # release (.claude/skills/translate-web-ui/SKILL.md); only the release
+      # tier requires every catalog to hold every key and no stale one. It runs
+      # after an earlier gate step failed too, so one run reports every gap.
+      - name: Require complete Web UI translations
+        if: ${{ !cancelled() }}
+        run: node tools/i18n/sync.mjs status --require-complete

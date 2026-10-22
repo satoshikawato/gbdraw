@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { answerChoicePrompt, evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
@@ -147,10 +147,12 @@ const history = async (page, step) => {
   await settleLive(page);
 };
 
+// `title`: the Session has none, so Save asks for one; '' saves an untitled file.
 // `again`: the page already downloaded this Session file name, so the Save asks first.
-const save = async (page, path, { again = false } = {}) => {
+const save = async (page, path, { again = false, title } = {}) => {
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (title !== undefined) await answerSessionTitle(page, title);
   if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await download).saveAs(path);
   return JSON.parse(gunzipSync(readFileSync(path)));
@@ -442,7 +444,7 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   await generate(page);
   const linear = await shown(page);
 
-  const saved = await save(page, info.outputPath('both.gbdraw-session.json.gz'));
+  const saved = await save(page, info.outputPath('both.gbdraw-session.json.gz'), { title: '' });
   expect(saved.ui.mode).toBe('linear');
   expect(saved.renderRequest.mode).toBe('linear');
   expect(saved.otherModeResult.renderRequest.mode).toBe('circular');
@@ -459,7 +461,7 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
     expect(loadedCircular).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
     expect(await drawing(fresh, loadedCircular.content)).toEqual(await drawing(page, circular.content));
 
-    const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw-session.json.gz'));
+    const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw-session.json.gz'), { title: '' });
     expect(resaved.ui.mode).toBe('circular');
     expect(resaved.renderRequest.mode).toBe('circular');
     expect(resaved.otherModeResult.renderRequest.mode).toBe('linear');
@@ -482,7 +484,7 @@ test('a Session with one Result opens on that Result\'s mode', async ({ page, br
   await showMode(page, 'linear');
   await expectEmptyPreview(page, 'linear');
 
-  const saved = await save(page, info.outputPath('one.gbdraw-session.json.gz'));
+  const saved = await save(page, info.outputPath('one.gbdraw-session.json.gz'), { title: '' });
   expect(saved.ui.mode).toBe('linear');
   expect(saved.renderRequest.mode).toBe('circular');
   expect(Object.hasOwn(saved, 'otherModeResult')).toBe(false);
@@ -709,7 +711,7 @@ test('a Session opened on its other Result set generates the Legend it shows', a
   await bothResults(page);
   await showMode(page, 'circular');
   const webPath = info.outputPath('web.gbdraw-session.json.gz');
-  await save(page, webPath);
+  await save(page, webPath, { title: '' });
   const resavedPath = info.outputPath('cli-resaved.gbdraw-session.json');
   execFileSync('python', ['-c', [
     'import sys',
@@ -811,26 +813,29 @@ test('an Undo of a mode switch waits for a label rerender', async ({ page }) => 
   test.setTimeout(300_000);
   await bothResults(page);
   await showMode(page, 'circular');
-  await page.evaluate(async () => {
-    const app = window.__GBDRAW_APP__;
-    await app.setFeatureColorValue(app.extractedFeatures.find((feature) => feature.type === 'CDS'), '#123456');
-  });
-  await settleLive(page);
   const attempt = await evaluateWithRetainedPromise(page, async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
     const owner = window.__GBDRAW_HISTORY__;
-    // The Undo of the color restores the rule table and asks for the rerender.
+    // The color asks for the rerender, and its Undo comes while that draws,
+    // so the rerender draws the restored rule table (D-24 (OV-731)).
+    await app.setFeatureColorValue(app.extractedFeatures.find((feature) => feature.type === 'CDS'), '#123456');
     await owner.undo();
     for (let wait = 0; wait < 200 && !state.labelReflowProcessing.value; wait += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     const rerendering = state.labelReflowProcessing.value;
     const undo = await owner.undo();
-    return { rerendering, undo, mode: state.mode.value };
+    // OV-1339: the Undo button is disabled while its step waits.
+    await window.Vue.nextTick();
+    const undoButtonDisabled = document.querySelector('button[aria-label="Undo"]').disabled;
+    return { rerendering, undo, undoButtonDisabled, mode: state.mode.value };
   });
-  expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, mode: 'circular' });
+  expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, undoButtonDisabled: true, mode: 'circular' });
   await settleLive(page);
-  await history(page, 'undo');
+  // The button comes back when the rerender ends, with no other History change.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await settleLive(page);
   expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
 });
 
@@ -963,7 +968,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
   await showMode(page, 'linear');
   await check(page, 'switch to a mode without a Result');
   const oneResultFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
-  await save(page, oneResultFile);
+  await save(page, oneResultFile, { title: '' });
   await generate(page);
   await check(page, 'Linear Generate');
   await showMode(page, 'circular');
@@ -991,7 +996,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await check(page, `Redo ${step + 1}`);
   }
   const bothFile = info.outputPath('both.gbdraw-session.json.gz');
-  await save(page, bothFile, { again: true });
+  await save(page, bothFile, { again: true, title: '' });
 
   const fresh = await freshPage(browser);
   try {

@@ -873,7 +873,7 @@
         }
       },
       "expected": {
-        "error": "ParseError"
+        "error": "ValidationError"
       }
     }
   ]

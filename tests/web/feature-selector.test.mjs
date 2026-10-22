@@ -16,7 +16,8 @@ await writeFile(
 
 const {
   SPECIFIC_COLOR_QUALIFIER_PRESETS,
-  collectSpecificColorQualifierSuggestions,
+  collectFeatureQualifierNames,
+  specificColorQualifierSuggestions,
   exactRegexValue,
   resolveFeatureLabelSelector
 } = await import(pathToFileURL(join(tempDir, 'feature-selector.js')));
@@ -75,11 +76,11 @@ assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
 }
 
 {
-  const suggestions = collectSpecificColorQualifierSuggestions(
-    [
+  const suggestions = specificColorQualifierSuggestions(
+    collectFeatureQualifierNames([
       { qualifiers: { custom_tag: ['one'], color: ['#ff0000'] } },
       { selector: { qualifiers: { VendorKey: ['two'] } } }
-    ],
+    ]),
     [{ qual: 'rule_only' }, { qual: ' custom_tag ' }]
   );
   assert.equal(SPECIFIC_COLOR_QUALIFIER_PRESETS.includes('color'), true);

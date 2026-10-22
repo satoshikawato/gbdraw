@@ -21,17 +21,14 @@ class GcSkewGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        longest_record_len: int,
         track_height: float,
-        alignment_width: float,
         skew_config: GcSkewConfigurator,
         *,
-        normalize_length: bool,
+        sequence_width: float,
         start_x: float = 0,
         start_y: float = 0,
         gc_df: DataFrame | None = None,
         group_id: str = "gc_skew",
-        sequence_width: float | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         """
@@ -41,7 +38,6 @@ class GcSkewGroup:
         self.skew_group: Group = Group(id=group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
-        self.longest_record_len: int = longest_record_len
         self.skew_config: GcSkewConfigurator = skew_config
         self.group_id = group_id
         self.gb_record: SeqRecord = gb_record
@@ -49,26 +45,11 @@ class GcSkewGroup:
         self.step: int = self.skew_config.step
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.track_height: float = track_height
-        self.bool_normalize_length = normalize_length
-        self.sequence_width = sequence_width
-        self.alignment_width: float = (
-            float(sequence_width) if sequence_width is not None else alignment_width
-        )
-        self.generate_gc_df(gc_df)
-        self.normalize_length()
-        self.add_elements_to_group()
-
-    def normalize_length(self) -> None:
-        """
-        Normalizes the length of the genomic record relative to the longest record.
-        """
+        # The record's drawn axis width, from its placement.
+        self.sequence_width: float = float(sequence_width)
         self.record_len: int = len(self.gb_record.seq)
-        if self.sequence_width is not None:
-            self.genome_size_normalization_factor: float = 1.0
-        elif self.bool_normalize_length:
-            self.genome_size_normalization_factor = 1.0
-        else:
-            self.genome_size_normalization_factor = self.record_len / self.longest_record_len
+        self.generate_gc_df(gc_df)
+        self.add_elements_to_group()
 
     def generate_gc_df(self, gc_df: DataFrame | None = None) -> None:
         if gc_df is not None:
@@ -84,8 +65,7 @@ class GcSkewGroup:
             self.skew_group,
             self.skew_df,
             self.record_len,
-            self.alignment_width,
-            self.genome_size_normalization_factor,
+            self.sequence_width,
             self.track_height,
             self.start_x,
             self.start_y,

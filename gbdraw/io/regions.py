@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 import re
 from pathlib import PurePath, PureWindowsPath
@@ -13,6 +13,7 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
 
+from ..core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
 from ..core.record_metadata import _read_coord_map, _write_coord_map
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 from .record_select import reverse_records
@@ -20,7 +21,8 @@ from .record_select import reverse_records
 logger = logging.getLogger(__name__)
 
 _REGION_COORD_RE = re.compile(
-    r"(?P<start>\d+)(?:\.\.|-)(?P<end>\d+)(?::(?P<strand>rc|rev|reverse|minus|-))?$",
+    rf"(?P<start>{ASCII_NONNEGATIVE_INTEGER_PATTERN})(?:\.\.|-)(?P<end>{ASCII_NONNEGATIVE_INTEGER_PATTERN})"
+    r"(?::(?P<strand>rc|rev|reverse|minus|-))?$",
     re.IGNORECASE,
 )
 
@@ -70,14 +72,16 @@ def parse_region_spec(spec: str) -> RegionSpec:
         raise ValueError("Region spec is empty.")
 
     match = _REGION_COORD_RE.search(text)
-    if not match or match.end() != len(text):
+    start = end = None
+    if match and match.end() == len(text):
+        start = parse_ascii_nonnegative_integer(match.group("start"))
+        end = parse_ascii_nonnegative_integer(match.group("end"))
+    if match is None or start is None or end is None:
         raise ValueError(
             "Invalid region spec: '{0}'. Expected format: record_id:start-end[:rc], "
             "#index:start-end[:rc], or file:record_selector:start-end[:rc].".format(text)
         )
 
-    start = int(match.group("start"))
-    end = int(match.group("end"))
     if start < 1 or end < 1:
         raise ValueError(f"Region coordinates must be >= 1: '{text}'.")
 
@@ -112,11 +116,12 @@ def parse_region_spec(spec: str) -> RegionSpec:
     if record_selector:
         if record_selector.startswith("#"):
             index_str = record_selector[1:].strip()
-            if not index_str.isdigit():
+            number = parse_ascii_nonnegative_integer(index_str)
+            if number is None:
                 raise ValueError(
                     f"Invalid record index in region spec '{text}'. Use #<number>:start-end."
                 )
-            record_index = int(index_str) - 1
+            record_index = number - 1
             if record_index < 0:
                 raise ValueError(
                     f"Record index must be >= 1 in region spec '{text}'."
@@ -214,15 +219,11 @@ def _crop_record_to_region(
     return new_record
 
 
-def apply_region_specs(
+def assign_region_specs(
     records: Sequence[SeqRecord],
     specs: Sequence[RegionSpec],
-    *,
-    log: logging.Logger | None = None,
-) -> list[SeqRecord]:
-    if not specs:
-        return list(records)
-    log = log or logger
+) -> dict[int, RegionSpec]:
+    """Return the region spec that applies to each record index."""
 
     total = len(records)
     selectorless = [
@@ -336,27 +337,76 @@ def apply_region_specs(
                 )
             assignments[idx] = spec
 
-    new_records: list[SeqRecord] = []
-    for idx, record in enumerate(records):
-        assigned = assignments.get(idx)
-        if not assigned:
-            new_records.append(record)
-            continue
-        log.info(
-            "INFO: Cropping record %s to %s..%s%s.",
-            record.id,
-            assigned.start,
-            assigned.end,
-            " (reverse complement)" if assigned.reverse_complement else "",
-        )
-        new_records.append(_crop_record_to_region(record, assigned, log=log))
+    return assignments
 
-    return new_records
+
+def crop_record_to_region(
+    record: SeqRecord,
+    spec: RegionSpec,
+    *,
+    log: logging.Logger | None = None,
+) -> SeqRecord:
+    """Crop one record to ``spec``, then reverse-complement the crop when it says so."""
+
+    log = log or logger
+    log.info(
+        "INFO: Cropping record %s to %s..%s%s.",
+        record.id,
+        spec.start,
+        spec.end,
+        " (reverse complement)" if spec.reverse_complement else "",
+    )
+    return _crop_record_to_region(record, spec, log=log)
+
+
+def apply_region_specs(
+    records: Sequence[SeqRecord],
+    specs: Sequence[RegionSpec],
+    *,
+    log: logging.Logger | None = None,
+) -> list[SeqRecord]:
+    if not specs:
+        return list(records)
+    assignments = assign_region_specs(records, specs)
+    return [
+        crop_record_to_region(record, assignments[idx], log=log)
+        if idx in assignments
+        else record
+        for idx, record in enumerate(records)
+    ]
+
+
+def crop_then_reverse_records(
+    records: Sequence[SeqRecord],
+    specs: Sequence[RegionSpec],
+    reverse: Sequence[bool],
+    *,
+    log: logging.Logger | None = None,
+) -> tuple[list[SeqRecord], frozenset[int]]:
+    """Crop each record a spec selects, then reverse-complement it (OV-1279).
+
+    The one owner of that order: a record's ``reverse`` flag applies after its
+    crop, as the spec's own ``:rc`` does, so both spellings draw one window and
+    asking for both reverses once. A record no spec selects is only reversed.
+    Returns the records and the indexes of the cropped ones.
+    """
+
+    assignments = assign_region_specs(records, specs) if specs else {}
+    oriented = [
+        crop_record_to_region(record, replace(spec, reverse_complement=spec.reverse_complement or flag), log=log)
+        if (spec := assignments.get(index)) is not None
+        else reverse_records((record,), flag, log=log)[0]
+        for index, (record, flag) in enumerate(zip(records, reverse, strict=True))
+    ]
+    return oriented, frozenset(assignments)
 
 
 __all__ = [
     "RegionSpec",
     "apply_region_specs",
+    "assign_region_specs",
+    "crop_record_to_region",
+    "crop_then_reverse_records",
     "parse_region_spec",
     "parse_region_specs",
 ]

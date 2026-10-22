@@ -53,15 +53,16 @@ from tools.refresh_gallery_sessions import (
     VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
     _gallery_file_transaction,
-    _canonicalize_orthogroup_resources,
     _public_gallery_session_files,
     _refresh_one_session,
+    _reopen_for_publication,
     _refresh_session_paths,
     _session_artifact_measurements,
     _session_path,
     _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
     _validate_staged_gallery_session,
+    stored_protein_result_differences,
 )
 
 
@@ -258,59 +259,76 @@ def test_session_artifact_measurements_report_component_bytes(
         assert measurements[key] > 0
 
 
-def test_gallery_refresh_canonicalizes_legacy_orthogroup_resource_once() -> None:
-    legacy_payload = {
-        "schema": 2,
-        "kind": "orthogroupResult",
-        "value": {
-            "type": "OrthogroupResult",
-            "fields": {
-                "orthogroups": {},
-                "memberByProteinId": {},
-                "namesByOrthogroupId": {},
-                "descriptionsByOrthogroupId": {},
-                "nameCandidatesByOrthogroupId": {},
-                "confidenceByOrthogroupId": {},
-                "rbhOrthogroups": {},
-                "orthologEdgesByOrthogroupId": {},
-                "orthologPathsByOrthogroupId": {},
-                "relatedEdgesByOrthogroupId": {},
-                "scopeByOrthogroupId": {},
-                "sourceRecordIndexByOrthogroupId": {},
-            },
-        },
-    }
-    published = json.dumps(legacy_payload, separators=(",", ":")).encode("utf-8")
-    resource = {
-        "kind": "orthogroup-result",
-        "name": "orthogroups.json",
-        "type": "application/json",
-        "size": len(published),
-        "lastModified": 0,
-        "encoding": "base64",
-        "data": base64.b64encode(published).decode("ascii"),
-    }
-    session = {
+def _stored_protein_session(cli_args: list[str] | None) -> dict[str, object]:
+    session: dict[str, object] = {
         "renderRequest": {
             "comparisons": [
-                {
-                    "kind": "orthogroupResult",
-                    "resourceId": "orthogroups",
-                    "encoding": "canonicalJson",
-                }
+                {"kind": "precomputedProteinComparison", "resourceId": "table-1"},
+                {"kind": "orthogroupResult", "resourceId": "groups"},
+                {"kind": "generatedProteinComparison", "mode": "none", "pairs": [], "settings": {}},
             ]
         },
-        "resources": {"orthogroups": resource},
+        "resources": {"table-1": {"data": "x"}, "groups": {"data": "y"}, "record-1": {"data": "z"}},
+        "modes": {"linear": {"config": {"losat": {"blastp": {"mode": "orthogroup"}}}}},
     }
+    if cli_args is not None:
+        session["cliInvocation"] = {"schema": 1, "mode": "linear", "args": cli_args}
+    return session
 
-    assert _canonicalize_orthogroup_resources(session) == 1
-    canonical = base64.b64decode(resource["data"], validate=True)
-    canonical_payload = json.loads(canonical)
-    assert canonical_payload["schema"] == 3
-    assert canonical_payload["kind"] == "orthogroupResult"
-    assert canonical_payload["value"]["type"] == "OrthogroupGraphResult"
-    assert resource["size"] == len(canonical)
-    assert _canonicalize_orthogroup_resources(session) == 0
+
+def test_refresh_reopens_stored_protein_results_in_the_declared_mode() -> None:
+    """A refresh computes stored protein results again (D-65, OV-1031, OV-1048).
+
+    The stored comparisons and their resources leave the request, and the
+    pipeline marker and the Web draft both take the mode of the recorded CLI
+    invocation, so the Web rebuilds in the mode the Gallery declares.
+    """
+
+    session = _stored_protein_session(
+        ["--losat", "losatp", "--losatp_mode", "collinear", "--gbk", "a.gb", "b.gb"]
+    )
+    gallery_path = Path("hepatoplasmataceae_collinear.gbdraw-session.json.gz")
+
+    assert _reopen_for_publication(gallery_path, session) == 1
+    assert session["renderRequest"]["comparisons"] == [
+        {"kind": "generatedProteinComparison", "mode": "collinear", "pairs": [], "settings": {}}
+    ]
+    assert set(session["resources"]) == {"record-1"}
+    assert session["modes"]["linear"]["config"]["losat"]["blastp"]["mode"] == "collinear"
+    assert _reopen_for_publication(gallery_path, session) == 0
+
+    web_saved = _stored_protein_session(None)
+    assert _reopen_for_publication(gallery_path, web_saved) == 1
+    assert web_saved["renderRequest"]["comparisons"][0]["mode"] == "orthogroup"
+
+    test_input = _stored_protein_session(None)
+    assert _reopen_for_publication(TEST_INPUT_SESSION_ROOT / TEST_INPUT_SESSION_FILES[0], test_input) == 0
+
+    # A public Gallery Session that shares the test input's file name is
+    # refreshed like any other: the exemption is the test input folder's.
+    same_name = _stored_protein_session(None)
+    assert _reopen_for_publication(gallery_path.parent / TEST_INPUT_SESSION_FILES[0], same_name) == 1
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "session_path",
+    [example.session_path for example in EXAMPLES],
+    ids=lambda path: path.name,
+)
+def test_gallery_protein_results_equal_a_rebuild_from_the_raw_cache(
+    session_path: Path,
+) -> None:
+    """The first Generate draws what a changed setting would compute (OV-1031).
+
+    The Web reuses a Session's stored protein results only while its filters
+    are unchanged; any other value computes them from the raw LOSATP cache.
+    A stored result older than the current code would make a filter round
+    trip change the drawing.
+    """
+
+    session = load_session(session_path)
+    assert stored_protein_result_differences(session) == []
 
 
 def test_current_session_catalog_structure_rejects_duplicate_payloads(
@@ -913,10 +931,13 @@ def test_staged_gallery_validator_allows_custom_extra_spacing(
         )
 
 
-def test_refresh_leaves_a_test_input_pipeline_unresolved(tmp_path: Path) -> None:
+def test_refresh_leaves_a_test_input_pipeline_unresolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # The Generate-pipeline specs load this input, so its orthogroup pipeline
     # stays; only public Gallery Sessions store resolved comparisons.
     name = TEST_INPUT_SESSION_FILES[0]
+    monkeypatch.setattr(refresh_gallery_sessions_module, "TEST_INPUT_SESSION_ROOT", tmp_path)
     source = tmp_path / name
     destination = tmp_path / "refreshed" / name
     destination.parent.mkdir()
@@ -1321,7 +1342,16 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
     with pytest.raises(ValueError, match="resolved protein comparison results"):
         _validate_staged_gallery_session(session_path, with_protein_mode("collinear"))
     _validate_staged_gallery_session(
-        tmp_path / TEST_INPUT_SESSION_FILES[0], with_protein_mode("orthogroup")
+        TEST_INPUT_SESSION_ROOT / TEST_INPUT_SESSION_FILES[0],
+        with_protein_mode("orthogroup"),
+    )
+    with pytest.raises(ValueError, match="resolved protein comparison results"):
+        _validate_staged_gallery_session(
+            session_path.parent / TEST_INPUT_SESSION_FILES[0],
+            with_protein_mode("orthogroup"),
+        )
+    _validate_staged_gallery_session(
+        session_path, with_protein_mode("none")
     )
 
     stale_version = dict(session, version=33)
@@ -1339,8 +1369,10 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
 ) -> None:
     first = tmp_path / "first.gbdraw-session.json"
     second = tmp_path / "second.gbdraw-session.json"
-    first.write_text("first-original", encoding="utf-8")
-    second.write_text("second-original", encoding="utf-8")
+    first_original = '{"createdAt":"first-original"}'
+    second_original = '{"createdAt":"second-original"}'
+    first.write_text(first_original, encoding="utf-8")
+    second.write_text(second_original, encoding="utf-8")
 
     monkeypatch.setattr(refresh_gallery_sessions_module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(refresh_gallery_sessions_module, "SESSION_ROOT", tmp_path)
@@ -1359,7 +1391,7 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
         assert destination_path is not None
         if session_path == second:
             raise RuntimeError("synthetic render failure")
-        destination_path.write_text("first-refreshed", encoding="utf-8")
+        destination_path.write_text('{"createdAt":"first-refreshed"}', encoding="utf-8")
 
     monkeypatch.setattr(
         refresh_gallery_sessions_module,
@@ -1377,8 +1409,8 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
             (first.name, second.name)
         )
 
-    assert first.read_text(encoding="utf-8") == "first-original"
-    assert second.read_text(encoding="utf-8") == "second-original"
+    assert first.read_text(encoding="utf-8") == first_original
+    assert second.read_text(encoding="utf-8") == second_original
 
 
 def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
@@ -1980,7 +2012,9 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
         "expected_hidden_members",
     ),
     [
-        ("hepatoplasmataceae_orthogroup", 577, 2566, 0),
+        # 2565: the current derivation leaves record-2 f2b985ad0 out of the og_570 local-paralog
+        # cluster that older code stored (OV-1031 refresh from the raw cache).
+        ("hepatoplasmataceae_orthogroup", 577, 2565, 0),
         ("majanivirus_orthogroup", 152, 826, 0),
     ],
 )
@@ -2401,3 +2435,42 @@ def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources()
         "first.gbk",
         "second.gbk",
     ]
+
+
+def test_gallery_session_refresh_keeps_the_session_created_at(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tracked = tmp_path / "kept.gbdraw-session.json.gz"
+    original = {"format": "gbdraw-session", "createdAt": "2026-01-02T03:04:05+00:00", "title": "old"}
+    tracked.write_bytes(gzip.compress(json.dumps(original).encode("utf-8"), mtime=0))
+
+    monkeypatch.setattr(refresh_gallery_sessions_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(refresh_gallery_sessions_module, "SESSION_ROOT", tmp_path)
+    monkeypatch.setattr(refresh_gallery_sessions_module, "_session_path", lambda name: tmp_path / name)
+    monkeypatch.setattr(refresh_gallery_sessions_module, "load_session", lambda path: {"path": str(path)})
+    monkeypatch.setattr(
+        refresh_gallery_sessions_module, "_validate_staged_gallery_session", lambda *_args, **_kwargs: None
+    )
+    refresh_count = 0
+
+    def fake_refresh(session_path: Path, *, destination_path: Path | None = None) -> None:
+        # Each replay stamps the time it ran, as the CLI Session writer does.
+        nonlocal refresh_count
+        refresh_count += 1
+        assert destination_path is not None
+        refreshed = {**original, "createdAt": f"2026-10-19T00:00:0{refresh_count}+00:00", "title": "new"}
+        destination_path.write_bytes(
+            gzip.compress(json.dumps(refreshed).encode("utf-8"), mtime=refresh_count)
+        )
+
+    monkeypatch.setattr(refresh_gallery_sessions_module, "_refresh_one_session", fake_refresh)
+
+    refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
+    first_run = tracked.read_bytes()
+    refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
+
+    refreshed = json.loads(gzip.decompress(first_run))
+    assert refreshed["createdAt"] == original["createdAt"]
+    assert refreshed["title"] == "new"
+    assert tracked.read_bytes() == first_run

@@ -5,6 +5,7 @@ import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '.
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';
+import { t, tn } from '../utils/i18n.js';
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 /** @import { LinearSeq } from '../state.js' */
 
@@ -171,26 +172,27 @@ export const createLosatSettings = ({ state }) => {
   const losatAutoPairWorkers = computed(() => losatThreadPlan.value.autoPairWorkers);
   const losatPairWorkerOptions = computed(() => losatEstimatedJobCount.value === 0 ? [] : appendRequestedIntegerOption(
     createPositiveIntegerOptions(losatMaxPairWorkers.value).map((option) => ({
-      ...option, label: `${option.value} ${option.value === '1' ? 'run' : 'runs'}`
+      ...option, label: tn(Number(option.value), '{count} parallel run', '{count} parallel runs')
     })),
     losatExecution.parallelWorkers,
     losatThreadPlan.value.pairWorkers
   ));
 
+  // The shown name of the mode Auto resolves to (UI text, compared nowhere).
   const losatEffectiveExecutionMode = computed(() => {
     const raw = String(losatExecution.executionMode || 'auto').trim().toLowerCase();
-    if (raw === 'serial') return 'serial';
-    if (raw === 'threaded') return 'threaded';
+    if (raw === 'serial') return t('serial');
+    if (raw === 'threaded') return t('threaded');
     const threadingState = String(state?.losatThreadingStatus?.value?.state || '').trim().toLowerCase();
-    if (threadingState && threadingState !== 'available' && threadingState !== 'running') return 'serial';
-    if (losatMaxPairWorkers.value > 1 || losatEffectiveThreadsPerJob.value > 1) return 'threaded if useful';
-    return 'serial';
+    if (threadingState && threadingState !== 'available' && threadingState !== 'running') return t('serial');
+    if (losatMaxPairWorkers.value > 1 || losatEffectiveThreadsPerJob.value > 1) return t('threaded if useful');
+    return t('serial');
   });
 
   // Threaded stays strict (PD-OI-018); the option says when this browser
   // environment cannot run it.
   const losatThreadedOptionLabel = computed(() => (
-    losatThreadingPrecondition().state === 'available' ? 'Threaded' : 'Threaded (unavailable here)'
+    losatThreadingPrecondition().state === 'available' ? t('Threaded') : t('Threaded (unavailable here)')
   ));
 
   /** @param {LosatSettingsDrawing} drawing */

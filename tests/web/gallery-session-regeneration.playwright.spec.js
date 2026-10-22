@@ -199,3 +199,70 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   expect(regenerated.hasCoreColor).toBe(true);
   expect(regenerated.hasCustomRecordLabel).toBe(true);
 });
+
+// OV-1049: a fresh protein analysis must not make the next unrelated Generate rebuild the comparison stages.
+// The analysis writes the pairwise tables that the next request reads from the committed Session, so each table
+// has to keep one resource identity (resource id and Worker cache token) from the analysis to the next request.
+test('the Generate after a fresh protein analysis rebuilds only what its own change needs', async ({ page }) => {
+  test.setTimeout(480000);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.addInitScript(() => {
+    window.__OV1049_DIAGNOSTICS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...(window.__GBDRAW_TEST_HOOKS__ || {}),
+      onSessionLifecycleEvent: (event) => {
+        if (event?.name === 'python-diagnostics') window.__OV1049_DIAGNOSTICS__.push(event.metrics || {});
+      }
+    };
+  });
+  await openApp(page, { waitForPalette: false });
+  const imported = await evaluateWithRetainedPromise(page, async () => {
+    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+    const file = new File([await response.text()], 'BGC0000708-BGC0000713.gbdraw-session.json', {
+      type: 'application/json'
+    });
+    return (await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } }))?.status;
+  });
+  expect(imported).toBe('ok');
+
+  const setInput = async (selector, value) => {
+    const input = page.locator(selector).first();
+    await input.evaluate((element) => {
+      for (let details = element.closest('details'); details; details = details.parentElement?.closest('details')) {
+        details.open = true;
+      }
+    });
+    await input.fill(String(value));
+    await input.dispatchEvent('change');
+  };
+  // The render-stage builds of one Generate, by stage name.
+  const generate = () => evaluateWithRetainedPromise(page, async () => {
+    window.__OV1049_DIAGNOSTICS__.length = 0;
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    const metrics = window.__OV1049_DIAGNOSTICS__.at(-1) || {};
+    return {
+      result,
+      errorLog: app.errorLog,
+      builds: Object.fromEntries(Object.entries(metrics)
+        .filter(([name]) => name.startsWith('renderStageBuild:'))
+        .map(([name, count]) => [name.slice('renderStageBuild:'.length), count]))
+    };
+  });
+  const ok = (run) => {
+    expect(run.result).toEqual({ status: 'ok' });
+    expect(run.errorLog).toBeNull();
+    return run.builds;
+  };
+
+  ok(await generate());
+  await setInput('input[aria-label="Plot Title"]', 'Title A');
+  const withoutAnalysis = ok(await generate());
+  await setInput('input[aria-label="Linear comparison minimum identity"]', '50');
+  const freshAnalysis = ok(await generate());
+  // The identity filter draws other comparison rows, so this Generate rebuilds the comparison stages.
+  expect(freshAnalysis.comparison_rows).toBeGreaterThan(0);
+  await setInput('input[aria-label="Plot Title"]', 'Title B');
+  const afterAnalysis = ok(await generate());
+  expect(afterAnalysis).toEqual(withoutAnalysis);
+});

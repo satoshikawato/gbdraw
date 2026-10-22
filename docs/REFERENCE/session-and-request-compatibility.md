@@ -2,16 +2,38 @@
 
 # Session and request compatibility
 
-Current writers emit session version 47 and canonical `renderRequest` schema 9.
+Current writers emit session version 48 and canonical `renderRequest` schema 9.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 47 | 27–33, 39–42, 44, 46, and 47 |
+| gbdraw session | 48 | 27–33, 39–42, 44, and 46–48 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, 46, and 47 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–48 |
+
+Session 48 stores the saved protein results (LOSATP tables, Similarity groups,
+Collinear blocks) of a reverse-complemented Linear record in the record's
+search frame, as it stores comparison tables. Sessions 46 and 47 stored them
+after the reverse complement. A replay of an older Session draws as before,
+and a re-save or `upgrade_session_document()` writes Session 48. A saved result
+that matches neither strand of its record is still drawn, but the Session
+cannot be saved as 48 (`SessionConversionError`); generate the comparison
+again.
+
+Session 48 also records which rows, colors, and Blacklist words each file card
+of the Web app loaded, so **Remove** on the card takes back only that file's
+effect. In an older Session, Whitelist and Priority rows read as rows added by
+hand, and Remove keeps them; Specific rules rows that came from a rules file
+were marked so already, and Remove takes them back. Rows that a built-in
+**Preset scheme** added count as yours, and Remove keeps them; an older Session
+stored them like a rules file's rows, so there Remove takes them back. In a Session 48 that the
+CLI or the Python API writes, the settings read from its color, priority,
+and whitelist files count as those files' cards. `--label_blacklist` takes
+keywords, so a CLI Session records it as keywords only; a CLI Session written
+by gbdraw 0.13.0 stored an existing path given to it as a Blacklist File, and a
+CLI replay keeps that card.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 and the Session to 47,
+readable. Current saves promote that request to schema 9 and the Session to 48,
 and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
@@ -41,7 +63,7 @@ at Load, Generate and any re-render of the stored request (label reflow,
 alignment, record transform) show "An input value is invalid"
 (`INPUT_INVALID`, field `schema`).
 
-Sessions 46 and 47 keep the Web app's settings and edits of each diagram mode in its
+Sessions 46 to 48 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
 
 - `config`: the draft configuration.
@@ -49,13 +71,13 @@ own slice, `modes.circular` and `modes.linear`:
 - `editorState`: the Legend edits and per-feature strokes.
 - `ui`: the mode's layout, padding, and pending palette.
 
-A field missing from a slice reads as that mode's default. A Session 46 or 47 rejects
+A field missing from a slice reads as that mode's default. A Session 46 to 48 rejects
 the top-level `config` and `features` of Sessions 44 and older. Reading an
 older Session splits its draft into the two slices. A Session that the CLI or
 the Python API writes from a request has no slices; a CLI re-save keeps or
 splits the source's draft.
 
-Session 47 stores each slice's Legend color and stroke edits
+Sessions 47 and 48 store each slice's Legend color and stroke edits
 (`editorState.legend.colorOverrides` and `strokeOverrides`) under the row's
 key: the caption gbdraw drew for the row (`originalCaption`), not the name the
 row shows. Two rows can then show one name and keep their own edits. Session 46
@@ -70,7 +92,7 @@ kept; a stroke takes its color and its width each from the last edit that sets
 it. The Web app, a CLI re-save, and `upgrade_session_document()` read
 these edits the same way.
 
-Sessions 46 and 47 store the per-feature edits (Feature visibility, Label visibility,
+Sessions 46 to 48 store the per-feature edits (Feature visibility, Label visibility,
 and label text) in each slice's `features.featureOverrides`. There is one row
 per original-source feature, named by `recordKey` and `biologicalFeatureId`, as
 in the request. Feature placement drafts and the `featureIdentity` targets of
@@ -132,7 +154,7 @@ the features they name:
     `hash=` annotation targets of these Sessions hold source hashes or values
     a user typed. They load as saved and now match the feature with that
     source hash on every record.
-  - A label whitelist row that **Whitelist only** wrote for a feature without
+  - A label whitelist row that the former **Whitelist only** action wrote for a feature without
     a unique qualifier holds its rendered ID and is not renamed either.
 - A catalog of schema 3 or 4 reads as schema 5 without selector values until
   the next Generate. A feature whose rendered ID carries its source hash was
@@ -162,7 +184,7 @@ and two readings keep older files usable:
   `Coverage` row, and the edits saved for the second row are not used. Two
   GC content tracks always have equal colors.
 
-A Session 46 or 47 can also hold `otherModeResult`: the Result set of the diagram
+A Session 46 to 48 can also hold `otherModeResult`: the Result set of the diagram
 mode that the top-level set does not draw (Circular or Linear), written when
 both modes have a Result. Its `renderRequest`, `results`, `editorState`
 (`featureCatalog`, `alignmentResetReceipt`, and the Result's generated Legend
@@ -183,9 +205,8 @@ with a default, not use, or read with another meaning:
   A label, file name, ID or other free text is named by its place only. A
   configuration file loads over the current drawing, so a settings group
   (`form`, `adv`, `losat` or `circularConservation`) that is not an object, a
-  value of another kind inside one (except the values kept as stored, below),
-  and `rules` or `whitelist` that is not a list (such as `"form": 5`) are not
-  used: the drawing keeps its value, and
+  value of another kind inside one, and `rules` or `whitelist` that is not a
+  list (such as `"form": 5`) are not used: the drawing keeps its value, and
   the row names that value or says that the drawing keeps its current value;
 - Legend positions outside the diagram mode in the saved layout preferences
   or a saved Result, with the position used;
@@ -194,7 +215,26 @@ with a default, not use, or read with another meaning:
 - per-feature edits and `hash=` values as listed above;
 - joined or dropped table rows;
 - Depth rows of the drawing's track stack that name a Depth series the drawing
-  does not have; they are turned off and no longer name it;
+  does not have; they are turned off and no longer name it. A track stack
+  that cannot be read is read as the default stack. A slot value that cannot
+  be used is left unset or read as its default, and an axis index outside the
+  stack is read as the nearest place in it;
+- Legend and stroke edits, original Legend colors and the Legend order of a
+  saved Result that cannot be read;
+- input file entries (a binding or a stored file) that name a file the Session
+  does not hold or cannot read. A comparison sequence file or a Depth file
+  keeps its place empty, so no later file changes series or track. A Circular
+  comparison series whose BLAST table cannot be read is left out with its
+  sequence files, with a row that names the series; the other series keep
+  their own files and names (a Session 27–30 draft without series names its
+  rings by `labels`, by place, so the left-out ring's label goes with it). A
+  Linear comparison whose BLAST TSV cannot be read loads without that file,
+  as after removing the file from its pair card;
+- parts of the Session file that Load cannot read, each named by its place:
+  the saved Results, the feature list and edits of the saved diagram, the
+  stored input files, the saved diagram of the other mode, or the settings of
+  a drawing; and fields that a Session of that version never held, such as
+  `modes` in a Session older than version 46 or an unknown top-level key;
 - feature information or comparison match sequences that cannot be restored.
 
 Rows of per-feature edits, Feature visibility edits, `hash=` values, feature
@@ -207,20 +247,25 @@ mode's settings in its own place, and each place is a row
 (`modes.circular.config.adv.label_rendering`, `modes.linear.config.adv.label_rendering`).
 
 The dialog shows at most 12 lines, the last one with the number of the rest,
-and says that Save Session afterwards writes the current format. It lists the
-readings named here. Other old or invalid values are still changed without a
-row, kept as stored, or refused, as before: for example, a track stack row's
-values and a Legend color edit the app does not accept are changed without a
-row, an unknown text value such as a track type is kept, a configuration
-file's Legend position outside its mode reads as the mode's default, and a
-configuration file drops a key it does not know.
+and says that Save Session afterwards writes the current format. Load reads
+each version of a Session against the fields and values that version can hold,
+and lists every value it drops or replaces. One reading still keeps a value as
+stored: an unknown text value of `track_type`, `scale_style`, `labels_mode` or
+`show_labels_linear`, in a Session or a configuration file, because the
+request format gives them no fixed list of values to check against.
 
 - **Load** loads the file. **Cancel** changes nothing. The file itself is
   never changed.
 - No dialog opens for a reading that keeps the meaning (an older format,
-  capitals, outer spaces, an alias, a number stored as its text), or for a
-  value that had no effect on the figure: a dropped cache entry that the next
-  comparison computes again, a Session 46 Legend edit that a later edit of the
+  capitals, outer spaces, an alias, a number stored as its text, or a blank
+  number, such as a cleared number field, which reads as the field's default
+  in a Session and in a configuration file), a name that an earlier gbdraw
+  wrote and that the Session now keeps elsewhere, or a value that had no
+  effect on the figure: a cache that the next comparison or Generate computes
+  again (the LOSAT caches, the protein identity manifest), run notices and
+  annotation warnings that no longer match the saved Results, an empty value
+  (`null`, `[]` or `{}`) of an optional part, a stored input file that nothing
+  names, a Session 46 Legend edit that a later edit of the
   same row overwrote, a pending palette that Instant Preview drops, a name or
   description edit of a similarity group the saved Result does not have, a
   setting of the other diagram mode, view state such as zoom, or a value
@@ -228,7 +273,9 @@ configuration file drops a key it does not know.
   every Gallery Session, opens none.
 - A Depth series without a Depth file loads as saved, and so does a Depth row
   the app keeps when you remove a Depth file (a row with its own size or
-  position).
+  position). Save Session before the first Generate of a mode leaves such an
+  enabled row out of the saved render request, as it draws nothing; the
+  Session's settings keep the row, and Generate still stops on its row issue.
 - The **Replace the current work?** question, asked when there is unsaved
   work, still comes first, before you choose the file. The question about a
   Session font that is not available (see [Fonts](#fonts)) comes after
@@ -248,15 +295,29 @@ instead of refused, and each repair is a row in the dialog:
 - an unreadable entry of a list is dropped;
 - a part that cannot be read is left out with the settings inside it, or
   replaced by its default when it has one;
-- a reference to a file or record the Session does not hold is left out.
+- a reference to a file or record the Session does not hold is left out. A
+  saved comparison that the **Comparisons** card keeps read-only or asks
+  about keeps its record references, which that card reports.
+
+A font size of 0 or less in a Session (feature labels, Legend, scale and
+ruler labels, ticks, definition text, plot title, GC content and Depth ticks,
+or a Linear Record Labels style such as Name / Species) reads as Auto, the
+default size, with the row `Settings: the value "0" (<place>) cannot be used;
+its default is used.` `gbdraw render --session`, `gbdraw circular --session`,
+`gbdraw linear --session` and the Python API read it the same way and print
+that row as a `WARNING:` line. **Generate**, the CLI size options and the
+Python options still refuse such a size.
 
 When the saved diagram's settings cannot be read at all (for example, their
 `schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
-of version 42, 44, 46 or 47 saved by the web app. A row says that the saved
+of version 42, 44, 46, 47 or 48 saved by the web app. A row says that the saved
 Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
-are left out. A Session of version 42, 44 or 47 written by the CLI or the
+are left out. A Session of version 42, 44, 47 or 48 written by the CLI or the
 Python API, and a Session of version 31–41, has no saved settings that can be
-read without them, so it is refused. When the settings of the
+read without them, so it is refused; so is a Session of version 31–41 whose
+request names a record file the Session does not hold. A `null` request
+reads as a missing one in a file that holds saved Results or a feature list;
+in a file without them it marks a settings-only Session. When the settings of the
 other diagram mode's saved result cannot be read, that diagram and its Results
 are left out, with a row.
 
@@ -268,38 +329,44 @@ and the Python API refuse it. Eight search-scope spellings that only the web
 app accepted (`adjacent_pairs`, `adjacent_pair`, `neighbor_pairs`,
 `neighboring_pairs`, `all_records`, `all_pairs`, `all_record_pairs`, `global`)
 are no longer read: in the saved diagram's settings, a generated comparison
-that holds one is dropped, with a row; in a Session's comparison settings, Load
-refuses the file, as before. A file that holds `top1` or `legacy` now loads.
+that holds one is dropped, with a row; in a Session's comparison settings, the
+default is used, with a row. A file that holds `top1` or `legacy` now loads.
+
+When a part of a Session other than its settings cannot be read, Load drops
+that part and lists it. A Result that stays but whose feature information
+cannot be restored keeps its SVG preview, and **Generate** restores the
+feature information. Only the cases below stop a Load.
 
 The Web app refuses these files and shows an error instead:
 
 - A file that is not JSON, including a broken gzip file and text that is not
   UTF-8.
 - A file that is neither a gbdraw Session nor a configuration file, including
-  the development-only Sessions 34–38, 43 and 45 and request schemas 3 and 4.
+  a Session without its `format` or `version` and request schemas 3 and 4.
 - A Session of version 26 or older (gbdraw 0.11.0 or older, or gbdraw.app
   before 0.12.0). The error says that an older gbdraw saved it.
-- A Session version or request schema newer than this reader.
+- A Session of a version this reader does not read, such as the
+  development-only Sessions 34–38, 43 and 45. The error names the version and
+  the versions this gbdraw reads.
+- A Session version or request schema newer than this reader. For a Session,
+  the error names its version and the newest version this gbdraw reads.
 - A file larger than 200 MB, or larger than 512 MB after decompression.
 - A gzip file opened in a browser without gzip decompression, or any file in
   a browser without module Workers. A browser feature or Worker that fails
   during the Load also stops it with an error.
 - A file with an unsafe name (`__proto__`, `constructor`, `prototype`).
-- A file whose content does not read as its version: for example an unknown
-  key in a Session drawing's `adv`, a retired setting name in a Session, a
-  Linear track layout, label placement, Linear Accession or Length /
-  Coordinates visibility or Circular multi-record size mode the app does not
-  know, a shape the app does not know for a feature type of the default
-  feature list, an arrow ratio out of
-  range, a missing or unknown resource, a track stack that does not read, or a
-  saved Result that does not pass its checks. Load refuses these before it
-  asks anything or changes anything, as it refused them before. It does not
-  refuse a file it loaded before: a feature shape or Linear Accession or
-  Length / Coordinates visibility that is not text keeps the drawing's value,
-  and a shape the app does not know for another feature type is dropped; the
-  dialog lists each. A configuration file with older track stacks and a
-  Session older than version 44 still refuse a visibility that is not text,
-  as before.
+- A file from which Load restores nothing: every part of its content that it
+  holds (settings, the saved diagram, Results, input files, edits or caches)
+  would be dropped or replaced by its default. A settings-only Session whose
+  `modes` is not an object, or whose settings hold nothing or were all
+  dropped, is such a file, and so is a Session of version 31–41, or one of
+  version 42, 44, 47 or 48 written by the CLI or the Python API, whose saved
+  settings cannot be read. A Session of version 27–30 that holds only its
+  `format` and `version` loads.
+
+Load refuses these before it asks anything or changes anything. Load does not
+refuse a file it loaded before. **Save Session** still refuses what it refused
+before.
 
 Do not change a version number, resource hash, or runtime binding by hand;
 changing metadata does not migrate its content.
@@ -310,6 +377,11 @@ A current session embeds its input resources, normalized settings, the last
 committed render request and generated Result of each diagram mode, and
 supported editor and comparison state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
+
+Each diagram mode keeps its own feature label style, **Label Line** and
+**Label Protection** (`--label_line`, `--label_protection`). A Session saved
+before they existed loads with each mode's defaults: Linear Underline and Box,
+Circular None and None.
 
 An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as
 `sha256:<hex>` or as bare hex. gbdraw does not add one. The web app keeps it
@@ -343,12 +415,12 @@ each matched item's offset into the new automatic layout for the same diagram;
 it does not pin an absolute page position. If the source, selected region,
 record set, or layout no longer matches a moved item, Generate keeps the saved
 Result and asks for that item's position reset, **Reset Layout**, or matching
-settings. Preview search placement and Layout edit hints are not saved. Keep
-the Session when browser positioning must be reproduced; a raw Python render
-request alone does not contain those manual positions. Session version 40
-files that unreleased builds of early August 2026 saved recorded moved items
-only in the drawing: Load shows them where they were, and Generate lays them
-out automatically.
+settings. Preview search placement, whether the search bar is hidden, and
+Layout edit hints are not saved. Keep the Session when browser positioning must
+be reproduced; a raw Python render request alone does not contain those manual
+positions. Session version 40 files that unreleased builds of early August 2026
+saved recorded moved items only in the drawing: Load shows them where they
+were, and Generate lays them out automatically.
 
 Fresh CLI sessions, and sessions that the Python API saves, omit `config`
 because they have no independent Web draft. Web initializes their settings from
@@ -375,9 +447,7 @@ Which records Web draws from a CLI session depends on the request:
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or
-  `presentation.reverseComplement`, as Web Save does. A crop taken after
-  `--reverse_complement` is written as the same span in source coordinates.
-  Each Linear row takes its crop and orientation from the request, so
+  `presentation.reverseComplement`, as Web Save does. Each Linear row takes its crop and orientation from the request, so
   **Generate Diagram** draws the record the CLI drew.
 - A cropped or reversed record of a Circular batch or grid, the records of a
   file that a Circular batch or grid draws only partly, and every record of an
@@ -412,7 +482,11 @@ A CLI Linear Session written without `-b` or `--losat` commits only a disabled
 protein pipeline (mode `none`, no pairs). It loads with **No comparison** and
 without selecting LOSATP, so Generate draws no ribbons and starts no LOSAT run.
 A CLI Session written with `--losat losatp` and an editable protein pipeline
-loads with the adjacent LOSATP comparison it drew.
+loads with the adjacent LOSATP comparison it drew. It stores the protein
+results the CLI computed: Similarity groups stores the comparison tables and
+the `orthogroupResult`, and Collinear stores only the `collinearityResult` (no
+tables). The first Generate after Load reuses them instead of running LOSAT
+again. Pairwise stores nothing, so its first Generate still searches.
 
 Without saved `ui.layoutPreferences`, the legend and plot-title positions come
 from the committed `diagramOptions.output` for its mode and grouping, so a CLI
@@ -430,8 +504,9 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42, 44, 46, and 47. Unknown or malformed bindings reject
-before import replaces the current work. Older schema-1 readers reject new
+Schema 2 is accepted with sessions 41–42, 44, and 46–48. Python refuses unknown or malformed
+bindings; the Web app drops each one and lists it in the **Load this file?** dialog
+before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
 ## Fonts
@@ -442,6 +517,12 @@ never embeds a font; only exported SVG does (see
 [Fonts](output-formats-and-export.md#fonts)). For a custom font, the web app
 notes this under **Font** and in the **Save Session** notice, and
 `--save_session` logs it.
+
+A Session that stores only the full resolved configuration, as the command
+line writes it, stores its font list in `objects.text.font_family`. When that
+is the packaged list, the web app loads it as the default **Font** (`null`),
+so **Save Session** then writes no font override; any other list loads as the
+chosen **Font**.
 
 When the first family of a Session's font list is not available, the command
 line and Python log a warning and draw the nearest font: the first available
@@ -522,10 +603,10 @@ itself, including the record that leads the row. A subtitle follows its label,
 so it is never left beside the row on its own.
 
 Older Linear sessions may contain automatically inferred replicon or organelle
-names saved as subtitles. These values remain visible when **Show Replicon** is
+names saved as subtitles. These values remain visible when the **Replicon** row's **Show** box is
 off: loading does not guess their origin or remove matching text. Clear an
 unwanted record subtitle to restore its file default; clear that default too if
-no subtitle is wanted. New uploads leave automatic names to **Show Replicon**.
+no subtitle is wanted. New uploads leave automatic names to the **Replicon** **Show** box.
 Loading preserves the saved preview. **Generate** applies the current settings
 and definition alignment, so its placement can differ from an older preview.
 
@@ -547,9 +628,9 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 47, while current readers also accept the
-session-42, session-44, and session-46 forms. Readers whose maximum version is
-42, 44, or 46 reject newly written session-47 files.
+settings-only writers emit session 48, while current readers also accept the
+session-42, session-44, session-46, and session-47 forms. Readers whose maximum
+version is 42, 44, 46, or 47 reject newly written session-48 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -573,8 +654,18 @@ then replaces each rendered drawing's Result set where it is, at the top level
 or in `otherModeResult`, keeps the other mode's set and the saved `ui.mode`,
 and preserves the editable draft's component bytes, order and File metadata.
 The re-save also replaces what both sets share: `losatCache` holds the entries
-the new render returns, `losatDerivedCache` is emptied, and
-`proteinIdentityManifest` and `legacyArtifacts` come from the new render. If
+the new render returns, `losatDerivedCache` keeps the Session's own entries
+unchanged (a CLI render builds none, and a Session saved by a fresh CLI render
+has an empty derived cache), and `proteinIdentityManifest` and `legacyArtifacts`
+come from the new render (with both drawings, `legacyArtifacts` come from the
+Linear one). A Circular render, one diagram or a batch, returns
+the Session's own `proteinIdentityManifest` and `legacyArtifacts`, so the
+protein entries that the re-save keeps still resolve. A Linear LOSATP render
+tries only the pending legacy protein entries of the record pairs it
+compares; an entry it cannot match stays pending, with a warning, so a later
+Web Generate can still use it. Legacy derived evidence is dropped once the
+Session has current derived entries, or when the render used the last pending
+entry. If
 the render migrates older protein IDs (only Sessions 44 and older have them),
 gbdraw rewrites the protein references throughout the Session. A resource
 whose bytes are unchanged
@@ -591,9 +682,13 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, 46, and 47;
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–48;
 versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
-loads them from their saved settings. Request schema 9 keeps schema 7's
+loads them from their saved settings. A Linear replay that combines `--region`,
+`--reverse_complement 1`, and `-b` or `--comparisons_table` now crops before it
+reverse-complements, so it can draw another window than the one its stored
+comparison was searched on; it prints a `WARNING:` line, and the comparison may
+need to be run again. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
@@ -707,6 +802,10 @@ also record the effective `cds` or `locus` unit kinds produced by `auto` and
 whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
 uses its historical inference behavior (ON); new Web state defaults to OFF.
+In the Web, any derived result read from a Session loads unchanged and is
+recomputed once from the raw search rows when the analysis runs again.
+The Web, the CLI, and the Python API compute the cache key of a derived result
+the same way, from every option that changes the result.
 
 **Save Raw LOSAT TSV** resolves generated protein handles to stable readable
 aliases. Uploaded comparison TSV is never rewritten. Export raw results to keep
@@ -719,8 +818,10 @@ this page documents current support.
 
 New commands and Python calls reject the names and values below. A Session or
 a canonical request schema 1–2 saved by an earlier release may still use them:
-gbdraw rewrites them before it draws. A retired CLI flag exits with status 2
-and names its replacement. A retired Python field raises `TypeError`; there is
+the CLI and the Python API rewrite them before they draw. The Web app reads
+those a Session 31–33 request stores the same way, except a Circular slot
+`spacing` (see below the table). A retired CLI flag exits with status 2 and
+names its replacement. A retired Python field raises `TypeError`; there is
 no alias. Field names stored inside a Session file do not change.
 
 | Retired input | Current input |
@@ -757,13 +858,22 @@ no alias. Field names stored inside a Session file do not change.
 | Circular `--conservation_table` column `comparison_fasta` | `comparison_sequence`; Sessions store the resolved table, so they need no rewrite |
 | `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files`; the Session field stays `conservationFastaFiles` |
 
+The config value `labels.stroke_width` (the leader line width) is removed:
+leaders and underlines are 0.07 em of the label font size wide, at least 1 px.
+A `config_overrides` entry or `--config_override` for it fails with the
+unknown-path error. A Session or stored config that still holds it loads, and
+its diagram draws the new width.
+
 Long options of more than one word use underscores, with two aliases that still
 work: `--annotation-table` for `--annotation_table`, and
 `--gc_content_tick_interval` for `--gc_content_large_tick_interval`.
 
-A Circular slot whose spacing an earlier release stored as a factor still draws.
-Set explicit pixel gaps (`inner_gap_px`, `outer_gap_px`) before you save it in
-the current format; a factor cannot be saved without loss.
+In the CLI and the Python API, a Circular slot whose spacing an earlier release
+stored as a factor still draws. Set explicit pixel gaps (`inner_gap_px`,
+`outer_gap_px`) before you save it in the current format; a factor cannot be
+saved without loss. The Web app drops a factor spacing of a Session 31–33 at
+Load and reads a spacing without a unit as pixels; it lists both in
+**Load this file?**.
 
 ## Record rotation and feature placement
 

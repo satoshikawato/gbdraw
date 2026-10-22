@@ -50,35 +50,41 @@ from ...configurators import (
 )
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
-from ...render_stages import render_stage
+from ...render_stages import _pre_keyed, render_stage
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ...config.modify import with_config_overrides
 from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
+from ...labels.label_ink import circular_label_ink
+from ...labels.label_style import label_leader_width_px
+from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
     CircularLabelProbeStopped,
     assign_leader_start_points,
     circular_label_fits,
     circular_label_font_size,
+    circular_label_shape,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_fit import CircularLabelLayout
+from ...labels.circular_fit import CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
 from ...labels.circular_types import CircularLabel, CircularLabelCandidate, CircularLabelCandidateCache
 from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
+    CircularAxisLayout,
     CircularFeatureLaneDirection,
     CircularRadialLayout,
     CircularRecordRenderContext,
     CircularResolvedSlot,
     CircularTickLayout,
+    RadialBand,
 )
 from ...layout.circular_depth_axis import DepthAxisStyle, depth_axis_tick_font_size_px
 from ...layout.composition import (
@@ -121,14 +127,21 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
-from ...render.drawers.circular.annotations import circular_annotation_track_content
+from ...render.drawers.circular.annotations import (
+    CircularAnnotationLabel,
+    CircularLabelObstacles,
+    LeaderSegment,
+    circular_annotation_label_room,
+    circular_annotation_labels,
+    circular_annotation_track_content,
+)
 from ...render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
 from ...render.composition import apply_composition_plan
 from ...svg.ids import track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout
-from ...tracks.parsing import slot_dinucleotide
+from ...tracks.parsing import slot_dinucleotide, slot_legend_label
 
 from .builders import (
     add_axis_group_on_canvas,
@@ -142,8 +155,8 @@ from .builders import (
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
 )
-from ...render.groups.circular.definition import DefinitionGroup
-from .radial_layout import resolve_circular_radial_layout
+from ...render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
+from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout, track_layout_reason
 from .presets import (
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
@@ -264,8 +277,23 @@ def _prepare_circular_annotation_tracks(
         return slots, bundle, {}
     # The planner generates the slot list whenever annotations are present.
     assert slots is not None
-    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
+    updated, layouts = _layout_circular_annotation_tracks(
+        gb_record, slots, bundle, canvas_config=canvas_config, record_index=record_index
+    )
+    return updated, bundle, layouts
 
+
+def _layout_circular_annotation_tracks(
+    gb_record: SeqRecord,
+    slots: list[CircularTrackSlot],
+    bundle: ResolvedAnnotationBundle,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    record_index: int,
+) -> tuple[list[CircularTrackSlot], dict[str, ResolvedAnnotationTrack]]:
+    """Resolve the lanes of each annotation slot; a slot without a width takes its required extent."""
+
+    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
     record_lengths = {record_index: len(gb_record.seq)}
     bp_per_px = {
         record_index: len(gb_record.seq) / max(1.0, 2.0 * math.pi * float(canvas_config.radius))
@@ -286,6 +314,7 @@ def _prepare_circular_annotation_tracks(
             params=params,
             available_extent_px=available,
             bp_per_px=bp_per_px,
+            label_font_size=circular_label_font_size(canvas_config.profile.config, len(gb_record.seq)),
         )
         layouts[slot.id] = layout
         updated.append(
@@ -293,7 +322,7 @@ def _prepare_circular_annotation_tracks(
             if slot.width is not None
             else replace(slot, width=ScalarSpec(layout.required_extent_px, "px"))
         )
-    return updated, bundle, layouts
+    return updated, layouts
 
 
 def _add_circular_feature_underlays(
@@ -301,14 +330,10 @@ def _add_circular_feature_underlays(
     underlay_features: Sequence,
     slots: list[CircularTrackSlot],
     bundle: ResolvedAnnotationBundle,
+    layouts: dict[str, ResolvedAnnotationTrack],
     *,
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
-    show_ticks: bool,
-    show_depth: bool,
-    show_gc: bool,
-    show_skew: bool,
-    depth_track_count: int,
 ) -> tuple[
     list[CircularTrackSlot],
     ResolvedAnnotationBundle,
@@ -322,7 +347,7 @@ def _add_circular_feature_underlays(
         record_indices=[record_index],
     )
     if set_id is None:
-        return slots, bundle, {}
+        return slots, bundle, layouts
     anchor_id = feature_underlay_anchor_slot_id(slots)
     anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
     slot_id = feature_underlay_slot_id(slots)
@@ -341,19 +366,11 @@ def _add_circular_feature_underlays(
             "show_labels": False,
         },
     )
-    updated, merged, layouts = _prepare_circular_annotation_tracks(
-        gb_record,
-        merged,
-        [underlay_slot, *slots],
-        canvas_config=canvas_config,
-        record_index=record_index,
-        show_ticks=show_ticks,
-        show_depth=show_depth,
-        show_gc=show_gc,
-        show_skew=show_skew,
-        depth_track_count=depth_track_count,
+    # The underlay set is new (collision-safe id), so the slots laid out before keep their layouts.
+    sized_underlay, underlay_layouts = _layout_circular_annotation_tracks(
+        gb_record, [underlay_slot], merged, canvas_config=canvas_config, record_index=record_index
     )
-    return list(updated or []), merged, layouts
+    return [*sized_underlay, *slots], merged, {**underlay_layouts, **layouts}
 
 
 def _circular_preset_for_layout(
@@ -611,13 +628,9 @@ def _external_label_bounds_on_canvas(
     return min_x, min_y, max_x, max_y
 
 
-def _external_label_paint_bounds_local(
-    label: CircularLabel,
-    total_length: int,
-    *,
-    leader_half_stroke_px: float,
-) -> Aabb:
-    """Return exact text plus leader paint bounds in circle-local coordinates."""
+def _external_label_paint_bounds_local(label: CircularLabel, total_length: int) -> Aabb:
+    """Return exact text plus leader paint bounds (the leader at its label's own width) in circle-local
+    coordinates."""
     measured_label = label.copy()
     if measured_label.get("aabb_local") is None:
         text_width, text_height = calculate_svg_bbox_dimensions(
@@ -654,7 +667,7 @@ def _external_label_paint_bounds_local(
         min(point[1] for point in leader_points),
         max(point[0] for point in leader_points),
         max(point[1] for point in leader_points),
-    ).expanded(float(leader_half_stroke_px))
+    ).expanded(0.5 * label_leader_width_px(label))
     combined = union_aabbs((text_bounds, leader_bounds))
     if combined is None:  # pragma: no cover - both inputs are present
         raise RuntimeError("external label paint bounds unexpectedly empty")
@@ -667,20 +680,164 @@ def _external_label_obstacles_on_canvas(
     canvas_config: CircularCanvasConfigurator,
 ) -> tuple[Aabb, ...]:
     """Return authoritative per-label overlay obstacles in plot coordinates."""
-    half_stroke = 0.5 * float(
-        canvas_config.profile.config.labels.stroke_width.for_length_param(
-            canvas_config.length_param
-        )
-    )
     return tuple(
-        _external_label_paint_bounds_local(
-            label,
-            total_length,
-            leader_half_stroke_px=half_stroke,
-        ).translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
+        _external_label_paint_bounds_local(label, total_length).translated(
+            float(canvas_config.offset_x), float(canvas_config.offset_y)
+        )
         for label in labels
         if not label.get("is_embedded")
     )
+
+
+def _circular_annotation_labels_by_slot(
+    radial_layout: CircularRadialLayout,
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
+    *,
+    record_index: int,
+    record_length: int,
+    font_family: str,
+    obstacles: CircularLabelObstacles,
+) -> dict[str, tuple[CircularAnnotationLabel, ...]]:
+    """The labels of each annotation slot of a record, measured once for the drawer and the canvas bounds.
+
+    The letters clear the axis circle's paint too where they would meet it, and
+    move along their regions off ``obstacles`` and the labels of earlier slots.
+    """
+
+    axis_paint = radial_layout.axis.paint_band_px
+    labels: dict[str, tuple[CircularAnnotationLabel, ...]] = {}
+    for slot in radial_layout.slots:
+        layout = (annotation_track_layouts or {}).get(slot.id)
+        if str(slot.renderer) != "annotations" or layout is None:
+            continue
+        labels[slot.id] = circular_annotation_labels(
+            layout,
+            record_index=record_index,
+            record_length=record_length,
+            inner_radius_px=float(slot.draw_inner_radius_px),
+            outer_radius_px=float(slot.draw_outer_radius_px),
+            side=str(slot.side),
+            font_family=font_family,
+            params=annotation_track_params_from_mapping(slot.params),
+            rings=(axis_paint,),
+            obstacles=obstacles,
+            covers_slots=slot.spans_slots,
+        )
+        obstacles = obstacles.with_labels(labels[slot.id])
+    return labels
+
+
+# Letters lie on a track when they reach more than this into its band, as a label covers the definition text.
+REGION_TRACK_MIN_OVERLAP_PX = 0.5
+
+
+def _region_labels_on_other_tracks(
+    radial_layout: CircularRadialLayout, labels: Mapping[str, Sequence[CircularAnnotationLabel]]
+) -> int:
+    """How many annotation labels' letters lie on the band another track takes.
+
+    The layout keeps a room for these letters beyond an inside or outside
+    annotation slot and beyond a span overlay (OV-1192), so they lie on a
+    track only where set radii leave no room (OV-1207); the figure is then
+    drawn and warns (LP-D86). A track takes the band the layout keeps for it
+    (``own_reserved_band_px``): its drawing with its tick or axis labels and
+    its own labels' room. Annotation overlays draw over other tracks and take
+    none. An overlay the layout keeps no room for (``span_keeps_label_room``:
+    a span whose outer edge is a plot overlay) has its labels drawn over the
+    tracks around it whatever the radii, so they are not counted.
+    """
+
+    def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
+        return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
+
+    tracks = [
+        (slot, band)
+        for slot in radial_layout.slots
+        if slot.draw_band_px is not None
+        and not (slot.renderer == "annotations" and slot.side == "overlay")
+        and (band := slot.own_reserved_band_px) is not None
+    ]
+    count = 0
+    for slot in radial_layout.slots:
+        own = slot.draw_band_px
+        if own is None or (slot.side == "overlay" and not slot.span_keeps_label_room):
+            continue
+        others = [band for track, band in tracks if track is not slot and not overlaps(own.inner_px, own.outer_px, band)]
+        count += sum(
+            1 for label in labels.get(slot.id, ()) if any(overlaps(*label.ink_radii, band) for band in others)
+        )
+    return count
+
+
+def _feature_label_obstacles(
+    labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
+) -> CircularLabelObstacles:
+    """The record's drawn feature labels and their leaders, as the fit count sees them, for annotation labels to
+    keep the label spacing from (OV-1173). A label with a leader also covers what its style draws with its letters,
+    its underline and its white box (OV-1358, the Linear rule of OV-1357)."""
+
+    style = canvas_config.profile.label_style
+    shapes = [
+        (
+            label,
+            shape,
+            ()
+            if label.get("is_embedded")
+            else feature_label_drawn_parts(circular_label_ink(label, total_length, style), style),
+        )
+        for label in labels
+        if (shape := circular_label_shape(label, total_length)).parts
+    ]
+    return CircularLabelObstacles(
+        shapes=tuple((*shape.parts, *drawn) for _label, shape, drawn in shapes),
+        segments=tuple(
+            LeaderSegment(start, end, 0.5 * label_leader_width_px(label))
+            for label, shape, _drawn in shapes
+            for start, end in zip(shape.leader, shape.leader[1:])
+        ),
+        clearance=float(canvas_config.profile.config.labels.spacing.circular),
+    )
+
+
+@dataclass(frozen=True)
+class _AnnotationLabelRoom:
+    """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
+    own owner; a frozen value, so the label stage that replans the radial layout stays cacheable."""
+
+    track: ResolvedAnnotationTrack
+    record_index: int
+    record_length: int
+    font_family: str
+
+    def __call__(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+    ) -> float:
+        return circular_annotation_label_room(
+            self.track,
+            record_index=self.record_index,
+            record_length=self.record_length,
+            band=band,
+            side=side,
+            font_family=self.font_family,
+            params=annotation_track_params_from_mapping(params),
+            rings=(axis.paint_band_px,),
+            covers_slots=covers_slots,
+        )
+
+
+def _circular_annotation_label_rooms(
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
+    *,
+    record_index: int,
+    record_length: int,
+    font_family: str,
+) -> dict[str, AnnotationLabelRoom]:
+    """The room each annotation slot's labels need beyond its band, measured by the labels' own owner."""
+
+    return {
+        slot_id: _AnnotationLabelRoom(track, record_index, record_length, font_family)
+        for slot_id, track in (annotation_track_layouts or {}).items()
+    }
 
 
 def _primary_radial_half_stroke_px(
@@ -1134,11 +1291,10 @@ def _definition_reserved_radius_px(
     definition_group = DefinitionGroup(
         gb_record,
         geometry,
-        cfg=cfg,
+        style=CircularDefinitionStyle.of(cfg, definition_profile),
         species=species,
         strain=strain,
         plot_title=plot_title,
-        definition_profile=definition_profile,
         record_transform=record_transform,
         species_line_count=species_line_count,
         record_presentation=record_presentation,
@@ -1190,16 +1346,6 @@ MAX_WRAPPED_SPECIES_LINES = 8
 def _packaged_circular_definition_font_size() -> float:
     config = load_config_toml("gbdraw.data", "config.toml")
     return float(config["objects"]["definition"]["circular"]["font_size"])
-
-
-def _track_layout_reason(error: ValidationError) -> str | None:
-    """Return the ``TRACK_LAYOUT`` diagnostic reason of a placement failure."""
-
-    diagnostic = error.diagnostic or {}
-    if diagnostic.get("code") != "TRACK_LAYOUT":
-        return None
-    reason = diagnostic.get("reason")
-    return reason if isinstance(reason, str) else None
 
 
 def _resolve_radial_layout_fitting_definition(
@@ -1254,7 +1400,7 @@ def _resolve_radial_layout_fitting_definition(
     except ValidationError as error:
         font_size = float(cfg.objects.definition.circular.font_size)
         if (
-            _track_layout_reason(error) != "DEFINITION_RESERVED"
+            track_layout_reason(error) != "DEFINITION_RESERVED"
             or str(definition_profile) != "full"
             or not math.isclose(font_size, _packaged_circular_definition_font_size())
         ):
@@ -1270,7 +1416,7 @@ def _resolve_radial_layout_fitting_definition(
         try:
             return resolve_layout(wrapped), wrapped, line_count
         except ValidationError as retry_error:
-            if _track_layout_reason(retry_error) != "DEFINITION_RESERVED":
+            if track_layout_reason(retry_error) != "DEFINITION_RESERVED":
                 break
     raise definition_error
 
@@ -1344,21 +1490,6 @@ def _slot_dataframe_for_nt(
 
 
 
-def _slot_legend_label(slot: LegendSlotSource, fallback: str) -> str:
-    raw_label = slot.params.get("legend_label", slot.params.get("label"))
-    label = str(raw_label).strip() if raw_label is not None else ""
-    return label or fallback
-
-
-def _add_numeric_legend_sources(out: LegendTable, label: str, swatch: NumericLegendSource) -> None:
-    stroke = {"stroke": swatch.stroke_color, "width": swatch.stroke_width}
-    if swatch.high_fill_color == swatch.low_fill_color:
-        out.add_source(label, {"type": "solid", "fill": swatch.high_fill_color, **stroke})
-    else:
-        out.add_source(f"{label} (+)", {"type": "solid", "fill": swatch.high_fill_color, **stroke})
-        out.add_source(f"{label} (-)", {"type": "solid", "fill": swatch.low_fill_color, **stroke})
-
-
 def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
@@ -1405,12 +1536,12 @@ def _sync_legend_table_for_circular_slots(
                 if track is None:
                     continue
                 swatch = track
-                label = _slot_legend_label(slot, track.label)
+                label = slot_legend_label(slot, track.label)
             elif depth is None:
                 continue
             else:
                 swatch = depth
-                label = _slot_legend_label(slot, "Depth")
+                label = slot_legend_label(slot, "Depth")
             out.add_source(label, {
                 "type": "solid",
                 "fill": swatch.fill_color,
@@ -1419,12 +1550,10 @@ def _sync_legend_table_for_circular_slots(
             })
         elif renderer == "dinucleotide_content":
             nt = slot_dinucleotide(slot.params, default_nt)
-            _add_numeric_legend_sources(out, _slot_legend_label(slot, f"{nt} content"), gc)
+            out.add_numeric_source(slot_legend_label(slot, f"{nt} content"), gc)
         elif renderer == "dinucleotide_skew":
             nt = slot_dinucleotide(slot.params, default_nt)
-            _add_numeric_legend_sources(
-                out, _slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt)
-            )
+            out.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
     if conservation_legend:
         default_min_color, default_max_color = conservation_colors
         if any(track.track_color for track in conservation_legend):
@@ -1480,6 +1609,7 @@ def _draw_resolved_circular_slot(
     use_slot_tick_options: bool = True,
     use_feature_anchor_override: bool = True,
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack] | None = None,
+    annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
     annotation_record_index: int = 0,
     record_transform: RecordDisplayTransform | None = None,
     record_key: str,
@@ -1511,6 +1641,7 @@ def _draw_resolved_circular_slot(
             side=str(resolved_slot.side),
             font_family=str(cfg.objects.text.font_family),
             params=params,
+            labels=annotation_labels.get(resolved_slot.id, ()),
             dom_group_id=(
                 track_slot_svg_id(
                     resolved_slot.id,
@@ -1858,8 +1989,14 @@ def _record_label_layout(
     *,
     definition_text: Sequence[Aabb],
     radial_refused: bool,
+    region_labels: Sequence[CircularAnnotationLabel] = (),
+    region_track_overlaps: int = 0,
 ) -> CircularLabelLayout | None:
-    """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings."""
+    """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
+
+    Region labels cut to fit their circle (LP-D87) or lying on another track
+    (LP-D86) are a ``circular_region`` kind that only warns.
+    """
 
     total_length = len(gb_record.seq)
     label_counts: dict[LabelKind, int] = {}
@@ -1872,33 +2009,48 @@ def _record_label_layout(
             else "circular_outer"
         )
         label_counts[kind] = label_counts.get(kind, 0) + 1
-    if not label_counts or place_labels is None:
+    placed = bool(label_counts) and place_labels is not None
+    cuts = sum(label.cut for label in region_labels)
+    if not placed and not cuts and not region_track_overlaps:
         return None
     cfg = profile.config
     horizontal = profile.label_placement == "horizontal"
 
-    def probe(overrides: Mapping[str, LabelFitValue]) -> LabelFit:
-        probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
-        try:
-            labels = place_labels(probe_profile, probe=True)
-        except CircularLabelProbeStopped as stopped:
-            # The dense candidate already overlaps; crossings are not counted.
-            return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
-        return circular_label_fits(labels, total_length).get("circular_outer", FITS)
+    probe: CircularLabelFitProbe | None = None
+    if place_labels is not None and horizontal and label_counts.get("circular_outer"):
+        placer = place_labels
+
+        def probe_outer(overrides: Mapping[str, LabelFitValue]) -> LabelFit:
+            probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
+            try:
+                labels = placer(probe_profile, probe=True)
+            except CircularLabelProbeStopped as stopped:
+                # The dense candidate already overlaps; crossings are not counted.
+                return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
+            return circular_label_fits(labels, total_length).get("circular_outer", FITS)
+
+        probe = probe_outer
+
+    counts: dict[LabelKind, int] = dict(label_counts) if placed else {}
+    kind_fits = circular_label_fits(drawn_labels, total_length, definition_text=definition_text) if placed else {}
+    if cuts or region_track_overlaps:
+        counts["circular_region"] = len(region_labels)
+        kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts, region_track_overlaps=region_track_overlaps)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
     return CircularLabelLayout(
         record_id=str(gb_record.id),
         placement="horizontal" if horizontal else "radial",
         font_size=circular_label_font_size(cfg, total_length),
-        label_counts=label_counts,
-        kind_fits=circular_label_fits(drawn_labels, total_length, definition_text=definition_text),
+        label_counts=counts,
+        kind_fits=kind_fits,
         x_radius_offset=float(outer_offsets.x_radius_offset),
         y_radius_offset=float(outer_offsets.y_radius_offset),
         label_spacing=float(cfg.labels.spacing.circular),
         refused=radial_refused,
         features_separated=bool(profile.resolve_overlaps),
-        probe=probe if horizontal and label_counts.get("circular_outer") else None,
+        probe=probe,
+        region_font_size=max((label.font_size for label in region_labels), default=0.0),
     )
 
 
@@ -2038,6 +2190,7 @@ def circular_labels(
     record_transform: RecordDisplayTransform | None,
     definition_text: tuple[Aabb, ...],
     label_filtering: Mapping[str, Any],
+    annotation_label_rooms: Mapping[str, AnnotationLabelRoom],
 ) -> CircularLabelPlacement:
     """Place one record's external and embedded labels; radial labels grow the radius (stage ``circular_labels``).
 
@@ -2191,6 +2344,7 @@ def circular_labels(
                 preferred_anchor_slot_ids=preferred_anchor_slot_ids,
                 depth_config=depth_axis,
                 center_reserved_radius_explicit=center_reserved_radius_explicit,
+                annotation_label_rooms=annotation_label_rooms,
             )
             if radial_layout.features is not None:
                 resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
@@ -2241,7 +2395,6 @@ def add_record_on_circular_canvas(
     depth_config: DepthConfigurator | None = None,
     depth_df: DataFrame | None = None,
     depth_tracks: Sequence[DepthTrackData] | None = None,
-    depth_track_count_value: int | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
     circular_track_slots: list[CircularTrackSlot] | None = None,
@@ -2253,7 +2406,8 @@ def add_record_on_circular_canvas(
     definition_profile: str = "full",
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
-    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
+    annotations: ResolvedAnnotationBundle,
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
@@ -2283,28 +2437,13 @@ def add_record_on_circular_canvas(
         if depth_tracks is not None
         else None
     )
-    resolved_depth_track_count = (
-        int(depth_track_count_value)
-        if depth_track_count_value is not None
-        else depth_track_data_count([depth_tracks or ()])
-    )
 
     show_labels_base = profile.labels_enabled
     depth_enabled = bool(profile.show_depth and depth_config is not None)
     simple_show_ticks = bool(cfg.objects.scale.show)
-    effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
-        gb_record,
-        annotations,
-        circular_track_slots,
-        canvas_config=canvas_config,
-        record_index=annotation_record_index,
-        show_ticks=simple_show_ticks,
-        show_depth=depth_enabled,
-        show_gc=profile.show_gc,
-        show_skew=profile.show_skew,
-        depth_track_count=max(1, resolved_depth_track_count),
-        record_transform=record_transform,
-    )
+    # The caller planned and laid out the annotation slots (_prepare_circular_annotation_tracks).
+    effective_circular_track_slots = circular_track_slots
+    resolved_annotations = annotations
     user_slot_mode = effective_circular_track_slots is not None
     user_active_slot_renderers = {
         str(slot.renderer)
@@ -2432,16 +2571,18 @@ def add_record_on_circular_canvas(
             feature_layers.underlay_features,
             layout_slots,
             resolved_annotations,
+            annotation_track_layouts,
             canvas_config=canvas_config,
             record_index=annotation_record_index,
-            show_ticks=show_ticks_track,
-            show_depth=show_depth_track,
-            show_gc=profile.show_gc,
-            show_skew=profile.show_skew,
-            depth_track_count=max(1, resolved_depth_track_count),
         )
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
+    annotation_label_rooms = _circular_annotation_label_rooms(
+        annotation_track_layouts,
+        record_index=annotation_record_index,
+        record_length=len(gb_record.seq),
+        font_family=str(cfg.objects.text.font_family),
+    )
     radial_layout, definition_reserved_radius_px, species_line_count = (
         _resolve_radial_layout_fitting_definition(
             lambda reserved_radius_px: resolve_circular_radial_layout(
@@ -2456,6 +2597,7 @@ def add_record_on_circular_canvas(
                     DepthAxisStyle.of(depth_config) if show_depth_track and depth_config is not None else None
                 ),
                 center_reserved_radius_explicit=center_reserved_radius is not None,
+                annotation_label_rooms=annotation_label_rooms,
             ),
             gb_record=gb_record,
             geometry=canvas_config.geometry(),
@@ -2485,11 +2627,10 @@ def add_record_on_circular_canvas(
             DefinitionGroup(
                 gb_record,
                 canvas_config.geometry(),
-                cfg=canvas_config.profile.config,
+                style=CircularDefinitionStyle.of(canvas_config.profile.config, definition_profile),
                 species=species,
                 strain=strain,
                 plot_title=plot_title,
-                definition_profile=definition_profile,
                 record_index=int(annotation_record_index),
                 record_count=int(definition_record_count),
                 record_transform=record_transform,
@@ -2534,6 +2675,7 @@ def add_record_on_circular_canvas(
             record_transform=record_transform,
             definition_text=definition_text,
             label_filtering=label_filtering,
+            annotation_label_rooms=annotation_label_rooms,
         )
         # The one write of the radius the labels grew (a stage result is never changed).
         canvas_config.radius = placement.state.geometry.radius
@@ -2569,10 +2711,27 @@ def add_record_on_circular_canvas(
         resolved_track_slots=resolved_track_slots,
     )
 
-    overlay_obstacles = _external_label_obstacles_on_canvas(
-        precalculated_labels or (),
-        len(gb_record.seq),
-        canvas_config,
+    # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.
+    # They move along their regions off the feature labels and leaders, so they follow the feature labels.
+    def place_annotation_labels() -> tuple[dict[str, tuple[CircularAnnotationLabel, ...]], tuple[Aabb, ...]]:
+        labels_by_slot = _circular_annotation_labels_by_slot(
+            radial_layout,
+            annotation_track_layouts,
+            record_index=annotation_record_index,
+            record_length=len(gb_record.seq),
+            font_family=str(cfg.objects.text.font_family),
+            obstacles=_feature_label_obstacles(precalculated_labels or (), len(gb_record.seq), canvas_config),
+        )
+        return labels_by_slot, tuple(
+            label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
+            for labels in labels_by_slot.values()
+            for label in labels
+        )
+
+    annotation_labels, annotation_label_obstacles = place_annotation_labels()
+    overlay_obstacles = (
+        *_external_label_obstacles_on_canvas(precalculated_labels or (), len(gb_record.seq), canvas_config),
+        *annotation_label_obstacles,
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
@@ -2617,10 +2776,10 @@ def add_record_on_circular_canvas(
                     ],
                     len(gb_record.seq),
                 )
-            overlay_obstacles = _external_label_obstacles_on_canvas(
-                precalculated_labels,
-                len(gb_record.seq),
-                canvas_config,
+            annotation_labels, annotation_label_obstacles = place_annotation_labels()
+            overlay_obstacles = (
+                *_external_label_obstacles_on_canvas(precalculated_labels, len(gb_record.seq), canvas_config),
+                *annotation_label_obstacles,
             )
             source_content_bounds = _collect_circular_primary_bounds(
                 radial_layout=radial_layout,
@@ -2632,6 +2791,10 @@ def add_record_on_circular_canvas(
                 overlay_obstacles=overlay_obstacles,
             )
 
+    # The labels do not change after this: both label phases take one keyed copy.
+    placed_labels: Sequence[CircularLabel] = (
+        _pre_keyed(label.copy() for label in precalculated_labels or ()) if show_external_labels else ()
+    )
     render_context = CircularRecordRenderContext(
         profile=profile,
         track_preset=circular_preset,
@@ -2648,7 +2811,7 @@ def add_record_on_circular_canvas(
             canvas_config,
             group_key=GroupKey(record_key, GroupKind.LABEL_LEADERS),
             render_context=render_context,
-            precalculated_labels=precalculated_labels or (),
+            precalculated_labels=placed_labels,
             phase="leaders",
         )
 
@@ -2682,6 +2845,7 @@ def add_record_on_circular_canvas(
             use_slot_tick_options=user_slot_mode,
             use_feature_anchor_override=user_slot_mode,
             annotation_track_layouts=annotation_track_layouts,
+            annotation_labels=annotation_labels,
             annotation_record_index=annotation_record_index,
             record_transform=record_transform,
             record_key=record_key,
@@ -2694,7 +2858,7 @@ def add_record_on_circular_canvas(
             canvas_config,
             group_key=GroupKey(record_key, GroupKind.LABEL_TEXT),
             render_context=render_context,
-            precalculated_labels=precalculated_labels or (),
+            precalculated_labels=placed_labels,
             phase="text",
         )
 
@@ -2743,6 +2907,8 @@ def add_record_on_circular_canvas(
         ),
         definition_text=definition_text,
         radial_refused=radial_refused,
+        region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
+        region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
@@ -3079,7 +3245,7 @@ def _assemble_circular_diagram_result(
         if depth_track_count_value is not None
         else depth_track_data_count([depth_tracks or ()])
     )
-    effective_circular_track_slots, resolved_annotations, _annotation_layouts = _prepare_circular_annotation_tracks(
+    effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
         gb_record,
         annotations,
         circular_track_slots,
@@ -3141,7 +3307,6 @@ def _assemble_circular_diagram_result(
         depth_config=depth_config,
         depth_df=depth_df,
         depth_tracks=depth_tracks,
-        depth_track_count_value=resolved_depth_track_count,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=conservation_min_identity,
         circular_track_slots=effective_circular_track_slots,
@@ -3154,6 +3319,7 @@ def _assemble_circular_diagram_result(
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
         annotations=resolved_annotations,
+        annotation_track_layouts=annotation_track_layouts,
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
         record_transform=record_transform,
@@ -3242,3 +3408,4 @@ __all__ = [
     "build_circular_legend_table",
     "plan_circular_annotation_slots",
 ]
+

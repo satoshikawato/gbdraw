@@ -29,7 +29,7 @@ const WEB_MODULES = readdirSync(WEB_ROOT, { recursive: true })
 // VALIDATION_UNCLASSIFIED (mostly internal invariants today). One total (kind
 // `count`), so a site that moves to another module with its code does not
 // change it.
-const UNCLASSIFIED_THROW_BASELINE = 630;
+const UNCLASSIFIED_THROW_BASELINE = 584;
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
 const literalAt = (source, index) => {
@@ -97,7 +97,7 @@ test('JS throw sites normalize to a recognized diagnostic or do not grow in numb
 });
 
 // The message-classification tables in the JS wording owner (R6 ratchet).
-const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 19 };
+const NATIVE_VALIDATION_BASELINE = { exactMessages: 76, patterns: 16 };
 
 test('the JS message-classification tables only shrink (R6 ratchet)', async (t) => {
   const source = readFileSync(new URL('utils/error-normalization.js', WEB_ROOT), 'utf8');

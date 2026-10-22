@@ -24,6 +24,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
+import { msg, t } from '../../utils/i18n.js';
 /** @import { DrawingState } from '../../state.js' */
 /** @import { FeatureDrawnContext, FeatureVisibilityRuleDraft, VisibilityFeature } from '../../services/feature-visibility.js' */
 
@@ -50,6 +51,7 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
 /** @typedef {Partial<VisibilityScope> & { id: string }} VisibilityScopeChoice A scope, or the bare `feature` scope. */
 
 /** @typedef {{ reflow?: boolean, rerender?: boolean, labels?: boolean }} LabelFollowOptions */
+/** @typedef {{ updated: boolean, needsRerender: boolean }} DrawnProjection Whether the Result changed, and whether the rerender must draw a feature or the Legend. */
 
 /**
  * The label owner's reaction the composition root registers once that owner exists.
@@ -208,15 +210,15 @@ export const createFeatureVisibilityActions = ({
     /** @type {VisibilityScope[]} */
     const scopes = [{
       id: 'feature',
-      label: 'This feature',
-      description: 'One rule for only this feature.'
+      label: t('This feature'),
+      description: t('One rule for only this feature.')
     }];
     const orthogroupMembers = getOrthogroupMemberFeatures(feat);
     if (orthogroupMembers.length > 1) {
       scopes.push({
         id: 'orthogroup',
-        label: `Current similarity-group members (${orthogroupMembers.length})`,
-        description: 'One rule per current similarity-group member.',
+        label: t('Current similarity-group members ({count})', { count: orthogroupMembers.length }),
+        description: t('One rule per current similarity-group member.'),
         features: orthogroupMembers
       });
     }
@@ -224,8 +226,8 @@ export const createFeatureVisibilityActions = ({
     if (featureType && product) {
       scopes.push({
         id: 'product',
-        label: `Exact product: ${product}`,
-        description: 'Exact product qualifier rule.',
+        label: t('Exact product: {product}', { product }),
+        description: t('Exact product qualifier rule.'),
         featureType,
         qualifier: 'product',
         value: product
@@ -242,8 +244,8 @@ export const createFeatureVisibilityActions = ({
     if (featureType && proteinId) {
       scopes.push({
         id: 'protein_id',
-        label: `Exact protein ID: ${proteinId}`,
-        description: 'Exact protein_id qualifier rule.',
+        label: t('Exact protein ID: {id}', { id: proteinId }),
+        description: t('Exact protein_id qualifier rule.'),
         featureType,
         qualifier: 'protein_id',
         value: proteinId
@@ -326,6 +328,7 @@ export const createFeatureVisibilityActions = ({
    * @param {DrawingState} drawing
    * @param {VisibilityTarget[]} features
    * @param {{ targeted?: boolean, legend?: boolean, show?: boolean }} [projection]
+   * @returns {DrawnProjection}
    */
   const projectDrawn = (drawing, features, { show = true, ...projection } = {}) => ({
     updated: show ? showEditorIntent({ domains: VISIBILITY_DOMAINS }) : true,
@@ -412,7 +415,7 @@ export const createFeatureVisibilityActions = ({
     };
 
     return {
-      label: 'Change selected feature visibility',
+      label: msg('Change selected feature visibility'),
       resultIndex: commandResultIndex,
       resultGenerationKey: commandGenerationKey,
       changes,
@@ -461,25 +464,65 @@ export const createFeatureVisibilityActions = ({
   // rejects (an invalid regex) changes nothing, as a failed Generate keeps its
   // Result, and reports Generate's error until a projection reads a table that
   // Generate accepts. A later projection supersedes one that still waits for
-  // its matches. Resolves to `projectDrawn`'s answer, or null when it projects
-  // nothing.
+  // its matches (`superseded`: the later one shows the matches). Resolves to
+  // `projectDrawn`'s answer, or says why it projected nothing. The newest run
+  // is kept with its drawing and whether it asks for the rerender itself
+  // (`legend`: an edit, a History step, a loaded table) or declines it (a
+  // Result display).
+  /**
+   * @typedef {{ status: 'projected', projection: DrawnProjection } | { status: 'superseded' | 'rejected' }} VisibilityProjectionOutcome
+   * @typedef {{ outcome: Promise<VisibilityProjectionOutcome>, drawing: DrawingState, asks: boolean }} VisibilityProjectionRun
+   */
   let projectionRun = 0;
+  let visibilityEditRun = 0;
+  /** @type {VisibilityProjectionRun | null} */
+  let newestProjection = null;
   /** @type {unknown} */
   let ruleTableError = null;
-  /** @param {DrawingState} drawing */
-  const runProjection = async (drawing, { legend = true, show = true } = {}) => {
-    const run = ++projectionRun;
+  /**
+   * @param {DrawingState} drawing
+   * @returns {Promise<VisibilityProjectionOutcome>}
+   */
+  const runProjection = (drawing, { legend = true, show = true } = {}) => {
+    const outcome = projectOnce(drawing, ++projectionRun, { legend, show });
+    newestProjection = { outcome, drawing, asks: legend };
+    return outcome;
+  };
+  /**
+   * @param {DrawingState} drawing
+   * @param {number} run
+   * @param {{ legend: boolean, show: boolean }} projection
+   * @returns {Promise<VisibilityProjectionOutcome>}
+   */
+  const projectOnce = async (drawing, run, { legend, show }) => {
     const prepared = /** @type {any} */ (await prepareDrawn());
-    if (run !== projectionRun) return null;
+    if (run !== projectionRun) return { status: prepared?.error ? 'rejected' : 'superseded' };
     if (prepared?.error) {
-      if (!state.errorLog) return null;
+      if (!state.errorLog) return { status: 'rejected' };
       state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
       ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
-      return null;
+      return { status: 'rejected' };
     }
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
-    return projectDrawn(drawing, displayedFeatures(), { legend, show });
+    return { status: 'projected', projection: projectDrawn(drawing, displayedFeatures(), { legend, show }) };
+  };
+  // Waits for the newest run, following it while a later run replaces it.
+  // True when that run was a Result display of `drawing` that projected and
+  // the displayed Result lacks what the rules draw (the question an edit
+  // begun after the display would ask).
+  /** @param {DrawingState} drawing */
+  const displayLacksRules = async (drawing) => {
+    /** @type {VisibilityProjectionRun | null} */
+    let followed = null;
+    /** @type {VisibilityProjectionOutcome | null} */
+    let outcome = null;
+    while (newestProjection && newestProjection !== followed) {
+      followed = newestProjection;
+      outcome = await followed.outcome;
+    }
+    return Boolean(followed && !followed.asks && followed.drawing === drawing && outcome?.status === 'projected')
+      && needsRerenderFor(drawing, displayedFeatures(), { legend: true });
   };
 
   // The one projection of this domain (R3), which History apply, the display
@@ -496,7 +539,8 @@ export const createFeatureVisibilityActions = ({
   // its own compile passes `show: false`.
   const projectFeatureVisibility = async ({ rerender = false, reflow = false, show = true, labels = false } = {}) => {
     const drawing = state.activeDrawing();
-    const projection = await runProjection(drawing, { legend: rerender, show });
+    const outcome = await runProjection(drawing, { legend: rerender, show });
+    const projection = outcome.status === 'projected' ? outcome.projection : null;
     const drawsMissing = rerender && Boolean(projection?.needsRerender);
     if (labels || (projection && (projection.updated || reflow || drawsMissing))) {
       followLabels({ reflow: reflow && Boolean(projection), rerender: drawsMissing, labels });
@@ -513,8 +557,14 @@ export const createFeatureVisibilityActions = ({
   // Generate rejects. An edit that leaves the rules Generate reads as they
   // were (a rule added, or a field set before its value) projects nothing.
   // A rerender that runs when the rules change may have read the old ones and
-  // is about to replace the Result this edit is decided against, so the edit
-  // asks for one more, which the running one coalesces (OV-330).
+  // is about to replace the Result this edit is decided against. The newest
+  // edit asks for one more rerender when a rerender was running as it began,
+  // or when a later projection superseded its own, as the display of that
+  // rerender's Result does (OV-330, OV-1134). A Result display that supersedes
+  // the newest edit while no rerender runs asks for none, so the edit asks
+  // when the displayed Result lacks what the rules draw (OV-1141). An older
+  // edit does not: the newer edit asks, or projects on the newer Result. Nor
+  // does an edit of a table Generate rejects.
   /**
    * @param {DrawingState} drawing
    * @param {(rules: FeatureVisibilityRuleDraft[]) => boolean | void} edit Changes the copy; false writes nothing.
@@ -527,9 +577,14 @@ export const createFeatureVisibilityActions = ({
     const requested = JSON.stringify(requestFeatureVisibilityRules(drawing.featureVisibilityManualRules));
     drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
     if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
+    const editRun = ++visibilityEditRun;
     const rerendering = Boolean(state.labelReflowProcessing?.value);
-    const projection = await runProjection(drawing);
-    const rerender = Boolean(projection?.needsRerender) || (Boolean(projection) && rerendering);
+    const outcome = await runProjection(drawing);
+    const projection = outcome.status === 'projected' ? outcome.projection : null;
+    const newest = editRun === visibilityEditRun;
+    const rerender = Boolean(projection?.needsRerender)
+      || (rerendering && outcome.status !== 'rejected' && newest)
+      || (outcome.status === 'superseded' && newest && await displayLacksRules(drawing));
     if (projection?.updated || rerender) followLabels({ rerender });
     return true;
   };
@@ -691,7 +746,7 @@ export const createFeatureVisibilityActions = ({
     const drawing = state.activeDrawing();
     const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
-      showNotice({ text: 'There are no complete Feature visibility rules to export.' });
+      showNotice({ text: t('There are no complete Feature visibility rules to export.') });
       return;
     }
     downloadTextFile('gbdraw_feature_visibility_table.tsv', text);

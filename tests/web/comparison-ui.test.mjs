@@ -40,6 +40,10 @@ await Promise.all([
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
   ),
   cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'i18n.js'),
+    join(tempRoot, 'js', 'utils', 'i18n.js')
+  ),
+  cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'download-names.js'),
     join(tempRoot, 'js', 'utils', 'download-names.js')
   )
@@ -318,6 +322,31 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
   });
   assert.deepEqual([collinear.activeLosatModeLabel, collinear.activeLosatpModeLabel],
     ['LOSATP', 'Collinear blocks']);
+});
+
+// OV-1128 B (D-114): Paralog links per group shows wherever it draws: Similarity groups, and Collinear with
+// Build similarity groups with within-record searches. Pairwise, Collinear without inference, another program, and Selected pairs hide it.
+test('Paralog links per group projects for Similarity groups and inferring Collinear only', () => {
+  const adjacent = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
+  const selected = {
+    mode: 'selected',
+    defaultSource: 'losat',
+    edges: [createLinearComparisonEdge({ id: 'a-b-losat', queryUid: 'a', subjectUid: 'b', source: 'losat' })]
+  };
+  const cases = [
+    [adjacent, 'blastp', 'orthogroup', false, true],
+    [adjacent, 'blastp', 'orthogroup', true, true],
+    [adjacent, 'blastp', 'collinear', true, true],
+    [adjacent, 'blastp', 'collinear', false, false],
+    [adjacent, 'blastp', 'pairwise', true, false],
+    [adjacent, 'blastn', 'orthogroup', true, false],
+    [selected, 'blastp', 'orthogroup', true, false],
+    [selected, 'blastp', 'collinear', true, false]
+  ];
+  for (const [plan, losatProgram, blastpMode, inferOrthogroups, shown] of cases) {
+    const { advanced } = project(plan, { losatProgram, blastpMode, inferOrthogroups }).sectionKeys;
+    assert.equal(advanced.includes('paralog-links'), shown, JSON.stringify([plan.mode, losatProgram, blastpMode, inferOrthogroups]));
+  }
 });
 
 test('selected topology blocks only grouping and collinear LOSATP modes without changing the plan', () => {

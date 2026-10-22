@@ -1082,6 +1082,78 @@ test('visible protein cache entries from the frozen v39 session recover stable e
   );
 });
 
+// OV-987: a Collinear display search can run in the other orientation than the
+// edge whose card shows it (a CLI grid that places a record above one listed
+// before it). Save writes the search's record instance keys and the edge's
+// fields; Load keeps the edge, as Generate does.
+test('a visible cache entry stored against its edge orientation keeps the edge at Load', async () => {
+  alerts.length = 0;
+  const sessionData = frozenV39Session();
+  const entries = sessionData.losatCache.entries;
+  const [edgeEntry] = entries.filter((entry) => entry.display !== false);
+  const reversed = entries.find((entry) => (
+    entry.queryRecordInstanceKey === edgeEntry.subjectRecordInstanceKey
+    && entry.subjectRecordInstanceKey === edgeEntry.queryRecordInstanceKey
+  ));
+  const edgeQueryUid = edgeEntry.queryRecordInstanceKey;
+  const edgeSubjectUid = edgeEntry.subjectRecordInstanceKey;
+  edgeEntry.display = false;
+  Object.assign(reversed, {
+    display: true,
+    filename: 'reversed.tsv',
+    edgeKey: `${edgeQueryUid}->${edgeSubjectUid}`,
+    queryUid: edgeQueryUid,
+    subjectUid: edgeSubjectUid,
+    queryIndex: 0,
+    subjectIndex: 1,
+    ordinal: 0
+  });
+  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const result = await importSession(
+    { target: { files: [file], value: 'selected' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
+  );
+
+  assert.equal(result.status, 'ok');
+  const row = state.losatCacheInfo.value.find((entry) => entry.key === reversed.key);
+  assert.deepEqual(
+    [row?.edgeKey, row?.queryUid, row?.subjectUid, row?.queryIndex, row?.subjectIndex, row?.ordinal],
+    [`${edgeQueryUid}->${edgeSubjectUid}`, edgeQueryUid, edgeSubjectUid, 0, 1, 0]
+  );
+});
+
+// OV-987, CLI-written entry: the CLI stores only the search's record instance
+// keys; a display search in the other orientation than its edge takes the edge.
+test('a CLI-written visible cache entry stored against its edge orientation takes the edge at Load', async () => {
+  alerts.length = 0;
+  const sessionData = frozenV39Session();
+  const entries = sessionData.losatCache.entries;
+  const [edgeEntry] = entries.filter((entry) => entry.display !== false);
+  const reversed = entries.find((entry) => (
+    entry.queryRecordInstanceKey === edgeEntry.subjectRecordInstanceKey
+    && entry.subjectRecordInstanceKey === edgeEntry.queryRecordInstanceKey
+  ));
+  const edgeQueryUid = edgeEntry.queryRecordInstanceKey;
+  const edgeSubjectUid = edgeEntry.subjectRecordInstanceKey;
+  edgeEntry.display = false;
+  reversed.display = true;
+  for (const field of ['edgeKey', 'queryUid', 'subjectUid', 'queryIndex', 'subjectIndex', 'ordinal']) {
+    assert.equal(reversed[field], undefined, field);
+  }
+  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const result = await importSession(
+    { target: { files: [file], value: 'selected' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
+  );
+
+  assert.equal(result.status, 'ok');
+  const row = state.losatCacheInfo.value.find((entry) => entry.key === reversed.key);
+  assert.deepEqual(
+    [row?.edgeKey, row?.queryUid, row?.subjectUid, row?.queryIndex, row?.subjectIndex, row?.ordinal],
+    [`${edgeQueryUid}->${edgeSubjectUid}`, edgeQueryUid, edgeSubjectUid, 0, 1, 0]
+  );
+});
+
 test('a conflicting restored edge key is not exposed under the wrong endpoints', async () => {
   alerts.length = 0;
   const sessionData = frozenV39Session();
@@ -1119,12 +1191,16 @@ const syntheticConservationSession = () => JSON.parse(gunzipSync(readFileSync(ne
   import.meta.url
 ))).toString('utf8'));
 
-test('a Session that repeats a raw LOSAT cache key is rejected with a classified diagnostic', async () => {
+// E-OD02: Load drops the repeat of a cache key with an unlisted row
+// (E-OD05) and loads the rest; Save refuses the repeat
+// (`validateSessionLosatArtifacts`, the tests below).
+test('a Session that repeats a raw LOSAT cache key loads without the repeat', async () => {
   const valid = syntheticConservationSession();
   const accepted = await importSession({
     target: { files: [new Blob([JSON.stringify(valid)], { type: 'application/json' })], value: 'selected' }
   });
   assert.equal(accepted.status, 'ok');
+  const validKeys = state.losatCacheInfo.value.map((entry) => entry.key);
 
   alerts.length = 0;
   const repeated = syntheticConservationSession();
@@ -1133,15 +1209,51 @@ test('a Session that repeats a raw LOSAT cache key is rejected with a classified
     ...ringC,
     filename: 'comparison-c-copy.circular_conservation.losatn.tsv'
   });
-  const event = {
+  const result = await importSession({
     target: { files: [new Blob([JSON.stringify(repeated)], { type: 'application/json' })], value: 'selected' }
-  };
-  const result = await importSession(event);
-  assert.equal(result.status, 'error');
-  assert.equal(result.error.code, 'INPUT_INVALID');
-  assert.deepEqual(result.error.context, { field: 'schema', reason: 'FIELDS' });
-  assert.match(result.error.summary, /supported Session file/);
+  });
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs.map((repair) => repair.code), ['cache-entry-dropped']);
+  // The first entry under the key stays; the repeat is dropped.
+  assert.deepEqual(state.losatCacheInfo.value.map((entry) => entry.key), validKeys);
   assert.deepEqual(alerts, []);
+});
+
+// OV-981: a saved raw LOSAT file name that is no text is read as a missing
+// one (the entry's default name), so a download is never named
+// "[object Object]". The entry and its rows load; no row is listed.
+test('a Session raw LOSAT cache file name that is no text loads as the default name', async () => {
+  const session = syntheticConservationSession();
+  const [first, second] = session.losatCache.entries;
+  first.filename = {};
+  second.filename = 7;
+  alerts.length = 0;
+  const result = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  });
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs, []);
+  assert.deepEqual(state.losatCacheInfo.value.map((entry) => entry.filename), [
+    'losat_pair_1.tsv', 'losat_pair_2.tsv', 'comparison-d.circular_conservation.losatn.tsv'
+  ]);
+  assert.deepEqual(alerts, []);
+});
+
+// OV-983: a search context that is no text (a list of the 64 hex characters)
+// is no current raw entry: Load drops it with an unlisted row, as any entry
+// it cannot read (E-OD05), and Save writes no such entry again.
+test('a Session raw LOSAT cache entry whose search context is a list is dropped', async () => {
+  const session = syntheticConservationSession();
+  const [, second] = session.losatCache.entries;
+  second.searchContext = ['a'.repeat(64)];
+  const result = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  });
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs.map((repair) => [repair.code, repair.path]), [
+    ['cache-entry-dropped', 'losatCache.entries[1]']
+  ]);
+  assert.equal(state.losatCache.value.has(second.key), false);
 });
 
 for (const version of [39, 40]) {
@@ -1237,10 +1349,35 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     const result = await importSession(event);
     assert.equal(result.status, 'error');
     assert.equal(result.error.code, 'INPUT_INVALID');
-    assert.deepEqual(result.error.context, {field:'schema',reason:'FIELDS'});
-    assert.match(result.error.summary, /supported Session file/);
+    // OV-1253: the refusal names the version and the versions this gbdraw reads.
+    assert.deepEqual(result.error.context, {
+      field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: unsupportedVersion,
+      readSessionVersions: '27–33, 39–42, 44, and 46–48'
+    });
+    assert.match(result.error.summary, new RegExp(`Unsupported session version: ${unsupportedVersion}\\.`));
     assert.deepEqual(state.errorLog.value, result.error);
     assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');
+  });
+}
+
+// OV-952: an unsafe own key anywhere in the file (here under `resources`) is
+// refused with the Session-schema diagnostic, not as an unknown failure.
+for (const key of ['__proto__', 'constructor', 'prototype']) {
+  test(`session import refuses the unsafe key ${key} under resources with a classified diagnostic`, async () => {
+    alerts.length = 0;
+    const text = JSON.stringify(syntheticConservationSession())
+      .replace('"resources":{', `"resources":{"${key}":{},`);
+    assert.ok(text.includes(`"${key}":{}`));
+    const event = { target: { files: [new Blob([text], { type: 'application/json' })], value: 'selected' } };
+    const result = await importSession(event);
+    assert.equal(result.status, 'error');
+    assert.deepEqual(
+      [result.error.code, result.error.operation, result.error.stage, result.error.context],
+      ['INPUT_INVALID', 'session-load', 'request-validation', { field: 'schema', reason: 'FIELDS' }]
+    );
+    assert.ok(!JSON.stringify(result.error).includes(key));
+    assert.deepEqual(state.errorLog.value, result.error);
+    assert.deepEqual(alerts, []);
   });
 }

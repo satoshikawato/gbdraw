@@ -23,9 +23,25 @@ const {
   promoteCanonicalRenderRequestToCurrent,
   projectCommittedEditorIntent: projectDrawingEditorIntent,
   projectCommittedRecordTransform,
-  projectCanonicalSessionRequest
+  projectCanonicalSessionRequest,
+  readStoredRenderRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+);
+// A stored request as Load projects it: read to the current schema by its one
+// reader (which lifts schemas 1 and 2 and promotes 5 to 8), then projected.
+// A stored Session's request as Load reads it: the projection takes only
+// the current schema (D3a).
+const readStoredSession = (canonical, context = {}) => {
+  const read = readStoredRenderRequest(canonical.renderRequest, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(canonical.resources || {})), path: 'renderRequest', ...context
+  });
+  assert.ok(!('kind' in read), JSON.stringify(read));
+  return { ...canonical, renderRequest: read.value };
+};
+const projectStoredSession = (canonical, context = {}) => (
+  projectCanonicalSessionRequest(readStoredSession(canonical, context))
 );
 const { migrateLegacyOrthogroupMembers } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
@@ -273,7 +289,7 @@ assert.throws(
     supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer']
   }),
-  /unknown anchor_slot/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_ANCHOR' && error.context.field === 'anchor_slot'
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -318,7 +334,7 @@ assert.throws(
     supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer']
   }),
-  /uses anchor_slot without side=overlay/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_SIDE' && error.context.field === 'side'
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -390,6 +406,7 @@ const state = {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
     arrow_head_length_ratio: null, arrow_shaft_width_ratio: 1.0,
     min_bitscore: 50, identity: 70, alignment_length: 0, plot_title_position: 'none',
+    feature_overlap_tolerance_bp: 0, // the factory value; a blank leaves the override out (R7)
     gc_content_mode: 'deviation', gc_content_min_percent: 0, gc_content_max_percent: 100,
     gc_content_show_axis: true, gc_content_show_ticks: true,
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,
@@ -562,11 +579,13 @@ assert.throws(
   state.featureOverrides = {};
   state.featurePlacementOverrides = {};
 }
+// The projection reads only a request of the current schema: a stored one is
+// read to it first (`readStoredRenderRequest`).
 const schema8WithRows = structuredClone(canonical);
 schema8WithRows.renderRequest.schema = 8;
 assert.throws(
   () => projectCanonicalSessionRequest(schema8WithRows),
-  { code: 'INPUT_INVALID', context: { field: 'featureOverrides', reason: 'SESSION_FORMAT' } }
+  { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'SESSION_FORMAT' } }
 );
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
@@ -758,6 +777,39 @@ assert.equal(
   ),
   false
 );
+// The feature label style of each mode (LP-D102): Save leaves the mode's packaged style (the generated mode
+// profile) unstated, as a request written before the setting does, and states another one; Load projects a stated
+// style into the drawing's settings, and a request without one into no field, so the drawing keeps its mode's
+// default (`createDefaultAdv`). Checked here for Circular and below for Linear.
+const { LABEL_STYLE_CHOICES, labelStyleForMode } = await import(pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js')));
+/** @param {() => { renderRequest: { diagramOptions: { configOverrides: Record<string, unknown> } } }} build */
+const assertLabelStyleRoundTrip = (build) => {
+  const mode = state.mode.value;
+  const defaults = labelStyleForMode(mode);
+  const paths = { label_line: `labels.${mode}.line`, label_protection: `labels.${mode}.protection` };
+  Object.assign(state.adv, defaults);
+  const plain = build();
+  for (const path of Object.values(paths)) {
+    assert.equal(Object.hasOwn(plain.renderRequest.diagramOptions.configOverrides, path), false, `${mode} ${path}`);
+  }
+  const plainAdv = projectCanonicalSessionRequest(plain).config.adv;
+  assert.deepEqual([Object.hasOwn(plainAdv, 'label_line'), Object.hasOwn(plainAdv, 'label_protection')], [false, false], mode);
+  const other = {
+    label_line: LABEL_STYLE_CHOICES.line.find((value) => value !== defaults.label_line),
+    label_protection: LABEL_STYLE_CHOICES.protection.find((value) => value !== defaults.label_protection)
+  };
+  Object.assign(state.adv, other);
+  const styled = build();
+  for (const [field, path] of Object.entries(paths)) {
+    assert.equal(styled.renderRequest.diagramOptions.configOverrides[path], other[field], `${mode} ${path}`);
+  }
+  const styledAdv = projectCanonicalSessionRequest(styled).config.adv;
+  assert.deepEqual({ label_line: styledAdv.label_line, label_protection: styledAdv.label_protection }, other, mode);
+  delete state.adv.label_line;
+  delete state.adv.label_protection;
+};
+assert.equal(state.mode.value, 'circular');
+assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({ state, filesData }));
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
@@ -909,9 +961,10 @@ assert.equal(
 );
 
 const invalidCircularCases = [
-  [{ circular_region_start: 3, circular_region_end: null }, /requires both Start and End/],
-  [{ circular_region_start: 8, circular_region_end: 3 }, /must not exceed End/],
-  [{ circular_region_start: 3, circular_region_end: 19 }, /exceeds the selected record length/],
+  [{ circular_region_start: 3, circular_region_end: null }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'BOTH_ENDPOINTS' } }],
+  [{ circular_region_start: 8, circular_region_end: 3 }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'ORDER' } }],
+  // OV-1097: a region that starts after the record (18 bp) ends is refused, as Python refuses it.
+  [{ circular_region_start: 19, circular_region_end: 25 }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'RECORD_BOUNDS' } }],
   [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, { code: 'RECORD_SELECTION', context: { reason: 'NO_MATCH' } }]
 ];
 for (const [overrides, message] of invalidCircularCases) {
@@ -923,6 +976,13 @@ for (const [overrides, message] of invalidCircularCases) {
   });
   assert.throws(() => buildCanonicalRenderRequest({ state, filesData }), message);
 }
+// OV-1097 (Owner decision 2026-10-18): an End past the record end is not
+// refused; the request sends it as typed and Python draws to the record end.
+Object.assign(state.form, { circular_record_selector: 'second-record', circular_region_start: 3, circular_region_end: 19 });
+assert.deepEqual(
+  { start: 3, end: 19 },
+  (({ start, end }) => ({ start, end }))(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.records[0].region)
+);
 state.circularRecordList.value = [
   { selector: '#1', record_id: 'duplicate-record', record_length: 18 },
   { selector: '#2', record_id: 'duplicate-record', record_length: 18 }
@@ -1075,7 +1135,7 @@ for (const schema of [3, 4]) {
   }
   assert.throws(
     () => projectCanonicalSessionRequest(branchOnlyCanonical),
-    /Unsupported canonical renderRequest schema/
+    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'SESSION_FORMAT' } }
   );
 }
 const missingCurrentGrouping = structuredClone(canonical);
@@ -1293,7 +1353,7 @@ legacyRepeatCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignore
 legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
 delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
 assert.equal(
-  projectCanonicalSessionRequest(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  projectStoredSession(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
   'rectangle'
 );
 
@@ -1526,7 +1586,7 @@ invalidCircularOverlay.renderRequest.diagramOptions.tracks = {
 };
 assert.throws(
   () => projectCanonicalSessionRequest(invalidCircularOverlay),
-  /references unknown anchor_slot/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_ANCHOR' && error.context.field === 'anchor_slot'
 );
 
 const emptyDepthColumn = structuredClone(canonical);
@@ -1860,7 +1920,7 @@ legacyCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
   allow_inner_labels: true
 };
 assert.equal(
-  projectCanonicalSessionRequest(legacyCircularLabelScope).config.form.labels_mode,
+  projectStoredSession(legacyCircularLabelScope).config.form.labels_mode,
   'both'
 );
 const intermediateCircularLabelScope = structuredClone(canonical);
@@ -1881,25 +1941,21 @@ if (2 < 7) {
 }
 legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
 assert.equal(
-  projectCanonicalSessionRequest(legacyOutputCanonical).config.form.prefix,
+  projectStoredSession(legacyOutputCanonical).config.form.prefix,
   'web-session'
 );
-const missingLegacyOutputPrefix = structuredClone(legacyOutputCanonical);
-delete missingLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix;
-assert.throws(
-  () => projectCanonicalSessionRequest(missingLegacyOutputPrefix),
-  /outputPrefix/
-);
+// A current request with the retired output field: its reader drops it with
+// a row, which names the object that held the unknown entry.
 const currentWithLegacyOutputPrefix = structuredClone(canonical);
 currentWithLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix = 'stale';
-assert.throws(
-  () => projectCanonicalSessionRequest(currentWithLegacyOutputPrefix),
-  /outputPrefix/
-);
+assert.deepEqual(readStoredRenderRequest(currentWithLegacyOutputPrefix.renderRequest, {
+  featureCatalog: null, legacyOrthogroupState: null,
+  resourceIds: new Set(Object.keys(currentWithLegacyOutputPrefix.resources)), path: 'renderRequest'
+}).repairs.map(({ code, path }) => [code, path]), [['setting-entries-dropped', 'renderRequest.diagramOptions.output']]);
 const legacyCircularOptions = structuredClone(legacyOutputCanonical);
 legacyCircularOptions.renderRequest.layout = { multiRecordSizeMode: 'sqrt' };
 assert.equal(
-  projectCanonicalSessionRequest(legacyCircularOptions).config.adv.multi_record_size_mode,
+  projectStoredSession(legacyCircularOptions).config.adv.multi_record_size_mode,
   'auto'
 );
 const currentCircularOptions = structuredClone(canonical);
@@ -1924,7 +1980,7 @@ for (const schema of [1, 2]) {
   delete sparseCircularCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
   delete sparseCircularCanonical.renderRequest.diagramOptions.config;
   delete sparseCircularCanonical.renderRequest.diagramOptions.configOverrides;
-  const sparseCircularProjection = projectCanonicalSessionRequest(sparseCircularCanonical);
+  const sparseCircularProjection = projectStoredSession(sparseCircularCanonical);
   assert.equal(sparseCircularProjection.config.adv.evalue, '0.00001');
   assert.equal(sparseCircularProjection.config.adv.min_bitscore, 50);
   assert.equal(sparseCircularProjection.config.adv.identity, 70);
@@ -2005,22 +2061,29 @@ if (2 < 7) {
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.tracks = {
   circularTrackSlots: [
+    // A schema-2 writer stored every field of an object slot.
     {
+      kind: 'circularTrackSlot',
       id: 'legacy_object',
       renderer: 'dinucleotide_skew',
+      enabled: true,
       side: 'inside',
+      radius: null,
+      width: null,
       spacing: { value: 5, unit: 'px' },
-      strict: true,
-      params: { nt: 'GC', reserve: true }
+      z: 0,
+      params: { nt: 'GC', reserve: true },
+      innerGapPx: null,
+      outerGapPx: null
     },
     'legacy_spec:dinucleotide_content@side=inside,spacing=4,compress=true,nt=AT'
   ],
   circularTrackAxisIndex: 0,
+  linearTrackSlots: null,
+  linearTrackAxisIndex: null,
   centerReservedRadius: null
 };
-const legacyCircularSlotsProjection = projectCanonicalSessionRequest(
-  legacyCircularSlotsCanonical
-);
+const legacyCircularSlotsProjection = projectStoredSession(legacyCircularSlotsCanonical);
 assert.deepEqual(
   legacyCircularSlotsProjection.config.adv.circular_track_slots.map((slot) => ({
     id: slot.id,
@@ -2172,6 +2235,9 @@ assert.deepEqual(
   materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
   ['multi-source::record-1', 'multi-source::record-2']
 );
+assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
+  state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
+}));
 
 const oneSourceFilesData = {
   linearSeqs: [{
@@ -2439,12 +2505,6 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }
   });
 
-  // Load reads every stored request to schema 9 (except schema 1, kept as
-  // stored); the reflow reads only a committed request of the current schema.
-  const older = structuredClone(committed);
-  older.renderRequest.schema = 1;
-  assert.throws(() => projectCommittedEditorIntent({ committed: older, state: draft }),
-    /A current committed canonical Session is required/);
 }
 
 state.form.prefix = '';
@@ -2534,14 +2594,14 @@ if (2 < 7) {
   legacyLinearOptions.renderRequest.records.forEach((record) => delete record.display);
 }
 legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+// A Linear writer stored a Linear plot title position.
+legacyLinearOptions.renderRequest.diagramOptions.output.plotTitlePosition = 'bottom';
 legacyLinearOptions.renderRequest.diagramOptions.configOverrides = {
   label_placement: 'on_feature',
   linear_track_layout: 'spreadout',
   show_labels: 'first'
 };
-const legacyLinearOptionsProjection = projectCanonicalSessionRequest(
-  legacyLinearOptions
-);
+const legacyLinearOptionsProjection = projectStoredSession(legacyLinearOptions);
 assert.equal(
   legacyLinearOptionsProjection.config.adv.label_placement,
   'above_feature'
@@ -2879,6 +2939,13 @@ state.linearRecordTranslations.value = ['first', 'second', 'third'].map(
 );
 const resolvedProteinPlotTitlePosition = state.adv.plot_title_position;
 state.adv.plot_title_position = 'bottom';
+// The analysis helper's canonical table text (Python `encode_canonical_table`): the request writes it unchanged.
+const resolvedProteinTableText = [
+  'query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart\tsend\tevalue'
+    + '\tbitscore\tgroup_kind\tgroup_scope\tquery_orthogroup_representative',
+  'protein-a\tprotein-b\t95.0\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120.0\torthogroup\tcross_record\tTrue',
+  ''
+].join('\n');
 const resolvedProteinCanonical = buildCanonicalRenderRequest({
   state,
   filesData: linearFilesData,
@@ -2887,22 +2954,7 @@ const resolvedProteinCanonical = buildCanonicalRenderRequest({
     edgeKey: 'first->third',
     queryRecordIndex: 0,
     subjectRecordIndex: 2,
-    rows: [{
-      query: 'protein-a',
-      subject: 'protein-b',
-      identity: 95,
-      alignment_length: 20,
-      mismatches: 1,
-      gap_opens: 0,
-      qstart: 10,
-      qend: 30,
-      sstart: 50,
-      send: 70,
-      evalue: 1e-20,
-      bitscore: 120,
-      group_kind: 'orthogroup',
-      group_scope: 'cross_record'
-    }]
+    canonicalTsv: resolvedProteinTableText
   }]
 });
 const resolvedProtein = resolvedProteinCanonical.renderRequest.comparisons.find(
@@ -2925,8 +2977,7 @@ const resolvedProteinTsv = Buffer.from(
   resolvedProteinCanonical.resources[resolvedProtein.resourceId].data,
   'base64'
 ).toString('utf8');
-assert.match(resolvedProteinTsv, /group_kind/);
-assert.match(resolvedProteinTsv, /cross_record/);
+assert.equal(resolvedProteinTsv, resolvedProteinTableText, 'the Python table bytes reach the request unchanged');
 const resolvedProteinProjection = projectCanonicalSessionRequest(
   resolvedProteinCanonical
 );
@@ -2987,6 +3038,25 @@ assert.equal(
   ).toString('utf8'),
   resolvedProteinTsv
 );
+// OV-1049: the table keeps one resource identity from the analysis to the next request, so the Worker keeps its
+// cache token and the Python render stages keyed by it are reused.
+assert.equal(roundTripPrecomputed.resourceId, resolvedProtein.resourceId);
+{
+  const { createDiagramResourceTransport } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'diagram-resource-staging.js'))
+  );
+  const transport = createDiagramResourceTransport();
+  const fresh = await transport.prepare(resolvedProteinCanonical);
+  fresh.commit();
+  const next = await transport.prepare(resolvedProteinRoundTripCanonical);
+  const tokenOf = (prepared) => prepared.resourceManifest
+    .find(({ resourceId }) => resourceId === roundTripPrecomputed.resourceId)?.cacheToken;
+  assert.equal(tokenOf(next), tokenOf(fresh));
+  assert.equal(
+    next.stagedResources.some(({ resourceId }) => resourceId === roundTripPrecomputed.resourceId),
+    false
+  );
+}
 assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
 assert.deepEqual(
   resolvedProteinRoundTripCanonical.renderRequest.layout,
@@ -3005,10 +3075,7 @@ for (const mutate of [
     { recordKey: 'first', x: 0, y: 0 }
   ),
   (request) => { request.layout.recordTranslations[0].x = Infinity; },
-  (request) => { request.layout.unknownTransform = true; },
   (request) => { request.layout.similarityAlignment.records[2].anchor = null; },
-  (request) => { request.layout.similarityAlignment.records[2].orientationPolicy = 'preserve'; },
-  (request) => { request.layout.similarityAlignment.records[2].effectiveReverseComplement = true; },
   (request) => { request.layout.similarityAlignment.schema = 1; }
 ]) {
   const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
@@ -3018,8 +3085,24 @@ for (const mutate of [
       renderRequest: invalid,
       resources: resolvedProteinCanonical.resources
     }),
-    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination|schema must be 2/
+    /duplicate record keys|finite numbers|invalid plan combination|schema must be 2/
   );
+}
+// A field the layout's description does not hold: its reader drops it with a
+// row that names the object that held it.
+for (const [mutate, path] of [
+  [(request) => { request.layout.unknownTransform = true; }, 'renderRequest.layout'],
+  [(request) => { request.layout.similarityAlignment.records[2].orientationPolicy = 'preserve'; },
+    'renderRequest.layout.similarityAlignment.records[2]'],
+  [(request) => { request.layout.similarityAlignment.records[2].effectiveReverseComplement = true; },
+    'renderRequest.layout.similarityAlignment.records[2]']
+]) {
+  const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
+  mutate(invalid);
+  assert.deepEqual(readStoredRenderRequest(invalid, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(resolvedProteinCanonical.resources)), path: 'renderRequest'
+  }).repairs.map(({ code, path: rowPath }) => [code, rowPath]), [['setting-entries-dropped', path]]);
 }
 
 const oldGroups = [{ id: 'og-legacy', members: [
@@ -3045,13 +3128,6 @@ const legacyGenerated = legacyAlignmentRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
 );
 legacyGenerated.settings.alignOrthogroupFeature = 'og-legacy';
-const legacyProjection = projectCanonicalSessionRequest({
-  renderRequest: legacyAlignmentRequest,
-  resources: losatPairCanonical.resources
-});
-assert.deepEqual(legacyProjection.pipelineState.legacySimilarityAlignment, {
-  target: 'og-legacy'
-});
 const legacyFeatureCatalog = {
   schema: 3,
   items: [{
@@ -3100,10 +3176,10 @@ malformedLegacyAlignment.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
 ).settings.alignOrthogroupFeature = ' ';
 assert.throws(
-  () => projectCanonicalSessionRequest({
-    renderRequest: malformedLegacyAlignment,
-    resources: losatPairCanonical.resources
-  }),
+  () => promoteCanonicalRenderRequestToCurrent(
+    malformedLegacyAlignment,
+    { featureCatalog: legacyFeatureCatalog }
+  ),
   /non-empty text/
 );
 const ambiguousLegacyFeatureCatalog = structuredClone(legacyFeatureCatalog);
@@ -3152,35 +3228,49 @@ state.linearComparisonPlan = {
   mode: 'adjacent'
 };
 state.losat.blastp.mode = 'collinear';
-for (const schema of [1, 2, 3]) {
-const typedCollinearityResource = {
-  schema,
-  kind: 'result',
-  value: { type: 'CollinearityResult', fields: {} }
+{
+// OV-1040: the typed result is written with the Python bytes it is bound to, also when a derived-cache hit hands
+// it back as a Vue proxy (here `1.0`, which `JSON.stringify` would print as `1`). An unbound result throws, and
+// only schema 3 can be bound.
+const typedCollinearityText = '{"kind":"result","schema":3,"value":{"fields":{"score":1.0},"type":"CollinearityResult"}}';
+const typedCollinearityResource = JSON.parse(typedCollinearityText);
+const typedCollinearityBacking = {
+  kind: 'collinearity-result', type: 'application/json', size: Buffer.byteLength(typedCollinearityText),
+  lastModified: 0, encoding: 'base64', data: Buffer.from(typedCollinearityText).toString('base64')
 };
-const originalTextEncoder = globalThis.TextEncoder;
-const typedResourceText = JSON.stringify(typedCollinearityResource);
-let typedResourceEncodes = 0;
-globalThis.TextEncoder = class extends originalTextEncoder {
-  encode(value) {
-    if (value === typedResourceText) typedResourceEncodes += 1;
-    return super.encode(value);
-  }
-};
+bindCanonicalTypedResource(typedCollinearityResource, typedCollinearityBacking);
+const proxiedCollinearityResource = new Proxy(typedCollinearityResource, {});
+const previousWindow = globalThis.window;
+globalThis.window = { Vue: { toRaw: (value) => (value === proxiedCollinearityResource ? typedCollinearityResource : value) } };
+const buildCollinear = (typedResource) => buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData,
+  resolvedComparisons: [{ kind: 'collinearityResult', typedResource }]
+});
 let resolvedCollinearCanonical;
 try {
-  resolvedCollinearCanonical = buildCanonicalRenderRequest({
-    state,
-    filesData: linearFilesData,
-    resolvedComparisons: [{
-      kind: 'collinearityResult',
-      typedResource: typedCollinearityResource
-    }]
-  });
+  resolvedCollinearCanonical = buildCollinear(proxiedCollinearityResource);
+  assert.equal(
+    Buffer.from(
+      resolvedCollinearCanonical.resources['comparison-canonical-collinearity-1'].data,
+      'base64'
+    ).toString('utf8'),
+    typedCollinearityText,
+    'the proxied typed result keeps its Python bytes'
+  );
+  assert.throws(
+    () => buildCollinear(JSON.parse(typedCollinearityText)),
+    /UNBOUND_CANONICAL_BYTES/
+  );
+  for (const schema of [1, 2]) {
+    assert.throws(
+      () => buildCollinear({ ...JSON.parse(typedCollinearityText), schema }),
+      /is not a canonical typed resource/
+    );
+  }
 } finally {
-  globalThis.TextEncoder = originalTextEncoder;
+  globalThis.window = previousWindow;
 }
-assert.equal(typedResourceEncodes, 1, 'The full typed result is encoded once, with identical resource bytes');
 assert.deepEqual(
   resolvedCollinearCanonical.renderRequest.comparisons.map(
     (comparison) => comparison.kind
@@ -3193,13 +3283,6 @@ assert.equal(
   'comparison-canonical-collinearity-1'
 );
 assert.equal(resolvedCollinearity.valueKind, 'result');
-assert.deepEqual(
-  JSON.parse(Buffer.from(
-    resolvedCollinearCanonical.resources[resolvedCollinearity.resourceId].data,
-    'base64'
-  ).toString('utf8')),
-  typedCollinearityResource
-);
 assert.equal(resolvedCollinearCanonical.renderRequest.comparisons[1].mode, 'none');
 assert.equal(
   resolvedCollinearCanonical.renderRequest.comparisons.some(
@@ -3208,6 +3291,24 @@ assert.equal(
   false,
   'Collinear rendering must use the full typed result instead of parallel pair tables'
 );
+}
+{
+// OV-1128 B (D-114, D-121): Similarity groups and Collinear draw and record the stored paralog links per group.
+// Pairwise hides the control and records the stored value when it is a positive integer, else 2, so a
+// Pairwise Save/Load keeps the user's value and an unusable hidden value raises nothing.
+const storedParalogLinks = state.losat.blastp.collinearMaxParalogLinksPerOrthogroup;
+for (const [blastpMode, stored, drawn] of [
+  ['orthogroup', 3, 3], ['collinear', 3, 3], ['pairwise', 3, 3], ['pairwise', 0, 2], ['pairwise', 'x', 2]
+]) {
+  state.losat.blastp.mode = blastpMode;
+  state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = stored;
+  // Raw: these requests are not among the characterized ones.
+  const generated = buildCanonicalRenderRequestRaw({
+    state, filesData: linearFilesData, comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+  }).renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.equal(generated.settings.collinearMaxParalogLinksPerOrthogroup, drawn, `${blastpMode} ${stored}`);
+}
+state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = storedParalogLinks;
 }
 state.losat.blastp.mode = 'pairwise';
 state.linearComparisonPlan = selectedComparisonPlan;
@@ -3269,20 +3370,8 @@ const resolvedWithFreshTable = buildCanonicalRenderRequest({
     edgeKey: 'first->third',
     queryRecordIndex: 0,
     subjectRecordIndex: 2,
-    rows: [{
-      query: 'fresh-a',
-      subject: 'fresh-b',
-      identity: 88,
-      alignment_length: 10,
-      mismatches: 1,
-      gap_opens: 0,
-      qstart: 1,
-      qend: 10,
-      sstart: 1,
-      send: 10,
-      evalue: 1e-10,
-      bitscore: 80
-    }]
+    canonicalTsv: 'query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart'
+      + '\tsend\tevalue\tbitscore\nfresh-a\tfresh-b\t88.0\t10\t1\t0\t1\t10\t1\t10\t1e-10\t80.0\n'
   }]
 });
 assert.deepEqual(
@@ -3411,6 +3500,8 @@ for (const schema of [1, 2]) {
     sparseLinearCanonical.renderRequest.records.forEach((record) => delete record.display);
   }
   sparseLinearCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+  // The Linear writer never stores 'none' (state.js keeps one slot per mode).
+  sparseLinearCanonical.renderRequest.diagramOptions.output.plotTitlePosition = 'bottom';
   delete sparseLinearCanonical.renderRequest.diagramOptions.evalue;
   delete sparseLinearCanonical.renderRequest.diagramOptions.bitscore;
   delete sparseLinearCanonical.renderRequest.diagramOptions.identity;
@@ -3418,7 +3509,7 @@ for (const schema of [1, 2]) {
   delete sparseLinearCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
   delete sparseLinearCanonical.renderRequest.diagramOptions.config;
   delete sparseLinearCanonical.renderRequest.diagramOptions.configOverrides;
-  const sparseLinearProjection = projectCanonicalSessionRequest(sparseLinearCanonical);
+  const sparseLinearProjection = projectStoredSession(sparseLinearCanonical);
   assert.equal(sparseLinearProjection.config.adv.evalue, '0.00001');
   assert.equal(sparseLinearProjection.config.adv.min_bitscore, 50);
   assert.equal(sparseLinearProjection.config.adv.identity, 70);
@@ -3437,7 +3528,7 @@ nullOverrideSparseLinear.renderRequest.diagramOptions.configOverrides = {
   show_skew: null,
   linear_axis_stroke_color: null
 };
-const nullOverrideSparseLinearProjection = projectCanonicalSessionRequest(
+const nullOverrideSparseLinearProjection = projectStoredSession(
   nullOverrideSparseLinear
 );
 assert.equal(nullOverrideSparseLinearProjection.config.form.show_gc, true);
@@ -3472,7 +3563,7 @@ explicitLinearThresholds.renderRequest.diagramOptions.configOverrides = {
   show_skew: false,
   linear_axis_stroke_color: ''
 };
-const explicitLinearProjection = projectCanonicalSessionRequest(explicitLinearThresholds);
+const explicitLinearProjection = projectStoredSession(explicitLinearThresholds);
 assert.equal(explicitLinearProjection.config.adv.evalue, '0');
 assert.equal(explicitLinearProjection.config.adv.min_bitscore, 0);
 assert.equal(explicitLinearProjection.config.adv.identity, 0);
@@ -3679,13 +3770,6 @@ assert.throws(
   () => projectCanonicalSessionRequest(historicalInvalidHeight),
   { code: 'INPUT_INVALID', context: { field: 'match_height', reason: 'POSITIVE_OR_AUTO' } }
 );
-assert.equal(
-  projectCanonicalSessionRequest({
-    ...historicalInvalidHeight,
-    repairInvalidComparisonHeight: true
-  }).config.adv.comparison_height,
-  null
-);
 state.adv.comparison_height = 42.5;
 
 const depthAText = 'position\tdepth\n1\t10\n';
@@ -3763,6 +3847,11 @@ assert.deepEqual(circularSparseProjection.config.adv.depth_tracks.map((track) =>
   'Sample A',
   'Sample B'
 ]);
+// A request without Depth labels projects series that stay unnamed in the
+// draft, so their names follow the series count (OV-1508).
+const labelFreeSparseCanonical = structuredClone(circularSparseCanonical);
+labelFreeSparseCanonical.renderRequest.diagramOptions.depthTracks.forEach((track) => { track.label = null; });
+assert.deepEqual(projectCanonicalSessionRequest(labelFreeSparseCanonical).config.adv.depth_tracks.map((track) => track.label), ['', '']);
 const circularSparseRebuilt = buildCanonicalRenderRequest({
   state,
   filesData: circularSparseProjection.files
@@ -3862,6 +3951,26 @@ assert.deepEqual(
   sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.map((track) => track.label),
   ['Sample A', 'Sample B']
 );
+{
+  // A series without settings draws in the default color the series owner
+  // gives it, not in series 1's (OV-1510): series 1 takes the Depth color,
+  // a later series the palette.
+  const storedTracks = state.adv.depth_tracks;
+  const storedColor = state.adv.depth_color;
+  state.adv.depth_tracks = [];
+  state.adv.depth_color = '#AA0000';
+  const unsetCanonical = buildCanonicalRenderRequestRaw({
+    state,
+    filesData: sparseDepthFilesData,
+    comparisonPlanSnapshot: comparisonSnapshotForState(state, sparseDepthFilesData)
+  });
+  assert.deepEqual(
+    unsetCanonical.renderRequest.diagramOptions.depthTracks.map(({ label, color }) => [label, color]),
+    [['Depth 1', '#AA0000'], ['Depth 2', '#E45756']]
+  );
+  state.adv.depth_tracks = storedTracks;
+  state.adv.depth_color = storedColor;
+}
 [
   'depthTrackFiles',
   'depthTrackLabels',
@@ -3885,6 +3994,32 @@ assert.throws(
   () => projectCanonicalSessionRequest(mixedCanonicalDepth),
   /depthTracks cannot be combined with legacy depth fields: depthTrackFiles/
 );
+// Python draws a request's Depth series without a color in the request's
+// Depth color (`clone_depth_config`), so an import gives such a series that
+// color, in both the canonical and the legacy form: the imported draft redraws
+// the CLI figure (OV-1510).
+{
+  const colorFreeCanonical = structuredClone(sparseDepthCanonical);
+  colorFreeCanonical.renderRequest.diagramOptions.configOverrides = {
+    ...(colorFreeCanonical.renderRequest.diagramOptions.configOverrides || {}),
+    'objects.depth.fill_color': '#AA0000'
+  };
+  const colorFreeLegacy = structuredClone(colorFreeCanonical);
+  colorFreeCanonical.renderRequest.diagramOptions.depthTracks.forEach((track) => { track.color = null; });
+  const legacyOptions = colorFreeLegacy.renderRequest.diagramOptions;
+  legacyOptions.depthTrackFiles = [
+    [legacyOptions.depthTracks[0].source[0], null],
+    [null, legacyOptions.depthTracks[1].source[1]]
+  ];
+  legacyOptions.depthTrackColors = [null, null];
+  delete legacyOptions.depthTracks;
+  const importedColors = (request) => {
+    const { adv } = projectCanonicalSessionRequest(request).config;
+    return [adv.depth_color, adv.depth_tracks.map((track) => track.color)];
+  };
+  assert.deepEqual(importedColors(colorFreeCanonical), ['#AA0000', ['#AA0000', '#AA0000']]);
+  assert.deepEqual(importedColors(colorFreeLegacy), ['#AA0000', ['#AA0000', '#AA0000']]);
+}
 const wrongCanonicalDepthCardinality = structuredClone(sparseDepthCanonical);
 wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source =
   wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source.slice(0, 1);
@@ -3906,9 +4041,14 @@ assert.throws(
 );
 const missingCanonicalDepthField = structuredClone(sparseDepthCanonical);
 delete missingCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].label;
-assert.throws(
-  () => projectCanonicalSessionRequest(missingCanonicalDepthField),
-  /missing required field\(s\): label/
+// The reader, not the projection, checks the stored fields (D3a); a missing
+// label takes its writer's value, with a row.
+assert.deepEqual(
+  readStoredRenderRequest(missingCanonicalDepthField.renderRequest, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(missingCanonicalDepthField.resources)), path: 'renderRequest'
+  }).repairs.map(({ code, path }) => [code, path]),
+  [['setting-replaced', 'renderRequest.diagramOptions.depthTracks[0].label']]
 );
 const blankCanonicalDepthLabel = structuredClone(sparseDepthCanonical);
 blankCanonicalDepthLabel.renderRequest.diagramOptions.depthTracks[0].label = ' ';
@@ -3924,9 +4064,13 @@ assert.throws(
 );
 const unknownCanonicalDepthField = structuredClone(sparseDepthCanonical);
 unknownCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].legacyLabel = 'old';
-assert.throws(
-  () => projectCanonicalSessionRequest(unknownCanonicalDepthField),
-  /contains unknown field\(s\): legacyLabel/
+// The reader, not the projection, checks the stored fields (D3a).
+assert.deepEqual(
+  readStoredRenderRequest(unknownCanonicalDepthField.renderRequest, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(unknownCanonicalDepthField.resources)), path: 'renderRequest'
+  }).repairs.map(({ code, path }) => [code, path]),
+  [['setting-entries-dropped', 'renderRequest.diagramOptions.depthTracks[0]']]
 );
 assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
 assert.deepEqual(
@@ -4637,8 +4781,8 @@ assert.deepEqual(
   nestedStyleOverride
 );
 
-// The slot editor has no control for to_slot (an overlay that spans from its
-// anchor slot to a second slot): Generate and a saved Session keep the value.
+// to_slot (the slot editor's Extend to: an overlay that spans from its anchor
+// slot to a second slot): Generate and a saved Session keep the value.
 for (const [spanState, spanFilesData, requestKey, configKey, gcSlot] of [
   [circularP3State, filesData, 'circularTrackSlots', 'circular_track_slots',
     { side: 'inside', width: null, radius: null, inner_gap_px: null, outer_gap_px: null }],
@@ -5367,7 +5511,7 @@ const resolvedSelectedProtein = buildCanonicalRenderRequestRaw({
   resolvedComparisons: [{
     kind: 'precomputedProteinComparison',
     edgeKey: 'b->c',
-    rows: [{ query: 'q', subject: 's', identity: 90 }]
+    canonicalTsv: 'query\tsubject\tidentity\nq\ts\t90.0\n'
   }]
 });
 assert.deepEqual(
@@ -5378,10 +5522,12 @@ const resolvedProteinMarker = resolvedSelectedProtein.renderRequest.comparisons[
 assert.equal(resolvedProteinMarker.mode, 'none');
 assert.deepEqual(resolvedProteinMarker.pairs, []);
 
-assert.equal(characterizedRequests.length, 83);
+// 81 since D-66: the schema-1 and schema-2 typed collinearity requests are gone (only schema 3 can be bound); the
+// other 81 requests are the 83 recorded before, byte for byte.
+assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  'b654f731b14f0317193a9cdb21cfba7e2431011189b41d897a7003ffc6dcdeb8',
-  'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
+  '9f0a68dde640b4645bbbef3813fbdce3d59072167910543562c539ca3bbbfea3',
+  'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
@@ -5516,7 +5662,7 @@ if (roundTripSessionIndex >= 0) {
 // C1 I03/I04/I14/I15/I23: explicit draft composition wins over table/request order.
 {
   const backing = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
-  const frozen = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json')));
+  const frozen = readStoredSession(JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json'))));
   const oldProjection = projectCanonicalSessionRequest({ ...frozen,
     sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
   assert.equal(oldProjection.files.c_gb.name, frozen.webFiles.bindings.c_gb.name);
@@ -5567,7 +5713,8 @@ if (roundTripSessionIndex >= 0) {
     assert.equal(backing.sessionResourceSource(projected.files.c_gb[0]).descriptors, undefined);
   }
   const bad = { ...webFiles, bindings: { schema: 2, c_gb: { ...composite, components: [] } } };
-  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }), /at least two/);
+  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }),
+    (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS'); // R6 (R1-M3)
   const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
   assert.equal(noDraft.files.c_gb, null);
 }
@@ -5580,7 +5727,7 @@ for (const [fixture, locked] of [
 ]) {
   const bytes = await readFile(join(repoRoot, 'tests/fixtures/sessions', fixture));
   const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
-  const projection = projectCanonicalSessionRequest(session);
+  const projection = projectStoredSession(session);
   assert.equal(projection.config.form.keep_definition_left_aligned, locked, fixture);
 }
 
@@ -5711,9 +5858,9 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const { normalizeUserFacingError } = await import(
     pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
   );
-  const session = JSON.parse(gunzipSync(await readFile(join(
+  const session = readStoredSession(JSON.parse(gunzipSync(await readFile(join(
     repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
-  ))));
+  )))));
   assert.equal(session.version, 39);
   const project = (document, repairLegacyTableRows) => projectCanonicalSessionRequest({
     renderRequest: document.renderRequest, resources: document.resources, webFiles: document.webFiles || {},
@@ -5815,7 +5962,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     repoRoot, 'tests/fixtures/sessions/precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz'
   ))));
   assert.equal(Object.hasOwn(session.renderRequest.diagramOptions, 'conservationLabels'), false);
-  const ringLabels = (renderRequest) => projectCanonicalSessionRequest({
+  const ringLabels = (renderRequest) => projectStoredSession({
     renderRequest, resources: session.resources
   }).config.circularConservation.series.map((entry) => entry.label);
   assert.deepEqual(ringLabels(session.renderRequest), ['caenorhabditis-human.tlosatx.tsv']);
@@ -5845,7 +5992,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   for (const { name, fixture: fixtureName, records, sourceReads } of cases) {
     const session = await fixture(fixtureName);
     const renderRequest = records ? { ...session.renderRequest, records } : session.renderRequest;
-    const { linearSeqs } = projectCanonicalSessionRequest({
+    const { linearSeqs } = projectStoredSession({
       renderRequest, resources: session.resources, webFiles: {}, storedConfig: null
     }).files;
     const context = buildLinearRegionExtractionContext(linearSeqs, 'gb');

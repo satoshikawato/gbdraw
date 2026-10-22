@@ -76,20 +76,61 @@ export const buildBulkLabelProjection = (bulkOverrides, options = {}) => {
 };
 
 /**
- * @param {readonly { recordId?: unknown, record_id?: unknown, featureType?: unknown, feature_type?: unknown, qualifier?: unknown, valueRegex?: unknown, value?: unknown, labelText?: unknown, label_text?: unknown }[] | null | undefined} rows
+ * @typedef {{ recordId?: unknown, record_id?: unknown, featureType?: unknown, feature_type?: unknown, qualifier?: unknown,
+ *   valueRegex?: unknown, value?: unknown, labelText?: unknown, label_text?: unknown }} StoredLabelOverrideRow
  */
+/** @param {StoredLabelOverrideRow | null | undefined} row The row's five cells. */
+const labelOverrideCells = (row) => [
+  normalizeTsvCell(row?.recordId ?? row?.record_id),
+  normalizeTsvCell(row?.featureType ?? row?.feature_type),
+  normalizeTsvCell(row?.qualifier),
+  normalizeTsvCell(row?.valueRegex ?? row?.value),
+  normalizeTsvCell(row?.labelText ?? row?.label_text)
+];
+/**
+ * A label table row the table serializes: an object that names a record, a
+ * feature type, a qualifier and a value (Load drops any other, RL-D).
+ * @param {unknown} row
+ */
+export const isLabelOverrideRow = (row) => Boolean(row) && typeof row === 'object'
+  && labelOverrideCells(/** @type {StoredLabelOverrideRow} */ (row)).slice(0, 4).every(Boolean);
+
+/** @param {readonly StoredLabelOverrideRow[] | null | undefined} rows */
 export const serializeLabelOverrideRows = (rows) => {
   const serialized = (Array.isArray(rows) ? rows : [])
-    .map((row) => [
-      normalizeTsvCell(row?.recordId ?? row?.record_id),
-      normalizeTsvCell(row?.featureType ?? row?.feature_type),
-      normalizeTsvCell(row?.qualifier),
-      normalizeTsvCell(row?.valueRegex ?? row?.value),
-      normalizeTsvCell(row?.labelText ?? row?.label_text)
-    ])
-    .filter((fields) => fields.slice(0, 4).every(Boolean))
-    .map((fields) => fields.join('\t'));
+    .filter(isLabelOverrideRow)
+    .map((row) => labelOverrideCells(row).join('\t'));
   return serialized.length > 0 ? `${serialized.join('\n')}\n` : '';
+};
+
+/**
+ * A drawing's bulk label edits ({sourceText: text}) and its saved label table:
+ * the rules a loaded Session sent, which Generate sends in their place.
+ * @typedef {{
+ *   labelTextBulkOverrides: Record<string, string>,
+ *   canonicalLabelOverrideRows: { value: readonly StoredLabelOverrideRow[] }
+ * }} BulkLabelEditDrawing
+ */
+/**
+ * The one way an edit replaces a drawing's bulk label edits. A change also
+ * replaces the saved label table with the rows the editor builds, in the
+ * action's own History step, so Undo returns both (OV-1102). Session Load and
+ * History restore install both members as saved.
+ * @param {BulkLabelEditDrawing} drawing
+ * @param {Readonly<Record<string, string>>} edits
+ * @returns {boolean} Whether the bulk label edits changed.
+ */
+export const replaceBulkLabelEdits = (drawing, edits) => {
+  const current = drawing.labelTextBulkOverrides;
+  const sourceTexts = Object.keys(edits);
+  if (sourceTexts.length === Object.keys(current).length
+    && sourceTexts.every((sourceText) => Object.hasOwn(current, sourceText) && current[sourceText] === edits[sourceText])) {
+    return false;
+  }
+  Object.keys(current).forEach((sourceText) => { delete current[sourceText]; });
+  Object.assign(current, edits);
+  drawing.canonicalLabelOverrideRows.value = [];
+  return true;
 };
 
 /**

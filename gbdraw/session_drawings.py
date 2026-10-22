@@ -261,7 +261,6 @@ def allocate_session_drawing(
 
 
 _ARTIFACT_ENTRY_FIELDS = ("losatCache", "losatDerivedCache")
-_LEGACY_ARTIFACT_FIELDS = ("proteinRawCandidates", "proteinDerivedEvidence")
 
 
 def _pruned(value: Any) -> Any:
@@ -319,8 +318,10 @@ def _merged_shared(
     drawing's view, or from ``kept`` for a drawing that is not replaced. The
     first view gives every other shared field, and the others may repeat but
     not change it, except the LOSAT artifacts: their entries are merged
-    without repeats, and the protein identity manifest is the one non-empty
-    manifest among the views.
+    without repeats, the legacy protein artifacts are the Linear view's (the
+    first view's without one), because only a Linear drawing decides them,
+    and the protein identity manifest is the one non-empty manifest among
+    the views.
     """
 
     owners = [*views, *kept]
@@ -356,16 +357,9 @@ def _merged_shared(
                     [_mapping(view.get(field_name)).get("entries") for view in views]
                 )
             }
-    legacy: dict[str, Any] = {}
-    for field_name in _LEGACY_ARTIFACT_FIELDS:
-        envelopes = [
-            _mapping(_mapping(view.get("legacyArtifacts")).get(field_name)) for view in views
-        ]
-        entries = _merged_entries([envelope.get("entries") for envelope in envelopes])
-        if entries:
-            legacy[field_name] = {"schema": 1, "entries": entries}
-    if legacy:
-        shared["legacyArtifacts"] = legacy
+    legacy_owner = next((view for view in views if _request_mode(view) == "linear"), views[0])
+    if "legacyArtifacts" in legacy_owner:
+        shared["legacyArtifacts"] = legacy_owner["legacyArtifacts"]
     else:
         shared.pop("legacyArtifacts", None)
     manifests = []

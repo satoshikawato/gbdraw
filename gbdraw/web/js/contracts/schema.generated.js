@@ -3,11 +3,11 @@
 // above each constant; do not edit manually.
 
 // gbdraw/session_io.py: CURRENT_SESSION_VERSION
-export const SESSION_VERSION = 47;
+export const SESSION_VERSION = 48;
 
 // gbdraw/session_io.py: SUPPORTED_SESSION_VERSIONS
 /** @type {readonly number[]} */
-export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]);
+export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48]);
 
 // gbdraw/session_io.py: TYPED_DRAFT_SESSION_MIN_VERSION
 export const TYPED_DRAFT_SESSION_VERSION = 44;
@@ -17,6 +17,9 @@ export const MODE_SCOPED_SESSION_VERSION = 46;
 
 // gbdraw/session_io.py: ROW_KEYED_LEGEND_SESSION_MIN_VERSION
 export const ROW_KEYED_LEGEND_SESSION_VERSION = 47;
+
+// gbdraw/session_io.py: FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION
+export const FILE_IMPORT_ORIGIN_SESSION_VERSION = 48;
 
 // gbdraw/session_io.py: DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
 export const DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41;
@@ -32,6 +35,12 @@ export const CANONICAL_SESSION_MIN_VERSION = 31;
 
 // gbdraw/session_io.py: DRAWN_HASH_RULE_SESSION_MAX_VERSION
 export const DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44;
+
+// gbdraw/api/session_compat.py: MAIN_DISPLAY_FRAME_SESSION_VERSION
+export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;
+
+// gbdraw/api/session_compat.py: DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION
+export const DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION = 47;
 
 // gbdraw/session_request_codec.py: CANONICAL_REQUEST_SCHEMA
 export const CANONICAL_REQUEST_SCHEMA = 9;
@@ -63,7 +72,8 @@ export const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   44: 4,
   46: 5,
-  47: 5
+  47: 5,
+  48: 5
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA
@@ -103,6 +113,10 @@ export const LEGEND_POSITIONS = Object.freeze({
   linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])
 });
 
+// gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
+/** @type {readonly string[]} */
+export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
+
 // gbdraw/session_io.py: FLAT_DRAFT_TOP_LEVEL_FIELDS
 /** @type {readonly string[]} */
 export const FLAT_DRAFT_TOP_LEVEL_FIELDS = Object.freeze(['config', 'features']);
@@ -134,7 +148,7 @@ export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologica
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
-  renderProtocol: 2,
+  renderProtocol: 4,
   request: Object.freeze({
     currentSchema: 9,
     supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8, 9]),
@@ -155,4 +169,87 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
     losatDerivedCacheSchema: 3,
     proteinIdentityManifestSchema: 2
   })
+});
+
+// gbdraw/config/modify.py: config_paths_reading_unset_spellings()
+/** @type {readonly string[]} */
+export const CONFIG_UNSET_NUMBER_PATHS = Object.freeze(['canvas.linear.track_axis_gap', 'objects.conservation.ring_gap', 'objects.conservation.ring_width', 'objects.definition.linear.line_styles.accession.font_size', 'objects.definition.linear.line_styles.accession.font_weight', 'objects.definition.linear.line_styles.length.font_size', 'objects.definition.linear.line_styles.length.font_weight', 'objects.definition.linear.line_styles.name.font_size', 'objects.definition.linear.line_styles.name.font_weight', 'objects.definition.linear.line_styles.replicon.font_size', 'objects.definition.linear.line_styles.replicon.font_weight', 'objects.definition.linear.line_styles.subtitle.font_size', 'objects.definition.linear.line_styles.subtitle.font_weight', 'objects.depth.large_tick_interval', 'objects.depth.max_depth', 'objects.depth.min_depth', 'objects.depth.small_tick_interval', 'objects.depth.tick_font_size', 'objects.gc_content.large_tick_interval', 'objects.gc_content.max_percent', 'objects.gc_content.min_percent', 'objects.gc_content.small_tick_interval', 'objects.gc_content.tick_font_size']);
+
+// gbdraw/session_request_codec.py: describe_legacy_request_tables()
+export const LEGACY_REQUEST_TABLES = Object.freeze({
+  comparisonDefaults: Object.freeze({
+    evalue: 1e-05,
+    bitscore: 50.0,
+    identity: 70.0,
+    alignmentLength: 0
+  }),
+  featureTypes: Object.freeze(['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']),
+  featureShapes: Object.freeze({
+    repeat_region: 'rectangle'
+  }),
+  multiRecordSizeModeRenames: Object.freeze({
+    sqrt: 'auto'
+  }),
+  privateSpacingParam: '__gbdraw_legacy_spacing',
+  configOverrides: Object.freeze({
+    circular: Object.freeze({
+      "canvas.show_gc": true,
+      "canvas.show_skew": true
+    }),
+    linear: Object.freeze({
+      "canvas.show_gc": true,
+      "canvas.show_skew": true,
+      "objects.axis.linear.stroke_color": 'gray'
+    })
+  }),
+  configOverrideRenames: Object.freeze({
+    depth_tick_interval: 'depth_large_tick_interval'
+  }),
+  linearConfigOverrideValues: Object.freeze({
+    label_placement: Object.freeze({
+      on_feature: 'above_feature'
+    }),
+    linear_track_layout: Object.freeze({
+      spreadout: 'above',
+      tuckin: 'below'
+    })
+  }),
+  configOverridePaths: Object.freeze({
+    linear_axis_stroke_color: Object.freeze(['objects.axis.linear.stroke_color']),
+    show_gc: Object.freeze(['canvas.show_gc']),
+    show_skew: Object.freeze(['canvas.show_skew']),
+    linear_track_layout: Object.freeze(['canvas.linear.track_layout']),
+    comparison_height: Object.freeze(['canvas.linear.comparison_height']),
+    label_placement: Object.freeze(['labels.linear.placement'])
+  }),
+  comparisonHeightDefault: 60,
+  diagramOptionRenames: Object.freeze({
+    featureTable: 'featureVisibilityTable',
+    featureTableFile: 'featureVisibilityTableFile'
+  }),
+  collinearityStandardParameters: Object.freeze(['minAnchors', 'maxGeneGap', 'blockMergeGap', 'singletonMergeGap', 'maxDiagonalDrift', 'maxConflictsInMergeGap', 'maxParalogLinksPerOrthogroup', 'gapPenalty', 'nearbyDuplicateWindow', 'scoreMode', 'constantAnchorScore', 'minBlockScore', 'blockEvalue']),
+  collinearityStandardFields: Object.freeze({
+    minAnchors: 'minAnchors',
+    maxGeneGap: 'maxUnitGap',
+    maxDiagonalDrift: 'maxDiagonalDrift',
+    maxConflictsInMergeGap: 'maxConflicts'
+  }),
+  collinearityMergeOrientation: 'either',
+  collinearityStandardParalogLinks: 'maxParalogLinksPerOrthogroup',
+  paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
+  paralogLinksDefault: 2
+});
+
+// gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
+/** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
+export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({
+  values: /** @type {readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[]} */ (Object.freeze(['anchor', 'coortholog', 'inparalog', 'low_confidence', 'local_paralog'])),
+  default: 'anchor'
+});
+
+// gbdraw/analysis/protein_colinearity.py: OrthogroupMember.confidence
+/** @type {Readonly<{ values: readonly ('high' | 'medium' | 'low')[], default: 'high' }>} */
+export const ORTHOGROUP_MEMBER_CONFIDENCE = Object.freeze({
+  values: /** @type {readonly ('high' | 'medium' | 'low')[]} */ (Object.freeze(['high', 'medium', 'low'])),
+  default: 'high'
 });

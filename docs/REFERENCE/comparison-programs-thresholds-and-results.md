@@ -9,11 +9,11 @@
 | Uploaded BLAST outfmt 6/7 | **Upload BLAST TSV** | Prepared table input | One retained row per Linear link or Circular span |
 | LOSATN | Browser nucleotide search | Linear and Circular rings: `--losat losatn` (Python `losat="losatn"`) | Local nucleotide-alignment spans |
 | TLOSATX | Browser six-frame translated-nucleotide search | Linear and Circular rings: `--losat tlosatx` (Python `losat="tlosatx"`) | Translated query and subject spans |
-| LOSATP Pairwise | Browser protein search | `pairwise` protein-search mode | Retained individual protein matches |
-| LOSATP **Similarity groups** | Browser protein search | `orthogroup` compatibility token | Search-derived group membership and links |
-| LOSATP **Collinear blocks** | Browser protein search | `collinear` protein-search mode | Ordered blocks built from compatible anchors |
+| LOSATP Pairwise | Browser protein search | `--losat losatp --losatp_mode pairwise` (Python `losat="losatp", losatp_mode="pairwise"`) | Retained individual protein matches |
+| LOSATP **Similarity groups** | Browser protein search | `--losat losatp --losatp_mode similarity_groups` (Python `losatp_mode="similarity_groups"`) | Search-derived group membership and links |
+| LOSATP **Collinear blocks** | Browser protein search | `--losat losatp --losatp_mode collinear` (Python `losatp_mode="collinear"`) | Ordered blocks built from compatible anchors |
 | Selected mixed edges | Per-edge browser plan | `--comparisons_table` rows with `source` `losat` or `table` | Only the selected record pairs |
-| Circular similarity rings | Uploaded or browser-generated results | Prepared conservation inputs | Ordered rings around one reference |
+| Circular similarity rings | Uploaded or browser-generated results | `--losat losatn\|tlosatx` with `--conservation_sequence`, or prepared `--conservation_blast` | Ordered rings around one reference |
 
 LOSATN compares nucleotide sequence directly. TLOSATX translates both sides
 and is useful when coding similarity remains after nucleotide divergence.
@@ -79,22 +79,23 @@ combination in its raw result. The display-stage `max_hits` setting
 (`--losatp_max_hits` on the command line) is a separate limit: it
 defaults to `5` and keeps the strongest distinct subject proteins for each
 query protein after the display thresholds are applied. Similarity-group and
-Collinear construction use **Member hits per protein**, a separate limit on
+Collinear construction use **Max hits per protein for groups**, a separate limit on
 threshold-qualified directional subject hits. Changing a derived limit does
 not change raw search jobs or raw cache keys.
 
 In Web **Settings**, **Max target seqs** sets the raw LOSATP
 `--max-target-seqs` limit. A blank value leaves the search unbounded. Both
-**Max target seqs** and **Member hits per protein** initially use `5` in
+**Max target seqs** and **Max hits per protein for groups** initially use `5` in
 Collinear blocks and are unbounded in Similarity groups. Each LOSATP mode
 remembers its own values when switching modes, including after a Session
 round trip. An explicitly blank Collinear value stays unbounded.
 
-Web Collinear blocks defaults **Infer orthogroups with self-comparisons** to
-OFF. OFF searches between records and builds blocks from the selected anchors
-without orthogroup inference. ON adds within-record searches and orthogroup
-inference, including paralog matches. Similarity groups always performs that
-inference. Older Collinear Sessions that lack the checkbox setting keep ON
+Web Collinear blocks defaults **Build similarity groups with within-record
+searches** to OFF. OFF searches between records and builds blocks from the
+selected anchors without similarity groups. ON adds within-record searches and
+groups proteins, paralogs included, into similarity groups before blocks are
+built (the CLI option `--collinear_infer_orthogroups`). Similarity groups
+always builds these groups. Older Collinear Sessions that lack the checkbox setting keep ON
 for reproducibility. The Python and CLI defaults when the setting is omitted keep their previous
 behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 
@@ -148,7 +149,7 @@ files and raw-result names do not reactivate an edge.
 
 A selected or mixed plan can use LOSATN, TLOSATX, or LOSATP Pairwise matches.
 When **LOSAT Mode** is LOSATP, its **Similarity groups** and **Collinear
-blocks** presentation options are disabled and marked **(all pairs only)**.
+blocks** presentation options are disabled and marked **(all adjacent pairs only)**.
 Select **Run LOSAT** at the top of the Comparison card, or **Run LOSAT for all
 pairs** in its issue list, to change to the compatible all-adjacent topology; opening or closing
 **Settings** does not change the plan.

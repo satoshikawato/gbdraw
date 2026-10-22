@@ -1,8 +1,10 @@
 import copy
 import math
 import random
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TypeVar
 
 import pandas as pd
 import pytest
@@ -36,6 +38,7 @@ from gbdraw.labels.circular import (
     y_overlap,
 )
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
+from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_types import CircularLabelCandidate
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
@@ -317,6 +320,19 @@ def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: p
     assert place() == pruned
 
 
+def test_segments_through_rect_interior_counts_every_crossing_segment() -> None:
+    box = (0.0, 0.0, 10.0, 10.0)
+    crossing = [((-5.0, 5.0), (15.0, 5.0)), ((5.0, -5.0), (5.0, 15.0))]  # two leader segments, both through
+    on_edges = [((-5.0, 0.0), (15.0, 0.0)), ((10.0, -5.0), (10.0, 15.0))]  # along the bottom and right edges
+
+    assert circular_labels_module._segments_through_rect_interior(crossing, box) == 2
+    assert circular_labels_module._segments_through_rect_interior(crossing + on_edges, box) == 2
+    assert circular_labels_module._segments_through_rect_interior(on_edges, box) == 0
+    assert circular_labels_module._segments_through_rect_interior(crossing, (5.0, 5.0, 5.0, 5.0)) == 0
+    assert circular_labels_module._segment_intersects_rect_interior(*crossing[0], box)
+    assert not circular_labels_module._segment_intersects_rect_interior(*on_edges[0], box)
+
+
 def test_circular_leader_crossing_count_keeps_pairs_with_non_finite_points() -> None:
     """A non-finite leader coordinate must not drop a crossing pair from the broad phase."""
     # A NaN sort key used to leave this order unsorted, so the x sweep stopped at the far
@@ -510,29 +526,53 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
     return external_labels, total_length
 
 
+_Loaded = TypeVar("_Loaded")
+
+
+def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]:
+    """Run ``load`` and count the label pair overlap tests it makes.
+
+    Counts ``y_overlap`` and ``_labels_overlap``: the pair test inlines its interval
+    tests (OV-870), so ``y_overlap`` alone no longer sees the resolver's pair tests.
+    """
+    calls = 0
+    originals = {name: getattr(circular_labels_module, name) for name in ("y_overlap", "_labels_overlap")}
+
+    def counting(original):
+        def wrapper(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    for name, original in originals.items():
+        setattr(circular_labels_module, name, counting(original))
+    try:
+        loaded = load()
+    finally:
+        for name, original in originals.items():
+            setattr(circular_labels_module, name, original)
+    return loaded, calls
+
+
+# The crowded MjeNMV inner fixture keeps one overlapping pair (hypothetical protein / tyrosine
+# recombinase next to the origin) since OV-1366: it may no longer spread by wrapping past the origin.
+MJENMV_INNER_TUCKIN_OVERLAPS = 1
+
+
 @pytest.fixture(scope="module")
 def mjenmv_inner_tuckin_labels() -> tuple[list[dict], int, GbdrawConfig, int]:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length, cfg = _load_mjenmv_external_labels_with_config(
+    (external_labels, total_length, cfg), pair_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_mjenmv_external_labels_with_config(
             strandedness=True,
             resolve_overlaps=False,
             track_type="tuckin",
             allow_inner_labels=True,
             label_blacklist="",
         )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
-
-    return external_labels, total_length, cfg, y_overlap_calls
+    )
+    return external_labels, total_length, cfg, pair_overlap_calls
 
 
 @pytest.mark.parametrize(
@@ -1777,7 +1817,7 @@ def test_mjenmv_inner_dense_keeps_y_overlap_calls_under_regression_cap(
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.DENSE_INNER_RELAX_MIN_LABELS
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
     assert y_overlap_calls < 8000000
 
 
@@ -1801,7 +1841,7 @@ def test_mjenmv_inner_dense_wsv209_stays_near_wsv267_after_refine(
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     wsv267 = next((label for label in inner_labels if label.get("label_text") == "wsv267-like protein"), None)
     wsv209 = next((label for label in inner_labels if label.get("label_text") == "wsv209-like protein"), None)
@@ -1818,15 +1858,21 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_hemisphere_mismatch_cap(
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     mismatch_count, _ = circular_labels_module._hemisphere_mismatch_metrics(inner_labels, total_length)
-    assert mismatch_count <= 9
+    # 9 before OV-1366; 0 since the solver chain also keeps the labels within one turn (OV-1376).
+    assert mismatch_count == 0
 
 
-def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap(
+def test_mjenmv_inner_wsv136_wsv192_keep_feature_order_with_current_min_gap_overlap(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
+    """Before OV-1366 the pair had room because labels next to the origin wrapped past their neighbours.
+
+    With every label kept between its neighbours across the origin, this crowded inner fixture keeps
+    wsv136 before wsv192 and leaves them closer than the minimum gap (the CLI stops this figure before
+    and after the fix)."""
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
@@ -1842,10 +1888,11 @@ def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap(
         wsv136,
         minimum_margin=min_gap_px,
     )
-    assert not overlap
+    assert overlap
+    assert _angle_of_label(wsv136) < _angle_of_label(wsv192)
 
 
-def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
+def test_mjenmv_inner_labels_keep_feature_order(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1857,8 +1904,8 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
 
     unwrapped_angles = [_label_unwrapped_angle_for_order_test(label, total_length) for label in inner_labels]
     deltas = [unwrapped_angles[idx + 1] - unwrapped_angles[idx] for idx in range(len(unwrapped_angles) - 1)]
-    assert sum(delta <= 0.0 for delta in deltas) == 6
-    assert min(deltas) == pytest.approx(-1.8091384182670334, abs=1e-6)
+    # 6 backtracking steps before OV-1366 and OV-1376, when labels next to the origin could wrap past their neighbours.
+    assert min(deltas) > 0.0
 
 
 def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
@@ -1886,7 +1933,7 @@ def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
     )
 
 
-def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
+def test_mjenmv_wsv209_sits_in_its_preferred_left_hemisphere(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1895,7 +1942,7 @@ def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
         key=lambda label: float(label["middle"]),
     )
     assert inner_labels
-    assert _count_overlaps(inner_labels, total_length) == 0
+    assert _count_overlaps(inner_labels, total_length) == MJENMV_INNER_TUCKIN_OVERLAPS
 
     wsv209 = next((label for label in inner_labels if label.get("label_text") == "wsv209-like protein"), None)
     assert wsv209 is not None
@@ -1905,8 +1952,9 @@ def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
         float(wsv209["start_x"]),
         axis_eps_px=circular_labels_module.HEMISPHERE_AXIS_EPS_PX,
     )
+    # Right half before OV-1376, when the solver chain could span more than a full circle.
     assert preferred_half == -1
-    assert current_half == 1
+    assert current_half == -1
 
 
 def test_nc001879_outer_only_dense_skips_improved_solver_and_keeps_plain_overlaps_zero() -> None:
@@ -2110,21 +2158,9 @@ def test_rearrange_dense_labels_over_70_reuses_single_legacy_candidate() -> None
 
 
 def test_nc001879_outer_only_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        outer_labels, total_length, _ = _load_nc001879_outer_labels_with_priority_and_color_table(
-            allow_inner_labels=False,
-        )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+    (outer_labels, total_length, _), y_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_nc001879_outer_labels_with_priority_and_color_table(allow_inner_labels=False)
+    )
 
     assert len(outer_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
     assert _count_overlaps(outer_labels, total_length) == 0
@@ -2132,21 +2168,9 @@ def test_nc001879_outer_only_dense_keeps_y_overlap_calls_under_regression_cap() 
 
 
 def test_nc001879_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length, _ = _load_nc001879_external_labels_with_priority_and_color_table(
-            allow_inner_labels=True,
-        )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+    (external_labels, total_length, _), y_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_nc001879_external_labels_with_priority_and_color_table(allow_inner_labels=True)
+    )
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
@@ -2532,19 +2556,9 @@ def test_hmmtdna_resolve_overlaps_middle_keeps_trna_lys_text_outside_feature_tra
 
 
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length = _load_hmmtdna_external_labels(label_font_size=22.0)
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+    (external_labels, total_length), y_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_hmmtdna_external_labels(label_font_size=22.0)
+    )
 
     assert len(external_labels) > 0
     assert _count_overlaps(external_labels, total_length) == 0
@@ -3455,6 +3469,8 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
             "height_px": 20.0,
             "is_inner": False,
             "is_embedded": False,
+            # The leader is 0.07 em wide: 1.4 px at 20 px.
+            "font_size": 20.0,
         }
     ]
     canvas_config = SimpleNamespace(
@@ -3465,15 +3481,6 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         legend_offset_x=0.0,
         legend_offset_y=0.0,
         length_param="short",
-        profile=SimpleNamespace(
-            config=SimpleNamespace(
-                labels=SimpleNamespace(
-                    stroke_width=SimpleNamespace(
-                        for_length_param=lambda _length_param: 2.0,
-                    )
-                )
-            )
-        ),
     )
     original_canvas = vars(canvas_config).copy()
     original_labels = copy.deepcopy(labels)
@@ -3486,7 +3493,7 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
 
     assert len(obstacles) == 1
     assert obstacles[0].max_x == pytest.approx(1090.0)
-    assert obstacles[0].min_x == pytest.approx(889.0)
+    assert obstacles[0].min_x == pytest.approx(889.3)
     assert obstacles[0].max_x > canvas_config.total_width
     assert vars(canvas_config) == original_canvas
     assert labels == original_labels
@@ -3593,8 +3600,8 @@ def _tobacco_cli_default_cfg(label_font_size: float) -> GbdrawConfig:
     return GbdrawConfig.from_dict(config_dict)
 
 
-def _drawn_outer_labels(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
-    """Capture the external label list each assembly hands to the label drawer."""
+def _drawn_external_labels(monkeypatch: pytest.MonkeyPatch, *, inner: bool = False) -> list[list[dict]]:
+    """Capture the outer (or ``inner``) label list each assembly hands to the label drawer."""
 
     drawn: list[list[dict]] = []
     original = circular_assemble_module.add_labels_group_on_canvas
@@ -3605,7 +3612,7 @@ def _drawn_outer_labels(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
                 [
                     label
                     for label in kwargs["precalculated_labels"]
-                    if not label.get("is_embedded") and not label.get("is_inner")
+                    if not label.get("is_embedded") and bool(label.get("is_inner")) == inner
                 ]
             )
         return original(canvas, *args, **kwargs)
@@ -3691,7 +3698,7 @@ def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytes
 
     record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"), "genbank")
     total_length = len(record.seq)
-    drawn = _drawn_outer_labels(monkeypatch)
+    drawn = _drawn_external_labels(monkeypatch)
     gaps: dict[float, float] = {}
     for spacing in (0.5, 3.0):
         config_dict = modify_config_dict(
@@ -3707,3 +3714,154 @@ def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytes
         gaps[spacing] = _smallest_row_gap_px(drawn[-1], total_length)
 
     assert gaps[3.0] > gaps[0.5] + 1.0
+
+
+_METAZOAN_MITOCHONDRIA = Path(__file__).parent.parent / "gbdraw" / "web" / "tutorial-data" / "metazoan-mitochondria-four"
+
+
+def _cli_external_labels(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    gbk: Path,
+    *extra: str,
+    scope: str = "out",
+    inner: bool = False,
+) -> tuple[list[dict], str]:
+    """Run ``gbdraw circular --labels <scope>`` in-process; return the drawn outer (or ``inner``) labels and stderr."""
+
+    import sys
+
+    from gbdraw import cli
+
+    drawn = _drawn_external_labels(monkeypatch, inner=inner)
+    output = tmp_path / gbk.stem
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["gbdraw", "circular", "--gbk", str(gbk), "--labels", scope, *extra, "-o", str(output), "-f", "svg"],
+    )
+    cli.main()
+    return drawn[-1], capsys.readouterr().err
+
+
+def _clockwise_label_order(labels: list[dict]) -> list[str]:
+    """Label texts in the order their anchors appear clockwise from the top of the circle."""
+
+    def clockwise_from_top(label: dict) -> float:
+        return (math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"]))) + 90.0) % 360.0
+
+    return [str(label["label_text"]) for label in sorted(labels, key=clockwise_from_top)]
+
+
+def _is_cyclic_rotation(order: list[str], expected: list[str]) -> bool:
+    return len(order) == len(expected) and any(order[i:] + order[:i] == expected for i in range(len(order)))
+
+
+def _feature_order(labels: list[dict]) -> list[str]:
+    return [str(label["label_text"]) for label in sorted(labels, key=lambda label: float(label["middle"]))]
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("font_size", [None, "16"])
+def test_drosophila_outer_labels_keep_feature_order_across_the_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    font_size: str | None,
+) -> None:
+    """OV-1366 (Owner D-25 A): tRNA-Ile, the first feature after the origin, keeps its place before
+    tRNA-Gln and tRNA-Met; it was moved past ND2, its leader crossed three others, and the CLI warned."""
+
+    extra = () if font_size is None else ("--label_font_size", font_size)
+    labels, stderr = _cli_external_labels(
+        monkeypatch, capsys, tmp_path, _METAZOAN_MITOCHONDRIA / "NC_024511.2.gb", *extra
+    )
+
+    order = _clockwise_label_order(labels)
+    assert _is_cyclic_rotation(order, _feature_order(labels)), order
+    ile = order.index("tRNA-Ile")
+    assert order[(ile + 1) % len(order)] == "tRNA-Gln"
+    assert order[(ile + 2) % len(order)] == "tRNA-Met"
+    total_length = len(SeqIO.read(str(_METAZOAN_MITOCHONDRIA / "NC_024511.2.gb"), "genbank").seq)
+    shapes = circular_labels_module.circular_label_shapes(labels, total_length)
+    assert crossing_pairs([shape.leader for shape in shapes]) == []
+    assert "do not fit" not in stderr
+
+
+def _clockwise_descents(labels: list[dict]) -> int:
+    """How often a label in list (feature) order sits counter-clockwise of the one before it, cyclically."""
+
+    angles = [(math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"]))) + 90.0) % 360.0 for label in labels]
+    return sum(1 for index, angle in enumerate(angles) if angle > angles[(index + 1) % len(angles)])
+
+
+@pytest.mark.circular
+def test_zebrafish_outer_labels_near_the_origin_stay_at_their_features(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """OV-1366 (Owner D-25 A): the hemisphere pass moved tRNA-Pro, the last label, across the origin
+    and out of order; the later passes restored the order by pushing tRNA-Thr and tRNA-Pro 10-17 degrees
+    counter-clockwise of their features. The pass now keeps the cyclic order, so both stay at their features."""
+
+    refine = circular_labels_module._refine_labels_to_preferred_hemisphere
+    added_descents: list[int] = []
+
+    def checked_refine(labels, *args, **kwargs):
+        before = _clockwise_descents(labels)
+        refined = refine(labels, *args, **kwargs)
+        added_descents.append(_clockwise_descents(refined) - before)
+        return refined
+
+    monkeypatch.setattr(circular_labels_module, "_refine_labels_to_preferred_hemisphere", checked_refine)
+    gbk = _METAZOAN_MITOCHONDRIA / "NC_002333.2.gb"
+    labels, _ = _cli_external_labels(monkeypatch, capsys, tmp_path, gbk)
+
+    assert added_descents and max(added_descents) <= 0
+    order = _clockwise_label_order(labels)
+    assert _is_cyclic_rotation(order, _feature_order(labels)), order
+    assert order[(order.index("tRNA-Thr") + 1) % len(order)] == "tRNA-Pro"
+    total_length = len(SeqIO.read(str(gbk), "genbank").seq)
+    for label in labels:
+        if label["label_text"] in {"tRNA-Thr", "tRNA-Pro"}:
+            anchor = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"])))
+            assert _angle_diff(anchor, angle_from_middle(float(label["middle"]), total_length)) < 2.0, label["label_text"]
+
+
+_EXAMPLES = Path(__file__).parent.parent / "examples"
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("genome", ["MelaMJNV", "MellatMJNV"])
+def test_dense_inner_labels_keep_feature_order_across_the_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    genome: str,
+) -> None:
+    """OV-1376 (D-26): the label solver kept the inner labels in a straight chain from the seam, which
+    could span more than a full circle; with every pass bounded across the origin, both figures draw
+    with the inner labels in feature order and nothing that needs a notice."""
+
+    labels, stderr = _cli_external_labels(
+        monkeypatch, capsys, tmp_path, _EXAMPLES / f"{genome}.gb", scope="both", inner=True
+    )
+
+    order = _clockwise_label_order(labels)
+    assert _is_cyclic_rotation(order, _feature_order(labels)), order
+    assert "do not fit" not in stderr
+
+
+def test_cyclic_order_is_stable_once_kept() -> None:
+    """A chain already in cyclic order reports no move, so the label optimizer can stop early."""
+    angles = [0.9, 0.9, 0.9, 30.9]
+    assert circular_labels_module._keep_cyclic_order(angles, 0.05) is True
+    assert [circular_labels_module._keep_cyclic_order(angles, 0.05) for _ in range(3)] == [False, False, False]
+
+    wrapped = [10.0, 200.0, 365.0, 369.98]
+    circular_labels_module._keep_cyclic_order(wrapped, 0.05)
+    circular_labels_module._keep_cyclic_order(wrapped, 0.05)
+    assert circular_labels_module._keep_cyclic_order(wrapped, 0.05) is False
+    assert wrapped[-1] <= wrapped[0] + 360.0 - 0.05 + 1e-9

@@ -4,6 +4,7 @@
 import os
 import logging
 from contextlib import contextmanager
+from collections import Counter
 from collections.abc import Set as AbstractSet
 from typing import List, Dict
 
@@ -13,7 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
 from .record_select import parse_record_selector, reverse_records, select_record
-from ..exceptions import InputFileError, ParseError, ValidationError
+from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
 from gbdraw.core.record_metadata import _copy_source_feature_identity, _feature_source_index_map
 from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
@@ -22,6 +23,16 @@ logger = logging.getLogger(__name__)
 
 # A file that cannot be parsed is a user-fixable input: the Web asks to replace it.
 _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
+_DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
+# OV-1257: a GFF3/FASTA pair whose slot file holds no entry says which slot.
+_GFF_WITHOUT_FEATURES = {"code": "NO_RECORDS", "reason": "GFF_NO_FEATURES"}
+_FASTA_WITHOUT_ENTRIES = {"code": "NO_RECORDS", "reason": "FASTA_NO_ENTRIES"}
+
+
+def _parser_reason(error: BaseException) -> str:
+    """The parser's own reason, carried in the raised error (OV-1241)."""
+
+    return str(error).strip().rstrip(".")
 
 
 def genbank_absence_diagnostic(path: str) -> dict[str, str]:
@@ -34,6 +45,17 @@ def genbank_absence_diagnostic(path: str) -> dict[str, str]:
         first = next((line.strip() for line in handle if line.strip()), b"")
     reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
     return {"code": "NO_RECORDS", "reason": reason}
+
+
+def genbank_read_diagnostic(path: str) -> dict[str, str]:
+    """The INPUT_UNREADABLE diagnostic of a GenBank/DDBJ file the parser refused (OV-1258).
+
+    A gzip file says so; any other refusal is a file cut off or damaged.
+    """
+
+    with open(path, "rb") as handle:
+        compressed = handle.read(2) == b"\x1f\x8b"
+    return {"code": "INPUT_UNREADABLE", "reason": "GZIP_INPUT" if compressed else "GENBANK_PARSE"}
 
 
 def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
@@ -62,7 +84,6 @@ def load_gbks(
     logger.info("INFO: Loading GenBank file(s)...")
     for file_idx, gbk_file in enumerate(gbk_list):
         if not os.path.isfile(gbk_file):
-            logger.error(f"ERROR: File does not exist or is not accessible: {gbk_file}")
             raise InputFileError(f"File does not exist or is not accessible: {gbk_file}")
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
@@ -92,28 +113,19 @@ def load_gbks(
                 id_list.append(record.id)
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
-                logger.error(f"ERROR: {e}")
                 raise ValidationError(str(e)) from e
-            logger.error(
-                f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}"
-            )
             raise ParseError(
+                f"The GenBank parser stopped: {_parser_reason(e)}. "
                 f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format.",
-                diagnostic=_UNREADABLE_INPUT,
+                diagnostic=genbank_read_diagnostic(gbk_file),
             ) from e
         except Exception as e:  # A more generic catch-all for other unexpected issues
-            logger.error(
-                f"ERROR: an unexpected error occurred while processing {gbk_file}: {e}"
-            )
             raise ParseError(
                 f"Unexpected error while processing {gbk_file}: {e}"
             ) from e
     logger.info("INFO:              ... finished loading GenBank file(s)")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
     if len(id_list) < 1:
-        logger.error(
-            "ERROR: No valid GenBank records were loaded. Please check your input files."
-        )
         raise ValidationError(
             "No valid GenBank records were loaded. Please check your input files."
         )
@@ -121,8 +133,25 @@ def load_gbks(
 
 
 def merge_gff_fasta_records(
-    gff_records: List[SeqRecord], fasta_records: List[SeqRecord]
+    gff_records: List[SeqRecord], fasta_records: List[SeqRecord], *, fasta_file: str
 ) -> List[SeqRecord]:
+    """Give each GFF3 record the sequence of the FASTA record with its ID.
+
+    The FASTA IDs are the join key, so ``fasta_file`` must not repeat an ID
+    that a GFF3 record names; a FASTA sequence without GFF3 rows is not a
+    record, and its repeats are ignored as before.
+    """
+    id_counts = Counter(record.id for record in fasta_records)
+    gff_ids = {gff_record.id for gff_record in gff_records}
+    duplicated_ids = [
+        record_id for record_id, count in id_counts.items() if count > 1 and record_id in gff_ids
+    ]
+    if duplicated_ids:
+        message = (
+            f"FASTA file {fasta_file} has more than one sequence with the ID of GFF3 "
+            f"record(s) {', '.join(duplicated_ids)}. Give each FASTA sequence a unique ID."
+        )
+        raise ValidationError(message, diagnostic=_DUPLICATE_FASTA_IDS)
     merged_records: List[SeqRecord] = []
     fasta_dict: Dict[str, SeqRecord] = {record.id: record for record in fasta_records}
     fasta_order: Dict[str, int] = {
@@ -135,18 +164,12 @@ def merge_gff_fasta_records(
                 # If FASTA record exists, record.seq is FASTA sequence
                 gff_record.seq = fasta_record.seq
             except Exception as e:
-                logger.error(
-                    f"ERROR: Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}"
-                )
                 raise ParseError(
                     f"Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}"
                 ) from e
             merged_records.append(gff_record)
         else:
             # If no matching FASTA record, raise error and stop the process
-            logger.error(
-                f"ERROR: No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
-            )
             raise ValidationError(
                 f"No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
             )
@@ -316,22 +339,37 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
         yield
     except ValueError as e:
         if str(e).startswith("Record selector"):
-            logger.error(f"ERROR: {e}")
             raise ValidationError(str(e)) from e
-        logger.error(
-            f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
-        )
         raise ParseError(
-            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
+            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}): {_parser_reason(e)}.",
             diagnostic=_UNREADABLE_INPUT,
         ) from e
+    except GbdrawError:
+        raise
     except Exception as e:
-        logger.error(
-            f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
-        )
         raise ParseError(
             f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
         ) from e
+
+
+def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
+    """Read the records of a FASTA file the same way under every Biopython version.
+
+    Text before the first ">" line is skipped, as Biopython 1.85 (the Web's) does;
+    Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
+    Only the lines before the first entry are read twice.
+    """
+
+    with open(fasta_file) as handle:
+        while True:
+            start = handle.tell()
+            line = handle.readline()
+            if not line:
+                raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+            if line.startswith(">"):
+                break
+        handle.seek(start)
+        return list(SeqIO.parse(handle, "fasta"))
 
 
 def parse_gff_fasta(
@@ -349,17 +387,18 @@ def parse_gff_fasta(
     """
     for path in (gff_file, fasta_file):
         if not os.path.isfile(path):
-            logger.error(f"ERROR: File does not exist or is not accessible: {path}")
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
         gff_records = [_normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)]
+        if not gff_records:
+            raise ValidationError(f"GFF3 file {gff_file} has no feature lines.", diagnostic=_GFF_WITHOUT_FEATURES)
         catalogs = {
             id(record): build_source_feature_catalog(record) for record in gff_records
         } if source_feature_catalogs is not None else {}
         logger.info("INFO: Loading FASTA file {}".format(fasta_file))
-        fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
-        merged_records = merge_gff_fasta_records(gff_records, fasta_records)
+        fasta_records = _read_fasta_records(fasta_file)
+        merged_records = merge_gff_fasta_records(gff_records, fasta_records, fasta_file=fasta_file)
         if source_feature_catalogs is not None:
             source_feature_catalogs.extend(catalogs[id(record)] for record in merged_records)
         for record in merged_records:
@@ -384,7 +423,6 @@ def load_gff_fasta(
     logger.info("INFO: Loading GFF3/FASTA file(s)...")
 
     if len(gff_list) != len(fasta_list):
-        logger.error("ERROR: Number of GFF3 files does not match number of FASTA files.")
         raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
 
     for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
@@ -436,9 +474,6 @@ def load_gff_fasta(
     logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
     if len(record_list) < 1:
-        logger.error(
-            "ERROR: No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
-        )
         raise ValidationError(
             "No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
         )

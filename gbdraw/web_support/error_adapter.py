@@ -11,12 +11,15 @@ import logging
 import re
 from typing import Iterator, Protocol, cast
 
+from Bio.Seq import UndefinedSequenceError
+
+from gbdraw.diagrams.circular.radial_layout import SWITCHED_TRACK_IDS
 from gbdraw.exceptions import (
     ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
 )
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules embedFonts pdfFonts
-buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame
+buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame convertStoredProteinResultFrames
 extractCdsProteinFasta extractFirstFasta hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords measureLegendText promoteLegacyLosatpCache
 readComparisonSequence readFeatureOverrideTable registerFonts resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
@@ -50,16 +53,17 @@ protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collin
 # Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
 # owner (utils/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
-DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE NO_RECORDS REGION_INVALID DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_INVALID TRACK_LAYOUT LABEL_LAYOUT LOSAT_RUNTIME FEATURE_PLACEMENT FEATURE_IDENTITY MODE_SETTING".split())
+DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE NO_RECORDS REGION_INVALID DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_INVALID TRACK_LAYOUT LABEL_LAYOUT LOSAT_RUNTIME FEATURE_PLACEMENT FEATURE_IDENTITY MODE_SETTING HELPER_PROTOCOL".split())
 DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES FILENAME FILENAME_LENGTH
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
-RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES CIRCULAR_SETTING LINEAR_SETTING
-ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK RECORD_ID OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
+RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
+ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
-    "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex".split()
+    "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
+    "subjectRecordIndex".split()
 )
 
 # The engine computes a Result from the request alone, so an unclassified failure
@@ -216,6 +220,15 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         value = diagnostic[key]
         if type(value) is int and 0 <= value <= 10_000_000:
             context[key] = value
+    # A context value is a bounded scalar: the kept rows travel as one comma-separated text.
+    kept_tracks = diagnostic.get("keptInsideTracks")
+    if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(kept_tracks, list):
+        known = [track for track in kept_tracks if track in SWITCHED_TRACK_IDS]
+        if known:
+            context["keptInsideTracks"] = ",".join(dict.fromkeys(known))
+    slot_track = diagnostic.get("slotTrack")
+    if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(slot_track, str) and slot_track in SWITCHED_TRACK_IDS:
+        context["slotTrack"] = slot_track
     # Python words the label fit counts (gbdraw.labels.fit); the Web shows the sentence as sent.
     counts = diagnostic.get("labelFitCounts")
     if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):
@@ -291,6 +304,9 @@ def _classify_native(error: BaseException, chain: list[BaseException], stage: st
         code, context = _validation(cause)
         if code != "VALIDATION_UNCLASSIFIED":
             return code, context, stage
+    # OV-1258: a GenBank record without sequence is an input problem, not an engine failure.
+    if any(isinstance(cause, UndefinedSequenceError) for cause in chain):
+        return "INPUT_UNREADABLE", {"reason": "SEQUENCE_UNDEFINED"}, stage
     validation = isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError))
     # UnicodeError is a ValueError: test the explicit chain before the validation flag (CI-08).
     if any(isinstance(cause, UnicodeError) for cause in chain) or (

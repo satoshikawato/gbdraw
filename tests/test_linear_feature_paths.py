@@ -42,7 +42,6 @@ def _linear_path(
         "feature_strand": strand,
         "genome_length": 1000,
         "alignment_width": 800.0,
-        "genome_size_normalization_factor": 1.0,
         "separate_strands": False,
         "feature_y_positions": (0.0, 10.0, 20.0),
     }
@@ -180,15 +179,11 @@ def test_full_width_ratio_uses_exact_legacy_arrow_path() -> None:
     assert full_width_path == legacy_path
 
 
-@pytest.mark.parametrize("normalization_factor", [0.5, 1.0, 1.75])
-def test_numeric_head_ratio_is_resolved_after_record_normalization(
-    normalization_factor: float,
-) -> None:
+def test_numeric_head_ratio_is_resolved_after_record_normalization() -> None:
     result = create_arrow_path_linear(
         **_linear_path(
             start=100,
             end=500,
-            genome_size_normalization_factor=normalization_factor,
             head_length_ratio=2.0,
         ),
         shaft_width_ratio=0.5,
@@ -261,7 +256,6 @@ def test_multipart_narrow_arrow_uses_lane_center_and_reduced_width_shafts(
         genome_length=1000,
         alignment_width=1000.0,
         cds_height=20.0,
-        genome_size_normalization_factor=1.0,
         feature_strand=strand,
         separate_strands=True,
         arrow_length=40.0,
@@ -300,7 +294,6 @@ def test_undefined_strand_narrow_arrow_falls_back_to_full_width_rectangle() -> N
         genome_length=1000,
         alignment_width=1000.0,
         cds_height=20.0,
-        genome_size_normalization_factor=1.0,
         feature_strand="undefined",
         separate_strands=False,
         arrow_length=40.0,

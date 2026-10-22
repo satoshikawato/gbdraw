@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../state.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 // Which editor state each Result's bytes show (design §5.4). A Result
 // displayed again receives a domain only when that state changed since it
@@ -18,8 +20,6 @@ import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
  *   legendOrder: string
  * }} EditorPaintState
  */
-
-const toRaw = globalThis.window?.Vue?.toRaw ?? (/** @type {<T>(value: T) => T} */ (value) => value);
 
 /**
  * What the paint state reads of the application state besides the drawing.
@@ -57,6 +57,21 @@ export const editorPaintState = (state, drawing) => ({
     ? JSON.stringify(drawing.legendEntries.value.map(legendEntryKey))
     : ''
 });
+
+// The rule table a paint state shows, or null when it is unknown (a Result
+// restored without the state it shows, `unknownPaint`).
+/** @param {EditorPaintState} paint @returns {SpecificColorRule[] | null} */
+export const paintRuleTable = (paint) => (paint.colors[1]
+  ? /** @type {[SpecificColorRule[], unknown, unknown]} */ (JSON.parse(paint.colors[1]))[0]
+  : null);
+
+// Whether two paint states show the same palette and color edits.
+/** @param {EditorPaintState['colors']} left @param {EditorPaintState['colors']} right */
+export const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
+
+// Whether two paint states show the same fills: palette and color edits, and visibility.
+/** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
+const sameFills = (left, right) => sameColors(left.colors, right.colors) && left.visibility === right.visibility;
 
 // A paint state no editor state equals: a Result recorded with it shows
 // every paint domain and the labels on its next display. The Legend order is
@@ -104,8 +119,7 @@ export const createResultPaintRecord = () => {
       });
       bound = displayed;
       const { colors, visibility } = drawn;
-      behind = colors[0] !== current.colors[0] || colors[1] !== current.colors[1] || visibility !== current.visibility
-        ? { colors, visibility } : null;
+      behind = sameFills(drawn, current) ? null : { colors, visibility };
     },
     /**
      * The displayed Result leaves (a mode switch) having followed every live
@@ -153,6 +167,17 @@ export const createResultPaintRecord = () => {
      */
     lacking(identity) {
       return bound === identity ? behind : null;
+    },
+    /**
+     * Whether a label rerender drawn from `drawn` shows the `current` editor
+     * state as Python draws it: the same fills and strokes (D-36). The labels
+     * and the Legend order are projected on any figure. Read when its Result
+     * is ready, so an edit made after its paint was committed counts too.
+     * @param {EditorPaintState | null | undefined} drawn
+     * @param {EditorPaintState} current
+     */
+    drewPaint(drawn, current) {
+      return drawn ? sameFills(drawn, current) && drawn.strokes === current.strokes : false;
     },
     /** @param {string} identity The Result shown again with the intent it left with (E1). */
     rebind(identity) {

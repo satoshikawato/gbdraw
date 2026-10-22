@@ -44,7 +44,10 @@ def test_generated_web_contracts_match_python_source() -> None:
 def test_the_contracts_directory_holds_only_the_generated_modules() -> None:
     # R14: `contracts/` holds the modules that `--check` compares and nothing else.
     generator = _generator()
-    targets = {generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET, generator.REQUEST_SHAPE_TARGET}
+    targets = {
+        generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET, generator.REQUEST_SHAPE_TARGET,
+        generator.SESSION_SHAPE_TARGET,
+    }
 
     assert set(generator.TARGET.parent.rglob("*")) == targets
 
@@ -98,6 +101,49 @@ def test_a_changed_session_field_set_makes_the_generated_module_stale(
     )
 
     assert "Object.freeze(['another', 'originalColors', 'originalOrder'])" in generator.render_web_contracts_module()
+
+
+def test_the_member_role_and_confidence_values_come_from_the_python_literals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-1390: the Web shows these values in the UI language; it lists no value itself.
+    from gbdraw.analysis import protein_colinearity
+
+    generator = _generator()
+    current = generator.render_web_contracts_module()
+    assert (
+        "export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({\n"
+        "  values: /** @type {readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[]} */ "
+        "(Object.freeze(['anchor', 'coortholog', 'inparalog', 'low_confidence', 'local_paralog'])),\n"
+        "  default: 'anchor'\n"
+        "});\n"
+    ) in current
+    assert (
+        "export const ORTHOGROUP_MEMBER_CONFIDENCE = Object.freeze({\n"
+        "  values: /** @type {readonly ('high' | 'medium' | 'low')[]} */ (Object.freeze(['high', 'medium', 'low'])),\n"
+        "  default: 'high'\n"
+        "});\n"
+    ) in current
+
+    @dataclasses.dataclass(frozen=True)
+    class NextMember:
+        role: Literal["anchor", "coortholog", "inparalog", "low_confidence", "local_paralog", "next"] = "anchor"
+        confidence: Literal["high", "medium", "low"] = "medium"
+
+    monkeypatch.setattr(protein_colinearity, "OrthogroupMember", NextMember)
+    following = generator.render_web_contracts_module()
+
+    assert "'local_paralog', 'next']" in following
+    assert "(Object.freeze(['high', 'medium', 'low'])),\n  default: 'medium'\n" in following
+
+
+def test_a_member_field_default_outside_its_literal_is_refused() -> None:
+    @dataclasses.dataclass(frozen=True)
+    class Broken:
+        role: Literal["anchor"] = "other"  # type: ignore[assignment]
+
+    with pytest.raises(TypeError, match="Broken.role"):
+        _generator()._literal_field_declaration("BROKEN", Broken, "role")
 
 
 def test_the_legend_positions_of_a_mode_have_one_python_owner(
@@ -325,3 +371,53 @@ def test_description_data_renders_any_json_key_but_the_prototype() -> None:
         generator._frozen_json({"__proto__": 1})
     with pytest.raises(ValueError):
         generator._frozen_json(float("nan"))
+
+
+def test_the_session_shape_module_is_the_admission_description_as_frozen_data() -> None:
+    from gbdraw.session_contract import describe_session_admission
+
+    source = _generator().render_session_shape_module()
+    description = describe_session_admission()
+
+    assert re.findall(r"\bimport\b.*|\bfrom\s+['\"].*", source) == [
+        "import { BandedContractDescription } from '../utils/contract-shape.js' */"
+    ]
+    assert re.search(r"\bany\b", source) is None
+    assert "export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({" in source
+    for band in description["bands"]:
+        versions = ", ".join(map(str, band["versions"]))
+        assert (
+            f'Object.freeze({{minVersion: {band["minVersion"]}, versions: Object.freeze([{versions}]), '
+            f'root: "{band["root"]}"}})'
+        ) in source
+
+
+def test_the_session_typedefs_declare_each_band_and_their_union() -> None:
+    from gbdraw.session_contract import describe_session_admission
+
+    source = _generator().render_session_typedefs_module()
+    roots = [band["root"] for band in describe_session_admission()["bands"]]
+
+    assert f"/** @typedef {{{' | '.join(roots)}}} SessionChecked */" in source
+    assert " *   otherModeResult?: never,\n" in source  # a literal with no value admits nothing
+    assert " * @property {CheckedSessionResult[]} results\n" in source
+
+
+def test_a_literal_without_values_renders_as_never() -> None:
+    from gbdraw.contract_shapes import literal
+
+    assert _generator()._jsdoc_type(literal()) == "never"
+
+
+def test_a_changed_session_threshold_makes_the_session_shape_module_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_io as session_io
+
+    generator = _generator()
+    current = generator.render_session_shape_module()
+
+    monkeypatch.setattr(session_io, "CURRENT_ARTIFACT_SESSION_MIN_VERSION", 40)
+    monkeypatch.setattr(session_io, "CURRENT_AUTHORITY_SESSION_MIN_VERSION", 41)
+
+    assert generator.render_session_shape_module() != current

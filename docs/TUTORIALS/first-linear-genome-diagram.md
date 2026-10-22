@@ -44,8 +44,8 @@ files selected.
 ### Step 1: Load the NCBI Lambda genome
 
 Select **Linear** at the top of the app. A fresh Linear page starts with **No
-comparison**. Under **Input Genomes**, keep **GenBank** selected. The **GenBank
-File** uploader is the first control in **Sequence 1**; choose
+comparison**. Under **Input Genomes**, keep **GenBank** selected. The **GenBank / DDBJ
+File** uploader is the first control in **File 1**; choose
 `NC_001416.gb`. Leave **Record options** closed.
 
 The uploader should show `NC_001416.gb` in green. Keep one input row only; this Tutorial uses the complete `NC_001416.1` record without cropping or splitting it.
@@ -65,8 +65,8 @@ Select **Generate Diagram** without changing the presentation settings. When pro
 
 ### Step 3: Add concise labels and a ruler
 
-Set **Output Prefix** under **Basic**. **Generate Diagram** follows **Basic** in
-the DOM. Continue past it to the **Layout**, **Labels**, **Axis & Scale**, and
+Set **Output Prefix** under **Basic**. **Generate Diagram** stays at the bottom of
+the pane. Open the **Layout**, **Labels**, **Axis & Scale**, and
 **Legend · Bottom** sections for the remaining values below. Leave the closed
 **Advanced comparison and layout** disclosure unchanged.
 
@@ -164,8 +164,8 @@ record, labels, ruler, and legend.
 
 ### If the command fails
 
-- The ruler is missing: keep `--scale_style ruler` and `--track_layout middle`
-  in the same command.
+- The ruler is missing: keep `--scale_style ruler` in the command. Only
+  `--ruler_on_axis` needs a track layout of `above` or `below`.
 - `Output file already exists`: use a new empty directory or a new output
   prefix. gbdraw refuses to replace the existing SVG by default.
 

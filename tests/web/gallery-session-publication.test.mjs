@@ -146,6 +146,25 @@ for (const name of sessionNames) {
   assert.deepEqual(admitted.modes[mode].editorState.legend.colorOverrides, { 'GC content': '#ff0000' });
 }
 
+// OV-1145: a Session 47 is admitted as current unless it stored protein
+// results of a reverse-complemented record, which only Python converts.
+{
+  const source = structuredClone(await loadSession(sessionNames[0]));
+  assert.equal(admitGallerySession({ ...source, version: 47 }).version, CURRENT_SESSION_VERSION);
+  const stored = await loadReleasedSession('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz');
+  assert.throws(() => admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
+}
+
+// D-OD08 (5): a historical Session is promoted through the one request
+// reader; one whose request Load would repair is not published.
+{
+  const historical = await loadReleasedSession('lambda_basic_linear.v31-schema1.gbdraw-session.json.gz');
+  assert.equal(admitGallerySession(structuredClone(historical)).renderRequest.schema, 9);
+  historical.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
+  assert.throws(() => admitGallerySession(historical),
+    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } });
+}
+
 const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
 const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
@@ -304,7 +323,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 47 or historical versions 31-33\/39-44\/46/
+    /supports current version 48 or historical versions 31-33\/39-44\/46-47/
   );
 }
 
@@ -355,53 +374,18 @@ const comparisonResource = (row) => ({
     data: Buffer.from(`query\tsubject\tevalue\n${row}\n`, 'utf8').toString('base64')
   }
 });
-const replayNumberSpelling = await compareCanonicalRenderRequests({
-  expectedRequest: comparisonTableRequest,
-  expectedResources: comparisonResource('q\ts\t1.1200000000000001e-132'),
-  actualRequest: comparisonTableRequest,
-  actualResources: comparisonResource('q\ts\t1.12e-132'),
-  normalizeReplayGeneratedResources: true
-});
-assert.equal(replayNumberSpelling.equivalent, true);
-// OV-413: rows the web app computed spell booleans `true`; the CLI replay
-// rewrites them through pandas as `True`.
-const booleanResource = (value) => ({
-  'comparison-table': {
-    kind: 'canonical-tsv',
-    encoding: 'base64',
-    data: Buffer.from(`query\tsubject\tquery_orthogroup_representative\nq\ts\t${value}\n`, 'utf8').toString('base64')
-  }
-});
-const replayBooleanSpelling = await compareCanonicalRenderRequests({
-  expectedRequest: comparisonTableRequest,
-  expectedResources: booleanResource('true'),
-  actualRequest: comparisonTableRequest,
-  actualResources: booleanResource('True'),
-  normalizeReplayGeneratedResources: true
-});
-assert.equal(replayBooleanSpelling.equivalent, true);
-const changedComparisonBoolean = await compareCanonicalRenderRequests({
-  expectedRequest: comparisonTableRequest,
-  expectedResources: booleanResource('true'),
-  actualRequest: comparisonTableRequest,
-  actualResources: booleanResource('False'),
-  normalizeReplayGeneratedResources: true
-});
-assert.equal(changedComparisonBoolean.equivalent, false);
 const changedComparisonValue = await compareCanonicalRenderRequests({
   expectedRequest: comparisonTableRequest,
   expectedResources: comparisonResource('q\ts\t1.12e-132'),
   actualRequest: comparisonTableRequest,
-  actualResources: comparisonResource('q\ts\t1.13e-132'),
-  normalizeReplayGeneratedResources: true
+  actualResources: comparisonResource('q\ts\t1.13e-132')
 });
 assert.equal(changedComparisonValue.equivalent, false);
 const changedComparisonIdentity = await compareCanonicalRenderRequests({
   expectedRequest: comparisonTableRequest,
   expectedResources: comparisonResource('q\ts\t1.12e-132'),
   actualRequest: comparisonTableRequest,
-  actualResources: comparisonResource('q2\ts\t1.12e-132'),
-  normalizeReplayGeneratedResources: true
+  actualResources: comparisonResource('q2\ts\t1.12e-132')
 });
 assert.equal(changedComparisonIdentity.equivalent, false);
 
@@ -411,6 +395,22 @@ const finalized = await finalizeGallerySessionPublication({
 });
 assert.equal(finalized.equivalence.equivalent, true);
 assert.deepEqual(finalized.session.cliInvocation, lambda.cliInvocation);
+
+// OV-1144: the published legacy protein artifacts are the replay's, also when the replay writes none.
+{
+  const evidence = (/** @type {string} */ key) => ({
+    proteinDerivedEvidence: { schema: 1, entries: [{ schema: 1, kind: 'derived-losatp-payload', key, payload: {} }] }
+  });
+  const prepared = { ...structuredClone(lambdaPrepared.session), legacyArtifacts: evidence('prepared') };
+  const withoutLegacy = await finalizeGallerySessionPublication({
+    prepared, replayed: structuredClone(lambdaPrepared.session)
+  });
+  assert.equal(Object.hasOwn(withoutLegacy.session, 'legacyArtifacts'), false);
+  const withLegacy = await finalizeGallerySessionPublication({
+    prepared, replayed: { ...structuredClone(lambdaPrepared.session), legacyArtifacts: evidence('replayed') }
+  });
+  assert.deepEqual(withLegacy.session.legacyArtifacts, evidence('replayed'));
+}
 
 const replayWithUnreferencedResource = structuredClone(lambdaPrepared.session);
 replayWithUnreferencedResource.resources['unused-replay-resource'] = {
@@ -575,6 +575,58 @@ assert.rejects(
         assert.deepEqual(session.renderRequest.comparisons, source.renderRequest.comparisons, id);
         assert.deepEqual(session.modes.linear.config.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] }, id);
       }
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+// A CLI command's annotation slot params are text ("0", "false") and the CLI
+// leaves an Axis index it was not given unstated; the published request compares
+// them as Load reads them (OV-1299). A real difference in either still fails.
+{
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-slots-'));
+  try {
+    const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions';
+    const file = path.join(directory, 'slots.gbdraw-session.json');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', `${data}/NC_001879.gbk`,
+      '--annotation_table', `${data}/nicotiana-tabacum-regions.tsv`,
+      '--circular_track_slot', 'features:features@side=overlay,lane_direction=split',
+      '--circular_track_slot', 'names:annotations@set_id=plastome_regions,side=inside,r=0.75,w=12px,'
+        + 'padding_px=0,show_labels=false,overflow=compress',
+      '--circular_track_slot', 'regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,'
+        + 'show_labels=true,padding_px=1,overflow=compress',
+      '--circular_track_slot', 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08',
+      '-o', path.join(directory, 'slots'), '-f', 'interactive_svg', '--session_output', file],
+    { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+    const source = JSON.parse(await readFile(file, 'utf8'));
+    const { tracks } = source.renderRequest.diagramOptions;
+    assert.deepEqual([tracks.circularTrackSlots[1].params.padding_px, tracks.circularTrackSlots[1].params.show_labels,
+      tracks.circularTrackSlots[2].params.padding_px, tracks.circularTrackAxisIndex ?? null], ['0', 'false', '1', null]);
+    const { session, equivalence } = await prepareGallerySessionForPublication(source);
+    assert.deepEqual(equivalence.differences, [], 'CLI slot params');
+    assert.deepEqual(session.renderRequest.diagramOptions.tracks.circularTrackSlots[1].params.padding_px, 0);
+    assert.equal(session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, 0);
+    // A rebuild that reads a param or the Axis index differently is a difference.
+    for (const [change, at] of [
+      [(rebuilt) => { rebuilt.circularTrackSlots[2].params.padding_px = 3; }, /circularTrackSlots\[2\]\.params\.padding_px/],
+      [(rebuilt) => { rebuilt.circularTrackAxisIndex = 1; }, /circularTrackAxisIndex/]
+    ]) {
+      const tampered = createGallerySessionPublication({
+        promoteSession: promoteGallerySessionToCurrent,
+        assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
+        buildRequest: (input) => {
+          const built = buildCanonicalRenderRequest(input);
+          change(built.renderRequest.diagramOptions.tracks);
+          return built;
+        },
+        buildRequestState: buildCanonicalRequestState,
+        readRequest: readPublishedRenderRequest,
+        projectRequest: projectCanonicalSessionRequest,
+        resolveComparisonPlan: resolveLinearComparisonPlan
+      });
+      await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
+        (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);
     }
   } finally {
     await rm(directory, { recursive: true, force: true });

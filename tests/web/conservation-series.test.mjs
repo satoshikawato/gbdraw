@@ -9,7 +9,8 @@ import test from 'node:test';
 const {
   applyComparisonSequenceRecordLabel,
   defaultConservationSeriesLabel,
-  reconcileConservationSeries
+  reconcileConservationSeries,
+  withoutConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const file = (name, size = 10) => ({ name, size, lastModified: 0 });
@@ -84,4 +85,22 @@ test('a row whose file was removed or replaced is not relabeled', () => {
     series: [], sourceFiles: [], file: genbank, recordLabel: 'synthetic comparison c'
   }), false);
   assert.equal(series[0].label, 'comparison-c');
+});
+
+// OV-893: the one removal of a series (Remove, and Load for a series whose
+// table it could not read) takes the place from every list; the series after
+// it keep their own files and take the place before.
+test('withoutConservationSeries leaves out one series with its files; later series keep theirs', () => {
+  const series = ['b', 'c', 'd'].map((label, sourceIndex) => ({ label, sourceIndex, color: `#${sourceIndex}` }));
+  const kept = withoutConservationSeries({
+    blasts: ['b.tsv', null, 'd.tsv'], fastas: ['b.fa', 'c.fa', 'd.fa'], sequenceSources: ['b.fa', 'c.fa', null], series
+  }, 1);
+  assert.deepEqual(kept, {
+    blasts: ['b.tsv', 'd.tsv'], fastas: ['b.fa', 'd.fa'], sequenceSources: ['b.fa', null],
+    series: [{ label: 'b', sourceIndex: 0, color: '#0' }, { label: 'd', sourceIndex: 1, color: '#2' }],
+    labels: 'b,d', enabled: true
+  });
+  assert.equal(withoutConservationSeries({ blasts: ['b.tsv'], fastas: [], sequenceSources: [], series: [series[0]] }, 0).enabled, false,
+    'with no series left the comparison is off');
+  assert.equal(series[2].sourceIndex, 2, 'the stored entries are not changed');
 });

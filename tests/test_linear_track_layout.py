@@ -42,7 +42,7 @@ from gbdraw.linear import (
     _parse_linear_track_layout,
 )
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
-from tests.utils.linear_render_context import make_linear_record_render_context
+from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
 
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
@@ -222,7 +222,8 @@ def _build_bottom_ruler_fragment(
         legend="none",
     )
     return LengthBarGroup(
-        canvas_config.alignment_width,
+        # The longest record fills the alignment width.
+        float(canvas_config.alignment_width),
         longest_genome,
         canvas_config.length_param,
         scale=cfg.objects.scale,
@@ -382,6 +383,7 @@ def _expected_middle_rotated_label_bottom_relative_y() -> float:
         feature_config,
         canvas_config,
         render_context=make_linear_record_render_context(profile),
+        sequence_widths=alone_sequence_widths([record], canvas_config),
     )
     labels = all_labels[0]
     assert labels

@@ -57,7 +57,17 @@ test('comparison browser contracts run in the required PR contract job and full 
   }
   const workflow = readFileSync('.github/workflows/test.yml', 'utf8');
   const job = workflow.split('  web-contracts-pr:\n')[1].split('  web-pr-smoke:\n')[0];
-  assert.match(job, /python -m pytest tests\/[\s\S]*-m "browser and not slow"/);
+  assert.match(job, /python -m pytest tests\/[\s\S]*-m "browser and not slow"[\s\S]*\$COMPARISON_CONTRACTS_DESELECT/);
+  // A PR plan without functional shards still runs the wrapper; one with them runs the cases there.
+  const wrapperDeselect = '--deselect tests/test_linear_comparison_browser_contracts.py';
+  assert.ok(job.includes(
+    "COMPARISON_CONTRACTS_DESELECT: ${{ contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') && "
+      + `'${wrapperDeselect}' || '' }}`
+  ), 'web-contracts-pr must deselect the wrapper only when the plan requires playwright-functional');
+  assert.equal(job.split(wrapperDeselect).length, 2, 'web-contracts-pr must not deselect the wrapper unconditionally');
+  // Dev always has functional shard evidence (run or inherited), which includes these cases.
+  const devJob = workflow.split('  browser:\n')[1].split('  web-contracts-pr:\n')[0];
+  assert.match(devJob, /-m "browser and not slow"\n\s+--deselect tests\/test_linear_comparison_browser_contracts\.py\n/);
   const pytestEntry = readFileSync('tests/test_linear_comparison_browser_contracts.py', 'utf8');
   assert.match(pytestEntry, /@pytest\.mark\.browser/);
   assert.match(pytestEntry, /test:web:comparison-contracts/);

@@ -42,7 +42,7 @@ def main(directory: Path) -> None:
         web = render_canonical_web_request(document.to_dict()['renderRequest'],
             resource_paths=materialized.resource_paths, output_directory=directory / 'web')
     save_session_document(directory / 'directions.gbdraw-session.json', drawings=[SessionDrawingSpec(request, state={
-        'results': web['results'], 'editorState': {'featureCatalog': web['metadata']['featureCatalog']}})])
+        'results': web['results'], 'editorState': {'featureCatalog': web['featureCatalog']}})])
 
 
 if __name__ == '__main__':

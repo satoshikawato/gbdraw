@@ -139,6 +139,7 @@ const create = ({
   const controllerState = state();
   controllerState.featureCatalog.value.items[0].biologicalFeatures=members;
   const currentGroup = { id: 'og-1', members, orthologEdges: [] };
+  let enrichCalls = 0;
   const helperCalls = [];
   const generationCalls = [];
   let svg = null;
@@ -176,7 +177,11 @@ const create = ({
   const actions = createSimilarityAlignmentActions({
     state: controllerState,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
-    getEnrichedOrthogroupMembers: () => currentGroup.members,
+    getEnrichedOrthogroupMembers: () => { enrichCalls += 1; return currentGroup.members; },
+    // The orthogroup owner's detail of the selected group (OV-920).
+    selectedOrthogroupDetail: { get value() {
+      return { group: currentGroup, id: currentGroup.id, members: currentGroup.members };
+    } },
     getCommittedRequest:()=>getCommittedRequest?.()||canonical.renderRequest,
     getCommittedSession:()=>({...canonical,renderRequest:getCommittedRequest?.()||canonical.renderRequest}),
     projectCommittedAlignment,
@@ -229,7 +234,10 @@ const create = ({
     onError: (error) => { controllerState.errorLog.value = error; onError?.(error); },
     previewCandidate, clearCandidatePreview
   });
-  return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history };
+  return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history,
+    enrichCalls: () => enrichCalls,
+    // A Session load or a Generate of the same files commits a Session with its own resources.
+    replaceCommittedResources: () => { canonical = { ...canonical, resources: structuredClone(canonical.resources) }; } };
 };
 const startReview = (fixture, selected = reference) => fixture.actions.startFromPopup({
   groupId: 'og-1', reference: selected, mode: 'review'
@@ -281,6 +289,17 @@ test('normal Align applies only-usable and unusable targets with one helper and 
   ], [1, 1, 0]);
   assert.notEqual(fixture.state.results.value, priorResult);
 });
+
+// OV-1010: a member's null or blank bound is missing, not 0, so the member
+// has no display facts and Align sends the helper nothing.
+for (const missing of [null, '', '  ']) {
+  test(`Align refuses a member whose start is ${JSON.stringify(missing)} (OV-1010)`, async () => {
+    const fixture = create({ members: [reference, { ...targetA, start: missing }, targetC] });
+    const outcome = await startAlign(fixture);
+    assert.notEqual(outcome.status, 'ok');
+    assert.equal(fixture.helperCalls.length, 0);
+  });
+}
 
 test('normal Align keeps a missing target unchanged in the resolved plan', async () => {
   const fixture = create({ members: [reference, targetA],
@@ -586,13 +605,38 @@ test('stale initial resolution and canceled Apply cannot publish late completion
   assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
 });
 
-test('changed committed Result rejects an old draft before validation', async () => {
+test('a new Result or catalog under the same committed resources keeps the draft; other resources reject it before validation', async () => {
   const fixture = create();
   await startReview(fixture);
+  // A live setting change draws a new Result from the same sources (PD-OI-102, OV-1082), and
+  // the automatic rerender a new feature catalog of the same features (OV-1120). It keeps the
+  // committed resources.
   fixture.state.results.value = [{ name: 'new.svg' }];
+  const catalog = fixture.state.featureCatalog.value;
+  fixture.state.featureCatalog.value = { ...catalog, items: catalog.items.map((item) => ({ ...item })) };
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
+  // A Generate or a Session load, even of the same files and features, commits other resources:
+  // it replaces the figure (PD-OI-039). The resources decide, not the catalog.
+  fixture.replaceCommittedResources();
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), false);
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
   assert.equal(fixture.helperCalls.length, 1);
   assert.deepEqual(fixture.state.results.value, [{ name: 'new.svg' }]);
+});
+
+// OV-1120: the automatic rerender commits a live setting during the review. The helper, Apply
+// and the Reset receipt read the committed Session as it is then (PD-OI-102).
+test('Apply composes onto the committed Session that a live setting changed during the review', async () => {
+  let committed = structuredClone(renderRequest);
+  const fixture = create({ getCommittedRequest: () => committed });
+  await startReview(fixture);
+  committed = { ...structuredClone(committed), diagramOptions: { plotTitle: 'live' } };
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.at(-1).payload.projection.canonicalRequest.diagramOptions.plotTitle, 'live');
+  const [call] = fixture.generationCalls;
+  assert.equal(call.canonical.renderRequest.diagramOptions.plotTitle, 'live');
+  assert.equal(call.alignmentResetBefore.renderRequest.diagramOptions.plotTitle, 'live');
 });
 
 test('active schema-2 plan validates on regeneration and supports Reset and stable reorder', async () => {
@@ -663,6 +707,23 @@ test('drawer requires a unique exact reference before starting the Worker', asyn
   const duplicate = create({ members: [reference, { ...reference }, targetA] });
   assert.deepEqual(duplicate.actions.drawerReferenceOptions('og-1')
     .filter(({ anchor: selected }) => selected.biologicalFeatureId === 'clicked'), []);
+});
+
+// OV-920: the drawer of the selected group reads the members the orthogroup
+// owner enriched for it; reading its options and reason enriches none again.
+test('the selected group drawer reads its members from the selected detail (OV-920)', () => {
+  const fixture = create({ members: [reference, otherReference, targetA, targetC] });
+  const before = fixture.enrichCalls();
+  const drawer = fixture.actions.drawer.value;
+  assert.equal(drawer.groupId, 'og-1');
+  assert.deepEqual(drawer.options.map(({ label }) => label), fixture.actions.drawerReferenceOptions('og-1').map(({ label }) => label));
+  assert.equal(drawer.options.length, 4);
+  assert.match(drawer.disabledReason, /Select an exact reference/);
+  assert.equal(fixture.actions.drawerDisabledReason('og-1'), drawer.disabledReason);
+  assert.equal(fixture.enrichCalls(), before, 'the selected group is not enriched again');
+  assert.equal(fixture.actions.setDrawerReference('og-1', drawer.options[1].key), true);
+  assert.equal(fixture.actions.drawer.value.disabledReason, '');
+  assert.deepEqual(fixture.actions.drawerReferenceOptions('og-missing'), []);
 });
 
 // OV-381: a committed plan (from the popup or a loaded Session) shows its exact
@@ -1162,7 +1223,7 @@ test('the Custom direction select reads its record by own key (OV-572)', async (
   await startReview(f);
   f.actions.setDirectionMode('custom');
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const binding = html.match(/:value="([^"]+)"\s+:aria-label="'Direction for ' \+ card\.direction\.label"/)?.[1];
+  const binding = html.match(/:value="([^"]+)"\s+:aria-label="t\('Direction for \{record\}', \{ record: card\.direction\.label \}\)"/)?.[1];
   assert.ok(binding, 'the Custom direction select is found');
   const selectValue = new Function(
     'similarityAlignmentDraft', 'similarityAlignmentCustomDirection', 'card', `return (${binding});`

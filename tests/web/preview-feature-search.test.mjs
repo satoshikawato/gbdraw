@@ -97,8 +97,10 @@ const state = {
   previewFeatureSearchActiveIndex: ref(-1),
   previewFeatureSearchError: ref(''),
   previewFeatureSearchRenderedCount: ref(0),
+  previewFeatureSearchVisible: ref(true),
   clickedFeature: ref(null)
 };
+const focused = [];
 
 const { createPreviewFeatureSearch } = await import(
   '../../gbdraw/web/js/app/feature-search/preview-actions.js'
@@ -116,7 +118,9 @@ const search = createPreviewFeatureSearch({
     return { get value() { return getter(); } };
   },
   isActiveResultReady: () => true,
-  openFeatureEditorForFeature(target, point) { opened.push([target, point]); }
+  openFeatureEditorForFeature(target, point) { opened.push([target, point]); },
+  focusSearchQuery: () => focused.push('query'),
+  focusSearchToggle: () => focused.push('toggle')
 });
 
 const metricTotal = (name) => metrics
@@ -177,5 +181,62 @@ watchers[1].callback();
 state.previewFeatureSearchInput.value = 'native code';
 search.applySearch();
 assert.deepEqual(state.previewFeatureSearchMatches.value, []);
+
+// The search bar's visibility is view state only (D-03): hiding it keeps the
+// query, the regex box, the matches, and the active match; the toolbar toggle
+// shows it again and focuses the query (D-05), and the hide button returns
+// focus to that toggle. A loaded Session shows the bar again.
+state.previewFeatureSearchInput.value = 'kinase|phosphatase';
+state.previewFeatureSearchUseRegex.value = true;
+search.applySearch();
+search.goToNext();
+const searchSnapshot = () => ({
+  input: state.previewFeatureSearchInput.value,
+  query: state.previewFeatureSearchQuery.value,
+  useRegex: state.previewFeatureSearchUseRegex.value,
+  matches: [...state.previewFeatureSearchMatches.value],
+  active: state.previewFeatureSearchActiveIndex.value,
+  status: search.previewFeatureSearchStatusText.value
+});
+const beforeHide = searchSnapshot();
+assert.equal(beforeHide.matches.length, 2);
+assert.equal(state.previewFeatureSearchVisible.value, true);
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+search.hideSearchBar();
+assert.equal(state.previewFeatureSearchVisible.value, false);
+// D-06: the hidden bar's match count is named on the toolbar button.
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 2);
+assert.deepEqual(focused, ['toggle']);
+assert.deepEqual(searchSnapshot(), beforeHide);
+search.toggleSearchBar();
+assert.equal(state.previewFeatureSearchVisible.value, true);
+assert.deepEqual(focused, ['toggle', 'query']);
+assert.deepEqual(searchSnapshot(), beforeHide);
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+search.toggleSearchBar();
+assert.equal(state.previewFeatureSearchVisible.value, false);
+assert.deepEqual(focused, ['toggle', 'query']);
+// Clearing while hidden ends the search, so the toggle names no count.
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 2);
+search.clearSearch();
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+// D-08: a search without matches still dims the diagram, so a hidden bar
+// names its count of 0; the bar shown or no search names none.
+search.toggleSearchBar();
+state.previewFeatureSearchUseRegex.value = false;
+state.previewFeatureSearchInput.value = 'no such feature';
+search.applySearch();
+assert.deepEqual(state.previewFeatureSearchMatches.value, []);
+assert.equal(search.previewFeatureSearchStatusText.value, 'No matches');
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+search.hideSearchBar();
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
+search.switchModeSearch('circular', 'linear');
+assert.equal(state.previewFeatureSearchVisible.value, false);
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+search.switchModeSearch('linear', 'circular');
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
+search.resetModeSearches();
+assert.equal(state.previewFeatureSearchVisible.value, true);
 
 console.log('preview feature search tests passed');

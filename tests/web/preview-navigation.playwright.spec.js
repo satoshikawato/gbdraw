@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { writeFile } = require('node:fs/promises');
 const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { seeds, generate, switchMode } = require('./helpers/mode-transition.cjs');
 
 const geometry = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
@@ -279,18 +280,25 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await page.setViewportSize({ width: 1024, height: 740 });
   const beforeResize = await page.locator('[aria-label="Result Preview"]').evaluate((element) => element.clientWidth);
   const handle = await page.locator('.resize-handle').boundingBox();
+  const paneWidth = () => page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth);
+  const paneBeforeResize = await paneWidth();
   await page.locator('#output-prefix').focus();
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
   await page.mouse.down();
   // The press is default-prevented, so it must still take focus off the field (a pending edit commits on blur).
   expect(await page.evaluate(() => document.activeElement?.id)).not.toBe('output-prefix');
+  // OV-620: the pane follows the pointer from the first move, by the distance the pointer travels.
+  await page.mouse.move(handle.x + handle.width / 2 + 1, handle.y + handle.height / 2);
+  expect(await paneWidth()).toBe(paneBeforeResize + 1);
   await page.mouse.move(handle.x + handle.width / 2 + 45, handle.y + handle.height / 2, { steps: 5 });
   // OV-534: the drag resizes the pane and selects no page text on its way.
   expect(await page.evaluate(() => String(getSelection()))).toBe('');
   await page.mouse.up();
   expect(await page.evaluate(() => String(getSelection()))).toBe('');
   const afterResize = await page.locator('[aria-label="Result Preview"]').evaluate((element) => element.clientWidth);
+  expect(await paneWidth()).toBe(paneBeforeResize + 45);
   expect(beforeResize).toBeGreaterThan(640);
+  expect(afterResize).toBe(beforeResize - 45);
   expect(afterResize).toBeLessThanOrEqual(640);
   observations.push({ settingsResize: [beforeResize, afterResize] });
   await search.focus();
@@ -324,7 +332,7 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await page.locator('.result-tabs button').first().click();
   await expect(search).toBeVisible();
   expect(await page.evaluate(() => window.__s03Nodes.search === document.querySelector('.preview-feature-search'))).toBe(true);
-  await page.getByRole('combobox', { name: 'Search field' }).selectOption('label');
+  await page.getByRole('combobox', { name: 'Field to search' }).selectOption('label');
   await search.fill('tRNA');
   await search.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(0);
@@ -434,3 +442,129 @@ test('the Preview feature search is kept per diagram mode', async ({ page }) => 
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
   await expect.poll(searchState).toEqual({ input: '', query: '' });
 });
+
+// The search bar hides and shows again (D-01..D-05): hiding is view state only,
+// so the search, its matches, and its highlights stay; the canvas row takes the
+// freed height; neither button records a History step; the choice outlives a
+// mode round trip and Generate, and a loaded Session shows the bar again.
+for (const mode of ['linear', 'circular']) {
+  test(`the ${mode} Preview search bar hides and shows again without losing the search`, async ({ page }) => {
+    test.setTimeout(240000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    page.on('dialog', (dialog) => dialog.accept());
+    await openApp(page);
+    const session = join(process.cwd(), seeds[mode]);
+    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
+    const bar = page.locator('.preview-feature-search');
+    const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+    const toggle = page.locator('.preview-controls').getByRole('button', { name: 'Toggle feature search', exact: true });
+    const hide = bar.getByRole('button', { name: 'Hide feature search', exact: true });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toHaveText(/^\s*Search\s*$/);
+    await page.getByRole('checkbox', { name: 'Regular expression', exact: true }).check();
+    await search.fill('a|e');
+    await search.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
+    await page.getByRole('button', { name: 'Next match' }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchActiveIndex)).toBe(1);
+    const searchState = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return {
+        input: app.previewFeatureSearchInput,
+        query: app.previewFeatureSearchQuery,
+        useRegex: app.previewFeatureSearchUseRegex,
+        matches: app.previewFeatureSearchMatches.length,
+        active: app.previewFeatureSearchActiveIndex,
+        status: document.querySelector('.preview-feature-search .gfs-count').textContent,
+        highlighted: app.svgContainer.querySelectorAll('.gbdraw-preview-feature-search-active-match').length
+      };
+    });
+    const rows = () => page.locator('.preview-editor-layout').evaluate((layout) => {
+      const height = (selector) => layout.querySelector(`:scope > ${selector}`).getBoundingClientRect().height;
+      return { search: height('.preview-feature-search'), workspace: height('.preview-workspace') };
+    });
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const searched = await searchState();
+    expect(searched.highlighted).toBeGreaterThan(0);
+    const shown = await rows();
+    const steps = await undoCount();
+    // The hide button ends the query row; it does not wrap onto a row of its own.
+    expect((await hide.boundingBox()).y).toBeCloseTo((await search.boundingBox()).y, 0);
+
+    await hide.click();
+    await expect(bar).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toBeFocused();
+    const hidden = await rows();
+    expect(hidden.search).toBe(0);
+    expect(hidden.workspace).toBeGreaterThanOrEqual(shown.workspace + shown.search - 1);
+    expect(await searchState()).toEqual(searched);
+    // D-06: the dimmed diagram is explained by the match count on the toggle;
+    // its accessible name does not change (R12).
+    await expect(toggle).toHaveText(new RegExp(`^\\s*Search\\s*·\\s*${searched.matches}\\s*$`));
+    await expect(toggle).toHaveAccessibleName('Toggle feature search');
+
+    await toggle.click();
+    await expect(bar).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(search).toBeFocused();
+    await expect(toggle).toHaveText(/^\s*Search\s*$/);
+    expect(await rows()).toEqual(shown);
+    expect(await searchState()).toEqual(searched);
+    expect(await undoCount()).toBe(steps);
+
+    await toggle.click();
+    await expect(bar).toBeHidden();
+    expect(await undoCount()).toBe(steps);
+    await switchMode(page, mode === 'linear' ? 'circular' : 'linear');
+    await switchMode(page, mode);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await generate(page);
+    await expect(bar).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toHaveText(/^\s*Search\s*·\s*\d+\s*$/);
+
+    // D-08: a search without matches dims every feature too, so the toggle of
+    // the hidden bar names its count of 0.
+    const dimmed = () => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+      .classList.contains('gbdraw-preview-feature-search-results-active'));
+    await toggle.click();
+    await search.fill('no-such-feature');
+    await search.press('Enter');
+    await expect(page.locator('.preview-feature-search .gfs-count')).toHaveText('No matches');
+    await expect.poll(dimmed).toBe(true);
+    await hide.click();
+    await expect(toggle).toHaveText(/^\s*Search\s*·\s*0\s*$/);
+    expect(await dimmed()).toBe(true);
+
+    // D-09: at the narrow widths too the canvas takes the hidden bar's row and
+    // no gap stays above it; on a phone the count stays beside the icon.
+    await toggle.click();
+    await search.fill('a|e');
+    await search.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
+    const narrowRows = () => page.locator('.preview-editor-layout').evaluate((layout) => ({
+      gap: layout.querySelector(':scope > .preview-workspace').getBoundingClientRect().top - layout.getBoundingClientRect().top,
+      canvas: layout.querySelector('.preview-viewport').getBoundingClientRect().height
+    }));
+    for (const width of [720, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      if (!(await bar.isVisible())) await toggle.click();
+      const narrowShown = await narrowRows();
+      await hide.click();
+      await expect(bar).toBeHidden();
+      const narrowHidden = await narrowRows();
+      expect(narrowHidden.gap, `${width} px`).toBeCloseTo(0, 0);
+      expect(narrowHidden.canvas, `${width} px`).toBeGreaterThan(narrowShown.canvas);
+    }
+    await expect(toggle.locator('.preview-search-count')).toBeVisible();
+    await expect(toggle.locator('.preview-search-count')).toHaveText(/^·\s*\d+$/);
+
+    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
+    await expect(bar).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+}

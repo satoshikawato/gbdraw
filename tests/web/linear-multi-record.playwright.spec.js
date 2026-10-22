@@ -5,7 +5,8 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -88,6 +89,8 @@ const loadDefinitionSession = async (page, path) => {
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
   test.setTimeout(120000);
+  // The case counts the wheel requests of the cold boot.
+  await forceColdPyodideBoot(page);
   const wheelResponses = [];
   await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
     const response = await fetchRoute(route);
@@ -351,14 +354,14 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   // checkbox's accessible description instead of an always-on paragraph.
   await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
   await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
-    'OFF centers them in a common column width and follows row offsets', 'Changes apply on Generate'].join('.*')));
+    'OFF centers them in a common column width and follows row offsets'].join('.*')));
   const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tooltip = page.locator('[role="tooltip"]');
   await expect(tooltip).toHaveCount(0);
   await lock.focus();
   await page.keyboard.press('Tab');
   await expect(helpButton).toBeFocused();
-  await expect(tooltip).toContainText('Changes apply on Generate');
+  await expect(tooltip).toContainText('ON aligns Linear definitions in a common left column');
   await page.keyboard.press('Escape');
   await expect(tooltip).toHaveCount(0);
   await helpButton.hover();
@@ -390,9 +393,18 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   });
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   for (const locked of [false, true]) {
-    const before = await measureDefinitionColumns(page);
-    const requestBefore = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
+    const shown = await measureDefinitionColumns(page);
+    const committedRequest = () => page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
     await lock.setChecked(locked);
+    // Lock is live (PD-OI-103 G1): the Result redraws without Generate, and
+    // the committed request equals the one a Generate builds from the draft.
+    await expect.poll(async () => (await committedRequest()).diagramOptions.configOverrides['canvas.linear.keep_definition_left_aligned']).toBe(locked);
+    await settleLive(page);
+    const before = await measureDefinitionColumns(page);
+    expect(before).not.toEqual(shown);
+    const requestBefore = await committedRequest();
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await committedRequest()).toEqual(requestBefore);
     expect(await measureDefinitionColumns(page)).toEqual(before);
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-draft'; });
     const download = page.waitForEvent('download');
@@ -415,20 +427,30 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).diagramOptions.configOverrides[
       'canvas.linear.keep_definition_left_aligned'
     ])).toBe(locked);
-    for (const malformed of [null, 'false', 0, {}]) {
+    // A stored value that is not a boolean is not a refusal class (receipt
+    // 〔拒否〕): Load lists it with the value it uses (BA-D25), and Cancel keeps
+    // the current work. A null holds nothing: it loads with no row (E-OD06),
+    // so it goes last.
+    for (const malformed of ['false', 0, {}, null]) {
       const invalid = structuredClone(saved);
       invalid.modes.linear.config.form.keep_definition_left_aligned = malformed;
       const stable = await measureDefinitionColumns(page);
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
-      const outcome = await evaluateWithRetainedPromise(page, async raw => {
+      const pending = evaluateWithRetainedPromise(page, async raw => {
         const result = await window.__GBDRAW_APP__.importSession({
           target: { files: [new File([raw], 'malformed.gbdraw-session.json')], value: 'selected' }
         });
         return { status: result.status, error: result.error };
       }, JSON.stringify(invalid));
-      expect(outcome.status).toBe('error');
-      expect(outcome.error).toMatchObject({ code: 'INPUT_INVALID', stage: 'request-validation',
-        context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' }, summary: expect.stringContaining('Use true or false.') });
+      if (malformed === null) {
+        // A null reads like an omission, the historical OFF (importSessionDocument).
+        expect((await pending).status).toBe('ok');
+        await expect(lock).toBeChecked({ checked: false });
+        continue;
+      }
+      await answerLoadRepairs(page, [`Settings: the value "${typeof malformed === 'string' ? malformed : JSON.stringify(malformed)}"`
+        + ' (modes.linear.config.form.keep_definition_left_aligned) cannot be used; true is used.'], 'cancel');
+      expect((await pending).status).toBe('canceled');
       await expect(lock).toBeChecked({ checked: locked });
       expect(await measureDefinitionColumns(page)).toEqual(stable);
       expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(runs);
@@ -443,7 +465,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await page.setViewportSize({ width: 390, height: 844 });
   await helpButton.scrollIntoViewIfNeeded();
   await helpButton.click();
-  await expect(tooltip).toContainText('Changes apply on Generate');
+  await expect(tooltip).toContainText('ON aligns Linear definitions in a common left column');
   // The tip sits beside the checkbox label; capture the row that holds both.
   await helpButton.locator('xpath=ancestor::div[1]').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
 });
@@ -1692,8 +1714,8 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   expect(generated.placements).toEqual(expectedPlacement(generated.expectedKeys));
 
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  page.once('dialog', (dialog) => dialog.accept('automatic-source-card-rows'));
   await page.getByRole('button', { name: 'Save Session' }).click();
+  await answerSessionTitle(page, 'automatic-source-card-rows');
   const sessionPath = await (await sessionDownloadPromise).path();
 
   const restoredContext = await browser.newContext();
@@ -3364,12 +3386,12 @@ test('@comparison-contract File source order moves multi-record blocks through p
     const app = window.__GBDRAW_APP__;
     app.setLinearRecordRow(app.linearSeqs[0].uid, app.linearRecordRows.at(-1).row);
   });
-  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('does not give each File its own consecutive rows');
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
   await expect(page.getByLabel('Arrange linear records in rows')).not.toBeChecked();
-  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('does not give each File its own consecutive rows');
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
 
@@ -3849,7 +3871,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   await settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true }).selectOption('1');
   await settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true }).selectOption('2');
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'));
-  const member = settings.getByRole('spinbutton', { name: 'Member hits per protein', exact: true });
+  const member = settings.getByRole('spinbutton', { name: 'Max hits per protein for groups', exact: true });
   await expect(member).toHaveValue('');
   await expect(member).toHaveAttribute('placeholder', 'Unbounded');
   await member.fill('7');
@@ -4054,7 +4076,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
     ['32', 12, 2], ['16', 12, 1], ['2', 2, 1], ['8', 8, 1], ['24', 12, 2]
   ]) {
     await total.selectOption(budget);
-    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} runs)`);
+    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} parallel runs)`);
     await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
   }
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -4088,7 +4110,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await expect(runs.locator('option:checked')).toContainText('1 effective');
   await expect(threads.locator('option:checked')).toContainText('4 effective');
   await total.selectOption('32');
-  await expect(runs.locator('option:checked')).toHaveText('2 runs');
+  await expect(runs.locator('option:checked')).toHaveText('2 parallel runs');
   await expect(threads.locator('option:checked')).toHaveText('8');
   await runs.selectOption({ index: 0 });
   await threads.selectOption('auto');
@@ -4109,7 +4131,7 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
     app.setLinearComparisonLosatpMode('collinear');
     app.losat.blastp.collinearSearchScope = 'all';
   });
-  const checkbox = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  const checkbox = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches' });
   await expect(checkbox).not.toBeChecked();
   const run = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;

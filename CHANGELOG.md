@@ -23,6 +23,144 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Feature label style (CLI, Python, web app): a feature label with a leader
+  line has a line setting and a protection setting per diagram mode,
+  `--label_line {none,under}` and `--label_protection {none,halo,box}`
+  (config `labels.<mode>.line` and `.protection`; web app **Label Line** and
+  **Label Protection** under **Labels**). Linear draws an underline joined to
+  the leader, under horizontal labels only (a turned label gets no underline and
+  keeps its vertical leader, as before), and a white box at 80 % opacity behind the letters by default;
+  Circular draws neither by default, and a white halo around the letters
+  can be chosen. Leaders and underlines are
+  0.07 em wide, at least 1 px, in both modes.
+  - In Linear the underline takes no room in its label row, so labels keep
+    their rows and the figure its size.
+  - In both modes region labels keep off a feature label's underline and box
+    as off its letters. In Linear a region label that meets one moves the
+    feature label to another row, or is drawn and warned about; in Circular
+    the region label takes the place along its region that meets the fewest.
+  - Each Linear underline lies on a white casing that cuts other labels'
+    leaders where they cross it, and stops 0.12 em inside the letters at each
+    end, so neighbouring underlines stay apart.
+  - Neighbouring Linear feature labels in one label row keep at least 0.25 em
+    apart, so two names no longer read as one word; a label that would come
+    closer takes another row at the same position.
+  - The web app's PDF export draws labels without their halos (when a halo is chosen), so each label
+    is drawn and extracted once, and draws centred and end-aligned text where
+    the SVG draws it (it was shifted right).
+  - `labels.stroke_width` is removed. An override of it fails with the
+    unknown-path error. A saved Session keeps its saved diagram until the next
+    Generate, which draws the new style.
+- Circular labels of an annotation overlay that spans split feature lanes
+  (`lane_direction=split`, as in the `middle` preset), or that spans nothing
+  (no `to_slot`, `cover_anchor=false`), keep a room like other span labels:
+  automatic rings move clear of the letters instead of lying under them, and
+  where set radii leave no room the labels count as region labels on other
+  tracks in the warning (OV-1359, OV-1360). When such an overlay lies at the
+  outer edge, the canvas grows by its labels' room even where nothing
+  overlapped before; a `to_slot` span from split feature lanes to an inside
+  slot no longer reserves its room past that slot, so the circle gets smaller.
+  Figures without such a labelled overlay draw as before.
+- Linear `--label_placement above_feature`: a horizontal label now starts one
+  row off its own feature, the height of the first `auto` row, with a leader
+  from the feature, and so gets the underline and the white box as in `auto`
+  (it was drawn on the feature with none of them). A turned label
+  (`--label_rotation`) keeps its place on its feature and, with
+  `--label_protection box`, now gets the white box, whose sides toward the
+  feature stop at the letters, so a neighbour's leader through its letters is
+  faded there. Linear feature labels, in `auto` rows too, move off the
+  record's definition text instead of covering it, and a label still over it
+  counts in the label warning. Figures with horizontal `above_feature` labels
+  get taller; `auto` figures move only a label that lay over the definition
+  text (OV-1361, OV-1395, OV-1396, OV-1398). Neighbouring `above_feature`
+  labels on one line, horizontal or turned, keep the 0.25 em row gap along
+  their text, and the label warning counts a pair that comes closer
+  (OV-1397, OV-1363).
+- Linear `--label_placement above_feature`: a horizontal label that has to move
+  off another label now takes the next `auto` row off its own feature (the
+  tallest label plus `--linear_label_spacing` per row) instead of stopping just
+  above the label it clears, so its underline and box stay off the letters
+  below. Figures with stacked horizontal `above_feature` labels change height
+  (most get taller; one whose labels were stuck between rows can get lower);
+  turned labels, `auto` figures, and the bundled examples and Gallery figures
+  draw as before.
+- Linear: a region label no longer moves a feature label onto its record's
+  definition text (OV-1436).
+- Circular: with no annotation sets, an annotation slot that names a set id
+  draws the same with and without feature underlays, instead of failing with
+  feature underlays (OV-1437).
+- Linear `--label_rotation` of a whole turn (360, -360, 720) now places labels
+  as horizontal, matching the underline they are drawn with (OV-1438).
+- Linear definition text keeps its `definition_gap` from the tick labels of a
+  depth or GC% axis drawn at a record's left, not from the axis line, so a
+  definition no longer runs into a label such as `8191x` (OV-1399). The
+  figure's left edge covers those tick labels at their drawn width (OV-1403).
+  Figures with such an axis get about 20 to 35 px wider; other figures draw as
+  before. A GC% track beside a depth axis reserves vertical room for its tick
+  labels at the size they are drawn, the depth axis font size, so such
+  figures can change height by about a pixel.
+- Web app: a header **Language** menu switches the interface text at once,
+  without a reload, between English, Bahasa Indonesia, Español, Français,
+  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, and 한국어. English is
+  shown on a first visit whatever the browser's language; the choice is kept
+  per browser and is not part of the Session, History, or any export. A
+  **Suggest a translation fix** link beside the menu opens the GitHub
+  translation feedback form with the shown language and the gbdraw version
+  filled in. The
+  figure, every export, and the Session are the same in every language, and
+  numbers keep the English format. Warnings from Python, the Gallery tutorials,
+  and the documentation stay English. Translated wording may contain errors until it is
+  later corrected; the Bahasa Indonesia, Español, Français, Português, Tiếng
+  Việt, ไทย, and 한국어 wording was drafted and checked without a
+  native-speaker reviewer.
+- Circular labels keep the features' order across the origin (the seam of the
+  circle), outer and inner, so fewer leaders cross and inner labels stay in
+  order. Some figures that stopped with "labels do not fit" now draw.
+- Circular region labels that lie on a track with a set radius (`r=`) are
+  reported in the label warning ("N region labels on other tracks"); the figure
+  is unchanged.
+- Web app, Legend: a Legend row of color None shows an empty struck-through
+  swatch and **None** in the Legend tab and the Legend item popup, and later
+  live color edits of such a row no longer fail (OV-1385, OV-1386).
+- SVG feature IDs: of two features with the same type and location, the one
+  left drawn when the other is hidden keeps its `__instance_<source index>`
+  rendered ID (element `id`, `data-gbdraw-rendered-feature-id`,
+  `data-label-feature-id`), so the live Web Result and Generate agree. When the
+  first feature of a record is one of them, its instance is `0` instead of
+  `item` (OV-1485).
+- Web app, Legend: after you sort or move the Legend rows, removing a color
+  rule that brings back a feature-type row (for example **CDS**) keeps your
+  order at the next Generate, with the returning row last, as the live Result
+  shows it; Generate no longer returns the Legend to the default order
+  (OV-1486).
+- Web app, History: the notice about discarded Undo history appears only when
+  the memory limit drops steps, not for the routine 30-step window.
+- Web app: **Undo** and **Redo** are disabled while the step they would take
+  switches the diagram mode and waits for a label rerender, **Generate
+  Diagram**, or a Session save or load, instead of a click that does nothing.
+- A CLI Session records `--label_blacklist` as keywords, not as a Blacklist
+  File; older CLI Sessions keep their binding.
+- Web app: count sentences (for example "1 source record inspected") use the
+  singular and plural forms of each language, and several English texts now
+  use the control names the UI shows (#1276).
+- Web app: the translations were checked against each other and corrected, the
+  English of 27 texts now names the control or the action it describes, and
+  the header, settings rail, popups, and controls fit their text in every
+  language; a name wraps only between words, never inside one.
+- Web app, Depth: unnamed Depth series are called **Depth** for one series and
+  **Depth 1**, **Depth 2**, … for more, as the CLI and Python draw them;
+  the web app named them **Depth**, **Depth 2** (OV-1508). Editing a Linear
+  Depth row's height no longer adds empty Depth series up to that row
+  (OV-1510).
+- Comparison, Depth, and Session tables read decimal numbers exactly with every
+  supported pandas version; before pandas 3.1 some values, for example a
+  comparison E-value in `data-evalue`, were one unit in the last place off
+  (OV-1534).
+- Documentation: the GUI images, the `examples/` figures, and the Gallery
+  tutorial media were retaken for the feature label style.
+- Documentation: the GUI images and the Gallery tutorial media were retaken
+  again so that they show the header **Language** menu and the final label
+  look; the `examples/` figures were checked and are unchanged.
 - Fonts (CLI, Python, web app): diagram text can use any font, including a
   font installed on the computer or loaded from a file, and gbdraw measures
   labels, the legend, and titles with that font instead of Liberation Sans
@@ -133,12 +271,167 @@ write-up of a release.
   example one tint per region from the GC track to the feature track
   (`regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_content,layer=underlay,z=-1`).
   `to_slot` follows the anchor rules, and the span adds no space between the
-  slots; in Linear, a span that shows labels keeps room for them at its edge.
-  The web app draws and saves a loaded `to_slot`; its slot editor has no
-  control for it yet. The CLI reference now documents the overlay slot
+  slots unless it has nothing to cover on a record; in Linear, a span that
+  shows labels keeps room for them at its edge. The web app's slot editor sets
+  it with **Extend to** (see below). The CLI reference now documents the overlay slot
   parameters (`anchor_slot`, `layer`, `cover_anchor`, `to_slot`). Fixed: a
   Python slot mapping that spelled the key with capitals (`Anchor_Slot`) was
   accepted but drawn on the axis instead of on its anchor slot (OV-475).
+- Linear tints that cover the feature track (a `highlight` annotation row
+  without custom slots, a feature drawn as an underlay such as
+  `repeat_region`, and an overlay slot with `cover_anchor=true`) now cover
+  the feature lanes with `--track_layout above` and `below`. They were drawn
+  9.5 to 18.5 px nearer the axis than the lanes, and their own height pushed
+  the lanes away from the axis and left empty space. The tint now adds no
+  space, its labels keep room beyond the lanes as for `to_slot`, and a region
+  without a label keeps none (OV-474, OV-476, OV-842). On a record whose only
+  features are underlays, a `to_slot` span from the feature track now covers
+  their nominal lanes too. Fixed: a feature-bound ribbon of a feature moved to
+  another lane stopped at the outermost lane of a `to_slot` span instead of
+  at its own lane.
+- Linear span labels (a `highlight` annotation row without custom slots, an
+  overlay slot with `to_slot`, or one with `cover_anchor=true` on the feature
+  track) no longer lie on the next slot or on the axis line. The room for the
+  labels (9 px for a 10 pt label) is now kept between slots too,
+  not only at the edge of the record: the next GC, skew, or feature-lane slot,
+  or the axis line, moves out by up to that much on the side with label text.
+  With the default `--track_layout below`, a labelled `highlight` row no
+  longer puts its label on the axis line; the lanes move away from the axis
+  only by the part of the room the gap did not already give (2 px for the
+  tobacco chloroplast and AP027078). Figures without a labelled span are
+  unchanged (OV-843).
+- Linear annotation labels (a labelled row, `to_slot` span, or annotation
+  slot, with any mark) keep `label_offset` (4 px by default) between their
+  painted letters and the painted edge of their mark, its stroke and a
+  bracket's end caps included, and the same gap beyond the letters to the
+  axis line, the next slot, or the record edge; a `to_slot` or
+  `cover_anchor` span's label stays outside every slot the span covers,
+  whatever its mark and its own `h` (OV-1156), `label_offset` beyond the
+  span's edge or beyond the part of the mark's stroke that passes it.
+  `highlight`, `band`, and `bracket` labels no longer touch or overlap their
+  mark; `line` labels, which had 4.7 px, move 0.7 px closer. The label room
+  grows to match; records grow only where nothing else already gave that room,
+  by 0 to 7 px per record in the tested figures (OV-844). The label room now
+  also follows a slot's `style_override` font size and offset (OV-848).
+- Linear overlays with nothing to span on a record (`cover_anchor` on a record
+  without feature lanes, a `to_slot` span where neither slot has a band) are
+  drawn there as a plain overlay on their anchor: they keep their own place,
+  their own `h`, and their mark's label rule, the anchor's spacing applies
+  (8 px for a Depth anchor), and their labels keep their room instead of lying
+  on the next slot (OV-1158, OV-1159, OV-1171). The room a span's labels need
+  beyond a slot without data on a record (for example a Depth slot with no
+  file there) no longer brings back that slot's spacing; the slots after it
+  stay packed and the letters keep `label_offset` from the axis line and the
+  next slot (OV-1170).
+- Linear: a region label that crossed a feature label's leader line or
+  overlapped a feature label now moves along its region, its centre over one
+  of the region's marks (never into the gap of a region across the origin), to
+  the nearest clear place. Its letters may hang past either end of the record
+  bar, but the record names, definition text, and the other records of the row
+  (their bars, labels, and leader lines) stop them there, and the figure grows
+  to hold them; a region label, moved or at its own place, keeps clear of the
+  other records of its row (OV-1157, OV-1172, OV-1174). Labels without such a
+  conflict stay where they were, for example the tobacco chloroplast `IRb` and
+  `IRa` labels with `--track_layout above` (OV-845).
+- Linear: a region label that meets feature labels or leader lines where no
+  place along its region is clear is placed inside its filled box, or the
+  feature labels it meets move to another row, or it is drawn in front of its
+  record's leader lines on a white rounded box at 70 % opacity that never
+  reaches past `label_offset` toward its own mark, each only when that clears
+  every overlap of the label; its font and line count never change, and
+  figures without overlaps draw as before. A label that still overlaps is
+  drawn at the place with the fewest conflicts and warns (a count on the
+  command line, a notice band in the Web app with no fix offered) (OV-1155,
+  OV-1290).
+- Circular annotation labels keep `label_offset` from other rings: an
+  annotation slot, and the outermost slot a `to_slot` or `cover_anchor` span
+  covers, reserve the labels' room, so automatic rings move clear; a ring at an
+  explicit `r` keeps its radius, and an inside numeric ring there with an
+  automatic width narrows (OV-1192, OV-1207). The gap is measured from the
+  painted edge of the mark (stroke and bracket caps included) to the letters
+  for every label orientation, inward and outward, as in Linear; letters that
+  would meet the axis circle keep the same gap beyond it, and labels past the
+  outermost ring stay on the canvas (OV-849, OV-1190, OV-1191). Labels move
+  along their region off feature labels and leaders (OV-1173), and span labels
+  stay off every covered ring (OV-1189).
+- Circular region labels with `label_orientation` `auto` (the default) or
+  `arc` are drawn along their circle, upright in both halves, instead of
+  straight; `tangent` stays straight, and `radial` and `horizontal` are
+  unchanged. A label longer than its circle allows keeps its start and an
+  ellipsis and warns (`N region label(s) cut` on the command line, "Region
+  labels are cut to fit their circle (N)." in the Web app, no fix offered)
+  (OV-1210).
+- Track slots that are not annotation slots now reject parameters their
+  renderer does not read (`to_slot` and `anchor_slot` say they belong to
+  annotation slots), from the CLI, Python slot objects and Sessions;
+  comparison-ring slots keep the keys saved Sessions store (OV-477). They
+  accept and ignore `legend_label`, `label` and `color` in slot text, and
+  `fileName` in Sessions and Python slot objects, where their renderer does not
+  read them, so Sessions from released versions with a label left on a row
+  whose renderer changed load; in the Web, changing a comparison-ring row's
+  renderer no longer keeps its label, color and file name (OV-1186). A Linear
+  GC content slot's `legend_label` now names its legend row, and each content
+  slot draws its own row under its dinucleotide, as in Circular (OV-846,
+  OV-1185).
+- Region annotation labels without `label_font_size` are drawn at the feature
+  label font size of the same drawing (by default 14 pt, or 8 pt for long records,
+  in Circular; 24 pt, or 5 pt, in Linear; or `--label_font_size`) instead of a fixed 10 pt;
+  a `label_font_size` on the row, set, or slot still wins (#1202).
+- Web app: an Overlay annotation slot row in the Circular and Linear Custom
+  Track Slots editors has an **Extend to** select that sets `to_slot`, so a
+  region tint can span from its anchor slot to a second slot; the editor
+  reports the same `to_slot` errors as the CLI before Generate, and Run Info's
+  Source recipe includes the key.
+- Web app: an Overlay annotation row made in the Circular or Linear Custom
+  Track Slots editor no longer always fails with "must have z below/above" on
+  Generate. Placing the row on its anchor (**Overlay anchor**, **On axis**), its
+  **Underlay** / **Foreground** layer, the anchor and **Extend to** give the row
+  a `z` one below the lowest (**Underlay**) or one above the highest
+  (**Foreground**) `z` of the slots it names, in the same History step, and
+  keep a `z` that already meets that rule, such as one from a loaded Session
+  (OV-1297).
+- Gallery: the tobacco chloroplast example tints each structural region (LSC,
+  IRb, SSC, IRa) from the gene track through the GC content track and names
+  the regions with curved labels on an inner ring of lines, from the new
+  `nicotiana-tabacum-regions-span.tsv`; its Session is built from its declared
+  command. The annotated chloroplast Tutorial draws the same figure in the web
+  app, on the command line, and in Python.
+- CLI: a `marks=` filter in an annotation track slot spec is written to
+  `--session_output` as a list, so the web app loads the Session instead of
+  reporting "has invalid mark filters" (OV-1298).
+- Web app: until a diagram draws it, an **Overlay anchor** annotation row's
+  Circular **Width** and **Radius** notes and Linear height note name the rows
+  it follows, such as "follows features → gc_content", instead of a size
+  estimate that ignored those rows (OV-1300).
+- Web app: Generate waits for uploaded rule, priority, color, whitelist and
+  blacklist files that are still being applied, so a Priority File uploaded
+  just before Generate is no longer left out (OV-1193). A Specific rules file no
+  longer loses its rules when another rule or color file is uploaded while it
+  is still being applied (OV-1205); when it cannot be applied because other
+  inputs kept changing, an error says so and offers Retry table import, which
+  stays available after later changes, instead of the file being dropped
+  silently (OV-1206).
+- Web app: **Remove** on the **Default colors file**, **Specific rules file**,
+  **Priority File (TSV)**, **Whitelist File**, and **Blacklist File** cards
+  now takes back what that file loaded, in Circular and Linear, and keeps
+  every edit you made by hand before or after the load, including a file row
+  you edited. One **Undo** brings back the card and what it loaded. Loading
+  another file on a card takes back the earlier file's rows first. Rows that a
+  **Preset scheme** added count as yours: Remove and a new rules file keep
+  them, and a rules file loaded after a preset adds its rows after the preset
+  rows (#1222, OV-1280).
+- Web app: the Legend popup of a row drawn by a feature type's default color
+  no longer says "Default color of <type> features" before the sentence that
+  says what **Color** sets (OV-1336).
+- Sessions: Session 48 also records what each Web file card loaded: Specific
+  rules rows keep their `fromFile` mark, Whitelist and Qualifier priority rows
+  carry `importedFrom`, and `config.fileImports` holds Default colors and
+  Blacklist words. In a Session up to 47, Remove on the Specific rules card
+  takes back `fromFile` rows, including the rows of a **Preset scheme** saved
+  then, which were marked like a rules file's rows; its other rows read as
+  rows added by hand (#1222).
+- The "Labels do not fit" error for radial labels without room now says so
+  instead of showing overlap and crossing counts (OV-1194).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and
@@ -163,6 +456,24 @@ write-up of a release.
   complement, display start, and region, in Linear also the organism line and the
   alignment, and edits the definition text and Reverse complement, which apply
   on Generate.
+- Web app: a click on the Circular scale ticks, the Linear scale, a GC content
+  or GC skew (dinucleotide) track, or the plot title in the preview shows that
+  element's settings section in a popup beside the figure while Layout edit is
+  off: **Axis & Scale**, **Dinucleotide content/skew**, or **Titles & Record
+  Labels**. The pointer on one of these elements shows the hint **Click to open
+  its settings**. The popup holds the section itself, so the settings panel does
+  not list that section until the popup closes; an edit there is the same
+  setting as in the panel and applies at the same time. This popup and a
+  feature, match, Legend row, or record definition popup replace each other,
+  so the preview shows one popup at a time. Every popup of the preview now moves back inside the window when the
+  window is resized, instead of staying partly outside it (OV-626).
+- Web app: with **Layout edit** on, a Legend row shows the grab cursor, and the
+  grabbing cursor while you drag it (it showed the pointing hand). With
+  **Layout edit** off a row keeps the pointing hand and opens its popup. In a
+  Circular Multi-Record Canvas with **Layout edit** on, a record definition
+  shows the grab cursor where it showed the pointing hand (OV-604). On a
+  Linear figure with **Layout edit** on, a record definition no longer shows a
+  grab cursor where nothing can be dragged (OV-625).
 - Web app: the Editor's Features list uses one compact row per feature that
   expands to its label text field; the label and feature-edit TSV actions move
   into one **Import / export** menu. The Legend tab reorders rows by a drag
@@ -241,6 +552,50 @@ write-up of a release.
   - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
     types Head Length Ratio 0.64 in step 10, **Finish the figure**, and its
     intermediate previews show the short Auto sizes.
+  - In the Web app, the Auto values beside the size fields and the Circular
+    track preview now read the records Generate draws. The Linear **Label Font
+    Size** value follows the records in the label scope (**Show Labels**), so
+    with **First Record Only** on a short first record it reads 24 px, not
+    5 px (OV-493). The Circular values follow the records that are drawn: a
+    Multi-Record Canvas as one diagram, separate diagrams one record each,
+    and neither a record turned off nor one that is not selected (OV-494).
+    They read **Auto (by genome size)** when separate diagrams take different
+    sizes. A record cropped to a region is sized by the length of the region,
+    as Generate sizes it: a 306,008 bp record cropped to 1..30,000 reads
+    14 px for **Label Font Size**, not 8 px (OV-512). The sliding window and
+    **Scale interval** follow each Circular record's own length, as Generate
+    does; where the drawn records take different values they read **Auto (by
+    genome size)** and `by record length (auto)` (OV-512). The track preview
+    estimates the diagram that draws the record of the shown Result, or the
+    first diagram while no Result is shown.
+- Web app: the Feature Visibility rule action **Exclude from matching** is now
+  **Leave out of protein search**, also in the selected-feature bar's
+  visibility list, where it read **Suppress**. The color rule field **Legend
+  caption** and the selected-feature bar's name field are now **Legend name**,
+  the words the feature popup uses, and the selected-feature bar's color
+  button and the Reset Fill Color dialog say legend name too. Saved Sessions
+  and rule files are unchanged. A Feature Visibility rule shows **Action** on
+  its own line under **Value regex**, so the closed list shows the whole
+  action.
+- Web app: a Circular record counts as cropped only where Generate crops it:
+  one record offered alone, with a region Generate can draw (OV-1093). Its
+  **Display start** was unavailable, as for a cropped record, when the region
+  fields were emptied, or when separate diagrams or a Multi-Record Canvas draw
+  the record whole. With a region left in the fields while separate diagrams
+  or a Multi-Record Canvas are drawn, the record's reverse-complement override
+  and **Display start** now count in the record list, as they already did in
+  the drawing.
+- Fixed (web app): on a phone, or with a short Preview, the selected-feature
+  bar's color, visibility and stroke rows ran under the preview controls and
+  could not be reached. The bar now stays inside the Preview and scrolls
+  inside itself, and it no longer runs under the Editor toggle at 1024 px. Its
+  three edits wrap to new rows when the Preview is narrow (OV-1098).
+- Fixed (web app): loading a Session that stores a full resolved
+  configuration, such as one written by the CLI `--session_output`, no longer
+  turns the packaged font list into an explicit **Font**. **Font** stays at the
+  default, Run info lists no `--font_family`, and **Save Session** writes no
+  font override; the drawing is unchanged. The Gallery Sessions are saved again
+  with the current writer (OV-1014).
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
@@ -269,6 +624,14 @@ write-up of a release.
   default: a Linear Result saved by 0.13.0 with a corner position keeps its
   figure, and its first Legend edit places the Legend below the diagram; such
   a side with capitals or spaces no longer stops the load (OV-671, OV-672).
+- Fixed (web app): a Session that 0.13.0 saved after **Generate** and a switch
+  to the other diagram mode opened its Result in the shown mode, listed its
+  feature information as not restored, and moved the Legend and the title at
+  its first edit. When the Session records the mode of its last Generate, it
+  now opens in that mode, with the Legend side and title side the Result was
+  drawn with; the shown mode keeps its settings, without a Result. A Session
+  0.13.0 saved without that mode (for example after a Linear LOSAT comparison
+  run) still opens in the shown mode (OV-677, OV-969).
 - Changed (CLI `--session`, Python API): the canonical request reader refuses
   values the request format does not define: a comparison table path at any
   request schema; `null` or another kind of value where a field holds text, a
@@ -298,13 +661,9 @@ write-up of a release.
   similarity groups the Result does not have) are dropped without a row. A
   Depth series without a Depth file loads as saved, and so does a Depth row
   the app keeps when a Depth file is removed (a row with its own size or
-  position) (OV-755). Some other old or invalid values are still changed
-  without a row or kept as stored (for example a track stack row's values or
-  a Legend color edit the app does not accept), and a configuration file
-  drops a key it does not know without a row. Other invalid content, such as
-  an unknown `adv` key in a Session, an unknown shape of a default feature
-  type, or an unknown option value, is still refused, now before anything is
-  asked or changed. No file that
+  position) (OV-755). An unknown text value of `track_type`, `scale_style`,
+  `labels_mode` or `show_labels_linear` in a Session or configuration file is
+  still kept as stored, because the request format lists no values for them. No file that
   loaded before is refused: a feature shape or Linear Accession or Length /
   Coordinates visibility that is not text keeps the drawing's value, and an
   unknown shape for a feature type the defaults lack is dropped, each with a
@@ -338,13 +697,53 @@ write-up of a release.
   loads as settings only (the saved Results, inputs, feature list and caches
   are left out) when it is a Session of version 42, 44, 46 or 47 saved by the
   web app; a Session of version 42, 44 or 47 written by the CLI or the Python
-  API, and a Session of version 31 to 41, is refused. Eight search-scope
+  API, and a Session of version 31 to 41, is refused, and so is a Session of
+  version 31 to 41 whose request names a record file it does not hold. A
+  `null` request reads as a missing one in a file that holds saved Results or
+  a feature list. Eight search-scope
   spellings only the web app accepted are no longer read: a generated
-  comparison that holds one is dropped with a row, and a Session whose
-  comparison settings hold one is still refused. A file that holds `top1` or
-  `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
+  comparison that holds one is dropped with a row, and a Session's comparison
+  settings that hold one read as the default, with a row. A file that holds
+  `top1` or `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
+- Fixed (web app): since late August 2026, gbdraw.app had refused every Session
+  31–32 whose request has schema 1, and some Sessions 32–33 whose request has
+  schema 2, among them most older Gallery Sessions with schema 2 (OV-790). They
+  load again. Load reads the request in the current format, with no
+  **Load this file?** dialog when nothing is lost. Their saved comparisons,
+  protein comparison settings and similarity alignment stay editable (OV-796),
+  and a live edit works before the first **Generate Diagram**. **Save Session**
+  writes request schema 9; right after Load of a Session with a saved Result
+  it first asks for one Generate, as for other Sessions saved before Session 40.
+- Changed (web app): older or hand-edited Sessions and configuration files
+  that Load used to refuse for their content now load, and the **Load this
+  file?** dialog lists what Load drops or replaces: an unknown or invalid
+  setting, track slot, Legend or stroke edit, an unreadable Result, feature
+  list, stored input file or saved diagram of the other mode, and a key that
+  Session version never held. A comparison sequence file or Depth file that
+  cannot be read keeps its place empty, and a Circular comparison series whose
+  BLAST table cannot be read is left out with its sequence files, with a row
+  that names it; the other series keep their own files and names. A Linear
+  comparison whose BLAST TSV cannot be read loads without that file, as after
+  removing it from its pair card. Run notices, recomputable caches, empty
+  values and values with no effect on the figure give no row. Load still
+  refuses a file that is not a gbdraw Session or configuration file, an
+  unsupported or too old version, a file too large or with an unsafe name, and
+  a file from which it restores nothing. **Save Session** refuses what it
+  refused before.
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
+- Fixed (web app): a cleared **Feature overlap tolerance (bp)** made Save
+  Session fail and Generate send an invalid value; it now draws and saves as
+  its default, 0. A blank number in a configuration file now reads as the
+  field's default instead of keeping the current drawing's value, and a blank
+  **Column Gap Ratio**, **Row Gap Ratio** or LOSAT **Merge conflicts** no
+  longer reads as 0. A cleared **Record gap (px)** under **Record Layout**
+  (Linear) now draws and saves as its default, 24 px (it drew 0). Save
+  Session before the first Generate no longer fails on an enabled Depth row
+  whose Depth file was removed: the saved render request leaves the row out,
+  and the Session's settings keep it. A Session 44 whose font was
+  a preserved override and whose `adv` is not an object now lists the dropped
+  `adv` in the **Load this file?** dialog.
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's
@@ -472,6 +871,29 @@ write-up of a release.
   **Recommended** chip stays on the recommended candidate after you choose
   another. Behaviour is unchanged: choices stay local until **Apply**, which
   validates, regenerates, and commits in one step.
+- Similarity alignment (web app): while **Review alignment** is open, the
+  figure is fitted again whenever its room changes: the window is resized, the
+  settings panel is dragged wider or narrower or switched between the full
+  panel and the icons, a section beside the icons opens or closes, the review
+  panel moves between the side of the figure and below it, or a notice above
+  the Result appears or goes. Before, the figure kept the fit of the moment the
+  panel opened, so it was cut or left room unused. A zoom or position you set
+  by hand during the review stays while the room stays and is replaced by the
+  fit at the next such change; **Fit** works as before, and the view from
+  before the review still returns when the panel closes (OV-536). The settings
+  panel now follows the pointer from the first move of a width drag; it jumped
+  10 px wider first (OV-620).
+- Similarity alignment (web app): changing a feature colour, **Show**/**Off**,
+  or a **Legend** or **Plot Title** setting while **Review alignment** is open,
+  or undoing such a change, no longer ends the review's rings and fitting: the
+  rings are drawn again, the figure is still fitted when its room changes, and
+  the view from before the review returns when the panel closes (OV-1082,
+  OV-1120). Apply keeps a Legend or Plot Title setting changed during the
+  review. Switching between Circular and Linear and back
+  with the panel open no longer loses the view from before the review (OV-622).
+  Apply now keeps a colour changed before or during the review; before, it drew
+  the old colour or failed with "The operation failed without recognized
+  diagnostic information" (OV-1083).
 - Similarity alignment (web app): the **Reset alignment** dialog says "Undo
   the latest Align." and offers **Positions only** and **Positions and
   directions (N records)**. The reason a scope is unavailable sits under it.
@@ -617,6 +1039,124 @@ write-up of a release.
   earlier action's step, and so does any edit made while a **Specific Table
   (-t)** upload, **Reset Settings**, or a color rule change that adds or
   removes a Legend row is being applied (OV-460, OV-461).
+- Changed (web app): Undo and Redo of a color change that adds or removes a
+  Legend row no longer draw the diagram again in Python once the automatic
+  redraw of that change has been shown while the change was the last step:
+  its History step keeps the redrawn diagram. An Undo or Redo made while that
+  redraw is still running, or after a redraw that never finished, still draws
+  again, so the diagram and its Legend always show the restored colors
+  (OV-731).
+- Fixed (CLI, Python): an integer written with non-ASCII digits (for example
+  `#١` or `#²` as a record selector, or `-w ٣` as a window size) is refused
+  with the reader's usual error. This covers record selectors, regions, record
+  rows, table cells, Session slot indexes, track slot `z=`, GenBank
+  `/codon_start` and `/transl_table`, GFF3 `phase`, and every integer option
+  of the `gbdraw` commands. Before, some of them read the value as the ASCII
+  number and others ended in `invalid literal for int()`. An integer written
+  with underscores (`1_0`), or with more than 4300 digits, is refused too;
+  signs and surrounding spaces are still accepted (OV-674, OV-676, OV-960,
+  OV-961).
+- Fixed (CLI, Python): the same rule now covers decimal numbers. A number
+  written with non-ASCII digits or with underscores is refused with the
+  reader's usual error, where Python's `float()` read it as the ASCII number:
+  for example `--gc_content_radius ٠.٥`, `--evalue 1_0`, `--track_axis_gap ١`,
+  a track slot width `٢px`, a config or Session depth bound, or an annotation
+  table `stroke_width` of `1_0` (the table's `start` and `end` integers too).
+  This covers every decimal option of the `gbdraw` commands, the decimal
+  readers of Sessions and tables, and every number, integers included, of a
+  config file or of the `config` of a Session or a Python API call
+  (`radius: "٣٩٠"` drew a radius of 390). Everything else `float()`
+  accepted is read as before: `0.5`, `+.5`, `5.`, `1e-5`, ` 2 `, and `inf` or
+  `nan` where a reader allowed them (OV-962, OV-1006).
+- Fixed (web app): **Load Session** of a Session 31 to 33 or 39 whose saved
+  conservation series has an empty (`null`) row stopped with an unknown error.
+  That row is now read like a row without a label (OV-963).
+- Fixed (web app): a color change made while the automatic redraw of an
+  earlier color change is still running is one Undo step again. Before, the
+  Legend rows that redraw drew (or, after a Legend or title move, the moved
+  position under the redrawn diagram) were recorded as an extra step under the
+  same name, whose Undo changed nothing visible (OV-872, OV-873).
+- Fixed (web app): with LOSATP Collinear and **Search between** set to **All
+  records** on a CLI Session's record grid that places a record above one
+  listed before it, **Save Raw LOSAT TSV** on one comparison card saved the
+  search of another pair, and the other pair's card had no **Save Raw LOSAT
+  TSV** button. The reproducibility files of two such pairs were also numbered
+  alike, so one overwrote the other. Each card now saves the search of its own
+  two records under its own file name, and each pair has its own
+  reproducibility file (OV-980, OV-985).
+- Fixed (web app): a Session whose raw LOSAT cache entry has a file name that
+  is not text (for example `{}`) loads with the entry's default name,
+  `losat_pair_<n>.tsv`. Before, **Save Raw LOSAT TSV** named the file
+  `[object Object]` (OV-981).
+- Fixed (CLI, Python): a Session whose raw LOSAT cache entry has a file name
+  that is not text (for example `7` or `["a.tsv"]`) is read as having no name,
+  as the web app reads it, instead of writing that value as the name. A Session
+  saved again names such a shown entry `losat_pair_<n>.tsv`, the name the web
+  app gives it, and writes a hidden (`display: false`) entry without a name, as
+  the web app does; before, the CLI kept a hidden entry's name (OV-986,
+  OV-1007, OV-1013).
+- Fixed (web app, CLI, Python): in an interactive SVG, a feature or orthogroup
+  member whose start is missing (`null`) no longer shows as starting at 1. The
+  web app wrote such a start as 0, so the feature without location parts read
+  `1..20`. Both writers now read a feature's or member's start and end as they
+  read a location part's: a number or ASCII number text, truncated toward zero;
+  blank text, a boolean, or a list is missing (OV-1009, OV-1011).
+- Changed (web app, interactive SVG): the web app and the interactive SVG
+  viewer read the start or end of a location part, a feature, or a Similarity
+  Group member by the same rule as the two writers. This concerns hand-edited
+  Session or SVG data only; gbdraw writes whole numbers. A fraction is
+  truncated toward zero: a part from `1.5` to `20` shows `2..20` (was
+  `2.5..20`), its sequence is extracted, and Align accepts such a member
+  (it refused it with "invalid display facts"). Hex or binary text (`0x10`),
+  text with any non-ASCII character (a no-break space included), and whole
+  numbers beyond 2^53 - 1 are missing: the location, length, FASTA header
+  coordinates, and sequence are left out for them and Align refuses such a
+  member, where `0x10` read as 16 before. The member rows of a Similarity
+  group in the feature popup and the Similarity drawer show the location as
+  the member popup does: a missing start no longer shows as `1..20`, and a
+  start of `1.5` shows `2..20` (was `2.5..20`) (OV-1015). Rotating a record to
+  a feature reads the feature's location parts by this rule too, so a part
+  bound stored as text (`"20"`) is no longer refused as outside the record
+  (OV-1016). The Interactive SVG viewer shows a member with one missing
+  bound the same way as the app (OV-1017).
+- Fixed (web app): loading a Session older than version 46 that recolored a
+  Legend row named like a built-in JavaScript member (`constructor`,
+  `toString`) without a saved original color no longer records that member as
+  the swatch's original color. Before, Reset set the swatch fill to
+  `function Object() { [native code] }` (OV-982).
+- Fixed (web app): Load drops a raw LOSAT cache entry whose `searchContext` is
+  not text (for example a list holding the 64-character hash), as it drops
+  other entries it cannot read. Before, the entry was kept, never reused, and
+  written again by Save Session (OV-983).
+- Fixed (web app): when a Session is loaded, a LOSATP Collinear comparison card
+  whose search ran in the other direction than the card (a CLI Session's record
+  grid that places a record above one listed before it) keeps its **Save Raw
+  LOSAT TSV** button, both for the CLI Session itself and after Save Session
+  and Load. Before, the button was missing until the next Generate (OV-987).
+- Fixed (web app): a Session with an unsafe key (`__proto__`, `constructor`,
+  `prototype`) anywhere in the file, for example under `resources`, is refused
+  with "An input value is invalid" and the advice to load a supported Session
+  file. Before, it was refused as a failure without recognized diagnostic
+  information (OV-952).
+- Fixed (web app): when a Session saved by 0.13.0 after a mode switch stores a
+  Legend side outside its Result's mode, the Load dialog lists it as the side
+  of a saved Result ("Legend of a saved Result: ..."), as it does for the same
+  value in a Session saved without a mode switch. Before, it was listed as a
+  Legend setting ("Legend: the position ...") (OV-964).
+- Fixed (web app, interactive SVG): a feature location part whose start or end
+  is missing (null or blank) is read as missing, not as 0. The interactive SVG
+  viewer and the web app's feature details show no location or length for
+  such a part, the FASTA header names no coordinates for it, and neither takes
+  its sequence from the record start. Before, the location began at 1 and the
+  sequence at the record start (OV-968).
+- Fixed (web app, interactive SVG): a Similarity Group member whose start or
+  end is missing (null or blank) shows no coordinate for it in the group
+  popups of the web app and the interactive SVG, gets no `1-20(+)` location as
+  its display ID, and makes Align, and Generate with a saved alignment of
+  that Similarity Group, refuse the whole group with "Similarity Group member
+  N has invalid display facts." (at Generate, after "Alignment needs
+  repair: "), as an undefined start already did; this concerns hand-edited
+  Session data only. Before, the missing value was read as 0 (OV-1010).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.
   Before, the dialog disappeared without an answer, and Undo, Redo, Save and
@@ -1003,7 +1543,9 @@ write-up of a release.
   series, custom track stacks, and layout positions. A change made in one mode,
   and its Generate, no longer reach the other mode, and a mode switch changes no
   setting. **Reset Settings** resets both modes, and one **Undo** restores both.
-  The input files, LOSAT run settings, and the rich feature popup stay shared.
+  The Circular inputs (GenBank/DDBJ File, or GFF3 File and FASTA File) and the
+  Linear File cards stay separate inputs that a mode switch keeps; LOSAT run
+  settings and the rich feature popup stay shared.
   This fixes Show Depth turned off by a switch or by the other mode's Depth file
   removal (OV-82, OV-101); a Linear Generate that failed after two Circular
   Depth series; a Circular Generate that reset the Linear Label rendering
@@ -2065,6 +2607,199 @@ Retired names and their replacements are listed under
   the record features, labels and group contents, the Multi-Record merge and the feature
   catalog item. A title change on a large Multi-Record Session drops from about 1.4 s to
   about 0.1 s warm (native Python). SVG, PNG, and PDF bytes are unchanged (#1070).
+- Performance (web app): a Generate whose feature catalog was not built again keeps the
+  catalog the page already holds: the catalog is not sent, decoded, or admitted again.
+  Python returns it beside the metadata, not inside it, and the Worker render protocol is
+  now 3, so a cached older wheel is reported as a version mismatch. The figure, the
+  catalog, and Saved Sessions are unchanged.
+- Performance (web app): a Generate sends and sanitizes only the SVG groups whose content
+  changed. Python writes each SVG document as ordered pieces with a sha256 revision for
+  each group's content; the page keeps each group's sanitized text on its Result, and the
+  next Generate names those revisions so Python leaves their text out. The joined Result
+  equals DOMPurify of the whole document. Python (CLI and Python API too) now raises
+  `ExportError` for an SVG group that holds a comment, CDATA or a processing instruction;
+  gbdraw writes none. The Worker render protocol is now 4. The figure, SVG, PNG and PDF
+  bytes, and Saved Sessions are unchanged.
+- Performance (web app): after a Generate that keeps the feature catalog, the page no
+  longer derives three values again whose inputs did not change: the feature set the
+  color and visibility rules match against, the record and feature names of the
+  Similarity alignment drawer, and the Features list. Nothing visible changes.
+- Performance (web app): after "Preparing render inputs and session..." and "Preparing
+  preview..." a Generate no longer waits two animation frames; it yields one task, so these
+  two statuses may not be painted or announced on a fast Generate. The first status still
+  paints before the work starts. A Cancel clicked during either step is still honored there
+  in Chromium: no Worker restart, and the canceled Result is never shown (PD-OI-101).
+- Performance (web app, CLI, Python API): a Generate spends less time in Python. On
+  every surface the request contract check is compiled once per type and the overlay
+  Legend search stops at the first conflicting obstacle. In the web app, a linear
+  Generate no longer builds the derived LOSAT cache entries that no reply reads (their
+  input checks still run), the Circular definition's GC percent and the placed labels
+  are keyed once and reused, and the cache no longer checks render-stage entries against
+  a constant. Figures, SVG bytes, replies and Saved Sessions are unchanged.
+
+- Web app, Custom Track Slots: each row keeps its Move up and Move down arrow
+  buttons, and one **Row actions** menu holds its other actions with text
+  labels: the moves across the Axis, **Track on Axis** where the row can sit on
+  the Axis, **Duplicate**, and **Remove** (Circular) or **Delete** (Linear), in
+  red. The menu closes after an action, the arrow keys move through it, and
+  Escape closes it. After a move, focus stays on the row's **Row actions**;
+  after a removal it moves to the next row's, else the previous row's, else
+  **Add track**.
+- Web app: the Session title is asked in the app's own dialog instead of the
+  browser's prompt: **Save Session** without a title opens **Save Session**,
+  and the title in the header opens **Rename Session**. The field starts with
+  the title selected; Enter saves or renames, Escape cancels, and focus returns
+  to the button that opened it.
+- Web app (OV-1097): a Region **End** past the record end is no longer refused.
+  Generate draws to the record end, as the CLI and Python already do, and a
+  note under the Region fields (Circular, and Linear once the record is read)
+  names the record length. A **Start** past the record end stays an error.
+- Web app, Custom Track Slots (OV-1099): **Duplicate** names the copy from the
+  source row's own ID, in Linear and Circular: the ID without one trailing
+  number, then the first unused number from 2 (`my_skew` gives `my_skew_2`, and
+  a further copy of either gives `my_skew_3`). Linear appended `_copy`
+  (`my_skew_copy`); Circular named a copy from the renderer's default ID
+  (`gc_skew_2`), also when the source row had an ID of its own. A copy never
+  takes the bare base ID. **Duplicate set** in Region Annotations follows the
+  same rule (OV-1139): a copy of `review` is `review_2` instead of
+  `review_copy`. **Add track** and **Add set** still use the default ID (such
+  as `gc_skew` or `annotations`) and the first unused number. Saved slot and
+  set IDs are unchanged. A Linear copy of an unedited Depth row (`depth_2`) is
+  a managed Depth row, as in Circular: removing the Depth files removes it with
+  its source row. A copy of a Depth row with its own ID (`my_depth_2`) is a
+  manual row like its source and stays when the Depth files are removed; in
+  0.13 a Circular copy of `my_depth` was a managed `depth_<n>` row.
+- Web app (OV-1137): the **FASTA** menu of each similarity group member, in the
+  feature popup, the pairwise match popup, and the **Similarity groups** drawer,
+  has an accessible name that names the member, such as "FASTA of BDT61648.1",
+  the same text as its tooltip.
+- Python 3.10 and 3.11 add the floats of the protein comparison (collinear
+  block scores and identities, the Similarity-group expected-bitscore fit) as
+  Python 3.12 and the web app do, so every supported Python gives the results
+  that the Gallery Sessions store; nothing changes on 3.12 and later (OV-1237,
+  #1203).
+- Web app: the live Legend matches Generate when one color-rule caption is
+  written in more than one color: changing a rule to a second color, or hiding
+  the only feature of one color, now redraws the Legend with Generate's rows
+  and order (OV-1235, OV-1236, #1204).
+- CLI, Python: float options, track slot scalars, and `config_overrides`
+  refuse `nan`, `inf`, and `-inf` with an error that names the field (OV-275);
+  `gbdraw gui --help` prints usage without starting the server, `gbdraw gui`
+  refuses unknown arguments, and `--version` is read only as the first argument
+  (OV-1239); an existing output is refused with the option of the surface,
+  `--overwrite` or `overwrite=True` (OV-1240), and `save_session_document`
+  refuses it before rendering (OV-1246); CLI input errors (a missing `--gbk`
+  file, a malformed `-d`, `-t`, or label table) print once, and a GenBank or
+  GFF3 parse error includes the parser's reason (OV-1241);
+  `FeatureOptions(types=...)` errors name `types`, and `read_genbank` and
+  `read_gff` given an open file ask for its path (OV-1245); a truncated or
+  corrupt gzip Session and a Session that is not UTF-8 give an error line, and
+  Session shape errors name the file's version (OV-1251, OV-1252); a negative
+  feature overlap tolerance is refused with the setting named, on the CLI, in
+  Python, and in the web app (OV-1248); a Legend swatch size of 0 or less is a
+  classified error that names the setting when a Legend is drawn (OV-1247);
+  a color rule captioned like a comparison Legend row (`Pairwise match
+  identity`, `Average identity`, `Collinear`, `Inverted`) keeps its own Legend
+  row (OV-646) (#1206).
+- CLI, Python: an unknown `-f` output format or `-p` palette, an unknown
+  `FeatureOptions(palette=...)`, and an unknown output format in `Diagram.to_bytes`
+  and `Diagram.save` are refused before anything is written, with the valid
+  choices listed; a saved Session that stores an unknown palette still draws
+  with the default palette (OV-1244). A blank `keyword` cell in a label
+  whitelist matches every value of its qualifier (`NA` is read as text; a row
+  without a feature type or qualifier is still refused) (OV-350). An explicit
+  Circular features slot `side`, such as `--circular_track_slot
+  features:features@side=overlay`, sets its own lane instead of stopping with a
+  traceback (OV-1326). The CLI reference states the `--label_blacklist`
+  defaults of the CLI, the web app, and Python (OV-470) (#1215).
+- CLI, Python, web app: `--region` with `--reverse_complement 1` (and
+  `reverse_complement` in a records table, a Session, or Python) crops the
+  region first and then reverse-complements it, as `:rc` on the region does;
+  the crop is read in source coordinates. Figures that combined the two change,
+  and asking for both reverses once. Replaying a Session 27-30 that also has
+  comparisons (`-b` or `--comparisons_table`) warns that its window changed and
+  the comparison may need re-running (OV-1279, #1215).
+- CLI, Python, web app: any font size of 0 or less stored in a Session
+  (labels, Legend, scale, ticks, definition text, plot title, GC content and
+  Depth ticks, Linear definition-line styles) is read as Auto with the web
+  app's notice, instead of refusing the Session; this includes Sessions that
+  the 0.13.0 CLI wrote with a `--*font_size` option of 0, which stopped with a
+  traceback. A size entered as 0 or less is still refused (OV-1282, #1215).
+- Linear: feature labels are sized by the width their text is drawn with, so
+  neighbouring labels in one label row no longer touch or overlap, and the
+  label fit check reports any that do. A label is drawn inside its feature
+  only when its text plus 0.25 em fits; with `--label_rendering embedded_only`,
+  a label that fits only without that margin is not drawn (OV-1294). Feature
+  labels of records placed in one row (`--multi_record_position`) are stacked
+  and checked together, so labels at a record junction no longer overlap
+  (OV-1188) (#1216).
+- Circular: a comparison ring whose label is wider than its colorbar no longer
+  sticks out of the figure with Legend Left; the colorbar is centered under the
+  label (OV-1261, #1207). Labels that overlap open the "Labels do not fit"
+  dialog (CLI and Python: `LabelsDoNotFitError`) when the "Separate overlapping
+  features" row leaves the inside tracks no room, instead of a track-layout
+  error that blamed the center definition text; the row now reads "The tracks
+  do not fit with this setting" (OV-1266, #1208). The message for a track slot
+  that cannot fit inside names the room kept for the tracks inside it
+  (OV-1268, #1208). When an inside track does not fit, the error names the GC
+  content and GC skew tracks that keep room and offers `--no-gc`, `--no-skew`,
+  `--gc_content_width`, `--gc_skew_width` (web app: Hide GC Content, Hide GC
+  Skew, or their widths), gives the band from the definition text's edge
+  instead of 0 px when no track inside it keeps room, and offers `--hide_scale`
+  (web app: clear Show Coordinate Scale) when the scale ticks do not fit; the
+  web app summary names GC Content Width and GC Skew Width and no longer gives
+  all the room kept inside to GC when a Depth track shares it (OV-1274,
+  OV-1276, #1212).
+- Web app, Undo history: one Generate of a large diagram (the Vnig Gallery
+  Session) no longer empties the history silently; the step just taken stays
+  undoable, older steps are discarded first, and a notice says so (OV-1260).
+  Loading a Session no longer keeps the previous document's extra Depth series
+  (OV-1164). **Reset Settings** with a file loaded keeps a Record Order row for
+  each loaded record (OV-1249), removes the Default colors, Specific rules,
+  Blacklist, Whitelist, and Priority File cards together with the settings they
+  loaded (OV-1267), and **Reset Label Edits** ends the "Loaded N row(s). Applied
+  to M label(s)." notice of the Label TSV edits it removes (#1205).
+- Web app, input errors: Load Session names an unsupported Session version and
+  the versions this gbdraw reads, such as "Session version 49 is newer than
+  this gbdraw supports (48).", instead of "Check the required fields"
+  (OV-1253). GFF3 + FASTA errors name the file without entries, and a
+  Generation Error about the inputs ends when the changed inputs are read
+  again (OV-1257). A GenBank/DDBJ input that is gzip-compressed, cut off,
+  damaged, or holds a record without sequence names its cause and is an input
+  error, not a diagram engine failure (OV-1258) (#1205).
+- Web app: two region annotations that overlap in one lane under "Error on
+  overflow" name the cause and the ways out (another lane, or Overflow behavior
+  Compress or Clip) instead of a diagram engine failure (OV-1262). In Circular
+  Custom Track Slots, Annotation placement "Outside axis" moves only that row
+  across the Axis (OV-1263). A disabled **Add track** names the missing source
+  (a Region annotation set or a Depth TSV) or the enabled Features row of a
+  Linear stack (OV-1254). After a successful Review alignment Apply, the Editor
+  reopens on the tab it had, as Cancel does, and a Linear review stays with
+  Linear: while Circular is shown its panel is hidden and Escape leaves it
+  (OV-1255, OV-1089). The Pairwise match popup no longer breaks a span or a
+  length ("1,911 bp") across lines (OV-1264). Showing another batch Result
+  closes the feature popup of the previous one (OV-1269). A Linear Record
+  Labels style size of 0 or less is refused by its setting on Generate, as in
+  the CLI and Python, instead of being drawn as Auto (OV-1270) (#1207).
+- Web app, Legend and color dialogs: the Legend item popup of a GC content, GC
+  skew, or Depth row names its plot ("Content plot", "Skew plot", "Depth plot")
+  and says that its Color changes the legend swatch only (OV-1272). In the
+  popup, Color on a row drawn from a feature type's default color sets that
+  type's default color, so features and legend change together in one Undo
+  step; rows drawn by a color rule still edit the rule (OV-1281). After a
+  choice or Cancel in the Color Change Scope or Stroke Change Scope dialog, the
+  feature popup stays open with the feature's fill and stroke (OV-1278). The
+  Legend Name Conflict dialog says "is the name of a color rule for another
+  feature type" when the typed name is a color rule's in the renamed row's own
+  color (OV-649) (#1212).
+- Web app: the Result Preview's **Search features** bar can be hidden with
+  **×** at the end of its row and shown again with **Search** in the bottom
+  toolbar; the query, matches, and highlights stay, and while the bar is hidden
+  during a search the button shows the match count (#1086).
+- Web app, Linear: **Paralog links per group** also shows in LOSATP
+  **Similarity groups** mode, and a Similarity groups Generate draws with the
+  value it shows; before, every such Generate drew with 2 whatever was stored
+  (OV-1128, #1179).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 

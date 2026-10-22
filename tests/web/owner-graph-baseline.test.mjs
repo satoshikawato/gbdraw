@@ -8,8 +8,9 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 // detectors in tools/web-owner-graph-detectors.mjs observe the coupling
 // channels the import graph does not: owner objects injected at composition,
 // closures bound to owners created later, functions assigned into state,
-// factories that take whole owner objects, heavy derived trigger sites, and
-// the call shapes of each projection domain outside its owner.
+// factories that take whole owner objects, heavy derived trigger sites,
+// identities read from display values, and the call shapes of each projection
+// domain outside its owner.
 //
 // The two literals are registered design-rule allowlists
 // (tools/web-design-rule-guards.json, R13, kind `count-map`): an observed
@@ -51,7 +52,24 @@ const OWNER_GRAPH_BASELINE = {
   'heavy-derived.trigger-site.v2|rulePreparation|app/app-setup.js': 2,
   'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/rule-actions.js': 1,
   'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/visibility-actions.js': 1,
-  'heavy-derived.trigger-site.v2|rulePreparation|app/run-analysis.js': 1
+  'heavy-derived.trigger-site.v2|rulePreparation|app/run-analysis.js': 1,
+  // owner-graph.identity-from-display.v1 (a Legend row or a feature joined on
+  // a fill or stroke, `paint-join`, or on a value a Result shows, `shown-join`)
+  'owner-graph.identity-from-display.v1|app/candidate-render.js|matchingRuleDerivedFill|paint-join': 1,
+  'owner-graph.identity-from-display.v1|app/feature-editor/color-actions.js|findLegendRowNamed|paint-join': 1,
+  'owner-graph.identity-from-display.v1|app/feature-editor/rule-actions.js|commitOnce|paint-join': 1,
+  'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|findLegendRowNamed|paint-join': 1,
+  'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|listLegendRows|shown-join': 1,
+  'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|namedBy|shown-join': 1,
+  'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|prepareFileLegendEntries|paint-join': 1,
+  'owner-graph.identity-from-display.v1|services/legend-svg.js|legendRowFeatureIds|paint-join': 1,
+  'owner-graph.identity-from-display.v1|services/specific-color-rules.js|captionFills|paint-join': 1,
+  'owner-graph.identity-from-display.v1|services/specific-color-rules.js|createRuleLegendCaptions|paint-join': 1,
+  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|applyLegendOperations|shown-join': 1,
+  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|legends|shown-join': 1,
+  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|nameSavedRuleRows|shown-join': 1,
+  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|recordSavedLegendKeys|shown-join': 1,
+  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|restoreLegendStructure|shown-join': 1
 };
 
 // Distinct call shapes per projection domain outside its owner (R3: one
@@ -70,7 +88,8 @@ const SUBJECT_DETECTORS = [
   'owner-graph.injection-edge.v1',
   'owner-graph.forward-closure.v2',
   'owner-graph.state-backdoor.v1',
-  'owner-graph.whole-object-port.v1'
+  'owner-graph.whole-object-port.v1',
+  'owner-graph.identity-from-display.v1'
 ];
 
 const { results } = evaluateWebOwnerGraphAt('worktree');

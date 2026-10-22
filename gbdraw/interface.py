@@ -37,6 +37,7 @@ from gbdraw.api.options import (
     CircularOutputOptions as _CircularOutputOptions,
     CircularRequestTrackOptions as _CircularRequestTrackOptions,
     ColorOptions as _ColorOptions,
+    validate_feature_type_names,
     LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
     LinearRecordTranslation as _LinearRecordTranslation,
@@ -50,7 +51,12 @@ from gbdraw.api.options import (
     _validate_center_reserved_radius,
     _validate_track_configuration,
 )
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import (
+    commit_staged_outputs,
+    OutputExistsError,
+    preflight_output_paths,
+    staged_output_files,
+)
 from gbdraw.api.request_render import (
     PreparedDiagramRequest as _PreparedDiagramRequest,
     build_prepared_interactive_context as _build_prepared_interactive_context,
@@ -79,6 +85,7 @@ from gbdraw.mode_profiles import (
     DEFAULT_FEATURE_TYPES,
     LINEAR_MODE_PROFILE,
 )
+from gbdraw.io.colors import require_palette_name
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT, normalize_format_token
 from gbdraw.render.interactive_context import require_interactive_svg_metadata
 from gbdraw.render.interactive_svg import InteractiveSvgContext
@@ -100,6 +107,10 @@ class FeatureOptions:
     visibility: TableSource | None = None
     shapes: Mapping[str, str] | None = None
     placements: TableSource | Sequence[FeaturePlacementOverride] | None = None
+
+    def __post_init__(self) -> None:
+        validate_feature_type_names(self.types, field_name="types")
+        require_palette_name(self.palette)
 
 
 @dataclass(frozen=True)
@@ -657,10 +668,7 @@ class Diagram:
         resolved_format = format or _format_from_path(output_path)
         preflight_output_paths((output_path,), overwrite=True)
         if output_path.exists() and not overwrite:
-            raise ValidationError(
-                f"Output file already exists: {output_path}. "
-                "Use overwrite=True to replace it."
-            )
+            raise OutputExistsError((output_path,))
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -668,29 +676,12 @@ class Diagram:
                 f"Could not prepare output directory: {output_path.parent}"
             ) from exc
         payload = self.to_bytes(resolved_format, embed_fonts=embed_fonts)
-        if overwrite and (output_path.exists() or output_path.is_symlink()):
+        with staged_output_files((output_path,)) as staged:
             try:
-                output_path.unlink()
+                staged[output_path].write_bytes(payload)
             except OSError as exc:
-                raise ExportError(
-                    f"Could not replace existing output file: {output_path}"
-                ) from exc
-        try:
-            with output_path.open("xb") as output_file:
-                output_file.write(payload)
-        except FileExistsError as exc:
-            message = (
-                f"Output target appeared during export: {output_path}. "
-                "Refusing to replace it."
-                if overwrite
-                else (
-                    f"Output file already exists: {output_path}. "
-                    "Use overwrite=True to replace it."
-                )
-            )
-            raise ValidationError(message) from exc
-        except OSError as exc:
-            raise ExportError(f"Could not write output file: {output_path}") from exc
+                raise ExportError(f"Could not write output file {output_path}: {exc}.") from exc
+            commit_staged_outputs(staged, overwrite=overwrite)
         return output_path
 
 
@@ -720,11 +711,18 @@ def _records(value: RecordCollection) -> tuple[SeqRecord, ...]:
     return records
 
 
-def _paths(value: str | PathLike[str] | Sequence[str | PathLike[str]]) -> list[str]:
+def _paths(value: str | PathLike[str] | Sequence[str | PathLike[str]], *, field_name: str) -> list[str]:
     if isinstance(value, (str, PathLike)):
         normalized = [str(value)]
-    else:
+    elif isinstance(value, Sequence) and not isinstance(value, bytes) and all(
+        isinstance(path, (str, PathLike)) for path in value
+    ):
         normalized = [str(path) for path in value]
+    else:
+        raise ValidationError(
+            f"{field_name} must be a file path or a sequence of file paths (str or os.PathLike), "
+            f"not {type(value).__name__}; pass the path of an open file, not the file."
+        )
     if not normalized or any(not path.strip() for path in normalized):
         raise ValidationError("At least one non-empty input path is required.")
     return normalized
@@ -735,7 +733,7 @@ def read_genbank(
 ) -> list[SeqRecord]:
     """Read all records from one or more GenBank files."""
 
-    return _load_gbks(_paths(paths))
+    return _load_gbks(_paths(paths, field_name="paths"))
 
 
 def read_gff(
@@ -746,8 +744,8 @@ def read_gff(
 ) -> list[SeqRecord]:
     """Read records from paired GFF3 and FASTA files."""
 
-    normalized_gff = _paths(gff_paths)
-    normalized_fasta = _paths(fasta_paths)
+    normalized_gff = _paths(gff_paths, field_name="gff_paths")
+    normalized_fasta = _paths(fasta_paths, field_name="fasta_paths")
     if len(normalized_gff) != len(normalized_fasta):
         raise ValidationError("GFF3 and FASTA inputs must contain the same number of paths.")
     return _load_gff_fasta(

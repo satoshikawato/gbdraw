@@ -5,7 +5,8 @@ import {
   resolveDisplayProteinId,
   resolveInternalProteinId
 } from '../../services/feature-utils.js';
-import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
+import { uniqueOrthogroupMemberResolver } from '../../services/feature-identity.js';
+import { msg, t, tm } from '../../utils/i18n.js';
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 
 /**
@@ -62,17 +63,17 @@ const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
 ]);
 
 const FEATURE_SEARCH_FIELD_DEFINITIONS = Object.freeze([
-  { id: 'all', label: 'All' },
-  { id: 'label', label: 'Label' },
-  { id: 'type', label: 'Feature type' },
-  { id: 'record-id', label: 'Record ID' },
-  { id: 'location', label: 'Location' },
-  { id: 'strand', label: 'Strand' },
-  { id: 'orthogroup', label: 'Similarity group' },
-  { id: 'qualifier-key', label: 'Qualifier key', richOnly: true },
-  { id: 'qualifier-value', label: 'Qualifier value', richOnly: true },
-  { id: 'nucleotide', label: 'Nucleotide', richOnly: true },
-  { id: 'amino-acid', label: 'Amino acid', richOnly: true }
+  { id: 'all', label: msg('All') },
+  { id: 'label', label: msg('Label') },
+  { id: 'type', label: msg('Feature type') },
+  { id: 'record-id', label: msg('Record ID') },
+  { id: 'location', label: msg('Location') },
+  { id: 'strand', label: msg('Strand') },
+  { id: 'orthogroup', label: msg('Similarity group') },
+  { id: 'qualifier-key', label: msg('Qualifier key'), richOnly: true },
+  { id: 'qualifier-value', label: msg('Qualifier value'), richOnly: true },
+  { id: 'nucleotide', label: msg('Nucleotide'), richOnly: true },
+  { id: 'amino-acid', label: msg('Amino acid'), richOnly: true }
 ]);
 
 const FIELD_IDS = new Set(FEATURE_SEARCH_FIELD_DEFINITIONS.map((field) => field.id));
@@ -104,7 +105,7 @@ export const getFeatureSearchFieldOptions = ({ popupMode = 'rich' } = {}) => {
   const normalizedPopupMode = normalizeFeatureSearchPopupMode(popupMode);
   return FEATURE_SEARCH_FIELD_DEFINITIONS.filter((field) => (
     normalizedPopupMode !== 'simple' || !field.richOnly
-  ));
+  )).map((field) => ({ ...field, label: tm(field.label) }));
 };
 
 /** @param {unknown} value */
@@ -295,7 +296,7 @@ const getQualifierSearchItems = (feature, qualifierKey) => {
   const items = [];
   Object.keys(qualifiers).sort().forEach((key) => {
     if (target && normalizeSearchText(key) !== target) return;
-    appendSearchItems(items, `Qualifier ${key}`, qualifiers[key]);
+    appendSearchItems(items, t('Qualifier {key}', { key }), qualifiers[key]);
   });
   return items;
 };
@@ -340,7 +341,7 @@ const getLabelSearchItems = (feature) => {
       const key = normalizeSearchText(entry);
       if (!key || seen.has(key)) return;
       seen.add(key);
-      appendSearchItems(items, key === normalizeSearchText(feature?.svg_id) ? 'SVG ID' : 'Label', entry);
+      appendSearchItems(items, key === normalizeSearchText(feature?.svg_id) ? t('SVG ID') : t('Label'), entry);
     });
   });
   return items;
@@ -381,9 +382,29 @@ const getOrthogroupId = (feature) => orthogroupIdFor({
   orthogroup_id: feature?.orthogroup_id
 });
 
-/** @param {FeatureLike | null | undefined} feature @param {SearchOrthogroup | null} group */
-const getFeatureOrthogroupMember = (feature, group) => {
-  return resolveUniqueOrthogroupMemberForFeature(feature, group?.members);
+// Each group's members are indexed once per group map, that is once per search
+// index build, not once per feature and field (OV-914).
+/** @type {WeakMap<Map<string, SearchOrthogroup>, Map<SearchOrthogroup, (feature: FeatureLike | null | undefined) => FeatureLike | null>>} */
+const memberResolversByGroupMap = new WeakMap();
+
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {SearchOrthogroup | null} group
+ * @param {Map<string, SearchOrthogroup>} orthogroupsById
+ */
+const getFeatureOrthogroupMember = (feature, group, orthogroupsById) => {
+  if (!group) return null;
+  let resolvers = memberResolversByGroupMap.get(orthogroupsById);
+  if (!resolvers) {
+    resolvers = new Map();
+    memberResolversByGroupMap.set(orthogroupsById, resolvers);
+  }
+  let resolve = resolvers.get(group);
+  if (!resolve) {
+    resolve = uniqueOrthogroupMemberResolver(group.members);
+    resolvers.set(group, resolve);
+  }
+  return resolve(feature);
 };
 
 /** @param {FeatureLike | null | undefined} feature @param {Map<string, SearchOrthogroup>} orthogroupsById */
@@ -391,27 +412,27 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const orthogroupId = getOrthogroupId(feature);
   const candidateGroup = orthogroupsById.get(orthogroupId) || null;
   const group = orthogroupIdFor(candidateGroup) === orthogroupId ? candidateGroup : null;
-  const member = getFeatureOrthogroupMember(feature, group);
+  const member = getFeatureOrthogroupMember(feature, group, orthogroupsById);
   const proteinId = resolveDisplayProteinId(feature, member);
   const internalId = resolveInternalProteinId(feature, member);
   /** @type {SearchItem[]} */
   const items = [];
-  appendSearchItems(items, 'Similarity group ID', orthogroupId);
-  appendSearchItems(items, 'Similarity group name', group?.display_name || group?.displayName || group?.name);
-  appendSearchItems(items, 'Similarity group description', group?.description);
-  appendSearchItems(items, 'Protein ID', proteinId);
+  appendSearchItems(items, t('Similarity group ID'), orthogroupId);
+  appendSearchItems(items, t('Similarity group name'), group?.display_name || group?.displayName || group?.name);
+  appendSearchItems(items, t('Similarity group description'), group?.description);
+  appendSearchItems(items, t('Protein ID'), proteinId);
   if (
     internalId &&
     internalId !== proteinId &&
     !isInternalProteinDisplayId(internalId)
   ) {
-    appendSearchItems(items, 'Internal protein ID', internalId);
+    appendSearchItems(items, t('Internal protein ID'), internalId);
   }
-  appendSearchItems(items, 'Similarity-group member', member?.label);
-  appendSearchItems(items, 'Similarity-group member gene', member?.gene);
-  appendSearchItems(items, 'Similarity-group member product', member?.product);
-  appendSearchItems(items, 'Similarity-group member note', member?.note);
-  appendSearchItems(items, 'Similarity-group member protein ID', resolveDisplayProteinId(null, member));
+  appendSearchItems(items, t('Similarity-group member'), member?.label);
+  appendSearchItems(items, t('Similarity-group member gene'), member?.gene);
+  appendSearchItems(items, t('Similarity-group member product'), member?.product);
+  appendSearchItems(items, t('Similarity-group member note'), member?.note);
+  appendSearchItems(items, t('Similarity-group member protein ID'), resolveDisplayProteinId(null, member));
   return items;
 };
 
@@ -438,55 +459,55 @@ const featureSearchItems = (
 
   if (selectedField === 'label') return getLabelSearchItems(feature);
   if (selectedField === 'type') {
-    appendSearchItems(items, 'Feature type', feature?.type);
+    appendSearchItems(items, t('Feature type'), feature?.type);
     return items;
   }
   if (selectedField === 'record-id') {
-    appendSearchItems(items, 'Record ID', feature?.record_id);
-    appendSearchItems(items, 'Record ID', feature?.recordId);
-    appendSearchItems(items, 'Record ID', feature?.displayRecordId);
+    appendSearchItems(items, t('Record ID'), feature?.record_id);
+    appendSearchItems(items, t('Record ID'), feature?.recordId);
+    appendSearchItems(items, t('Record ID'), feature?.displayRecordId);
     return items;
   }
   if (selectedField === 'location') {
-    appendSearchItems(items, 'Location', formatFeatureLocation(feature));
+    appendSearchItems(items, t('Location'), formatFeatureLocation(feature));
     return items;
   }
   if (selectedField === 'strand') {
-    appendSearchItems(items, 'Strand', feature?.strand);
+    appendSearchItems(items, t('Strand'), feature?.strand);
     return items;
   }
   if (selectedField === 'orthogroup') {
     return getOrthogroupSearchItems(feature, orthogroupsById);
   }
   if (selectedField === 'qualifier-key') {
-    appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
+    appendSearchItems(items, t('Qualifier key'), Object.keys(qualifiers));
     return items;
   }
   if (selectedField === 'qualifier-value') {
     return getQualifierSearchItems(feature, qualifierKey);
   }
   if (selectedField === 'nucleotide') {
-    appendSearchItems(items, 'Nucleotide sequence', feature?.nucleotide_sequence || feature?.nucleotideSequence, { alphabet: 'nucleotide' });
+    appendSearchItems(items, t('Nucleotide sequence'), feature?.nucleotide_sequence || feature?.nucleotideSequence, { alphabet: 'nucleotide' });
     return items;
   }
   if (selectedField === 'amino-acid') {
-    appendSearchItems(items, 'Amino acid sequence', resolveFeatureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
+    appendSearchItems(items, t('Amino acid sequence'), resolveFeatureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
     return items;
   }
 
   items.push(...getLabelSearchItems(feature));
-  appendSearchItems(items, 'Record ID', feature?.record_id);
-  appendSearchItems(items, 'Record ID', feature?.recordId);
-  appendSearchItems(items, 'Record ID', feature?.displayRecordId);
-  appendSearchItems(items, 'Feature type', feature?.type);
-  appendSearchItems(items, 'Location', formatFeatureLocation(feature));
-  appendSearchItems(items, 'Strand', feature?.strand);
+  appendSearchItems(items, t('Record ID'), feature?.record_id);
+  appendSearchItems(items, t('Record ID'), feature?.recordId);
+  appendSearchItems(items, t('Record ID'), feature?.displayRecordId);
+  appendSearchItems(items, t('Feature type'), feature?.type);
+  appendSearchItems(items, t('Location'), formatFeatureLocation(feature));
+  appendSearchItems(items, t('Strand'), feature?.strand);
   items.push(...getOrthogroupSearchItems(feature, orthogroupsById));
   if (normalizeFeatureSearchPopupMode(popupMode) !== 'simple') {
     // All excludes sequence content; the Nucleotide and Amino acid fields search it (D-01).
-    appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
+    appendSearchItems(items, t('Qualifier key'), Object.keys(qualifiers));
     Object.keys(qualifiers).sort().forEach((key) => {
-      if (key.toLowerCase() !== 'translation') appendSearchItems(items, `Qualifier ${key}`, qualifiers[key]);
+      if (key.toLowerCase() !== 'translation') appendSearchItems(items, t('Qualifier {key}', { key }), qualifiers[key]);
     });
   }
   return items;
@@ -630,10 +651,10 @@ export const buildFeatureSearchIndex = ({
     Object.keys(qualifiers).sort().forEach((key) => {
       const normalizedKey = normalizeSearchText(key).trim();
       if (!normalizedKey) return;
-      qualifierKeys.push(prepareSearchItem({ label: 'Qualifier key', value: key }));
+      qualifierKeys.push(prepareSearchItem({ label: t('Qualifier key'), value: key }));
       /** @type {SearchItem[]} */
       const values = [];
-      appendSearchItems(values, `Qualifier ${key}`, qualifiers[key]);
+      appendSearchItems(values, t('Qualifier {key}', { key }), qualifiers[key]);
       const preparedValues = values.map(prepareSearchItem);
       qualifierValuesByKey.set(normalizedKey, preparedValues);
       if (!qualifierFeatureIdsByKey.has(normalizedKey)) qualifierFeatureIdsByKey.set(normalizedKey, []);
@@ -812,5 +833,5 @@ export const formatSearchMatchLine = (feature, details) => {
   const detailText = details?.length ? formatSearchMatchDetail(details[0]) : '';
   if (!detailText) return '';
   const recordId = String(feature?.record_id || '');
-  return `${recordId ? `Record ${recordId} · ` : ''}Matched ${detailText}`;
+  return `${recordId ? `${t('Record {id}', { id: recordId })} · ` : ''}${t('Matched {detail}', { detail: detailText })}`;
 };

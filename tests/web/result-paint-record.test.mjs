@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createResultPaintRecord } from '../../gbdraw/web/js/app/result-paint-record.js';
+import { createResultPaintRecord, paintRuleTable } from '../../gbdraw/web/js/app/result-paint-record.js';
 
 // An editor paint state as app-setup reads it (`currentEditorProjectionState`).
 /** @param {string} step @returns {import('../../gbdraw/web/js/app/result-paint-record.js').EditorPaintState} */
@@ -123,4 +123,44 @@ test('a commit drawn from an earlier editor state leaves the edits made meanwhil
   const unchanged = createResultPaintRecord();
   unchanged.commit(['a', 'b'], 'a', started, { drawn: started });
   assert.equal(unchanged.lacking('a'), null, 'no edit while it ran');
+});
+
+// D-36, review C S2: whether a label rerender drew the current paint is
+// decided when its Result is ready, not when its paint is committed. A rule
+// write that lands between the two (in the binder's later steps) leaves the
+// record's `lacking` empty, yet the figure lacks the row the write adds. The
+// fills (colors, visibility) and the strokes count, so a Legend row restored
+// meanwhile does too; labels and the Legend order are projected on any figure.
+test('a rerender drew the current paint only while its fills and strokes still match', () => {
+  const started = paint('started');
+  const record = createResultPaintRecord();
+  record.commit(['a'], 'a', started, { drawn: started });
+  assert.equal(record.lacking('a'), null, 'nothing was edited before the paint commit');
+  const drewPaint = record.drewPaint;
+  assert.equal(drewPaint(started, started), true);
+  assert.equal(drewPaint(started, { ...started, colors: [started.colors[0], 'rules written after the paint commit'] }), false,
+    'a rule write after the paint commit');
+  assert.equal(drewPaint(started, { ...started, colors: [{ CDS: 'another palette' }, started.colors[1]] }), false, 'a palette');
+  assert.equal(drewPaint(started, { ...started, visibility: 'hidden meanwhile' }), false, 'a visibility edit');
+  assert.equal(drewPaint(started, { ...started, strokes: 'a Legend row restored meanwhile' }), false, 'a stroke edit');
+  assert.equal(drewPaint(started, { ...started, labels: 'labels edited', legendOrder: 'order edited' }), true,
+    'labels and the Legend order are projected');
+  assert.equal(drewPaint(undefined, started), false, 'a binding that names no drawn paint');
+});
+
+// OV-1280 (REVIEW-4 N-1): a Result a mode switch shows again names the rule
+// table it was last shown with, whatever the drawing did with its rules while
+// it was not shown, so its display can ask Python to draw it again; a Result
+// restored without its paint state names none.
+test('a Result shown again names the rule table it left with, and a restored Result none', () => {
+  const rulesOf = (rules) => ({ ...paint('x'), colors: [{ CDS: null }, JSON.stringify([rules, {}, {}])] });
+  const withFile = [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Imported', fromFile: true }];
+  const record = createResultPaintRecord();
+  record.commit(['circular'], 'circular', rulesOf(withFile));
+  assert.equal(record.depart(rulesOf(withFile)), 'circular');
+  // The file card's Remove while another mode is shown, then the switch back.
+  assert.deepEqual(paintRuleTable(record.display('circular', rulesOf([]))), withFile);
+  record.commit(['batch'], 'batch', rulesOf([]), { restored: true });
+  record.commit(['batch', 'kept'], 'batch', rulesOf([]), { restored: true });
+  assert.equal(paintRuleTable(record.display('kept', rulesOf([]))), null);
 });

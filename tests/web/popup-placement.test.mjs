@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { placePopupNearPoint, popupViewportBounds } from '../../gbdraw/web/js/utils/popup-bounds.js';
+import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../../gbdraw/web/js/utils/popup-bounds.js';
 
 // OV-371 and OV-384: the first placement of a popup opened at a clicked point.
 const desktop = { top: 56, bottom: 968, left: 0, right: 1600 };
@@ -88,6 +88,16 @@ test('a popup opens beside the panel that holds the clicked control when the bou
       placePopupNearPoint({ ...request, bounds, point })
     );
   }
+});
+
+// A drag, and a window that changed size, keep a popup inside the bounds.
+test('a popup is placed the least distance from the wanted place that puts it inside the bounds', () => {
+  const size = { width: 320, height: 400 };
+  assert.deepEqual(placePopupWithin({ x: 500, y: 300, ...size, bounds: desktop }), { x: 500, y: 300, maxHeight: 0 });
+  assert.deepEqual(placePopupWithin({ x: 1500, y: 800, ...size, bounds: desktop }), { x: 1268, y: 556, maxHeight: 0 });
+  assert.deepEqual(placePopupWithin({ x: -40, y: 10, ...size, bounds: desktop }), { x: 12, y: 68, maxHeight: 0 });
+  // A popup larger than the bounds starts at their top left.
+  assert.deepEqual(placePopupWithin({ x: 200, y: 300, width: 2000, height: 2000, bounds: desktop }), { x: 12, y: 68, maxHeight: 0 });
 });
 
 // OV-496: the notice banner is a top limit only where it is a banner above the

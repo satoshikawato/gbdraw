@@ -66,22 +66,19 @@ export const isPositiveInteger = (numeric) => Number.isInteger(numeric) && numer
 export const isNonNegativeInteger = (numeric) => Number.isInteger(numeric) && numeric >= 0;
 
 /**
- * A finite number `accepts` takes, else `fallback`. An unset value is
- * `fallback`, or with `coerceUnset` the number `Number()` makes of it (0 for
- * null and empty text), as the reader always took it.
+ * A finite number `accepts` takes, else `fallback`. An unset value (a blank
+ * is null, R7) is `fallback` without a loss, never the 0 `Number()` makes of it.
  * @template F
  * @param {(numeric: number) => boolean} accepts
  * @param {F} fallback
- * @param {{ coerceUnset?: boolean }} [options]
  * @returns {FieldReader<number | F>}
  */
-export const numberOr = (accepts, fallback, { coerceUnset = false } = {}) => (value) => {
-  const unset = isUnsetValue(value);
-  if (unset && !coerceUnset) return { value: fallback, lost: false };
+export const numberOr = (accepts, fallback) => (value) => {
+  if (isUnsetValue(value)) return { value: fallback, lost: false };
   const numeric = Number(value);
   // A boolean reads as 1 or 0, as it always did, but is no number (rule 2).
   return Number.isFinite(numeric) && accepts(numeric)
-    ? { value: numeric, lost: typeof value === 'boolean' } : { value: fallback, lost: !unset };
+    ? { value: numeric, lost: typeof value === 'boolean' } : { value: fallback, lost: true };
 };
 
 /** @param {unknown} value */
@@ -96,7 +93,7 @@ export const truthy = (value) => ({ value: Boolean(value), lost: notBoolean(valu
 /**
  * One of `values` exactly, else `fallback`; a falsy value is unset.
  * @template {string} V
- * @template F
+ * @template {string | null} F
  * @param {readonly V[]} values
  * @param {F} fallback
  * @returns {FieldReader<V | F>}
@@ -150,4 +147,17 @@ export const changedLeaves = (stored, read, at = '') => {
     });
   }
   return keepsMeaning(stored, read) ? [] : [{ at, stored, used: read }];
+};
+
+/**
+ * Records in `losses` a stored value a reader replaced with `used`, unless the
+ * stored value was unset or `used` keeps its meaning (OV-758: the track-slot
+ * readers report what they replace this way).
+ * @param {FieldLeaf[] | null | undefined} losses
+ * @param {string} at
+ * @param {unknown} stored
+ * @param {unknown} used
+ */
+export const noteReplacedLeaf = (losses, at, stored, used) => {
+  if (losses && !isUnsetValue(stored) && !keepsMeaning(stored, used)) losses.push({ at, stored, used });
 };

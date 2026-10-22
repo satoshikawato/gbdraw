@@ -5,12 +5,10 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
 } from './composition-actions.js';
-import {
-  closestRecordGroup,
-  isMultiRecordCanvasSvg,
-  isRecordGroup
-} from '../record-groups.js';
+import { closestRecordGroup, isMultiRecordCanvasSvg } from '../record-groups.js';
 import { setClassToken } from '../../services/svg-serialization.js';
+import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
+import { msg } from '../../utils/i18n.js';
 
 /**
  * @typedef {object} DiagramDragActionsOptions
@@ -128,9 +126,9 @@ export const createDiagramDragActions = ({
   };
 
   /** @param {{ id?: string } | null | undefined} group */
-  const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
+  const isLengthBarGroup = (group) => (group?.id || '') === LENGTH_BAR_ID;
   /** @param {{ id?: string } | null | undefined} group */
-  const isPlotTitleGroup = (group) => (group?.id || '') === 'plot_title';
+  const isPlotTitleGroup = (group) => (group?.id || '') === PLOT_TITLE_ID;
 
   /**
    * @param {Element | null | undefined} el
@@ -215,7 +213,7 @@ export const createDiagramDragActions = ({
    */
   const syncLengthBarElement = (svg, preserveOffset = false) => {
     // The Python-drawn scale bar is a `g` group.
-    const nextLengthBar = /** @type {SVGGraphicsElement | null} */ (svg?.getElementById('length_bar') || null);
+    const nextLengthBar = /** @type {SVGGraphicsElement | null} */ (svg?.getElementById(LENGTH_BAR_ID) || null);
     if (!nextLengthBar) {
       clearLengthBarState();
       return;
@@ -267,22 +265,40 @@ export const createDiagramDragActions = ({
     applyPlotTitleTransform(nextPlotTitleGroup);
   };
 
+  // Whether a press drags one record (a Multi-Record Canvas) or the whole diagram.
+  const dragsOneRecord = () => isMultiRecordCanvasSvg(svgContainer.value?.querySelector('svg'));
+
+  // What a press on `target` drags: its record on a Multi-Record Canvas, else
+  // every bound primary group; null when the press drags nothing.
+  /**
+   * @param {Element} target
+   * @param {boolean} [oneRecord] `dragsOneRecord()`, read once by a caller that asks for many targets.
+   * @returns {{ mode: 'record' | 'group', targets: SVGGraphicsElement[] } | null}
+   */
+  const diagramDragOf = (target, oneRecord = dragsOneRecord()) => {
+    if (oneRecord) {
+      const record = closestRecordGroup(target);
+      // `closestRecordGroup` returns a `g` element.
+      return record ? { mode: 'record', targets: [/** @type {SVGGraphicsElement} */ (record)] } : null;
+    }
+    const group = target.closest('g[id]');
+    if (!group || isLegendOwnedGroup(group) || isLengthBarGroup(group) || isPlotTitleGroup(group)) return null;
+    // setupDiagramDrag stores the bound primary groups (or []) in `diagramElements`.
+    /** @type {SVGGraphicsElement[]} */
+    const targets = diagramElements.value;
+    return targets.length > 0 ? { mode: 'group', targets } : null;
+  };
+
+  // A primary group shows `grab` only when a press on it drags it; one that no
+  // press drags (a Linear record definition) shows no drag cursor (PD-OI-053).
   const refreshDiagramDragAffordances = () => {
     const enabled = isLayoutRepositionModeEnabled();
     /** @type {SVGGraphicsElement[]} */
     const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
-    const hasRecordGroups = elements.some((el) => isRecordGroup(el));
+    const oneRecord = enabled && dragsOneRecord();
 
     elements.forEach((el) => {
-      if (!enabled) {
-        setElementCursor(el, '');
-        return;
-      }
-      if (hasRecordGroups) {
-        setElementCursor(el, isRecordGroup(el) ? 'grab' : '');
-      } else {
-        setElementCursor(el, 'grab');
-      }
+      setElementCursor(el, !enabled ? '' : diagramDragOf(el, oneRecord)?.targets.includes(el) ? 'grab' : 'default');
     });
 
     [lengthBarElement.value, plotTitleElement.value].forEach((element) => {
@@ -323,7 +339,7 @@ export const createDiagramDragActions = ({
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
-    beginDragTransaction('Move length bar');
+    beginDragTransaction(msg('Move length bar'));
     lengthBarElement.value = group;
     diagramDragging.value = true;
     plotTitleDragging.value = false;
@@ -347,7 +363,7 @@ export const createDiagramDragActions = ({
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
-    beginDragTransaction('Move plot title');
+    beginDragTransaction(msg('Move plot title'));
     assignPlotTitleElement(group);
     diagramDragging.value = true;
     plotTitleDragging.value = true;
@@ -371,50 +387,28 @@ export const createDiagramDragActions = ({
     ) {
       return;
     }
-    if (!svgContainer.value) return;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+    if (!svgContainer.value?.querySelector('svg')) return;
 
-    const clickedLengthBar = e.target.closest('#length_bar');
+    const clickedLengthBar = e.target.closest(`#${LENGTH_BAR_ID}`);
     if (clickedLengthBar) {
       startLengthBarDrag(e, /** @type {SVGGraphicsElement} */ (clickedLengthBar)); // the `g#length_bar` group
       return;
     }
 
-    const clickedPlotTitle = e.target.closest('#plot_title');
+    const clickedPlotTitle = e.target.closest(`#${PLOT_TITLE_ID}`);
     if (clickedPlotTitle) {
       startPlotTitleDrag(e, /** @type {SVGGraphicsElement} */ (clickedPlotTitle)); // the `g#plot_title` group
       return;
     }
 
-    const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
-    /** @type {SVGGraphicsElement[]} */
-    let dragTargets = [];
-
-    if (isMultiRecordCanvas) {
-      // Multi-record mode: allow dragging only the clicked record group.
-      const clickedRecordGroup = closestRecordGroup(e.target);
-      if (!clickedRecordGroup) return;
-      dragTargets = [/** @type {SVGGraphicsElement} */ (clickedRecordGroup)]; // record groups are `g` elements (isRecordGroup)
-      activeDragMode = 'record';
-    } else {
-      const clickedGroup = e.target.closest('g[id]');
-      if (!clickedGroup) return;
-
-      if (isLegendOwnedGroup(clickedGroup)) return;
-      if (isLengthBarGroup(clickedGroup)) return;
-      if (isPlotTitleGroup(clickedGroup)) return;
-
-      // setupDiagramDrag stores the bound primary groups (or []) in `diagramElements`.
-      dragTargets = /** @type {SVGGraphicsElement[]} */ (diagramElements.value);
-      if (dragTargets.length === 0) return;
-      activeDragMode = 'group';
-    }
+    const drag = diagramDragOf(e.target);
+    if (!drag) return;
+    activeDragMode = drag.mode;
 
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
-    beginDragTransaction(activeDragMode === 'record' ? 'Move record' : 'Move diagram');
+    beginDragTransaction(activeDragMode === 'record' ? msg('Move record') : msg('Move diagram'));
     if (activeDragMode === 'record') {
       similarityAlignmentLifecycle?.beforeRecordDrag?.();
     }
@@ -422,7 +416,7 @@ export const createDiagramDragActions = ({
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
     diagramDragStart.y = e.clientY;
-    pressDragTargets(dragTargets);
+    pressDragTargets(drag.targets);
   };
 
   const getActiveDragStart = () => {

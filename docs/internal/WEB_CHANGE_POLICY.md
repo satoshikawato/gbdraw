@@ -170,7 +170,9 @@ already emits the final fields.
 The following are hard failures when applicable:
 
 - new production dependencies or bare production imports;
-- binary runtime additions or vendored runtime changes;
+- binary runtime additions that the trusted base does not list, and vendored
+  runtime changes that it does not list (see
+  [Updating a vendored runtime file](#updating-a-vendored-runtime-file));
 - incomplete or cyclic first-party imports;
 - unauthorized privileged owners or importers;
 - malformed authority or rules;
@@ -179,6 +181,10 @@ The following are hard failures when applicable:
   static Product Contract co-change route;
 - checker implementation combined with authority or an evidence producer in
   one ordinary pull request;
+- a persisted contract change without its history, reference, or fixtures,
+  or with a new Session version other than `main`'s or `main`'s plus one, or
+  one that cannot be read (see
+  [Persisted contract co-change](#persisted-contract-co-change));
 - candidate execution in a trusted workflow;
 - promotion topology, source-coverage, exact-SHA evidence, result-tree, or
   security failures; and
@@ -200,8 +206,10 @@ Human review is required for at least these cases:
 - an architecture-bearing owner, path, or responsibility move;
 - a new module, public export, reactive owner, watcher, or resource signal;
 - a material performance-baseline change;
-- a scientific or reference-output change; or
-- a compatibility-path change.
+- a scientific or reference-output change;
+- a compatibility-path change; or
+- a persisted contract change, or a new generated contract export (see
+  [Persisted contract co-change](#persisted-contract-co-change)).
 
 `Review: REQUIRED` alone exits zero and is not permission to ignore a hard
 failure.
@@ -383,19 +391,20 @@ The checker reads the registry from the trusted base.
   `count-map` (a number per key), `set` (exempt names), `writer-map` (exempt
   writers per module, each with a category), `set-map` (names per path),
   `json-entries` (the objects of a JSON array, by `id`), `json-ids` (the `id`
-  set of a JSON array: a new id is an expansion, a removed id a contraction,
-  and an edit of another field neither), and `py-count`, `py-count-map`, and
-  `py-set` for a module-level literal of a Python test.
+  set of a JSON array and the length of each entry's lists: a new id or a
+  further list item is an expansion, a removed id or list item a contraction,
+  and a renamed list item or an edit of another field neither), and
+  `py-count`, `py-count-map`, and `py-set` for a module-level literal of a
+  Python test.
 - A count is a ceiling. Its test asserts observed ≤ recorded, per key for a
   map, and a key without an entry counts as 0. Lowering or removing an entry
   is a contraction and is optional; the test names what may be lowered.
   Raising an entry or adding a key is an expansion. The two R6 site counts
   (`UNCLASSIFIED_THROW_BASELINE`, `UNPROVEN_BASELINE`) are one total each
   (`count`, `py-count`), so a site that moves to another module with its code
-  changes nothing. The four maps keyed by module path
-  (`NO_IMPLICIT_ANY_BASELINE`, `EXPLICIT_ANY_BASELINE`,
-  `OUTSIDE_OWNER_BASELINE`, `TYPE_DEBT_BASELINE`) stay per module, so a new or
-  moved module starts at 0.
+  changes nothing. The three maps keyed by module path
+  (`EXPLICIT_ANY_BASELINE`, `OUTSIDE_OWNER_BASELINE`, `TYPE_DEBT_BASELINE`)
+  stay per module, so a new or moved module starts at 0.
 
 Root-cause patterns (boundary audit of 2026-10-10):
 
@@ -578,6 +587,153 @@ applies only when `tools/web-change-policy.json` is the sole changed guard file
 and the change is a pure policy contraction. The
 checker implementation and source parser cannot change with that policy or its
 policy workflows.
+
+## Updating a vendored runtime file
+
+A change under `gbdraw/web/vendor/` passes the Gate only when the
+`allowedVendorChanges` list in `tools/web-change-policy.json` on the pull
+request base names it exactly. The checker reads the list from the base. A
+list in the pull request head is checked as data and authorizes nothing.
+
+Each entry names one file:
+
+| Field | Value |
+| --- | --- |
+| `path` | the exact path under `gbdraw/web/vendor/` |
+| `change` | `add`, `replace`, or `remove` (Git status `A`, `M`, or `D`) |
+| `sha256` | SHA-256 of the bytes Git stores for the file after the change (`add`, `replace`) or before it (`remove`) |
+| `package` | the upstream package name |
+| `version` | the upstream version |
+| `source` | the `https` URL the bytes come from |
+
+A path appears at most once. A change whose path, kind, or bytes differ from
+its entry fails as an unlisted change. A malformed list fails closed, in the
+base and in the candidate, and so does a policy file that repeats a key. A new
+entry that cannot apply to the base tree fails in the pull request that adds
+it: `add` for a path the base has as a file or directory, `replace` or `remove`
+for a path it lacks,
+`remove` whose hash differs from the base bytes, and `replace` with the bytes
+the base already has. The report lists every added and removed entry. A listed
+change passes with `Review: REQUIRED`. An added binary file under
+`gbdraw/web/vendor/` passes the binary rule only when the trusted base lists
+it as `add` and the head bytes hash to the entry's `sha256`; any other added
+binary runtime file still fails ("added binary runtime files are not
+allowed"). The route takes effect for a pull request only when that pull
+request's base checker implements it; a checker-only pull request follows the
+one that lists the files.
+
+An update takes two pull requests in this order:
+
+1. Authority only: add the entry to `tools/web-change-policy.json`. Take the
+   bytes from the upstream release, check them against the registry's
+   published integrity value, and hash them as Git stores them
+   (`git cat-file blob <commit>:<path> | sha256sum`; with `eol=lf` this equals
+   the upstream file when it has LF line endings). The pull request names the
+   reason, such as a security fix. It expands authority, so it waits for the
+   Owner's approval.
+2. After it merges: the runtime pull request changes the file and the code,
+   tests, notices, and packaging that use it, and leaves the list unchanged.
+   Changing the list beside a runtime path fails the Gate.
+
+The check compares the pull request base with its head, so an open pull
+request that is behind `dev` after step 2 merged shows the listed change in
+reverse. When the head does not contain its base and leaves a listed path as
+their merge base had it, the checker reports that the branch is behind its
+base; update it from `dev`. Any other mismatch reports the kind or the hash.
+
+An entry whose change has merged can only authorize the same bytes again.
+Remove it in the next authority-only pull request. Because a path appears once,
+the next update of that path replaces its entry.
+
+## Persisted contract co-change
+
+The generated modules in `gbdraw/web/js/contracts/` describe the persisted
+Session and request contracts; `python tools/generate_web_contracts.py --check`
+keeps them equal to their Python owners. The Gate compares them between the
+pull request base and head, without running Python:
+
+- `schema.generated.js`: each `export const` statement, ignoring owner
+  comments, JSDoc, and whitespace. A changed or removed export counts unless
+  `exemptGeneratedExports` names it. A removed export whose exact value
+  reappears under a new name is a rename and needs review only; renaming a
+  version export (`SESSION_VERSION`, `SUPPORTED_SESSION_VERSIONS`,
+  `CANONICAL_REQUEST_SCHEMA`, `SUPPORTED_CANONICAL_REQUEST_SCHEMAS`) fails,
+  because the checker reads them by name and needs a change first.
+- `request-shape.generated.js` and `session-shape.generated.js`: the
+  description as data, with type references inlined, so renaming or
+  reordering types does not count.
+- `request.generated.js` and `session.generated.js` (JSDoc only) never count.
+- A module or version value that cannot be read counts as changed and fails
+  closed. A version export that the base has and the head lacks or cannot
+  read fails as "a renamed or removed version export (<name>) needs a checker
+  change".
+- With `--head`, a branch behind its base is compared from the merge base of
+  base and head, so only its own changes count, and only its own diff supplies
+  the co-changes. When Git cannot find a merge base, the comparison falls back
+  to the base, and a failure may come from a newer `dev` change; the message
+  then says to update the branch from `dev`. Without `--head` (the working
+  tree), the comparison is always two-dot against the base.
+
+| Kind | Counts when | Also needs |
+| --- | --- | --- |
+| `session-version` | `SESSION_VERSION` or `SUPPORTED_SESSION_VERSIONS` changes | for a new version, a `## ` heading in the history naming `Session <n>`; while the old version stays supported, a `tests/fixtures/sessions/*.v<old>.*` fixture |
+| `request-schema` | `CANONICAL_REQUEST_SCHEMA` or `SUPPORTED_CANONICAL_REQUEST_SCHEMAS` changes | for a new schema, a `## ` heading naming `request schema <n>` |
+| `request-description` | the request description changes and the request schema does not | nothing more |
+| `session-admission` | the Session admission description changes | nothing more |
+| `schema-constant` | any other export changes | nothing more |
+
+Every kind needs `docs/internal/SESSION_FORMAT_HISTORY.md`,
+`docs/REFERENCE/session-and-request-compatibility.md`, and a changed path under
+`tests/fixtures/` in the diff. A missing item fails the Gate
+(`persisted-contract.co-change`), naming the kind, the exports or modules, and
+each missing item. When all are present, the Gate passes with
+`Review: REQUIRED`. A new export or a new description module is
+`Review: REQUIRED` only: confirm that it projects an existing value.
+
+The rule data is `persistedContractCoChange.exemptGeneratedExports` in
+`tools/web-change-policy.json`, read from the base. Without the key the rule is
+off. Malformed data fails closed in the base and in the candidate. Neither may
+exempt a version export, and a candidate may not exempt a name the head does
+not export. Adding an exemption, or turning the rule on or off, is
+`Review: REQUIRED`; adding an exemption or removing the key expands authority
+and waits for the Owner's approval. The two documents and `tests/fixtures/`
+are evidence, not guard or authority paths.
+
+A breaking Session change raises `SESSION_VERSION` when it enters `main`; the
+unit is `main`, not a release tag. A change is breaking when the `main` build
+would refuse a Session that the new writer writes, or would read it
+differently. While the head writes a version that `main` does not, a further
+breaking change keeps that version: rewrite its history entry and fixtures, and
+remove any reader or migrator of a version that never reached `main`. With
+`persistedContractCoChange.sessionVersionUnit` set to `"main"` in the base
+policy (another value fails closed in the base and the candidate), the Gate
+reads `main`'s `SESSION_VERSION` from `refs/remotes/origin/main` for every pull
+request with one of the kinds above:
+
+- a pull request that changes `SESSION_VERSION` to anything other than
+  `main`'s or `main`'s plus one fails the Gate (`persisted-contract.fold`);
+- when the head writes `main`'s version, `Review: REQUIRED` asks to confirm
+  that `main` reads what the head writes the same way, or to raise
+  `SESSION_VERSION` by one;
+- when either version cannot be read, the Gate fails closed
+  (`persisted-contract.fold`); fetch `main` and rerun.
+
+Whether a change breaks `main` is the reviewer's judgment.
+`CANONICAL_REQUEST_SCHEMA` has no rule tied to `main`; it keeps the rules in
+the table. Setting or removing `sessionVersionUnit` is
+`Review: REQUIRED`; removing it expands authority and waits for the Owner's
+approval. `Promotion / gate` does not repeat the check: every change reaches
+`main` through a `dev` pull request.
+
+In the pull request body, under "Risk and review notes", write
+"Persisted contract:" and either `N/A` or the kinds the Gate reported, the
+history heading, the compatibility reference section, the fixture paths, and,
+for an older Session version that stays readable, the first-parent `main`
+commit or release tag that wrote its fixture. The Gate does not check reader
+behaviour outside the descriptions or that `main`/tag evidence; the reviewer
+does. Before opening the pull request, commit, then run
+`python tools/generate_web_contracts.py --check` and
+`node tools/check-web-change-budget.mjs --base origin/dev --head HEAD`.
 
 ## Changing a privileged owner or importer
 

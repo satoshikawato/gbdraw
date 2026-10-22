@@ -19,6 +19,7 @@ from typing import Literal, TypeAlias, TypedDict, cast, get_args
 from svgwrite import Drawing
 
 from gbdraw.api.diagram import label_fit_report, label_fit_row
+from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
@@ -111,6 +112,7 @@ class LabelFitRecordPayload(TypedDict):
     overlapPairs: int
     crossingPairs: int
     definitionOverlaps: int
+    regionOverlaps: int
     refused: bool
     counts: str
 
@@ -121,6 +123,7 @@ class LabelFitReportPayload(TypedDict):
     overlapPairs: int
     crossingPairs: int
     definitionOverlaps: int
+    regionOverlaps: int
     notice: list[str]
     records: list[LabelFitRecordPayload]
     rows: list[LabelFitRowPayload]
@@ -190,12 +193,13 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
     return {
         "recordId": record.record_id,
         "labelKind": record.label_kind,
-        "labelKindTitle": f"{label_kind_words(record)} labels",
+        "labelKindTitle": f"{label_kind_words(record)} label{'' if record.label_count == 1 else 's'}",
         "labelCount": record.label_count,
         "fontSize": float(record.font_size),
         "overlapPairs": record.fit.overlap_pairs,
         "crossingPairs": record.fit.crossing_pairs,
         "definitionOverlaps": record.fit.definition_overlaps,
+        "regionOverlaps": record.fit.region_overlaps,
         "refused": record.refused,
         # A refused radial record has no counts; the reason stands in (OV-699).
         "counts": label_fit_record_counts(record),
@@ -211,6 +215,7 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "overlapPairs": report.overlap_pairs,
         "crossingPairs": report.crossing_pairs,
         "definitionOverlaps": report.definition_overlaps,
+        "regionOverlaps": report.region_overlaps,
         "notice": list(label_fit_notice(report)),
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],
@@ -306,16 +311,18 @@ class LabelFitRowSearches:
         mode_text, _, rest = token.partition(":")
         mode = label_fit_mode(mode_text)
         generation_text, _, index_text = rest.partition(":")
+        wanted_generation = parse_ascii_nonnegative_integer(generation_text)
+        wanted_index = parse_ascii_nonnegative_integer(index_text)
         source = (
             next(
                 (
-                    kept.get(int(index_text))
+                    kept.get(wanted_index)
                     for kept_mode, (generation, kept) in self._kept()
-                    if kept_mode == mode and generation == int(generation_text)
+                    if kept_mode == mode and generation == wanted_generation
                 ),
                 None,
             )
-            if generation_text.isdigit() and index_text.isdigit()
+            if wanted_generation is not None and wanted_index is not None
             else None
         )
         deadline = time.monotonic() + self._row_search_seconds

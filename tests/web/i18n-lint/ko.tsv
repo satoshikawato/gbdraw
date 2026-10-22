@@ -1,0 +1,16 @@
+id	regex	flags	message	severity
+ko-r2-feature	피처	u	피처 retired: write the English word feature (lower case, particle after the Korean reading: feature를, feature의) (ko-r2 D-07, Owner).	error
+ko-r1-locus-tag	유전자좌 태그|로커스 태그	u	Write the Latin term locus tag; 유전자좌 태그 and 로커스 태그 are retired (round 1, D-05).	error
+ko-never-loanwords	게놈|스트랜드|어노테이션|라벨|라이센스|디폴트|폰트|에러|(?<!프)리셋|쓰레드|유저|컬러|색상|업데이트|액세션|로커스	u	Retired form (STYLE 5.1 Never list, glossary notes): 유전체, 가닥, 주석, 레이블, 라이선스, 기본값, 글꼴, 오류, 초기화, 스레드 as the glossary writes it, 사용자, 색, 갱신, 등록 번호, locus.	error
+ko-never-feature-words	특징	u	특징 is not used for Feature: write the English word feature (STYLE 5.1 Never, ko-r2 D-07).	error
+ko-function-feature	기능	u	기능 is not used for Feature (STYLE 5.1 Never): write feature when Feature is meant; 기능 stays only for a real function.	warn
+ko-sequence-loan	(?<!이스케이프 )시퀀스	u	시퀀스 is on the Never list: write 서열 (only 이스케이프 시퀀스 is allowed, round 2 D-03).	warn
+ko-source-sauce	(?<!리)(?<!오픈 )소스(?! 코드)	u	소스 also reads "sauce": write 원본 (only the compound 소스 코드 is allowed).	warn
+ko-honorific-pronoun	당신|귀하	u	Leave the subject out; 당신 and 귀하 are not used (STYLE 5.1 Never).	error
+ko-haeyo-style	하세요|해요|하시오	u	Sentences use 합니다체 and ~하십시오, never 해요체 or ~하시오 (STYLE 5.2).	error
+ko-drag	끌기	u	Write 드래그; Microsoft 끌기 is not used (glossary Drag).	error
+ko-glossary-alt-terms	액세션 번호|비트 점수|매개 변수|허용 오차|확장 대상|갭 열림|이어받|사슬	u	Retired alternative (glossary notes): 등록 번호, Bitscore, 매개변수, 허용 범위, 연장 대상, 갭 개시 수, 상속, 가닥.	error
+ko-color-table	색상표|색 표(?!시)	u	The color-table file is 색 테이블 (glossary Color table); 표 alone is Table.	warn
+ko-hanja	[\u4e00-\u9fff]	u	No Hanja, not even in parentheses (STYLE 5.4): write Hangul or the Latin term.	error
+ko-number-order	순번	u	The track/source index is 번호, not 순번 (round 2 D-05).	warn
+ko-ambiguous	모호	u	State the cause instead of 모호함 (e.g. 여러 레코드 또는 원본과 일치) (glossary Ambiguous).	warn

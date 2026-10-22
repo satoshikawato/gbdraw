@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +22,10 @@ const copyModule = async (sourceRelative, targetRelative) => {
 
 await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
 await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
+// feature-metadata-extraction.js reads the Linear Region fields through record-options.js.
+for (const name of ['services/record-options.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+  await copyModule(`gbdraw/web/js/${name}`, name);
+}
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 // losat-normalization.js reads the comparison settings from the generated request description.
 await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');
@@ -73,13 +78,16 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/session-feature-metadata.js', 'services/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/services/svg-result-ingestion.js', 'services/svg-result-ingestion.js');
+await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
+await copyModule('gbdraw/web/js/utils/vue-raw.js', 'utils/vue-raw.js');
+await copyModule('gbdraw/web/js/services/drawn-groups.js', 'services/drawn-groups.js');
 await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');
 await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-sanitization.js');
 await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
 // The Legend naming rule and the key mirror of the color rules, which the Legend reader and the admission import.
 for (const name of ['services/legend-row-names.js', 'services/specific-color-rules.js', 'services/file-imports.js',
-  'services/rule-matchers.js', 'utils/color-utils.js', 'utils/named-colors.js', 'utils/tsv-cell.js']) {
+  'services/rule-matchers.js', 'utils/color-utils.js', 'utils/i18n.js', 'utils/named-colors.js', 'utils/tsv-cell.js']) {
   await copyModule(`gbdraw/web/js/${name}`, name);
 }
 
@@ -179,9 +187,22 @@ const {
     artifactIdentity: null
   });
   const metadata = { trackSlotGeometry: { schema: 1, mode: 'linear', records: [] }, annotationWarnings: [{ code: 'feature_selector_unmatched', setId: 's', annotationId: 'a', recordId: 'r', recordIndex: 0, missingCount: 1, message: 'Skipped annotation: 1 feature selector(s) unmatched.', resultIndex: 0, resultName: 'out.svg' }] };
+  // The feature catalog travels beside the metadata (step 3a).
+  const featureCatalog = { schema: 4, items: [] };
   assert.deepEqual(
-    normalizeGenerationResponse({ results: legacyResults, metadata }),
-    { results: legacyResults, metadata, artifactIdentity: null }
+    normalizeGenerationResponse({ results: legacyResults, metadata, featureCatalog }),
+    { results: legacyResults, metadata: { ...metadata, featureCatalog }, artifactIdentity: null }
+  );
+  // A catalog inside the metadata is the removed shape.
+  assert.throws(
+    () => normalizeGenerationResponse({ results: legacyResults, metadata: { ...metadata, featureCatalog }, featureCatalog }),
+    (error) => error.code === 'RESULT_INVALID' && error.stage === 'result-admission'
+  );
+  assert.throws(
+    () => normalizeGenerationResponse({
+      results: legacyResults, metadata, featureCatalog, featureCatalogRevision: { revision: 'e:1', sha256: 'x', bytes: 1 }
+    }),
+    (error) => error.code === 'RESULT_INVALID' && error.stage === 'result-admission'
   );
   const errorPayload = { error: { type: 'OutputError', message: 'No output files generated.' } };
   assert.deepEqual(normalizeGenerationResponse(errorPayload), {
@@ -189,18 +210,35 @@ const {
     metadata: {},
     artifactIdentity: null
   });
-  const binarySvg = new TextEncoder().encode('<svg>µ</svg>');
-  assert.deepEqual(
-    normalizeGenerationResponse({
-      results: [{ name: 'binary.svg', content: binarySvg }],
-      metadata: new TextEncoder().encode(JSON.stringify(metadata))
-    }),
-    {
-      results: [{ name: 'binary.svg', content: '<svg>µ</svg>' }],
-      metadata,
-      artifactIdentity: null
-    }
-  );
+  // Step 3b S: a Result is its document pieces; the children texts arrive in
+  // one UTF-8 buffer and are decoded once each.
+  const { SEGMENTS } = await import(pathToFileURL(join(tempDir, 'services', 'current-worker-result-source.js')));
+  const children = new TextEncoder().encode('<text>µ</text>');
+  const revision = createHash('sha256').update(children).digest('hex');
+  const decoded = normalizeGenerationResponse({
+    results: [{
+      name: 'binary.svg',
+      document: { head: '<svg>', tail: '</svg>', pieces: [
+        { kind: 'raw', text: '<defs />' },
+        { kind: 'content', start: '<g>', revision, bytes: children.byteLength, offset: 0, length: children.byteLength }
+      ] },
+      segments: children
+    }],
+    metadata: new TextEncoder().encode(JSON.stringify(metadata)),
+    featureCatalog: new TextEncoder().encode(JSON.stringify(featureCatalog))
+  });
+  assert.deepEqual(decoded, {
+    results: [{
+      name: 'binary.svg',
+      document: { head: '<svg>', tail: '</svg>', pieces: [
+        { kind: 'raw', text: '<defs />' },
+        { kind: 'content', start: '<g>', revision, bytes: children.byteLength, children: '<text>µ</text>' }
+      ] },
+      [SEGMENTS]: new Map()
+    }],
+    metadata: { ...metadata, featureCatalog },
+    artifactIdentity: null
+  });
 }
 
 const parseAttributes = (source) => {

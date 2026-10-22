@@ -3,13 +3,10 @@
 // (`Object.hasOwn`, `hasOwnProperty.call`) is no dependency: a computed that
 // found no entry must still run again when the entry is written first.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-const { computed, reactive } = context.Vue;
+const { computed, reactive } = loadPageVue();
 const { hasOwnEntry, ownEntry } = await import('../../gbdraw/web/js/utils/own-entry.js');
 const { featureOverrideKey, getFeatureOverride } = await import('../../gbdraw/web/js/services/feature-override-identity.js');
 const { draftLegendPanelColors } = await import('../../gbdraw/web/js/app/candidate-render.js');

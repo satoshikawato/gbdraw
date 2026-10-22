@@ -144,7 +144,7 @@ def test_quantitative_and_annotation_recipes_pin_track_semantics() -> None:
 def test_presentation_recipe_uses_one_complete_mitochondrion() -> None:
     _, recipe = _recipe("H-CLI-11")
 
-    assert "--palette colorblind" in recipe
+    assert "--palette default" in recipe
     assert "--table tables/presentation_colors.tsv" in recipe
     assert "--label_whitelist tables/presentation_labels.tsv" in recipe
     assert "--label_table tables/presentation_label_overrides.tsv" in recipe

@@ -7,7 +7,7 @@ module does not own session envelopes, base64 encoding, or temporary files.
 
 from __future__ import annotations
 
-from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
+from collections.abc import Callable, Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
 from dataclasses import MISSING, Field, asdict, dataclass, fields, is_dataclass, replace
 from functools import lru_cache
@@ -63,7 +63,15 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
+from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
+from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.session_legacy_values import (
+    LEGACY_FEATURE_SHAPES,
+    LEGACY_FEATURE_TYPES,
+    LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import (
@@ -74,6 +82,7 @@ from gbdraw.features.placement import (
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -82,7 +91,9 @@ from gbdraw.linear_comparison import (
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
+    _LEGACY_SPACING_PARAM,
     _InternalCircularTrackSlot,
+    _migrate_legacy_circular_track_slot_spec,
     _internal_circular_track_slot,
     _normalize_renderer as _circular_renderer_name,
     parse_circular_track_slot,
@@ -98,6 +109,7 @@ from gbdraw.annotations import (
     HatchStyle,
     RegionAnnotation,
     RegionAnnotationStyle,
+    annotation_track_params_from_mapping,
 )
 
 from .api.options import (
@@ -220,11 +232,11 @@ class _LegacyStandardCollinearityPayload:
 
     def to_lossless(self) -> LosslessCollinearityParameters:
         return LosslessCollinearityParameters(
-            min_anchors=self.min_anchors,
-            max_unit_gap=self.max_gene_gap,
-            max_diagonal_drift=self.max_diagonal_drift,
-            max_conflicts=self.max_conflicts_in_merge_gap,
-            merge_orientation="either",
+            **{
+                lossless: getattr(self, standard)
+                for standard, lossless in _LEGACY_STANDARD_COLLINEARITY_FIELDS.items()
+            },
+            merge_orientation=_LEGACY_STANDARD_MERGE_ORIENTATION,
         )
 
 
@@ -260,15 +272,6 @@ _LEGACY_SPARSE_COMPARISON_DEFAULTS = {
     "identity": 70.0,
     "alignment_length": 0,
 }
-_LEGACY_SPARSE_FEATURE_TYPES = (
-    "CDS",
-    "rRNA",
-    "tRNA",
-    "tmRNA",
-    "ncRNA",
-    "misc_RNA",
-    "repeat_region",
-)
 _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
@@ -283,6 +286,23 @@ _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
 _LEGACY_CONFIG_OVERRIDE_KEYS = {
     "depth_tick_interval": "depth_large_tick_interval",
 }
+# Schemas 1-2 diagramOptions names of the feature visibility table.
+_LEGACY_FEATURE_VISIBILITY_RENAMES = (
+    ("featureTable", "featureVisibilityTable"),
+    ("featureTableFile", "featureVisibilityTableFile"),
+)
+# A ``kind=standard`` collinearity payload (schemas 1-2) read as lossless
+# parameters: standard field -> lossless field, and the merge orientation.
+_LEGACY_STANDARD_COLLINEARITY_FIELDS = {
+    "min_anchors": "min_anchors",
+    "max_gene_gap": "max_unit_gap",
+    "max_diagonal_drift": "max_diagonal_drift",
+    "max_conflicts_in_merge_gap": "max_conflicts",
+}
+_LEGACY_STANDARD_MERGE_ORIENTATION: Literal["either"] = "either"
+# The paralog link setting a ``kind=standard`` payload's own value replaces
+# in collinear mode, when the setting holds this default.
+_LEGACY_PARALOG_LINKS_DEFAULT = 2
 _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES = {
     "label_placement": {
         "on_feature": "above_feature",
@@ -897,12 +917,15 @@ def _decode_canonical_request(
             # Schemas 2-5 wrote one ``#<card>@<row>`` per record card; as Web
             # Load promotes them, each card's row becomes its gridRow, which
             # the records an ALL card expands to inherit.
-            rows = [token.rpartition("@")[2] for token in linear_layout.multi_record_positions]
+            rows = [
+                parse_ascii_nonnegative_integer(token.rpartition("@")[2])
+                for token in linear_layout.multi_record_positions
+            ]
             records = tuple(
-                replace(record, presentation=replace(record.presentation, grid_row=int(row)))
-                if row.isdigit() and int(row) > 0
+                replace(record, presentation=replace(record.presentation, grid_row=row))
+                if row is not None and row > 0
                 else record
-                for record, row in zip(records, [*rows, *[""] * len(records)])
+                for record, row in zip(records, [*rows, *[None] * len(records)])
             )
             linear_layout = replace(linear_layout, multi_record_positions=None)
         request = LinearDiagramRequest(
@@ -1628,8 +1651,8 @@ def _decode_circular_layout(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
     size_mode = layout["multiRecordSizeMode"]
-    if schema in {1, 2} and size_mode == "sqrt":
-        size_mode = "auto"
+    if schema in {1, 2} and isinstance(size_mode, str):
+        size_mode = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(size_mode, size_mode)
     result = CircularMultiRecordOptions(
         multi_record_size_mode=size_mode,
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
@@ -1910,11 +1933,84 @@ def _decode_diagram_options(
         )
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
-        feature_shapes.setdefault("repeat_region", "rectangle")
+        for feature_type, shape in LEGACY_FEATURE_SHAPES.items():
+            feature_shapes.setdefault(feature_type, shape)
         decoded["feature_shapes"] = feature_shapes
     if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
     return decoded
+
+
+def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a stored request with each font size <= 0 read as Auto, as Web Load does (Owner Q-13 a, OV-1282).
+
+    The Session reader (``decode_session_request``) calls it; a fresh request,
+    such as a Web Generate, keeps refusing such a size (PD-OI-081).
+
+    A font size is a ``POSITIVE`` style leaf (``style_leaf_domain``), in
+    ``config`` or ``configOverrides``. Auto is the value the request's base
+    gives that path: an override leaf is dropped, and inside ``config`` (or an
+    override that holds a table) the leaf takes the stored ``config`` value
+    (for an override), else the packaged one, else ``None`` (a Linear
+    definition line style then inherits its size). Changed containers are
+    copies; the stored request stays as saved.
+    """
+
+    packaged: list[Mapping[str, object]] = []  # Read on the first replacement only.
+    packaged_base = object()
+
+    def lookup(tree: object, path: str) -> object:
+        if tree is packaged_base:
+            if not packaged:
+                packaged.append(load_config_toml("gbdraw.data", "config.toml"))
+            tree = packaged[0]
+        for key in path.split("."):
+            if not isinstance(tree, MappingABC) or key not in tree:
+                return None
+            tree = tree[key]
+        return tree
+
+    def read(value: object, path: str, where: str, bases: tuple[object, ...]) -> object:
+        if isinstance(value, MappingABC):
+            children = {
+                key: read(child, f"{path}.{key}", f"{where}.{key}", bases) for key, child in value.items()
+            }
+            return children if any(children[key] is not value[key] for key in value) else value
+        domain = style_leaf_domain(path)
+        if (
+            value is None  # Unset stays unset; only a stored number <= 0 is replaced.
+            or domain is None
+            or domain[0] != "POSITIVE"
+            or read_stored_font_size(value, path=where) is not None
+        ):
+            return value
+        return next((default for base in bases if (default := lookup(base, path)) is not None), None)
+
+    result = dict(payload)
+    stored = result.get("diagramOptions")
+    if not isinstance(stored, MappingABC):
+        return result
+    options = dict(stored)
+    result["diagramOptions"] = options
+    config = options.get("config")
+    if isinstance(config, MappingABC):
+        options["config"] = {
+            key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged_base,))
+            for key, child in config.items()
+        }
+    overrides = options.get("configOverrides")
+    if isinstance(overrides, MappingABC):
+        bases = (options.get("config"), packaged_base)
+        kept: dict[str, Any] = {}
+        for key, value in overrides.items():
+            where = f'renderRequest.diagramOptions.configOverrides["{key}"]'
+            if isinstance(value, MappingABC):
+                kept[key] = read(value, key, where, bases)
+            elif read(value, key, where, ()) is value:
+                kept[key] = value
+            # Else dropped, as Web Load drops it: the base value applies.
+        options["configOverrides"] = kept
+    return result
 
 
 def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -1953,10 +2049,7 @@ def _migrate_legacy_feature_visibility_fields(
     """Move removed feature-table aliases at the legacy schema boundary."""
 
     migrated = dict(payload)
-    for old_name, current_name in (
-        ("featureTable", "featureVisibilityTable"),
-        ("featureTableFile", "featureVisibilityTableFile"),
-    ):
+    for old_name, current_name in _LEGACY_FEATURE_VISIBILITY_RENAMES:
         if old_name not in migrated:
             continue
         old_value = migrated.pop(old_name)
@@ -2006,16 +2099,20 @@ def _decode_config_overrides(
                 f"{path} contains retired value {retired!r}; schema {schema} "
                 "requires canonical config overrides."
             )
-    return _migrate_flat_config_overrides(overrides, mode=mode, path=path)
+    return migrate_flat_config_overrides(overrides, mode=mode, path=path)
 
 
-def _migrate_flat_config_overrides(
+def migrate_flat_config_overrides(
     overrides: Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     path: str,
 ) -> dict[str, Any]:
-    """Project persisted flat aliases onto schema-derived dotted leaves."""
+    """Project persisted flat aliases onto schema-derived dotted leaves.
+
+    The decoder reads the overrides of every stored request with it, and so
+    does the Web Load check of a stored request (OV-799).
+    """
 
     legacy_label_paths = {
         "canvas.show_labels",
@@ -2295,7 +2392,7 @@ def _restore_legacy_sparse_defaults(
 
     for name, default in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items():
         decoded.setdefault(name, default)
-    decoded.setdefault("selected_features_set", _LEGACY_SPARSE_FEATURE_TYPES)
+    decoded.setdefault("selected_features_set", LEGACY_FEATURE_TYPES)
 
     if decoded.get("config") is not None:
         return
@@ -2366,7 +2463,7 @@ def _expanded_depth_numeric_metadata(
             items.append(None)
             continue
         try:
-            numeric = float(value)
+            numeric = ascii_float(value)
         except (TypeError, ValueError, OverflowError) as exc:
             raise CanonicalRequestEncodingError(
                 f"{field_name} values must be finite numbers > 0 or None."
@@ -2767,7 +2864,7 @@ def _decode_option_value(
     if schema < DISPLAY_PLACEMENT_SCHEMA:
         value = _without_unwritten_feature_tolerance(name, value, CanonicalRequestDecodingError)
     if name == "config":
-        return _migrate_legacy_full_config(
+        return migrate_legacy_full_config(
             _object(value, path="renderRequest.diagramOptions.config"),
             mode=mode,
             path="renderRequest.diagramOptions.config",
@@ -2836,13 +2933,17 @@ def _decode_option_value(
     return value
 
 
-def _migrate_legacy_full_config(
+def migrate_legacy_full_config(
     value: Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     path: str,
 ) -> dict[str, Any]:
-    """Move persisted config aliases onto the current typed schema."""
+    """Move persisted config aliases onto the current typed schema.
+
+    The decoder reads every stored full ``config`` with it, and so does the Web
+    Load check of a stored request (OV-790).
+    """
 
     migrated = deepcopy(dict(value))
     canvas = migrated.get("canvas")
@@ -3444,6 +3545,11 @@ def _encode_track_slot(
                     + ", ".join(sorted(private_keys))
                     + "."
                 )
+            # A spec string keeps `marks=a|b` as text; the Session holds the
+            # mark list the Web reads (OV-1298). Read before the style
+            # override below becomes its camelCase Session form.
+            if isinstance(raw.get("marks"), str):
+                raw["marks"] = list(annotation_track_params_from_mapping(raw).marks or ())
             if isinstance(raw.get("style_override"), RegionAnnotationStyle):
                 raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
@@ -3559,7 +3665,7 @@ def _decode_track_slots(
         }
         if mode == "circular" and schema in {1, 2}:
             params = dict(kwargs.get("params") or {})
-            private_spacing = params.pop("__gbdraw_legacy_spacing", None)
+            private_spacing = params.pop(_LEGACY_SPACING_PARAM, None)
             if private_spacing is not None:
                 if legacy_spacing is not None:
                     raise CanonicalRequestDecodingError(
@@ -3590,31 +3696,6 @@ def _decode_track_slots(
             )
         result.append(decoded_slot)
     return tuple(result)
-
-
-def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
-    """Translate retired Circular slot fields at the persisted-data boundary."""
-
-    head, separator, options = str(spec).partition("@")
-    if not separator:
-        return str(spec)
-    migrated: list[str] = []
-    for raw_part in options.split(","):
-        part = raw_part.strip()
-        if not part or "=" not in part:
-            migrated.append(part)
-            continue
-        raw_key, raw_value = part.split("=", 1)
-        key = raw_key.strip().lower()
-        if key in {"strict", "compress", "reserve"}:
-            continue
-        if key == "spacing":
-            migrated.append(
-                f"__gbdraw_legacy_spacing={raw_value.strip()}"
-            )
-        else:
-            migrated.append(part)
-    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def _decode_scalar_if_needed(value: object, *, path: str) -> object:
@@ -3769,6 +3850,12 @@ def _encode_comparisons(
                 }
             )
             continue
+        if comparison.drawn_feature_ids:
+            raise CanonicalRequestEncodingError(
+                f"Linear comparison {index} still holds the drawn-frame feature IDs of a "
+                "Session up to 40; write it with gbdraw.session.save_session_document, "
+                "which moves it to the search frame (OV-1183)."
+            )
         comparison = reverse_unbound_endpoint_rows(comparison, *endpoint_frames)
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
@@ -4178,7 +4265,8 @@ def _decode_pipeline(
     if (
         mode == "collinear"
         and legacy_max_paralog_links is not None
-        and result["collinear_max_paralog_links_per_orthogroup"] == 2
+        and result["collinear_max_paralog_links_per_orthogroup"]
+        == _LEGACY_PARALOG_LINKS_DEFAULT
     ):
         result["collinear_max_paralog_links_per_orthogroup"] = (
             legacy_max_paralog_links
@@ -4284,24 +4372,34 @@ def _decode_batch_outputs(
     )
 
 
+def encode_canonical_table(frame: object, *, name: str = "table") -> str:
+    """Encode one DataFrame as the canonical request's TSV table text.
+
+    This is the only encoder of canonical TSV tables: request resources and the
+    Web protein comparison payload both use it, so equal frames give equal bytes.
+    """
+
+    if not isinstance(frame, DataFrame):
+        raise CanonicalRequestEncodingError(f"{name} must be a pandas DataFrame.")
+    if len(frame.columns) == 0:
+        raise CanonicalRequestEncodingError(
+            f"DataFrame resource {name!r} must have at least one column."
+        )
+    try:
+        return frame.to_csv(sep="\t", index=False, lineterminator="\n")
+    except Exception as exc:
+        raise CanonicalRequestEncodingError(
+            f"Could not encode DataFrame resource {name!r} as canonical TSV."
+        ) from exc
+
+
 def _table_ref(
     name: str,
     value: object,
     *,
     resources: RequestResources,
 ) -> dict[str, str]:
-    if not isinstance(value, DataFrame):
-        raise CanonicalRequestEncodingError(f"{name} must be a pandas DataFrame.")
-    if len(value.columns) == 0:
-        raise CanonicalRequestEncodingError(
-            f"DataFrame resource {name!r} must have at least one column."
-        )
-    try:
-        text = value.to_csv(sep="\t", index=False, lineterminator="\n")
-    except Exception as exc:
-        raise CanonicalRequestEncodingError(
-            f"Could not encode DataFrame resource {name!r} as canonical TSV."
-        ) from exc
+    text = encode_canonical_table(value, name=name)
     preferred_id = _resource_id(name)
     resource_id = resources.add_bytes(
         preferred_id,
@@ -4376,9 +4474,12 @@ def _read_canonical_table(
     file_path: Path, *, context: str, text_cells: bool = False
 ) -> DataFrame:
     # A text table keeps every cell as written (an empty label text stays "");
-    # the numeric tables (depth, comparisons) take pandas' inferred dtypes.
+    # the numeric tables (depth, comparisons) take pandas' inferred dtypes and
+    # read floats exactly, so an encoded table survives a read unchanged.
     text_options: dict[str, Any] = (
-        {"dtype": str, "keep_default_na": False} if text_cells else {}
+        {"dtype": str, "keep_default_na": False}
+        if text_cells
+        else EXACT_FLOAT_READ_OPTIONS
     )
     try:
         table = read_csv(file_path, sep="\t", **text_options)
@@ -4793,45 +4894,95 @@ def _validate_dataclass_contract(value: object, *, path: str, error: str) -> Non
 
 
 def _matches_type(value: object, hint: object) -> bool:
+    return _type_checker(hint)(value)
+
+
+def _accept_any(value: object) -> bool:
+    return True
+
+
+def _reject(value: object) -> bool:
+    return False
+
+
+def _is_finite_float(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_bool(value: object) -> bool:
+    return isinstance(value, bool)
+
+
+def _is_str(value: object) -> bool:
+    return isinstance(value, str)
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+def _is_sequence(value: object) -> bool:
+    return isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray))
+
+
+def _is_mapping(value: object) -> bool:
+    return isinstance(value, MappingABC)
+
+
+_SCALAR_CHECKERS: dict[object, Callable[[object], bool]] = {
+    float: _is_finite_float,
+    int: _is_int,
+    bool: _is_bool,
+    str: _is_str,
+    type(None): _is_none,
+}
+
+
+@lru_cache(maxsize=1024)
+def _type_checker(hint: object) -> Callable[[object], bool]:
+    """Build once per type hint the check that a value matches its typed contract."""
     if hint is Any or hint is object:
-        return True
+        return _accept_any
     origin = get_origin(hint)
     args = get_args(hint)
     if origin in {types.UnionType, Union}:
-        return any(_matches_type(value, branch) for branch in args)
+        branches = tuple(_type_checker(branch) for branch in args)
+        return lambda value: any(branch(value) for branch in branches)
     if origin is Literal:
-        return value in args and any(type(value) is type(item) for item in args if item == value)
+        return lambda value: value in args and any(
+            type(value) is type(item) for item in args if item == value
+        )
     if origin in {tuple, list, Sequence, SequenceABC}:
-        if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
-            return False
         if not args:
-            return True
-        item_hint = args[0]
-        return all(_matches_type(item, item_hint) for item in value)
+            return _is_sequence
+        item_check = _type_checker(args[0])
+        return lambda value: _is_sequence(value) and all(
+            item_check(item) for item in cast(SequenceABC[object], value)
+        )
     if origin in {dict, Mapping, MappingABC}:
-        if not isinstance(value, MappingABC):
-            return False
         if len(args) != 2:
-            return True
-        return all(
-            _matches_type(key, args[0]) and _matches_type(item, args[1])
-            for key, item in value.items()
+            return _is_mapping
+        key_check = _type_checker(args[0])
+        item_check = _type_checker(args[1])
+        return lambda value: _is_mapping(value) and all(
+            key_check(key) and item_check(item)
+            for key, item in cast(MappingABC[object, object], value).items()
         )
-    if hint is float:
-        return (
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
-        )
-    if hint is int:
-        return isinstance(value, int) and not isinstance(value, bool)
-    if hint is bool:
-        return isinstance(value, bool)
-    if hint is str:
-        return isinstance(value, str)
-    if hint is type(None):
-        return value is None
-    return isinstance(hint, type) and isinstance(value, hint)
+    scalar = _SCALAR_CHECKERS.get(hint) if isinstance(hint, type) else None
+    if scalar is not None:
+        return scalar
+    if isinstance(hint, type):
+        cls = hint
+        return lambda value: isinstance(value, cls)
+    return _reject
 
 
 def _raise_contract_error(kind: str, message: str) -> NoReturn:
@@ -4939,6 +5090,68 @@ def _undescribed_parts(payload: object) -> list[str]:
         return []
     description = _current_request_description()
     return violations(payload, ref(description["root"]), description["types"], "renderRequest")
+
+
+def describe_legacy_request_tables() -> dict[str, Any]:
+    """The tables of the request schemas 1-2 reading, with wire names.
+
+    The Web lift of a stored schema 1 or 2 request into schema 5
+    (``gbdraw/web/js/services/legacy-render-request.js``) reads them from the
+    generated ``LEGACY_REQUEST_TABLES``; this module's tables stay their owner.
+    """
+
+    paralog_key = next(
+        key
+        for key, _owner, name in _PROTEIN_SETTINGS_WIRE
+        if name == "collinear_max_paralog_links_per_orthogroup"
+    )
+    sparse_paths = {path for overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.values() for path in overrides}
+    return {
+        "comparisonDefaults": {
+            _option_wire_key(name): value
+            for name, value in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items()
+        },
+        "featureTypes": list(LEGACY_FEATURE_TYPES),
+        "featureShapes": dict(LEGACY_FEATURE_SHAPES),
+        "multiRecordSizeModeRenames": dict(LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES),
+        # The slot parameter the decoder reads a slot spacing from (A8, N3).
+        "privateSpacingParam": _LEGACY_SPACING_PARAM,
+        "configOverrides": {
+            mode: dict(overrides)
+            for mode, overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.items()
+        },
+        "configOverrideRenames": dict(_LEGACY_CONFIG_OVERRIDE_KEYS),
+        "linearConfigOverrideValues": {
+            name: dict(values)
+            for name, values in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items()
+        },
+        # The canonical paths of the flat names the lift reads: the Linear
+        # values above, a comparison height (B17, Web only), and the flat
+        # names of the sparse config defaults (a default yields to them).
+        "configOverridePaths": {
+            name: list(paths)
+            for name, paths in _LEGACY_FLAT_CONFIG_OVERRIDE_PATHS.items()
+            if name in (*_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES, "comparison_height")
+            or sparse_paths.intersection(paths)
+        },
+        # What replaces an invalid comparison height of a stored full config
+        # (B17): the packaged default.
+        "comparisonHeightDefault": load_config_toml("gbdraw.data", "config.toml")["canvas"]["linear"][
+            "comparison_height"
+        ],
+        "diagramOptionRenames": dict(_LEGACY_FEATURE_VISIBILITY_RENAMES),
+        "collinearityStandardParameters": [
+            _camel(item.name) for item in fields(_LegacyStandardCollinearityPayload)
+        ],
+        "collinearityStandardFields": {
+            _camel(standard): _camel(lossless)
+            for standard, lossless in _LEGACY_STANDARD_COLLINEARITY_FIELDS.items()
+        },
+        "collinearityMergeOrientation": _LEGACY_STANDARD_MERGE_ORIENTATION,
+        "collinearityStandardParalogLinks": _camel("max_paralog_links_per_orthogroup"),
+        "paralogLinksSetting": paralog_key,
+        "paralogLinksDefault": _LEGACY_PARALOG_LINKS_DEFAULT,
+    }
 
 
 def describe_canonical_request() -> dict[str, Any]:
@@ -5377,7 +5590,12 @@ __all__ = [
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
+    "describe_legacy_request_tables",
+    "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "migrate_flat_config_overrides",
+    "migrate_legacy_full_config",
     "with_automatic_scale_interval",
+    "with_stored_font_sizes_as_auto",
 ]

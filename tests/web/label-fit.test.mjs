@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { t } from '../../gbdraw/web/js/utils/i18n.js';
+
 globalThis.window = {
   Vue: {
     ref: (value) => ({ value }),
@@ -31,11 +33,11 @@ const foundRow = (kind, value) => row(kind, 'found', {
   canvasSize: { width: 1708, height: 1130 }
 });
 const report = (rows, { drawn = false } = {}) => ({
-  schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
+  schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0, regionOverlaps: 0,
   notice: drawn ? ['Leader lines cross (5 pairs).'] : [],
   records: [{ recordId: 'NC_1', labelKind: 'circular_outer', labelKindTitle: 'outer labels',
     labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
-    refused: false, counts: '3 label pairs overlap, 5 leader pairs cross' }],
+    regionOverlaps: 0, refused: false, counts: '3 label pairs overlap, 5 leader pairs cross' }],
   rows
 });
 const failure = (value, rowToken = null) => JSON.stringify({ report: value, rowToken });
@@ -73,7 +75,7 @@ test('the notice bar shows Python\'s sentences and has no wording of its own', a
   assert.throws(() => normalizeReport({ ...report([]), notice: [5] }), invalid);
   assert.throws(() => normalizeReport({ ...report([]), notice: undefined }), invalid);
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf('Choose a fix</button>'));
+  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf("{{ t('Choose a fix') }}</button>"));
   assert.match(bar, /labelFitNotice\.report\.notice/);
   assert.doesNotMatch(bar, /Leader lines cross|definition text|'pairs'/);
 });
@@ -109,6 +111,30 @@ test('a malformed report or row is RESULT_INVALID', () => {
   // A setting shows a number or the option word, never a raw switch.
   assert.throws(() => normalizeLabelFitRow({ ...foundRow('x', 1), settings: [{ name: 'Resolve Overlaps', unit: '', value: true }] }),
     invalid);
+});
+
+// LP-D68, LP-D82: a Linear figure drawn with region labels over other labels or
+// lines warns with its count and offers no fix.
+const regionReport = () => ({
+  ...report([], { drawn: true }), crossingPairs: 0, regionOverlaps: 1,
+  notice: ['Region labels overlap other labels or lines (1).'],
+  records: [{ recordId: 'adjacent', labelKind: 'linear_region', labelKindTitle: 'region label', labelCount: 1,
+    fontSize: 10, overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 1, refused: false,
+    counts: '1 region label overlap' }]
+});
+
+test('a region label report carries its count, and its notice offers no fix without rows (LP-D82)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const [entry] = normalizeResultLabelFits([{ resultIndex: 0, resultName: 'fit.svg', rowToken: null,
+    report: regionReport() }], [{ name: 'fit.svg' }]);
+  assert.equal(entry.report.regionOverlaps, 1);
+  assert.equal(entry.report.records[0].regionOverlaps, 1);
+  assert.deepEqual(entry.report.rows, []);
+  assert.deepEqual(entry.report.notice, ['Region labels overlap other labels or lines (1).']);
+  const invalid = (error) => error.code === 'RESULT_INVALID';
+  assert.throws(() => normalizeReport({ ...regionReport(), regionOverlaps: -1 }), invalid);
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<button v-if="labelFitNotice\.report\.rows\.length" [^>]*@click="openLabelFitNotice">\{\{ t\('Choose a fix'\) \}\}<\/button>/);
 });
 
 test('a Result\'s report names that Result by index and name', () => {
@@ -239,8 +265,13 @@ test('only a Generate that drew nothing or the notice bar opens the dialog; a re
   assert.match(setup, /const openLabelFitNotice = \(\) => \{[^}]*return openLabelFitDialog\(entry\.report/s);
   // A label reflow (the rerender of an edit) that fails reports a live-edit failure, not a label fit.
   const run = await readFile(new URL('app/run-analysis.js', root), 'utf8');
-  const reflow = run.slice(run.indexOf('const runLabelReflowCandidate = async'), run.indexOf('} catch (e) {', run.indexOf('const runLabelReflowCandidate = async')));
-  assert.match(reflow, /labelReflowLastError\.value = liveEditFailure\(error\);\n\s*return \{ status: 'error', error \};/);
+  const reflowStart = run.indexOf('const runLabelReflowCandidate = async');
+  const reflow = run.slice(reflowStart, run.indexOf('\n  };\n', reflowStart));
+  // Both failures of a rerender report it: the engine's error and a live
+  // setting value Generate would refuse (its projection).
+  const reported = /\{\n\s*(?:logPostGbdrawTimings\(timingEntries\);\n\s*)?const error = formatError\([^;]*\);\n\s*labelReflowLastError\.value = liveEditFailure\(error\);\n\s*return \{ status: 'error', error \};/;
+  assert.match(reflow, new RegExp(`if \\(execution\\.status === 'engine-error'\\) ${reported.source}`));
+  assert.match(reflow, new RegExp(`projectLiveSettingWrites\\([^;]*;\\n\\s*\\} catch \\(e\\) ${reported.source}`));
   assert.doesNotMatch(reflow, /labelFit:/);
 });
 
@@ -315,11 +346,11 @@ const choiceDialogStatus = async () => {
   const template = html.slice(start, html.indexOf('</script>', start));
   const lines = [...template.matchAll(/<p v-if="busy" role="status"[^>]*>\{\{ (.+?) \}\}<\/p>/g)].map((match) => match[1]);
   assert.equal(lines.length, 1, 'the choice dialog has one busy status line');
-  const bindings = new Function('dialogChoicePending', 'labelFitDialog', `return [${busy}, ${busyStatus}];`);
-  const text = new Function('busyStatus', `return ${lines[0]};`);
+  const bindings = new Function('dialogChoicePending', 'labelFitDialog', 't', `return [${busy}, ${busyStatus}];`);
+  const text = new Function('busyStatus', 't', `return ${lines[0]};`);
   return (/** @type {boolean} */ pending, /** @type {object} */ dialog) => {
-    const [isBusy, status] = bindings(pending, dialog);
-    return isBusy ? [text(status)] : [];
+    const [isBusy, status] = bindings(pending, dialog, t);
+    return isBusy ? [text(status, t)] : [];
   };
 };
 
@@ -368,4 +399,37 @@ test('Apply or Cancel during a row waits for that row, says so, and starts no fu
   assert.doesNotMatch(body.slice(body.indexOf('>') + 1), /Finishing/);
   const source = await readFile(new URL('../../gbdraw/web/js/app/label-fit-dialog.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /Finishing/);
+});
+
+test('an exported interactive SVG opens the annotation of a region label drawn in front of the leader lines (OV-1289)', async () => {
+  const { STANDALONE_INTERACTIVE_SCRIPT: script } = await import(
+    '../../gbdraw/web/js/services/standalone-interactivity-assets.js'
+  );
+  const start = script.indexOf('function closestAnnotation(');
+  const end = script.indexOf('\n  }\n', start);
+  assert.ok(start >= 0 && end > start);
+  const selector = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';
+  const element = (attributes, parentNode, annotation = false) => ({
+    parentNode,
+    getAttribute: (name) => attributes[name] ?? null,
+    matches: (query) => annotation && query === selector
+  });
+  const byId = new Map();
+  const svg = {
+    ownerDocument: { getElementById: (id) => byId.get(id) ?? null },
+    contains: (node) => [...byId.values()].includes(node)
+  };
+  const record = element({}, svg);
+  const annotationGroup = element({ id: 'annotation-r0' }, record, true);
+  byId.set('annotation-r0', annotationGroup);
+  const frontLayer = element({}, record);
+  const frontItem = element({ 'data-gbdraw-region-label-for': 'annotation-r0' }, frontLayer);
+  const frontText = element({}, frontItem);
+  const stray = element({ 'data-gbdraw-region-label-for': 'missing' }, frontLayer);
+  const closestAnnotation = new Function('svg', 'ANNOTATION_SELECTOR',
+    `${script.slice(start, end + 4)}\nreturn closestAnnotation;`)(svg, selector);
+
+  assert.equal(closestAnnotation(frontText), annotationGroup);
+  assert.equal(closestAnnotation(element({}, annotationGroup)), annotationGroup);
+  assert.equal(closestAnnotation(element({}, stray)), null);
 });

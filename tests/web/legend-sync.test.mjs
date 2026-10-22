@@ -88,7 +88,7 @@ assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
     /\.setAttribute\('data-legend-|\.appendChild\(|\.replaceWith\(|\borderLegendEntries\(|textContent = |\.remove\(\)/,
     `${name} writes no Legend row`
   ));
-assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\('Delete legend item', deleteLegendEntry, \{ domains: \[\.\.\.LEGEND_STRUCTURE_DOMAINS, \.\.\.STROKE_DOMAINS\] \}\)/);
+assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\(msg\('Delete legend item'\), deleteLegendEntry, \{ domains: \[\.\.\.LEGEND_STRUCTURE_DOMAINS, \.\.\.STROKE_DOMAINS\] \}\)/);
 assert.match(appSetupSource, /const restoreLegendItems = \(label, restore\) => history\.runUndoable\(label,/);
 assert.doesNotMatch(appSetupSource, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/);
 assert.match(
@@ -147,6 +147,7 @@ assert.deepEqual(buildLegendIntents([
 class MockElement {
   constructor(tagName, attributes = {}, textContent = '') {
     this.tagName = tagName;
+    this.localName = tagName;
     this.attributes = new Map(Object.entries(attributes));
     this.children = [];
     this.parentElement = null;

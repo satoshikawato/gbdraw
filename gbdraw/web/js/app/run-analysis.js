@@ -4,12 +4,16 @@
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
-/** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
+/** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
+/** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
+import { regionWithinRecord } from '../services/record-options.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
@@ -30,15 +34,18 @@ import {
   DiagramGenerationCanceledError,
   isDiagramGenerationCanceled,
   runDiagramGeneration,
-  runDiagramHelperOperation
+  runDiagramHelperOperation,
+  selectHeldRenderState
 } from '../services/diagram-generation.js';
 import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
+  isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
+  projectLiveSettingWrites,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
@@ -46,14 +53,10 @@ import {
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
+import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js';
 import {
-  applyCircularSuppressControlsToSlots,
-  hasEnabledCircularTrackRenderer
-} from './circular-track-slots.js';
-import {
-  applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  inferLegacyAxisIndexFromFeature
+  placeCircularTrackStack
 } from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
@@ -65,7 +68,6 @@ import {
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from '../services/linear-track-slot-model.js';
-import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   activeDepthTrackIndices,
   depthFileSlotsFromValue,
@@ -75,6 +77,7 @@ import {
   normalizeRecordMajorDepthFileRows,
   depthSeriesLegendCaptions,
   representativeDepthFiles,
+  shapeDepthTracksForGenerate,
   syncDepthSlotLabels
 } from '../services/depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -87,6 +90,7 @@ import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-i
 import {
   buildLosatJobSpecs,
   canonicalGridDisplayPairs,
+  numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
@@ -96,14 +100,16 @@ import {
 import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
-  serializeSpecificRules
+  serializeSpecificRules,
+  specificRulesFileCaptions
 } from '../services/file-imports.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
 } from '../services/feature-visibility.js';
 import {
-  normalizeDefinitionLineStyleState
+  normalizeDefinitionLineStyleState,
+  refusedDefinitionLineFontSizePath
 } from '../services/definition-line-style-state.js';
 import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
@@ -122,7 +128,7 @@ import {
   requireCurrentCollinearColorMode,
   requireCurrentCollinearMaxConflicts,
   requireCurrentCollinearMaxDiagonalDrift,
-  requireCurrentCollinearMaxParalogLinks,
+  paralogLinksFor,
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
@@ -150,6 +156,7 @@ import {
   emptyProteinIdentityManifest,
   getCurrentRawLosatCacheEntry,
   isCurrentRawLosatCacheEntry,
+  isDerivedAnalysisResult,
   isLosatDerivedCacheEntry,
   mergeProteinIdentityManifests,
   normalizeLosatArgs,
@@ -158,7 +165,8 @@ import {
   transitionLegacyProteinCandidate,
   losatEdgeFilename,
   validateDerivedProteinReferences,
-  webLosatRuntimeRecord
+  webLosatRuntimeRecord,
+  writtenLegacyProteinArtifacts
 } from '../services/losat-cache.js';
 import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
@@ -195,15 +203,16 @@ import {
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
 /** @import { OrderedConservationSource } from '../services/conservation-series.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
-/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { DepthSlotRow, RawDepthTrackConfig } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
@@ -213,26 +222,28 @@ import {
 /** @import { LegendEntry } from '../state.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
-/** @import { CanonicalFeatureOverride, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
 
 const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
-  'preparing-runtime': 'Preparing diagram runtime (first use)...',
-  'preparing-resources': 'Preparing diagram input resources...',
-  rendering: 'Rendering diagram...',
-  finalizing: 'Finalizing diagram results...'
+  'preparing-runtime': msg('Preparing diagram runtime (first use)...'),
+  'preparing-resources': msg('Preparing diagram input resources...'),
+  rendering: msg('Rendering diagram...'),
+  finalizing: msg('Finalizing diagram results...')
 });
-// The status line of a diagram Worker stage. The first-use runtime preparation
-// names its real step: "step 2 of 5, loading the package installer".
+// The status line of a diagram Worker stage, shown in the processing overlay
+// while it runs. The first-use runtime preparation names its real step:
+// "step 2 of 5, loading the package installer" (the Worker marks the step
+// names with `msg`).
 /** @param {{ stage?: string, step?: number, total?: number, label?: string }} progress */
 const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
   const message = DIAGRAM_PROGRESS_MESSAGES[/** @type {keyof typeof DIAGRAM_PROGRESS_MESSAGES} */ (stage)] || '';
   return stage === 'preparing-runtime' && step && total && label
-    ? `Preparing diagram runtime (first use): step ${step} of ${total}, ${label}...`
-    : message;
+    ? t('Preparing diagram runtime (first use): step {step} of {total}, {label}...', { step, total, label: tm(label) })
+    : tm(message);
 };
 
 export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
@@ -241,6 +252,12 @@ export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } =
     requestFrame(() => requestFrame(resolve));
   });
 };
+
+// One task boundary, no frame (PD-OI-101). Chromium dispatches input that
+// arrived during the work before it first, so a Cancel clicked then is seen
+// before the run goes on; the status set just before may not paint.
+/** @returns {Promise<void>} */
+export const afterTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
 export const afterFrame = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
   if (typeof requestFrame !== 'function') return Promise.resolve();
@@ -297,7 +314,6 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @property {number} canonicalLength
  * @property {Record<string, unknown>} [proteinMap]
  * @property {number} [proteinCount]
- * @property {string} [proteinCacheKey]
  * @property {string} [proteinSetHash]
  * @property {string} [recordAnalysisId]
  * @property {string} [recordInstanceKey]
@@ -401,6 +417,7 @@ export const buildLosatCachePayload = ({
 };
 
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { LiveSettingWrite } from '../services/session-request.js' */
 
 /**
  * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
@@ -513,126 +530,6 @@ const pruneLosatDerivedCache = (cacheMap) => {
 };
 
 /**
- * The option values a derived protein payload depends on, as the options form holds them.
- * @typedef {object} LosatDerivedCacheMetadata
- * @property {any} [mode]
- * @property {any} [maxHits]
- * @property {any} [bitscore]
- * @property {any} [evalue]
- * @property {any} [identity]
- * @property {any} [alignmentLength]
- * @property {any} [collinearMinAnchors]
- * @property {any} [collinearMaxUnitGap]
- * @property {any} [collinearUnitMode]
- * @property {any} [collinearColorMode]
- * @property {any} [collinearAnchorMode]
- * @property {any} [collinearMergeOrientation]
- * @property {any} [collinearMaxDiagonalDrift]
- * @property {any} [collinearMaxConflictsInMergeGap]
- * @property {any} [collinearMaxParalogLinksPerOrthogroup]
- * @property {any} [collinearSearchScope]
- * @property {any} [orthogroupMembershipMode]
- * @property {any} [orthogroupMemberMaxHits]
- * @property {boolean} [collinearInferOrthogroups]
- * @property {boolean} [explicitDisplayPairs]
- * @property {Record<string, any>[]} [recordPayloads]
- * @property {Record<string, any>[]} [pairPayloads]
- */
-
-/** @param {LosatDerivedCacheMetadata} metadata */
-export const buildLosatDerivedPayloadCachePayload = ({
-  mode,
-  maxHits,
-  bitscore,
-  evalue,
-  identity,
-  alignmentLength,
-  collinearMinAnchors,
-  collinearMaxUnitGap,
-  collinearUnitMode,
-  collinearColorMode,
-  collinearAnchorMode,
-  collinearMergeOrientation,
-  collinearMaxDiagonalDrift,
-  collinearMaxConflictsInMergeGap,
-  collinearMaxParalogLinksPerOrthogroup,
-  collinearSearchScope,
-  collinearInferOrthogroups = true,
-  orthogroupMembershipMode,
-  orthogroupMemberMaxHits,
-  explicitDisplayPairs = false,
-  recordPayloads,
-  pairPayloads
-}) => {
-  const normalizedMode = String(mode || 'pairwise');
-  /** @type {Record<string, unknown>} */
-  const payload = {
-    cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
-    semantics: 'derived-option-conformance-v1',
-    idEncoding: 'runtime-handle-v1',
-    converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
-    featureIdentity: 'stable-source-rendered-display-v1',
-    mode: normalizedMode,
-    thresholds: {
-      bitscore: String(bitscore),
-      evalue: String(evalue),
-      identity: String(identity),
-      alignmentLength: String(alignmentLength)
-    },
-    records: (Array.isArray(recordPayloads) ? recordPayloads : [])
-      .map((record) => ({
-        recordIndex: Number(record?.recordIndex),
-        proteinCacheKey: String(record?.proteinCacheKey || ''),
-        runtimeBindingHash: String(record?.runtimeBindingHash || ''),
-        displayBindingHash: String(record?.displayBindingHash || ''),
-        viewTransform: {
-          length: Number(record?.viewTransform?.length || 0),
-          reverse: Boolean(record?.viewTransform?.reverse)
-        }
-      }))
-      .sort((left, right) => left.recordIndex - right.recordIndex),
-    pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
-      .map((pair) => ({
-        pairIndex: Number(pair?.pairIndex),
-        queryIndex: Number(pair?.queryIndex),
-        subjectIndex: Number(pair?.subjectIndex),
-        cacheKey: String(pair?.cacheKey || ''),
-        // The converter returns the pairs flagged here, in this direction.
-        displayPair: pair?.displayPair === true
-      }))
-  };
-  if (normalizedMode === 'pairwise') {
-    payload.pairwise = { maxHits: Number(maxHits) || 5 };
-  }
-  if (['orthogroup', 'collinear'].includes(normalizedMode)) {
-    payload.pathRepresentation = 'lossless-graph-v1';
-    payload.orthogroup = {
-      membershipMode: String(orthogroupMembershipMode || ORTHOGROUP_INFERENCE_VERSION),
-      memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
-    };
-  }
-  if (normalizedMode === 'collinear') {
-    payload.collinear = {
-      minAnchors: String(collinearMinAnchors),
-      // Persisted LOSAT derived-cache schema 3 uses this historical identity key.
-      maxGeneGap: String(collinearMaxUnitGap),
-      unitMode: String(collinearUnitMode || 'auto'),
-      colorMode: String(collinearColorMode || 'orientation'),
-      anchorMode: String(collinearAnchorMode || 'rbh'),
-      mergeOrientation: String(collinearMergeOrientation || 'either'),
-      maxDiagonalDrift: String(collinearMaxDiagonalDrift),
-      maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
-      maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
-      inferOrthogroups: requireCurrentCollinearInferOrthogroups(collinearInferOrthogroups),
-      searchScope: String(collinearSearchScope || 'adjacent'),
-      // With the search scope 'all' the CLI grid row layout limits the output to the displayed pairs.
-      explicitDisplayPairs: explicitDisplayPairs === true
-    };
-  }
-  return payload;
-};
-
-/**
  * @param {Map<string, unknown> | null | undefined} cacheMap The derived cache; an entry is read as unchecked.
  * @param {string} key
  * @param {unknown} manifest
@@ -651,54 +548,58 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
 };
 
 /**
+ * Whether a converted protein payload holds what a request needs from it: the typed result bound to its Python
+ * bytes and each displayed pair's canonical comparison table. A payload read from a Session or written before
+ * the table was canonical lacks one of them, so it is a cache miss and the analysis runs again.
  * @param {unknown} mode
  * @param {Record<string, unknown> | null | undefined} payload
  */
 export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   const normalizedMode = String(mode || '').trim().toLowerCase();
   if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
-  const rawResource = normalizedMode === 'collinear'
+  const resource = normalizedMode === 'collinear'
     ? payload?.collinearityResult
     : payload?.orthogroupResult;
-  // The checks below test that `resource` is a non-array object before they read its fields.
-  const resource = /** @type {{ schema?: unknown, kind?: unknown, value?: { type?: unknown, fields?: unknown } | null } | null | undefined} */ (
-    rawResource
-  );
-  const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
-  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupGraphResult';
   return Boolean(
-    resource
-    && typeof resource === 'object'
-    && !Array.isArray(resource)
-    && resource.schema === 3
-    && resource.kind === expectedKind
-    && resource.value?.type === expectedType
-    && resource.value.fields
-    && typeof resource.value.fields === 'object'
-    && !Array.isArray(resource.value.fields)
+    isDerivedAnalysisResult(normalizedMode, resource)
+    && isCanonicalTypedResourceBound(resource)
+    && Array.isArray(payload?.pairs)
+    && payload.pairs.every((pair) => typeof pair?.canonicalTsv === 'string')
   );
 };
 
+/** @param {unknown} key */
+const isHexDigest = (key) => typeof key === 'string' && /^[0-9a-f]{64}$/.test(key);
+
+/**
+ * The keys of the `buildProteinLosatCacheKeys` reply: one raw key per pair, and the key of the derived payload
+ * they convert to when the request asked for it (`''` otherwise).
+ * @typedef {{ keys: string[], derivedKey: string }} ProteinLosatCacheKeys
+ */
 // The reply of the `buildProteinLosatCacheKeys` helper is unchecked data. Generate uses each key as a raw LOSAT
-// cache key, so the reply holds one SHA-256 hex digest per pair, as text (`RegExp.test` alone would coerce).
+// cache key (and the derived key as the derived cache key), so the reply holds SHA-256 hex digests, as text
+// (`RegExp.test` alone would coerce).
 /**
  * @param {unknown} reply
  * @param {number} pairCount
- * @returns {string[]}
+ * @param {{ derived?: boolean }} [options] Whether the request asked for the derived key.
+ * @returns {ProteinLosatCacheKeys}
  */
-export const requireProteinLosatCacheKeys = (reply, pairCount) => {
-  /** @type {{ error?: unknown, keys?: unknown }} */
+export const requireProteinLosatCacheKeys = (reply, pairCount, { derived = false } = {}) => {
+  /** @type {{ error?: unknown, keys?: unknown, derived?: { key?: unknown } | null }} */
   const result = reply !== null && typeof reply === 'object' ? reply : {};
   const keys = Array.isArray(result.keys) ? /** @type {unknown[]} */ (result.keys) : null;
+  const derivedKey = derived ? result.derived?.key : '';
   if (
     result.error || !keys
     || keys.length !== pairCount
-    || keys.some((key) => typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key))
+    || keys.some((key) => !isHexDigest(key))
+    || (derived && !isHexDigest(derivedKey))
   ) {
     throw result.error || new Error('Protein cache key generation failed.');
   }
   // Every key passed the text and pattern check above.
-  return /** @type {string[]} */ (keys);
+  return { keys: /** @type {string[]} */ (keys), derivedKey: /** @type {string} */ (derivedKey) };
 };
 
 /** @param {unknown} candidateLimit */
@@ -758,10 +659,8 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
- * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/session-request.js),
- *   left untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the
- *   reads below use them as they are (a null record throws). The true type needs checks that change that result, so
- *   the member stays an implicit `any` until Load promotes the stored request.
+ * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
+ *   current schema (Load reads a stored one to schema 9; Generate and the rerender commit the one they built).
  * @param {LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
@@ -779,10 +678,12 @@ const canReuseResolvedProteinArtifacts = ({
   const persistedMarker = persisted.find((comparison) => (
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
   ));
-  const committedMarker = committed.find((comparison) => (
+  // The test of `kind` is the type.
+  const committedMarker = /** @type {CanonicalGeneratedProteinComparison | undefined} */ (committed.find((comparison) => (
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
-  ));
-  if (!persistedMarker || !committedMarker || !active) return false;
+  )));
+  // A committed marker implies a committed request; the test only states it.
+  if (!committedRequest || !persistedMarker || !committedMarker || !active) return false;
   // Selected proteins follow the Feature visibility rules (CO-02).
   if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility, active.featureOverrides)) {
     return false;
@@ -796,8 +697,9 @@ const canReuseResolvedProteinArtifacts = ({
     const end = Number(seq.region_end) || null;
     const reverse = Boolean(seq.region_reverse)
       || (start !== null && end !== null && start > end);
+    const selector = record.region?.selector || record.selector;
     return record.recordKey !== seq.uid
-      || String((record.region?.selector || record.selector)?.value || '') !== String(seq.region_record_id || '').trim()
+      || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
       || (record.region?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
       || (record.region?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
       || reverse !== Boolean(record.region?.reverseComplement || record.presentation?.reverseComplement);
@@ -834,8 +736,11 @@ const canReuseResolvedProteinArtifacts = ({
   ) {
     return false;
   }
+  // Similarity groups and Collinear both draw with the paralog links per group (OV-1128 B).
+  if (!sameNumber(settings.collinearMaxParalogLinksPerOrthogroup ?? 2, active.maxParalogLinks)) return false;
   if (active.mode === 'orthogroup') return true;
 
+  /** @type {Partial<CanonicalLosslessCollinearityParameters>} */
   const parameters = settings.collinearityParams?.parameters || {};
   return (
     sameNumber(parameters.minAnchors ?? 1, active.minAnchors)
@@ -848,10 +753,6 @@ const canReuseResolvedProteinArtifacts = ({
     && (settings.collinearInferOrthogroups ?? true) === active.inferOrthogroups
     && String(settings.collinearitySearchScope || 'adjacent') === active.searchScope
     && String(settings.collinearityColorMode || 'orientation') === active.colorMode
-    && sameNumber(
-      settings.collinearMaxParalogLinksPerOrthogroup ?? 2,
-      active.maxParalogLinks
-    )
   );
 };
 
@@ -1125,20 +1026,17 @@ const parseGenbankRecordsFast = (text) => {
 /**
  * @param {ParsedSequenceRecord} record
  * @param {unknown} regionSpec
- * @param {unknown} reverseFlag
  */
-const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
+const applyLosatSequenceTransforms = (record, regionSpec) => {
   const region = parseRegionText(regionSpec);
   let sequence = record.sequence;
-  if (String(reverseFlag).trim().toLowerCase() === '1') sequence = reverseComplementSequence(sequence);
   if (region) {
-    const start = Math.max(0, region.start - 1);
-    const end = Math.min(sequence.length, region.end);
-    if (start >= end && (region.start !== 1 || region.end !== sequence.length)) {
+    const drawn = regionWithinRecord(region.start, region.end, sequence.length);
+    if (!drawn) {
       // The region starts after the record ends, as crop_genbank.py reports it (GX-09).
       throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' });
     }
-    sequence = sequence.slice(start, end);
+    sequence = sequence.slice(drawn.start - 1, drawn.drawnEnd);
     if (region.reverse) sequence = reverseComplementSequence(sequence);
   }
   return { id: record.id, sequence };
@@ -1224,13 +1122,13 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 /**
- * @param {{ file?: FileLike | null, text?: string | null, fmt: string, regionSpec: unknown, recordSelector: unknown, reverseFlag: unknown }} options
+ * @param {{ file?: FileLike | null, text?: string | null, fmt: string, regionSpec: unknown, recordSelector: unknown }} options
  */
-export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
+export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   const selected = selectParsedRecord(records, recordSelector);
-  const transformed = applyLosatSequenceTransforms(selected, regionSpec, reverseFlag);
+  const transformed = applyLosatSequenceTransforms(selected, regionSpec);
   return {
     fasta: buildFastaText(transformed),
     recordId: transformed.id,
@@ -1324,10 +1222,11 @@ const sortMultiRecordPositionsByRow = (positions) => {
     .map(({ __index, ...entry }) => entry);
 };
 /**
+ * The default Record Order of a Circular source's records: a near-square grid.
  * @param {unknown} selectors
  * @returns {MultiRecordPosition[]}
  */
-const buildDefaultMultiRecordPositions = (selectors) => {
+export const buildDefaultMultiRecordPositions = (selectors) => {
   const normalizedSelectors = Array.isArray(selectors)
     ? selectors.map((value) => String(value ?? '').trim()).filter(Boolean)
     : [];
@@ -1388,7 +1287,7 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {string} [kind]
  * @property {((progress: any) => void) | null} [onProgress]
  * @property {() => boolean} [shouldAdmit]
- * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null }) => Promise<any>) | null} [generationExecutor] Test seam.
+ * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null, held?: ReturnType<typeof selectHeldRenderState> }) => Promise<any>) | null} [generationExecutor] Test seam.
  * @property {typeof admitFeatureCatalog} [catalogAdmission]
  * @property {typeof prepareCandidateRenderCommit} [prepareCommit]
  * @property {Record<string, any>} [prepareCommitInput]
@@ -1396,6 +1295,10 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {any[]} [timingEntries]
  * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
  *   which they keep (OV-136); Generate's Results take the names the engine gives them.
+ * @property {FeatureCatalog | null} [heldFeatureCatalog] The catalog the page holds for the drawing it
+ *   renders; when this render reuses its build, the reply says so and the page keeps it.
+ * @property {readonly unknown[] | null} [heldResults] The drawing's committed Results; Python
+ *   omits the children texts whose sanitized segments they keep.
  */
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
@@ -1411,22 +1314,25 @@ export const executeCanonicalRenderCandidate = async ({
   prepareCommitInput = {},
   decorationContinuity = null,
   timingEntries = [],
-  resultNames = null
+  resultNames = null,
+  heldFeatureCatalog = null,
+  heldResults = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
   }
   recordStructuralMetric('canonicalCandidateExecutionCount', 1, { kind });
   const startedAt = getNow();
+  const held = selectHeldRenderState(heldFeatureCatalog, heldResults, resultNames);
   const generationResponse = generationExecutor
     ? await generationExecutor({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress })
+      }, { onProgress, held })
     : await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress: onProgress });
+      }, { onProgress: onProgress, held });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
     return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
@@ -1526,7 +1432,10 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
- * @property {(() => (Record<string, any> | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
+ * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
+ * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
+ * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
+ *   The Session owner's commit of the live setting values an automatic rerender drew (R1 (c)).
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
@@ -1539,6 +1448,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
  * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
  * @property {() => Promise<void>} [waitForAfterPaint]
+ * @property {() => Promise<void>} [yieldToTask] The task yield after the later Generate statuses.
  * @property {() => Promise<void>} [waitForPostBindFrame]
  * @property {((capture: { phase?: string, diagnostics?: any }) => void) | null} [onGeneratedArtifactCheckpointCapture]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
@@ -1549,11 +1459,16 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
- * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
+ * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
+ *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
  * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
+ * @property {() => number} [readHistoryStepSerial] History's `intentStepSerial`, read as a label rerender
+ *   is requested: the Legend rows it draws join only the History steps begun after it (D-40).
+ * @property {(write: () => void, request: { requestedAt: number }) => void} [adoptDrawnWrite] History's
+ *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
@@ -1570,6 +1485,8 @@ export const createRunAnalysis = ({
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalSession = null,
+  readCommittedCanonicalRevision = () => 0,
+  commitLiveSettingValues = () => {},
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet,
@@ -1580,6 +1497,7 @@ export const createRunAnalysis = ({
   previewRuntime = null,
   nextTick = () => Promise.resolve(),
   waitForAfterPaint = afterPaint,
+  yieldToTask = afterTask,
   waitForPostBindFrame = afterFrame,
   onGeneratedArtifactCheckpointCapture = null,
   resetPreviewViewport,
@@ -1589,11 +1507,13 @@ export const createRunAnalysis = ({
   prepareLinearRecordCatalog = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
-  // D12: ring rows added just before Generate are named before it reads them.
-  settleComparisonRecordLabels = async () => {},
+  // D12, OV-1193: the input reads still applying settle before Generate reads the drawing.
+  settlePendingInputs = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
   readDraftSignature = null,
+  readHistoryStepSerial = () => 0,
+  adoptDrawnWrite = (write) => write(),
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
@@ -1639,7 +1559,6 @@ export const createRunAnalysis = ({
     files,
     // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
     linearSeqs: allLinearSeqs,
-    shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
@@ -1669,6 +1588,20 @@ export const createRunAnalysis = ({
   ) {
     throw new Error('createRunAnalysis requires PreviewRuntime readiness and selection handlers.');
   }
+  /**
+   * Generate, a committed rerender and a label reflow render the shown
+   * drawing: they name its feature catalog, so a reused build keeps it, and
+   * the children texts its Results keep sanitized, so Python omits them.
+   * @param {CanonicalRenderCandidateExecutionOptions} options
+   */
+  const executeShownDrawingCandidate = (options) => {
+    const shown = captureGeneratedArtifactOwnerSet();
+    return executeCanonicalRenderCandidate({
+      ...options,
+      heldFeatureCatalog: shown.featureCatalog ?? null,
+      heldResults: shown.results ?? null
+    });
+  };
   /**
    * @param {LosatJob[]} jobs
    * @param {LosatRunOptions} [options]
@@ -1702,10 +1635,39 @@ export const createRunAnalysis = ({
   const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
+  // The latest request that makes the running iteration stale: an editor
+  // request, or one for a live setting value that iteration applies. A
+  // request for other live values queues the next iteration only: the running
+  // one commits only its own values (OV-1075).
+  let reflowSupersededAt = 0;
+  /** @type {readonly string[]} The live setting request paths the running iteration applies. */
+  let activeLiveSettings = [];
+  // `readHistoryStepSerial()` at the latest request (D-40).
+  let pendingReflowRequestedAt = 0;
   // A rerender requested while Generate (or a committed-candidate run) is in
   // progress waits for it: the rerender would take the newer generation token
   // and silently supersede the run (OV-48). It runs once after the run settles.
-  let reflowDeferredByProcessing = false;
+  // OV-1076: so do the requests of an action that holds the rerender while it
+  // writes (`holdAutomaticRerender`): one action, one rerender.
+  let reflowDeferred = false;
+  let rerenderHolds = 0;
+  const reflowWaits = () => processing.value || rerenderHolds > 0;
+  // R1 (c), PD-OI-102: the request paths of live setting values each drawing's
+  // actions committed and its Result does not show yet (R15: per drawing).
+  // An automatic rerender applies them; it runs for a request of these alone
+  // only while one of them still differs from the committed request. A
+  // Generate keeps only the paths it did not draw, and a Load none (6.7).
+  /** @type {Map<DrawingState, Set<string>>} */
+  const pendingLiveSettings = new Map();
+  /** @param {DrawingState} drawing */
+  const pendingLiveSettingsOf = (drawing) => {
+    const pending = pendingLiveSettings.get(drawing) || new Set();
+    pendingLiveSettings.set(drawing, pending);
+    return pending;
+  };
+  // Whether a request since the last iteration began asked for more than the
+  // live setting values (an editor edit's rerender).
+  let editorRerenderRequested = false;
   // The label rerender loop while it runs. A run that sets `processing` waits
   // for it before it renders: its iteration may already be in the diagram
   // Worker, which takes one request at a time (OV-349), and no further
@@ -1863,7 +1825,7 @@ export const createRunAnalysis = ({
 
   const downloadCliHelperFiles = async () => {
     if (!latestCliHelperFiles.length) {
-      showNotice({ text: 'The latest run has no reproducibility files to download.' });
+      showNotice({ text: t('The latest run has no reproducibility files to download.') });
       return;
     }
     const materializedFiles = latestCliHelperFiles.map((file) => ({
@@ -1884,8 +1846,8 @@ export const createRunAnalysis = ({
       0
     );
     if (totalChars > 50 * 1024 * 1024 && !await askBeforeLargeDownload(askChoice, {
-      title: 'Download large reproducibility files?',
-      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`
+      title: t('Download large reproducibility files?'),
+      description: t('The ZIP holds about {size} MB of input and helper files.', { size: (totalChars / (1024 * 1024)).toFixed(1) })
     })) return;
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
@@ -1905,7 +1867,9 @@ export const createRunAnalysis = ({
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
    * Record discovery read every source input of `drawingMode`: a shown
-   * Generate failure about those inputs no longer holds, so it ends here.
+   * Generate failure about those inputs no longer holds, so it ends here,
+   * whether the inputs now give records or the inspection line says why
+   * they do not (OV-1257).
    * @param {string} drawingMode
    */
   const releaseSourceInputFailure = (drawingMode) => {
@@ -2278,13 +2242,9 @@ export const createRunAnalysis = ({
   const validateDepthInputPresence = (drawing) => {
     const linear = mode.value === 'linear';
     const slots = linear ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots;
-    const customDepthRequested = (
-      (linear ? drawing.adv.linear_track_slots_enabled : drawing.adv.circular_track_slots_enabled) === true &&
-      (Array.isArray(slots) ? slots : []).some((slot) => (
-        slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-      ))
-    );
-    if (!drawing.form.show_depth && !customDepthRequested) return '';
+    if (!draftDrawsDepth(linear ? 'linear' : 'circular', drawing)) return '';
+    // The draft draws Depth; with the custom stack on, through an enabled Depth slot.
+    const customStack = Boolean(linear ? drawing.adv.linear_track_slots_enabled : drawing.adv.circular_track_slots_enabled);
     let rows;
     if (linear) {
       rows = drawing.drawnLinearSeqs.value.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -2307,7 +2267,7 @@ export const createRunAnalysis = ({
       }
       rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
     }
-    if (customDepthRequested) {
+    if (customStack) {
       // An enabled Depth row must reference a logical series with a source in
       // some record; Generate stops on the row issue the track editor shows
       // (PD-OI-083).
@@ -2460,6 +2420,7 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.status = 'error';
       circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
+      releaseSourceInputFailure('circular');
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
     }
   };
@@ -2510,6 +2471,36 @@ export const createRunAnalysis = ({
     const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
     return { rules: candidate.rules, shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
+  };
+
+  // A render of the committed Session draws the drawing's live editor paint (PD-OI-102): the
+  // label rerender and a committed candidate (a record rotation, an alignment Apply, OV-1083)
+  // render the committed Session with the editor intent and the rules prepared for it, so their
+  // Result shows the live edits as a Generate of the same settings would. `drawnPaint` is the
+  // editor state it draws from; an edit made later is shown once its Result is bound (OV-346).
+  // Null when the run went stale during the rule preparation.
+  /**
+   * @param {DrawingState} drawing
+   * @param {CommittedCanonicalSession & { config?: Record<string, unknown> | null }} committed The committed Session.
+   * @param {() => boolean} isCurrent
+   * @param {LiveSettingWrite[]} [liveSettingWrites] Draft values of live setting rows the render applies.
+   */
+  const prepareCommittedPaintCandidate = async (drawing, committed, isCurrent, liveSettingWrites = []) => {
+    const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
+    const colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
+    if (!colorCandidate) return null;
+    const canonical = projectCommittedEditorIntent({
+      committed,
+      state,
+      drawing: {
+        ...drawing,
+        selectedPalette: appliedPaletteName,
+        currentColors: appliedPaletteColors,
+        manualSpecificRules: colorCandidate.rules
+      },
+      liveSettingWrites
+    });
+    return { canonical, drawnPaint, rules: colorCandidate.rules, shouldAdmit: colorCandidate.shouldAdmit };
   };
 
   /**
@@ -2604,7 +2595,7 @@ export const createRunAnalysis = ({
     const sourceReplaced = replacedFeatures.length > 0;
     const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
       ? getCommittedCanonicalSession()?.renderRequest : null;
-    const previousRequestRecords = previousCommittedRequest?.mode === mode.value
+    const previousRequestRecords = previousCommittedRequest && previousCommittedRequest.mode === mode.value
       ? previousCommittedRequest.records || [] : [];
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
@@ -2642,7 +2633,7 @@ export const createRunAnalysis = ({
       await restoreCommittedArtifact();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (isCurrentAlert()) errorLog.value = null;
-      processingStatus.value = 'Canceled.';
+      processingStatus.value = t('Canceled.');
       generationCancelRequested.value = false;
       return { status: 'canceled' };
     };
@@ -2666,7 +2657,7 @@ export const createRunAnalysis = ({
     generationAbortSignal = generationAbortController?.signal || null;
     activeLosatAbortController = generationAbortController;
     if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
-      processingStatus.value = 'Reading input records...';
+      processingStatus.value = t('Reading input records...');
       let prepared;
       try {
         prepared = await prepareLinearRecordCatalog();
@@ -2677,7 +2668,7 @@ export const createRunAnalysis = ({
         };
       } finally {
         if (generationToken === latestGenerationToken) {
-          processingStatus.value = 'Preparing input files...';
+          processingStatus.value = t('Preparing input files...');
         }
       }
       if (generationToken !== latestGenerationToken) {
@@ -2707,12 +2698,12 @@ export const createRunAnalysis = ({
         hasCompleteInput &&
         !circularDiscoveryMatchesCurrentInput()
       ) {
-        processingStatus.value = 'Reading input records...';
+        processingStatus.value = t('Reading input records...');
         try {
           await refreshCircularRecordOrder({ reuseFinalError: true });
         } finally {
           if (generationToken === latestGenerationToken) {
-            processingStatus.value = 'Preparing input files...';
+            processingStatus.value = t('Preparing input files...');
           }
         }
         if (generationToken !== latestGenerationToken) {
@@ -2758,7 +2749,7 @@ export const createRunAnalysis = ({
     let pendingLosatCacheCommit = null;
 
     featureExtractionRequestId += 1;
-    processingStatus.value = 'Preparing input files...';
+    processingStatus.value = t('Preparing input files...');
     resultPanelTab.value = 'preview';
     if (isCurrentAlert()) errorLog.value = null;
     skipCaptureBaseConfig.value = false;
@@ -3047,74 +3038,33 @@ export const createRunAnalysis = ({
           };
         }
       );
-      /** @param {unknown} index */
-      const ensureDepthTrackConfigAt = (index) => {
-        const idx = Math.max(0, Number(index) || 0);
+      // Generate gives each series the drawing has its settings through the
+      // series owner, before a row reads them; it adds no series (OV-1510).
+      /** @param {number} seriesCount */
+      const shapeDepthSeriesForGenerate = (seriesCount) => {
         if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
-        while (drawing.adv.depth_tracks.length <= idx) {
-          const nextIndex = drawing.adv.depth_tracks.length;
-          drawing.adv.depth_tracks.push({
-            label: getDepthTrackFallbackLabel(nextIndex),
-            color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-            height: null,
-            large_tick_interval: null,
-            small_tick_interval: null,
-            tick_font_size: null
-          });
-        }
-        const config = drawing.adv.depth_tracks[idx];
-        if (!config || typeof config !== 'object' || Array.isArray(config)) {
-          drawing.adv.depth_tracks[idx] = {
-            label: getDepthTrackFallbackLabel(idx),
-            color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-            height: null,
-            large_tick_interval: null,
-            small_tick_interval: null,
-            tick_font_size: null
-          };
-        }
-        return drawing.adv.depth_tracks[idx];
+        shapeDepthTracksForGenerate(drawing.adv.depth_tracks, seriesCount, drawing.adv);
       };
       /**
-       * @param {unknown} slots
-       * @param {unknown} [trackFiles]
+       * @param {DepthSlotRow[]} slots
+       * @param {number} seriesCount
        */
-      const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, trackFiles = []) => {
-        if (!Array.isArray(slots)) return;
-        const trackCount = Array.isArray(trackFiles)
-          ? trackFiles.length
-          : 0;
-        for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
-          ensureDepthTrackConfigAt(trackIndex);
-        }
-        syncDepthSlotLabels(/** @type {any} */ ({
-          slots,
-          depthTracks: drawing.adv.depth_tracks,
-          activeCount: trackCount
-        }));
+      const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, seriesCount) => {
+        syncDepthSlotLabels({ slots, depthTracks: drawing.adv.depth_tracks, activeCount: seriesCount });
       };
-      const linearDepthRepresentativeFiles = () => {
-        const rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
-        const maxDepthTracks = depthTrackMatrixWidth(rows);
-        return Array.from({ length: maxDepthTracks }, (_, trackIndex) => (
-          rows.map((row) => row[trackIndex]).find(Boolean) || null
-        ));
-      };
+      // A Depth row draws its series' stored height, read without writing: a
+      // series without settings, or one the drawing does not have, leaves the
+      // row its own height (TK-03).
       /** @param {LinearTrackSlot | null | undefined} slot */
       const syncLinearDepthSlotHeightFromTrackConfig = (slot) => {
         if (!slot || String(slot.renderer || '') !== 'depth') return;
         const rawTrackIndex = Number(slot.params?.track_index);
         const trackIndex = Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
-        const config = ensureDepthTrackConfigAt(trackIndex);
-        const configuredHeight = normalizeDepthTrackValue(config.height);
-        if (configuredHeight) {
-          slot.height = configuredHeight;
-          return;
-        }
-        const slotHeight = normalizeDepthTrackValue(slot.height);
-        if (slotHeight) {
-          config.height = Number(slotHeight);
-        }
+        /** @type {unknown} */
+        const config = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks[trackIndex] : null;
+        if (!config || typeof config !== 'object') return;
+        const configuredHeight = normalizeDepthTrackValue(/** @type {RawDepthTrackConfig} */ (config).height);
+        if (configuredHeight) slot.height = configuredHeight;
       };
       const normalizeGcContentPercentState = () => {
         drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
@@ -3168,32 +3118,21 @@ export const createRunAnalysis = ({
           drawing.adv.circular_track_slots_axis_index,
           Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
         );
-        const circularTrackSlots = useCircularTrackSlots
-          ? applyCircularSuppressControlsToSlots(
-              applyCircularTrackOrderPlacements(
-                drawing.adv.circular_track_slots,
-                drawing.adv.nt,
-                drawing.form.track_type,
-                circularTrackAxisIndex
-              ),
-              drawing.form,
-              drawing.adv.nt
+        // The rows' sides follow one Axis index, and Generate stores that index (OV-1263).
+        const placedCircularTrackStack = useCircularTrackSlots
+          ? placeCircularTrackStack(
+              drawing.adv.circular_track_slots,
+              drawing.adv.nt,
+              drawing.form.track_type,
+              circularTrackAxisIndex
             )
+          : null;
+        const circularTrackSlots = placedCircularTrackStack
+          ? applyCircularSuppressControlsToSlots(placedCircularTrackStack.slots, drawing.form, drawing.adv.nt)
           : [];
-        if (useCircularTrackSlots) {
+        if (placedCircularTrackStack) {
           drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
-          const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
-          const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
-            ? circularTrackOnAxisIndex
-            : (
-                circularTrackAxisIndex === null
-                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, drawing.form.track_type)
-                  : circularTrackAxisIndex
-              );
-          drawing.adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
-            normalizedCircularTrackAxisIndex,
-            circularTrackSlots.length
-          );
+          drawing.adv.circular_track_slots_axis_index = placedCircularTrackStack.axisIndex;
         }
         // Numeric settings (plot title font size, center radius, label
         // spacing, multi-record ratios, ring geometry) are projected literally
@@ -3252,14 +3191,12 @@ export const createRunAnalysis = ({
             }
             circularDepthSlotOrdinal += 1;
           });
-          syncDepthSlotLegendLabelsFromTrackConfigs(
-            circularTrackSlots,
-            representativeDepthFiles(circularDepthRows)
-          );
+          const circularDepthSeriesCount = representativeDepthFiles(circularDepthRows).length;
+          shapeDepthSeriesForGenerate(circularDepthSeriesCount);
+          syncDepthSlotLegendLabelsFromTrackConfigs(circularTrackSlots, circularDepthSeriesCount);
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
-        const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
-        if (drawing.form.show_depth || circularSlotNeedsDepth) {
+        if (draftDrawsDepth('circular', drawing)) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const entry = circularDepthEntries[depthIndex];
@@ -3282,7 +3219,7 @@ export const createRunAnalysis = ({
         drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
-          setProcessingStatus('Preparing conservation comparisons...');
+          setProcessingStatus(t('Preparing sequence comparisons for the circular diagram...'));
           // Thresholds are evaluated before conservation work; the request
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
@@ -3385,7 +3322,7 @@ export const createRunAnalysis = ({
             }
 
             if (losatJobs.length > 0) {
-              setProcessingStatus('Preparing comparison search runtime...');
+              setProcessingStatus(t('Preparing comparison search runtime...'));
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
                 console.warn('LOSAT runtime warmup failed; execution will report the error.', formatError(error));
                 return null;
@@ -3394,7 +3331,7 @@ export const createRunAnalysis = ({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
-              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
+              setProcessingStatus(t('Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
               const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
@@ -3407,7 +3344,7 @@ export const createRunAnalysis = ({
                 },
                 onProgress: ({ completed, total }) => {
                   if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                  setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: ${completed}/${total} jobs complete`);
+                  setProcessingStatus(t('Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed, total }));
                 }
               });
               losatResults.forEach((result) => {
@@ -3427,7 +3364,7 @@ export const createRunAnalysis = ({
                 });
               });
             } else {
-              setProcessingStatus('Using cached LOSAT conservation results...');
+              setProcessingStatus(t('Using cached LOSAT comparison results for the circular diagram...'));
             }
             throwIfGenerationCanceled();
             retainCompletedLosatSearch(cacheMap, losatPairs);
@@ -3493,16 +3430,16 @@ export const createRunAnalysis = ({
         let linearTrackSlots = [];
         /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
-        let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
           linearTrackSlots = normalizeLinearTrackSlots(
             drawing.adv.linear_track_slots,
             drawing.adv.nt,
             drawing.form.linear_track_layout
           );
-          linearSlotNeedsDepth = linearTrackSlots.some(
-            (slot) => slot.enabled !== false && slot.renderer === 'depth'
+          const linearDepthSeriesCount = depthTrackMatrixWidth(
+            linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
           );
+          shapeDepthSeriesForGenerate(linearDepthSeriesCount);
           let nextDepthIndex = 0;
           linearTrackSlots.forEach((slot) => {
             if (slot.renderer !== 'depth') return;
@@ -3518,10 +3455,7 @@ export const createRunAnalysis = ({
             syncLinearDepthSlotHeightFromTrackConfig(slot);
             nextDepthIndex = Number(slot.params.track_index) + 1;
           });
-          syncDepthSlotLegendLabelsFromTrackConfigs(
-            linearTrackSlots,
-            linearDepthRepresentativeFiles()
-          );
+          syncDepthSlotLegendLabelsFromTrackConfigs(linearTrackSlots, linearDepthSeriesCount);
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
             drawing.adv.linear_track_slots_axis_index,
             linearTrackSlots.length
@@ -3552,7 +3486,7 @@ export const createRunAnalysis = ({
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
-          setProcessingStatus('Preparing comparisons...');
+          setProcessingStatus(t('Preparing comparisons...'));
           drawing.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
             drawing.adv.pairwise_match_style,
             'ribbon'
@@ -3595,11 +3529,10 @@ export const createRunAnalysis = ({
               drawing.losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
-        const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
-          ? requireCurrentCollinearMaxParalogLinks(
-              drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
-            )
-          : 2;
+        const collinearMaxParalogLinksPerOrthogroup = paralogLinksFor(
+          useProteinBlastp ? blastpMode : '',
+          drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
+        );
         const collinearColorMode = useCollinearBlastp
           ? requireCurrentCollinearColorMode(drawing.losat.blastp?.collinearColorMode)
           : 'orientation';
@@ -3688,6 +3621,8 @@ export const createRunAnalysis = ({
           drawing.adv.linear_length_visibility,
           'Linear Length / Coordinates visibility'
         );
+        const refusedLineFontSize = refusedDefinitionLineFontSizePath(drawing.adv.linear_definition_line_styles);
+        if (refusedLineFontSize) throw diagnosticError('INPUT_INVALID', { configPath: refusedLineFontSize, reason: 'POSITIVE' });
         drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(drawing.adv.linear_definition_line_styles);
         drawing.form.plot_title = normalizedPlotTitle;
         drawing.adv.plot_title_position = normalizedPlotTitlePosition;
@@ -3911,14 +3846,12 @@ export const createRunAnalysis = ({
               const res = response.result;
               if (res.error) throw res.error;
               const fastaHash = await hashText(res.fasta || '');
-              const proteinCacheKey = String(res.display_binding_hash || '');
               entry = {
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
                 canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
                 proteinMap: res.protein_map || {},
                 proteinCount: res.protein_count || 0,
-                proteinCacheKey,
                 proteinSetHash: String(res.protein_set_hash || ''),
                 recordAnalysisId: String(res.record_analysis_id || ''),
                 recordInstanceKey: String(res.record_instance_key || recordInstanceKey),
@@ -3936,8 +3869,7 @@ export const createRunAnalysis = ({
                   text: sourceText,
                   fmt,
                   regionSpec,
-                  recordSelector,
-                  reverseFlag
+                  recordSelector
                 });
                 if (losatTiming) losatTiming.fastaJsExtractions += 1;
               } catch (fastError) {
@@ -4324,7 +4256,7 @@ export const createRunAnalysis = ({
 
         // `losatTiming` is built exactly when `useLosat` holds; the second test narrows it for this block.
         if (useLosat && losatTiming) {
-          setProcessingStatus('Preparing LOSAT jobs...');
+          setProcessingStatus(t('Preparing LOSAT jobs...'));
           const losatPairs = [];
           /** @type {LosatLinearJob[]} */
           const losatJobs = [];
@@ -4363,10 +4295,59 @@ export const createRunAnalysis = ({
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
+          // CLI Sessions can specify a complete two-dimensional row layout.
+          // For collinearity, every pair across adjacent rows is displayed;
+          // the Web comparison-plan edges alone do not represent those pairs.
+          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
+            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
+            : null;
+          const hasCanonicalGridRows = canonicalGridPair !== null;
+          const pairNumbers = numberLosatDisplayPairs(
+            preparedJobs.map(({ spec }) => spec), comparisonResolution.edges, canonicalGridPair
+          );
+          const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
+          // The converter settings. The derived key and the converter read these same values.
+          const derivedSettings = {
+            mode: blastpMode,
+            maxHits: blastpMaxHits,
+            ...comparisonThresholds,
+            collinearMinAnchors,
+            collinearMaxUnitGap,
+            collinearUnitMode,
+            collinearColorMode,
+            collinearAnchorMode,
+            collinearMergeOrientation,
+            collinearMaxDiagonalDrift,
+            collinearMaxConflictsInMergeGap,
+            collinearMaxParalogLinksPerOrthogroup,
+            collinearSearchScope,
+            collinearInferOrthogroups,
+            orthogroupMembershipMode,
+            orthogroupMemberMaxHits,
+            explicitDisplayPairs: hasCanonicalGridRows
+          };
+          // The records the converter reads: every record for similarity groups and Collinear.
+          const converterRecordIndexes = useDerivedProteinPayloadCache
+            ? linearSeqs.map((_, index) => index)
+            : Array.from(new Set(preparedJobs.flatMap(({ spec }) => [spec.queryIndex, spec.subjectIndex])))
+              .sort((left, right) => left - right);
           /** @type {string[] | null} */
           let proteinCacheKeys = null;
+          // The key of the derived payload these raw results convert to (similarity groups and Collinear).
+          let derivedCacheKey = '';
           if (useProteinBlastp && preparedJobs.length > 0) {
             throwIfGenerationCanceled();
+            const derivedRecords = [];
+            if (useDerivedProteinPayloadCache) {
+              for (const recordIndex of converterRecordIndexes) {
+                const entry = await getSeqEntry(recordIndex);
+                derivedRecords.push({
+                  recordIndex,
+                  recordInstanceKey: entry.recordInstanceKey,
+                  viewTransform: await getViewTransform(recordIndex)
+                });
+              }
+            }
             const response = await runDiagramHelperOperation(
               DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS,
               {
@@ -4380,11 +4361,16 @@ export const createRunAnalysis = ({
                     args: normalizeLosatArgs(cacheMetadata.args),
                     ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {})
                   }
-                }))
+                })),
+                ...(useDerivedProteinPayloadCache
+                  ? { derived: { settings: derivedSettings, records: derivedRecords, pairs: pairNumbers } }
+                  : {})
               }
             );
             throwIfGenerationCanceled();
-            proteinCacheKeys = requireProteinLosatCacheKeys(response.result, preparedJobs.length);
+            ({ keys: proteinCacheKeys, derivedKey: derivedCacheKey } = requireProteinLosatCacheKeys(
+              response.result, preparedJobs.length, { derived: useDerivedProteinPayloadCache }
+            ));
           }
 
           // mergeProteinIdentityManifests made a private deep copy for this run.
@@ -4397,13 +4383,6 @@ export const createRunAnalysis = ({
           if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
             throw new Error('Protein comparison identity manifest is invalid.');
           }
-          // CLI Sessions can specify a complete two-dimensional row layout.
-          // For collinearity, every pair across adjacent rows is displayed;
-          // the Web comparison-plan edges alone do not represent those pairs.
-          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
-            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
-            : null;
-          const hasCanonicalGridRows = canonicalGridPair !== null;
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -4450,15 +4429,9 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = canonicalGridPair
-                ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
-                : Boolean(
-                    resolvedEdge &&
-                    spec.queryIndex === resolvedEdge.queryIndex &&
-                    spec.subjectIndex === resolvedEdge.subjectIndex
-                  );
+              const { displayPair: isResolvedDisplayPair, pairIndex } = pairNumbers[jobIndex];
               const pair = {
-                pairIndex: spec.ordinal,
+                pairIndex,
                 ordinal: spec.ordinal,
                 edgeKey: spec.edgeKey,
                 queryUid: spec.queryUid,
@@ -4490,7 +4463,7 @@ export const createRunAnalysis = ({
               if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
                 pendingJobKeys.add(cacheKey);
                 losatJobs.push({
-                  pairIndex: spec.ordinal,
+                  pairIndex,
                   ordinal: spec.ordinal,
                   edgeKey: spec.edgeKey,
                   queryUid: spec.queryUid,
@@ -4552,12 +4525,12 @@ export const createRunAnalysis = ({
           if (sourceJobs.length > 0) {
             // A failure while searching is reported as a LOSAT failure (CO-01).
             failureStage = 'losat';
-            setProcessingStatus('Preparing comparison search runtime...');
+            setProcessingStatus(t('Preparing comparison search runtime...'));
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
-            setProcessingStatus(`Running LOSAT: 0/${sourceJobs.length} source jobs complete`);
+            setProcessingStatus(t('Running LOSAT: {completed}/{total} source jobs complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
             const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
               concurrency: getLosatParallelWorkers(),
@@ -4571,7 +4544,7 @@ export const createRunAnalysis = ({
               },
               onProgress: ({ completed, total }) => {
                 if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                setProcessingStatus(`Running LOSAT: ${completed}/${total} source jobs complete`);
+                setProcessingStatus(t('Running LOSAT: {completed}/{total} source jobs complete', { completed, total }));
               }
             });
             throwIfGenerationCanceled();
@@ -4619,7 +4592,7 @@ export const createRunAnalysis = ({
               cacheMap.set(result.cacheKey, rawEntry);
             });
           } else {
-            setProcessingStatus('Using cached LOSAT results...');
+            setProcessingStatus(t('Using cached LOSAT results...'));
           }
           throwIfGenerationCanceled();
           // Legacy promotions must repeat their transaction until a Result commits.
@@ -4631,19 +4604,12 @@ export const createRunAnalysis = ({
           throwIfGenerationCanceled();
           if (useProteinBlastp) {
             const recordPayloads = [];
-            const recordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-              ? linearSeqs.map((_, index) => index)
-              : Array.from(new Set(losatPairs.flatMap((pair) => [
-                  pair.queryIndex,
-                  pair.subjectIndex
-                ]))).sort((left, right) => left - right);
-            for (const i of recordIndexes) {
+            for (const i of converterRecordIndexes) {
               const entry = await getSeqEntry(i);
               recordPayloads.push({
                 recordIndex: i,
                 recordId: entry.recordId || `seq_${i + 1}`,
                 proteinMap: entry.proteinMap || {},
-                proteinCacheKey: entry.proteinCacheKey || entry.sequenceKey || `record:${i}`,
                 runtimeBindingHash: entry.runtimeBindingHash || '',
                 displayBindingHash: entry.displayBindingHash || '',
                 viewTransform: await getViewTransform(i)
@@ -4678,36 +4644,12 @@ export const createRunAnalysis = ({
             losatTiming.rawTsvLargestEntryBytes = rawTsvLargestEntryBytes;
             setProcessingStatus(
               useCollinearBlastp
-                ? 'Converting LOSAT protein links to collinear ribbons...'
-                : 'Converting LOSAT protein hits...'
+                ? t('Converting LOSAT protein links to collinear ribbons...')
+                : t('Converting LOSAT protein hits...')
             );
-            const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
-            let derivedCacheKey = '';
             /** @type {Record<string, any> | null} */
             let convertedPayload = null;
             if (useDerivedProteinPayloadCache) {
-              const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
-                mode: blastpMode,
-                maxHits: blastpMaxHits,
-                ...comparisonThresholds,
-                collinearMinAnchors,
-                collinearMaxUnitGap,
-                collinearUnitMode,
-                collinearColorMode,
-                collinearAnchorMode,
-                collinearMergeOrientation,
-                collinearMaxDiagonalDrift,
-                collinearMaxConflictsInMergeGap,
-                collinearMaxParalogLinksPerOrthogroup,
-                collinearSearchScope,
-                collinearInferOrthogroups,
-                orthogroupMembershipMode,
-                orthogroupMemberMaxHits,
-                explicitDisplayPairs: Boolean(hasCanonicalGridRows),
-                recordPayloads,
-                pairPayloads
-              });
-              derivedCacheKey = await hashText(JSON.stringify(derivedCachePayload));
               convertedPayload = getLosatDerivedCacheEntry(
                 derivedCacheMap,
                 derivedCacheKey,
@@ -4744,27 +4686,19 @@ export const createRunAnalysis = ({
                     { role: 'pairs', bytes: pairManifestBytes.buffer },
                     { role: 'rawTsv', bytes: rawTsvBuffer }
                   ],
-                  mode: blastpMode,
-                  maxHits: blastpMaxHits,
-                  ...comparisonThresholds,
-                  collinearMinAnchors,
-                  collinearMaxUnitGap,
-                  collinearUnitMode,
-                  collinearColorMode,
-                  collinearAnchorMode,
-                  collinearMergeOrientation,
-                  collinearMaxDiagonalDrift,
-                  collinearMaxConflictsInMergeGap,
-                  collinearMaxParalogLinksPerOrthogroup,
-                  collinearSearchScope,
-                  collinearInferOrthogroups,
-                  orthogroupMembershipMode,
-                  orthogroupMemberMaxHits,
-                  explicitDisplayPairs: Boolean(hasCanonicalGridRows)
+                  ...derivedSettings
                 }
               );
               // The converter returns a JSON object (convert_losatp_blastp_pairs_to_genomic_payload in python-helpers.js).
               convertedPayload = /** @type {Record<string, any>} */ (response.result);
+              const { identityKey } = convertedPayload;
+              delete convertedPayload.identityKey;
+              // The payload is stored under the key it was looked up by, so the converter must name the same identity.
+              if (useDerivedProteinPayloadCache && !convertedPayload.error && identityKey !== derivedCacheKey) {
+                throw diagnosticError('RESULT_INVALID', { reason: 'DERIVED_KEY_MISMATCH' }, {
+                  stage: 'result-admission', operation: 'convertLosatpPairsToGenomicPayload'
+                });
+              }
               if (["orthogroup", "collinear"].includes(blastpMode)) {
                 const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
                 const canonical = convertedPayload.canonicalResource;
@@ -4830,18 +4764,21 @@ export const createRunAnalysis = ({
                 slot: blastSlot
               });
               if (!useCollinearBlastp) {
+                if (typeof converted.canonicalTsv !== 'string') {
+                  throw diagnosticError('RESULT_INVALID', { reason: 'MISSING_COMPARISON_TABLE' }, { stage: 'result-admission' });
+                }
                 resolvedComparisons.push({
                   kind: 'precomputedProteinComparison',
                   edgeKey: sourcePair?.edgeKey || '',
                   ordinal: Number(sourcePair?.ordinal),
                   queryRecordIndex: Number(sourcePair?.queryIndex),
                   subjectRecordIndex: Number(sourcePair?.subjectIndex),
-                  rows: Array.isArray(converted.rows) ? converted.rows : []
+                  canonicalTsv: converted.canonicalTsv
                 });
               }
             }
           } else {
-            setProcessingStatus('Preparing nucleotide comparison results...');
+            setProcessingStatus(t('Preparing nucleotide comparison results...'));
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
@@ -4872,18 +4809,15 @@ export const createRunAnalysis = ({
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           if (legacyPromotionTransaction.length > 0) {
             commitProteinMigration = (candidateOwnerSet) => {
-              let nextLegacyEnvelope = candidateOwnerSet.legacyProteinRawCandidates;
+              const written = writtenLegacyProteinArtifacts({
+                candidates: candidateOwnerSet.legacyProteinRawCandidates,
+                evidence: candidateOwnerSet.legacyProteinDerivedEvidence,
+                promoted: legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                hasCurrentDerived: false
+              });
               /** @type {Record<string, unknown>} */
               const promotedProteinIdMap = {};
-              legacyPromotionTransaction.forEach(({
-                candidateIndex,
-                proteinIdMap
-              }) => {
-                nextLegacyEnvelope = transitionLegacyProteinCandidate(
-                  nextLegacyEnvelope,
-                  candidateIndex,
-                  'promoted'
-                );
+              legacyPromotionTransaction.forEach(({ proteinIdMap }) => {
                 Object.entries(proteinIdMap || {}).forEach(([oldId, runtimeHandle]) => {
                   const previous = promotedProteinIdMap[oldId];
                   if (previous && previous !== runtimeHandle) {
@@ -4892,10 +4826,6 @@ export const createRunAnalysis = ({
                   promotedProteinIdMap[oldId] = runtimeHandle;
                 });
               });
-              let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
-              if (!nextLegacyEnvelope.entries.some((/** @type {LegacyProteinCandidateEnvelope['entries'][number]} */ candidate) => candidate.state === 'pending')) {
-                nextLegacyEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-              }
               let nextOrthogroups = candidateOwnerSet.orthogroups;
               let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
               let nextBiologicalFeatures = candidateOwnerSet.biologicalFeatures;
@@ -4924,8 +4854,8 @@ export const createRunAnalysis = ({
               return {
                 ownerSet: {
                   ...candidateOwnerSet,
-                  legacyProteinRawCandidates: nextLegacyEnvelope,
-                  legacyProteinDerivedEvidence: nextLegacyEvidence,
+                  legacyProteinRawCandidates: written.candidates,
+                  legacyProteinDerivedEvidence: written.evidence,
                   orthogroups: nextOrthogroups,
                   extractedFeatures: nextExtractedFeatures,
                   biologicalFeatures: nextBiologicalFeatures
@@ -5008,7 +4938,7 @@ export const createRunAnalysis = ({
             )
           });
         }
-        if ((!useLinearTrackSlots && drawing.form.show_depth) || linearSlotNeedsDepth) {
+        if (draftDrawsDepth('linear', drawing)) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
           const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
           if (totalDepthFiles === 0) {
@@ -5036,9 +4966,9 @@ export const createRunAnalysis = ({
       }
 
       throwIfGenerationCanceled();
-      setProcessingStatus('Preparing render inputs and session...');
+      setProcessingStatus(t('Preparing render inputs and session...'));
       await nextTick();
-      await waitForAfterPaint();
+      await yieldToTask();
       throwIfGenerationCanceled();
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
@@ -5077,8 +5007,7 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // Load read the committed request (schema 9; a schema-1 request is
-        // refused as the inherited comparison's owner).
+        // Load read the committed request to schema 9 (`readStoredRenderRequest`).
         inheritCommittedComparisonIntent({
           candidate: canonical,
           committed: getCommittedCanonicalSession()
@@ -5168,7 +5097,7 @@ export const createRunAnalysis = ({
       /** @type {TimingEntry[]} */
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
-      const canonicalExecution = await executeCanonicalRenderCandidate({
+      const canonicalExecution = await executeShownDrawingCandidate({
         canonical,
         decorationContinuity,
         mode: mode.value,
@@ -5194,9 +5123,9 @@ export const createRunAnalysis = ({
         timingEntries: postGbdrawTimingEntries
       });
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
-      setProcessingStatus('Preparing preview...');
+      setProcessingStatus(t('Preparing preview...'));
       await nextTick();
-      await waitForAfterPaint();
+      await yieldToTask();
       throwIfGenerationCanceled();
       if (canonicalExecution.status === 'superseded'
         || generationToken !== latestGenerationToken) {
@@ -5301,7 +5230,7 @@ export const createRunAnalysis = ({
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
-        fileLegendCaptions: new Set(candidateRules.filter((/** @type {SpecificColorRule} */ rule) => rule.fromFile && rule.cap).map((/** @type {SpecificColorRule} */ rule) => rule.cap)),
+        fileLegendCaptions: specificRulesFileCaptions(candidateRules),
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
         legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
@@ -5475,6 +5404,7 @@ export const createRunAnalysis = ({
         // target-only renders and Similarity alignment use it without LOSATP.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
+      settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
         Object.assign(
           drawing.importedComparisonIntent,
@@ -5556,7 +5486,7 @@ export const createRunAnalysis = ({
     };
     let runDraftIsShown = false;
     processing.value = true;
-    processingStatus.value = 'Preparing input files...';
+    processingStatus.value = t('Preparing input files...');
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
     try {
@@ -5573,7 +5503,7 @@ export const createRunAnalysis = ({
       // Cancel is honored before rendering, including during preparation.
       const cancelBeforeRender = () => {
         if (!generationCancelRequested.value) return null;
-        processingStatus.value = 'Canceled.';
+        processingStatus.value = t('Canceled.');
         outcome = { status: 'canceled' };
         preserveCanceledResult(readRunDraftIsShown());
         return outcome;
@@ -5588,7 +5518,7 @@ export const createRunAnalysis = ({
           isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
         return outcome;
       }
-      await settleComparisonRecordLabels();
+      await settlePendingInputs();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (cancelBeforeRender()) return outcome;
       if (prepareGenerate) {
@@ -5612,7 +5542,7 @@ export const createRunAnalysis = ({
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(
-            'Generate diagram',
+            msg('Generate diagram'),
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
@@ -5702,7 +5632,7 @@ export const createRunAnalysis = ({
    *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} options
    */
   const runCommittedCanonicalCandidateInternal = async (drawing, {
-    canonical,
+    canonical: committedCandidate,
     decorationContinuity = null,
     generatedArtifactHandle = null,
     commitIntent = null,
@@ -5753,19 +5683,23 @@ export const createRunAnalysis = ({
       await restoreCommittedArtifact();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (isCurrentAlert()) errorLog.value = null;
-      processingStatus.value = 'Canceled.';
+      processingStatus.value = t('Canceled.');
       return { status: 'canceled' };
     };
     try {
+      // The candidate draws the live editor paint, as the label rerender does (OV-1083).
+      const paint = await prepareCommittedPaintCandidate(drawing, /** @type {CommittedCanonicalSession} */ (committedCandidate),
+        () => generationToken === latestGenerationToken && !generationCancelRequested.value);
+      if (!paint) return generationCancelRequested.value ? finishCanceled() : { status: 'stale' };
+      const { canonical, drawnPaint } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeCanonicalRenderCandidate({
+      const execution = await executeShownDrawingCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'target-record-transform',
-        shouldAdmit: () => generationToken === latestGenerationToken
-          && !generationCancelRequested.value,
+        shouldAdmit: () => paint.shouldAdmit() && !generationCancelRequested.value,
         onProgress: (progress) => {
           const message = diagramProgressMessage(progress);
           if (message && generationToken === latestGenerationToken) {
@@ -5786,7 +5720,7 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: drawing.manualSpecificRules
+          manualSpecificRules: paint.rules
         },
         timingEntries
       });
@@ -5803,7 +5737,7 @@ export const createRunAnalysis = ({
         return failure.status === 'error' && execution.labelFit
           ? { ...failure, labelFit: execution.labelFit } : failure;
       }
-      processingStatus.value = 'Preparing preview...';
+      processingStatus.value = t('Preparing preview...');
       const candidateCommit = execution.commit;
       const candidateCatalogAdmission = execution.catalogAdmission;
       const candidateCatalog = execution.catalog;
@@ -5815,7 +5749,7 @@ export const createRunAnalysis = ({
         ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:/** @type {AlignmentResetPlannedCanonical} */ (canonical)})
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
           : alignmentResetReceipt;
-      await validateSimilarityAlignmentResetReceipt(receipt, canonical);
+      await validateSimilarityAlignmentResetReceipt(receipt, /** @type {AlignmentResetCanonical} */ (canonical));
       const currentOwnerSet = captureGeneratedArtifactOwnerSet();
       const candidateOwnerSet = {
         ...currentOwnerSet,
@@ -5870,7 +5804,7 @@ export const createRunAnalysis = ({
         generationToken: String(generationToken),
         catalogState: candidateCatalogAdmission,
         phase: 'target-record-transform',
-        bindingOptions: { isIncrementalEdit: false },
+        bindingOptions: { isIncrementalEdit: false, drawnPaint },
         isCurrent: () => generationToken === latestGenerationToken
           && !generationCancelRequested.value
           && Number(selectedResultIndex.value) === nextSelectedResultIndex
@@ -5945,7 +5879,7 @@ export const createRunAnalysis = ({
    */
   const runCommittedCanonicalCandidate = async ({
     canonical,
-    label = 'Rotate record to feature',
+    label = msg('Rotate record to feature'),
     captureIntentCheckpoint = null,
     restoreIntentCheckpoint = null,
     commitIntent = null,
@@ -5969,7 +5903,7 @@ export const createRunAnalysis = ({
     /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
-    processingStatus.value = 'Preparing target record...';
+    processingStatus.value = t('Preparing target record...');
     generationCancelRequested.value = false;
     try {
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
@@ -6043,7 +5977,7 @@ export const createRunAnalysis = ({
       activeLosatAbortController.abort(new DiagramGenerationCanceledError());
     }
     if (processing.value) {
-      processingStatus.value = 'Canceling generation...';
+      processingStatus.value = t('Canceling generation...');
     }
     return cancelDiagramGeneration();
   };
@@ -6059,8 +5993,9 @@ export const createRunAnalysis = ({
    * @param {() => boolean} isCurrentReflow
    * @param {LabelDiagramOptions | null | undefined} diagramOptions The `diagramOptions` of the request the rerender drew.
    * @param {EditorPaintState} drawnPaint
+   * @param {number} historyRequestedAt The History step serial its request was made at.
    */
-  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint) => {
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint, historyRequestedAt) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
@@ -6080,6 +6015,7 @@ export const createRunAnalysis = ({
       bindingOptions: {
         replaceGeneratedLegend: true,
         drawnPaint,
+        historyRequestedAt,
         ...(featureIds.length === 0 ? {} : {
           reportedLabelBinding: Object.freeze({
             featureIds,
@@ -6097,59 +6033,59 @@ export const createRunAnalysis = ({
     });
   };
 
-  // A label reflow re-renders the committed Session with the current editor
-  // tables (R1(c), N-16): it never reads the settings draft.
+  // The automatic rerender re-renders the committed Session with the current
+  // editor tables and the draft values of the live setting rows its requests
+  // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'] }} options
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean }} options
+   *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, decorationContinuity }) => {
-    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
-      return { status: 'skipped' };
-    }
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
       return { status: 'skipped' };
     }
+    // It commits only onto the committed Session it drew from (an Undo of a
+    // Generate step may replace it meanwhile): otherwise it is stale and runs
+    // again from the current one.
+    const committedRevision = readCommittedCanonicalRevision();
+    /** @type {LiveSettingWrite[]} */
+    let liveSettingWrites;
+    try {
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings });
+    } catch (e) {
+      const error = formatError(e, 'generate', 'render');
+      labelReflowLastError.value = liveEditFailure(error);
+      return { status: 'error', error };
+    }
+    // Values equal to the committed ones (a Generate applied them) draw nothing.
+    if (!editor && liveSettingWrites.length === 0) return { status: 'skipped' };
     // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
-    /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
-    let colorCandidate = null;
     clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
-    const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
-    // The editor state the rerender draws from; an edit made from here on is
-    // shown on its Results after they commit (OV-346).
-    const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
+    const isRequested = () => generationToken === latestGenerationToken && requestId >= reflowSupersededAt;
+    const isCurrent = () => isRequested() && readCommittedCanonicalRevision() === committedRevision;
     // A candidate whose rule inputs changed while it was prepared or drawn (an
     // edit the Result shows live) is not admitted. No newer request replaces
     // it, so the rerender it was asked for (a Legend relabel) runs again (OV-351).
-    const notAdmitted = () => ({ status: 'stale', rerun: isCurrent() });
+    const notAdmitted = () => ({ status: 'stale', rerun: isRequested() });
     try {
-      colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
-      if (!colorCandidate) return notAdmitted();
-      const candidateRules = colorCandidate.rules;
-      const canonical = projectCommittedEditorIntent({
-        committed,
-        state,
-        drawing: {
-          ...drawing,
-          selectedPalette: appliedPaletteName,
-          currentColors: appliedPaletteColors,
-          manualSpecificRules: candidateRules
-        }
-      });
+      const paint = await prepareCommittedPaintCandidate(drawing, committed, isCurrent, liveSettingWrites);
+      if (!paint) return notAdmitted();
+      const { canonical, drawnPaint, rules: candidateRules } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeCanonicalRenderCandidate({
+      const execution = await executeShownDrawingCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'reflow',
-        shouldAdmit: colorCandidate.shouldAdmit,
+        shouldAdmit: paint.shouldAdmit,
         prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
           featureColorOverrides: drawing.featureColorOverrides,
@@ -6186,21 +6122,37 @@ export const createRunAnalysis = ({
       // its popup, label binding, Features list row, and History projection
       // (R-5). It renders the committed request, so the records and the
       // similarity groups the Generate committed stay.
-      featureCatalog.value = execution.catalog;
-      extractedFeatures.value = execution.commit.featureState.extractedFeatures;
-      biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
-      results.value = execution.commit.results;
-      // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
-      labelFitReports.value = execution.labelFitReports;
-      // The preview owner selects the Result (R13). It registers readiness only
-      // when fewer Results leave the selection out of range; the reflow's own
-      // expectation, registered next, replaces it, so the binder reports a
-      // forced label the Result does not draw (OV-06).
-      if (execution.commit.results.length > 0) {
-        previewRuntime.selectResult(nextSelectedResultIndex);
+      // OV-873: the new Results have new identities, which key the Legend and
+      // title moves History records; the rerender draws the same moves, so a
+      // step begun after its request takes the change as drawn (D-40).
+      adoptDrawnWrite(() => {
+        featureCatalog.value = execution.catalog;
+        extractedFeatures.value = execution.commit.featureState.extractedFeatures;
+        biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
+        results.value = execution.commit.results;
+        // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
+        labelFitReports.value = execution.labelFitReports;
+        // The preview owner selects the Result (R13). It registers readiness only
+        // when fewer Results leave the selection out of range; the reflow's own
+        // expectation, registered next, replaces it, so the binder reports a
+        // forced label the Result does not draw (OV-06).
+        if (execution.commit.results.length > 0) {
+          previewRuntime.selectResult(nextSelectedResultIndex);
+        }
+      }, { requestedAt: historyRequestedAt });
+      // The committed Session names what the new Results draw (PD-OI-102); the
+      // binder reports for these Results while that Session stays committed.
+      commitLiveSettingValues(liveSettingWrites);
+      const drawnRevision = readCommittedCanonicalRevision();
+      const isShownReflow = () => isRequested() && readCommittedCanonicalRevision() === drawnRevision;
+      if (canonical.renderRequest.mode === 'circular') {
+        state.generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(
+          canonical.renderRequest.diagramOptions.output.plotTitlePosition
+        );
       }
       expectReflowBindings(
-        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint
+        execution.commit, nextSelectedResultIndex, isShownReflow, canonical.renderRequest.diagramOptions, drawnPaint,
+        historyRequestedAt
       );
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok' };
@@ -6215,22 +6167,31 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runLabelReflow = async () => {
+  /**
+   * @param {{ settings?: readonly string[] }} [options] `settings`: the live
+   *   setting request paths of a request to apply live values alone; without
+   *   it, an editor edit's rerender.
+   */
+  const runLabelReflow = async ({ settings } = {}) => {
     const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    if (!settings) editorRerenderRequested = true;
     pendingReflowRequestId += 1;
+    if (!settings || settings.some((path) => activeLiveSettings.includes(path))) reflowSupersededAt = pendingReflowRequestId;
+    pendingReflowRequestedAt = readHistoryStepSerial();
     if (activeReflowRequestId !== 0) return;
-    if (processing.value) {
-      reflowDeferredByProcessing = true;
+    if (reflowWaits()) {
+      reflowDeferred = true;
       return;
     }
 
     labelReflowProcessing.value = true;
     activeReflowRun = (async () => {
       // Generate takes priority: an iteration never starts while it runs.
-      while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
+      while (!reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
+        const historyRequestedAt = pendingReflowRequestedAt;
         let decorationContinuity;
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
@@ -6238,28 +6199,98 @@ export const createRunAnalysis = ({
           labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
+        const editor = editorRerenderRequested;
+        editorRerenderRequested = false;
+        const pending = pendingLiveSettingsOf(drawing);
+        const settings = [...pending];
+        activeLiveSettings = settings;
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
-          requestId: activeReflowRequestId
+          requestId: activeReflowRequestId,
+          historyRequestedAt,
+          settings,
+          editor
         });
+        // A stale iteration leaves its values and its editor request to the
+        // next one; an applied, failed or empty one is done with them (a
+        // failed value waits for its next change or Generate, PD-OI-102).
+        if (outcome.status === 'stale' || outcome.status === 'canceled') editorRerenderRequested ||= editor;
+        else settings.forEach((path) => pending.delete(path));
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
-      if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
-        reflowDeferredByProcessing = true;
+      if (reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
+        reflowDeferred = true;
       }
     })().finally(() => {
       activeReflowRequestId = 0;
+      activeLiveSettings = [];
       labelReflowProcessing.value = false;
       activeReflowRun = null;
     });
     await activeReflowRun;
   };
 
-  // Called where a run clears `processing`: the requests it held back run once.
+  // A Generate drew the drawing's draft: the paths whose values now equal the
+  // committed request are done; a value changed after its request was built
+  // stays for the rerender that follows it.
+  /** @param {DrawingState} drawing */
+  const settlePendingLiveSettings = (drawing) => {
+    const pending = pendingLiveSettings.get(drawing);
+    const committed = getCommittedCanonicalSession?.();
+    if (!pending || !committed) return;
+    for (const path of [...pending]) {
+      try {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path] }).length === 0) pending.delete(path);
+      } catch {
+        // A value Generate would refuse stays for the rerender, which reports it.
+      }
+    }
+  };
+  // A Load replaces both drawings' committed Sessions and applies nothing (6.7).
+  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); };
+
+  // R1 (c), PD-OI-102: an action committed the values of these live setting
+  // request paths in the drawing of `mode` (the shown one). Its Result shows
+  // them after the automatic rerender applies them; a mode without a Result
+  // applies nothing until its Generate (R15).
+  /** @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode */
+  const requestLiveSettingApply = (requestPaths, mode) => {
+    const committed = getCommittedCanonicalSession?.();
+    if (requestPaths.length === 0 || !committed || committed.renderRequest?.mode !== mode) return false;
+    const pending = pendingLiveSettingsOf(committedDrawing(committed));
+    requestPaths.forEach((path) => pending.add(path));
+    labelReflowLastError.value = null;
+    void runLabelReflow({ settings: requestPaths });
+    return true;
+  };
+
+  // Called where a run clears `processing`, and when a hold ends: the requests
+  // held back run once. An editor request held back kept its flag; live values
+  // the Generate committed are equal now, so a replay with nothing left is
+  // skipped.
   const replayDeferredLabelReflow = () => {
-    if (!reflowDeferredByProcessing || processing.value) return;
-    reflowDeferredByProcessing = false;
-    void runLabelReflow();
+    if (!reflowDeferred || reflowWaits()) return;
+    reflowDeferred = false;
+    void runLabelReflow({ settings: [] });
+  };
+  // OV-1076: Reset Settings asks for the rerender while it writes (its label
+  // projection), again for the rules it removed, and its History checkpoint
+  // asks to apply the live values it changed. A rerender started midway reads
+  // a Legend the action has not finished writing and runs again. The action
+  // holds the requests and one rerender draws what it wrote.
+  /**
+   * @template T
+   * @param {() => T} run
+   * @returns {Promise<Awaited<T>>}
+   */
+  const holdAutomaticRerender = async (run) => {
+    rerenderHolds += 1;
+    try {
+      return await run();
+    } finally {
+      rerenderHolds -= 1;
+      replayDeferredLabelReflow();
+    }
   };
 
   const downloadLosatCache = async () => {
@@ -6281,8 +6312,8 @@ export const createRunAnalysis = ({
     );
 
     if (losatExportBytesExceedLimit(totalBytes) && !await askBeforeLargeDownload(askChoice, {
-      title: 'Download large LOSAT tables?',
-      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`
+      title: t('Download large LOSAT tables?'),
+      description: t('The raw LOSAT TSV files total about {size} MB.', { size: (totalBytes / (1024 * 1024)).toFixed(1) })
     })) return;
 
     for (const { entry, idx, hydrated } of hydratedEntries) {
@@ -6317,6 +6348,9 @@ export const createRunAnalysis = ({
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
+    holdAutomaticRerender,
+    requestLiveSettingApply,
+    discardLiveSettingRequests,
     refreshCircularRecordOrder,
     releaseSourceInputFailure,
     downloadCliHelperFiles,

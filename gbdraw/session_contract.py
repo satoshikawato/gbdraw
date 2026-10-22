@@ -313,6 +313,181 @@ def describe_session_document() -> dict[str, Any]:
     return {"root": root["name"], "types": types_}
 
 
+def describe_session_admission() -> dict[str, Any]:
+    """Describe what ``validate_session`` proves of a stored Session, per version band.
+
+    Returns ``{"bands": [{"minVersion", "versions", "root"}], "types"}`` with
+    the shapes of :mod:`gbdraw.contract_shapes`. A band starts at a threshold
+    of :mod:`gbdraw.session_io` where a check of ``validate_session`` starts;
+    its root is what every Session of its ``versions`` is once Python has
+    accepted it. A shape keeps the keys of the writer's object
+    (:func:`describe_session_document`) and declares only what Python refuses
+    otherwise: a field is ``unknown`` unless a validator refuses its other
+    kinds, required only where Python requires it, and closed only where
+    Python refuses another key. Values, references and cross-field conditions
+    stay in the validators, so a document outside its band's shape is one that
+    ``validate_session`` refuses (``tests/test_session_contract.py``).
+    ``defaults`` gives a required part's empty form as the writer writes it.
+    """
+
+    from . import session_io as sio
+    from .contract_shapes import (
+        BOOLEAN, INTEGER, STRING, UNKNOWN, Shape, array, literal, nullable, obj, record, ref,
+    )
+
+    writer = describe_session_document()["types"]
+    types_: dict[str, Shape] = {}
+
+    def named(name: str, shape: Shape) -> Shape:
+        if types_.setdefault(name, shape) != shape:
+            raise RuntimeError(f"Two admission shapes are named {name}.")
+        return ref(name)
+
+    def relaxed(
+        writer_name: str,
+        checked: dict[str, Shape] | None = None,
+        *,
+        required: tuple[str, ...] = (),
+        open: bool = False,
+        defaults: dict[str, object] | None = None,
+        name: str | None = None,
+    ) -> Shape:
+        """The writer's object ``writer_name``: its keys, each ``unknown``
+        unless ``checked`` names the shape Python proves."""
+        keys = list(writer[writer_name]["fields"])
+        undeclared = (set(checked or ()) | set(required)) - set(keys)
+        if undeclared:
+            raise RuntimeError(f"{writer_name} declares no field(s) {sorted(undeclared)}.")
+        fields = {key: (checked or {}).get(key, UNKNOWN) for key in keys}
+        return named(name or f"Checked{writer_name}", obj(
+            fields, optional=[key for key in keys if key not in required], open=open, defaults=defaults
+        ))
+
+    # A Result: a named plain SVG (_validate_current_feature_catalog_authority).
+    result = relaxed("SessionResult", {"name": STRING, "content": STRING}, required=("name", "content"), open=True)
+
+    # The caches of Session 39+ (validate_current_session_artifacts); an entry
+    # is refused unless it holds these.
+    def cache(name: str, entry: dict[str, Shape]) -> Shape:
+        entry_shape = named(f"Checked{name}Entry", obj(entry, open=True))
+        return nullable(relaxed("SessionArtifactCache", {"entries": array(entry_shape)}, open=True, name=f"Checked{name}"))
+
+    losat_cache = cache("LosatCache", {"kind": literal("raw-losat"), "text": STRING, "key": STRING})
+    derived_cache = cache("LosatDerivedCache", {
+        "kind": literal("derived-losatp-payload"), "key": STRING, "payload": record(UNKNOWN),
+    })
+
+    # The drafts a Session 46 slice holds (_validate_display_placement_draft_config,
+    # _validate_feature_override_drafts); the other leaves are the Web's.
+    anchor_fields: dict[str, Shape] = {
+        "schema": literal(1), "recordKey": STRING, "biologicalFeatureId": STRING,
+        "placement": literal("anchor", "feature-end"),
+        "anchor": nullable(literal("five-prime", "midpoint", "three-prime")),
+        "offsetBp": INTEGER, "orientForward": BOOLEAN,
+    }
+    display_fields: dict[str, Shape] = {
+        "sourceUid": STRING, "selector": STRING, "recordId": STRING,
+        "topologyOverride": UNKNOWN, "startCoordinate": UNKNOWN,
+        "reverseComplementOverride": nullable(BOOLEAN),
+        "anchorIntent": nullable(named("CheckedRecordAnchorIntent", obj(anchor_fields))),
+    }
+    if (set(anchor_fields) != sio.RECORD_ANCHOR_INTENT_FIELDS
+            or set(display_fields) != sio.RECORD_DISPLAY_DRAFT_FIELDS | sio.TYPED_RECORD_DISPLAY_DRAFT_FIELDS):
+        raise RuntimeError("The record display draft shapes name other fields than the validator.")
+    slice_leaves: dict[str, Shape] = {
+        "config.recordsOff": array(STRING),  # _validate_records_off
+        "config.recordDisplayDrafts": array(named("CheckedRecordDisplayDraft", obj(display_fields))),
+        "config.featurePlacementOverrides": record(UNKNOWN),
+        "config.adv.feature_overlap_tolerance_bp": INTEGER,
+        "features.featureOverrides": record(relaxed(
+            "FeatureOverrideDraftRow",
+            {"recordKey": STRING, "biologicalFeatureId": STRING, "labelSourceText": nullable(STRING)},
+            required=tuple(writer["FeatureOverrideDraftRow"]["fields"]),
+        )),
+    }
+
+    def mode_slice(writer_name: str, container: str = "") -> Shape:
+        """A slice container: the registry's keys only, each optional (_validate_mode_slice_fields)."""
+        checked: dict[str, Shape] = {}
+        for key, shape in writer[writer_name]["fields"].items():
+            path = f"{container}.{key}" if container else key
+            if shape["kind"] == "ref" and shape["name"].startswith("SessionModeSlice"):
+                checked[key] = mode_slice(shape["name"], path)
+            elif path in slice_leaves:
+                checked[key] = slice_leaves[path]
+        return relaxed(writer_name, checked)
+
+    other_mode_result = relaxed("SessionOtherModeResult", {  # _validate_other_mode_result
+        "results": array(result),
+        "editorState": relaxed(
+            "SessionOtherModeEditorState", {"legend": relaxed("SessionOtherModeLegend")}, required=("featureCatalog",)
+        ),
+        "ui": relaxed("SessionOtherModeUi"),
+        "runMetadata": relaxed("SessionRunMetadata"),
+    }, required=("renderRequest", "results", "editorState"))
+
+    supported = sorted(sio.SUPPORTED_SESSION_VERSIONS)
+    minimums = [
+        supported[0],
+        sio.CANONICAL_SESSION_MIN_VERSION,
+        sio.CURRENT_ARTIFACT_SESSION_MIN_VERSION,
+        sio.CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+        sio.MODE_SCOPED_SESSION_MIN_VERSION,
+    ]
+    top_level = list(writer["SessionInput"]["fields"])
+    bands: list[dict[str, Any]] = []
+    for index, minimum in enumerate(minimums):
+        below = minimums[index + 1] if index + 1 < len(minimums) else sio.CURRENT_SESSION_VERSION + 1
+        versions = [version for version in supported if minimum <= version < below]
+        fields: dict[str, Shape] = {"format": literal(sio.SESSION_FORMAT), "version": literal(*versions)}
+        required = ["format", "version"]
+        defaults: dict[str, object] = {}
+        if minimum < sio.MODE_SCOPED_SESSION_MIN_VERSION:
+            fields["otherModeResult"] = literal()  # absent below 46
+        # Below 40 `files` stays unknown: Python requires an object below 31 and
+        # refuses another kind below 40, but the Web loads a Session without it
+        # and one whose `files` is not an object (tests/fixtures/session_admission_vectors.json).
+        if minimum >= sio.CANONICAL_SESSION_MIN_VERSION:
+            fields["renderRequest"] = UNKNOWN  # the request's own reader checks it
+            fields["resources"] = record(UNKNOWN)
+            required += ["renderRequest", "resources"]
+            defaults["resources"] = {}
+        if minimum >= sio.CURRENT_ARTIFACT_SESSION_MIN_VERSION:
+            fields["losatCache"] = losat_cache
+            fields["losatDerivedCache"] = derived_cache
+            fields["proteinIdentityManifest"] = nullable(record(UNKNOWN))
+            # `legacyArtifacts` stays unknown: the Web loads one that is not an object.
+        root = f"SessionChecked{minimum}"
+        if minimum < sio.CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+            # Below 40 no top-level key is checked.
+            named(root, obj(fields, optional=[key for key in fields if key not in required], open=True, defaults=defaults))
+        else:
+            # From 40 the top level is closed (_validate_current_top_level_fields),
+            # without the keys of the other homes (_validate_mode_scoped_fields).
+            absent = {"files"} | (
+                {"modes", "cliOptions", "otherModeResult"}
+                if minimum < sio.MODE_SCOPED_SESSION_MIN_VERSION
+                else set(sio.FLAT_DRAFT_TOP_LEVEL_FIELDS)
+            )
+            fields = {key: fields.get(key, UNKNOWN) for key in top_level if key not in absent}
+            fields["results"] = array(result)
+            fields["editorState"] = relaxed("SessionEditorState", required=("featureCatalog",), open=True)
+            fields["orthogroupState"] = relaxed("SessionOrthogroupState", open=True)
+            required += ["results", "editorState"]
+            defaults |= {"results": [], "editorState": {"featureCatalog": None}}
+            if minimum < sio.MODE_SCOPED_SESSION_MIN_VERSION:
+                fields["features"] = record(UNKNOWN)
+            else:
+                fields["modes"] = nullable(relaxed("SessionModes", {
+                    mode: mode_slice("SessionModeSlice") for mode in DIAGRAM_MODES
+                }))
+                fields["cliOptions"] = record(UNKNOWN)
+                fields["otherModeResult"] = other_mode_result
+            named(root, obj(fields, optional=[key for key in fields if key not in required], defaults=defaults))
+        bands.append({"minVersion": minimum, "versions": versions, "root": root})
+    return {"bands": bands, "types": types_}
+
+
 __all__ = [
     "FeatureOverrideDraftRow",
     "FlatDraftFields",
@@ -323,6 +498,7 @@ __all__ = [
     "SessionOtherModeResult",
     "SessionOtherModeUi",
     "SessionRunMetadata",
+    "describe_session_admission",
     "describe_session_document",
     "keys_of",
 ]

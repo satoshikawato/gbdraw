@@ -6,12 +6,16 @@
 // top-level request and `otherModeResult` (OV-670).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
+import { SESSION_VERSION } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -30,15 +34,11 @@ installSessionImportWorker();
 
 const REPO = new URL('../../', import.meta.url);
 const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
-const { readStoredRenderRequest, readPublishedRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const {
+  readStoredRenderRequest, readPublishedRenderRequest, projectCommittedEditorIntent
+} = await import('../../gbdraw/web/js/services/session-request.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
-setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 
@@ -87,14 +87,15 @@ test('a request schema the app does not read is a Session-format error (OV-773);
   }
 });
 
-test('a request that needs no repair comes back as the stored object (RK-3); schema 1 and 2 as stored', () => {
+test('a request that needs no repair comes back as the stored object (RK-3); schema 1 and 2 are lifted first', () => {
   const session = gallery('lambda_basic_linear');
   const result = readStoredRenderRequest(session.renderRequest, contextOf(session));
   assert.equal(result.value, session.renderRequest);
   assert.deepEqual(result.repairs, []);
   for (const schema of [1, 2]) {
-    const stored = { schema, mode: 'linear', records: [] };
-    assert.equal(readStoredRenderRequest(stored, contextOf(session)).value, stored);
+    // A schema 1 or 2 request the lift cannot read leaves nothing to read (K22).
+    assert.deepEqual(readStoredRenderRequest({ schema, mode: 'linear', records: [] }, contextOf(session)),
+      { kind: 'request-dropped', path: 'renderRequest', reason: 'wrong-kind' });
   }
 });
 
@@ -304,10 +305,8 @@ test('a Linear layout whose record translations do not cover the drawn records d
 });
 
 test('the other diagram\'s request is read at Load: its repairs are listed, and an unreadable one leaves only that set out (OV-670)', async () => {
-  const twoMode = () => JSON.parse(execFileSync('python', ['-c',
-    'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
-  ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }));
-  const listed = twoMode();
+  const twoMode = () => evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()');
+  const listed = await twoMode();
   // Unknown keys are counted under their object, one row per object (S7).
   Object.assign(listed.otherModeResult.renderRequest.records[0], { bogus: true, extra: 1 });
   const first = await load(listed);
@@ -315,7 +314,7 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
   assert.deepEqual(first.dialogs.flat(), [
     'Settings: 2 entries of otherModeResult.renderRequest.records[0] could not be read and were dropped.'
   ]);
-  const dropped = twoMode();
+  const dropped = await twoMode();
   dropped.otherModeResult.renderRequest.records = [];
   const second = await load(dropped);
   assert.equal(second.result.status, 'ok', JSON.stringify(second.result.error));
@@ -340,11 +339,13 @@ test('a request whose comparisons Load holds is promoted like any other, and the
       'PRESERVED_READ_ONLY', []],
     ['se06 fixture', () => read('tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz'),
       'PRESERVED_READ_ONLY', []],
+    // A held comparison's reference to a resource the Session lacks is dropped
+    // with its row (OV-899): no Save could write it; the notice is as before.
     ['dangling comparison', () => {
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].resourceId = 'missing';
       return session;
-    }, 'DECISION_REQUIRED', [], missing],
+    }, 'DECISION_REQUIRED', ['request-reference-dropped'], missing],
     ['unknown comparison kind', () => {
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].kind = 'other';
@@ -411,8 +412,8 @@ test('a saved comparison entry that is neither resource-backed nor a generated c
 
 // G3 on the request path: every stored Session the app ships or pins (the
 // Gallery and the Session fixtures) loads with no row about its stored
-// request and commits it at the current schema (schema 1 as stored until its
-// reader, PR-D). A row here is a defect of the input's producer.
+// request and commits it at the current schema (schemas 1 and 2 through the
+// lift, PR-D). A row here is a defect of the input's producer.
 /** Inputs this Node harness cannot load, by name, with the reason. */
 const fixture = (name) => read(`tests/fixtures/sessions/${name}`);
 
@@ -496,6 +497,32 @@ test('a Session 31 to 41 whose request cannot be read at its root is refused wit
   }
 });
 
+test('a schema 2 request takes the rows a schema 9 one takes: an empty tracks object, which no writer stored, is a part left out (PR-D)', () => {
+  const tracksRows = (session) => readRequest(session, (request) => { request.diagramOptions.tracks = {}; }).repairs
+    .filter(({ path }) => path.startsWith('renderRequest.diagramOptions.tracks'))
+    .map(({ code, path, effect }) => ({ code, path, effect }));
+  const dropped = [{ code: 'request-part-dropped', path: 'renderRequest.diagramOptions.tracks', effect: 'dropped' }];
+  assert.deepEqual(tracksRows(gallery('lambda_basic_linear')), dropped);
+  assert.deepEqual(tracksRows(fixture('feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz')), dropped);
+});
+
+test('a schema 1 or 2 request whose record names a resource the Session lacks is unreadable (K22), and its Session 31-41 is refused (OV-894, E-OD30)', async () => {
+  const name = 'scale-interval-zero-circular-web.v33.gbdraw-session.json.gz';
+  for (const schema of [1, 2]) {
+    const session = fixture(name);
+    session.renderRequest.schema = schema;
+    delete session.resources['record-1-genbank'];
+    assert.deepEqual(readStoredRenderRequest(session.renderRequest, contextOf(session)),
+      { kind: 'request-dropped', path: 'renderRequest', reason: 'unknown-resource' }, String(schema));
+  }
+  const missing = fixture(name);
+  delete missing.resources['record-1-genbank'];
+  await assertRefusedUnread(missing, 'record resource missing');
+  const none = fixture(name);
+  none.resources = null;
+  await assertRefusedUnread(none, 'resources null');
+});
+
 test('a request whose schema is no integer is unreadable (K22): settings only with its Web settings, refused without them; an integer the app does not read stays a Session-format error (OV-863)', async () => {
   for (const request of UNREADABLE_REQUESTS.slice(1)) {
     const session = gallery('lambda_basic_linear');
@@ -519,6 +546,42 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
   }
 });
 
+// R4 has one owner (E-OD22, C-OD27): a Session 42, 44 or 47 the CLI or the
+// Python API wrote keeps no settings apart from its request, so when Load
+// drops that request at its root (K22), `restoresNothing` refuses the file.
+test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is missing, unreadable or of no integer schema: nothing restored, nothing committed (E-OD21, E-OD22)', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gbdraw-cli-47-'));
+  let cliCurrent;
+  try {
+    const file = join(directory, 'cli.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
+      '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
+    });
+    cliCurrent = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  const sessions = [
+    ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
+    ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
+    ['cli.v47', { ...cliCurrent, version: 47 }],
+    ['cli.current', cliCurrent]
+  ];
+  assert.equal(cliCurrent.version, SESSION_VERSION);
+  for (const [name, base] of sessions) {
+    assert.ok(!Object.hasOwn(base, 'config') && !Object.hasOwn(base, 'modes'), name);
+    const missing = clone(base);
+    delete missing.renderRequest;
+    await assertRefusedUnread(missing, `${name} missing`);
+    for (const request of [...UNREADABLE_REQUESTS, 'x', 5, []]) {
+      const session = clone(base);
+      session.renderRequest = clone(request);
+      await assertRefusedUnread(session, `${name} ${JSON.stringify(request)}`);
+    }
+  }
+});
+
 test('a Session 27 to 30 loads as before whatever its renderRequest key holds: no writer wrote one and Load reads none (OV-862)', async () => {
   const name = 'BGC0000708-BGC0000713.v30.gbdraw-session.json.gz';
   const plain = await load(fixture(name));
@@ -532,6 +595,16 @@ test('a Session 27 to 30 loads as before whatever its renderRequest key holds: n
     assert.deepEqual(result.repairs, plain.result.repairs, JSON.stringify(request));
     assert.equal(JSON.stringify(getCommittedCanonicalSession()), committed, JSON.stringify(request));
   }
+  // Beside `resources`, a readable schema-5 request is still not committed, and
+  // Save still asks for Generate first (OV-819).
+  const v40 = fixture('BGC0000708-BGC0000713.v40-schema5.json');
+  const session = fixture(name);
+  Object.assign(session, { resources: v40.resources, renderRequest: v40.renderRequest });
+  const { result } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.deepEqual(result.repairs, plain.result.repairs);
+  assert.equal(JSON.stringify(getCommittedCanonicalSession()), committed);
+  await assert.rejects(exportSession('probe', { askChoice: async () => 'download' }), { code: 'SESSION_SAVE_REQUIRES_GENERATE' });
 });
 
 const HARNESS_CANNOT_LOAD = new Map([
@@ -549,6 +622,10 @@ const requestRow = ({ code, path }) => REQUEST_ROW_CODES.has(code) || /^(otherMo
 
 test('every Gallery Session and Session fixture loads with no stored-request row and commits the current schema (G3)', { timeout: 600000 }, async () => {
   const { readdirSync } = await import('node:fs');
+  // Node has no diagram Worker: Python's conversion of the protein results a
+  // Session up to 47 stored for a reversed record (OV-1145) answers "nothing changed".
+  const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  setStoredProteinResultFrameConverter(async () => ({ result: { resources: {} } }));
   const findings = {};
   let loaded = 0;
   for (const folder of ['gbdraw/web/gallery/sessions/', 'tests/fixtures/sessions/']) {
@@ -559,12 +636,13 @@ test('every Gallery Session and Session fixture loads with no stored-request row
       const { result } = await load(session);
       const committed = result.status === 'ok' || result.status === 'legacy'
         ? getCommittedCanonicalSession()?.renderRequest?.schema ?? null : 'not loaded';
-      const expected = stored === null ? null : stored === 1 ? 1 : 9;
+      const expected = stored === null ? null : 9;
       const rows = (result.repairs || []).filter(requestRow).map(({ code, path }) => `${code} ${path}`);
       if (rows.length || committed !== expected) findings[folder + name] = { status: result.status, rows, committed, expected };
       loaded += 1;
     }
   }
+  setStoredProteinResultFrameConverter(null);
   assert.deepEqual(findings, {});
   assert.ok(loaded >= 50, String(loaded));
 });
@@ -643,4 +721,29 @@ test('Load commits a stored request that differs from the stored one only where 
   }
   assert.ok(checked > 200, String(checked));
   assert.deepEqual(silent, [], String(checked));
+});
+
+// H2 (PR-D): Load lifts a schema-1 request and commits schema 9, so a live
+// edit (the committed request with the drawing's tables) works before any
+// Generate, and Save writes schema 9. Save still asks for one Generate while
+// the Session holds Results without their feature metadata (D-25, PD-OI-079),
+// as it does for a schema-2 Session; the same Session without Results saves.
+test('a schema-1 Session takes a live edit and Save before any Generate (H2)', async () => {
+  const save = (name) => exportSession(name, { askChoice: async () => 'download' });
+  for (const name of ['lambda_basic_linear.v31-schema1', 'HmmtDNA_basic_circular.v32-schema1']) {
+    const session = read(`tests/fixtures/sessions/${name}.gbdraw-session.json.gz`);
+    assert.equal(session.renderRequest.schema, 1);
+    assert.ok(session.results.length > 0);
+    assert.equal((await load(session)).result.status, 'ok', name);
+    await assert.rejects(save(name), { code: 'SESSION_SAVE_REQUIRES_GENERATE' }, name);
+    assert.equal((await load({ ...session, results: [] })).result.status, 'ok', name);
+    const committed = getCommittedCanonicalSession();
+    assert.equal(committed.renderRequest.schema, 9, name);
+    const edited = projectCommittedEditorIntent({ committed, state, drawing: state.activeDrawing() });
+    assert.equal(edited.renderRequest.schema, 9, name);
+    const saved = await save(name);
+    assert.equal(saved.status, 'saved', `${name}: ${saved.error?.code}`);
+    const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    assert.equal(document.renderRequest.schema, 9, name);
+  }
 });

@@ -1,7 +1,7 @@
 const { expect, test } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
+const { answerSessionTitle, assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
 
 const seeds = {
   circular: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
@@ -68,11 +68,14 @@ const closeEditor = async page => {
   if (await page.locator('.right-drawer').isVisible()) await page.locator('.drawer-toggle').click();
 };
 
-const download = async (page, button, path, health = {}) => {
+// `title`: the Session has none, so Save asks for one; the dialog is answered
+// with it ('' saves an untitled file). Leave it out for a titled Session.
+const download = async (page, button, path, { title, ...health } = {}) => {
   const control = button === 'Save Session' ? page.getByRole('banner') : page;
   const errorSignatureBefore = await readErrorSignature(page);
   const pending = page.waitForEvent('download');
   await control.getByRole('button', { name: button, exact: true }).click();
+  if (title !== undefined) await answerSessionTitle(page, title);
   // A large file asks first (`Download large ...?`), at any time before the
   // download starts; the download action answers it.
   const large = page.locator('[data-choice-prompt] [data-choice-prompt-action="download"]');

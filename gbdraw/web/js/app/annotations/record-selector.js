@@ -4,6 +4,7 @@ import {
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
+import { t } from '../../utils/i18n.js';
 
 /**
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
@@ -146,11 +147,11 @@ export const annotationRecordOptions = (catalog, annotation) => {
     synthetic: false
   }));
   const selectedIsMissing = Boolean(currentValue) && !options.some((option) => option.value === currentValue);
-  const savedSelector = annotationRecordSelectorValue(annotation?.target?.record) || 'saved target';
+  const savedSelector = annotationRecordSelectorValue(annotation?.target?.record) || t('saved target');
   return [
-    { value: '', label: records.length > 1 ? 'Select target record' : 'Automatic (single record)', synthetic: false },
+    { value: '', label: records.length > 1 ? t('Select target record') : t('Automatic (single record)'), synthetic: false },
     ...(selectedIsMissing
-      ? [{ value: currentValue, label: `${savedSelector} (target record unavailable)`, synthetic: true }]
+      ? [{ value: currentValue, label: t('{selector} (target record unavailable)', { selector: savedSelector }), synthetic: true }]
       : []),
     ...options
   ];
@@ -200,8 +201,8 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     const record = current.status === 'ready' ? resolvedRecord(current, annotation) : null;
     const name = record?.recordId || annotationRecordSelectorValue(annotation?.target?.record);
     if (!name) return '';
-    const unread = current.status !== 'ready' && !discoveryPending(current) ? ' (record list unavailable)' : '';
-    return `Record: ${name}${unread}`;
+    const unread = current.status !== 'ready' && !discoveryPending(current);
+    return unread ? t('Record: {name} (record list unavailable)', { name }) : t('Record: {name}', { name });
   };
   return {
     showsSelect,
@@ -217,6 +218,6 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     setValue: (annotation, value) => setAnnotationRecordValue(catalog(), annotation, value),
     isRequired: () => Boolean(catalog().requiresSelection),
     isMissing,
-    missingMessage: () => 'Choose the record that this annotation targets.'
+    missingMessage: () => t('Choose the record that this annotation targets.')
   };
 };

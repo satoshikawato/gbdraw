@@ -74,6 +74,9 @@ CAPTURE_ACTION_TYPES = frozenset(
 )
 CAPTURE_SELECT_MENU_SELECTOR = ".gbdraw-capture-select-menu"
 CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
+# A drawn openSelect menu shows at most this many rows, scrolled so the
+# selected option is in view, like a native select list.
+OPEN_SELECT_MAX_VISIBLE_OPTIONS = 17
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -662,7 +665,12 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         confirm = page.get_by_role("dialog", name="Reset all settings?")
         confirm.get_by_role("button", name="Reset all settings", exact=True).click()
         confirm.wait_for(state="hidden")
-        page.wait_for_timeout(500)
+        # Reset redraws the shown Result ("Updating diagram"); the mode buttons, Undo, and
+        # other History-backed controls stay disabled until that update ends.
+        page.wait_for_function(
+            "() => { const app = window.__GBDRAW_APP__; return Boolean(app) && !app.processing && !app.labelReflowProcessing; }",
+            timeout=DEFAULT_GENERATE_TIMEOUT_MS,
+        )
     elif action_type == "generate":
         generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))
     else:
@@ -728,7 +736,7 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
 
     page.evaluate(
         """
-        (specs) => {
+        ({ specs, maxVisibleOptions }) => {
           const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
           const normalizeKey = (value) => normalize(value).toLowerCase();
 
@@ -884,6 +892,19 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             });
 
             document.body.appendChild(menu);
+            const rows = Array.from(menu.children);
+            if (rows.length > maxVisibleOptions) {
+              const rowHeight = rows[0].offsetHeight;
+              const menuStyle = getComputedStyle(menu);
+              const chrome = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']
+                .reduce((sum, key) => sum + parseFloat(menuStyle[key] || '0'), 0);
+              menu.style.maxHeight = `${rowHeight * maxVisibleOptions + chrome}px`;
+              menu.style.overflowX = 'hidden';
+              menu.style.overflowY = 'auto';
+              const selectedIndex = rows.findIndex((row) => row.classList.contains('is-selected'));
+              const firstRow = Math.max(0, selectedIndex - Math.floor(maxVisibleOptions / 2));
+              menu.scrollTop = firstRow * rowHeight;
+            }
             const placement = normalizeKey(spec.placement || 'below');
             const gap = Number(spec.gap ?? 4);
             if (placement === 'right') {
@@ -902,7 +923,7 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
           });
         }
         """,
-        specs,
+        {"specs": specs, "maxVisibleOptions": OPEN_SELECT_MAX_VISIBLE_OPTIONS},
     )
     if not specs:
         return

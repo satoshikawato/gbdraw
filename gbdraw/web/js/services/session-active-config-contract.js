@@ -1,22 +1,38 @@
 // @ts-check
+/** @import { FileImports } from './file-imports.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
+/** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
-import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { validateTrackSlotBindingInvariants } from './track-slot-validation.js';
+import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { trackSlotLeafFaults, validateTrackSlotBindingInvariants } from './track-slot-validation.js';
 import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentConfigFields } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
-import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, labelStyleForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { isUnsetValue } from '../utils/field-reading.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
+// The Feature overlap tolerance of a new drawing, in bp.
+export const DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP = 0;
+/**
+ * The Feature overlap tolerance a draft draws and saves with: a blank (the
+ * cleared number input stores '') or an unset value is the default, as R7
+ * reads a blank (OV-826, BA-OD112). Any other value is the draft's own, which
+ * `validateCurrentWriterActiveConfig` and Python check.
+ * @param {{ feature_overlap_tolerance_bp?: unknown }} adv
+ * @returns {unknown}
+ */
+export const draftFeatureOverlapTolerance = ({ feature_overlap_tolerance_bp: value }) => (
+  value === undefined || value === null || value === '' ? DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP : value
+);
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 /**
  * @template T
@@ -43,6 +59,7 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
  * @property {string} [filterMode] `None`, `Whitelist`, or `Blacklist`.
  * @property {Array<Record<string, any>>} [whitelist]
  * @property {string} [blacklistText]
+ * @property {FileImports} [fileImports] What the Default colors and Blacklist files set (OV-1280).
  * @property {string} [losatProgram]
  * @property {Record<string, any>} [circularConservation]
  * @property {Array<Record<string, any>>} [annotationSets]
@@ -73,9 +90,9 @@ export const createDefaultAdv = (mode = 'circular') => ({
   features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
   arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, font_family: null, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
-  circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
+  ...labelStyleForMode(mode), circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
-  legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: 0, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
+  legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
   linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
   depth_height: null, depth_color: '#4A90E2', depth_tracks: [], depth_window_size: null, depth_step_size: null, depth_share_axis: false,
   depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_large_tick_interval: null,
@@ -111,7 +128,7 @@ export const createDefaultCircularConservation = () => ({ enabled: false, source
   subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
-  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
+  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'fileImports', 'losatProgram', 'circularConservation',
   'annotationSets', 'recordDisplayDrafts', 'recordsOff', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
@@ -130,18 +147,44 @@ const CLI_WRITER_CONFIG_DOMAINS = new Set(['form', 'adv', 'losat', 'cliOptions',
 export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.version)
   && session.cliInvocation?.generatedBy === 'gbdraw' && isObject(session.config)
   && Object.keys(session.config).every((key) => CLI_WRITER_CONFIG_DOMAINS.has(key));
-export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
-// `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
-// keeps the app preference in `ui.richFeaturePopup`.
-export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram', 'rich_feature_popup']);
+/** The configuration domains a draft stores, with the compatibility field `colorsAreOverrides`. */
+export const STORED_CONFIG_DOMAINS = Object.freeze([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
+/** The input types of a Session's `ui.cInputType` and `ui.lInputType` (Save refuses another; Load reads it, OV-594). */
+export const SESSION_INPUT_TYPES = Object.freeze(['gb', 'gff']);
+/** The PNG DPI the export uses unless the user picks another. */
+export const DEFAULT_PNG_DPI = 300;
+/** The PNG DPI choices the DPI menu lists; Load reads a stored DPI among them (OV-595). */
+export const PNG_DPI_CHOICES = Object.freeze([
+  { value: '72', label: '72 (Web)' },
+  { value: '96', label: '96 (Screen)' },
+  { value: '150', label: '150 (Draft)' },
+  { value: '300', label: '300 (Print)' },
+  { value: '600', label: '600 (High)' }
+]);
+
+/**
+ * Stored settings a gbdraw writer wrote and later retired or moved (E-OD03):
+ * Load reads them where they moved, or drops them, with no dialog row (TB19,
+ * TB32), and Save accepts the `form` and `adv` ones in a Session 40-44 draft.
+ * `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
+ * keeps the app preference in `ui.richFeaturePopup`.
+ */
+export const RETIRED_STORED_FIELDS = Object.freeze([
+  'form.legend', 'adv.plot_title_position', 'adv.losatProgram', 'adv.rich_feature_popup', 'blastSource', 'priorityRules'
+]);
+/** @param {string} domain */
+const retiredFieldsOf = (domain) => RETIRED_STORED_FIELDS.filter((at) => at.startsWith(`${domain}.`)).map((at) => at.slice(domain.length + 1));
+export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), ...retiredFieldsOf('form')]);
+export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), ...retiredFieldsOf('adv')]);
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
-  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
+  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string', fileImports: 'object',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
-const ROW_FIELDS = { rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
-  qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
-  annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] };
+/** The fields of a stored rule row (Save refuses another; Load drops it with a row). */
+export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
+  qualifierPriorityRules: ['feat', 'order', 'importedFrom', 'handOrder'], whitelist: ['feat', 'qual', 'key', 'importedFrom'],
+  annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] });
 const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
   'outer_radius', 'placement', 'spacing', 'strict', 'compress', 'reserve']);
@@ -172,24 +215,33 @@ const assertRows = (rows, fields, path) => rows.forEach((row, index) => {
  * @param {{ annotationSets?: { annotations?: unknown }[], [domain: string]: unknown }} config
  */
 const validateCollections = (config) => {
-  for (const [domain, fields] of Object.entries(ROW_FIELDS))
+  for (const [domain, fields] of Object.entries(STORED_ROW_FIELDS))
     if (Array.isArray(config[domain])) assertRows(config[domain], fields, `config.${domain}`);
   (config.annotationSets || []).forEach((set, index) => {
     if (!Array.isArray(set.annotations)) throw new Error(`Current session active configuration config.annotationSets[${index}].annotations must be an array.`);
     assertRows(set.annotations, ANNOTATION_FIELDS, `config.annotationSets[${index}].annotations`);
   });
 };
+/** @param {Record<string, unknown>} slot The obsolete fields of a Circular slot row, at its top level and in its params. */
+const obsoleteCircularSlotFields = (slot) => [...OBSOLETE_SLOT_KEYS].filter((key) => has(slot, key))
+  .concat(isObject(slot.params) ? [...OBSOLETE_SLOT_PARAM_KEYS].filter((key) => has(slot.params, key)).map((key) => `params.${key}`) : []);
 /** @param {unknown} slots */
 const obsoleteCircularSlotField = (slots) => {
   if (!Array.isArray(slots)) return null;
   for (const [slotIndex, slot] of slots.entries()) {
     if (!isObject(slot)) continue;
-    const field = [...OBSOLETE_SLOT_KEYS].find((key) => has(slot, key))
-      ?? (isObject(slot.params) ? [...OBSOLETE_SLOT_PARAM_KEYS].find((key) => has(slot.params, key)) : undefined);
-    if (field) return { field, slotIndex };
+    const [field] = obsoleteCircularSlotFields(slot);
+    if (field) return { field: field.replace(/^params\./, ''), slotIndex };
   }
   return null;
 };
+/** What each mode's slot check reads (`validateTrackSlotBindingInvariants`). */
+const TRACK_SLOT_CHECKS = Object.freeze({
+  circular: { modeLabel: 'Circular', layoutKind: 'circular', supportedRenderers: CIRCULAR_TRACK_RENDERERS,
+    supportedSides: ['inside', 'outside', 'overlay'], anchorlessRenderers: ['ticks', 'spacer'] },
+  linear: { modeLabel: 'Linear', layoutKind: 'linear', supportedRenderers: LINEAR_TRACK_RENDERERS,
+    supportedSides: ['above', 'below', 'overlay'], anchorlessRenderers: ['spacer'] }
+});
 /**
  * @param {Record<string, any>} [config] The active configuration.
  * @param {{ depthTrackCount?: number | null }} [options]
@@ -203,9 +255,7 @@ export const validateImportedCircularTrackSlots = (config = {}, { depthTrackCoun
   // Any value and either enablement: readers drop only the lossless legacy null.
   const obsolete = obsoleteCircularSlotField(adv.circular_track_slots);
   if (obsolete) throw diagnosticError('TRACK_INVALID', { ...obsolete, reason: 'OBSOLETE_TRACK_FIELD' });
-  validateTrackSlotBindingInvariants(adv.circular_track_slots, { modeLabel: 'Circular', layoutKind: 'circular',
-    supportedRenderers: CIRCULAR_TRACK_RENDERERS, supportedSides: ['inside', 'outside', 'overlay'],
-    anchorlessRenderers: ['ticks', 'spacer'], depthTrackCount });
+  validateTrackSlotBindingInvariants(adv.circular_track_slots, { ...TRACK_SLOT_CHECKS.circular, depthTrackCount });
 };
 /**
  * @param {Record<string, any>} [config] The active configuration.
@@ -218,31 +268,78 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
   if (![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(adv.linear_track_slots_schema_version))
     throw new Error(`Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`);
   if (!Array.isArray(adv.linear_track_slots)) throw new Error('Custom Track Slots must be an array.');
-  validateTrackSlotBindingInvariants(adv.linear_track_slots, { modeLabel: 'Linear', layoutKind: 'linear',
-    supportedRenderers: LINEAR_TRACK_RENDERERS, supportedSides: ['above', 'below', 'overlay'],
-    anchorlessRenderers: ['spacer'], depthTrackCount });
+  validateTrackSlotBindingInvariants(adv.linear_track_slots, { ...TRACK_SLOT_CHECKS.linear, depthTrackCount });
 };
 /**
- * Throws when `storedConfig` is not a current-writer active configuration:
- * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
- * Session 40-44, whose record display and placement rows name their mode.
- * `sessionVersion` is the version of the Session that holds the draft; the
- * default, the current version, is for the writer's own draft and a slice.
- * @param {{
- *   mode: unknown, storedConfig: unknown, scopedDrafts?: boolean,
- *   sessionVersion?: number
- * }} input
- * @returns {void}
+ * Load's reading of a drawing's track stack (OV-758, A10), where Save checks
+ * it (`validateImported*TrackSlots`, E-OD02). A slot value the check refuses
+ * is dropped and its default used (`params` that is no object reads as {});
+ * a stack the check still refuses then (a slot that is no object, a missing
+ * or repeated id, an unknown renderer, slots that contradict each other)
+ * reads as the drawing's default stack, which `reset` reports: the stack's
+ * axis index, a place in it, is unset with it.
+ * @param {'circular' | 'linear'} mode
+ * @param {unknown} slots A list (the settings' merge keeps a stack of another kind out).
+ * @returns {FieldReading<unknown> & { reset: boolean }}
  */
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false, sessionVersion = SESSION_VERSION }) => {
+export const readImportedTrackSlots = (mode, slots) => {
+  const check = TRACK_SLOT_CHECKS[mode];
+  const defaultStack = () => (mode === 'circular' ? createDefaultCircularTrackSlots() : createDefaultLinearTrackSlots());
+  if (!Array.isArray(slots)) return { value: defaultStack(), lost: false, reset: true };
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  const read = slots.map((slot, index) => {
+    if (!isObject(slot) || typeof slot.id !== 'string') return slot;
+    /** @type {Record<string, unknown>} */
+    const row = { ...slot, ...(isObject(slot.params) ? { params: { ...slot.params } } : {}) };
+    const faults = trackSlotLeafFaults(row, slot.id.trim(), { ...check, sideSet: new Set(check.supportedSides) }).map(({ field }) => field);
+    new Set([...(mode === 'circular' ? obsoleteCircularSlotFields(row) : []), ...faults]).forEach((field) => {
+      const [container, key] = field === 'params' ? [null, field] : field.startsWith('params.') ? [/** @type {Record<string, unknown>} */ (row.params), field.slice(7)] : [row, field];
+      const stored = container ? container[key] : row.params;
+      if (container) delete container[key];
+      else row.params = {};
+      if (!isUnsetValue(stored)) leaves.push({ at: `[${index}].${field}`, stored, used: container ? undefined : {} });
+    });
+    return row;
+  });
+  try {
+    validateTrackSlotBindingInvariants(read, check);
+  } catch {
+    return { value: defaultStack(), lost: slots.length > 0, reset: true };
+  }
+  return { value: read, lost: leaves.length > 0, ...(leaves.length ? { leaves } : {}), reset: false };
+};
+/**
+ * The containers Load cannot read a drawing's settings without: the mode, the
+ * configuration object and its `form` and `adv`. Load reads the values inside
+ * them, the track stacks included (`readImportedTrackSlots`), with the reader
+ * table (`config-field-readers.js`), which lists what it cannot restore.
+ * @param {{ mode: unknown, storedConfig: unknown }} input
+ * @returns {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} The configuration.
+ */
+export const requireActiveConfigContainers = ({ mode, storedConfig: config }) => {
   if (!(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
-  assertSafeObjectKeys(config, 'Current session active configuration');
-  const domains = new Set([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
+  assertSafeObjectKeys(config);
+  if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
+  // The cast: the two tests above.
+  return /** @type {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} */ (config);
+};
+/**
+ * Throws when `storedConfig` is not a current-writer active configuration
+ * (Save and Gallery publication): a Session 46 slice of `mode`, or
+ * (`scopedDrafts`) the flat draft of a Session 40-44, whose record display and
+ * placement rows name their mode.
+ * @param {{ mode: unknown, storedConfig: unknown, scopedDrafts?: boolean }} input
+ * @returns {void}
+ */
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig, scopedDrafts = false }) => {
+  const config = requireActiveConfigContainers({ mode, storedConfig });
+  validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
+  const domains = new Set(STORED_CONFIG_DOMAINS);
   const unknownDomains = Object.keys(config).filter((domain) => !domains.has(domain));
   if (unknownDomains.length)
     throw new Error(`Current session active configuration contains unknown domain(s): ${unknownDomains.join(', ')}.`);
-  if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
   // A list of Linear card uids or Circular source selectors `#N`, once each, as
   // Python reads it; that a Linear uid names a bound card is checked with the
   // bindings (session-authority.js).
@@ -251,13 +348,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   validateDomainShapes(config); validateCollections(config); requireCurrentConfigFields(config);
-  // Python checks the record display drafts of a Session from that version
-  // (`validate_session`) and refuses a row whose selector is not text
-  // (gbdraw/session_io.py:853-857). A Session 40 draft is not checked there, so
-  // here it keeps the verdict it had before OV-575.
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, {
-    scoped: scopedDrafts, textSelector: sessionVersion >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
-  });
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
     else canonicalFeaturePlacements(config.featurePlacementOverrides, /** @type {'circular' | 'linear'} */ (mode)); // the first check
@@ -321,7 +412,6 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
       throw new Error('Current session active configuration config.importedComparisonResolution.action is invalid.');
     }
   }
-  validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };
 
 /** @param {{ scale_font_size?: unknown, ruler_label_font_size?: unknown }} [adv] */
@@ -413,40 +503,50 @@ const sortedValue = (value) => Array.isArray(value)
  */
 
 /**
- * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
+ * The one shape check of a stored alignment reset receipt (OV-115, OV-130):
+ * whether `receipt` is absent or is the receipt of `request`'s plan.
+ * @param {unknown} receipt The stored receipt, unvalidated.
  * @param {AlignmentResetRequest | null | undefined} request
- * @returns {AlignmentResetReceipt | null}
+ * @returns {boolean}
  */
-export const validateAlignmentResetReceiptShape = (receipt, request) => {
-  if (receipt === null || receipt === undefined) return null;
-  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
-  /** @type {() => never} */
-  const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
+export const alignmentResetReceiptShapeHolds = (receipt, request) => {
+  if (receipt === null || receipt === undefined) return true;
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
     || typeof receipt.binding !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.binding)
     || !Array.isArray(receipt.directions)
-    || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
+    || request?.mode !== 'linear' || !request.layout?.similarityAlignment) return false;
   const plan = request.layout.similarityAlignment;
   const eligible = new Set(plan.records.filter(({ status }) => status !== 'skipped')
     .map(({ recordKey }) => recordKey));
   /** @type {Set<unknown>} */
   const keys = new Set();
-  receipt.directions.forEach((delta) => {
+  const directionsHold = receipt.directions.every((delta) => {
     if (!isObject(delta) || Object.keys(delta).sort().join(',') !== 'after,before,recordKey'
       || !eligible.has(delta.recordKey) || keys.has(delta.recordKey)
       || typeof delta.before !== 'boolean' || typeof delta.after !== 'boolean'
-      || delta.before === delta.after) invalid();
+      || delta.before === delta.after) return false;
     keys.add(delta.recordKey);
+    return true;
   });
   const delta = receipt.referenceDeltaX;
-  if (delta !== null && (!isObject(delta)
-    || Object.keys(delta).sort().join(',') !== 'deltaX,recordKey'
-    || delta.recordKey !== plan.reference.recordKey
-    || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
-    || delta.deltaX === 0)) invalid();
-  // Every field was checked above.
-  return /** @type {AlignmentResetReceipt} */ (receipt);
+  return directionsHold && (delta === null || (isObject(delta)
+    && Object.keys(delta).sort().join(',') === 'deltaX,recordKey'
+    && delta.recordKey === plan.reference.recordKey
+    && typeof delta.deltaX === 'number' && Number.isFinite(delta.deltaX)
+    && delta.deltaX !== 0));
+};
+
+/**
+ * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
+ * @param {AlignmentResetRequest | null | undefined} request
+ * @returns {AlignmentResetReceipt | null}
+ */
+export const validateAlignmentResetReceiptShape = (receipt, request) => {
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  if (!alignmentResetReceiptShapeHolds(receipt, request)) throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  // Absent, or every field checked above.
+  return /** @type {AlignmentResetReceipt | null} */ (receipt ?? null);
 };
 
 /** @param {AlignmentResetCanonical} canonical */
@@ -488,16 +588,30 @@ const resetBinding = async (canonical) => {
 };
 
 /**
+ * The one reader of a stored alignment reset receipt: the receipt when it is
+ * the receipt of `canonical`'s plan and sources, else none, with `stale` set.
+ * Load reads a stale receipt as none, with a row (A19); History, Align and
+ * Save refuse it (`validateSimilarityAlignmentResetReceipt`).
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical
+ * @returns {Promise<{ value: AlignmentResetReceipt | null, stale: boolean }>}
+ */
+export const readSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
+  if (!alignmentResetReceiptShapeHolds(receipt, canonical?.renderRequest)) return { value: null, stale: true };
+  const value = /** @type {AlignmentResetReceipt | null} */ (receipt ?? null); // checked above
+  // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
+  if (value && value.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) return { value: null, stale: true };
+  return { value, stale: false };
+};
+
+/**
  * @param {unknown} receipt The stored receipt, unvalidated.
  * @param {AlignmentResetCanonical | null | undefined} canonical
  */
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
-  const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
-  // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
-  if (validated && validated.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) {
-    throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
-  }
-  return validated;
+  const read = await readSimilarityAlignmentResetReceipt(receipt, canonical);
+  if (read.stale) throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  return read.value;
 };
 
 /**

@@ -5,12 +5,12 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { buildConfigData, applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
+const { buildConfigData, applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData
+  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
 const history = createHistoryManager({
   buildIntent: snapshots.buildHistoryIntent, applyIntent: snapshots.applyHistoryIntent,
@@ -36,6 +36,24 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
+// R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
+// Undo and Redo install it as captured; only Load reads a file's stack.
+{
+  const drawing = state.drawings.circular;
+  const slot = () => drawing.adv.circular_track_slots.find(({ id }) => id === 'gc_content');
+  const original = structuredClone(slot().width ?? null);
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Width draft', () => { slot().width = { value: 'bad', unit: 'px' }; });
+  await history.runUndoable('Width unit', () => { slot().width = { value: 'bad', unit: 'factor' }; });
+  await history.undo();
+  assert.deepEqual(slot().width, { value: 'bad', unit: 'px' }, 'Undo keeps the invalid draft and its unit');
+  await history.redo();
+  assert.deepEqual(slot().width, { value: 'bad', unit: 'factor' }, 'Redo keeps the invalid draft');
+  await history.undo();
+  await history.undo();
+  assert.deepEqual(slot().width ?? null, original);
+}
+
 // Record selection: a toggle is one intent step, and Undo and Redo restore
 // the OFF records of the drawing it was made in.
 {
@@ -59,7 +77,7 @@ for (const [domain, key, first, second] of [
   const config = await import('../../gbdraw/web/js/services/config.js');
   const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   const editorSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
     buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
   });
@@ -103,7 +121,7 @@ for (const [domain, key, first, second] of [
   delete drawing.featureOverrides[key];
 }
 
-applyConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
+applyCapturedConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.activeDrawing().form, 'unknown'), false);
 assert.equal({}.polluted, undefined);
 
@@ -186,7 +204,7 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.strictEqual(liveCatalog(), catalog);
 
   const artifactSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildEditorStateData, applyEditorStateData
   });
   const artifactHistory = createHistoryManager({
@@ -255,7 +273,7 @@ console.log('History restores nullable config values and preserves key guards.')
     config: buildConfigData(state.activeDrawing()), layoutPreferences: buildUiStateData(state.activeDrawing()).layoutPreferences
   });
   const restoreSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
   });
   const restoreHistory = createHistoryManager({
@@ -267,13 +285,17 @@ console.log('History restores nullable config values and preserves key guards.')
   });
   await restoreHistory.captureBaseline();
   await restoreHistory.initializeIntentBaseline();
-  await restoreHistory.runUndoable('Rich Feature Popup', () => {
-    state.richFeaturePopup.value = !state.richFeaturePopup.value;
-  });
+  // A `ui` step (the canvas padding) and a config step: Undo and Redo of the
+  // first go through the UI restore (`applyUiStateData`).
+  const padding = state.activeDrawing().canvasPadding.right;
+  await restoreHistory.runUndoable('Canvas padding', () => { state.activeDrawing().canvasPadding.right = padding + 50; });
   await restoreHistory.runUndoable('Label Mode', () => { state.activeDrawing().form.labels_mode = 'both'; });
   const edited = settings();
+  let position = 2;
   for (const direction of ['undo', 'redo', 'undo', 'undo', 'redo', 'redo']) {
     await restoreHistory[direction]();
+    position += direction === 'undo' ? -1 : 1;
+    assert.equal(state.activeDrawing().canvasPadding.right, position > 0 ? padding + 50 : padding, `intent ${direction} restores the padding`);
     assert.deepEqual(unsetValues(), unset, `intent ${direction} keeps unset values unset`);
   }
   assert.equal(settings(), edited, 'Undo and Redo return to the edited settings');
@@ -302,4 +324,43 @@ console.log('History restores nullable config values and preserves key guards.')
   state.activeDrawing().legendEntries.value = [];
   state.originalSvgStroke.value = { color: null, width: null };
   console.log('History Undo and Redo keep unset settings unset.');
+}
+
+// D-03 (Q-R1): the Rich Feature Popup is a UI preference outside History. A
+// toggle records no step, Undo and Redo of other steps leave it as set, and
+// the checkbox opens no History transaction.
+{
+  const { readFile } = await import('node:fs/promises');
+  const { buildUiStateData, applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const preferenceSnapshots = createHistorySnapshotService({
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
+  });
+  const preferenceHistory = createHistoryManager({
+    buildIntent: preferenceSnapshots.buildHistoryIntent,
+    applyIntent: preferenceSnapshots.applyHistoryIntent,
+    buildCheckpoint: () => assert.fail('a setting edit uses intent History'),
+    applyCheckpoint: () => assert.fail('a setting edit uses intent History')
+  });
+  const drawing = state.activeDrawing();
+  state.richFeaturePopup.value = true;
+  drawing.form.labels_mode = 'out';
+  await preferenceHistory.initializeIntentBaseline();
+  assert.equal(Object.hasOwn(preferenceSnapshots.buildHistoryIntent().ui, 'richFeaturePopup'), false,
+    'the History intent does not hold the preference');
+  await preferenceHistory.runUndoable('Label Mode', () => { drawing.form.labels_mode = 'both'; });
+  const steps = preferenceHistory.getUndoCount();
+  await preferenceHistory.runUndoable('Rich Feature Popup', () => { state.richFeaturePopup.value = false; });
+  assert.equal(preferenceHistory.getUndoCount(), steps, 'the toggle records no step');
+  await preferenceHistory.undo();
+  assert.deepEqual([drawing.form.labels_mode, state.richFeaturePopup.value], ['out', false], 'Undo leaves the preference');
+  state.richFeaturePopup.value = true;
+  await preferenceHistory.redo();
+  assert.deepEqual([drawing.form.labels_mode, state.richFeaturePopup.value], ['both', true], 'Redo leaves the preference');
+  await preferenceHistory.undo();
+  assert.equal(state.richFeaturePopup.value, true);
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const checkbox = html.match(/<input type="checkbox" v-model="richFeaturePopup"[^>]*>/)?.[0] || '';
+  assert.match(checkbox, /\sdata-history-ignore[\s>]/, 'the checkbox opens no History transaction');
+  drawing.form.labels_mode = 'out';
+  console.log('The Rich Feature Popup preference stays outside History.');
 }

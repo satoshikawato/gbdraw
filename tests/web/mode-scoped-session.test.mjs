@@ -54,7 +54,7 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
 });
 
 test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
-  assert.equal(SESSION_VERSION, 47);
+  assert.equal(SESSION_VERSION, 48);
   resetDrawings();
   state.mode.value = 'circular';
   state.drawings.circular.adv.label_font_size = 13;
@@ -149,28 +149,34 @@ test('a file that is not a gbdraw Session is refused as such before its contents
   assert.equal(await reason({ format: 'other', version: 46, bogus: 1 }), 'SESSION_FORMAT');
 });
 
-test('Session 45 and a Session 46 with a retired field or a non-registry slice field are rejected (S3, S4)', async () => {
+// S3, S4 (E-OD03, A7d, A7f): Load refuses a version it does not read; it drops
+// a Session 46's retired homes, whose place the slices fill, with no row, and a
+// key no writer wrote with one.
+test('Session 45 is refused; a Session 46 drops its retired homes with no row and an unknown key with one (S3, S4)', async () => {
   resetDrawings();
   const saved = await save('current');
-  const rejected = async (session, label) => {
+  const rows = async (session, label) => {
     const outcome = await load(session);
-    assert.equal(outcome.status, 'error', label);
+    assert.equal(outcome.status, 'ok', `${label}: ${JSON.stringify(outcome.error)}`);
+    return (outcome.repairs ?? []).map(({ code, path }) => `${code}@${path}`);
   };
-  await rejected({ ...structuredClone(saved), version: 45 }, 'Session 45');
-  await rejected({ ...structuredClone(saved), config: structuredClone(saved.modes.circular.config) }, 'top-level config');
-  await rejected({ ...structuredClone(saved), features: {} }, 'top-level features');
+  const refused = await load({ ...structuredClone(saved), version: 45 });
+  assert.equal(refused.status, 'error', 'Session 45');
+  assert.deepEqual(await rows({ ...structuredClone(saved), config: structuredClone(saved.modes.circular.config) }, 'top-level config'), []);
+  assert.deepEqual(await rows({ ...structuredClone(saved), features: {} }, 'top-level features'), []);
   const retiredUi = structuredClone(saved);
   retiredUi.ui.canvasPadding = { top: 0, right: 0, bottom: 0, left: 0 };
-  await rejected(retiredUi, 'ui.canvasPadding');
+  assert.deepEqual(await rows(retiredUi, 'ui.canvasPadding'), []);
   const retiredLegend = structuredClone(saved);
   retiredLegend.editorState.legend = { ...retiredLegend.editorState.legend, entries: [] };
-  await rejected(retiredLegend, 'editorState.legend.entries');
+  assert.deepEqual(await rows(retiredLegend, 'editorState.legend.entries'), []);
+  // A field no slice holds (a flat draft's `modeProfiles`) is dropped with a row (E-OD03).
   const unknownSliceField = structuredClone(saved);
-  unknownSliceField.modes.linear.config.modeProfiles = {};
-  await rejected(unknownSliceField, 'modes.linear.config.modeProfiles');
+  unknownSliceField.modes.linear.config.modeProfiles = { activeMode: 'linear' };
+  assert.deepEqual(await rows(unknownSliceField, 'modeProfiles'), ['setting-replaced@modes.linear.config.modeProfiles']);
   const thirdMode = structuredClone(saved);
   thirdMode.modes.radial = {};
-  await rejected(thirdMode, 'modes.radial');
+  assert.deepEqual(await rows(thirdMode, 'modes.radial'), ['session-field-dropped@modes.radial']);
 });
 
 // OV-160: a named CSS color in a Legend color or a stroke override (also the
@@ -234,7 +240,7 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   assert.deepEqual(shownRows(state.drawings.circular), kept);
   assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
   assert.deepEqual(loadDialogs.map(({ items }) => items),
-    [['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']]);
+    [['Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.']]);
   assert.deepEqual(loaded.notices, []);
   assert.deepEqual(alerts, []);
 
@@ -335,7 +341,9 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
 });
 
 // Record selection D-05: each slice keeps the keys of its OFF records; an
-// omitted list draws every record, and a malformed or unbound key is rejected.
+// omitted list draws every record. Load drops a key that names no record of
+// its drawing without a row (BA-OD88, E-OD13), reads a repeat once, and lists
+// a list of the wrong shape.
 test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
   resetDrawings();
   state.mode.value = 'circular';
@@ -366,18 +374,23 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   assert.equal('recordsOff' in allOn.modes.linear.config, false);
   assert.equal('recordsOff' in allOn.modes.circular.config, false);
 
-  const rejected = async (mutate, label, code = 'INPUT_INVALID') => {
+  const loaded = async (mutate, label, { linear, circular, rows = [] }) => {
     const session = structuredClone(saved);
     mutate(session.modes);
     const result = await load(session);
-    assert.equal(result.status, 'error', label);
-    if (code) assert.equal(result.error?.code, code, label);
+    assert.equal(result.status, 'ok', label);
+    assert.deepEqual(result.repairs.map(({ code, path }) => `${code}@${path}`), rows, label);
+    assert.deepEqual([...state.drawings.linear.recordsOff], linear, label);
+    assert.deepEqual([...state.drawings.circular.recordsOff], circular, label);
   };
-  await rejected((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid');
-  await rejected((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key');
-  await rejected((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N');
-  // Review F8: a list of the wrong shape fails with the code Python gives it.
-  await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list');
+  await loaded((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
+    { linear: [], circular: ['#2'] });
+  await loaded((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
+  await loaded((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
+    { linear: [uid], circular: [] });
+  // Review F8: a list of the wrong shape is listed; every record is drawn.
+  await loaded((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list',
+    { linear: [uid], circular: [], rows: ['setting-replaced@modes.circular.config.recordsOff'] });
 });
 
 // Review #992 finding 1: a Session without a slice of a mode (a Gallery
@@ -407,6 +420,25 @@ test('Reset Settings keeps the OFF records of both drawings (record selection)',
   state.drawings.circular.recordsOff.splice(0);
 });
 
+// R15-21 (OV-1107, OV-1108): Reset Settings removes a loaded Session's saved
+// label table (also when the bulk label edits are empty) and the dormant
+// Similarity group names, in both drawings.
+test('Reset Settings removes the saved label table and the dormant Similarity group names of both drawings', async () => {
+  const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  const row = { recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^a$', labelText: 'A' };
+  MODES.forEach((mode) => {
+    const drawing = state.drawings[mode];
+    drawing.canonicalLabelOverrideRows.value = [row];
+    drawing.orthogroupDormantOverrides.OG_1 = { name: 'Saved name' };
+  });
+  resetSettings(state);
+  MODES.forEach((mode) => {
+    const drawing = state.drawings[mode];
+    assert.deepEqual(drawing.canonicalLabelOverrideRows.value, [], `${mode} label table`);
+    assert.deepEqual({ ...drawing.orthogroupDormantOverrides }, {}, `${mode} dormant group names`);
+  });
+});
+
 // Record selection 2.5: a Linear drawing with every card OFF (only a
 // hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
 test('a Linear drawing with no ON record names the fix', () => {
@@ -418,4 +450,44 @@ test('a Linear drawing with no ON record names the fix', () => {
     (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
   sourceState.drawings.linear.recordsOff = ['a'];
   assert.doesNotThrow(() => assertActiveModeInputs('linear', sourceState));
+});
+
+// OV-1280 (D-19, D-ORIGIN-2): the Web writer's Session 48 after the five file
+// cards keeps each card's rows and what its file set through Load and Save,
+// and the file-imports.js helpers each card's Remove calls take back only that
+// file's effect (the Remove path itself: auxiliary-file-history Playwright cases).
+test('Session 48 keeps what each file card loaded through Load and Save, and the card-mark helpers take back only that', async () => {
+  const fileImports = await import('../../gbdraw/web/js/services/file-imports.js');
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  const loaded = await load(fixture);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const drawing = state.drawings.circular;
+  const plain = (value) => JSON.parse(JSON.stringify(value));
+  const read = () => ({
+    rules: plain(drawing.manualSpecificRules), priority: plain(drawing.manualPriorityRules),
+    whitelist: plain(drawing.manualWhitelist), blacklist: drawing.manualBlacklist.value, fileImports: plain(drawing.fileImports)
+  });
+  const stored = fixture.modes.circular.config;
+  assert.deepEqual(read(), {
+    rules: stored.rules, priority: stored.qualifierPriorityRules, whitelist: stored.whitelist,
+    blacklist: stored.blacklistText, fileImports: stored.fileImports
+  });
+  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.files[key])),
+    [true, true, true, true, true]);
+  // Save writes them back as they were loaded.
+  const saved = await save('file cards');
+  for (const field of ['rules', 'qualifierPriorityRules', 'whitelist', 'blacklistText', 'fileImports']) {
+    assert.deepEqual(saved.modes.circular.config[field], stored[field], field);
+  }
+  // Remove on each card, as the card's owner takes it back.
+  assert.deepEqual(fileImports.withoutImportedRows(drawing.manualSpecificRules, 't_color').map((rule) => [rule.val, rule.color]),
+    [['hand', '#445566'], ['beta', '#999999']]);
+  const priority = plain(drawing.manualPriorityRules);
+  fileImports.removeImportedPriorityRows(priority);
+  assert.deepEqual(priority, [{ feat: 'CDS', order: 'gene' }, { feat: 'tRNA', order: 'product' }, { feat: 'rRNA', order: 'locus_tag' }]);
+  assert.deepEqual(fileImports.withoutImportedRows(drawing.manualWhitelist, 'whitelist').map((rule) => rule.key), ['mine', 'betas']);
+  assert.equal(fileImports.withoutImportedBlacklistWords(drawing.manualBlacklist.value, drawing.fileImports.blacklist), 'hypothetical, mine');
+  const colors = fileImports.withoutImportedDefaultColors(drawing.currentColors.value, drawing.fileImports.d_color, { CDS: '#aaaaaa', tRNA: '#bbbbbb' });
+  assert.deepEqual([colors.CDS, colors.tRNA], ['#111111', '#abcdef']);
 });

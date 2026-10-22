@@ -3,9 +3,11 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
-const { answerChoicePrompt, openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, answerSessionTitle, openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+const loadedAnnotationCount = JSON.parse(require('node:fs').readFileSync(fixture, 'utf8'))
+  .modes.circular.config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const input = 'input[accept^=".json,"]';
 
@@ -19,9 +21,10 @@ const load = async (page, file) => {
 };
 
 // `again`: the page already downloaded this Session file name, so the Save asks first.
-const save = async (page, file, { again = false } = {}) => {
+const save = async (page, file, { again = false, title } = {}) => {
   const pending = page.waitForEvent('download', { timeout: 120_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (title !== undefined) await answerSessionTitle(page, title);
   if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await pending).saveAs(file);
   return JSON.parse(gunzipSync(await fs.readFile(file)));
@@ -65,7 +68,8 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   });
   const before = await snapshot(page);
   expect(before.positions).toEqual([]);
-  expect(before.annotations).toHaveLength(4);
+  // One annotation per row of the loaded Session's sets (the four plastome regions and their four tints).
+  expect(before.annotations).toHaveLength(loadedAnnotationCount);
   expect(before.annotations.every(annotation => annotation.key === null)).toBe(true);
   const beforeFile = info.outputPath('before.gbdraw-session.json.gz');
   const beforeSaved = await save(page, beforeFile);
@@ -139,6 +143,26 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
     { timeout: 180_000 }).toBe(false);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   expect((await snapshot(page)).history[0]).toBe(before.history[0] + 1);
+});
+
+// OV-1302: the tobacco tint row extends to gc_content, so turning only gc_content
+// off makes Save refuse; the alert names the row and the Extend to reason.
+test('Save refuses a disabled Extend to slot with a named alert and no download', async ({ page }) => {
+  test.setTimeout(360_000);
+  await load(page, fixture);
+  const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+  await reveal(panel);
+  if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click();
+  await page.locator('[data-capture="circular-track-slot-gc_content"]').getByTitle('Enabled', { exact: true }).uncheck();
+  let downloaded = false;
+  page.on('download', () => { downloaded = true; });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.summary || ''), { timeout: 60_000 })
+    .toMatch(/Track row 2\./);
+  const summary = await page.evaluate(() => window.__GBDRAW_APP__.errorLog.summary);
+  expect(summary).toContain('Extend to');
+  expect(summary).not.toContain('without recognized diagnostic');
+  expect(downloaded).toBe(false);
 });
 
 test('canceled post-response Generate keeps valid bindings and old artifact through stale completion', async ({ page, browser, baseURL }, info) => {
@@ -217,7 +241,7 @@ ${origin}
 
 test('failed multi-record Generate retains a validated binding to the selected second record', async ({ page, browser, baseURL }, info) => {
   test.setTimeout(360_000);
-  page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'S04 multi' : undefined));
+  page.on('dialog', dialog => dialog.accept());
   await page.addInitScript(() => { window.__GBDRAW_TEST_HOOKS__ = {}; });
   await openApp(page);
   await page.evaluate(content => {
@@ -234,7 +258,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   await page.evaluate(() => {
     delete window.__GBDRAW_APP__.annotationSets[0].annotations[0].metadata._gbdraw_web_target_record_key;
   });
-  const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw-session.json.gz'));
+  const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw-session.json.gz'), { title: 'S04 multi' });
   const before = await snapshot(page);
   expect(before.positions.map(position => position.selector)).toEqual(['#1', '#2']);
   expect(before.annotations[0].record).toEqual({ kind: 'recordId', value: 'RecB' });

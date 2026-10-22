@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import * as featureUtils from '../../gbdraw/web/js/services/feature-utils.js';
-import { formatSearchMatchLine, runFeatureSearch } from '../../gbdraw/web/js/app/feature-search/search-core.js';
+import {
+  buildFeatureSearchIndex,
+  formatSearchMatchLine,
+  runFeatureSearch
+} from '../../gbdraw/web/js/app/feature-search/search-core.js';
 import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import {
@@ -83,7 +88,16 @@ const locationCases = [
   [features.find((feature) => feature.svg_id === 'f-simple'), '301..600 (+)', '300 bp'],
   [{ start: 300, end: 600, strand: '+' }, '301..600 (+)', '300 bp'],
   [{ start: 10, end: 20, strand: '-', location_parts: [{ start: 10, end: 20, strand: '-' }] }, '11..20 (-)', '10 bp'],
-  [{ strand: '+' }, '', '']
+  [{ strand: '+' }, '', ''],
+  // OV-968: a null or blank start or end is missing, not 0.
+  [{ strand: '+', location_parts: [{ start: null, end: 20, strand: '+' }] }, '', ''],
+  [{ strand: '+', location_parts: [{ start: '  ', end: 20, strand: '+' }] }, '', ''],
+  [{ strand: '+', location_parts: [{ start: 5, end: null, strand: '+' }] }, '', ''],
+  [{ start: null, end: 20, strand: '+' }, '', ''],
+  // PT-OD23: hand-edited bounds read by the writers' rule (PT-OD14).
+  [{ strand: '+', location_parts: [{ start: '0x10', end: 20, strand: '+' }] }, '', ''],
+  [{ strand: '+', location_parts: [{ start: 1.5, end: 20, strand: '+' }] }, '2..20 (+)', '19 bp'],
+  [{ start: 0, end: 2 ** 53 + 1, strand: '+' }, '', '']
 ];
 
 const embeddedSlice = (startMarker, endMarker) => {
@@ -108,6 +122,7 @@ const createEmbeddedSearch = (popupMode) => new Function('features', 'popupMode'
   function consistentTextIdentity() { return { valid: false, value: '' }; }
   function biologicalFeatureForMember() { return null; }
   ${embeddedFunction('normalizeArray')}
+  ${embeddedFunction('locationPartBound')}
   ${embeddedFunction('featureLocationParts')}
   ${embeddedFunction('rangeText')}
   ${embeddedFunction('locationText')}
@@ -197,6 +212,88 @@ test('Interactive SVG search and location text match the app', () => {
   }
 });
 
+// PT-OD23: the app, the Interactive SVG viewer, and both interactive-SVG writers
+// read a start or end by one rule (../fixtures/location-parts-vectors.json).
+test('the app and the Interactive SVG read a start or end by the writers\' rule', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/location-parts-vectors.json', import.meta.url), 'utf8'));
+  const embeddedBound = new Function(`${embeddedFunction('locationPartBound')} return locationPartBound;`)();
+  /** @type {[unknown, number | null][]} */
+  const values = [
+    [true, null], ['0x10', null], ['1_0', null], ['\u0661', null], [1.5, 1], [2 ** 53 + 1, null],
+    [' 20 ', 20], ['-0.5', 0], [undefined, null]
+  ];
+  for (const { input, expected } of vectors.featureCoordinateCases) {
+    for (const field of ['start', 'end']) values.push([input[field], expected[field]]);
+  }
+  for (const [value, expected] of values) {
+    const label = String(value);
+    assert.equal(featureUtils.locationPartNumber(value), expected, label);
+    assert.deepEqual(featureUtils.locationPartBound({ start: value }, 'start'), expected ?? NaN, label);
+    assert.deepEqual(embeddedBound({ start: value }, 'start'), expected ?? NaN, label);
+  }
+});
+
+// OV-1010 / OV-1017: the runtime shows a member's location as the app popup
+// does: a null or blank bound is missing (not 0), a bound that does not read
+// shows its stored text, and one side shows alone when the other is empty.
+// The app text is `locationRangeText` plus the popup's strand rule
+// (pairwise-match-popup.js memberLocationText).
+test('Interactive SVG member location text equals the app member text', () => {
+  const viewerText = new Function(`
+    ${embeddedFunction('locationPartBound')}
+    ${embeddedFunction('rawBoundText')}
+    ${embeddedFunction('strandText')}
+    ${embeddedFunction('memberLocationText')}
+    return memberLocationText;
+  `)();
+  const appStrand = (strand) => {
+    const text = String(strand).trim();
+    if (text === '-1') return '-';
+    if (text === '1') return '+';
+    return text;
+  };
+  const appText = (member) => {
+    const range = featureUtils.locationRangeText(member);
+    const strand = appStrand(member.strand);
+    return range && strand ? `${range} (${strand})` : range;
+  };
+  assert.equal(viewerText({ start: 9, end: 18, strand: '-1' }), '10..18 (-)');
+  const bounds = [9, 1.5, null, '', '  ', '0x10', '20', 1e400, 2 ** 53];
+  for (const start of bounds) {
+    for (const end of [38, undefined]) {
+      for (const strand of ['-1', '1', '+', '-', '']) {
+        const member = end === undefined ? { start, strand } : { start, end, strand };
+        assert.equal(viewerText(member), appText(member), JSON.stringify([String(start), end, strand]));
+      }
+    }
+  }
+});
+
+// OV-1015: the Similarity group member rows (feature popup table, Similarity
+// drawer) and the member popup show one location text, read with the shared
+// reader. The drawer groups digits (en-US); the table does not.
+test('Similarity group member rows read their location with the shared reader', () => {
+  const { locationRangeText } = featureUtils;
+  for (const [start, plain, grouped] of [
+    [10, '11..20', '11..20'],
+    [null, '20', '20'],
+    [1.5, '2..20', '2..20'],
+    ['0x10', '0x10..20', '0x10..20'],
+    [100, '101..20', '101..20'],
+    [1233, '1234..20', '1,234..20']
+  ]) {
+    assert.equal(locationRangeText({ start, end: 20 }), plain, JSON.stringify(start));
+    assert.equal(locationRangeText({ start, end: 20 }, 'en-US'), grouped, JSON.stringify(start));
+  }
+  assert.equal(locationRangeText({ start: 9999, end: 20000 }, 'en-US'), '10,000..20,000');
+  assert.equal(locationRangeText({ start: null, end: undefined }), '');
+  assert.equal(locationRangeText(null), '');
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /Number\(member\.(start|end)\)/);
+  assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member\) \}\}/g)?.length, 1);
+  assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member, 'en-US'\) \}\}/g)?.length, 1);
+});
+
 // OV-211: the active match names its record, in the app and the Interactive SVG.
 test('the match line names the record of the active match', () => {
   const embeddedLine = new Function(`
@@ -275,6 +372,7 @@ test('Interactive SVG popup title and Protein ID match the app popup', () => {
     ${embeddedFunction('isInternalProteinDisplayId')}
     ${embeddedFunction('firstNonInternalDisplayText')}
     ${embeddedFunction('qualifierDisplayValue')}
+    ${embeddedFunction('locationPartBound')}
     ${embeddedFunction('featureLocationParts')}
     ${embeddedFunction('rangeText')}
     ${embeddedFunction('featureCaption')}
@@ -346,10 +444,9 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
     0: { 'data-gbdraw-record-source-start': '3000', 'data-gbdraw-record-source-end': '8000', 'data-gbdraw-record-source-step': '1' },
     1: { 'data-gbdraw-record-source-start': '1000', 'data-gbdraw-record-source-end': '12000', 'data-gbdraw-record-source-step': '-1' }
   };
-  const svg = { querySelector: (selector) => {
-    const group = groups[/data-gbdraw-record-index="(\d+)"/.exec(selector)?.[1] ?? ''];
-    return group ? { getAttribute: (name) => group[name] ?? null } : null;
-  } };
+  const svg = { querySelectorAll: () => Object.entries(groups).map(([index, group]) => ({
+    getAttribute: (name) => (name === 'data-gbdraw-record-index' ? index : group[name] ?? null)
+  })) };
   const attributes = {
     'data-gbdraw-pairwise-match-id': 'm1', 'data-match-kind': 'pairwise', 'data-source-index': '0',
     'data-query-record-id': 'Q', 'data-subject-record-id': 'S',
@@ -369,8 +466,45 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
   assert.match(payload.sequenceBundle.entries[0].fasta, /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
   // A record shown as in its file (rotate only) keeps its coordinates.
   const plain = buildMatchPopupPayload(
-    { ownerSVGElement: { querySelector: () => null }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
+    { ownerSVGElement: { querySelectorAll: () => [] }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
     { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
   );
   assert.deepEqual(plain.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`), ['1..4', '4..1']);
+});
+
+// A search index reads each similarity-group member once, not once per feature
+// and field (OV-914); a feature still takes the protein ID of its one member.
+test('the search index reads each group member a bounded number of times (OV-914)', () => {
+  const build = (count, { ambiguous = false } = {}) => {
+    let memberReads = 0;
+    const member = (index) => new Proxy({
+      record_index: 0, feature_index: index, rendered_svg_id: `f${index}`, source_protein_id: `PX${index}.1`
+    }, {
+      get(target, property, receiver) {
+        memberReads += 1;
+        return Reflect.get(target, property, receiver);
+      }
+    });
+    const members = Array.from({ length: count }, (_, index) => member(index));
+    if (ambiguous) members.push(member(0));
+    const index = buildFeatureSearchIndex({
+      features: Array.from({ length: count }, (_, index) => ({
+        svg_id: `f${index}`, rendered_svg_id: `f${index}`, record_index: 0, feature_index: index,
+        type: 'CDS', record_id: 'REC', start: index * 10, end: index * 10 + 9, strand: '+', orthogroup_id: 'OG1'
+      })),
+      orthogroups: [{ id: 'OG1', name: 'Group one', members }]
+    });
+    const proteinIds = index.featureOrder.map((svgId) => (
+      index.byId.get(svgId).itemsByField.get('orthogroup').find((item) => item.label === 'Protein ID')?.value || ''
+    ));
+    return { memberReads, proteinIds };
+  };
+  const small = build(10);
+  const large = build(40);
+  assert.deepEqual(large.proteinIds, Array.from({ length: 40 }, (_, index) => `PX${index}.1`));
+  // Linear in the group size: 4x the members cost about 4x the reads, not 16x.
+  assert.ok(large.memberReads < 6 * small.memberReads, `${small.memberReads} reads for 10, ${large.memberReads} for 40`);
+  // A feature that matches two members takes no member's protein ID.
+  const ambiguous = build(3, { ambiguous: true });
+  assert.deepEqual(ambiguous.proteinIds, ['', 'PX1.1', 'PX2.1']);
 });

@@ -264,7 +264,6 @@ def test_linear_feature_paths_change_with_directionality() -> None:
         genome_length=1000,
         alignment_width=800,
         cds_height=20,
-        genome_size_normalization_factor=1.0,
         feature_strand="positive",
         separate_strands=False,
         arrow_length=50,

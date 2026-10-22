@@ -3,7 +3,7 @@ const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -57,6 +57,28 @@ const previewView = (page) => page.evaluate(() => ({
 }));
 const editorDrawer = (page) => page.evaluate(() => ({
   open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
+}));
+// Whether the view is what Fit gives in the canvas as it is now: the largest whole-percent zoom
+// that leaves 8 px around the figure, with the figure centred. `room` is the canvas size.
+const figureFit = (page) => page.evaluate(() => {
+  const { zoom } = window.__GBDRAW_APP__;
+  const canvas = document.querySelector('.preview-canvas');
+  const frame = canvas.getBoundingClientRect();
+  const figure = document.querySelector('.gbdraw-preview-surface svg').getBoundingClientRect();
+  const largest = Math.min((canvas.clientWidth - 16) / (figure.width / zoom), (canvas.clientHeight - 16) / (figure.height / zoom));
+  return {
+    room: [canvas.offsetWidth, canvas.offsetHeight],
+    zoom,
+    fitted: Math.abs(zoom - Math.floor(largest * 100 + 1e-9) / 100) < 1e-9
+      && Math.abs(figure.left + figure.right - frame.left - frame.right) <= 2
+      && Math.abs(figure.top + figure.bottom - frame.top - frame.bottom) <= 2,
+    inFrame: figure.left >= frame.left && figure.right <= frame.right
+      && figure.top >= frame.top && figure.bottom <= frame.bottom
+  };
+});
+// A change of the canvas size has reached its observers once two frames have been drawn.
+const roomSettled = (page) => evaluateWithRetainedPromise(page, () => new Promise((resolve) => {
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
 }));
 
 const loadAmbiguousSession = async (page, testInfo) => {
@@ -295,11 +317,19 @@ test('alignment rings and the reference line stay transient and share the panel 
   expect(await artifactSnapshot(page)).toEqual(before);
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  // Another Result under the open review: the rings and the line belong to the Result
-  // the review was made on, so they go.
+  // Another Result under the open review, as a Generate or a Session load draws it: it commits
+  // a Session with its own resources, even from the same files. The rings and the line belong
+  // to the sources the review was made on, so they go. (A Result of the same sources, as a live
+  // setting draws it, keeps the resources and them: OV-1082, OV-1120.)
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
+    const { canonicalRenderArtifactOwner } = await import('./js/services/config.js');
     window.__S03Result = state.results.value[state.selectedResultIndex.value];
+    const canonical = window.__S03Canonical = canonicalRenderArtifactOwner.capture();
+    const committed = canonical.committedCanonicalSession;
+    if (!committed?.resources) throw new Error('The fixture has no committed resources.');
+    canonicalRenderArtifactOwner.restore({ ...canonical,
+      committedCanonicalSession: { ...committed, resources: { ...committed.resources } } });
     state.results.value = [{ ...window.__S03Result }];
   });
   await expect(overlay).toHaveCount(0);
@@ -311,8 +341,11 @@ test('alignment rings and the reference line stay transient and share the panel 
   await page.evaluate(()=>window.__GBDRAW_APP__.cancelSimilarityAlignmentDialog());
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
+    const { canonicalRenderArtifactOwner } = await import('./js/services/config.js');
+    canonicalRenderArtifactOwner.restore(window.__S03Canonical);
     state.results.value = [window.__S03Result];
     delete window.__S03Result;
+    delete window.__S03Canonical;
   });
   await expect(page.locator('.gbdraw-preview-surface svg')).toBeVisible();
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
@@ -386,9 +419,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const sectionCounts = await dialog.locator('[data-alignment-section]').evaluateAll((headings) => Object.fromEntries(
     headings.map((heading) => [heading.dataset.alignmentSection, Number(heading.querySelector('.count').textContent)])));
   const summaryParts = [
-    ['choose', (n) => `${n} ${n === 1 ? 'needs' : 'need'} a choice`], ['several', (n) => `${n} with several candidates`],
-    ['single', (n) => `${n} with one candidate`], ['none', (n) => `${n} without a usable candidate`]
-  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => words(sectionCounts[id]));
+    ['choose', 'awaiting a choice'], ['several', 'with several candidates'],
+    ['single', 'with one candidate'], ['none', 'without a usable candidate']
+  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => `${sectionCounts[id]} ${sectionCounts[id] === 1 ? 'record' : 'records'} ${words}`);
   const recordCount = await dialog.locator('.alignment-review-card').count();
   await expect(dialog.locator('#similarity-alignment-dialog-description')).toHaveText(
     `Similarity group ${await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.response.groupId)}: `
@@ -875,7 +908,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   const error = dialog.locator('[data-similarity-alignment-error]');
   await expect(error).toBeVisible({ timeout: 180000 });
-  await expect(error).toContainText('Comparison endpoints disagree');
+  await expect(error).toContainText('The features at the ends of comparison links do not match');
   // The failed run put the Result back; the review goes on with the figure fitted beside it.
   await expect.poll(async () => {
     const view = await previewView(page);
@@ -1143,7 +1176,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await normalAlign.click();
   await expect(resolvedReview).toBeVisible({ timeout: 180000 });
   const retryError = resolvedReview.locator('[data-similarity-alignment-error]');
-  await expect(retryError).toContainText('Comparison endpoints disagree with the displayed features.');
+  await expect(retryError).toContainText('The features at the ends of comparison links do not match the displayed features.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'COMPARISON_IDENTITY',operation:'align',stage:'result-admission',secondary:[{code:'CLEANUP_FAILED',stage:'cleanup'}]});
   await expect(page.getByRole('alert', { name: 'Alignment error' })).toHaveCount(1);
   await expect(retryError).toBeFocused();
@@ -1633,8 +1666,11 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   }
   const corrupt=JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   corrupt.editorState.alignmentResetReceipt.binding='0'.repeat(64);
-  const rejected=await evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
-  expect(rejected.status).toBe('error');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
+  // A receipt that no longer binds the request is dropped with a row before
+  // anything changes (receipt 〔確認〕, BA-D25); Cancel keeps the restored receipt.
+  const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
+  await answerLoadRepairs(freshPage,['Session file: the field editorState.alignmentResetReceipt could not be read and was left out.'],'cancel');
+  expect((await pendingCorrupt).status).toBe('canceled');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   // Re-render the restored Session and compare the complete SVG tree.
   const regenerated = await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_APP__.runAnalysis());
   expect(regenerated.status).toBe('ok');
@@ -2104,7 +2140,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         'import base64, json, sys', 'from dataclasses import replace',
         'from gbdraw.analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupResult',
         'from gbdraw.session_request_codec import decode_canonical_typed_resource, encode_canonical_typed_resource',
-        'session = json.load(open(sys.argv[1]))', "entry = session['resources']['comparison-canonical-orthogroups-1']",
+        'session = json.load(open(sys.argv[1]))', "entry = session['resources']['comparison-orthogroups']",
         "result = decode_canonical_typed_resource(base64.b64decode(entry['data']), value_kind='orthogroupResult', expected=OrthogroupResult | OrthogroupGraphResult)",
         "drop = lambda values: {key: value for key, value in values.items() if key != 'og_1'}",
         "data = encode_canonical_typed_resource('orthogroupResult', replace(result, ortholog_edges_by_orthogroup_id=drop(result.ortholog_edges_by_orthogroup_id), path_indexes_by_orthogroup_id=drop(result.path_indexes_by_orthogroup_id)))",
@@ -2393,9 +2429,14 @@ test('the drawer list scrolls to the group a new alignment plan selects', async 
     return box.top >= view.top - 1 && box.bottom <= view.bottom + 1;
   });
 
-  // The Session's plan selected its group before the drawer opened.
+  // The Session's plan selected its group before the drawer opened. The row
+  // stays in view once the Result card has settled: the Session loaded notice
+  // above the card changes its margins, which must not slide the list after it
+  // scrolled (OV-1022).
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
   await expect(planRow).toHaveAttribute('aria-current', 'true');
+  await page.locator('[aria-label="Result Preview"]').evaluate(
+    (card) => Promise.all(card.getAnimations().map((animation) => animation.finished)));
   await expect.poll(() => rowInView(planRow)).toBe(true);
 
   // With the drawer open, the user picks the first group and the list is back at
@@ -2609,6 +2650,63 @@ test('the docked review takes the popup, the Editor and the view, and gives them
   expect(pageErrors).toEqual([]);
 });
 
+// A review opened with the keyboard from a feature popup, whose Apply fails: the review
+// stays with the error and its draft while the popup stays hidden, and Cancel gives the
+// popup back with focus on Review alignment options…, beside the figure and below it.
+for (const [width, height] of [[1280, 800], [390, 844]]) {
+  test(`a failed Apply in a review opened by keyboard from a feature popup, then Cancel (${width}x${height})`, async ({ page }) => {
+    test.setTimeout(600000);
+    await page.setViewportSize({ width, height });
+    await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__GBDRAW_APP__);
+    await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+    const featureId = await page.evaluate(featureByProteinId, 'CAG38712.1');
+    await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
+      .dispatchEvent('click', { clientX: -100, clientY: -100 });
+    const popup = page.locator('.feature-popup[role="dialog"]');
+    const popupReview = popup.locator('[data-similarity-alignment-popup-review]');
+    await popupReview.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('[data-similarity-alignment-dialog]');
+    await expect(dialog).toBeVisible({ timeout: 180000 });
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+    await expect(dialog.locator('#similarity-alignment-dialog-title')).toBeFocused();
+    await expect(popup).toBeHidden();
+    await chooseUnresolved(page, dialog);
+    const draft = () => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows
+      .map((row) => [row.recordKey, row.choice?.kind ?? null, row.choice?.candidateKey ?? null]));
+    const chosen = await draft();
+    const before = await artifactSnapshot(page);
+    await page.evaluate(() => {
+      const sanitize = window.DOMPurify.sanitize;
+      window.DOMPurify.sanitize = (...args) => {
+        if (!String(args[0]).includes('<svg')) return sanitize(...args);
+        window.DOMPurify.sanitize = sanitize;
+        throw Object.assign(new Error('The candidate Result was not admitted.'), {
+          code: 'COMPARISON_IDENTITY', stage: 'result-admission', context: { reason: 'SOURCE_VIEW_CONFLICT' }
+        });
+      };
+    });
+    const apply = dialog.locator('footer button[aria-describedby="similarity-alignment-apply-reason"]');
+    await exposeReviewControl(page, apply);
+    await apply.click();
+    const error = dialog.locator('[data-similarity-alignment-error]');
+    await expect(error).toBeVisible({ timeout: 180000 });
+    await expect(error).toBeFocused();
+    await expect(apply).toBeEnabled();
+    await expect(popup).toBeHidden();
+    expect(await draft()).toEqual(chosen);
+    expect((await artifactSnapshot(page)).results).toEqual(before.results);
+
+    const cancel = dialog.locator('footer button.btn-secondary');
+    await exposeReviewControl(page, cancel);
+    await cancel.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(popup).toBeVisible();
+    await expect(popupReview).toBeFocused();
+  });
+}
+
 // The search row's Open is a command, not a gesture on the figure: it moves the view and
 // retargets the hidden popup, which is shown at its feature when the review ends.
 test('Open in the feature search row retargets the hidden popup, shown at its feature when the review ends', async ({ page }) => {
@@ -2689,10 +2787,434 @@ test('a Session loaded under an open review keeps its own view and Editor when t
     return { zoom, pan: canvasPan };
   });
   expect(savedView).toEqual(loaded);
+  // The view is the loaded Session's now: a change of the room does not fit it.
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(loaded);
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   expect(await previewView(page)).toEqual(loaded);
   expect((await editorDrawer(page)).open).toBe(false);
+});
+
+// OV-536: while the review shows the fitted figure, the figure follows the room of the Result,
+// whatever changed that room: the window, the settings pane's display, a docked section, the
+// pane's width.
+test('the figure is fitted again whenever the room of the Result changes while Review alignment is open', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  // The user's own view.
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.x += 37; });
+  const before = await previewView(page);
+  const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  const undoAtOpen = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  // The figure is fitted in the canvas as it is now, whose size differs from the one before.
+  let room = null;
+  const fittedAfterChange = async (state) => {
+    const last = String(room);
+    await expect.poll(async () => {
+      const found = await figureFit(page);
+      return found.fitted && found.inFrame && String(found.room) !== last;
+    }, { message: `${state}: ${JSON.stringify(await figureFit(page))}` }).toBe(true);
+    room = (await figureFit(page)).room;
+    return { ...await previewView(page), room };
+  };
+  const opened = await fittedAfterChange('opened');
+  // The same room gives the same fit, whatever the view it replaces.
+  const expectOpenedView = (view) => {
+    expect(view.room).toEqual(opened.room);
+    expect(view.zoom).toBe(opened.zoom);
+    expect(Math.abs(view.pan.x - opened.pan.x) + Math.abs(view.pan.y - opened.pan.y)).toBeLessThan(0.01);
+  };
+
+  // The window: wider, narrower, and back. The fit has landed once two frames are drawn, which
+  // is what the cases that expect no fit wait for.
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  await roomSettled(page);
+  expect((await previewView(page)).zoom).toBeGreaterThan(opened.zoom);
+  const wider = await fittedAfterChange('window 1900');
+  expect(wider.room[0]).toBeGreaterThan(opened.room[0]);
+  await page.setViewportSize({ width: 1340, height: 1000 });
+  const narrower = await fittedAfterChange('window 1340');
+  expect(narrower.room[0]).toBeLessThan(opened.room[0]);
+  expect(narrower.zoom).toBeLessThan(opened.zoom);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  expectOpenedView(await fittedAfterChange('window 1600 again'));
+
+  // The settings pane: the icon rail with a section, the rail alone, the stacked pane again.
+  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+  const railWithSection = await fittedAfterChange('rail with a section');
+  expect(railWithSection.room[0]).toBeLessThan(opened.room[0]);
+  expect(railWithSection.zoom).toBeLessThan(opened.zoom);
+  await page.getByRole('button', { name: 'Close section', exact: true }).click();
+  const railAlone = await fittedAfterChange('rail alone');
+  expect(railAlone.room[0]).toBeGreaterThan(opened.room[0]);
+  expect(railAlone.zoom).toBeGreaterThan(opened.zoom);
+  await page.getByRole('button', { name: 'Expand settings', exact: true }).click();
+  expectOpenedView(await fittedAfterChange('stacked again'));
+
+  // A zoom and a pan made by hand stay while the room stays: through a hover, and through the
+  // canvas hidden and shown again in the same room (the Run info tab) ...
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.y += 23; });
+  const byHand = await previewView(page);
+  expect(byHand.zoom).toBeGreaterThan(opened.zoom);
+  await dialog.locator('[data-alignment-record-key]').first().hover();
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(byHand);
+  for (const tab of ['run-info', 'preview']) {
+    await page.evaluate((shown) => { window.__GBDRAW_APP__.resultPanelTab = shown; }, tab);
+    await roomSettled(page);
+  }
+  expect(await previewView(page)).toEqual(byHand);
+  // ... and the fit replaces them when it changes: here the pane's width drag, which follows
+  // the pointer from the first move (OV-620).
+  const paneWidth = () => page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth);
+  const paneBefore = await paneWidth();
+  const handle = await page.locator('.resize-handle').first().boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 1, handle.y + 200);
+  expect(await paneWidth()).toBe(paneBefore + 1);
+  await page.mouse.move(handle.x + handle.width / 2 + 100, handle.y + 200, { steps: 5 });
+  await page.mouse.up();
+  expect(await paneWidth()).toBe(paneBefore + 100);
+  const dragged = await fittedAfterChange('pane 100 px wider');
+  expect(dragged.room[0]).toBe(opened.room[0] - 100);
+  expect(dragged.zoom).toBeLessThan(opened.zoom);
+
+  // No fit is a History step, and a Session saved now holds the view from before the review.
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen);
+  const savedView = await evaluateWithRetainedPromise(page, async () => {
+    const { exportSession } = await import('./js/services/config.js');
+    const result = await exportSession('saved after a fit to the room');
+    const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    const { zoom, canvasPan } = JSON.parse(text).ui;
+    return { zoom, pan: canvasPan };
+  });
+  expect(savedView).toEqual(before);
+
+  // Apply records its one History action and gives back the view from before the review.
+  await chooseUnresolved(page, dialog);
+  await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, dialog);
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen + 1);
+  // The review is over: a change of the room keeps that view.
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(before);
+  expect(pageErrors).toEqual([]);
+});
+
+test('outside Review alignment a change of the room of the Result keeps the zoom and the position', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.x += 37; });
+  const view = await previewView(page);
+  const room = async () => (await figureFit(page)).room;
+  const rooms = [await room()];
+  for (const change of [
+    () => page.setViewportSize({ width: 1900, height: 1000 }),
+    () => page.setViewportSize({ width: 1340, height: 800 }),
+    () => page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click(),
+    () => page.getByRole('button', { name: 'Close section', exact: true }).click()
+  ]) {
+    await change();
+    await roomSettled(page);
+    rooms.push(await room());
+    expect(await previewView(page), `room ${rooms.at(-1)}`).toEqual(view);
+  }
+  // Each step did change the room.
+  expect(new Set(rooms.map(String)).size).toBe(rooms.length);
+});
+
+// The user's own view and Editor tab, then the review opened from a feature popup.
+const openReviewOverOwnView = async (page) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.canvasPan.x += 37;
+    app.canvasPan.y += 11;
+    app.openRightDrawerTab('orthogroups');
+  });
+  const before = await previewView(page);
+  const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
+  return { before, dialog };
+};
+
+// One live setting change: the CDS color in Colors, drawn on the shown Result.
+const cdsColor = (page) => page.locator('input[type="color"][aria-label="CDS feature color"]').first();
+const recolorCds = async (page, color) => {
+  await cdsColor(page).evaluate((input, value) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, color);
+  await expect.poll(() => page.evaluate((value) => window.__GBDRAW_APP__.results
+    .some(({ content }) => String(content).toLowerCase().includes(value)), color), { timeout: 60000 }).toBe(true);
+  await roomSettled(page);
+};
+// Whether each Linear record is drawn reversed.
+const recordOrientations = (page) => page.evaluate(async () => (await import('./js/state.js')).state.linearSeqs
+  .map(({ uid, region_reverse: reverse }) => [uid, Boolean(reverse)]));
+// The Result and the figure draw the color the setting shows (PD-OI-102).
+const expectCdsColorDrawn = async (page, color) => {
+  await expect(cdsColor(page)).toHaveValue(color);
+  expect(await page.evaluate((value) => ({
+    results: window.__GBDRAW_APP__.results.every(({ content }) => String(content).toLowerCase().includes(value)),
+    figure: document.querySelector('.gbdraw-preview-surface svg').outerHTML.toLowerCase().includes(value)
+  }), color)).toEqual({ results: true, figure: true });
+};
+
+// OV-1082: a live setting change redraws the Result of the same records (PD-OI-102). The review
+// still shows its draft on it: the rings are drawn again, the figure follows the room, and the
+// end (Cancel, Apply) gives back the view and the Editor. Apply draws the change (OV-1083).
+test('a live setting change under an open review keeps its rings, its fit and the view it gives back', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const rings = page.locator('button.gbdraw-alignment-ring');
+  const ringCount = await rings.count();
+  expect(ringCount).toBeGreaterThan(0);
+  const fitted = await previewView(page);
+  const recolor = (color) => recolorCds(page, color);
+  await recolor('#e76f51');
+  await expect(dialog).toBeVisible();
+  await expect(rings).toHaveCount(ringCount);
+  expect(await previewView(page)).toEqual(fitted);
+  // The figure is fitted again when the room changes.
+  const room = (await figureFit(page)).room;
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await expect.poll(async () => {
+    const found = await figureFit(page);
+    return found.fitted && found.inFrame && String(found.room) !== String(room);
+  }).toBe(true);
+  // Cancel gives back the view and the Editor from before the review.
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+
+  // Apply after a live change: one History action, and the view from before the review.
+  const { dialog: again } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await recolor('#2a9d8f');
+  await expect(rings).toHaveCount(ringCount);
+  const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const preApply = await recordOrientations(page);
+  await chooseUnresolved(page, again);
+  await again.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, again);
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  await expectCdsColorDrawn(page, '#2a9d8f');
+  expect(await recordOrientations(page)).not.toEqual(preApply);
+  // Undo puts back the orientation from before Apply, and the live color stays.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => recordOrientations(page)).toEqual(preApply);
+  await expectCdsColorDrawn(page, '#2a9d8f');
+  expect(pageErrors).toEqual([]);
+});
+
+// The font sizes of the Legend the figure draws.
+const legendFontSizes = (page) => page.evaluate(() => [...new Set([...document.querySelectorAll(
+  '.gbdraw-preview-surface svg g[data-legend-key] text'
+)].map((text) => String(parseFloat(getComputedStyle(text).fontSize))))]);
+// A live setting row the automatic rerender draws: type the Legend font size and leave the field.
+const commitLegendFont = async (page, size) => {
+  const input = page.locator('input[aria-label="Legend font size"]');
+  for (const details of await input.locator('xpath=ancestor::details').all()) {
+    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+  }
+  await input.fill(String(size));
+  await input.press('Tab');
+  await expect.poll(() => legendFontSizes(page), { timeout: 120000 }).toEqual([String(size)]);
+  await roomSettled(page);
+};
+
+// OV-1120: the automatic rerender draws a live setting (here the Legend font size) as a new
+// Result with a new feature catalog of the same features (PD-OI-102). The review keeps its
+// draft, as after a live color, and Apply commits onto the Session that names the new value.
+test('a live setting drawn by the automatic rerender under an open review keeps its rings and the view it gives back', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const rings = page.locator('button.gbdraw-alignment-ring');
+  const ringCount = await rings.count();
+  expect(ringCount).toBeGreaterThan(0);
+  const fontBefore = await legendFontSizes(page);
+  await page.evaluate(async () => {
+    window.__OV1120Catalog = (await import('./js/state.js')).state.featureCatalog.value;
+  });
+  await commitLegendFont(page, 21);
+  expect(await page.evaluate(async () => (
+    (await import('./js/state.js')).state.featureCatalog.value !== window.__OV1120Catalog
+  )), 'the rerender installed a new feature catalog').toBe(true);
+  await expect(dialog).toBeVisible();
+  await expect(rings).toHaveCount(ringCount);
+  // Its Undo is a live change too (D-44: B), and so is the Redo.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => legendFontSizes(page), { timeout: 120000 }).toEqual(fontBefore);
+  await expect(rings).toHaveCount(ringCount);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await expect.poll(() => legendFontSizes(page), { timeout: 120000 }).toEqual(['21']);
+  await roomSettled(page);
+  await expect(rings).toHaveCount(ringCount);
+  // The figure is fitted again when the room changes.
+  const room = (await figureFit(page)).room;
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await expect.poll(async () => {
+    const found = await figureFit(page);
+    return found.fitted && found.inFrame && String(found.room) !== String(room);
+  }).toBe(true);
+  // Cancel gives back the view and the Editor from before the review.
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+
+  // Apply after the change keeps the value the rerender committed.
+  const { dialog: again } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await commitLegendFont(page, 23);
+  await expect(rings).toHaveCount(ringCount);
+  const preApply = await recordOrientations(page);
+  await chooseUnresolved(page, again);
+  await again.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, again);
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await recordOrientations(page)).not.toEqual(preApply);
+  expect(await legendFontSizes(page)).toEqual(['23']);
+  await expect(page.locator('input[aria-label="Legend font size"]')).toHaveValue('23');
+  expect(pageErrors).toEqual([]);
+});
+
+// OV-1083: a live color changed before the review is drawn by Apply too.
+test('Apply of a review draws a live color changed before the review', async ({ page }) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await recolorCds(page, '#264653');
+  const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await chooseUnresolved(page, dialog);
+  await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, dialog);
+  await expectCdsColorDrawn(page, '#264653');
+});
+
+// A Session loaded while the other mode is shown replaces the review's figure: the review gives
+// back neither the view nor the Editor (OV-622). This pins the outcome; the load shows the
+// review's mode again, so it does not tell which mode the replacement test reads.
+test('a Session loaded while the other mode is shown under a review keeps its own view', async ({ page }) => {
+  test.setTimeout(600000);
+  const { dialog } = await openReviewOverOwnView(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
+  const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
+  session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
+  await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  const loaded = await previewView(page);
+  expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  expect(await previewView(page)).toEqual(loaded);
+  expect((await editorDrawer(page)).open).toBe(false);
+});
+
+// OV-622: a mode switch brings no view of its own. After Circular and back, the review still
+// holds the view from before it and gives it back; the figure is not fitted again (the draft no
+// longer shows on it, as before).
+test('a mode switch and back under an open review leaves the view the review gives back', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
+  for (const target of ['circular', 'linear']) {
+    await page.evaluate((next) => window.__GBDRAW_APP__.setDiagramMode(next), target);
+    await expect.poll(shownMode).toBe(target);
+  }
+  await expect(dialog).toBeVisible();
+  await roomSettled(page);
+  const shown = await previewView(page);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(shown);
+  // Circular has no Similarity tab, so the switch left the Editor on its Features tab; the
+  // review gives back the tab it closed (OV-1255).
+  expect((await editorDrawer(page)).tab).toBe('features');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  expect(pageErrors).toEqual([]);
+});
+
+// OV-1089: the held view is the Linear review's. Escape while Circular is shown ends the
+// review there and gives back the Editor (PD-OI-039 rev 4), but not Linear's view from before
+// the review: the Circular figure keeps its own.
+test('a Linear review ended in Circular gives the Linear view back to no other figure (OV-1089)', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
+  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await expect.poll(shownMode).toBe('circular');
+  // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
+  // its panel has no Result area to dock in), and Escape ends it there.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(true);
+  const circular = await previewView(page);
+  expect(circular).not.toEqual(before);
+  await page.locator('body').focus();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(false);
+  await expect(dialog).toHaveCount(0);
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(circular);
+  expect((await editorDrawer(page)).open).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+// OV-1255: Apply's new Result leaves the Similarity groups tab without groups for a while; the
+// review still gives back the tab it closed, as Cancel does.
+test('a successful Apply of a review opened from the Editor reopens the Similarity groups tab', async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  await loadAmbiguousSession(page, testInfo);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  const drawer = page.locator('.right-drawer');
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
+  const reference = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+    .find(({ anchor }) => anchor.recordKey === 'record_b').key);
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  await drawer.getByRole('button', { name: 'Review alignment options…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+  expect(await editorDrawer(page)).toEqual({ open: false, tab: 'orthogroups' });
+  await chooseUnresolved(page, dialog);
+  await applyReview(page, dialog);
+  await expect.poll(() => editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
 });
 
 // The majanivirus og_13 review opens with records that need a choice.
@@ -2719,7 +3241,7 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   await expect(dialog.locator('[data-alignment-section="choose"]'))
     .toHaveText(`Choose a gene${needKeys.length} (${needKeys.length} record${needKeys.length === 1 ? '' : 's'})`);
   await expect(dialog.locator('#similarity-alignment-dialog-description'))
-    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'needs' : 'need'} a choice`);
+    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'record' : 'records'} awaiting a choice`);
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(/Choose a candidate or Skip for \d+ record/);
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
   // No number joins a row to the figure.

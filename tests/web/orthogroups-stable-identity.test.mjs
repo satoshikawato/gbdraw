@@ -27,8 +27,11 @@ await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/f
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 // losat-normalization.js reads the comparison settings from the generated request description.
 await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');
+await copyModule('gbdraw/web/js/utils/i18n.js', 'utils/i18n.js');
 await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.js');
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
+// session-resource-backing.js raises its refusals as typed diagnostics.
+await copyModule('gbdraw/web/js/utils/error-normalization.js', 'utils/error-normalization.js');
 // depth-track-state.js reads a Depth series color by name.
 await copyModule('gbdraw/web/js/utils/color-utils.js', 'utils/color-utils.js');
 await copyModule('gbdraw/web/js/utils/named-colors.js', 'utils/named-colors.js');
@@ -48,12 +51,17 @@ await copyModule(
 );
 // standalone-interactivity.js reads the bulk label table by own key.
 await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
+await copyModule('gbdraw/web/js/utils/vue-raw.js', 'utils/vue-raw.js');
+// It reads location-part numbers with the decimal-number owner.
+await copyModule('gbdraw/web/js/utils/optional-positive-number.js', 'utils/optional-positive-number.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
+// It finds the annotation groups by the drawn-group owner's marks.
+await copyModule('gbdraw/web/js/services/drawn-groups.js', 'services/drawn-groups.js');
 // The member tables name records through the Linear record label owners (OV-369).
 for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache', 'session-resource-backing',
   'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
@@ -62,6 +70,7 @@ for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache'
 // track-slot-display.js reads the generated size-class boundaries.
 await copyModule('gbdraw/web/js/mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
+await copyModule('gbdraw/web/js/utils/i18n.js', 'utils/i18n.js');
 await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),
@@ -215,10 +224,26 @@ const catalogRuntime = new Function(`
     'expandCatalogItem',
     'consistentTextIdentity',
     'nonnegativeIntegerIdentity',
-    'reverseComplementMatchSequence'
+    'reverseComplementMatchSequence',
+    'locationPartBound'
   ].map(embeddedFunctionSource).join('\n')}
-  return { expandCatalogItem };
+  return { expandCatalogItem, catalogNucleotideSequence };
 `)();
+// OV-968: the viewer reads a null or blank part start as missing, not 0.
+{
+  const item = {
+    recordKeys: ['record-a'],
+    sequenceSources: [{ key: 'linear:record:0', origin: 'linear-record', recordIndex: 0, sequence: 'AACCGG' }]
+  };
+  const feature = (start) => ({
+    recordKey: 'record-a', sequenceSourceIndex: 0, strand: '+', location_parts: [{ start, end: 4, strand: '+' }]
+  });
+  const sources = ['AACCGG'];
+  assert.equal(catalogRuntime.catalogNucleotideSequence(item, feature(1), sources), 'ACC');
+  for (const missing of [null, '', '  ']) {
+    assert.equal(catalogRuntime.catalogNucleotideSequence(item, feature(missing), sources), '', JSON.stringify(missing));
+  }
+}
 const embeddedCatalogItem = {
   recordKeys: ['record-a'],
   biologicalFeatures: [{
@@ -245,6 +270,20 @@ const embeddedCatalogItem = {
     query_feature_index: 4
   }]
 };
+// OV-968: the compact catalog path builds a part only from a present start and
+// end; a null or blank start is missing, not 0.
+for (const missing of [null, '', '  ']) {
+  const compact = structuredClone(embeddedCatalogItem);
+  Object.assign(compact.biologicalFeatures[0], { start: missing, end: 4, strand: '+' });
+  const [expanded] = catalogRuntime.expandCatalogItem(compact, 'rich').features;
+  assert.equal(expanded.location_parts, undefined, JSON.stringify(missing));
+}
+{
+  const compact = structuredClone(embeddedCatalogItem);
+  Object.assign(compact.biologicalFeatures[0], { start: 0, end: 4, strand: '+' });
+  assert.deepEqual(catalogRuntime.expandCatalogItem(compact, 'rich').features[0].location_parts,
+    [{ start: 0, end: 4, strand: '+', display: '1..4' }]);
+}
 const expandedCatalogItem = catalogRuntime.expandCatalogItem(embeddedCatalogItem, 'rich');
 assert.equal(expandedCatalogItem.features[0].svg_id, 'rendered-a');
 assert.equal(expandedCatalogItem.features[0].sourceFeatureIndex, 4);
@@ -1391,6 +1430,17 @@ const state = {
 };
 
 const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null });
+// OV-1010: a member's null or blank bound is missing, not 0, so a member
+// without identifiers gets no `1-20(+)` location as its display ID.
+for (const missing of [null, '', '  ']) {
+  const bare = { recordIndex: 0, featureIndex: 99, start: missing, end: 20, strand: '+' };
+  const [enriched] = editor.getEnrichedOrthogroupMembers({ orthogroupId: 'og_bound', members: [bare] });
+  assert.equal(enriched.displayProteinId, '', JSON.stringify(missing));
+}
+assert.equal(
+  editor.getEnrichedOrthogroupMembers({ orthogroupId: 'og_bound', members: [{ recordIndex: 0, featureIndex: 99, start: 0, end: 20, strand: '+' }] })[0].displayProteinId,
+  '1-20(+)'
+);
 const aliasedEditorGroup = {
   orthogroupId: 'og_editor_alias',
   orthogroup_id: 'og_editor_alias',
@@ -1483,6 +1533,14 @@ assert.match(copiedText, /AAAA/);
 assert.match(copiedText, /CCCC/);
 assert.match(copiedText, /GGGG/);
 const copiedNucleotidePayload = copiedText;
+// D-37: installing a Generate's artifact clears the feedback through the
+// editor's port; the pending timer then changes nothing.
+editor.clearCopyFeedback();
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'), 'Copy nt');
+advanceCopyFeedbackTime(2000);
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'), 'Copy nt');
+await editor.copyOrthogroupSequences(group, 'nt');
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'), 'Copied!');
 await editor.copyOrthogroupSequences(group, 'aa');
 assert.equal(
   editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa'),

@@ -182,7 +182,8 @@ def test_selection_reverse_region_order_and_provenance(tmp_path: Path) -> None:
 
     record = resolved.records[0]
     provenance = resolved.provenance[0]
-    assert str(record.seq) == "GGT"
+    # Cropped to source 2..4 (AAC), then reverse-complemented (OV-1279).
+    assert str(record.seq) == "GTT"
     assert provenance.presentation.label == "Shown"
     assert provenance.presentation.subtitle == "Detail"
     assert "gbdraw_record_label" not in record.annotations
@@ -735,7 +736,7 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
     """
     from dataclasses import replace
     import pandas as pd
-    from gbdraw.api.record_planning import project_source_bound_comparisons
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
     from gbdraw.api.request_render import plan_linear_request
     from gbdraw.features.ids import compute_feature_hash
     from gbdraw.linear_comparison import LinearComparison
@@ -768,9 +769,9 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
         for item, reverse in zip(inputs, (query_reverse, subject_reverse), strict=True)))
     after = plan_linear_request(reversed_request)
     assert after.request.options.linear_comparisons[0].matches is evidence
-    projected = project_source_bound_comparisons(
-        after.request.options, after.records, after.provenance
-    ).linear_comparisons[0].matches
+    projected = project_source_bound_results(
+        after.request.options, comparison_record_bindings(after.records, after.provenance, search_frame=False)
+    ).options.linear_comparisons[0].matches
     assert evidence.to_dict("records") == [row]
     for role, prefix, record, reverse in zip(("query", "subject"), ("q", "s"), after.records,
                                             (query_reverse, subject_reverse), strict=True):
@@ -781,10 +782,10 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
             assert projected.iloc[0][key] == (len(record) + 1 - row[key] if reverse else row[key])
     assert projected.iloc[0].bitscore == row["bitscore"]
     assert projected.iloc[0].collinearity_orientation == ("plus" if query_reverse != subject_reverse else "minus")
-    restored = project_source_bound_comparisons(
+    restored = project_source_bound_results(
         replace(options, linear_comparisons=(LinearComparison(0, 1, projected),)),
-        before.records, before.provenance,
-    )
+        comparison_record_bindings(after.records, after.provenance, search_frame=True),
+    ).options
     pd.testing.assert_frame_equal(restored.linear_comparisons[0].matches, evidence)
     # Planning checks the bindings, so a Session writer rejects them (review 2).
     corrupted = evidence.copy(deep=True)
@@ -974,3 +975,151 @@ def test_editing_the_record_swapped_into_a_resolved_request_does_not_change_its_
     expected = _plan_svg(plan)
     _flip_first_cds(mine)
     assert _plan_svg(plan) == expected
+
+
+def _frame_test_record(length: int = 200) -> SeqRecord:
+    from Bio.SeqFeature import CompoundLocation
+
+    record = _record("frame", "ACGT" * (length // 4))
+    record.features = [
+        SeqFeature(FeatureLocation(30, 60, strand=1), type="CDS"),
+        # A joined CDS and one across the origin of a circular record (R1).
+        SeqFeature(CompoundLocation([FeatureLocation(10, 20, strand=-1), FeatureLocation(80, 95, strand=-1)]),
+                   type="CDS"),
+        SeqFeature(CompoundLocation([FeatureLocation(190, 200, strand=1), FeatureLocation(0, 6, strand=1)]),
+                   type="CDS"),
+    ]
+    return record
+
+
+def _member(index: int, span: tuple[int, int, int | None], protein_id: str = "p"):
+    from gbdraw.analysis.protein_colinearity import OrthogroupMember
+
+    return OrthogroupMember(
+        orthogroup_id="og1", protein_id=f"{protein_id}{index}", record_index=0, feature_index=index,
+        record_id="frame", label=f"cds{index}", start=span[0], end=span[1], strand=span[2],
+        feature_svg_id=None, source_protein_id=None,
+    )
+
+
+def _anchor(binding, index: int | None, view: str, start: int, end: int, strand: int | None):
+    from gbdraw.analysis.collinearity import CollinearityAnchor
+
+    return CollinearityAnchor(
+        query_protein_id="q", subject_protein_id="s", query_record_index=0, subject_record_index=1,
+        query_order=1, subject_order=1, query_start=start, query_end=end, subject_start=5, subject_end=10,
+        identity=99.0, evalue=0.0, bitscore=50.0, alignment_length=10, query_feature_svg_id="fq",
+        subject_feature_svg_id="fs", source="protein_hit", query_unit_id="q", subject_unit_id="s",
+        query_unit_kind="cds", subject_unit_kind="cds", query_locus_id=None, subject_locus_id=None,
+        query_display_name="q", subject_display_name="s", query_strand=strand, subject_strand=1,
+        query_view_feature_svg_id=view, query_feature_index=index,
+    )
+
+
+def test_typed_results_move_between_frames_by_their_tags() -> None:
+    # OV-1145: an orthogroup member is tagged by its span, an anchor side by
+    # its view ID; an item in the other frame moves, one in the target frame
+    # stays, and the round trip is exact (a joined and an origin-spanning CDS
+    # included). An untagged side follows its record (Session 39).
+    from gbdraw.analysis.collinearity import CollinearityBlock, CollinearityResult
+    from gbdraw.analysis.protein_colinearity import OrthogroupResult
+    from gbdraw.api.record_planning import (
+        ComparisonRecordBinding,
+        comparison_record_binding,
+        project_source_bound_results,
+    )
+
+    record = _frame_test_record()
+    binding = comparison_record_binding(record, None, False)
+    assert binding.opposite_spans[1] == (200 - 95, 200 - 10, 1)
+    assert binding.current_spans[2] == binding.opposite_spans[2][:2] + (1,) == (0, 200, 1)
+    other = ComparisonRecordBinding({}, {}, {}, 50, {}, {}, False)
+    reversed_binding = ComparisonRecordBinding(
+        binding.source, binding.opposite, binding.current, binding.length,
+        binding.opposite_spans, binding.current_spans, True,
+    )
+    members = [_member(index, binding.opposite_spans[index]) for index in (0, 1, 2)]
+    members.append(_member(3, (1, 2, 1)))
+    groups = OrthogroupResult(orthogroups={"og1": members},
+                              member_by_protein_id={member.protein_id: member for member in members})
+    tagged = _anchor(binding, 0, binding.opposite[0], 170, 141, -1)
+    untagged = _anchor(binding, None, "", 3, 20, None)
+    blocks = (
+        CollinearityBlock("b1", 0, 1, "plus", 1.0, (tagged,)),
+        # Its sides disagree: one anchor moves, the other does not.
+        CollinearityBlock("b2", 0, 1, "plus", 1.0, (tagged, _anchor(binding, 0, binding.current[0], 31, 60, 1))),
+    )
+    collinearity = CollinearityResult(blocks=blocks, unblocked_anchors=(untagged,))
+    options = LinearDiagramOptions(orthogroups=groups, collinearity_blocks=collinearity)
+
+    projection = project_source_bound_results(options, (binding, other))
+    moved = projection.options
+    assert [(member.start, member.end, member.strand) for member in moved.orthogroups.orthogroups["og1"]] == [
+        binding.current_spans[0], binding.current_spans[1], binding.current_spans[2], (1, 2, 1),
+    ]
+    assert moved.orthogroups.member_by_protein_id["p0"] is moved.orthogroups.orthogroups["og1"][0]
+    (block, kept_block) = moved.collinearity_blocks.blocks
+    (anchor,) = block.anchors
+    assert (anchor.query_start, anchor.query_end, anchor.query_strand) == (31, 60, 1)
+    assert anchor.query_view_feature_svg_id == binding.current[0]
+    assert block.orientation == "minus"  # exactly one side moved
+    assert kept_block is blocks[1]
+    assert moved.collinearity_blocks.unblocked_anchors[0] is untagged  # its record is not reversed
+    assert [item.kind for item in projection.unmatched] == ["member", "block"]
+    assert projection.unmatched[0].protein_id == "p3"
+
+    back = project_source_bound_results(moved, (reversed_binding, other)).options
+    assert repr(back.orthogroups) == repr(groups)
+    assert repr(back.collinearity_blocks.blocks[0]) == repr(blocks[0])
+    assert project_source_bound_results(moved, (binding, other)).options is moved
+
+    # An untagged side of a reversed record maps x -> L + 1 - x, and a span of
+    # mixed strands (strand None) stays descending after the map.
+    reversed_untagged = project_source_bound_results(
+        LinearDiagramOptions(collinearity_blocks=CollinearityResult(blocks=(), unblocked_anchors=(untagged,))),
+        (reversed_binding, other),
+    ).options.collinearity_blocks.unblocked_anchors[0]
+    assert (reversed_untagged.query_start, reversed_untagged.query_end, reversed_untagged.query_strand) == (
+        198, 181, None,
+    )
+
+
+@pytest.mark.parametrize("cropped", [False, True])
+def test_web_protein_map_binding_equals_the_planned_search_frame_binding(tmp_path: Path, cropped: bool) -> None:
+    # OV-1145: the Web builds each record's binding from its protein map with
+    # no second plan; for the CDS keys it equals the binding the planner makes
+    # for a reverse-complemented (and cropped) record.
+    import json
+
+    from gbdraw.api.record_planning import comparison_record_bindings
+    from gbdraw.api.request_render import plan_linear_request
+    from tests.test_api_request_render import _load_web_helpers
+
+    record = _frame_test_record()
+    record.features.append(SeqFeature(FeatureLocation(120, 165, strand=-1), type="CDS"))
+    path = tmp_path / "frame.gbk"
+    _write_genbank(path, record)
+    region = "frame:11-180" if cropped else None
+    planned = plan_linear_request(LinearDiagramRequest(records=(RecordInput(
+        GenBankInputSource(path), record_key="frame",
+        region=dataclasses.replace(parse_region_spec(region), reverse_complement=True) if region else None,
+        presentation=RecordPresentation(reverse_complement=not cropped),
+    ),)))
+    (expected,) = comparison_record_bindings(planned.records, planned.provenance, search_frame=True)
+    assert expected.reverse
+
+    helpers = _load_web_helpers()
+    extracted = json.loads(str(helpers["extract_cds_protein_fasta"](
+        str(path), "genbank", None, region, None, "0", 0, "frame",
+    )))
+    (actual,) = helpers["_web_protein_map_bindings"]([{
+        "record_index": 0, "protein_map": extracted["protein_map"],
+        "view_transform": {"length": extracted["record_length"], "reverse": True},
+    }])
+    keys = sorted(actual.current)
+    assert len(keys) == (3 if cropped else 4) and set(keys) <= set(expected.current)
+    for field in ("current", "opposite", "current_spans", "opposite_spans"):
+        assert {key: getattr(actual, field)[key] for key in keys} == {
+            key: getattr(expected, field)[key] for key in keys
+        }, field
+    assert (actual.length, actual.reverse) == (expected.length, expected.reverse)

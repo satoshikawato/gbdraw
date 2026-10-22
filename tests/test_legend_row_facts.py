@@ -33,13 +33,14 @@ from gbdraw.api import (
 )
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.analysis.depth_tracks import sync_depth_track_legend_entries
 from gbdraw.legend.sources import DepthLegendSource, NumericLegendSource, legend_slot_sources
 from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
 from gbdraw.tracks.circular import parse_circular_track_slots
-from gbdraw.tracks.linear import parse_linear_track_slots
+from gbdraw.tracks.linear import default_linear_track_slots, parse_linear_track_slots
 
 _COLOR_COLUMNS = ["feature_type", "qualifier_key", "value", "color", "caption"]
 _VISIBILITY_COLUMNS = ["record_id", "feature_type", "qualifier", "value", "action"]
@@ -345,13 +346,33 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
 
     gc_config = track(palette["gc_content"], palette["gc_content"])
     skew_config = track(palette["skew_high"], palette["skew_low"])
-    # The request's entries (spec strings or slot objects), read as a render reads them.
-    entries = list(_decode_track_slots(case["slots"], mode=case["mode"], schema=CANONICAL_REQUEST_SCHEMA, path="slots"))
+    # The request's Depth series (diagramOptions.depthTracks); a blank label takes Python's own fallback (OV-1198).
+    raw_depth = case.get("depthTracks") or []
+    depth_tracks = tuple(
+        DepthLegendSource(raw.get("label") or "", raw["color"], "none", 0, index)
+        for index, raw in enumerate(raw_depth)
+    ) or None
     table = LegendTable({key: {"fill": fill} for key, fill in case.get("legend", [])})
+    if case["slots"] is None and case["mode"] == "circular":
+        # Circular without explicit slots names a row per Depth series (circular assemble).
+        table = sync_depth_track_legend_entries(table, depth_tracks)
+        assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]
+        assert list(table.shared_keys) == case.get("shared", [])
+        return
+    # The request's entries (spec strings or slot objects), read as a render reads them; Linear
+    # without explicit slots draws its default slots (linear assemble, OV-1198).
+    entries = (
+        list(default_linear_track_slots(
+            show_features=True, show_depth=bool(depth_tracks), depth_track_count=max(1, len(raw_depth)),
+            show_gc=True, show_skew=True, dinucleotide=case["dinucleotide"],
+        ))
+        if case["slots"] is None
+        else list(_decode_track_slots(case["slots"], mode=case["mode"], schema=CANONICAL_REQUEST_SCHEMA, path="slots"))
+    )
     if case["mode"] == "circular":
         table = _sync_legend_table_for_circular_slots(
             table, slots=legend_slot_sources(parse_circular_track_slots(entries)), gc=gc_config, skew=skew_config,
-            depth=None,
+            depth=None, depth_tracks=depth_tracks,
         )
     else:
         defaults = _generated_legend_rows(
@@ -362,7 +383,8 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
         for key, entry in defaults.items():
             table.add_default_track(key, {"fill": entry["fill"]})
         table = _sync_legend_table_for_linear_slots(
-            table, slots=legend_slot_sources(parse_linear_track_slots(entries)), skew=skew_config, depth_tracks=None,
+            table, slots=legend_slot_sources(parse_linear_track_slots(entries)), gc=gc_config, skew=skew_config,
+            depth_tracks=depth_tracks,
         )
     assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]
     assert list(table.shared_keys) == case.get("shared", [])

@@ -9,7 +9,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { answerSessionTitle, evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -383,6 +383,7 @@ test('a loaded GFF3 + FASTA Session folds a card that holds both of its files', 
 
   const pending = page.waitForEvent('download');
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await answerSessionTitle(page, '');
   const download = await pending;
   const saved = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(saved);

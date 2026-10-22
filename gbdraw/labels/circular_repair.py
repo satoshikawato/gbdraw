@@ -42,7 +42,14 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-from ..layout.spatial import Aabb, aabbs_touch, bounding_aabb, touching_aabb_indices, union_aabbs
+from ..layout.spatial import (
+    Aabb,
+    aabbs_touch,
+    bounding_aabb,
+    finite_aabb,
+    touching_aabb_indices,
+    union_aabbs,
+)
 from .circular import (
     FITS,
     HEMISPHERE_AXIS_EPS_PX,
@@ -53,6 +60,7 @@ from .circular import (
     _label_fit_box,
     _leader_start_point,
     _segment_intersects_rect_interior,
+    _segments_through_rect_interior,
     angle_from_middle_unwrapped,
     assign_leader_start_points,
     circular_label_fits,
@@ -195,6 +203,8 @@ class _Repair:
         # The labels of the original defects (set by run) and the yield's current window.
         self.seeds: frozenset[int] = frozenset()
         self.window: frozenset[int] = frozenset()
+        # The engine's row gap of each pair of neighbours (key: moved label, neighbour).
+        self._original_gaps: dict[tuple[int, int], float] = {}
         self._refresh()
         # Pairs that a move within the bounds can bring together.
         tallest = max((float(self.labels[index]["height_px"]) for index in self.external), default=0.0)
@@ -226,6 +236,12 @@ class _Repair:
         leader_box = bounding_aabb(shape.leader)
         reach = union_aabbs((box, leader_box)) if box is not None and leader_box is not None else None
         return _Geometry(shape, box, leader_box, reach)
+
+    def _fit_box(self, label: CircularLabel) -> Aabb | None:
+        """The label's fit box (`_label_fit_box`) as a box; None for a non-finite bound."""
+
+        (min_x, min_y), _, (max_x, max_y), _ = _label_fit_box(label, self.total_length)
+        return finite_aabb(min_x, min_y, max_x, max_y)
 
     def _text_rect(self, label: CircularLabel) -> tuple[tuple[float, float, float, float], Aabb]:
         rect = _label_bbox_rect(label, self.total_length, 0.0)
@@ -308,9 +324,7 @@ class _Repair:
                     rect, rect_box = rects.get(text_of, self.text_rects[text_of])
                     if not leader or not aabbs_touch(leader_geometry.leader_box, rect_box):
                         continue
-                    if any(
-                        _segment_intersects_rect_interior(start, end, rect) for start, end in zip(leader, leader[1:])
-                    ):
+                    if _segments_through_rect_interior(zip(leader, leader[1:]), rect):
                         found.add((leader_of, text_of))
         return frozenset(found)
 
@@ -464,11 +478,26 @@ class _Repair:
             following = indices[(at + step * offset) % len(indices)]
             if following in moved:
                 break
-            previous_box = bounding_aabb(_label_fit_box(moved[previous], self.total_length))
+            previous_box = self._fit_box(moved[previous])
+            # The following label turns on its circle as `_arc` turns it; only its fit box is tested,
+            # on one copy (no label copy per test).
+            turned = self.labels[following].copy()
+            x, y = float(turned["start_x"]), float(turned["start_y"])
+            radius, angle = math.hypot(x, y), _angle(x, y)
 
-            def hits(turn: float, following: int = following, previous_box: Aabb | None = previous_box) -> bool:
-                label = self._arc([following], [turn])[following] if turn else self.labels[following]
-                return aabbs_touch(bounding_aabb(_label_fit_box(label, self.total_length)), previous_box)
+            def hits(
+                turn: float,
+                following: int = following,
+                previous_box: Aabb | None = previous_box,
+                turned: CircularLabel = turned,
+                radius: float = radius,
+                angle: float = angle,
+            ) -> bool:
+                if not turn:
+                    return aabbs_touch(self.geometry[following].box, previous_box)
+                radians = math.radians(angle + turn)
+                turned["start_x"], turned["start_y"] = radius * math.cos(radians), radius * math.sin(radians)
+                return aabbs_touch(self._fit_box(turned), previous_box)
 
             if not hits(0.0):
                 break
@@ -640,8 +669,8 @@ class _Repair:
         return cost
 
     def _row_gap(self, first: CircularLabel, second: CircularLabel) -> float:
-        a = bounding_aabb(_label_fit_box(first, self.total_length))
-        b = bounding_aabb(_label_fit_box(second, self.total_length))
+        a = self._fit_box(first)
+        b = self._fit_box(second)
         if a is None or b is None:
             return math.inf
         return max(b.min_y - a.max_y, a.min_y - b.max_y, b.min_x - a.max_x, a.min_x - b.max_x, 0.0)
@@ -655,7 +684,9 @@ class _Repair:
             for other in (indices[(at - 1) % len(indices)], indices[(at + 1) % len(indices)]):
                 if other == index or (other in moved and other < index):
                     continue
-                today = self._row_gap(self.original[index], self.original[other])
+                today = self._original_gaps.get((index, other))
+                if today is None:
+                    today = self._original_gaps[index, other] = self._row_gap(self.original[index], self.original[other])
                 if today > ROW_GAP_CAP_PX:
                     continue
                 gap = self._row_gap(moved[index], moved.get(other, self.labels[other]))

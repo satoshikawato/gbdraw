@@ -23,6 +23,7 @@ from gbdraw import linear as linear_cli
 from gbdraw.cli_utils import common as cli_common
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as export_module
+from gbdraw.render import output_paths as output_paths_module
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
@@ -32,7 +33,10 @@ from gbdraw.render.formats import (
 )
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
+    _feature_coordinates,
     _feature_payloads,
+    _normalize_location_parts,
+    _normalize_orthogroup_member,
     enrich_svg,
 )
 from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
@@ -1806,26 +1810,41 @@ def test_save_figure_to_raises_when_cairosvg_is_unavailable(
             output_prefix="strict",
         )
 
-    assert (tmp_path / "strict.svg").exists()
-    assert not (tmp_path / "strict.png").exists()
+    assert list(tmp_path.iterdir()) == []
 
 
-def test_save_figure_to_reports_partial_conversion_failure(
+class _PdfFailsCairoSvg:
+    @staticmethod
+    def svg2png(*, bytestring, write_to):
+        write_to.write(b"new png")
+
+    @staticmethod
+    def svg2pdf(*, bytestring, write_to):
+        write_to.write(b"%PDF-partial")
+        raise RuntimeError("converter failed")
+
+
+def _directory_bytes(directory: Path) -> dict[str, bytes]:
+    return {path.name: path.read_bytes() for path in directory.iterdir()}
+
+
+@pytest.mark.parametrize("overwrite", (False, True))
+def test_save_figure_to_conversion_failure_changes_no_output(
+    overwrite: bool,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    # OV-1152: every format is generated before any output is committed, so a
+    # failed conversion keeps the old outputs and leaves no new or staged file.
     drawing = _drawing(tmp_path / "out.svg")
-
-    class PartialCairoSvg:
-        @staticmethod
-        def svg2png(*, bytestring, write_to):
-            write_to.write(bytestring)
-
-        @staticmethod
-        def svg2pdf(*, bytestring, write_to):
-            raise RuntimeError("converter failed")
-
-    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: PartialCairoSvg)
+    if overwrite:
+        (tmp_path / "partial.svg").write_text("old svg", encoding="utf-8")
+        (tmp_path / "partial.png").write_bytes(b"old png")
+        (tmp_path / "partial.pdf").write_bytes(b"old pdf")
+    else:
+        (tmp_path / "unrelated.txt").write_text("keep", encoding="utf-8")
+    before = _directory_bytes(tmp_path)
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: _PdfFailsCairoSvg)
 
     with pytest.raises(ExportError, match="Failed to generate PDF"):
         api_render.save_figure_to(
@@ -1833,11 +1852,42 @@ def test_save_figure_to_reports_partial_conversion_failure(
             ["png", "pdf"],
             output_dir=str(tmp_path),
             output_prefix="partial",
+            overwrite=overwrite,
         )
 
-    assert (tmp_path / "partial.svg").exists()
-    assert (tmp_path / "partial.png").exists()
-    assert not (tmp_path / "partial.pdf").exists()
+    assert _directory_bytes(tmp_path) == before
+
+
+@pytest.mark.parametrize("overwrite", (False, True))
+def test_save_figure_to_reports_outputs_committed_before_a_commit_failure(
+    overwrite: bool,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "out.svg")
+    real_commit = output_paths_module.commit_staged_output_file
+
+    def fail_on_png(staged_path, output_path, *, overwrite):
+        if Path(output_path).suffix == ".png":
+            raise OSError("disk full")
+        real_commit(staged_path, output_path, overwrite=overwrite)
+
+    monkeypatch.setattr(output_paths_module, "commit_staged_output_file", fail_on_png)
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: _PdfFailsCairoSvg)
+
+    with pytest.raises(ExportError) as raised:
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="commit",
+            overwrite=overwrite,
+        )
+
+    message = str(raised.value)
+    assert f"Could not write output file {tmp_path / 'commit.png'}" in message
+    assert f"Already written: {tmp_path / 'commit.svg'}." in message
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["commit.svg"]
 
 
 def test_render_to_bytes_wraps_converter_failure(
@@ -1868,3 +1918,45 @@ def test_cli_help_lists_interactive_svg(capsys) -> None:
 
     assert "interactive_svg" in circular_help
     assert "interactive_svg" in linear_help
+
+
+_SHARED_LOCATION_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "location-parts-vectors.json").read_text(encoding="utf-8")
+)
+_LOCATION_PART_VECTORS = _SHARED_LOCATION_VECTORS["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", _LOCATION_PART_VECTORS, ids=[case["name"] for case in _LOCATION_PART_VECTORS]
+)
+def test_location_parts_normalize_to_the_vectors_shared_with_the_web_export_writer(
+    case: dict[str, object],
+) -> None:
+    # tests/web/standalone-location-parts.test.mjs checks the same vectors against
+    # normalizeLocationParts.
+    assert _normalize_location_parts(json.loads(json.dumps(case["input"]))) == case["expected"]
+
+
+_FEATURE_COORDINATE_VECTORS = _SHARED_LOCATION_VECTORS["featureCoordinateCases"]
+
+
+@pytest.mark.parametrize(
+    "case", _FEATURE_COORDINATE_VECTORS, ids=[case["name"] for case in _FEATURE_COORDINATE_VECTORS]
+)
+def test_feature_start_and_end_read_to_the_vectors_shared_with_the_web_export_writer(
+    case: dict[str, object],
+) -> None:
+    # OV-1011: the Web writer read a null start as 0. tests/web/standalone-location-parts.test.mjs
+    # checks the same vectors against featureCoordinates.
+    assert _feature_coordinates(json.loads(json.dumps(case["input"]))) == case["expected"]
+
+
+@pytest.mark.parametrize(
+    "case", _FEATURE_COORDINATE_VECTORS, ids=[case["name"] for case in _FEATURE_COORDINATE_VECTORS]
+)
+def test_orthogroup_member_start_and_end_read_like_a_feature(case: dict[str, object]) -> None:
+    # OV-1009: the Web writer read a member's null start as 0 (`Number(null)`)
+    # and the Python writer kept fractions; both now read a member like a feature.
+    member = _normalize_orthogroup_member(json.loads(json.dumps(case["input"])))
+    assert member is not None
+    assert {"start": member.get("start"), "end": member.get("end")} == case["expected"]

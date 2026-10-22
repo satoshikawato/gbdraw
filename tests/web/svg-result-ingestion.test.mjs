@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
@@ -7,7 +8,8 @@ import { compileDirectEditorMutationPlan, editorPaintDomains, LIVE_EDIT_DOMAINS 
 import {
   requireUniqueEditableLabelBindings
 } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
-import { normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
+import { normalizeGenerationResponse, selectHeldRenderState } from '../../gbdraw/web/js/services/diagram-generation.js';
+import { SEGMENTS } from '../../gbdraw/web/js/services/current-worker-result-source.js';
 import {
   admitFeatureCatalog,
   biologicalFeatureKey
@@ -226,7 +228,8 @@ const currentFixture = (content = '<svg><path id="f0001"/></svg>') => {
   const featureCatalog = catalog();
   const response = normalizeGenerationResponse({
     results: [{ name: 'diagram.svg', content }],
-    metadata: { featureCatalog }
+    metadata: {},
+    featureCatalog
   });
   const admission = admitFeatureCatalog(featureCatalog, response.results, {
     adopt: true,
@@ -306,6 +309,179 @@ test('current-worker EMPTY admission sanitizes once and performs zero applicatio
   const persistedRoundTrip = JSON.parse(JSON.stringify(committed));
   assert.equal(isCommittedSvgResult(persistedRoundTrip), false);
   assert.equal(getCommittedSvgResultMetadata(persistedRoundTrip), null);
+});
+
+// Step 3b S: a Generate Result arrives as document pieces; the page sanitizes
+// each children text once per revision and keeps it on the Result it commits.
+const encoder = new TextEncoder();
+const revisionOf = (text) => createHash('sha256').update(encoder.encode(text)).digest('hex');
+const DOCUMENT_HEAD = '<svg xmlns="http://www.w3.org/2000/svg" width="10">';
+const documentReply = (children, { held = new Set(), starts = [] } = {}) => {
+  const chunks = [];
+  let offset = 0;
+  const pieces = [{ kind: 'raw', text: '<defs><clipPath id="c"/></defs>' }, ...children.map((text, index) => {
+    const bytes = encoder.encode(text);
+    const piece = {
+      kind: 'content', start: starts[index] ?? `<g id="g${index}">`, revision: revisionOf(text), bytes: bytes.byteLength
+    };
+    if (held.has(piece.revision)) return piece;
+    chunks.push(bytes);
+    const sent = { ...piece, offset, length: bytes.byteLength };
+    offset += bytes.byteLength;
+    return sent;
+  })];
+  const segments = new Uint8Array(offset);
+  chunks.reduce((at, bytes) => { segments.set(bytes, at); return at + bytes.byteLength; }, 0);
+  return { name: 'diagram.svg', document: { head: DOCUMENT_HEAD, tail: '</svg>', pieces }, ...(chunks.length ? { segments } : {}) };
+};
+const joinedDocument = (children, starts = []) => `${DOCUMENT_HEAD}<defs><clipPath id="c"/></defs>${
+  children.map((text, index) => `${starts[index] ?? `<g id="g${index}">`}${text}</g>`).join('')}</svg>`;
+const admitDocument = (reply, held, fakeSanitizer, mutationPlan = createEmptySvgMutationPlan(1)) => {
+  const featureCatalog = catalog();
+  const response = normalizeGenerationResponse({ results: [reply], metadata: {}, featureCatalog }, held);
+  const catalogAdmission = admitFeatureCatalog(featureCatalog, response.results, { adopt: true, mode: 'linear' });
+  return captureMetrics(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission, mutationPlan, sanitizer: fakeSanitizer, parser: FakeDomParser, selectedFeatureTypes: null
+  }));
+};
+const COLD_CHILDREN = ['<path id="f0001" d="M0,0"/><script>bad()</script>', '<text>title µ</text>'];
+
+test('current-worker EMPTY admission of a document reply sanitizes each new piece once and performs zero application SVG work', () => {
+  FakeDomParser.calls = 0;
+  const calls = { calls: 0 };
+  const { value: results, metrics } = admitDocument(documentReply(COLD_CHILDREN), undefined, sanitizer(calls));
+  const committed = results[0];
+
+  // Once to learn the wrapper's sanitized prefix, then the head, the raw
+  // piece, two start tags and two children texts: each piece once.
+  assert.equal(calls.calls, 7);
+  assert.equal(FakeDomParser.calls, 0);
+  // The joined pieces are what one sanitizer call on the whole document gives.
+  assert.equal(committed.content, sanitizer({ calls: 0 }).sanitize(joinedDocument(COLD_CHILDREN)));
+  assert.equal(committed.content.includes('<script>'), false);
+  assert.equal(isCommittedSvgResult(committed), true);
+  assert.equal(metricTotal(metrics, 'svgSanitizationCount'), 1);
+  assert.equal(metricTotal(metrics, 'svgSanitizedPieceCount'), 2);
+  assert.equal(metricTotal(metrics, 'svgMemoHitCount'), 0);
+  for (const name of [
+    'applicationSvgParseCount',
+    'svgMutationIndexBuildCount',
+    'featureDomFullScanCount',
+    'legendDomFullScanCount',
+    'svgIdentityScanCount',
+    'svgSerializationCount',
+    'currentLegacyNormalizationCount'
+  ]) assert.equal(metricTotal(metrics, name), 0, name);
+
+  // The committed Result keeps today's members plus SEGMENTS: no decoded
+  // document, no raw children; each segment holds sanitized text only.
+  assert.deepEqual(Object.keys(committed).sort(), ['content', 'name']);
+  assert.deepEqual(Object.getOwnPropertySymbols(committed).filter((key) => key === SEGMENTS), [SEGMENTS]);
+  const segments = committed[SEGMENTS];
+  assert.deepEqual([...segments.keys()], COLD_CHILDREN.map(revisionOf));
+  for (const segment of segments.values()) {
+    assert.deepEqual(Object.keys(segment).sort(), ['bytes', 'revision', 'sanitized']);
+    assert.equal(Object.isFrozen(segment), true);
+  }
+  assert.equal(segments.get(revisionOf(COLD_CHILDREN[0])).sanitized, '<path id="f0001" d="M0,0"/>');
+  assert.equal(segments.get(revisionOf(COLD_CHILDREN[1])).bytes, encoder.encode(COLD_CHILDREN[1]).byteLength);
+  // Session save and History copy the members, never the symbol key.
+  assert.deepEqual(JSON.parse(JSON.stringify(committed)), { name: 'diagram.svg', content: committed.content });
+});
+
+test('a warm Generate sanitizes only the children texts the page does not hold', () => {
+  const calls = { calls: 0 };
+  const fake = sanitizer(calls);
+  const cold = admitDocument(documentReply(COLD_CHILDREN), undefined, fake).value[0];
+  const held = selectHeldRenderState(null, [cold], null);
+  assert.deepEqual([...held.segments.keys()].sort(), COLD_CHILDREN.map(revisionOf).sort());
+
+  // A title edit: the first group's children are the same, the second's change.
+  const retitled = [COLD_CHILDREN[0], '<text>new title</text>'];
+  calls.calls = 0;
+  const { value: [warm], metrics } = admitDocument(
+    documentReply(retitled, { held: new Set(held.segments.keys()) }), held, fake
+  );
+  // Head, raw piece, two start tags, one changed children text.
+  assert.equal(calls.calls, 5);
+  assert.equal(metricTotal(metrics, 'svgSanitizedPieceCount'), 1);
+  assert.equal(metricTotal(metrics, 'svgMemoHitCount'), 1);
+  assert.equal(warm.content, fake.sanitize(joinedDocument(retitled)));
+  // The unchanged segment is the same object in both Results; the old title's is gone.
+  assert.equal(warm[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])), cold[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])));
+  assert.deepEqual([...warm[SEGMENTS].keys()], retitled.map(revisionOf));
+
+  // A start-tag-only edit (a moved group) holds every children text.
+  const moved = ['<g id="g0" transform="translate(5,0)">', '<g id="g1">'];
+  calls.calls = 0;
+  const { value: [shifted], metrics: movedMetrics } = admitDocument(
+    documentReply(retitled, { held: new Set(retitled.map(revisionOf)), starts: moved }),
+    selectHeldRenderState(null, [warm], null),
+    fake
+  );
+  assert.equal(calls.calls, 4);
+  assert.equal(metricTotal(movedMetrics, 'svgSanitizedPieceCount'), 0);
+  assert.equal(metricTotal(movedMetrics, 'svgMemoHitCount'), 2);
+  assert.equal(shifted.content, fake.sanitize(joinedDocument(retitled, moved)));
+});
+
+test('a mutated document Result keeps the segments of what Python wrote', () => {
+  const fake = sanitizer({ calls: 0 });
+  const { value: [committed] } = admitDocument(
+    documentReply(COLD_CHILDREN),
+    undefined,
+    fake,
+    { kind: 'MUTATING', operationsByResult: [{ ...createEmptySvgMutationPlan(1).operationsByResult[0], callerTransforms: [() => true] }] }
+  );
+  assert.equal(committed.content.startsWith('<svg'), true);
+  assert.equal(committed[SEGMENTS].get(revisionOf(COLD_CHILDREN[1])).sanitized, '<text>title µ</text>');
+});
+
+test('a document reply that does not match the held snapshot or its wrapper fails at result admission', () => {
+  const resultInvalid = (error) => error.code === 'RESULT_INVALID' && error.stage === 'result-admission';
+  const fake = sanitizer({ calls: 0 });
+  const cold = admitDocument(documentReply(COLD_CHILDREN), undefined, fake).value[0];
+  const held = selectHeldRenderState(null, [cold], null);
+  const allHeld = new Set(COLD_CHILDREN.map(revisionOf));
+  // A held piece the request's snapshot does not hold, or names with another length.
+  assert.throws(() => admitDocument(documentReply(COLD_CHILDREN, { held: allHeld }), undefined, fake), resultInvalid);
+  const wrongLength = documentReply(COLD_CHILDREN, { held: allHeld });
+  wrongLength.document.pieces[1] = { ...wrongLength.document.pieces[1], bytes: 1 };
+  assert.throws(() => admitDocument(wrongLength, held, fake), resultInvalid);
+  // A sanitizer whose output loses the wrapper's prefix, or a start tag's end tag.
+  const dropsPrefix = { sanitize: (content) => (String(content).includes('title') ? String(content).slice(5) : String(content)) };
+  assert.throws(() => admitDocument(documentReply(COLD_CHILDREN), undefined, dropsPrefix), resultInvalid);
+  const dropsEndTag = { sanitize: (content) => String(content).replace('<g id="g1"></g>', '<g id="g1">') };
+  assert.throws(() => admitDocument(documentReply(COLD_CHILDREN), undefined, dropsEndTag), resultInvalid);
+});
+
+test('the held snapshot reads Results through toRaw and is fixed when the request starts', () => {
+  const fake = sanitizer({ calls: 0 });
+  const committed = admitDocument(documentReply(COLD_CHILDREN), undefined, fake).value[0];
+  // A reactive Result hands out a proxy for its symbol key; toRaw gives the raw Map.
+  const reactiveMap = new Proxy(committed[SEGMENTS], {});
+  const reactive = new Proxy(committed, { get: (target, key) => (key === SEGMENTS ? reactiveMap : target[key]) });
+  const toRaw = globalThis.window.Vue.toRaw;
+  globalThis.window.Vue.toRaw = (value) => (value === reactive ? committed : value);
+  try {
+    const held = selectHeldRenderState(null, [reactive], null);
+    assert.equal(held.segments.get(revisionOf(COLD_CHILDREN[0])), committed[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])));
+    // A Result committed after the snapshot was taken (the race) does not change it.
+    const later = admitDocument(documentReply(['<text>later</text>']), undefined, fake).value[0];
+    assert.equal(held.segments.has(revisionOf('<text>later</text>')), false);
+    assert.equal(later[SEGMENTS].size, 1);
+    const { value: [warm] } = admitDocument(documentReply(COLD_CHILDREN, { held: new Set(held.segments.keys()) }), held, fake);
+    assert.equal(warm.content, committed.content);
+  } finally {
+    globalThis.window.Vue.toRaw = toRaw;
+  }
+  // A Result admitted from its whole text (a Session, a legacy import) holds nothing.
+  const { response, admission } = currentFixture();
+  const [whole] = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission, mutationPlan: createEmptySvgMutationPlan(1), sanitizer: fake, parser: FakeDomParser
+  });
+  assert.equal(Object.getOwnPropertySymbols(whole).includes(SEGMENTS), false);
+  assert.equal(selectHeldRenderState(null, [whole, null, { content: '<svg/>' }], null).segments.size, 0);
 });
 
 test('JSON cannot forge current-worker provenance and malformed envelopes fail closed', () => {
@@ -963,8 +1139,8 @@ const legendRowsFixture = ({ contents, legendRows, withFacts = true, rename = fa
   const names = contents.map((_, index) => (index === 0 ? 'diagram.svg' : 'diagram-2.svg'));
   const response = normalizeGenerationResponse({
     results: contents.map((content, index) => ({ name: names[index], content })),
+    featureCatalog,
     metadata: {
-      featureCatalog,
       ...(withFacts ? {
         legendRows: legendRows.map(({ drawn = [], suppressed = [] }, index) => ({
           resultIndex: index, resultName: names[index], drawn, suppressed
@@ -1268,6 +1444,28 @@ test('Load records Python\'s paint on a Session 44 Result saved without records'
   ['f841fb8a8', 'f970830ef__instance_4_4b227777d4dd1fc6', 'f970830ef__instance_5_ef2d127de37b942b', 'CDS']
     .forEach((name) => assert.equal(python[name], saved[name], `${name} has no edit`));
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
+});
+
+// OV-982: a Legend row whose key is an Object.prototype member name
+// (`constructor`) has no Python color unless the Session saved one; Load
+// records none for its swatch, while a row with a saved color gets it.
+test('Load records no Python color for a Legend row named like an Object member', () => {
+  const content = '<svg><path id="f0001" fill="#aaaaaa"></path><g id="legend"><g id="feature_legend">'
+    + '<g data-legend-key="constructor"><path fill="#ff0000"></path><text>constructor</text></g>'
+    + '<g data-legend-key="CDS"><path fill="#00ff00"></path><text>CDS</text></g></g></g></svg>';
+  const results = [{ name: 'diagram.svg', content }];
+  const admission = admitFeatureCatalog(catalog(), results, { mode: 'linear' });
+  const plan = createSavedResultPlan(results, admission, {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [],
+    legendColorOverrides: { constructor: '#ff0000', CDS: '#00ff00' }, legendStrokeOverrides: {},
+    originalLegendColors: { CDS: '#123456' }, originalLegendOrder: [], rules: [], mode: 'linear', sessionVersion: 44
+  });
+  const svg = parseSvgText(content);
+  (plan.operationsByResult[0].callerTransforms || []).forEach((transform) => transform(svg));
+  const swatchBase = (key) => svg.querySelectorAll('g[data-legend-key]')
+    .find((row) => row.getAttribute('data-legend-key') === key).querySelector('path').getAttribute('data-gbdraw-base-fill');
+  assert.equal(swatchBase('CDS'), '#123456');
+  assert.equal(swatchBase('constructor'), null);
 });
 
 // Python's paint is recorded only for a Session older than 46: a Session 46
@@ -1789,7 +1987,7 @@ test('a Legend row stroke reaches in each Result of a batch the features of Pyth
 test('the Load normalizer records no fill Python is not known to have drawn', () => {
   const featureCatalog = catalog();
   featureCatalog.items[0].features[0].fillColor = '';
-  const response = normalizeGenerationResponse({ results: [{ name: 'diagram.svg', content: '<svg/>' }], metadata: { featureCatalog } });
+  const response = normalizeGenerationResponse({ results: [{ name: 'diagram.svg', content: '<svg/>' }], metadata: {}, featureCatalog });
   const admission = admitFeatureCatalog(featureCatalog, response.results, { mode: 'linear' });
   const svg = buildSvgRoot();
   svg.querySelector('[data-gbdraw-feature-id]').setAttribute('fill', '#112233');
@@ -1970,6 +2168,44 @@ test('a fill addressed by Python\'s key reaches a renamed row; a reconcile witho
   assert.equal(legendSwatch(svg.querySelectorAll('g[data-legend-key]')[0]).getAttribute('fill'), '#123456');
   reconcileMountedResult(svg, legendOperations(), { domains: [...LEGEND_STRUCTURE, 'legendFills'] });
   assert.equal(serializeNode(svg), drawn);
+});
+
+// OV-1385: a Legend row's swatch is the path Python draws in the row, whatever
+// fill it shows now. Python draws a row of color `none` with a swatch of fill
+// `none`, so a live fill of `none` shows what Generate draws, and the next
+// live edits still find the swatch. A row Python draws with a paint server
+// (a gradient bar or a hatch pattern) has no solid swatch, as before.
+test('a Legend swatch of fill none is still the row\'s swatch, and live fills after none reach it (OV-1385)', () => {
+  const svg = legendSvg();
+  const drawn = serializeNode(svg);
+  const cds = () => svg.querySelectorAll('g[data-legend-key]')[0];
+  const domains = ['legendFills', 'legendStrokes'];
+  const fill = (color) => legendOperations({ legendFills: [{ caption: 'CDS', color }] });
+  reconcileMountedResult(svg, fill('none'), { domains });
+  assert.equal(legendSwatch(cds())?.getAttribute('fill'), 'none');
+  reconcileMountedResult(svg, fill('#123456'), { domains });
+  assert.equal(legendSwatch(cds()).getAttribute('fill'), '#123456', 'a live fill after none reaches the swatch');
+  reconcileMountedResult(svg, fill('none'), { domains });
+  reconcileMountedResult(svg, legendOperations({
+    legendStrokes: [{
+      caption: 'CDS', strokeColor: '#e63946', strokeWidth: 2,
+      reach: { listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }
+    }]
+  }), { domains });
+  assert.equal(legendSwatch(cds()).getAttribute('stroke'), '#e63946', 'a live stroke after none reaches the swatch');
+  reconcileMountedResult(svg, legendOperations(), { domains });
+  assert.equal(serializeNode(svg), drawn, 'a reconcile without the edits returns Python\'s row');
+
+  const pythonNone = legendRow('GC content', 7);
+  pythonNone.children[0].setAttribute('fill', 'none');
+  assert.equal(legendSwatch(pythonNone), pythonNone.children[0], 'Python\'s own swatch of fill none');
+  const gradient = new FakeElement('g', { 'data-legend-key': 'Identity' }, [
+    new FakeElement('linearGradient', { id: 'g1' }), new FakeElement('text'), new FakeElement('path', { fill: 'url(#g1)' })
+  ]);
+  const hatch = new FakeElement('g', { 'data-legend-key': 'Region' }, [
+    new FakeElement('path', { fill: 'url(#hatch)' }), new FakeElement('text')
+  ]);
+  assert.deepEqual([legendSwatch(gradient), legendSwatch(hatch)], [null, null], 'a paint-server row has no solid swatch');
 });
 
 test('an editor row is cloned from Python\'s first row and removed by a reconcile without its add', () => {

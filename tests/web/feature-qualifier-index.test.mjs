@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import vm from 'node:vm';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync('gbdraw/web/vendor/vue/vue.global.js', 'utf8'), context);
-const { ref, computed } = context.Vue;
+const { ref, computed } = loadPageVue();
 
 const feature = (type, id) => ({ type, svg_id: id });
 const create = (features) => {

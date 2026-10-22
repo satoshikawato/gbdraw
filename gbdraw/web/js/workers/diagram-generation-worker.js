@@ -1,9 +1,18 @@
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
-import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  readFeatureCatalogRevision,
+  readHeldSegments,
+  readSvgDocumentParts
+} from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
+import {
+  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep
+} from './pyodide-snapshot.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -77,9 +86,10 @@ export const collectGenerationResultTransferList = (payload) => {
     else if (ArrayBuffer.isView(value)) buffers.add(value.buffer);
   };
   (Array.isArray(payload?.results) ? payload.results : []).forEach((result) => {
-    addBuffer(result?.content);
+    addBuffer(result?.segments);
   });
   addBuffer(payload?.metadata);
+  addBuffer(payload?.featureCatalog);
   return Array.from(buffers);
 };
 
@@ -96,15 +106,63 @@ const hexDigest = async (bytes) => {
   return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
 };
 
+const invalidGenerationReply = () => serializeError({
+  code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
+});
+
+/**
+ * Check one Result's document against its `segments` buffer and the segments
+ * the request named, and describe the whole document: its UTF-8 length, and a
+ * manifest that names each children text by revision, held or sent.
+ * @param {{ document?: unknown, segments?: unknown }} result
+ * @param {ReadonlyMap<string, number>} heldBytes The request's held segments: revision -> bytes.
+ * @param {TextEncoder} encoder
+ */
+const describeResultDocument = async (result, heldBytes, encoder) => {
+  const segments = result.segments === undefined ? new Uint8Array(0) : bytesForDigest(result.segments);
+  if (!segments) throw invalidGenerationReply();
+  const parts = readSvgDocumentParts(result.document, segments.byteLength, invalidGenerationReply);
+  let bytes = encoder.encode(parts.head).byteLength + encoder.encode(parts.tail).byteLength;
+  const pieces = [];
+  for (const piece of parts.pieces) {
+    if (piece.kind === 'raw') {
+      bytes += encoder.encode(piece.text).byteLength;
+      pieces.push(piece);
+      continue;
+    }
+    const { start, revision } = piece;
+    if (piece.offset === undefined) {
+      if (heldBytes.get(revision) !== piece.bytes) throw invalidGenerationReply();
+    } else if (await hexDigest(segments.subarray(piece.offset, piece.offset + piece.bytes)) !== revision) {
+      throw invalidGenerationReply();
+    }
+    bytes += encoder.encode(start).byteLength + '</g>'.length + piece.bytes;
+    pieces.push({ kind: 'content', start, revision, bytes: piece.bytes });
+  }
+  return { bytes, manifest: { head: parts.head, tail: parts.tail, pieces } };
+};
+
 /**
  * Build a private identity from the buffers that are already being transferred.
- * SVG and metadata payloads are never re-encoded or concatenated here. Each large
- * buffer is hashed independently and only the compact digest manifest is encoded
- * for the final ordered digest.
+ * SVG children, metadata and feature catalog payloads are never re-encoded or
+ * concatenated here. Each sent children text is hashed and must equal its
+ * revision; a held one is named by the revision the request held, so a
+ * document has one fingerprint and one byte count whether its children were
+ * held or sent. `featureCatalogDigest` is the digest of the catalog bytes sent,
+ * or of the held catalog's bytes when Python reported it unchanged, so equal
+ * artifacts get equal fingerprints either way.
+ * @param {{ results?: unknown, metadata?: unknown }} payload The wrapper's reply.
+ * @param {{ bytes: number, sha256: string } | null} [featureCatalogDigest]
+ * @param {readonly { revision: string, bytes: number }[]} [heldSegments] The segments the request named.
  */
-export const buildGeneratedArtifactTransportIdentity = async (payload) => {
+export const buildGeneratedArtifactTransportIdentity = async (
+  payload,
+  featureCatalogDigest = null,
+  heldSegments = []
+) => {
   const results = Array.isArray(payload?.results) ? payload.results : [];
   const encoder = new TextEncoder();
+  const heldBytes = new Map(heldSegments.map(({ revision, bytes }) => [revision, bytes]));
   const resultManifest = [];
   let resultBytes = 0;
   let resultNameBytes = 0;
@@ -112,18 +170,15 @@ export const buildGeneratedArtifactTransportIdentity = async (payload) => {
   for (let index = 0; index < results.length; index += 1) {
     const result = results[index] || {};
     const nameBytes = encoder.encode(String(result.name || ''));
-    const contentBytes = bytesForDigest(result.content);
-    if (!contentBytes) {
-      throw new Error('Generated SVG content was not encoded for Worker transport.');
-    }
-    resultBytes += contentBytes.byteLength;
+    const document = await describeResultDocument(result, heldBytes, encoder);
+    resultBytes += document.bytes;
     resultNameBytes += nameBytes.byteLength;
     resultManifest.push({
       index,
       nameBytes: nameBytes.byteLength,
       nameSha256: await hexDigest(nameBytes),
-      contentBytes: contentBytes.byteLength,
-      contentSha256: await hexDigest(contentBytes)
+      documentBytes: document.bytes,
+      documentSha256: await hexDigest(encoder.encode(JSON.stringify(document.manifest)))
     });
   }
 
@@ -132,13 +187,17 @@ export const buildGeneratedArtifactTransportIdentity = async (payload) => {
     throw new Error('Generated metadata was not encoded for Worker transport.');
   }
   const manifest = {
-    schema: 1,
+    schema: 3,
     results: resultManifest,
     metadata: {
       bytes: metadataBytes.byteLength,
       sha256: await hexDigest(metadataBytes)
-    }
+    },
+    featureCatalog: featureCatalogDigest
+      ? { bytes: featureCatalogDigest.bytes, sha256: featureCatalogDigest.sha256 }
+      : null
   };
+  const catalogBytes = featureCatalogDigest?.bytes ?? 0;
   const fingerprint = await hexDigest(encoder.encode(JSON.stringify(manifest)));
   return Object.freeze({
     schema: 1,
@@ -146,13 +205,39 @@ export const buildGeneratedArtifactTransportIdentity = async (payload) => {
     fingerprint,
     resultBytes,
     resultNameBytes,
-    metadataBytes: metadataBytes.byteLength,
+    metadataBytes: metadataBytes.byteLength + catalogBytes,
     // Parsed metadata retains strings and object structure in addition to the
     // transferred UTF-8 representation. Two bytes per source byte is a bounded,
     // deliberately conservative owner estimate; Result UTF-16 strings are added
-    // separately by the main-thread handle.
-    retainedBytes: resultBytes + resultNameBytes + metadataBytes.byteLength * 2
+    // separately by the main-thread handle. `resultBytes` counts the whole
+    // admitted document, held or sent. The feature catalog counts as metadata
+    // whether it was sent or kept (D-38 OQ-2).
+    retainedBytes: resultBytes + resultNameBytes + (metadataBytes.byteLength + catalogBytes) * 2
   });
+};
+
+/**
+ * Name the feature catalog of a Generate reply and fix its artifact identity.
+ * A sent catalog is hashed; an "unchanged" reply reuses the digest of the held
+ * catalog (`held`, read from the run message), so nothing is hashed again. The
+ * page checks that "unchanged" names the revision it holds.
+ * @param {{ featureCatalog?: unknown, featureCatalogRevision?: unknown, artifactIdentity?: unknown }} outcome
+ * @param {{ revision: string, sha256: string, bytes: number } | null} held
+ * @param {readonly { revision: string, bytes: number }[]} heldSegments The segments the request named.
+ */
+export const resolveGeneratedFeatureCatalog = async (outcome, held, heldSegments) => {
+  const catalogBytes = bytesForDigest(outcome.featureCatalog);
+  const digest = catalogBytes
+    ? { bytes: catalogBytes.byteLength, sha256: await hexDigest(catalogBytes) }
+    : held
+      ? { bytes: held.bytes, sha256: held.sha256 }
+      : null;
+  const pythonRevision = typeof outcome.featureCatalogRevision === 'string' && outcome.featureCatalogRevision
+    ? outcome.featureCatalogRevision
+    : null;
+  outcome.featureCatalogRevision = pythonRevision && digest ? { revision: pythonRevision, ...digest } : null;
+  outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome, digest, heldSegments);
+  return outcome;
 };
 
 export const serializeError = (error, options = {}) => normalizeUserFacingError(error || {}, options);
@@ -210,19 +295,31 @@ const ensureLocalAsset = async (url, label) => {
   return url;
 };
 
-const readRuntimeCapabilities = (pyodide) => {
+// The booted runtime with its capabilities. A runtime restored from a Pyodide
+// snapshot first starts this Worker's own state, since the snapshot holds the
+// state of the process that made it (OV-1000), and calls numpy and pandas, so
+// a side module the restore linked wrongly fails here and the page boots cold.
+const SNAPSHOT_BOOT_CHECK = `
+_start_web_worker_state()
+import numpy as _numpy, pandas as _pandas
+if int(_numpy.arange(3).sum()) != 3 or _pandas.DataFrame({'a': [1]}).shape != (1, 1):
+    raise RuntimeError('numpy or pandas returned a wrong result after the snapshot restore')
+del _numpy, _pandas
+`;
+const bootedRuntime = (pyodide, boot) => {
   const raw = pyodide.runPython(`
+${boot === 'snapshot' ? SNAPSHOT_BOOT_CHECK : ''}
 import json as _json
 from gbdraw.api import get_web_runtime_capabilities as _get_web_runtime_capabilities
 _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
   `);
-  return JSON.parse(String(raw));
+  return { pyodide, capabilities: JSON.parse(String(raw)), boot };
 };
 
 // The first-use preparation steps, reported as they start: a real step
-// count, not a time estimate.
+// count, not a time estimate. The page translates the names where it shows them.
 const RUNTIME_PREPARATION_STEPS = Object.freeze([
-  'loading Python', 'loading the package installer', 'checking packages', 'installing packages', 'starting gbdraw'
+  msg('loading Python'), msg('loading the package installer'), msg('checking packages'), msg('installing packages'), msg('starting gbdraw')
 ]);
 
 const initializeRuntime = async ({
@@ -230,7 +327,8 @@ const initializeRuntime = async ({
   pyodideIndexUrl,
   pyodideModuleUrl,
   localWheelUrls = [],
-  gbdrawWheelUrl
+  gbdrawWheelUrl,
+  pyodideSnapshotUrl = null
 } = {}) => {
   if (runtime) return runtime;
   if (runtimePromise) return runtimePromise;
@@ -247,30 +345,48 @@ const initializeRuntime = async ({
   });
   runtimePromise = (async () => {
     reportStep(0);
-    const { loadPyodide } = await import(pyodideModuleUrl);
-    const pyodide = await loadPyodide({
+    // A test server may serve a snapshot of the runtime this function builds
+    // (workers/pyodide-snapshot.js). An error in a step of its restore is a
+    // snapshot failure (pyodideSnapshotStep); any other error is an ordinary
+    // init error (OV-1021).
+    const [{ loadPyodide }, snapshot] = await Promise.all([
+      import(pyodideModuleUrl),
+      pyodideSnapshotUrl
+        ? pyodideSnapshotStep(() => fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, gbdrawWheelUrl, localWheelUrls }))
+        : null
+    ]);
+    const load = () => loadPyodide({
       indexURL: pyodideIndexUrl,
-      packageBaseUrl: pyodideIndexUrl
+      packageBaseUrl: pyodideIndexUrl,
+      ...(snapshot && { _loadSnapshot: snapshot.memory, _snapshotDeserializer: snapshot.deserialize })
     });
+    const pyodide = await (snapshot ? pyodideSnapshotStep(load) : load());
+    if (snapshot) {
+      reportStep(4);
+      runtime = await pyodideSnapshotStep(async () => {
+        await snapshot.complete(pyodide);
+        return bootedRuntime(pyodide, 'snapshot');
+      });
+      return runtime;
+    }
     reportStep(1);
-    await pyodide.loadPackage('micropip');
-    const micropip = pyodide.pyimport('micropip');
-
-    reportStep(2);
-    await Promise.all(
-      localWheelUrls.map((url, index) =>
-        ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
-      )
-    );
-    await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
-    reportStep(3);
-    await micropip.install(localWheelUrls);
-    await micropip.install(gbdrawWheelUrl);
+    await installRuntimePackages(pyodide, {
+      localWheels: localWheelUrls,
+      gbdrawWheel: gbdrawWheelUrl,
+      beforeInstall: async () => {
+        reportStep(2);
+        await Promise.all(
+          localWheelUrls.map((url, index) =>
+            ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
+          )
+        );
+        await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+        reportStep(3);
+      }
+    });
     reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
-
-    const capabilities = readRuntimeCapabilities(pyodide);
-    runtime = { pyodide, capabilities };
+    runtime = bootedRuntime(pyodide, 'cold');
     return runtime;
   })();
 
@@ -615,7 +731,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'config',
       'configOverrides',
       'managedPaths',
-      'requireUnmanagedOnly'
+      'source'
     ],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
@@ -626,7 +742,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(payload.config, null),
         jsonArgument(payload.configOverrides, {}),
         jsonArgument(payload.managedPaths, []),
-        Boolean(payload.requireUnmanagedOnly)
+        String(payload.source || '')
       ]
     )
   },
@@ -679,14 +795,16 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     }
   },
   [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS]: {
-    keys: ['identityManifest', 'pairs'],
+    // `derived` (optional) asks for the key of the derived payload the raw results convert to.
+    keys: ['identityManifest', 'pairs', 'derived'],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
       pyodide,
       'build_protein_losat_cache_keys_json',
       [
         jsonArgument(payload.identityManifest, {}),
-        jsonArgument(payload.pairs, [])
+        jsonArgument(payload.pairs, []),
+        jsonArgument(payload.derived, null)
       ]
     )
   },
@@ -807,6 +925,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // A Session up to 47 stored the protein results of a reversed Linear record
+  // in the drawn frame: Python returns their bytes in the search frame by
+  // stored resource ID (OV-1145), from the drawing's request and its staged files.
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: {
+    keys: ['version', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'stored_protein_results_to_search_frame_json', [
+        jsonArgument({ version: payload.version, renderRequest: payload.canonicalRequest }, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],
@@ -915,6 +1047,8 @@ const runGeneration = async ({
   resourceManifest,
   stagedResources,
   fontIdentities = [],
+  heldFeatureCatalogRevision = null,
+  heldSegments: heldSegmentsInput = null,
   requestId,
   testLifecycleEnabled = false
 } = {}) => {
@@ -924,6 +1058,17 @@ const runGeneration = async ({
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' });
   }
+  // The catalog revision the page holds for the shown drawing, with the
+  // digest of its bytes (gbdraw/web/CLAUDE.md, Runtime data flow).
+  const held = readFeatureCatalogRevision(
+    heldFeatureCatalogRevision,
+    () => serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' })
+  );
+  // The children texts the page holds (content revisions); Python omits their text.
+  const heldSegments = readHeldSegments(
+    heldSegmentsInput,
+    () => serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' })
+  );
   const { pyodide } = runtime;
   try {
     fontRegistryFor(pyodide).requireRegistered(fontIdentities);
@@ -996,7 +1141,9 @@ const runGeneration = async ({
       resourcePathsJson,
       workspace,
       testLifecycleEnabled,
-      preparedResourceIdentitiesJson
+      preparedResourceIdentitiesJson,
+      held?.revision ?? null,
+      JSON.stringify(heldSegments.map(({ revision }) => revision))
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
@@ -1022,6 +1169,9 @@ const runGeneration = async ({
     }
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-transport-ready', {
       transport: 'transferable-binary',
+      featureCatalog: result?.featureCatalog != null ? 'sent' : result?.error ? 'none' : 'unchanged',
+      heldFeatureCatalogRevision: Boolean(held),
+      heldSegmentCount: heldSegments.length,
       bytes: collectGenerationResultTransferList(result).reduce(
         (total, buffer) => total + buffer.byteLength,
         0
@@ -1090,7 +1240,7 @@ const runGeneration = async ({
   if (outcome?.error) outcome.error = serializeError(outcome.error, { operation: 'generate' });
   if (!outcome?.error) {
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-start');
-    outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome);
+    await resolveGeneratedFeatureCatalog(outcome, held, heldSegments);
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-end', {
       fingerprint: outcome.artifactIdentity.fingerprint,
       retainedBytes: outcome.artifactIdentity.retainedBytes
@@ -1195,7 +1345,17 @@ const handleWorkerMessage = async (data) => {
   const { id, requestId, type } = data;
   try {
     if (type === 'init') {
-      const initialized = await initializeRuntime(data);
+      let initialized;
+      try {
+        initialized = await initializeRuntime(data);
+      } catch (error) {
+        const snapshotError = pyodideSnapshotFailureDetail(error);
+        if (snapshotError === null) throw error;
+        // A snapshot restore error: the page replaces this Worker with one
+        // that boots cold (services/diagram-generation.js).
+        self.postMessage({ id, type: 'init', ok: false, snapshotError });
+        return;
+      }
       // The replay of the page's fonts into a new Worker, font by font; the
       // reply names each font it lost (OV-686), and a Generate that names one
       // fails (FONT_NOT_LOADED).
@@ -1205,7 +1365,8 @@ const handleWorkerMessage = async (data) => {
         type: 'init',
         ok: true,
         capabilities: initialized.capabilities,
-        lostFonts
+        lostFonts,
+        boot: initialized.boot
       });
       return;
     }

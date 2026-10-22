@@ -26,29 +26,28 @@ pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sessions/HmmtDNA_basic_circular.issue-469.json.gz"
 SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
-# Keep the independently recorded Issue #469 output as a second byte-level
-# oracle: the current renderer adds only explicit logical label bindings.
-LEGACY_OUTPUT_SHA = "fe022818a9b6a08b52a84fd18293ae318a31b140eb0d2c1c84e847dc5cc2e71d"
-PRE_COMPLETE_BINDING_OUTPUT_SHA = (
-    "68cb2b7670d84f1010a2a05c55e97574de1eef633354a6e7e8086cc6db2b781d"
+OUTPUT_SHA = "96efbd45f967ee658d8899afa88ee5af93532b225d68f681fd6d355ef21b35cb"
+# The replay before the feature label style (dev d84352d8a, hash
+# 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
+# the overlayObstacles array of the composition removed. The leader width went
+# from 1.5 to 1.0, which shrinks each obstacle box by half that change per
+# side, so the boxes cannot be peeled and are left out of the comparison.
+PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
+    "c42139da6f913db165da9bfaa5de8f42e694b81ab8d7b8296570f647932c425a"
 )
-PRE_LEGEND_LAYOUT_INPUTS_OUTPUT_SHA = (
-    "c41f5c281e4a913f4820db59bf546077a1fc1b5b8f5260f6deea888b2adb1d84"
-)
-OUTPUT_SHA = "76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0"
 
 
-def _without_legend_layout_inputs(svg: bytes) -> bytes:
-    """Drop the Legend layout inputs that legendReflow carries since K+Z1."""
-    svg = re.sub(
-        rb',&quot;dpi&quot;:\d+,&quot;fontFile&quot;:(?:null|&quot;[^&]*&quot;)'
-        rb',&quot;fontSize&quot;:[^,]+',
-        b"",
+def _without_feature_label_style(svg: bytes) -> bytes:
+    """Peel what the Circular feature label style adds or changes."""
+    svg = re.sub(rb'<use aria-hidden="true"[^>]*xlink:href="#label_text_[0-9a-f]+" />', b"", svg)
+    svg = re.sub(rb' id="label_text_[0-9a-f]+"', b"", svg)
+    svg = re.sub(rb'(<line\b[^>]*?) stroke-width="1\.0"', rb'\1 stroke-width="1.5"', svg)
+    return re.sub(
+        rb'&quot;overlayObstacles&quot;:\[.*?\],&quot;overlayPolicy',
+        b"&quot;overlayPolicy",
         svg,
         count=1,
     )
-    svg = re.sub(rb',&quot;primaryLocalBounds&quot;:\{[^}]*\}', b"", svg, count=1)
-    return re.sub(rb',&quot;wrapWidth&quot;:[^,}]+', b"", svg, count=1)
 
 
 def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
@@ -136,7 +135,7 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
             assert second["committed"] == generated["committed"]
             edit = page.evaluate("""async () => {
                 const a = window.__GBDRAW_APP__;
-                const feature = a.extractedFeatures.find(f => a.canEditFeatureColor(f));
+                const feature = a.extractedFeatures[0];
                 const color = String(a.getFeatureColorValue(feature) || '').toLowerCase()
                     === '#123456' ? '#654321' : '#123456';
                 return { color, applied: await a.setFeatureColorValue(feature, color) };
@@ -195,26 +194,9 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
         output = work / "out.svg"
         assert output.stat().st_size > 0
         assert hashlib.sha256(output.read_bytes()).hexdigest() == OUTPUT_SHA
-        # The older oracles predate the Legend layout inputs in legendReflow.
-        without_legend_layout_inputs = _without_legend_layout_inputs(output.read_bytes())
-        assert hashlib.sha256(without_legend_layout_inputs).hexdigest() == (
-            PRE_LEGEND_LAYOUT_INPUTS_OUTPUT_SHA
+        assert hashlib.sha256(_without_feature_label_style(output.read_bytes())).hexdigest() == (
+            PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA
         )
-        without_complete_bindings = re.sub(
-            rb'(<line\b[^>]*?) data-label-feature-id="[^"]+"',
-            rb"\1",
-            without_legend_layout_inputs,
-        )
-        without_complete_bindings = without_complete_bindings.replace(
-            b' data-gbdraw-label-binding-schema="1"', b""
-        )
-        assert hashlib.sha256(without_complete_bindings).hexdigest() == (
-            PRE_COMPLETE_BINDING_OUTPUT_SHA
-        )
-        without_label_bindings = re.sub(
-            rb' data-label-feature-id="[^"]+"', b"", without_complete_bindings
-        )
-        assert hashlib.sha256(without_label_bindings).hexdigest() == LEGACY_OUTPUT_SHA
         # DOMPurify removes only this non-rendering SVG profile declaration.
         # Retain every geometry, style, label, and composition attribute.
         tree = ET.parse(output)

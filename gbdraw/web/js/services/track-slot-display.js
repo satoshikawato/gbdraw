@@ -1,5 +1,6 @@
 // @ts-check
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { t } from '../utils/i18n.js';
 
 /**
  * @param {unknown} value
@@ -63,20 +64,73 @@ export const sizeClassForRecordLengths = (mode, recordLengths, drawing) => {
 };
 
 /**
+ * The size class every diagram of a Generate takes, by the record lengths of
+ * each diagram.
+ * @param {'circular' | 'linear'} mode
+ * @param {number[][]} diagramRecordLengths
+ * @param {SizeClassDrawing} drawing the drawing of that mode
+ * @returns {'short' | 'long' | null} null when no length is known or the diagrams differ
+ */
+export const sharedSizeClass = (mode, diagramRecordLengths, drawing) => {
+  const sizeClasses = new Set(diagramRecordLengths.map((lengths) => sizeClassForRecordLengths(mode, lengths, drawing)));
+  return sizeClasses.size === 1 ? [...sizeClasses][0] : null;
+};
+
+/**
+ * Which records set the Auto Linear label font size, by label display scope
+ * (linear_label_size_records in gbdraw/auto_sizes.py).
+ * @type {Readonly<Record<string, string>>}
+ */
+const LINEAR_LABEL_SIZE_RECORDS = MODE_PROFILE_DATA.autoSizes.linearLabelSizeRecords;
+
+/**
+ * The lengths of the records that set the Auto Linear label font size.
+ * @param {number[]} recordLengths the drawn records, in drawing order
+ * @param {string} labelScope the label display scope of the drawing (Show Labels)
+ * @returns {number[]}
+ */
+export const linearLabelSizeLengths = (recordLengths, labelScope) => (
+  LINEAR_LABEL_SIZE_RECORDS[labelScope] === 'first' ? recordLengths.slice(0, 1) : recordLengths
+);
+
+/**
  * The note an Auto field shows: a value measured in the last render, or,
- * before one, an estimate marked as such (TK-15).
+ * before one, an estimate marked as such (TK-15). `variesByRecord` says the
+ * measured value differs between records (a Linear features row).
  * @param {string} text
  * @param {string} unit
  * @param {boolean} estimate
+ * @param {boolean} [variesByRecord]
  */
-const autoNote = (text, unit, estimate) => {
+const autoNote = (text, unit, estimate, variesByRecord = false) => {
   if (!text) return '';
-  return estimate ? `≈ ${text} ${unit} (estimate)` : `${text} ${unit} (auto)`;
+  const params = { value: text, unit };
+  if (estimate) return t('≈ {value} {unit} (estimate)', params);
+  return variesByRecord ? t('{value} {unit} (auto; varies by record)', params) : t('{value} {unit} (auto)', params);
 };
 
-/** @param {unknown} value @param {{ estimate?: boolean }} [options] */
-export const formatPxAuto = (value, { estimate = false } = {}) => (
-  autoNote(roundDisplayNumber(value, 1), 'px', estimate)
+/**
+ * The size note of an Overlay annotation row that no Generate has drawn yet:
+ * the rows it follows, by slot id (`follows features → gc_content`), because
+ * its size comes from those rows' resolved bands (OV-1300, LP-D99). Empty for
+ * any other row. Circular Width/Radius and Linear height read it.
+ * @param {{ renderer?: unknown, side?: unknown, params?: unknown } | null | undefined} slot
+ * @returns {string}
+ */
+export const overlayFollowsNote = (slot) => {
+  if (!slot || slot.renderer !== 'annotations' || slot.side !== 'overlay') return '';
+  const params = slot.params && typeof slot.params === 'object'
+    ? /** @type {{ anchor_slot?: unknown, to_slot?: unknown }} */ (slot.params)
+    : {};
+  const anchor = normalizeOptionalText(params.anchor_slot);
+  if (!anchor) return '';
+  const target = normalizeOptionalText(params.to_slot);
+  return target ? t('follows {anchor} → {target}', { anchor, target }) : t('follows {anchor}', { anchor });
+};
+
+/** @param {unknown} value @param {{ estimate?: boolean, variesByRecord?: boolean }} [options] */
+export const formatPxAuto = (value, { estimate = false, variesByRecord = false } = {}) => (
+  autoNote(roundDisplayNumber(value, 1), 'px', estimate, variesByRecord)
 );
 
 /**

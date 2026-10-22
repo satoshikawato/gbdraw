@@ -172,7 +172,7 @@ for (const width of [1440, 390]) {
     const dialogs = [];
     page.on('dialog', async (dialog) => {
       dialogs.push(dialog.message());
-      await dialog.accept(dialog.type() === 'prompt' ? 'S01 annotations' : undefined);
+      await dialog.accept();
     });
     await openApp(page);
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')

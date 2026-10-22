@@ -1,4 +1,6 @@
 // @ts-check
+import { toRaw } from '../utils/vue-raw.js';
+
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match; a declined one is settled but
 // unknown until the next Generate. A result is a fact of one feature and one
@@ -32,17 +34,11 @@
 const resultsByFeature = new WeakMap();
 /** @type {Set<string>} */
 const NOTHING_EVALUATED = new Set();
-/**
- * @template T
- * @param {T} value
- * @returns {T}
- */
-const raw = (value) => globalThis.window?.Vue?.toRaw?.(value) ?? value;
 /** @param {RuleFeature} feature */
-const resultsOf = (feature) => resultsByFeature.get(raw(feature));
+const resultsOf = (feature) => resultsByFeature.get(toRaw(feature));
 /** @param {RuleFeature} feature */
 const resultsFor = (feature) => {
-  const key = raw(feature);
+  const key = toRaw(feature);
   let results = resultsByFeature.get(key);
   if (!results) {
     results = { matches: new Map(), declined: new Set(), evaluated: NOTHING_EVALUATED, visibility: new Map() };
@@ -60,7 +56,7 @@ const resultsFor = (feature) => {
  */
 const memoizedKey = (memo, fieldsOf) => (/** @type {Rule} */ rule) => {
   const fields = fieldsOf(rule);
-  const source = raw(rule);
+  const source = toRaw(rule);
   const known = memo.get(source);
   if (known && known.fields.every((field, index) => field === fields[index])) return known.key;
   const key = JSON.stringify(fields);

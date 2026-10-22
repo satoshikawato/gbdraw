@@ -1002,8 +1002,8 @@
     var sequences = [];
     for (var index = 0; index &lt; parts.length; index += 1) {
       var part = parts[index];
-      var start = Number(part &amp;&amp; part.start);
-      var end = Number(part &amp;&amp; part.end);
+      var start = locationPartBound(part, 'start');
+      var end = locationPartBound(part, 'end');
       if (
         !Number.isInteger(start)
         || !Number.isInteger(end)
@@ -1104,8 +1104,8 @@
       if (note) expanded.note = Array.from(note).slice(0, 50).join('');
     }
     var locationParts = expanded.location_parts || expanded.locationParts;
-    var start = Number(expanded.start);
-    var end = Number(expanded.end);
+    var start = locationPartBound(expanded, 'start');
+    var end = locationPartBound(expanded, 'end');
     if (
       !Array.isArray(locationParts)
       &amp;&amp; Number.isInteger(start)
@@ -3355,7 +3355,7 @@
     });
     var fieldSelect = createXhtmlNode('select', {
       className: 'gfs-select',
-      'aria-label': 'Search field',
+      'aria-label': 'Field to search',
       'data-search-field': 'true'
     });
     var searchFieldOptions = [
@@ -4552,6 +4552,22 @@
     }, 0);
   }
 
+  // Mirrors services/feature-utils.js locationPartBound (locationPartNumber):
+  // the viewer's one reader of a start or end of a location part, a feature, or
+  // a group member. A number or ASCII number text (surrounding ASCII spaces
+  // allowed), truncated toward zero; anything else is NaN, never 0: missing,
+  // null or blank, a boolean, other digits, underscores, hex, any non-ASCII
+  // character, and a truncation beyond the safe integers (OV-968, OV-1010, PT-OD23).
+  function locationPartBound(part, field) {
+    var value = part &amp;&amp; typeof part === 'object' ? part[field] : undefined;
+    var number = typeof value === 'number' ? value
+      : typeof value === 'string'
+        &amp;&amp; /^[\t\n\v\f\r ]*[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[eE][+-]?[0-9]+)?[\t\n\v\f\r ]*$/.test(value)
+        ? Number(value) : NaN;
+    var truncated = Math.trunc(number) || 0;
+    return Number.isFinite(number) &amp;&amp; Number.isSafeInteger(truncated) ? truncated : NaN;
+  }
+
   // Mirrors services/feature-utils.js formatFeatureRange/formatFeatureLocation/formatFeatureLength.
   function featureLocationParts(feature) {
     return feature &amp;&amp; Array.isArray(feature.location_parts) &amp;&amp; feature.location_parts.length
@@ -4563,8 +4579,8 @@
     return featureLocationParts(feature).map(function (part) {
       var display = String(part &amp;&amp; part.display || '').trim();
       if (display) return display;
-      var start = Number(part &amp;&amp; part.start);
-      var end = Number(part &amp;&amp; part.end);
+      var start = locationPartBound(part, 'start');
+      var end = locationPartBound(part, 'end');
       return Number.isFinite(start) &amp;&amp; Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
     }).filter(Boolean).join(', ');
   }
@@ -4582,14 +4598,19 @@
     return text;
   }
 
+  function rawBoundText(value) {
+    return String(value === null || value === undefined ? '' : value).trim();
+  }
+
   function memberLocationText(member) {
     if (!member || typeof member !== 'object') return '';
-    var start = Number(member.start);
-    var end = Number(member.end);
-    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
+    var start = locationPartBound(member, 'start');
+    var end = locationPartBound(member, 'end');
+    var startText = Number.isFinite(start) ? String(start + 1) : rawBoundText(member.start);
+    var endText = Number.isFinite(end) ? String(end) : rawBoundText(member.end);
+    var text = startText &amp;&amp; endText ? startText + '..' + endText : startText || endText;
     var strand = strandText(member.strand);
-    if (strand) text += ' (' + strand + ')';
-    return text === '..' ? '' : text;
+    return text &amp;&amp; strand ? text + ' (' + strand + ')' : text;
   }
 
   function getFeatureSearchDetail(feature) {
@@ -5920,8 +5941,8 @@
     var parts = featureLocationParts(feature);
     var length = 0;
     for (var index = 0; index &lt; parts.length; index += 1) {
-      var start = Number(parts[index] &amp;&amp; parts[index].start);
-      var end = Number(parts[index] &amp;&amp; parts[index].end);
+      var start = locationPartBound(parts[index], 'start');
+      var end = locationPartBound(parts[index], 'end');
       if (!Number.isFinite(start) || !Number.isFinite(end) || end &lt; start) return '';
       length += end - start;
     }
@@ -6670,6 +6691,11 @@
   function closestAnnotation(node) {
     while (node &amp;&amp; node !== svg) {
       if (node.matches &amp;&amp; node.matches(ANNOTATION_SELECTOR)) return node;
+      var frontOf = node.getAttribute ? node.getAttribute('data-gbdraw-region-label-for') : null;
+      if (frontOf) {
+        var owner = svg.ownerDocument.getElementById(frontOf);
+        return owner &amp;&amp; svg.contains(owner) &amp;&amp; owner.matches(ANNOTATION_SELECTOR) ? owner : null;
+      }
       node = node.parentNode;
     }
     return null;

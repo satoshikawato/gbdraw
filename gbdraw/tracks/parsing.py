@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
+from types import MappingProxyType
 from numbers import Integral
 from typing import TYPE_CHECKING, Any, Collection, Literal, Mapping, Protocol, Sequence
 
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.mode_profiles import validate_dinucleotide
 
@@ -75,10 +76,11 @@ def parse_nonnegative_integer(raw: object, *, field_name: str) -> int:
         raise ValueError(f"{field_name} must be a nonnegative integer")
     if isinstance(raw, Integral):
         value = int(raw)
-    elif isinstance(raw, str) and re.fullmatch(r"[+-]?\d+", raw.strip()):
-        value = int(raw.strip())
     else:
-        raise ValueError(f"{field_name} must be a nonnegative integer")
+        parsed = parse_ascii_integer(raw.strip()) if isinstance(raw, str) else None
+        if parsed is None:
+            raise ValueError(f"{field_name} must be a nonnegative integer")
+        value = parsed
     if value < 0:
         raise ValueError(f"{field_name} must be >= 0")
     return value
@@ -145,6 +147,52 @@ def validate_overlay_annotation_anchors(
                 )
 
 
+# The params keys each numeric or spacer renderer reads (parser aliases
+# included), the same in both modes; each mode adds its own renderers
+# (`_*_SLOT_PARAM_KEYS` in tracks/circular.py and tracks/linear.py). Annotation
+# slots check their own keys (`annotation_track_params_from_mapping`).
+LEGEND_LABEL_PARAM_KEYS = ("legend_label", "label")
+_DINUCLEOTIDE_PARAM_KEYS = frozenset({"nt", "dinucleotide"})
+SHARED_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
+    "dinucleotide_content": _DINUCLEOTIDE_PARAM_KEYS | set(LEGEND_LABEL_PARAM_KEYS),
+    "dinucleotide_skew": _DINUCLEOTIDE_PARAM_KEYS | set(LEGEND_LABEL_PARAM_KEYS) | {
+        "positive_color", "negative_color", "high_color", "low_color"
+    },
+    "depth": frozenset({"track_index", *LEGEND_LABEL_PARAM_KEYS}),
+    "spacer": frozenset(),
+})
+# Keys every non-annotation slot takes and ignores where its renderer does not
+# read them (Owner LP-D70): a legend label left on a row whose renderer changed
+# in a released Web, and a comparison ring's label, color and fileName.
+CARRIED_SLOT_PARAM_KEYS = frozenset({*LEGEND_LABEL_PARAM_KEYS, "color", "fileName"})
+
+
+def reject_unread_slot_params(
+    params: Mapping[str, object],
+    *,
+    mode: Literal["circular", "linear"],
+    slot_id: str,
+    renderer: str,
+    accepted: Mapping[str, frozenset[str]],
+) -> None:
+    """Raise for a params key the slot's renderer neither reads nor carries (OV-477, OV-1186)."""
+
+    read = accepted[renderer]
+    unknown = sorted(str(key) for key in params if str(key) not in read and str(key) not in CARRIED_SLOT_PARAM_KEYS)
+    if not unknown:
+        return
+    references = [name for name, _role in _OVERLAY_SLOT_REFERENCES if name in unknown]
+    if references:
+        raise ValueError(
+            f"{mode} track slot '{slot_id}' ({renderer}) cannot use {', '.join(sorted(references))}: "
+            "only annotation slots take anchor_slot and to_slot"
+        )
+    raise ValueError(
+        f"{mode} track slot '{slot_id}' ({renderer}) has unknown parameter(s): {', '.join(unknown)}; "
+        f"it takes {', '.join(sorted(read)) or 'none'}"
+    )
+
+
 def split_kv_list(raw: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for part in raw.split(","):
@@ -198,6 +246,15 @@ def _slot_param_text(slot: SlotWithParams, *names: str) -> str | None:
     return None
 
 
+def slot_legend_label(slot: SlotWithParams, fallback: str) -> str:
+    """The legend row name a slot sets (``legend_label``, else ``label``), or ``fallback``."""
+
+    params = slot.params
+    raw_label = params.get(LEGEND_LABEL_PARAM_KEYS[0], params.get(LEGEND_LABEL_PARAM_KEYS[1]))
+    label = str(raw_label).strip() if raw_label is not None else ""
+    return label or fallback
+
+
 def slot_skew_colors(slot: SlotWithParams) -> tuple[str | None, str | None]:
     """The high and low fill colors a skew slot sets in its params, as hex, or ``None``."""
 
@@ -237,12 +294,17 @@ def strip_inline_comment(raw: str) -> str:
 
 
 __all__ = [
+    "CARRIED_SLOT_PARAM_KEYS",
     "CircularTrackSlotParseError",
+    "LEGEND_LABEL_PARAM_KEYS",
+    "SHARED_SLOT_PARAM_KEYS",
     "SlotView",
     "SlotWithParams",
     "normalize_dinucleotide_params",
     "parse_bool",
     "parse_nonnegative_integer",
+    "reject_unread_slot_params",
+    "slot_legend_label",
     "slot_skew_colors",
     "parse_track_slot_text",
     "slot_dinucleotide",

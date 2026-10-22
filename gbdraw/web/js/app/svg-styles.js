@@ -9,10 +9,11 @@ import {
   resolvePairwiseLegendGradientColorKeys
 } from '../utils/color-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
-import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
-import { skewTrackColor } from '../services/track-legend-rows.js';
+import {
+  DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups
+} from '../services/drawn-groups.js';
+import { drawnTrackHidden, skewTrackColor } from '../services/track-legend-rows.js';
 
-export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
 /** @param {unknown} value */
 const normalizeComparableColor = (value) => String(value || '').trim().toLowerCase();
@@ -129,11 +130,7 @@ export const createSvgStyles = ({
     const colors = appliedFeatureColors(state);
     let updatedCount = 0;
 
-    const gcContentGroups = getGroupsByBaseIds(
-      svg,
-      ['gc_content'],
-      ['dinucleotide_content']
-    );
+    const gcContentGroups = findTrackGroups(svg, DINUCLEOTIDE_CONTENT_GROUPS);
     if (gcContentGroups.length > 0 && colors.gc_content) {
       gcContentGroups.forEach((gcContentGroup) => {
         const gcPaths = gcContentGroup.querySelectorAll('path');
@@ -143,11 +140,7 @@ export const createSvgStyles = ({
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(
-      svg,
-      ['skew', 'gc_skew'],
-      ['dinucleotide_skew']
-    );
+    const skewGroups = findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS);
     if (skewGroups.length > 0) {
       const tracks = readDrawnTracks();
       skewGroups.forEach((/** @type {Element} */ skewGroup) => {
@@ -264,13 +257,9 @@ export const createSvgStyles = ({
 
     let updated = false;
 
-    const gcContentGroups = getGroupsByBaseIds(
-      svg,
-      ['gc_content'],
-      ['dinucleotide_content']
-    );
+    const gcContentGroups = findTrackGroups(svg, DINUCLEOTIDE_CONTENT_GROUPS);
     if (gcContentGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? drawing.form.suppress_gc : !drawing.form.show_gc;
+      const shouldHide = drawnTrackHidden('content', mode.value, drawing);
       gcContentGroups.forEach((gcContentGroup) => {
         const currentDisplay = gcContentGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -283,13 +272,9 @@ export const createSvgStyles = ({
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(
-      svg,
-      ['skew', 'gc_skew'],
-      ['dinucleotide_skew']
-    );
+    const skewGroups = findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS);
     if (skewGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? drawing.form.suppress_skew : !drawing.form.show_skew;
+      const shouldHide = drawnTrackHidden('skew', mode.value, drawing);
       skewGroups.forEach((skewGroup) => {
         const currentDisplay = skewGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -302,9 +287,9 @@ export const createSvgStyles = ({
       });
     }
 
-    const depthGroups = getGroupsByBaseIds(svg, ['depth'], ['depth']);
+    const depthGroups = findTrackGroups(svg, DEPTH_GROUPS);
     if (depthGroups.length > 0) {
-      const shouldHide = !drawing.form.show_depth;
+      const shouldHide = drawnTrackHidden('depth', mode.value, drawing);
       depthGroups.forEach((depthGroup) => {
         const currentDisplay = depthGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -349,10 +334,15 @@ export const createSvgStyles = ({
     { deep: true }
   );
 
-  // Each drawing's track toggles; a mode switch changes neither drawing, so it
-  // applies nothing (R10).
-  /** @type {DrawingState[]} */ ([state.drawings.circular, state.drawings.linear]).forEach((drawing) => watch(
-    () => [drawing.form.suppress_gc, drawing.form.suppress_skew, drawing.form.show_gc, drawing.form.show_skew, drawing.form.show_depth],
+  // Each drawing's answers of the hide rule (`drawnTrackHidden`): a track
+  // checkbox, a slot switched on or off or removed, or the custom stack switch
+  // changes them. The watcher only shows the answer on the Result; the writers
+  // retire the Legend rows (R10). A mode switch changes neither drawing, so it
+  // applies nothing.
+  /** @type {Array<['circular' | 'linear', DrawingState]>} */ ([
+    ['circular', state.drawings.circular], ['linear', state.drawings.linear]
+  ]).forEach(([drawingMode, drawing]) => watch(
+    () => /** @type {const} */ (['content', 'skew', 'depth']).map((kind) => drawnTrackHidden(kind, drawingMode, drawing)).join(),
     () => {
       if (drawing !== state.activeDrawing()) return;
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;

@@ -14,11 +14,12 @@ from pandas import DataFrame
 
 from gbdraw.analysis.depth import depth_df, read_depth_tsv
 from gbdraw.configurators import DepthConfigurator
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
-from gbdraw.tracks.parsing import parse_nonnegative_integer
+from gbdraw.tracks.parsing import parse_nonnegative_integer, slot_legend_label
 
 if TYPE_CHECKING:
     from gbdraw.api.options import DepthTrackInput
@@ -103,7 +104,7 @@ def _expand_track_float_metadata(
         if isinstance(value, str) and value.strip().lower() in {"", "auto", "none", "null", "-"}:
             items.append(None)
             continue
-        numeric = float(value)
+        numeric = ascii_float(value)
         if numeric <= 0:
             raise ValidationError(f"{field_name} values must be > 0.")
         items.append(numeric)
@@ -804,10 +805,8 @@ def sync_depth_track_legend_entries(
             track.label
             or ("Depth" if track_count == 1 else f"Depth {int(track.track_index) + 1}")
         )
-        params = selected_slot.params if selected_slot is not None else {}
-        raw_label = params.get("legend_label", params.get("label"))
-        override = str(raw_label).strip() if raw_label is not None else ""
-        out.add_source(override or fallback, {
+        label = slot_legend_label(selected_slot, fallback) if selected_slot is not None else fallback
+        out.add_source(label, {
             "type": "solid",
             "fill": track.fill_color,
             "stroke": track.stroke_color,

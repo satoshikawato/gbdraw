@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { PersistedPreviewViewport } from '../services/config.js' */
+/** @import { PressPoint } from '../utils/popup-bounds.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
+import { isClickAtPress } from '../utils/popup-bounds.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
 // also absorbs browser delivery delay between nominally 80 ms wheel inputs.
@@ -276,6 +278,12 @@ export const createPanZoom = (state) => {
     resetZoom ? 1.0 : zoom.value
   );
 
+  // The room of the figure is the canvas box, which a zoomed figure's scrollbars do not change.
+  /** @param {HTMLElement} container The preview canvas. */
+  const previewRoom = (container) => `${container.offsetWidth}x${container.offsetHeight}`;
+  // The room the last Fit measured.
+  let fittedRoom = '';
+
   // Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in
   // the visible preview frame (the canvas left of an open Editor drawer), and
   // the pan that centres it under the top-center origin.
@@ -293,6 +301,7 @@ export const createPanZoom = (state) => {
     const width = svgBox.width / zoom.value;
     const height = svgBox.height / zoom.value;
     if (!(width > 0 && height > 0)) return;
+    fittedRoom = previewRoom(container);
     const largest = Math.min(
       (frameWidth - 2 * FIT_MARGIN_PX) / width,
       (container.clientHeight - 2 * FIT_MARGIN_PX) / height
@@ -399,9 +408,30 @@ export const createPanZoom = (state) => {
   // writer and the UI capture read it through `heldPreviewViewport`.
   /** @type {PersistedPreviewViewport | null} */
   let held = null;
-  const holdPreviewViewport = () => { held ??= { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } }; };
+  /** @type {() => boolean} */
+  let heldFigureShown = () => false;
+  // While a view is held and the figure fitted in its place is shown, that figure follows its
+  // room: it is fitted again each time the canvas changes size, whatever changed it (the window,
+  // the settings pane, the docked panel changing sides). A zoom or a pan made in between lasts
+  // until the next such change. A hidden canvas (the Run info tab) has no room, and the room of
+  // the last Fit is no change. Another figure shown under the hold is not fitted.
+  const heldRoomObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    const container = canvasContainerRef.value;
+    if (!container?.offsetWidth || !container.offsetHeight || previewRoom(container) === fittedRoom
+      || !heldFigureShown()) return;
+    fitPreviewToViewport();
+  }) : null;
+  /** @param {() => boolean} figureShown Whether the figure fitted in place of the held view is shown. */
+  const holdPreviewViewport = (figureShown) => {
+    if (held) return;
+    held = { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+    heldFigureShown = figureShown;
+    fittedRoom = '';
+    if (canvasContainerRef.value) heldRoomObserver?.observe(canvasContainerRef.value);
+  };
   /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
   const releasePreviewViewport = ({ restore }) => {
+    heldRoomObserver?.disconnect();
     const view = held;
     held = null;
     if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
@@ -409,6 +439,7 @@ export const createPanZoom = (state) => {
   const heldPreviewViewport = () => held;
 
   const disposePanZoom = () => {
+    heldRoomObserver?.disconnect();
     cancelPreviewTransformInteraction({ reconcile: false });
     previewTransformInteractionListeners.clear();
   };
@@ -432,12 +463,14 @@ export const createPanZoom = (state) => {
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createSidebarResize = (state) => {
   const { sidebarWidth, isResizing } = state;
+  // Where the pointer pressed the handle, as its distance from the pane's width: the pane
+  // follows the pointer from the first move (OV-620).
+  let grabOffset = 0;
 
   /** @param {MouseEvent} event */
   const doResize = (event) => {
     if (!isResizing.value) return;
-    const newWidth = event.clientX - 16;
-    sidebarWidth.value = Math.max(240, Math.min(500, newWidth));
+    sidebarWidth.value = Math.max(240, Math.min(500, event.clientX - grabOffset));
   };
 
   const stopResizing = () => {
@@ -446,9 +479,11 @@ export const createSidebarResize = (state) => {
     document.removeEventListener('mouseup', stopResizing);
   };
 
-  const startResizing = () => {
+  /** @param {MouseEvent} event The press on the handle. */
+  const startResizing = (event) => {
     // The press is default-prevented, so the field is blurred here.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    grabOffset = event.clientX - sidebarWidth.value;
     isResizing.value = true;
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResizing);
@@ -464,6 +499,7 @@ export const createSidebarResize = (state) => {
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer
  * @property {() => boolean} previewPopupsHeld While it holds, a click outside leaves the feature and match popups as they are.
+ * @property {() => boolean} closeSettingsPopup The pane's closing of the popup that holds a settings section; whether it was open.
  */
 
 /** @param {GlobalUiEventsOptions} options */
@@ -472,7 +508,8 @@ export const setupGlobalUiEvents = ({
   onMounted,
   onUnmounted,
   closeRightDrawer,
-  previewPopupsHeld
+  previewPopupsHeld,
+  closeSettingsPopup
 }) => {
   const {
     clickedFeature,
@@ -489,10 +526,13 @@ export const setupGlobalUiEvents = ({
   // A click whose press began in a popup (a drag released past the popup's
   // clamp, a text selection) is not a click outside it.
   let pressStartedInPopup = false;
+  /** @type {PressPoint | null} */
+  let pressPoint = null;
   /** @param {MouseEvent} e */
   const rememberPressTarget = (e) => {
     pressStartedInPopup = e.target instanceof Element
       && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
+    pressPoint = { clientX: e.clientX, clientY: e.clientY };
   };
 
   /** @param {MouseEvent & { target: Element }} e A click; the popups and dialogs are elements. */
@@ -513,6 +553,9 @@ export const setupGlobalUiEvents = ({
       if (previewPopupsHeld()) return;
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
+      // The popup of a settings section stays through clicks elsewhere (Generate, Undo, the
+      // pane) and through a pan: a click on the Result's canvas that nothing took closes it.
+      if (e.target.closest('.preview-canvas') && isClickAtPress(pressPoint, e)) closeSettingsPopup();
     }
   };
 
@@ -528,6 +571,7 @@ export const setupGlobalUiEvents = ({
       if (clickedLabel.value) clickedLabel.value = null;
       return;
     }
+    if (closeSettingsPopup()) return;
     if (showCanvasControls.value) showCanvasControls.value = false;
     closeRightDrawer();
   };

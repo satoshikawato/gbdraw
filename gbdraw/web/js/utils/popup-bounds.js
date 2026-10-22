@@ -48,9 +48,43 @@ export const popupViewportBounds = () => ({
   right: Math.max(1, window.innerWidth || 1)
 });
 
+// The popup bounds inside a rectangle of the page (the Result's canvas).
+/** @param {PopupBounds} box @returns {PopupBounds} */
+export const popupBoundsWithin = (box) => {
+  const bounds = popupViewportBounds();
+  return {
+    top: Math.max(bounds.top, box.top), bottom: Math.min(bounds.bottom, box.bottom),
+    left: Math.max(bounds.left, box.left), right: Math.min(bounds.right, box.right)
+  };
+};
+
+// A press that moved farther than this before its release is a drag (a pan of
+// the figure), not a click that opens or closes a popup of the Result.
+const CLICK_SLOP_PX = 4;
+/**
+ * @typedef {{ clientX: number, clientY: number }} PressPoint Where a press began.
+ * @param {PressPoint | null} press @param {PressPoint} release
+ */
+export const isClickAtPress = (press, release) =>
+  !press || Math.hypot(release.clientX - press.clientX, release.clientY - press.clientY) <= CLICK_SLOP_PX;
+
 const clamp = (/** @type {number} */ value, /** @type {number} */ min, /** @type {number} */ max) => (
   Math.min(Math.max(value, min), Math.max(min, max))
 );
+
+/**
+ * The placement nearest to (x, y) at which a popup of this size lies inside
+ * the bounds: where a drag may leave it (OV-384: below the header), and where
+ * a window that changed size leaves it. A popup larger than the bounds starts
+ * at their top left. Its height then follows the bounds (`maxHeight` 0).
+ * @param {{ x: number, y: number, width: number, height: number, bounds: PopupBounds, margin?: number }} request
+ * @returns {PopupPlacement}
+ */
+export const placePopupWithin = ({ x, y, width, height, bounds, margin = 12 }) => ({
+  x: clamp(x, bounds.left + margin, bounds.right - width - margin),
+  y: clamp(y, bounds.top + margin, bounds.bottom - height - margin),
+  maxHeight: 0
+});
 
 /**
  * OV-371: the placement of a popup opened at a clicked point. The popup lies

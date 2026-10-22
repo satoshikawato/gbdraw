@@ -12,6 +12,7 @@
 import {
   RECORD_LIST_SORTS, nextRecordsOff, offChangeLeavesSourceEmpty, recordListRows
 } from '../services/record-draw-selection.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * @typedef {'linear' | 'circular'} RecordSelectionMode
@@ -135,7 +136,7 @@ export const createRecordSelection = ({
     }
     const next = nextRecordsOff(current, keys, drawn);
     if (next.length === current.length && next.every((key, index) => key === current[index])) return false;
-    return runUndoable(drawn ? 'Draw records' : 'Leave out records', () => {
+    return runUndoable(drawn ? msg('Draw records') : msg('Leave out records'), () => {
       recordsOff(mode).splice(0, Infinity, ...next);
       afterRecordSetChange(mode);
       return true;
@@ -172,7 +173,7 @@ export const createRecordSelection = ({
     const off = keys.filter((key) => !isDrawn(mode, key));
     if (off.length === 0) return false;
     await readRecords(mode);
-    return runUndoable('Delete record settings', () => deleteRecordSettings(mode, off));
+    return runUndoable(msg('Delete record settings'), () => deleteRecordSettings(mode, off));
   };
   const deleteShownOffSettings = () => deleteSettings(listMode(), recordListView.value.offWithSettings);
 
@@ -207,7 +208,7 @@ export const createRecordSelection = ({
 
   const closeRemoveFileDialog = () => { removeFileDialog.open = false; };
   /** D-06: Remove File removes the whole file as one step; Cancel changes nothing. */
-  const resolveRemoveFile = withDialogChoice(() => 'Remove File', () => {
+  const resolveRemoveFile = withDialogChoice(() => msg('Remove File'), () => {
     const { mode, sourceKey } = removeFileDialog;
     const removed = removeSource(mode, sourceKey);
     closeAfterDialogChoice(() => {

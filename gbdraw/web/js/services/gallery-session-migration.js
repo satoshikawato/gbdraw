@@ -13,7 +13,8 @@ import {
 import {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
-  projectCanonicalSessionRequest
+  projectCanonicalSessionRequest,
+  readStoredRenderRequest
 } from './session-request.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { resolveActiveLayoutPreference } from './layout-preferences.js';
@@ -23,12 +24,14 @@ import {
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { SESSION_VERSION } from '../contracts/schema.generated.js';
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @typedef {{ losatCache?: { entries?: unknown } | null }} LosatCacheSession A Session as the conservation restore reads it. */
 /** @typedef {{ filename?: unknown, text?: unknown }} CachedLosatEntry */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { LoadRepair } from '../utils/load-repairs.js' */
 
 
 /**
@@ -289,7 +292,7 @@ const migratePersistedGalleryConfig = (config) => {
   return {
     ...migratedNames,
     form,
-    adv: migrateLegacyLinearLabelVisibility(adv)
+    adv: migrateLegacyLinearLabelVisibility(adv, { load: true })
   };
 };
 
@@ -673,8 +676,7 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
     webFiles: session.webFiles || {},
     legacyFiles: session.files,
     storedConfig: session.config,
-    fileBindings: session.cliInvocation?.fileBindings,
-    repairInvalidComparisonHeight: Number(session.version) <= 33
+    fileBindings: session.cliInvocation?.fileBindings
   });
   const migratedConfig = migratePersistedGalleryConfig(
     mergedGuiConfig(session, projection)
@@ -737,46 +739,47 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
 };
 
 /**
- * @param {Record<string, any>} session An unvalidated historical Gallery Session.
- * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
+ * A historical Gallery Session whose request its reader has read (Load reads
+ * it with the Session's other requests) as a current-request Session.
+ * @param {Parameters<typeof promoteGuiAuthoredSession>[0]} session A Session of version 31-33 or 39 with a read request.
+ * @returns {ReturnType<typeof promoteGuiAuthoredSession>} A current-request Session with its flat draft (`config`).
  */
-export const promoteGallerySessionToCurrent = (session) => {
-  if (!isPlainObject(session) || !isPlainObject(session.renderRequest)) {
-    throw new Error('Gallery session must contain a canonical renderRequest.');
-  }
-  if (!isPlainObject(session.resources)) {
-    throw new Error('Gallery session must contain canonical resources.');
-  }
-  const version = Number(session.version);
-  if (![31, 32, 33, 39].includes(version)) {
-    throw new Error(
-      `Gallery historical migration supports session versions 31-33 and 39; received ${String(session.version)}.`
-    );
-  }
-  const schema = Number(session.renderRequest.schema);
-  if (schema === 5) {
-    if (version !== 39) {
-      throw new Error(
-        `Gallery session version ${version} does not support canonical renderRequest schema ${schema}.`
-      );
-    }
-    const args = sessionArgs(session);
-    const cliAuthored = isPlainObject(session?.config?.cliOptions)
-      && !isPlainObject(session?.config?.linearRecordLayout);
-    return cliAuthored
-      ? promoteCliAuthoredSession(session, args)
-      : promoteGuiAuthoredSession(session, args);
-  }
-  if (![1, 2].includes(schema)) {
-    throw new Error(`Unsupported canonical renderRequest schema: ${schema}.`);
-  }
-  if (version === 39) {
-    throw new Error('Gallery session version 39 requires canonical renderRequest schema 5.');
-  }
+export const promoteReadGallerySession = (session) => {
   const args = sessionArgs(session);
   const cliAuthored = isPlainObject(session?.config?.cliOptions)
     && !isPlainObject(session?.config?.linearRecordLayout);
   return cliAuthored
     ? promoteCliAuthoredSession(session, args)
     : promoteGuiAuthoredSession(session, args);
+};
+
+/**
+ * A historical Gallery Session as a current-request Session: its request is
+ * read by the one reader (`readStoredRenderRequest`, which lifts schemas 1
+ * and 2), then the Session is promoted.
+ * @param {unknown} session An unvalidated historical Gallery Session.
+ * @param {{ repairs: LoadRepair[] }} options `repairs` receives what the read of its request could not carry.
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
+ */
+export const promoteGallerySessionToCurrent = (session, { repairs }) => {
+  if (!isPlainObject(session) || !isPlainObject(session.renderRequest)) {
+    throw new Error('Gallery session must contain a canonical renderRequest.');
+  }
+  if (!isPlainObject(session.resources)) {
+    throw new Error('Gallery session must contain canonical resources.');
+  }
+  if (![31, 32, 33, 39].includes(Number(session.version))) {
+    throw new Error(
+      `Gallery historical migration supports session versions 31-33 and 39; received ${String(session.version)}.`
+    );
+  }
+  const read = readStoredRenderRequest(session.renderRequest, {
+    featureCatalog: isPlainObject(session.editorState) ? session.editorState.featureCatalog ?? null : null,
+    legacyOrthogroupState: session.orthogroupState ?? null,
+    resourceIds: new Set(Object.keys(session.resources)),
+    path: 'renderRequest'
+  });
+  if ('kind' in read) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  repairs.push(...read.repairs);
+  return promoteReadGallerySession({ ...session, renderRequest: read.value });
 };

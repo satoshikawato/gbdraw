@@ -9,6 +9,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
+from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
 
@@ -131,7 +132,7 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
         'name="Circular track slot annotations", exact=True',
         '"Circular track slot annotations Annotation set", exact=True',
         '"Circular track slot annotations Annotation placement", exact=True',
-        'get_by_title("Move outside Axis", exact=True)',
+        'run_track_slot_row_action(annotation_slot, "Move outside Axis")',
         '"Circular track slot annotations Show annotation labels", exact=True',
         'get_by_role("button", name="SVG", exact=True)',
         "page.expect_download",
@@ -157,7 +158,7 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
 
 
 def test_track_capture_accessibility_labels_are_part_of_the_public_ui() -> None:
-    source = INDEX_PATH.read_text(encoding="utf-8")
+    source = read_english_index(INDEX_PATH)
     for label in (
         'aria-label="Depth TSV tracks"',
         'aria-label="Depth Window"',
@@ -168,11 +169,11 @@ def test_track_capture_accessibility_labels_are_part_of_the_public_ui() -> None:
         'aria-label="Dinucleotide content/skew"',
         'aria-label="New circular track renderer"',
         # TK-16 (R12): stack-row names carry the slot id.
-        ':aria-label="`Circular track slot ${entry.slot.id} Annotation set`"',
-        ':aria-label="`Circular track slot ${entry.slot.id} Annotation placement`"',
-        ':aria-label="`Circular track slot ${entry.slot.id} Show annotation labels`"',
-        ':aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`"',
-        ':aria-label="`Circular track slot ${entry.slot.id} Track legend label`"',
+        ':aria-label="t(\'Circular track slot {id} Annotation set\', { id: entry.slot.id })"',
+        ':aria-label="t(\'Circular track slot {id} Annotation placement\', { id: entry.slot.id })"',
+        ':aria-label="t(\'Circular track slot {id} Show annotation labels\', { id: entry.slot.id })"',
+        ':aria-label="t(\'Circular track slot {id} Track dinucleotide\', { id: entry.slot.id })"',
+        ':aria-label="t(\'Circular track slot {id} Track legend label\', { id: entry.slot.id })"',
     ):
         assert label in source
 

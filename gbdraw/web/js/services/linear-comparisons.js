@@ -1,5 +1,8 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
+import { msg } from '../utils/i18n.js';
+/** @import { FieldLeaf } from '../utils/field-reading.js' */
+/** @typedef {(leaf: FieldLeaf) => void} PlanLossCollector Told each stored value the plan does not use as stored. */
 /**
  * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
  * @typedef {'losat' | 'upload'} LinearComparisonSource
@@ -203,29 +206,62 @@ export const createLinearComparisonEdge = ({
 });
 
 /**
- * @param {unknown} edge
- * @param {number} index
+ * An edge's uploaded BLAST TSV, the one place that sets it: a file is the
+ * edge's active upload; none leaves the edge with no file and none active.
+ * The pair card's file input and its Remove set it, and so does Load where it
+ * drops the edge's file binding (OV-899).
+ * @param {LinearComparisonEdge} edge Changed in place.
+ * @param {File | null} file
  */
-const normalizeEdge = (edge, index) => {
-  const source = /** @type {Readonly<Record<string, unknown>>} */ (edge && typeof edge === 'object' ? edge : {});
-  return createLinearComparisonEdge({
+export const setComparisonEdgeFile = (edge, file) => {
+  edge.file = file || null;
+  edge.fileActive = Boolean(file);
+};
+
+/** @param {unknown} value */
+const isStored = (value) => value !== undefined && value !== null;
+/**
+ * @param {Readonly<Record<string, unknown>>} source
+ * @param {number} index
+ * @param {PlanLossCollector} collect
+ */
+const normalizeEdge = (source, index, collect) => {
+  const normalized = createLinearComparisonEdge({
     ...source,
     id: cleanUid(source.id) || `linear-comparison-draft-${index + 1}`,
     included: source.included === true,
     fileActive: source.fileActive === true,
     losatFilenameActive: source.losatFilenameActive === true
   });
+  /** @type {const} */ (['included', 'fileActive', 'losatFilenameActive', 'source', 'losatFilename']).forEach((field) => {
+    if (isStored(source[field]) && source[field] !== normalized[field]) {
+      collect({ at: `.edges[${index}].${field}`, stored: source[field], used: normalized[field] });
+    }
+  });
+  // A field an edge does not have is not read (E-OD03, E-OD12).
+  Object.keys(source).filter((field) => !Object.hasOwn(normalized, field)).forEach((field) => {
+    collect({ at: `.edges[${index}].${field}`, stored: source[field], used: undefined });
+  });
+  return normalized;
 };
 
 /**
  * @param {unknown} [plan] unvalidated plan (a session, a draft, or a live plan)
+ * @param {PlanLossCollector} [collect] Load lists what it is told (OV-764).
  * @returns {LinearComparisonPlan}
  */
-export const normalizeLinearComparisonPlan = (plan = {}) => {
+export const normalizeLinearComparisonPlan = (plan = {}, collect = () => {}) => {
   const source = /** @type {{ edges?: unknown, mode?: unknown, defaultSource?: unknown }} */ (
     plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : {}
   );
-  const edges = (Array.isArray(source.edges) ? source.edges : []).map(normalizeEdge);
+  if (isStored(source.edges) && !Array.isArray(source.edges)) collect({ at: '.edges', stored: source.edges, used: [] });
+  // An edge that is no object pairs no records: it is dropped, and the
+  // generated ids keep the stored positions.
+  const edges = (Array.isArray(source.edges) ? source.edges : []).flatMap((edge, index) => {
+    if (edge && typeof edge === 'object' && !Array.isArray(edge)) return [normalizeEdge(edge, index, collect)];
+    collect({ at: `.edges[${index}]`, stored: edge, used: undefined });
+    return [];
+  });
   /** @type {Set<string>} */
   const usedIds = new Set();
   edges.forEach((edge, index) => {
@@ -239,11 +275,15 @@ export const normalizeLinearComparisonPlan = (plan = {}) => {
     edge.id = id;
     usedIds.add(id);
   });
-  return {
+  const normalized = {
     mode: normalizeMode(source.mode),
     defaultSource: normalizeSource(source.defaultSource),
     edges
   };
+  /** @type {const} */ (['mode', 'defaultSource']).forEach((field) => {
+    if (isStored(source[field]) && source[field] !== normalized[field]) collect({ at: `.${field}`, stored: source[field], used: normalized[field] });
+  });
+  return normalized;
 };
 
 /**
@@ -395,30 +435,30 @@ export const validateLinearComparisonEdges = ({
   (Array.isArray(edges) ? edges : []).forEach((edge) => {
     const edgeKey = linearComparisonEdgeKey(edge?.queryUid, edge?.subjectUid);
     if (seen.has(edgeKey)) {
-      issues.push(validationIssue('duplicate', 'Selected comparisons cannot contain the same directed pair more than once.', edge));
+      issues.push(validationIssue('duplicate', msg('Selected comparisons cannot contain the same directed pair more than once.'), edge));
     }
     seen.add(edgeKey);
 
     const queryUid = cleanUid(edge?.queryUid);
     const subjectUid = cleanUid(edge?.subjectUid);
     if (!validUids.has(queryUid) || !validUids.has(subjectUid)) {
-      issues.push(validationIssue('missing-uid', 'A selected comparison references a record that is no longer available.', edge));
+      issues.push(validationIssue('missing-uid', msg('A selected comparison references a record that is no longer available.'), edge));
       return;
     }
     if (queryUid === subjectUid) {
-      issues.push(validationIssue('self', 'A comparison cannot connect a record to itself.', edge));
+      issues.push(validationIssue('self', msg('A comparison cannot connect a record to itself.'), edge));
       return;
     }
     // Both uids are valid here, and every valid uid has a row (linearComparisonRowTopology).
     const queryRow = /** @type {number} */ (rowByUid.get(queryUid));
     const subjectRow = /** @type {number} */ (rowByUid.get(subjectUid));
     if (queryRow === subjectRow) {
-      issues.push(validationIssue('same-row', 'Comparisons must connect records in different rows.', edge));
+      issues.push(validationIssue('same-row', msg('Comparisons must connect records in different rows.'), edge));
     } else if (
       // Every valid uid has a row and every row has a position (linearComparisonRowTopology).
       Math.abs(/** @type {number} */ (rowPositionByNumber.get(queryRow)) - /** @type {number} */ (rowPositionByNumber.get(subjectRow))) !== 1
     ) {
-      issues.push(validationIssue('non-adjacent', 'Comparisons must connect adjacent rows.', edge));
+      issues.push(validationIssue('non-adjacent', msg('Comparisons must connect adjacent rows.'), edge));
     }
     if (
       normalizeSource(edge?.source, LINEAR_COMPARISON_SOURCES.UPLOAD) === LINEAR_COMPARISON_SOURCES.UPLOAD &&
@@ -426,7 +466,7 @@ export const validateLinearComparisonEdges = ({
     ) {
       issues.push(validationIssue(
         'missing-upload',
-        'Every selected uploaded comparison requires an active BLAST TSV file.',
+        msg('Every selected uploaded comparison requires an active BLAST TSV file.'),
         edge
       ));
     }
@@ -550,7 +590,7 @@ export const resolveLinearComparisonPlan = ({
   if (selectedHasLosat && normalizedProgram === 'blastp' && normalizedBlastpMode !== 'pairwise') {
     issues.push(validationIssue(
       'selected-losat-requires-pairwise',
-      'Selected LOSAT comparisons require LOSATP Pairwise mode. Similarity groups and Collinear blocks use All adjacent LOSAT.',
+      msg('Selected LOSAT comparisons require LOSATP Pairwise mode. For Similarity groups or Collinear blocks, choose Run LOSAT for all adjacent pairs.'),
       null
     ));
   }
@@ -859,7 +899,7 @@ export const buildLinearComparisonTimeline = ({
       const fallbackIssues = [
         validationIssue(
           'duplicate',
-          'Selected comparisons cannot contain the same directed pair more than once.',
+          msg('Selected comparisons cannot contain the same directed pair more than once.'),
           draft
         ),
         ...issues
@@ -870,7 +910,7 @@ export const buildLinearComparisonTimeline = ({
     if (issues.length > 0 || !boundary) {
       const fallbackIssues = issues.length > 0 ? issues : [validationIssue(
         'non-adjacent',
-        'Comparisons must connect adjacent rows.',
+        msg('Comparisons must connect adjacent rows.'),
         draft
       )];
       unplacedDrafts.push({ draft, issues: fallbackIssues });
@@ -985,6 +1025,23 @@ export const buildPairwiseLosatJobSpecs = ({
     })));
 };
 
+/**
+ * The LOSAT edge that joins two drawn records: the one in the search's own
+ * orientation, else the one in the other orientation, else null. Generate
+ * (`buildLosatJobSpecs`) and Session Load (the cache-info rows) read a
+ * search's edge here (OV-980, OV-987).
+ * @param {readonly LinearComparisonResolvedEdge[]} edges The resolved edges.
+ * @param {number} queryIndex
+ * @param {number} subjectIndex
+ * @returns {LinearComparisonResolvedEdge | null}
+ */
+export const losatEdgeOfPair = (edges, queryIndex, subjectIndex) => {
+  const losatEdges = edges.filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  return losatEdges.find((edge) => edge.queryIndex === queryIndex && edge.subjectIndex === subjectIndex)
+    || losatEdges.find((edge) => edge.queryIndex === subjectIndex && edge.subjectIndex === queryIndex)
+    || null;
+};
+
 // The record-pair searches one Generate requests. Generate and the Settings
 // job-count estimate both expand them here (N-10). Similarity groups always
 // include within-record evidence; Collinear includes it only when inference is
@@ -1025,9 +1082,10 @@ export const buildLosatJobSpecs = ({
    * @param {number} ordinal
    */
   const push = (queryIndex, subjectIndex, ordinal) => {
-    const edge = edges.find((candidate) => (
-      candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
-    )) || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
+    // The search's own edge is the card that shows it (OV-980) and numbers it
+    // (OV-985); a pair no edge joins takes an edge by ordinal.
+    const edge = losatEdgeOfPair(edges, queryIndex, subjectIndex)
+      || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
     specs.push(Object.freeze({
       edgeKey: edge?.edgeKey || '',
       ordinal: edge?.ordinal ?? ordinal,
@@ -1066,3 +1124,25 @@ export const buildLosatJobSpecs = ({
   }
   return Object.freeze(specs);
 };
+
+/**
+ * Which searches of a LOSAT run are displayed pairs, and the number of each
+ * search (a displayed pair's number names its payload, its `/blast_<n>.txt`
+ * file and Run info slot). Every search takes its spec ordinal. A displayed
+ * pair is its edge's search in the edge's direction or, for a complete row
+ * grid, an adjacent-row pair; each such pair is its own ADJACENT edge
+ * (`adjacentRowPairs`), so displayed numbers never repeat (OV-1069). The
+ * derived LOSATP identity owner refuses a repeated displayed number.
+ * @param {readonly LosatJobSpec[]} specs
+ * @param {readonly LinearComparisonResolvedEdge[]} edges The edges of the comparison plan.
+ * @param {((queryIndex: number, subjectIndex: number) => boolean) | null} gridPair
+ *   `canonicalGridDisplayPairs` of a drawing laid out by a complete row grid, else null.
+ * @returns {{ displayPair: boolean, pairIndex: number }[]} One per spec, in spec order.
+ */
+export const numberLosatDisplayPairs = (specs, edges, gridPair) => specs.map((spec) => {
+  const edge = edges.find((candidate) => candidate.edgeKey === spec.edgeKey);
+  const displayPair = gridPair
+    ? gridPair(spec.queryIndex, spec.subjectIndex)
+    : Boolean(edge && spec.queryIndex === edge.queryIndex && spec.subjectIndex === edge.subjectIndex);
+  return { displayPair, pairIndex: spec.ordinal };
+});

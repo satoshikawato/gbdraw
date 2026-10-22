@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, fields, is_dataclass
 from numbers import Real
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping
 
+from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import USER_COLOR_FORMS, is_user_color
 
@@ -14,6 +16,8 @@ from .objects import ObjectsConfig
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
+
+logger = logging.getLogger(__name__)
 
 
 # D-27 (PD-OI-081): only values whose meaning SVG/CSS fixes are constrained.
@@ -44,7 +48,8 @@ def _is_font_weight(text: str) -> bool:
     if text in _FONT_WEIGHT_KEYWORDS:
         return True
     # Digits only, the form CairoSVG reads; "700.0" and "7e2" errored under svgwrite.
-    return text.isascii() and text.isdigit() and 1 <= int(text) <= 1000
+    weight = parse_ascii_nonnegative_integer(text)
+    return weight is not None and 1 <= weight <= 1000
 
 
 _KEYWORD_LEAF_DOMAINS: dict[str, tuple[str, Callable[[str], bool]]] = {
@@ -76,6 +81,33 @@ def style_leaf_domain(path: str) -> tuple[str, str] | None:
         return "COLOR", f"colors must be {USER_COLOR_FORMS}"
     if leaf in _KEYWORD_LEAF_DOMAINS:
         return "KEYWORD", _KEYWORD_LEAF_DOMAINS[leaf][0]
+    return None
+
+
+def read_stored_font_size(value: object, *, path: str) -> object:
+    """A stored font size (a ``POSITIVE`` style leaf), read as Auto when it is <= 0.
+
+    PD-OI-081 refuses a size <= 0 where a user enters one, but a Session that
+    stores one loads, as Web Load reads it: Auto (``None``), with the Web's
+    lost-value notice (Owner Q-13 a, OV-1282). ``path`` names the value in the
+    Session. Any other value is returned for the usual check.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return value
+    try:
+        number = ascii_float(value)
+    except ValueError:
+        return value
+    if not math.isfinite(number) or number > 0:
+        return value
+    stored = str(int(number)) if isinstance(value, (int, float)) and number.is_integer() else str(value)
+    # The wording of the Web's Load notice (utils/load-repairs.js `setting-replaced`).
+    logger.warning(
+        'WARNING: Settings: the value "%s" (%s) cannot be used; its default is used.',
+        stored,
+        path,
+    )
     return None
 
 

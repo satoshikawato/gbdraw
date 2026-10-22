@@ -11,6 +11,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import ExactPosition
 from Bio.SeqRecord import SeqRecord
 
+from .numeric import parse_ascii_integer
 from ..features.overrides import feature_override_lookup
 from ..features.visibility import should_render_feature
 from .record_metadata import _source_feature_anchor_profile
@@ -93,10 +94,10 @@ def _cds_reading_frame(qualifiers: dict) -> int:
         name, shift = "phase", 1
     if raw is None:
         return 1
-    try:
-        frame = int(raw) + shift
-    except ValueError:
-        raise ValueError(f"{name} is invalid: {raw}") from None
+    number = parse_ascii_integer(raw)
+    if number is None:
+        raise ValueError(f"{name} is invalid: {raw}")
+    frame = number + shift
     if frame not in (1, 2, 3):
         raise ValueError(f"{name} is outside {1 - shift}..{3 - shift}: {raw}")
     return frame
@@ -132,11 +133,11 @@ def translate_cds(
 
     qualifiers = feature.qualifiers or {}
     raw_table = _first_qualifier(qualifiers, "transl_table") or "1"
-    try:
-        table_id = int(raw_table)
-        start_codons = unambiguous_dna_by_id[table_id].start_codons
-    except (KeyError, ValueError):
-        raise ValueError(f"transl_table is invalid: {raw_table}") from None
+    table_id = parse_ascii_integer(raw_table)
+    table = None if table_id is None else unambiguous_dna_by_id.get(table_id)
+    if table is None:
+        raise ValueError(f"transl_table is invalid: {raw_table}")
+    start_codons = table.start_codons
     frame = _cds_reading_frame(qualifiers)
     coding = str(nucleotide_sequence).upper()[frame - 1 :]
     partial_codon = len(coding) % 3

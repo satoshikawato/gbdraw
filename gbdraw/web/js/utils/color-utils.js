@@ -1,5 +1,6 @@
 // @ts-check
 import { namedColorHex } from './named-colors.js';
+import { t } from './i18n.js';
 /**
  * @param {string} hex
  * @returns {{ r: number, g: number, b: number }}
@@ -187,6 +188,18 @@ const CSS_NUMBER = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
 const CSS_NUMBER_OR_PERCENT = new RegExp(`^${CSS_NUMBER}%?$`);
 const CSS_HUE = new RegExp(`^${CSS_NUMBER}(?:deg|grad|rad|turn)?$`, 'i');
 /**
+ * A committed paint read with the Default colors domain (D-41): '' when it is
+ * unset, its color, or null when it names no color. The live projection
+ * refuses such a paint, and Load drops it before (RL-D): one predicate.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export const readCommittedPaint = (value) => {
+  const raw = String(value ?? '').trim();
+  return raw ? normalizeDefaultColor(raw) : '';
+};
+
+/**
  * @param {unknown} colorValue
  * @returns {string | null}
  */
@@ -244,6 +257,28 @@ export const toNativeColorInputValue = (colorValue, fallback = '#000000') => {
   return /^#[0-9a-f]{6}$/i.test(normalizedFallback)
     ? normalizedFallback.toLowerCase()
     : '#000000';
+};
+
+/**
+ * How a view shows a color it draws as a swatch (the Legend rows, the Legend
+ * popup): the swatch fill, the value of a native color input, and the caption.
+ * A color of `none` shows an empty swatch and the caption None, as the Palette
+ * pane shows None (the Owner's choice, 2026-10-20), never a stale fill or a
+ * black input; a color input starts at `fallback`.
+ * @typedef {{ none: boolean, fill: string, picker: string, label: string }} ColorSwatchView
+ * @param {unknown} color
+ * @param {unknown} [fallback]
+ * @returns {ColorSwatchView}
+ */
+export const colorSwatchView = (color, fallback = '#000000') => {
+  const none = colorValueMode(color) === 'none';
+  const written = String(color ?? '').trim();
+  return {
+    none,
+    fill: none ? 'transparent' : written,
+    picker: toNativeColorInputValue(none ? null : color, fallback),
+    label: none ? t('None') : written
+  };
 };
 
 /**

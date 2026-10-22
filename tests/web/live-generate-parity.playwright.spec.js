@@ -1,5 +1,8 @@
-// PD-OI-066 (LIVE-EDIT-EQUALS-REGENERATION; R1, R3): each live edit shows on
-// the displayed Result what the next Generate from the same draft draws. The
+// PD-OI-066 scenario revision 2 (WAIT-FOR-G1-APPLIES; R1, R3): each live edit
+// shows on the displayed Result what the next Generate from the same draft
+// draws when no pending Applies on Generate value changes those elements;
+// otherwise what a Generate of the committed Session plus the applied live
+// values draws. These cases change no Applies on Generate value. The
 // matrix pairs every edit kind with states of the editor; the check is
 // expectLiveEqualsGenerate (tests/web/helpers/live-generate-parity.cjs), minus
 // the differences tests/web/contracts/live-generate-parity-allowed.json allows.
@@ -10,7 +13,7 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const { answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
@@ -116,6 +119,14 @@ const CASES = [
     edit: 'Feature visibility Off (popup)',
     states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
     run: (page) => popupEdit(page, 'TESTA_0004', { visibility: 'off' })
+  },
+  // OV-1485: of two CDS at the same location, the one left drawn keeps its
+  // rendered ID (its instance suffix) in the Result Generate draws.
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) of one of two identical features',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    run: (page) => popupEdit(page, { type: 'CDS', product: 'dup alpha' }, { visibility: 'off' })
   },
   {
     kind: 'feature On',
@@ -807,6 +818,44 @@ test('Reset Settings after a palette change and a Legend row stroke shows what G
   expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
 });
 
+// OV-1385: a palette color of None draws the Legend row's swatch with fill
+// none, as Python draws it, and the next live edits of that row still find
+// the swatch: no page error, and each step shows what Generate draws (Linear,
+// two genomes, as reported).
+test('Palette color None and the live edits after it show the Legend row Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await openFresh(page);
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setDiagramMode('linear');
+    await window.Vue.nextTick();
+    if (app.linearSeqs.length < 2) app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
+    app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));
+    await window.Vue.nextTick();
+  }, { first: readFileSync('examples/MjeNMV.gb', 'utf8'), second: readFileSync('examples/MelaMJNV.gb', 'utf8') });
+  await generate(page);
+  const swatchFills = (key) => page.evaluate((row) => [...window.__GBDRAW_APP__.svgContainer
+    .querySelectorAll(`g[data-legend-key="${CSS.escape(row)}"]`)]
+    .map((entry) => [...entry.children].find((child) => child.localName === 'path')?.getAttribute('fill')), key);
+  await page.locator('summary[aria-label="Colors"]').click();
+  const mode = page.getByRole('combobox', { name: 'CDS feature color mode', exact: true });
+  const setMode = async (value) => { await mode.selectOption(value); await settleLive(page); };
+  await setMode('none');
+  expect(await swatchFills('CDS'), 'the swatch Python draws for None').toEqual(['none', 'none']);
+  await setMode('auto');
+  expect((await swatchFills('CDS')).every((fill) => fill && fill !== 'none'), 'Auto fills the swatch again').toBe(true);
+  await setMode('none');
+  await expectLiveEqualsGenerate(page, { label: 'CDS color None after Auto' });
+  expect(await swatchFills('CDS'), 'Generate draws the swatch with fill none').toEqual(['none', 'none']);
+  await setMode('auto');
+  await expectLiveEqualsGenerate(page, { label: 'CDS color Auto after a Generate of None' });
+  expect(errors, 'no live edit throws').toEqual([]);
+});
+
 for (const { edit, states, setup, run, knownMismatch } of CASES) {
   test(`${edit}: ${statesName(states)}`, async ({ page }) => {
     if (knownMismatch) test.fail(true, knownMismatch);
@@ -886,7 +935,7 @@ test('a stroke removed after Load leaves a batch Result that showed it (circular
   await showResult(page, 1);
   await showResult(page, 0);
   const saved = testInfo.outputPath('stroked-batch.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
   await loaded.evaluate((row) => {
@@ -909,7 +958,7 @@ test('a batch Result saved before it showed the paint edits shows them after Loa
   await popupEdit(page, 'TESTA_0001', { stroke: '#2a9d8f' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
   const saved = testInfo.outputPath('stale-batch.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
   await showResult(loaded, 1);
@@ -967,12 +1016,21 @@ test('a batch Result displayed while Save runs shows the edits once Save ends (c
 // the rule matches to prepare: the Legend row color after it is the edit the
 // displayed Result lacks, and the Save prepares the matches it needs. (The
 // case above holds its Save with its own `beforeExport`, so it never reaches
-// the app's Save.)
+// the app's Save.) The Session has a title while it saves, so Save asks for
+// none: the title dialog would wait for its answer while the display paints,
+// and the Save would no longer run while the displayed Result lacks paint.
+// The title is restored after it, so a later Save asks as before.
 const saveWhileDisplaying = (page, resultIndex) => evaluateWithRetainedPromise(page, async (index) => {
   const app = window.__GBDRAW_APP__;
-  const saved = app.saveSessionWithTitle();
-  app.selectResult(index);
-  await saved;
+  const title = app.sessionTitle;
+  app.sessionTitle = 'save-while-displaying';
+  try {
+    const saved = app.saveSessionWithTitle();
+    app.selectResult(index);
+    await saved;
+  } finally {
+    app.sessionTitle = title;
+  }
 }, resultIndex);
 test('a batch Result displayed while Save runs is saved with the edits (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
@@ -1003,7 +1061,7 @@ test('a batch Result saved with a label edit removed meanwhile shows the label a
   await showResult(page, 0);
   await appAction(page, 'resetAllLabelTextOverrides');
   const saved = testInfo.outputPath('label-batch.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
   await showResult(loaded, 1);
@@ -1406,7 +1464,7 @@ const WORK_ALLOWLIST = [
     // A Session this page saved, loaded into it: its Results already show
     // their drawing's intent, so the Load compiles nothing and asks nothing.
     kind: 'Session Load', stages: [], compiles: 0, requests: [],
-    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw-session.json')),
+    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw-session.json'), { title: '' }),
     run: async (page) => {
       const shown = () => page.evaluate(async () => {
         const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
@@ -1442,8 +1500,11 @@ const WORK_ALLOWLIST = [
     // Legend rows and colors (OV-287) and the feature visibility (OV-290) it
     // clears in one compile; the palette watcher shows the default palette's
     // fills in a compile of its own, so a Reset that changes the palette
-    // compiles twice. With nothing to reflow it sends no request.
-    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: [],
+    // compiles twice. Removing the color rules changes a Legend source, which
+    // Python draws again in one rerender (OV-43, Owner 2026-10-06), and that
+    // rerender applies the live setting values Reset changes (PD-OI-102,
+    // PD-OI-103). One action asks for one rerender (OV-1076).
+    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: ['render'],
     run: resetSettings
   }
 ];
@@ -1558,5 +1619,27 @@ test.describe('the warm app page', () => {
     expect(warmPage()).toBe('fresh: page.globals.leftByCase: "<missing>" -> "boolean"');
     await openFresh(page);
     expect((await freshBootView(page)).leftByCase).toBe(null);
+  });
+
+  // OV-1001: the app asks before it downloads a Session file of a name it
+  // downloaded before. The answer is the downloaded name, or the question.
+  const saveSession = async (page) => {
+    const downloaded = page.waitForEvent('download').then((file) => file.suggestedFilename());
+    const question = page.locator('#choice-prompt-title');
+    await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+    await answerSessionTitle(page, '');
+    const asked = question.waitFor().then(() => question.textContent());
+    return Promise.race([downloaded, asked]);
+  };
+
+  test('a case saves a Session', async ({ page }) => {
+    await openFresh(page);
+    expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
+  });
+
+  test('the next case saves a Session of that name without the question', async ({ page }) => {
+    await openFresh(page);
+    expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
+    expect(warmPage()).toBe('fresh: savedSessions: [] -> ["gbdraw_session.json.gz"]');
   });
 });

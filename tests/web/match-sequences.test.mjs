@@ -20,6 +20,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'utils', 'i18n.js'),
+  await readFile('gbdraw/web/js/utils/i18n.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'utils', 'color-utils.js'),
   await readFile('gbdraw/web/js/utils/color-utils.js', 'utf8'),
   'utf8'
@@ -49,6 +54,17 @@ await writeFile(
   await readFile('gbdraw/web/js/services/record-source-coordinates.js', 'utf8'),
   'utf8'
 );
+// match-sequences.js reads the region rule of record-options.js.
+for (const name of ['record-options.js', 'record-draw-selection.js']) {
+  await writeFile(join(tempDir, 'services', name), await readFile(`gbdraw/web/js/services/${name}`, 'utf8'), 'utf8');
+}
+for (const name of ['optional-positive-number.js', 'error-normalization.js', 'download-names.js']) {
+  await writeFile(
+    join(tempDir, 'utils', name),
+    await readFile(`gbdraw/web/js/utils/${name}`, 'utf8'),
+    'utf8'
+  );
+}
 await writeFile(
   join(tempDir, 'services', 'file-content-cache.js'),
   'export const readFileText = (file) => file.text();\n',
@@ -408,6 +424,24 @@ test('builds deterministic single and combined FASTA in query-subject order', ()
   assert.equal(bundle.combinedFilename, 'pairwise_comparison1_match3_both.fna');
 });
 
+// OV-1097 (Owner decision 2026-10-18): the restored record is the region
+// Generate draws, so an end past the record end is read to the record end, and
+// a region that starts after the record ends has no sequence.
+test('a restored region past the record end holds the record up to its end (OV-1097)', async () => {
+  const gb = () => textFile(`LOCUS       query\nACCESSION   QUERY\nVERSION     QUERY.1\nORIGIN\n        1 aaccggtt\n//\n`);
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear',
+    lInputType: 'gb',
+    linearSeqs: [
+      { gb: gb(), region_record_id: 'QUERY.1', region_start: 5, region_end: 20 },
+      { gb: gb(), region_record_id: 'QUERY.1', region_start: 9, region_end: 20 }
+    ]
+  });
+  assert.deepEqual(sources.map(({ key, sequence }) => ({ key, sequence })), [
+    { key: 'linear:record:0', sequence: 'GGTT' }
+  ]);
+});
+
 test('a match on a restored cropped reverse record reports source coordinates (CO-10)', async () => {
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'linear',
@@ -439,14 +473,15 @@ test('a match on a restored cropped reverse record reports source coordinates (C
   // The renderer marks the cropped reverse record with its input-file span.
   const group = {
     getAttribute: (name) => ({
+      'data-gbdraw-record-index': '0',
       'data-gbdraw-record-source-start': '2',
       'data-gbdraw-record-source-end': '5',
       'data-gbdraw-record-source-step': '-1'
     })[name] ?? null
   };
   const svg = {
-    querySelector: (selector) => (
-      selector === '[data-gbdraw-record-index="0"][data-gbdraw-record-source-step]' ? group : null
+    querySelectorAll: (selector) => (
+      selector === '[data-gbdraw-record-index][data-gbdraw-record-source-step]' ? [group] : []
     )
   };
   const match = { ownerSVGElement: svg };
@@ -466,6 +501,37 @@ test('a match on a restored cropped reverse record reports source coordinates (C
   assert.equal(bundle.entries[0].fasta, '>pairwise_comparison1_match1_query|record=QUERY.1|coords=5..4|strand=-\nCG\n');
   assert.equal(bundle.entries[0].filename, 'pairwise_comparison1_match1_query_QUERY.1_5-4.fna');
   assert.equal(bundle.entries[1].fasta, '>pairwise_comparison1_match1_subject|record=SUBJECT.1|coords=3..4|strand=+\nGG\n');
+});
+
+test('record source spans are read from one scan of the Result (OV-931)', () => {
+  let scans = 0;
+  const groupFor = (index, step) => ({
+    getAttribute: (name) => ({
+      'data-gbdraw-record-index': String(index),
+      'data-gbdraw-record-source-start': '2',
+      'data-gbdraw-record-source-end': '5',
+      'data-gbdraw-record-source-step': String(step)
+    })[name] ?? null
+  });
+  const groups = [groupFor(0, -1), groupFor(1, 1)];
+  const svg = {
+    querySelector: (selector) => {
+      scans += 1;
+      const index = /data-gbdraw-record-index="(\d+)"/.exec(selector)?.[1];
+      return groups.find((group) => group.getAttribute('data-gbdraw-record-index') === index) || null;
+    },
+    querySelectorAll: (selector) => {
+      scans += 1;
+      return selector === '[data-gbdraw-record-index][data-gbdraw-record-source-step]' ? groups : [];
+    }
+  };
+  const match = { ownerSVGElement: svg };
+  for (let round = 0; round < 50; round += 1) {
+    assert.deepEqual(readRecordSourceSpan(match, 0), { start: 2, end: 5, step: -1 });
+    assert.deepEqual(readRecordSourceSpan(match, 1), { start: 2, end: 5, step: 1 });
+    assert.equal(readRecordSourceSpan(match, 2), null);
+  }
+  assert.equal(scans, 1);
 });
 
 test('restores circular reference and display-ordered conservation sources', async () => {

@@ -1,0 +1,299 @@
+// OV-1035..1039 (R1, PD-OI-037 rev 2 / OIC-024): `SETTING_APPLICATION` in
+// services/setting-application.js is the one owner of when a setting applies.
+// index.html names a setting only by its key: an element with
+// `data-setting="<key>"` is the scope of that row, a control belongs to the
+// row of its nearest scope (itself or an ancestor), and a timing note is a
+// `<setting-note setting="<key>">` that renders the row's note. No timing
+// note is written as literal text.
+//
+// "Settings control": every input, select, textarea and button, and every
+// component element except the presentation-only ones, inside an element
+// marked `v-settings-section` (the settings pane's only containers; the
+// catalog `SETTINGS_SECTIONS` owns their keys), unless it sits in a
+// `data-history-scope="transient"` subtree (a value that is not kept).
+// `data-history-ignore` controls count: the History input adapter skips them
+// because they record their own step (Inherit, Replace and Clear comparison
+// write a setting) or change no Session setting, which this test does not
+// tell apart. Outside the settings pane the controls that write draft
+// settings are the Result's Feature placement selects (popup and selection
+// toolbar) and the record popup's definition fields, found by their handler
+// names; every other Result control is an editor edit (live), a review with
+// its own Apply, or a dialog.
+//
+// What this catches: a control without any scope (the Basic card, a new
+// section, a new Result writer with a known handler), a scope or note without
+// a row, a missing note, and the literal wording "applies on Generate". What
+// it does not catch: a control is classified by its nearest scope, and every
+// card except Basic is a scope, so a new control inside a card inherits the
+// card's row whether or not it applies that way; a new Result writer with
+// another handler; and a timing note in other words. A reviewer checks those.
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import test from 'node:test';
+
+import {
+  SETTING_APPLICATION, settingApplicationNote, settingApplicationSentence
+} from '../../gbdraw/web/js/services/setting-application.js';
+import { SETTINGS_SECTIONS } from '../../gbdraw/web/js/services/settings-sections.js';
+
+const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
+const lineOf = (offset) => html.slice(0, offset).split('\n').length;
+
+const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+const PRESENTATION_COMPONENTS = new Set(['help-tip', 'settings-section-title', 'setting-note', 'markup-preview', 'i18n-text']);
+
+// The end of an opening tag, skipping '>' inside quoted attribute values.
+const tagEnd = (from) => {
+  let quote = null;
+  for (let index = from; index < html.length; index += 1) {
+    const char = html[index];
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '>') {
+      return index;
+    }
+  }
+  throw new Error(`Unterminated tag at line ${lineOf(from)}`);
+};
+
+const parseAttributes = (text) => {
+  const attributes = new Map();
+  for (const match of text.matchAll(/([^\s=/"']+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>"']+))?/g)) {
+    const value = match[2] ?? '';
+    attributes.set(match[1], value.replace(/^["']|["']$/g, ''));
+  }
+  return attributes;
+};
+
+// The element tree of index.html outside <script> and comments.
+const parseTree = () => {
+  const root = { tag: '#root', attributes: new Map(), parent: null, children: [], line: 0 };
+  let current = root;
+  let index = 0;
+  while (index < html.length) {
+    const open = html.indexOf('<', index);
+    if (open < 0) break;
+    if (html.startsWith('<!--', open)) {
+      index = html.indexOf('-->', open) + 3;
+      continue;
+    }
+    if (html.startsWith('</', open)) {
+      const end = html.indexOf('>', open);
+      const tag = html.slice(open + 2, end).trim().toLowerCase();
+      let node = current;
+      while (node && node.tag !== tag) node = node.parent;
+      if (node) current = node.parent;
+      index = end + 1;
+      continue;
+    }
+    if (!/[a-zA-Z]/.test(html[open + 1] || '')) {
+      index = open + 1;
+      continue;
+    }
+    const end = tagEnd(open);
+    const raw = html.slice(open + 1, end);
+    const tag = raw.match(/^[^\s/>]+/)[0].toLowerCase();
+    const element = {
+      tag,
+      attributes: parseAttributes(raw.slice(tag.length)),
+      parent: current,
+      children: [],
+      line: lineOf(open)
+    };
+    current.children.push(element);
+    index = end + 1;
+    if (tag === 'script') {
+      index = html.indexOf('</script>', index) + '</script>'.length;
+      continue;
+    }
+    if (!VOID.has(tag) && !raw.endsWith('/')) current = element;
+  }
+  return root;
+};
+
+const tree = parseTree();
+const descendants = function* descendants(element) {
+  for (const child of element.children) {
+    yield child;
+    yield* descendants(child);
+  }
+};
+const ancestorsOrSelf = function* ancestorsOrSelf(element) {
+  for (let node = element; node; node = node.parent) yield node;
+};
+const allElements = [...descendants(tree)];
+const scopeOf = (element) => [...ancestorsOrSelf(element)].find((node) => node.attributes.has('data-setting')) || null;
+const enclosingScope = (scope) => (scope.parent ? scopeOf(scope.parent) : null);
+const ROWS = new Map(SETTING_APPLICATION.map((row) => [row.id, row]));
+const describe = (element) => `line ${element.line}: <${element.tag}${element.attributes.has('aria-label')
+  ? ` aria-label="${element.attributes.get('aria-label')}"` : ''}>`;
+
+const isControl = (element) => {
+  if (['input', 'select', 'textarea', 'button'].includes(element.tag)) {
+    return element.attributes.get('type') !== 'hidden';
+  }
+  return element.tag.includes('-') && !PRESENTATION_COMPONENTS.has(element.tag);
+};
+const isTransient = (element) => [...ancestorsOrSelf(element)].some((node) => node.attributes.get('data-history-scope') === 'transient');
+// An app preference, not a drawing setting (`ui.richFeaturePopup`, PD-OI-086);
+// it is not in the Session's drawing request. It takes effect on the next
+// feature click and sets the popup mode of Interactive SVG exports
+// (svg-serialization.js `popupMode`), so no Applies on Generate row fits it.
+const APP_PREFERENCES = new Set(['richFeaturePopup']);
+const isAppPreference = (element) => APP_PREFERENCES.has(element.attributes.get('v-model'));
+
+const sections = allElements.filter((element) => element.attributes.has('v-settings-section'));
+const settingsControls = sections.flatMap((section) => [...descendants(section)]
+  .filter((element) => isControl(element) && !isTransient(element) && !isAppPreference(element)));
+const RESULT_DRAFT_WRITERS = /featurePlacementActions\.setPlacement\(|setPreviewRecordField\(/;
+const resultDraftControls = allElements.filter((element) => !sections.some((section) => [...ancestorsOrSelf(element)].includes(section))
+  && RESULT_DRAFT_WRITERS.test(element.attributes.get('@change') || ''));
+const scopes = allElements.filter((element) => element.attributes.has('data-setting'));
+const notes = allElements.filter((element) => element.tag === 'setting-note');
+
+test('the owner has one row per key with a known application', () => {
+  const ids = SETTING_APPLICATION.map((row) => row.id);
+  assert.equal(new Set(ids).size, ids.length, 'row keys are unique');
+  for (const row of SETTING_APPLICATION) {
+    assert.match(row.id, /^[a-z][a-z0-9-]*$/, `${row.id}: a stable key, not a caption`);
+    assert.ok(['live', 'generate', 'apply', 'export'].includes(row.application), `${row.id}: ${row.application}`);
+    if ('note' in row) assert.match(row.note, /\S/, `${row.id}: a note has text`);
+  }
+  assert.ok(Object.isFrozen(SETTING_APPLICATION) && SETTING_APPLICATION.every(Object.isFrozen));
+});
+
+test('every settings section exists in index.html and has settings controls in a scope', () => {
+  assert.deepEqual(
+    sections.map((section) => section.attributes.get('v-settings-section').replace(/'/g, '')).sort(),
+    SETTINGS_SECTIONS.map((section) => section.key).sort()
+  );
+  assert.ok(settingsControls.length > 250, `found ${settingsControls.length} settings controls`);
+  assert.equal(resultDraftControls.length, 5, resultDraftControls.map(describe).join('\n'));
+  const unscoped = [...settingsControls, ...resultDraftControls]
+    .filter((element) => !scopeOf(element)).map(describe);
+  assert.deepEqual(unscoped, [], 'every settings control belongs to a SETTING_APPLICATION row');
+});
+
+test('every scope and note names a row, and every row is used', () => {
+  const named = [
+    ...scopes.map((element) => [element.attributes.get('data-setting'), element]),
+    ...notes.map((element) => [element.attributes.get('setting'), element])
+  ];
+  assert.deepEqual(named.filter(([id]) => !ROWS.has(id)).map(([id, element]) => `${id} at ${describe(element)}`), []);
+  const sentences = [...html.matchAll(/settingApplicationSentence\('([^']+)'\)/g)].map((match) => match[1]);
+  assert.deepEqual(sentences.filter((id) => !ROWS.has(id)), []);
+  const used = new Set(scopes.map((element) => element.attributes.get('data-setting')));
+  assert.deepEqual(SETTING_APPLICATION.filter((row) => !used.has(row.id)).map((row) => row.id), []);
+  for (const note of notes) {
+    const scope = scopeOf(note);
+    assert.equal(scope?.attributes.get('data-setting'), note.attributes.get('setting'), `the note at ${describe(note)} sits in its own scope`);
+  }
+});
+
+test('every scope that applies on Generate shows its note, and a nested scope that differs shows its own', () => {
+  const missing = [];
+  for (const scope of scopes) {
+    const id = scope.attributes.get('data-setting');
+    const row = ROWS.get(id);
+    const parent = enclosingScope(scope);
+    const differs = parent && ROWS.get(parent.attributes.get('data-setting'))?.application !== row.application;
+    if (row.application !== 'generate' && !differs) continue;
+    const own = [...descendants(scope)].some((element) => element.tag === 'setting-note'
+      && element.attributes.get('setting') === id && scopeOf(element) === scope);
+    if (!own) missing.push(`${id} at ${describe(scope)}`);
+  }
+  assert.deepEqual(missing, []);
+  for (const control of resultDraftControls) {
+    assert.equal(ROWS.get(scopeOf(control).attributes.get('data-setting')).application, 'generate', describe(control));
+  }
+});
+
+test('the selection toolbar placement select has the note of the popup Feature placement (OV-1038)', () => {
+  const placements = resultDraftControls.filter((element) => /setPlacement\(/.test(element.attributes.get('@change')));
+  assert.equal(placements.length, 2);
+  for (const control of placements) assert.equal(scopeOf(control).attributes.get('data-setting'), 'feature-placement', describe(control));
+});
+
+test('every row renders its note or its class text', () => {
+  for (const row of SETTING_APPLICATION) {
+    const note = settingApplicationNote(row.id);
+    assert.equal(note.application, row.application, row.id);
+    assert.equal(note.qualified, Boolean(row.note), row.id);
+    if (row.note) {
+      assert.equal(note.text, row.note, row.id);
+    } else {
+      assert.equal(note.text, { generate: 'Applies on Generate', live: 'Live edit', apply: '', export: '' }[row.application], row.id);
+    }
+    assert.equal(settingApplicationSentence(row.id), row.application === 'generate' ? 'Changes apply on Generate.' : '', row.id);
+  }
+  assert.throws(() => settingApplicationNote('no-such-setting'), /no-such-setting/);
+  // The component (components.js `SettingNote`) renders exactly that text and,
+  // for a Generate row, the marker attribute the browser tests select.
+  const component = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'components.js'), 'utf8')
+    .match(/export const SettingNote = \{([\s\S]*?)\n\};/);
+  assert.ok(component, 'components.js defines SettingNote');
+  // A live setting row says Applies on Generate while the committed request
+  // cannot draw one of its request paths (review F2 of #1145).
+  assert.match(component[1], /const applies = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, applies\)\) \};/);
+  // The app setup provides the predicate of the committed request.
+  const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
+  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedLiveSettingApplies\);/);
+  assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
+  assert.match(component[1], /\{\{ note\.text \}\}/);
+});
+
+test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () => {
+  const toggles = settingsControls.filter((element) => /show_gc|show_skew|setTrackShown|setCircularGcSuppressed|setCircularSkewSuppressed/
+    .test(`${element.attributes.get('v-model') || ''} ${element.attributes.get('@change') || ''}`));
+  assert.equal(toggles.length, 6, toggles.map(describe).join('\n'));
+  for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));
+  assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
+});
+
+test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {
+  const depthSourceControls = settingsControls.filter((element) => /(?:remove(?:Circular|Linear)DepthTrack|clearLinearSourceDepthFile|set(?:Circular|LinearSource|Linear)DepthFile)\(/
+    .test(`${element.attributes.get('@click') || ''} ${element.attributes.get('@update:model-value') || ''}`));
+  assert.equal(depthSourceControls.length, 7, depthSourceControls.map(describe).join('\n'));
+  for (const control of depthSourceControls) assert.equal(scopeOf(control).attributes.get('data-setting'), 'depth-sources', describe(control));
+  const note = settingApplicationNote('depth-sources');
+  assert.equal(note.application, 'generate');
+  assert.match(note.text, /Adding a Depth file, or a series.*turns Show Depth on.*removing the last Depth file or the File that holds it.*at once\..*Legend title.*at once\..*Generate/);
+  const dialog = allElements.find((element) => element.attributes.has('data-linear-source-removal-dialog'));
+  const removal = [...descendants(dialog)].filter((element) => element.tag === 'setting-note'
+    && element.attributes.get('setting') === 'depth-sources');
+  assert.equal(removal.length, 1, 'the Linear File removal dialog shows the Depth note');
+  assert.match(scopeOf(removal[0]).attributes.get('v-if') || '', /hasLinearDepthFiles/, 'only when the File holds a Depth file');
+});
+
+test('Feature Visibility notes that leaving a feature out of protein search applies on Generate', () => {
+  const note = settingApplicationNote('feature-visibility');
+  assert.equal(note.application, 'live');
+  assert.match(note.text, /at once.*leaving a feature out of protein search applies on Generate/);
+});
+
+test('Output Prefix names the Results of the next Generate (OV-1042)', () => {
+  // Exports take their file name from the Result's name (export.js
+  // `getDownloadName`), which the request sets from the prefix at Generate.
+  const [control] = settingsControls.filter((element) => element.attributes.get('v-model') === 'form.prefix');
+  assert.ok(control);
+  assert.equal(ROWS.get(scopeOf(control).attributes.get('data-setting')).application, 'generate', describe(control));
+});
+
+test('Embed font in exported SVG is an export-only setting', () => {
+  const [control] = settingsControls.filter((element) => element.attributes.get('v-model') === 'fontSettings.embedInExports.value');
+  assert.ok(control);
+  assert.equal(ROWS.get(scopeOf(control).attributes.get('data-setting')).application, 'export', describe(control));
+});
+
+test('no timing note is written as literal text in index.html', () => {
+  // Skip matches inside HTML comments by their ranges instead of deleting the
+  // comments, which CodeQL reads as incomplete sanitization.
+  const comments = [...html.matchAll(/<!--[\s\S]*?-->/g)].map((match) => [match.index, match.index + match[0].length]);
+  const literal = [...html.matchAll(/appl(?:y|ies) (?:on|to) (?:the next )?Generate|not to Generate|data-applies-on-generate/gi)]
+    .filter((match) => !comments.some(([start, end]) => match.index >= start && match.index < end))
+    .map((match) => `${match[0]} at line ${html.slice(0, match.index).split('\n').length}`);
+  assert.deepEqual(literal, []);
+});

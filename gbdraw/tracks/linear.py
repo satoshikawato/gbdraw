@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
+    SHARED_SLOT_PARAM_KEYS,
     normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
     parse_track_slot_text,
+    reject_unread_slot_params,
     split_kv_list,
     validate_annotation_slot_side,
     validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec, parse_optional_pixel
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 
 
@@ -74,6 +78,12 @@ _GENERIC_LAYOUT_KEYS = {
 }
 
 _SIDE_VALUES = {"above", "below", "overlay"}
+
+# The params keys each non-annotation Linear renderer takes (OV-477).
+_LINEAR_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
+    **SHARED_SLOT_PARAM_KEYS,
+    "features": frozenset(),
+})
 
 
 @dataclass
@@ -179,7 +189,10 @@ def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
                 elif key in {"enabled", "show", "visible"}:
                     enabled = parse_bool(value)
                 elif key in {"z", "z_index", "zindex"}:
-                    z = int(value)
+                    parsed_z = parse_ascii_integer(value)
+                    if parsed_z is None:
+                        raise ValueError(f"z must be an integer, got {value!r}")
+                    z = parsed_z
                 elif key == "side":
                     side = _normalize_side_value(value)
                 elif key in {"h", "height"}:
@@ -353,6 +366,10 @@ def _normalize_linear_track_slots(
                     f"linear track slot '{slot.id}' stores generic layout field '{raw_key}' in params; "
                     "use slot-level height, spacing, side, and z fields"
                 )
+        if renderer != "annotations":
+            reject_unread_slot_params(
+                raw_params, mode="linear", slot_id=str(slot.id), renderer=renderer, accepted=_LINEAR_SLOT_PARAM_KEYS
+            )
         params = dict(raw_params)
 
         _validate_px_scalar(slot.height, field_name="height", allow_zero=False)

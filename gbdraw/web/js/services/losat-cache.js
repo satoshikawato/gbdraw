@@ -125,8 +125,9 @@ const hasRawShape = (entry) => (
   isPlainObject(entry) &&
   entry.kind === 'raw-losat' &&
   typeof entry.text === 'string' &&
-  // `RegExp.test` coerces a non-string `searchContext` to text; the cast only satisfies the signature.
-  (entry.searchContext === undefined || /^[0-9a-f]{64}$/.test(/** @type {string} */ (entry.searchContext)))
+  // `RegExp.test` coerces what it is given to text, so the type is tested first (OV-983).
+  (entry.searchContext === undefined
+    || (typeof entry.searchContext === 'string' && /^[0-9a-f]{64}$/.test(entry.searchContext)))
 );
 
 /**
@@ -586,24 +587,80 @@ const COMPOUND_PATH_EDGE_RE = /^[^:\s]+:\d+:(h_[a-z2-7]{26})->\d+:(h_[a-z2-7]{26
 const isNonnegativeInteger = (value) => Number.isInteger(value) && /** @type {number} */ (value) >= 0;
 
 /**
+ * A zero-hit pair holds exactly one empty table: the header-only `canonicalTsv` the current writer emits, or the
+ * `rows: []` that derived entries carried from #312 until the canonical table replaced it. The Python twin is
+ * `_has_one_empty_table_form` in `gbdraw/analysis/protein_artifacts.py`.
+ * @param {Record<string, unknown>} pair
+ */
+const hasOneEmptyTableForm = (pair) => {
+  const hasTable = Object.prototype.hasOwnProperty.call(pair, 'canonicalTsv');
+  if (hasTable === Object.prototype.hasOwnProperty.call(pair, 'rows')) return false;
+  if (!hasTable) return Array.isArray(pair.rows) && pair.rows.length === 0;
+  return typeof pair.canonicalTsv === 'string' && /^[^\n]*\n$/.test(pair.canonicalTsv);
+};
+
+// The typed analysis result a derived payload of each mode carries: its payload member, the kind of its typed
+// resource and the type of its value. The Python twin is `_DERIVED_RESULT_MEMBERS` in
+// `gbdraw/analysis/protein_artifacts.py`.
+/** @type {Readonly<Record<string, { member: string, kind: string, type: string }>>} */
+const DERIVED_RESULT_MEMBERS = Object.freeze({
+  orthogroup: { member: 'orthogroupResult', kind: 'orthogroupResult', type: 'OrthogroupGraphResult' },
+  collinear: { member: 'collinearityResult', kind: 'result', type: 'CollinearityResult' }
+});
+
+/**
+ * Whether `resource` is a typed analysis result of `mode` as the Python typed codec writes it: schema 3, the mode's
+ * kind and value type, and an object of fields.
+ * @param {unknown} mode
+ * @param {unknown} resource
+ * @returns {boolean}
+ */
+export const isDerivedAnalysisResult = (mode, resource) => {
+  const expected = typeof mode === 'string' && Object.hasOwn(DERIVED_RESULT_MEMBERS, mode)
+    ? DERIVED_RESULT_MEMBERS[mode]
+    : null;
+  if (!expected || !isPlainObject(resource)) return false;
+  const value = resource.value;
+  return resource.schema === 3
+    && resource.kind === expected.kind
+    && isPlainObject(value)
+    && value.type === expected.type
+    && isPlainObject(value.fields);
+};
+
+/**
+ * Whether a JSON value names nothing: every array and object in it is empty. A typed object (`{ type, fields }`) is
+ * read through its fields, so a typed result whose collections are all empty, nested results included, holds no
+ * value. The Python twin is `_holds_no_value`.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+const holdsNoValue = (value) => {
+  if (Array.isArray(value)) return value.length === 0;
+  if (!isPlainObject(value)) return true;
+  const keys = Object.keys(value);
+  if (keys.length === 2 && Object.hasOwn(value, 'type') && isPlainObject(value.fields)) {
+    return Object.values(value.fields).every(holdsNoValue);
+  }
+  return keys.length === 0;
+};
+
+/**
+ * Whether a derived entry is the result of zero-hit searches, which names no protein (OV-1127): its mode computes a
+ * result, its identity (if present) is current, every pair is a zero-hit pair, its typed result (if present) is the
+ * mode's, and every other member holds no value: the typed result and the members of the form written before it
+ * (`orthogroups: []`) are empty. The Python twin is `_is_zero_hit_result` in `gbdraw/analysis/protein_artifacts.py`;
+ * `tests/fixtures/session_admission_vectors.json` pins both.
  * @param {LosatDerivedCacheEntry} entry A derived entry that `isLosatDerivedCacheEntry` accepted.
  * @returns {boolean}
  */
-const isStrictEmptyDerivedResult = (entry) => {
+const isZeroHitDerivedResult = (entry) => {
   const mode = entry?.mode;
-  if (!(/** @type {readonly unknown[]} */ (['orthogroup', 'collinear'])).includes(mode) || !isPlainObject(entry?.payload)) {
-    return false;
-  }
+  const result = typeof mode === 'string' && Object.hasOwn(DERIVED_RESULT_MEMBERS, mode)
+    ? DERIVED_RESULT_MEMBERS[mode]
+    : null;
+  if (!result || !isPlainObject(entry?.payload)) return false;
   const payload = entry.payload;
-  const allowedKeys = new Set(['identity', 'provenance', 'pairs', 'orthogroups']);
-  if (mode === 'collinear') {
-    [
-      'collinearGroups',
-      'collinearGroupScope',
-      'collinearityBlocks'
-    ].forEach((key) => allowedKeys.add(key));
-  }
-  if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return false;
 
   if (Object.prototype.hasOwnProperty.call(payload, 'identity')) {
     const identity = payload.identity;
@@ -617,19 +674,13 @@ const isStrictEmptyDerivedResult = (entry) => {
     ) return false;
   }
 
-  if (
-    !Array.isArray(payload.pairs) ||
-    payload.pairs.length === 0 ||
-    !Array.isArray(payload.orthogroups)
-  ) {
-    return false;
-  }
-  if (payload.orthogroups.length !== 0) return false;
+  if (!Array.isArray(payload.pairs) || payload.pairs.length === 0) return false;
   const allowedPairKeys = new Set([
     'pair_index',
     'query_index',
     'subject_index',
     'tsv',
+    'canonicalTsv',
     'rows',
     'hit_count'
   ]);
@@ -641,8 +692,7 @@ const isStrictEmptyDerivedResult = (entry) => {
       !isNonnegativeInteger(pair.pair_index) ||
       pairIndices.has(pair.pair_index) ||
       pair.tsv !== '' ||
-      !Array.isArray(pair.rows) ||
-      pair.rows.length !== 0 ||
+      !hasOneEmptyTableForm(pair) ||
       pair.hit_count !== 0
     ) return false;
     pairIndices.add(pair.pair_index);
@@ -660,19 +710,11 @@ const isStrictEmptyDerivedResult = (entry) => {
     ) return false;
   }
 
-  if (mode === 'collinear') {
-    for (const key of ['collinearGroups', 'collinearityBlocks']) {
-      if (
-        Object.prototype.hasOwnProperty.call(payload, key) &&
-        (!Array.isArray(payload[key]) || payload[key].length !== 0)
-      ) return false;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(payload, 'collinearGroupScope') &&
-      !(/** @type {readonly unknown[]} */ (['adjacent_local', 'global_collinear'])).includes(payload.collinearGroupScope)
-    ) return false;
-  }
-  return true;
+  if (Object.hasOwn(payload, result.member) && !isDerivedAnalysisResult(mode, payload[result.member])) return false;
+  return Object.entries(payload).every(([key, value]) => (
+    ['identity', 'provenance', 'pairs'].includes(key)
+    || holdsNoValue(key === result.member && isPlainObject(value) ? value.value : value)
+  ));
 };
 
 /**
@@ -779,7 +821,7 @@ export const validateDerivedProteinReferences = (
     (
       sawReference ||
       Object.keys(entry.payload).length === 0 ||
-      isStrictEmptyDerivedResult(entry)
+      isZeroHitDerivedResult(entry)
     )
   );
 };
@@ -905,6 +947,32 @@ export const transitionLegacyProteinCandidate = (
       : candidate
   ));
   return { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries };
+};
+
+/**
+ * The legacy protein artifacts a written Session keeps, from one write's attempts (OV-1132, OV-1143).
+ * Python `written_legacy_protein_artifacts` is the other side; both read
+ * tests/fixtures/legacy_protein_artifact_vectors.json. A promoted candidate leaves the envelope on
+ * serialization; the evidence goes when current derived entries supersede it, or when this write
+ * promoted the last pending candidate.
+ * @template {{ entries: readonly unknown[] }} E
+ * @param {{ candidates: unknown, evidence: E, promoted: readonly number[], hasCurrentDerived: boolean }} write
+ * @returns {{ candidates: LegacyProteinCandidateEnvelope,
+ *   evidence: E | { schema: number, entries: never[] } }}
+ */
+export const writtenLegacyProteinArtifacts = ({ candidates, evidence, promoted, hasCurrentDerived }) => {
+  const written = promoted.reduce(
+    (envelope, index) => transitionLegacyProteinCandidate(envelope, index, 'promoted'),
+    normalizeLegacyProteinCandidateEnvelope(candidates)
+  );
+  const promotedTheLast = promoted.length > 0
+    && !written.entries.some((candidate) => candidate.state === 'pending');
+  return {
+    candidates: written,
+    evidence: hasCurrentDerived || promotedTheLast
+      ? { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] }
+      : evidence
+  };
 };
 
 /** @param {unknown} envelope */

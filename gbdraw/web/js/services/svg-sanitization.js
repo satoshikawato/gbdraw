@@ -124,6 +124,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-record-translation-y',
     'data-gbdraw-annotation-mark',
     'data-gbdraw-annotation-label',
+    'data-gbdraw-region-label-for',
     'data-gbdraw-role',
     'data-gbdraw-composition-schema',
     'data-gbdraw-composition',
@@ -167,7 +168,8 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'dominant-baseline',
     'writing-mode',
     'letter-spacing',
-    'display'
+    'display',
+    'pointer-events'
   ],
   FORBID_TAGS: [
     'style',
@@ -212,3 +214,29 @@ export const sanitizeSvgContent = (
   }
   return content;
 };
+
+const SVG_FRAGMENT_OPEN = '<svg xmlns="http://www.w3.org/2000/svg">';
+const SVG_END = '</svg>';
+
+/**
+ * A fragment of SVG elements inside an SVG root, as the sanitizer reads a
+ * whole document. Pure: calls nothing.
+ * @param {string} fragment
+ */
+export const wrapSvgFragment = (fragment) => `${SVG_FRAGMENT_OPEN}${fragment}${SVG_END}`;
+
+/**
+ * The fragment of a sanitized wrapped fragment: the text between `prefix`
+ * (the sanitized form of the wrapper's start tag) and the root end tag, or
+ * null when either is missing. Pure: calls nothing.
+ * @param {string} sanitized
+ * @param {string} prefix
+ * @returns {string | null}
+ */
+export const unwrapSvgFragment = (sanitized, prefix) => (
+  sanitized.length >= prefix.length + SVG_END.length
+  && sanitized.startsWith(prefix)
+  && sanitized.endsWith(SVG_END)
+    ? sanitized.slice(prefix.length, sanitized.length - SVG_END.length)
+    : null
+);

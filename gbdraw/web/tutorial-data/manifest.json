@@ -13,8 +13,8 @@
     },
     "extended": {
       "maxUncompressedBytes": 16777216,
-      "actualUncompressedBytes": 7848956,
-      "fileCount": 20
+      "actualUncompressedBytes": 7849886,
+      "fileCount": 21
     }
   },
   "fixtures": {
@@ -356,6 +356,7 @@
       "fileIds": [
         "tobacco-plastome-genbank",
         "tobacco-plastome-regions-table",
+        "tobacco-plastome-regions-span-table",
         "tobacco-plastome-default-colors",
         "tobacco-plastome-specific-colors",
         "tobacco-plastome-qualifier-priority"
@@ -950,8 +951,37 @@
         "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv."
       },
       "derivation": null,
-      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "scenarioIds": ["H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv"]
+    },
+    "tobacco-plastome-regions-span-table": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/nicotiana-tabacum-regions-span.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "region-annotation-table",
+      "sizeBytes": 930,
+      "sha256": "67f6f6385870b270fed02c24141bf586181794dba211ea93661833ae8429b246",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "annotationCount": 8,
+        "annotationSetIds": ["plastome_regions", "plastome_tint"],
+        "recordId": "NC_001879.2",
+        "coordinateSpace": "source"
+      },
+      "provenance": {
+        "sourceName": "gbdraw Gallery annotation table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": "2026-10-19",
+        "repositoryAddedOn": "2026-10-19",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/nicotiana-tabacum-regions-span.tsv."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02"],
+      "replaces": ["gbdraw/web/gallery/files/nicotiana-tabacum-regions-span.tsv"]
     },
     "tobacco-plastome-default-colors": {
       "fixtureId": "tobacco-plastome-regions",

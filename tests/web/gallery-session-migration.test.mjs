@@ -72,7 +72,7 @@ const {
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });
-const { applyConfigData } = await import(
+const { applyCapturedConfigData } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'config.js'))
 );
 const { splitDraftIntoModes } = await import(
@@ -119,13 +119,15 @@ const syntheticCliSession = {
       source: { kind: 'genbank', resourceId: 'record-source' },
       selector: null,
       region: null,
-      presentation: null
+      // A schema-2 writer stored each record's presentation (Python refuses null).
+      presentation: { label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null }
     }, {
       recordKey: 'record-2',
       source: { kind: 'genbank', resourceId: 'record-source-2' },
       selector: null,
       region: null,
-      presentation: null
+      // A schema-2 writer stored each record's presentation (Python refuses null).
+      presentation: { label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null }
     }],
     diagramOptions: {
       config: { form: { legend: 'right' }, marker: 'must-survive' },
@@ -143,7 +145,7 @@ const syntheticCliSession = {
       queryRecordIndex: 0,
       subjectRecordIndex: 1
     }],
-    output: { prefix: 'cli', formats: ['interactive_svg'], overwrite: true }
+    output: { prefix: 'cli', formats: ['interactive_svg'], overwrite: true, interactiveMetadataPolicy: 'auto' }
   },
   resources: {
     'record-source': syntheticResource('genbank', 'cli.gb', 'LOCUS synthetic'),
@@ -155,8 +157,15 @@ const syntheticCliSession = {
     )
   }
 };
+// A Gallery Session promotes through the one request reader; these need no repair.
+const promotedWithoutRepairs = (session) => {
+  const repairs = [];
+  const promoted = promoteGallerySessionToCurrent(session, { repairs });
+  assert.deepEqual(repairs, []);
+  return promoted;
+};
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
-const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
+const promotedSyntheticCli = promotedWithoutRepairs(syntheticCliSession);
 assert.equal(promotedSyntheticCli.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
@@ -198,7 +207,7 @@ const cliEditorProjection = projectCanonicalSessionRequest({
 });
 webState.mode.value = 'linear';
 webState.lInputType.value = cliEditorProjection.inputType;
-applyConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
+applyCapturedConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
 const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
   plan: webState.activeDrawing().linearComparisonPlan,
   sequences: cliEditorProjection.files.linearSeqs,
@@ -270,7 +279,10 @@ const syntheticGuiSession = {
     }],
     diagramOptions: {
       configOverrides: { show_labels: false, circular_definition_font_size: 10 },
-      tracks: { circularTrackSlots: null, circularTrackAxisIndex: null },
+      tracks: {
+        circularTrackSlots: null, circularTrackAxisIndex: null, linearTrackSlots: null, linearTrackAxisIndex: null,
+        centerReservedRadius: null
+      },
       output: { outputPrefix: 'old', legend: 'right', plotTitlePosition: 'none' },
       selectedFeaturesSet: ['CDS'],
       featureShapes: { repeat_region: 'rectangle' },
@@ -278,7 +290,7 @@ const syntheticGuiSession = {
     },
     layout: {},
     comparisons: [],
-    output: { prefix: 'old', formats: ['interactive_svg'], overwrite: true }
+    output: { prefix: 'old', formats: ['interactive_svg'], overwrite: true, interactiveMetadataPolicy: 'auto' }
   },
   resources: {
     'record-source': syntheticResource('genbank', 'gui.gb', 'LOCUS synthetic'),
@@ -289,7 +301,7 @@ const syntheticGuiSession = {
     )
   }
 };
-const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
+const promotedSyntheticGui = promotedWithoutRepairs(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
 assert.equal(promotedSyntheticGui.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
@@ -347,7 +359,7 @@ assert.throws(() => admitGallerySession(promotedSyntheticGui), /Web draft in mod
 const currentSyntheticGui = asCurrent(promotedSyntheticGui);
 assert.equal(admitGallerySession(currentSyntheticGui), currentSyntheticGui);
 assert.throws(
-  () => promoteGallerySessionToCurrent(promotedSyntheticGui),
+  () => promoteGallerySessionToCurrent(promotedSyntheticGui, { repairs: [] }),
   /historical migration supports session versions 31-33 and 39/
 );
 const retiredCurrentConfig = structuredClone(currentSyntheticGui);
@@ -571,7 +583,7 @@ assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearComparisonPlan'), fals
 assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false);
 
 const hmmt = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json'), 'utf8'));
-const promotedHmmt = promoteGallerySessionToCurrent({ ...hmmt, version: 39 });
+const promotedHmmt = promotedWithoutRepairs({ ...hmmt, version: 39 });
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
 assert.equal(promotedHmmt.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
@@ -696,7 +708,7 @@ assert.throws(
   /group is ambiguous/
 );
 const bgc = JSON.parse(bgcFixtureBytes.toString('utf8'));
-const promotedBgc = promoteGallerySessionToCurrent({ ...bgc, version: 39 });
+const promotedBgc = promotedWithoutRepairs({ ...bgc, version: 39 });
 const bgcOptions = promotedBgc.renderRequest.diagramOptions;
 assert.deepEqual(
   promotedBgc.renderRequest.records.map((record) => record.presentation.reverseComplement),
@@ -841,9 +853,29 @@ for (const [name, promoted] of [
   const current = asCurrent(promoted);
   assert.equal(admitGallerySession(current), current);
   assert.throws(
-    () => promoteGallerySessionToCurrent(promoted),
+    () => promoteGallerySessionToCurrent(promoted, { repairs: [] }),
     /historical migration supports session versions 31-33 and 39/
   );
+}
+
+// OV-963: a saved conservation series row that is null reads as a row without a label, as
+// a row of another kind does; it no longer stops the promotion (and so the Load of a
+// Session 31-33 whose schema-2 request Load rebuilds) with a TypeError.
+{
+  const conservationSession = async (series) => {
+    const session = JSON.parse(gunzipSync(await readFile(join(
+      repoRoot, 'tests/fixtures/sessions/feature-edits-circular.v33.gbdraw-session.json.gz'
+    ))).toString('utf8'));
+    session.config.circularConservation = { ...session.config.circularConservation, labels: '', series };
+    return session;
+  };
+  const promotedSeries = async (series) => {
+    const promoted = promoteGallerySessionToCurrent(await conservationSession(series), { repairs: [] });
+    return promoted.config.circularConservation;
+  };
+  const labelless = await promotedSeries([{}]);
+  assert.deepEqual(await promotedSeries([null]), { ...labelless, series: [null] });
+  assert.equal(labelless.labels, '');
 }
 
 console.log('gallery session migration assertions passed');

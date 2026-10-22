@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Callable, Dict, List, Literal, NamedTuple, Optional, Sequence, cast
 
@@ -22,6 +23,7 @@ from ....core.text import (
     parse_mixed_content_text,
 )
 from ....layout.spatial import Aabb, union_aabbs
+from ....render_stages import render_stage
 from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 
@@ -43,6 +45,34 @@ def _normalize_definition_profile(profile: str) -> CircularDefinitionProfile:
             "definition_profile must be one of: full, record_summary, shared_common"
         )
     return cast(CircularDefinitionProfile, normalized)
+
+
+@dataclass(frozen=True)
+class CircularDefinitionStyle:
+    """What a Circular definition draws with: its line interval, font size, font family and profile.
+
+    The shared-common profile (the plot title) draws in the plot title font
+    size, the others in the definition font size. A render stage keys the
+    definition by these values, so a setting it does not draw with does not
+    rebuild it (OV-1115).
+    """
+
+    interval: int
+    font_size: float
+    font_family: str
+    profile: CircularDefinitionProfile
+
+    @classmethod
+    def of(cls, cfg: GbdrawConfig, definition_profile: str) -> CircularDefinitionStyle:
+        definition = cfg.objects.definition.circular
+        profile = _normalize_definition_profile(definition_profile)
+        shared_common = profile == "shared_common"
+        return cls(
+            interval=definition.interval,
+            font_size=definition.plot_title_font_size if shared_common else definition.font_size,
+            font_family=cfg.objects.text.font_family,
+            profile=profile,
+        )
 
 
 def _has_visible_text(parts: list[_TextPart]) -> bool:
@@ -194,14 +224,22 @@ class DefinitionRecordFacts(NamedTuple):
     gc_percent: float | None
 
 
+def _record_gc_percent(record: SeqRecord) -> float:
+    return calculate_gc_percent(record.seq)
+
+
 def definition_record_facts(record: SeqRecord, *, gc_percent: bool = True) -> DefinitionRecordFacts:
-    """The facts a circular definition reads of ``record`` (the GC only when asked)."""
+    """The facts a circular definition reads of ``record`` (the GC only when asked).
+
+    The GC percent reads only the record, so it is a render stage keyed by the
+    record's identity: a warm Generate does not count the bases again.
+    """
 
     return DefinitionRecordFacts(
         record_id=str(record.id),
         metadata=infer_record_source_metadata(record),
         length=len(record.seq),
-        gc_percent=calculate_gc_percent(record.seq) if gc_percent else None,
+        gc_percent=render_stage("record_gc_percent", _record_gc_percent, record) if gc_percent else None,
     )
 
 
@@ -215,11 +253,10 @@ class DefinitionGroup:
         gb_record: SeqRecord | DefinitionRecordFacts,
         geometry: CircularCanvasGeometry,
         *,
-        cfg: GbdrawConfig,
+        style: CircularDefinitionStyle,
         species: Optional[str] = None,
         strain: Optional[str] = None,
         plot_title: Optional[str] = None,
-        definition_profile: CircularDefinitionProfile | str = "full",
         definition_group_id: str | None = None,
         record_index: int = 0,
         record_count: int = 1,
@@ -239,19 +276,15 @@ class DefinitionGroup:
         self.species: str | None = species
         self.strain: str | None = strain
         self.plot_title: str | None = plot_title
-        self.definition_profile: CircularDefinitionProfile = _normalize_definition_profile(
-            str(definition_profile)
-        )
+        self.definition_profile: CircularDefinitionProfile = style.profile
         self.record_index = int(record_index)
         self.record_count = int(record_count)
         self.replicon: str | None = None
         self.organelle: str | None = None
         self.record_name: str = ""
-        self._cfg = cfg
-        self.interval = cfg.objects.definition.circular.interval
-        self.font_size = cfg.objects.definition.circular.font_size
-        self.plot_title_font_size = cfg.objects.definition.circular.plot_title_font_size
-        self.font = cfg.objects.text.font_family
+        self.style = style
+        self.font_size = style.font_size
+        self.font = style.font_family
         self.track_id: str = self.record_facts.record_id
         self.definition_group_id: str = (
             str(definition_group_id)
@@ -352,9 +385,7 @@ class DefinitionGroup:
         gc_percent = self.record_facts.gc_percent
         if show_gc and gc_percent is None:
             raise ValueError("A circular definition that shows the GC content needs the record's GC.")
-        active_font_size = (
-            self.plot_title_font_size if self.definition_profile == "shared_common" else self.font_size
-        )
+        active_font_size = self.font_size
         active_name_font_weight = "normal" if self.definition_profile == "shared_common" else "bold"
         species_line_parts: list[list[_TextPart]] | None = None
         if self.definition_profile == "full" and self.species_line_count > 1:
@@ -371,7 +402,9 @@ class DefinitionGroup:
             if len(wrapped) > 1:
                 species_line_parts = wrapped
 
-        self.definition_group = DefinitionDrawer(cfg=self._cfg).draw(
+        self.definition_group = DefinitionDrawer(
+            interval=self.style.interval, font_size=self.style.font_size, font_family=self.style.font_family
+        ).draw(
             self.definition_group,
             self.title_x,
             self.title_y,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Mapping, Sequence, cast
 
-from ...annotations.models import annotation_track_params_from_mapping
+from ...annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import GbdrawConfig
 from ...layout.linear import (
@@ -22,7 +22,7 @@ class LinearSlotFootprint:
     paint_band: VerticalBand | None
     reserve_band: VerticalBand
     data_available: bool = True
-    # The band an overlay spans to (to_slot); None means the slot's nominal extents.
+    # The band a span covers on this slot; None means its nominal extents if it has data.
     body_band: VerticalBand | None = None
 
 
@@ -42,6 +42,9 @@ class LinearResolvedSlot:
     data_available: bool
     z: int
     params: Mapping[str, object]
+    # An overlay that spans slots with a body on this record (``_overlay_span``)
+    # takes its band from them, not from its own height.
+    spans_slots: bool = False
 
 @dataclass(frozen=True)
 class LinearRecordVerticalPlan:
@@ -82,6 +85,13 @@ class LinearRecordVerticalPlan:
     @property
     def canvas_bottom_extent(self) -> float:
         return max(0.0, self.canvas_band.bottom_y)
+
+    @property
+    def features_origin_y(self) -> float:
+        """The origin of the record's features slot (0 without one): the y its feature labels are placed
+        from (record coordinates)."""
+
+        return next((float(slot.origin_y) for slot in self.slots if slot.renderer == "features"), 0.0)
 
     def slot_by_id(self, slot_id: str) -> LinearResolvedSlot:
         for slot in self.slots:
@@ -364,6 +374,20 @@ def _combine_slot_footprint(
     )
 
 
+def _slot_is_missing(footprint: LinearSlotFootprint) -> bool:
+    """A slot with nothing to paint or reserve on this record (its own data and overlays only)."""
+
+    return footprint.paint_band is None and footprint.reserve_band.height <= 0.0
+
+
+def _join_label_rooms(footprint: LinearSlotFootprint, rooms: Sequence[VerticalBand]) -> LinearSlotFootprint:
+    """The slot's reservation with the span label rooms joined to it (they paint nothing)."""
+
+    if not rooms:
+        return footprint
+    return replace(footprint, reserve_band=union_vertical_bands([footprint.reserve_band, *rooms]))
+
+
 def _resolved_slot(
     track: LinearResolvedTrack,
     footprint: LinearSlotFootprint,
@@ -389,28 +413,101 @@ def _resolved_slot(
     )
 
 
+def _span_body(track: LinearResolvedTrack, footprint: LinearSlotFootprint) -> VerticalBand | None:
+    if footprint.body_band is not None:
+        return footprint.body_band
+    if footprint.data_available:
+        return VerticalBand(-track.top_extent, track.bottom_extent)
+    return None
+
+
+def _overlay_span(
+    params: AnnotationTrackParams,
+    slots: Mapping[str, LinearResolvedTrack],
+    footprints: Mapping[str, LinearSlotFootprint],
+) -> tuple[LinearResolvedTrack, ...] | None:
+    """The slots an annotation overlay spans on one record, or ``None`` when it is not a span.
+
+    A ``to_slot`` overlay is a span and adds no space; it covers those of its
+    two slots that have a body on the record. ``cover_anchor`` on a
+    ``features`` slot spans the slot when it has lanes there. With nothing
+    to cover the overlay is not a span on the record: it keeps its own band
+    and reserves it, with its labels, as a plain overlay does (OV-1158,
+    OV-1171).
+    The plan stretches an overlay over the slots it covers and records that
+    as ``spans_slots``, the one span decision its labels follow (OV-1158).
+    """
+
+    anchor = slots.get(params.anchor_slot or "")
+    if anchor is None:
+        return None
+
+    def has_body(track: LinearResolvedTrack) -> bool:
+        return _span_body(track, footprints.get(track.id, _default_slot_footprint(track))) is not None
+
+    if params.to_slot is not None:
+        ids = dict.fromkeys((anchor.id, params.to_slot))
+        covered = tuple(slots[slot_id] for slot_id in ids if slot_id in slots and has_body(slots[slot_id]))
+        return covered or None
+    if params.cover_anchor and anchor.renderer == "features" and has_body(anchor):
+        return (anchor,)
+    return None
+
+
+def _span_label_rooms(
+    overlay: LinearResolvedTrack,
+    footprint: LinearSlotFootprint,
+    referenced: Sequence[tuple[LinearResolvedTrack, LinearSlotFootprint]],
+    stack_order: Mapping[str, int],
+) -> list[tuple[str, VerticalBand]]:
+    """Room for a span's labels beyond the outermost slot it covers on each side.
+
+    The room joins that slot's reservation, so the next slot (or the axis)
+    keeps clear of the labels instead of lying under them. A room never makes
+    an empty slot present (``_pack_side_slots``, OV-1170).
+    """
+
+    bodies = sorted(
+        (
+            (track.id, body)
+            for track, slot_footprint in referenced
+            if (body := _span_body(track, slot_footprint)) is not None
+        ),
+        key=lambda item: stack_order[item[0]],
+    )
+    # The overlay's label overhang beyond its own nominal band, on each side.
+    above = -float(overlay.top_extent) - footprint.reserve_band.top_y
+    below = footprint.reserve_band.bottom_y - float(overlay.bottom_extent)
+    rooms: list[tuple[str, VerticalBand]] = []
+    if above > 0.0:
+        top_id, top_body = bodies[0]
+        rooms.append((top_id, VerticalBand(top_body.top_y - above, top_body.top_y)))
+    if below > 0.0:
+        bottom_id, bottom_body = bodies[-1]
+        rooms.append((bottom_id, VerticalBand(bottom_body.bottom_y, bottom_body.bottom_y + below)))
+    return rooms
+
+
 def _span_resolved_slot(
     overlay: LinearResolvedSlot,
     referenced: Sequence[tuple[LinearResolvedTrack, LinearSlotFootprint, float]],
 ) -> LinearResolvedSlot:
-    """Stretch a to_slot overlay over the hull of the bodies its two slots have.
+    """Stretch a spanning overlay over the hull of the bodies of the slots it covers.
 
-    A slot without data for the record has no body; with none at all, the
-    overlay keeps its place on the anchor. Label overhangs keep their size.
+    Label overhangs keep their size.
     """
 
     bodies = [
-        (footprint.body_band or VerticalBand(-track.top_extent, track.bottom_extent)).translate(origin_y)
+        body.translate(origin_y)
         for track, footprint, origin_y in referenced
-        if footprint.data_available
+        if (body := _span_body(track, footprint)) is not None
     ]
-    if not bodies:
-        return overlay
     span = union_vertical_bands(bodies)
     shift = span.top_y - overlay.origin_y
     grow = span.height - overlay.height
     return replace(
         overlay,
+        spans_slots=True,
         origin_y=span.top_y,
         height=span.height,
         paint_band=(
@@ -464,8 +561,18 @@ def _pack_side_slots(
     seed_band: VerticalBand,
     footprints: Mapping[str, LinearSlotFootprint],
     overlays_by_anchor: Mapping[str, Sequence[tuple[float, LinearSlotFootprint]]],
+    label_rooms: Mapping[str, Sequence[VerticalBand]],
     initial_spacing: float = 0.0,
 ) -> list[LinearResolvedSlot]:
+    """Pack one side's slots outward from ``seed_band``.
+
+    A slot is missing when neither its own data nor an overlay on it paints or
+    reserves anything; when one is, the side is compacted and the missing slot
+    adds no spacing. A span label room joined to a slot never makes it present:
+    a missing slot lies at the occupied edge, moved out only as far as a room
+    on its inner side needs, and a room on its outer side moves the next slot.
+    """
+
     if direction not in {"above", "below"}:
         raise ValueError("direction must be 'above' or 'below'")
 
@@ -484,20 +591,27 @@ def _pack_side_slots(
         )
         for track in ordered
     ]
-    compact_missing = any(
-        footprint.paint_band is None and footprint.reserve_band.height <= 0.0
-        for _track, footprint in prepared
-    )
+    compact_missing = any(_slot_is_missing(footprint) for _track, footprint in prepared)
 
-    for track, footprint in prepared:
-        if footprint.paint_band is None and footprint.reserve_band.height <= 0.0:
-            resolved.append(
-                _resolved_slot(
-                    track,
-                    footprint,
-                    occupied_edge - footprint.reserve_band.top_y,
-                )
+    for track, own_footprint in prepared:
+        footprint = _join_label_rooms(own_footprint, label_rooms.get(track.id, ()))
+        if _slot_is_missing(own_footprint):
+            item = _resolved_slot(
+                track,
+                footprint,
+                _resolve_side_slot_origin(
+                    direction=direction,
+                    occupied_edge=occupied_edge,
+                    incoming_spacing=0.0,
+                    local_reserve_band=footprint.reserve_band,
+                    preferred_origin=None,
+                ),
             )
+            resolved.append(item)
+            if direction == "above":
+                occupied_edge = min(occupied_edge, item.reserve_band.top_y)
+            else:
+                occupied_edge = max(occupied_edge, item.reserve_band.bottom_y)
             continue
         origin_y = _resolve_side_slot_origin(
             direction=direction,
@@ -532,35 +646,63 @@ def resolve_linear_record_vertical_plan(
     tracks_by_id = {track.id: track for track in layout.slots}
     overlay_tracks = [track for track in layout.slots if track.side == "overlay"]
     overlays_by_anchor: dict[str, list[tuple[float, LinearSlotFootprint]]] = {}
+    label_rooms: dict[str, list[VerticalBand]] = {}
     standalone_overlays: list[LinearResolvedSlot] = []
-    relative_overlay_origins: dict[str, tuple[str, float, str | None]] = {}
+    # Per anchored overlay: its anchor, its origin from the anchor, and the slots it spans.
+    relative_overlay_origins: dict[str, tuple[str, float, tuple[LinearResolvedTrack, ...]]] = {}
+
+    def footprint_of(track: LinearResolvedTrack) -> LinearSlotFootprint:
+        return footprint_map.get(track.id, _default_slot_footprint(track))
+
+    # Top-to-bottom order of the slots a span can cover.
+    stack_order = {
+        track.id: index
+        for index, track in enumerate(
+            [
+                *(track for track in layout.slots if track.side == "above"),
+                *(track for track in overlay_tracks if track.renderer == "features"),
+                *(track for track in layout.slots if track.side == "below"),
+            ]
+        )
+    }
 
     for overlay in overlay_tracks:
         if overlay.renderer == "features":
             continue
         annotation = annotation_track_params_from_mapping(overlay.params)
         anchor = tracks_by_id.get(annotation.anchor_slot or "")
-        overlay_footprint = footprint_map.get(overlay.id, _default_slot_footprint(overlay))
+        overlay_footprint = footprint_of(overlay)
         if anchor is None:
             standalone_overlays.append(
                 _resolved_slot(overlay, overlay_footprint, overlay.y_offset)
             )
             continue
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
-        # A span pushes no slot: its extent comes from the packed slots. Its label
-        # overhang still joins the record body through its reserve band.
-        if annotation.to_slot is None:
+        span = _overlay_span(annotation, tracks_by_id, footprint_map)
+        span_tracks = span or ()
+        # A span pushes no slot: its extent comes from the packed slots. Its labels
+        # keep room beyond the outermost slot it covers (or its own band), on their side.
+        if span is None:
             overlays_by_anchor.setdefault(anchor.id, []).append((relative_origin, overlay_footprint))
-        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, annotation.to_slot)
+        else:
+            rooms = _span_label_rooms(
+                overlay,
+                overlay_footprint,
+                [(track, footprint_of(track)) for track in span_tracks],
+                stack_order,
+            )
+            for slot_id, room in rooms:
+                label_rooms.setdefault(slot_id, []).append(room)
+        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, span_tracks)
 
     structural_slots: list[LinearResolvedSlot] = []
     seed_band = axis_band
     for track in overlay_tracks:
         if track.renderer != "features":
             continue
-        footprint = _combine_slot_footprint(
-            footprint_map.get(track.id, _default_slot_footprint(track)),
-            overlays_by_anchor.get(track.id, ()),
+        footprint = _join_label_rooms(
+            _combine_slot_footprint(footprint_of(track), overlays_by_anchor.get(track.id, ())),
+            label_rooms.get(track.id, ()),
         )
         item = _resolved_slot(track, footprint, 0.0)
         structural_slots.append(item)
@@ -578,6 +720,7 @@ def resolve_linear_record_vertical_plan(
         seed_band=seed_band,
         footprints=footprint_map,
         overlays_by_anchor=overlays_by_anchor,
+        label_rooms=label_rooms,
         initial_spacing=structural_spacing,
     )
     below_slots = _pack_side_slots(
@@ -586,6 +729,7 @@ def resolve_linear_record_vertical_plan(
         seed_band=seed_band,
         footprints=footprint_map,
         overlays_by_anchor=overlays_by_anchor,
+        label_rooms=label_rooms,
         initial_spacing=structural_spacing,
     )
 
@@ -598,23 +742,18 @@ def resolve_linear_record_vertical_plan(
         relation = relative_overlay_origins.get(overlay.id)
         if relation is None:
             continue
-        anchor_id, relative_origin, to_slot = relation
+        anchor_id, relative_origin, span_tracks = relation
         anchor_slot = anchors.get(anchor_id)
         if anchor_slot is None:
             continue
-        footprint = footprint_map.get(overlay.id, _default_slot_footprint(overlay))
-        item = _resolved_slot(overlay, footprint, anchor_slot.origin_y + relative_origin)
-        if to_slot is not None:
+        item = _resolved_slot(overlay, footprint_of(overlay), anchor_slot.origin_y + relative_origin)
+        if span_tracks:
             item = _span_resolved_slot(
                 item,
                 [
-                    (
-                        tracks_by_id[slot_id],
-                        footprint_map.get(slot_id, _default_slot_footprint(tracks_by_id[slot_id])),
-                        anchors[slot_id].origin_y,
-                    )
-                    for slot_id in (anchor_id, to_slot)
-                    if slot_id in anchors
+                    (track, footprint_of(track), anchors[track.id].origin_y)
+                    for track in span_tracks
+                    if track.id in anchors
                 ],
             )
         resolved_overlays.append(item)

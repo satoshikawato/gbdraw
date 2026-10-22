@@ -99,6 +99,12 @@ class CircularAxisLayout:
     radius_px: float
     stroke_width_px: float
 
+    @property
+    def paint_band_px(self) -> RadialBand:
+        """The ring the axis circle's stroke paints."""
+        half_stroke = 0.5 * float(self.stroke_width_px)
+        return RadialBand(float(self.radius_px) - half_stroke, float(self.radius_px) + half_stroke)
+
 
 @dataclass(frozen=True)
 class CircularTickLayout:
@@ -151,6 +157,16 @@ class CircularResolvedSlot:
     explicit_anchor: bool = False
     explicit_width: bool = False
     compressed: bool = False
+    # An overlay stretched over the slots it covers (``to_slot``, or ``cover_anchor`` on a band): its labels keep
+    # ``label_offset`` beyond the span's edge, as a Linear span's do.
+    spans_slots: bool = False
+    # How far ``reserved_band_px`` reaches past the slot's own reservation, on the label side, for the labels of a
+    # span overlay that covers this slot: other slots keep out of it, but it does not move the slot itself.
+    span_label_room_px: float = 0.0
+    # An annotation overlay whose labels the layout keeps a room for past its outer edge, where set radii allow: the
+    # room lies past the slot that holds it (the outermost slot it covers, split feature lanes included, or its
+    # anchor when it spans nothing), so only a span whose outer edge is another overlay (a plot overlay) keeps none.
+    span_keeps_label_room: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))
@@ -176,6 +192,16 @@ class CircularResolvedSlot:
     @property
     def reserved_outer_radius_px(self) -> float:
         return float(self.reserved_band_px.outer_px) if self.reserved_band_px is not None else 0.0
+
+    @property
+    def own_reserved_band_px(self) -> RadialBand | None:
+        """The band the slot itself takes: its drawing with its tick or axis labels and its own labels' room, without
+        the room of the span labels past it, which never moves the slot itself."""
+
+        reserved = self.reserved_band_px
+        if reserved is None or self.span_label_room_px <= 0.0:
+            return reserved
+        return RadialBand(reserved.inner_px, float(reserved.outer_px) - self.span_label_room_px)
 
     @property
     def draw_width_px(self) -> float:

@@ -5,12 +5,12 @@ import sys
 import argparse
 import copy
 import logging
-import math
 import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .io.cli_tables import (
     read_circular_track_table,
 )
@@ -65,6 +65,7 @@ from .tracks import (
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.losat_jobs import unique_losat_filenames
+from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -92,6 +93,7 @@ from .cli_utils.common import (
     setup_logging,
     validate_input_args,
     validate_label_args,
+    validate_output_choice_args,
     handle_output_formats,
 )
 from .cli_utils.session import (
@@ -105,6 +107,7 @@ from .cli_utils.session import (
     render_canonical_session_if_present,
     resolve_session_sidecar_path,
     save_session_sidecar_if_requested,
+    read_stored_font_size_options,
 )
 from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -242,7 +245,7 @@ def _get_args(
     parser.add_argument(
         '--axis_stroke_width',
         help='Axis stroke width (optional; float; default: 3 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (str; default: "gray")',
@@ -250,11 +253,11 @@ def _get_args(
     parser.add_argument(
         '--line_stroke_width',
         help='Line stroke width (optional; float; default: 5 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; default: 18)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--plot_title',
         help='Circular plot title shown when plot_title_position is top or bottom (optional; defaults to species + strain).',
@@ -262,7 +265,7 @@ def _get_args(
     parser.add_argument(
         '--plot_title_font_size',
         help='Plot title font size for circular top/bottom title layout (optional; default: 32).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--keep_full_definition_with_plot_title',
         help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
@@ -270,11 +273,11 @@ def _get_args(
     parser.add_argument(
         '--center_reserved_radius',
         help='Override the center-label reserved radius for circular track packing (in px; must be >= 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
-        type=float)
+        type=argparse_float)
     _add_format_arg(parser)
     _add_gc_skew_toggle_args(
         parser,
@@ -327,11 +330,11 @@ def _get_args(
     parser.add_argument(
         '--conservation_ring_width',
         help='Similarity ring width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--conservation_ring_gap',
         help='Similarity ring gap for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--losat',
         choices=_CLI_RING_LOSAT_PROGRAMS,
@@ -412,7 +415,7 @@ def _get_args(
     parser.add_argument(
         '--depth_width',
         help='Depth track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_depth_axis_args(parser)
     parser.add_argument(
         '-l',
@@ -433,17 +436,17 @@ def _get_args(
     parser.add_argument(
         '--multi_record_min_radius_ratio',
         help='Minimum radius ratio for multi-record scaling (0 < ratio <= 1; default: 0.55).',
-        type=float,
+        type=argparse_float,
         default=0.55)
     parser.add_argument(
         '--multi_record_column_gap_ratio',
         help='Additional horizontal gap ratio between visible content bounds in each multi-record row (>= 0; default: 0.10).',
-        type=float,
+        type=argparse_float,
         default=0.10)
     parser.add_argument(
         '--multi_record_row_gap_ratio',
         help='Additional gap ratio between multi-record row content bounds (>= 0; default: 0.05).',
-        type=float,
+        type=argparse_float,
         default=0.05)
     parser.add_argument(
         '--multi_record_position',
@@ -486,6 +489,19 @@ def _get_args(
         default='auto',
         type=str)
     parser.add_argument(
+        '--label_line',
+        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
+        '(a turned label gets none); "none" draws none. '
+        f'Default: "{DEFAULT_LABEL_LINE["circular"]}".',
+        choices=LABEL_LINES,
+        type=str)
+    parser.add_argument(
+        '--label_protection',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
+        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["circular"]}".',
+        choices=LABEL_PROTECTIONS,
+        type=str)
+    parser.add_argument(
         '--label_placement',
         help='External circular label placement: "horizontal" or "radial". Default: "horizontal".',
         choices=['horizontal', 'radial'],
@@ -497,23 +513,23 @@ def _get_args(
     parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--outer_label_y_radius_offset',
         help='Outer label y-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--inner_label_x_radius_offset',
         help='Inner label x-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--inner_label_y_radius_offset',
         help='Inner label y-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--scale_interval',
         help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '--hide_scale',
         help='Hide the primary genome-coordinate scale while retaining the circular axis.',
@@ -521,15 +537,15 @@ def _get_args(
     parser.add_argument(
         '--tick_label_font_size',
         help='Tick label font size for circular mode (optional; float; default: 14 (pt)).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--circular_label_spacing',
         help='Circular label-to-label vertical spacing in px (optional; float; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--feature_width',
         help='Feature track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--circular_track_order',
         help='Comma-separated circular slot order. Omitted built-in slot geometry inherits --track_type.',
@@ -546,34 +562,38 @@ def _get_args(
         type=str)
     parser.add_argument(
         '--circular_track_axis_index',
-        type=int,
+        type=argparse_integer,
         default=None,
         help='Axis boundary index for --circular_track_slot order. Slots before this index render outside; slots at or after it render inside.')
     parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_radius',
         help='GC content track center radius for circular mode (as a ratio of base radius; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_gc_content_axis_args(parser)
     parser.add_argument(
         '--gc_skew_width',
         help='GC skew track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_skew_radius',
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_legend_size_args(parser)
     _add_font_args(parser)
 
     add_session_args(parser)
 
     args = parser.parse_args(args)
+    if _allow_legacy_track_transport:
+        read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if not _allow_legacy_track_transport:
+        validate_output_choice_args(args)
     if args.records_table and args.multi_record_position:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
     if args.conservation_table and args.conservation_blast:
@@ -596,10 +616,6 @@ def _get_args(
         parser.error("--gc_content_width must be > 0")
     if args.gc_content_radius is not None and args.gc_content_radius <= 0:
         parser.error("--gc_content_radius must be > 0")
-    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
-        option_value = getattr(args, option_name)
-        if option_value is not None and not math.isfinite(float(option_value)):
-            parser.error(f"--{option_name} must be a finite number")
     if (
         args.gc_content_min_percent is not None
         and args.gc_content_max_percent is not None
@@ -626,9 +642,7 @@ def _get_args(
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
         parser.error("--conservation_ring_gap must be > 0")
-    if args.center_reserved_radius is not None and (
-        not math.isfinite(float(args.center_reserved_radius)) or args.center_reserved_radius < 0
-    ):
+    if args.center_reserved_radius is not None and args.center_reserved_radius < 0:
         parser.error("--center_reserved_radius must be a finite number >= 0")
     try:
         ComparisonThresholds(
@@ -682,9 +696,8 @@ def _get_args(
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
-            try:
-                numeric_option_value = float(option_value)
-            except (TypeError, ValueError):
+            numeric_option_value = parse_ascii_finite_float(str(option_value))
+            if numeric_option_value is None:
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
                 parser.error(f"--{option_name} values must be > 0")
@@ -719,9 +732,9 @@ def _get_args(
             parser.error(str(exc))
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
-    if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
+    if args.multi_record_column_gap_ratio < 0:
         parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
-    if not math.isfinite(args.multi_record_row_gap_ratio) or args.multi_record_row_gap_ratio < 0:
+    if args.multi_record_row_gap_ratio < 0:
         parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
     return args
 
@@ -888,7 +901,10 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
     try:
         return CircularDiagramOptions(**values)
     except ValidationError as exc:
-        raise _cli_ring_error(exc, _args) from exc
+        rewritten = _cli_ring_error(exc, _args)
+        if rewritten is exc:
+            raise
+        raise rewritten from exc
 
 
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
@@ -1161,6 +1177,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.definition.circular.font_size": definition_font_size,
         "objects.definition.circular.plot_title_font_size": plot_title_font_size,
         "labels.rendering": label_rendering,
+        "labels.circular.line": args.label_line,
+        "labels.circular.protection": args.label_protection,
         "labels.circular.placement": circular_label_placement,
         "labels.filtering.raw": filtering_override,
         "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,
@@ -1497,7 +1515,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             records=track_slot_geometry_records,
         ),
         canonical_request=materialized_request,
-        losat_cache_entries=tuple(getattr(rendered, "losat_cache_entries", ()) or ()),
+        losat_cache_entries=rendered.losat_cache_entries,
     )
 
 if __name__ == "__main__":

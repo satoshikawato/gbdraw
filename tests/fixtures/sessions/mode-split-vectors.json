@@ -5153,6 +5153,16 @@
       },
       "loadDefaults": [
         {
+          "pointer": "/modes/circular/config/fileImports",
+          "value": {},
+          "projected": false
+        },
+        {
+          "pointer": "/modes/linear/config/fileImports",
+          "value": {},
+          "projected": true
+        },
+        {
           "pointer": "/modes/circular/config/adv/linear_accession_visibility",
           "value": "auto",
           "projected": false
@@ -10057,6 +10067,29 @@
           }
         }
       }
+    },
+    {
+      "name": "mode-switch-circular-result-linear-shown.v30 (OV-677): a 0.13.0 Circular Result saved while Linear is shown; the Result's Legend and feature edits go to Circular (cliInvocation.mode), the shown mode and its Legend position stay Linear",
+      "fixture": "tests/fixtures/sessions/mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/version": 46,
+        "/ui/mode": "linear",
+        "/ui/legend": "bottom",
+        "/ui/linearLegendPosition": "bottom",
+        "/ui/generatedLegendPosition": "left",
+        "/modes/circular/editorState/legend/entries/0/caption": "CDS",
+        "/modes/circular/editorState/legend/entries/1/caption": "GC content",
+        "/modes/circular/editorState/legend/entries/2/caption": "GC skew (+)",
+        "/modes/circular/editorState/legend/entries/3/caption": "GC skew (-)",
+        "/modes/circular/features/featureColorOverrides": {}
+      },
+      "expectAbsent": [
+        "/modes/linear/editorState",
+        "/modes/linear/features/featureColorOverrides"
+      ]
     }
   ]
 }

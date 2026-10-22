@@ -110,7 +110,8 @@ class FakeWorker {
             ok: true,
             results: {
               results: [{ name: 'diagram.svg', content: '<svg></svg>' }],
-              metadata: {}
+              metadata: {},
+              featureCatalog: { schema: 4, items: [] }
             }
           }
         });

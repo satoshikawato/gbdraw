@@ -9,6 +9,7 @@ const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime
 const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js');
 const serviceNames = [
   'current-worker-result-source.js',
+  'drawn-groups.js',
   'file-imports.js',
   'legend-row-names.js',
   'legend-svg.js',
@@ -35,7 +36,7 @@ await Promise.all(serviceNames.map(async (name) => {
 }));
 
 await mkdir(join(tempDir, 'utils'), { recursive: true });
-await Promise.all(['color-utils.js', 'error-normalization.js', 'named-colors.js', 'tsv-cell.js'].map(async (name) => {
+await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'i18n.js', 'named-colors.js', 'own-entry.js', 'tsv-cell.js', 'vue-raw.js'].map(async (name) => {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');
 }));
 

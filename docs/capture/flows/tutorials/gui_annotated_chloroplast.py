@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import re
 from pathlib import Path
 from typing import Any, Mapping
@@ -12,14 +13,14 @@ from flows.how_to.tracks import (
     GUI_ANNOTATION_GENBANK_PATH,
     GUI_ANNOTATION_GENBANK_SHA256,
     GUI_ANNOTATION_GENBANK_SIZE,
-    GUI_ANNOTATION_TABLE_PATH,
+    GUI_ANNOTATION_TABLE_PATH,  # noqa: F401  (H-GUI-16 imports it from here)
     _assert_safe_svg,
     _download_svg,
     _fit_circular_preview,
     _inspect_tracks_svg,
     _resize_sidebar,
     _track_slot_snapshot,
-    _validate_annotation_fixture,
+    _validate_annotation_fixture,  # noqa: F401  (H-GUI-16 imports it from here)
     _validate_complete_record,
     CaptureResult,
 )
@@ -30,6 +31,7 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
+    run_track_slot_row_action,
     toggle_disclosure,
     wait_for_app_shell,
 )
@@ -63,11 +65,75 @@ GALLERY_FEATURE_TYPES = (
     "misc_RNA",
     "rep_origin",
 )
+# The three-slot stack H-GUI-16 still builds with the bracket table.
 GALLERY_SLOT_ORDER = (
     ("features", "features"),
     ("plastome_regions", "annotations"),
     ("gc_content", "dinucleotide_content"),
 )
+# The Gallery figure: the region tint is an Underlay on the features that
+# extends to GC content, listed after the features (as the Gallery command).
+GALLERY_SPAN_SLOT_ORDER = (
+    ("features", "features"),
+    ("plastome_tint", "annotations"),
+    ("plastome_regions", "annotations"),
+    ("gc_content", "dinucleotide_content"),
+)
+# The SVG draws the Underlay first.
+GALLERY_SPAN_SVG_SLOT_ORDER = (
+    ("plastome_tint", "annotations"),
+    ("features", "features"),
+    ("plastome_regions", "annotations"),
+    ("gc_content", "dinucleotide_content"),
+)
+SPAN_TABLE_PATH = GUI_ANNOTATION_GENBANK_PATH.with_name(
+    "nicotiana-tabacum-regions-span.tsv"
+)
+SPAN_TABLE_SIZE = 930
+SPAN_TABLE_SHA256 = (
+    "67f6f6385870b270fed02c24141bf586181794dba211ea93661833ae8429b246"
+)
+PLASTOME_REGIONS = (
+    ("lsc", 1, 86_686, "LSC"),
+    ("irb", 86_687, 112_029, "IRb"),
+    ("ssc", 112_030, 130_600, "SSC"),
+    ("ira", 130_601, 155_943, "IRa"),
+)
+TINT_PARAMS = {
+    "set_id": "plastome_tint",
+    "anchor_slot": "features",
+    "layer": "underlay",
+    "to_slot": "gc_content",
+    "marks": ["highlight"],
+    "padding_px": 0,
+    "show_labels": False,
+}
+
+
+def _validate_span_table() -> dict[str, Any]:
+    assert_fixture_identity(
+        SPAN_TABLE_PATH,
+        expected_size=SPAN_TABLE_SIZE,
+        expected_sha256=SPAN_TABLE_SHA256,
+    )
+    with SPAN_TABLE_PATH.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    actual = tuple(
+        (row["set_id"], row["id"], row["mark"], int(row["start"]), int(row["end"]), row["label"])
+        for row in rows
+    )
+    expected = tuple(
+        ("plastome_regions", key, "line", start, end, label)
+        for key, start, end, label in PLASTOME_REGIONS
+    ) + tuple(
+        ("plastome_tint", f"{key}_tint", "highlight", start, end, "")
+        for key, start, end, _label in PLASTOME_REGIONS
+    )
+    if actual != expected:
+        raise AssertionError(f"Unexpected plastome span table rows: {actual!r}")
+    if "label_orientation" in rows[0]:
+        raise AssertionError("The span table must leave the region labels curved")
+    return {"path": SPAN_TABLE_PATH.name, "rows": len(rows)}
 
 
 def _assert_plain_plastome(report: Mapping[str, Any]) -> None:
@@ -101,7 +167,7 @@ def _assert_gallery_chloroplast(report: Mapping[str, Any]) -> None:
         for slot in report["slots"]
         if not str(slot["slotId"]).startswith("__gbdraw_auto_")
     )
-    if slots != GALLERY_SLOT_ORDER:
+    if slots != GALLERY_SPAN_SVG_SLOT_ORDER:
         raise AssertionError(f"Unexpected Gallery chloroplast slots: {slots!r}")
     annotations = {
         (
@@ -115,8 +181,11 @@ def _assert_gallery_chloroplast(report: Mapping[str, Any]) -> None:
         for item in report["annotations"]
     }
     expected_annotations = {
-        (key, "plastome_regions", "plastome_regions", "NC_001879.2", "bracket", label)
-        for key, label in (("lsc", "LSC"), ("irb", "IRb"), ("ssc", "SSC"), ("ira", "IRa"))
+        (key, "plastome_regions", "plastome_regions", "NC_001879.2", "line", label)
+        for key, _start, _end, label in PLASTOME_REGIONS
+    } | {
+        (f"{key}_tint", "plastome_tint", "plastome_tint", "NC_001879.2", "highlight", "")
+        for key, _start, _end, _label in PLASTOME_REGIONS
     }
     if annotations != expected_annotations:
         raise AssertionError(f"Unexpected plastome region annotations: {annotations!r}")
@@ -246,7 +315,7 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
         "group", name=f"Circular track slot {slot_id}", exact=True
     )
     if group.count():
-        group.get_by_title("Remove", exact=True).click()
+        run_track_slot_row_action(group, "Remove")
 
 
 def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
@@ -329,6 +398,54 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     return slots
 
 
+def _add_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
+    """Add the plastome_tint Underlay after the Gallery three-slot stack."""
+
+    renderer = page.get_by_label("New circular track renderer", exact=True)
+    renderer.select_option("annotations")
+    page.get_by_role("button", name=re.compile(r"Add track$"), exact=False).click()
+    tint = page.get_by_role("group", name="Circular track slot annotations", exact=True)
+    tint.get_by_label("Circular track slot id annotations", exact=True).fill("plastome_tint")
+    tint = page.get_by_role("group", name="Circular track slot plastome_tint", exact=True)
+    label = "Circular track slot plastome_tint"
+    # Move the row under the features first: an overlay row's Move outward and
+    # Move inward arrows are disabled.
+    for _ in range(2):
+        tint.get_by_title("Move outward", exact=True).click()
+    tint.get_by_label(f"{label} Annotation set", exact=True).select_option("plastome_tint")
+    tint.get_by_label(f"{label} Annotation placement", exact=True).select_option("overlay")
+    tint.get_by_label(f"{label} Enabled drawable anchor", exact=True).select_option("features")
+    tint.get_by_label(f"{label} Annotation layer", exact=True).select_option("underlay")
+    open_ancestor_details(tint.get_by_label(f"{label} Extend to", exact=True)).select_option("gc_content")
+    tint.get_by_label(f"{label} Show annotation labels", exact=True).uncheck()
+    tint.get_by_label(f"{label} Padding", exact=True).fill("0")
+    for mark in ("line", "bracket", "band"):
+        tint.get_by_label(f"{label} mark {mark}", exact=True).uncheck()
+
+    slots = _track_slot_snapshot(page)
+    enabled = tuple((slot["id"], slot["renderer"]) for slot in slots if slot["enabled"])
+    if enabled != GALLERY_SPAN_SLOT_ORDER:
+        raise AssertionError(f"Unexpected Gallery slot state: {enabled!r}")
+    params = next(slot["params"] for slot in slots if slot["id"] == "plastome_tint")
+    if {key: params.get(key) for key in TINT_PARAMS} != TINT_PARAMS:
+        raise AssertionError(f"Unexpected plastome_tint params: {params!r}")
+    z = page.evaluate(
+        "() => window.__GBDRAW_APP__.adv.circular_track_slots.find((slot) => slot.id === 'plastome_tint')?.z"
+    )
+    if z != -1:
+        raise AssertionError(f"The plastome_tint Underlay must sit below the features (z {z!r})")
+    return slots
+
+
+def _dismiss_history_limit_notice(page: Page) -> None:
+    """Keep the History-limit notice that the long slot edit raises out of the captures."""
+
+    notice = page.locator("[data-app-notice]").filter(has_text="history limit")
+    if notice.count() and notice.first.is_visible():
+        notice.first.get_by_role("button", name="Dismiss notice").click()
+        expect(notice).to_have_count(0)
+
+
 def capture_gui_annotated_chloroplast(
     browser_type: BrowserType,
     base_url: str,
@@ -344,7 +461,7 @@ def capture_gui_annotated_chloroplast(
         expected_id="NC_001879.2",
         expected_length=155_943,
     )
-    annotation_report = _validate_annotation_fixture()
+    annotation_report = _validate_span_table()
     assert_fixture_identity(
         SPECIFIC_COLORS_PATH,
         expected_size=SPECIFIC_COLORS_SIZE,
@@ -400,22 +517,28 @@ def capture_gui_annotated_chloroplast(
         toggle_disclosure(annotations)
         with page.expect_file_chooser() as chooser:
             page.get_by_role("button", name="Import TSV", exact=True).click()
-        chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)
-        expect(page.get_by_label("Annotation set id", exact=True)).to_have_value(
-            "plastome_regions"
+        chooser.value.set_files(SPAN_TABLE_PATH)
+        set_ids = page.get_by_label("Annotation set id", exact=True)
+        expect(set_ids).to_have_count(2)
+        expect(set_ids.first).to_have_value("plastome_regions")
+        expect(set_ids.last).to_have_value("plastome_tint")
+        page.wait_for_function(
+            "() => (window.__GBDRAW_APP__?.annotationSets || []).map((set) => "
+            "`${set.id}:${set.annotations.map((entry) => entry.id).join(',')}`).join(' ') === "
+            "'plastome_regions:lsc,irb,ssc,ira plastome_tint:lsc_tint,irb_tint,ssc_tint,ira_tint'"
         )
-        expect(page.get_by_label("Annotation lane", exact=True)).to_have_count(4)
         annotations.scroll_into_view_if_needed()
         expect(page.get_by_role("button", name="Download TSV", exact=True)).to_be_enabled()
         screenshot_bytes[SCREENSHOT_NAMES[2]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[2]], "Circular"
         )
 
-        slots = _configure_gallery_slots(page)
-        annotation_slot = page.get_by_role(
-            "group", name="Circular track slot plastome_regions", exact=True
-        )
-        annotation_slot.scroll_into_view_if_needed()
+        _configure_gallery_slots(page)
+        slots = _add_region_tint_slot(page)
+        _dismiss_history_limit_notice(page)
+        page.get_by_role(
+            "group", name="Circular track slot plastome_tint", exact=True
+        ).scroll_into_view_if_needed()
         screenshot_bytes[SCREENSHOT_NAMES[3]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[3]], "Circular"
         )
@@ -431,6 +554,7 @@ def capture_gui_annotated_chloroplast(
             popup.get_by_role(
                 "button", name="Close feature popup", exact=True
             ).click()
+        _dismiss_history_limit_notice(page)
         screenshot_bytes[SCREENSHOT_NAMES[4]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[4]], "Circular"
         )

@@ -12,8 +12,9 @@ const snapshot = async (page) => {
   return { ...artifact, mounted: await svgSemantics(page, mounted) };
 };
 
-const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise(page, async (name) => {
-  const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
+const loadSessionUrl = async (page, url) => evaluateWithRetainedPromise(page, async (path) => {
+  const name = path.split('/').pop();
+  const response = await fetch(path);
   if (!response.ok) throw new Error(`Could not load ${name}: ${response.status}`);
   const bytes = await response.arrayBuffer();
   const file = new File([bytes], name, {
@@ -22,7 +23,8 @@ const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise
   return window.__GBDRAW_APP__.importSession({
     target: { files: [file], value: 'selected' }
   });
-}, filename);
+}, url);
+const loadGallerySession = (page, filename) => loadSessionUrl(page, `/gbdraw/web/gallery/sessions/${filename}`);
 
 const ISSUE_461_VIEWPORTS = [
   { id: 'issue-desktop', width: 2541, height: 1409 },
@@ -620,6 +622,12 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(groupAaCopy).toHaveText(/Copy aa/);
 
   const memberMenus = groupDetail.locator('summary', { hasText: 'FASTA' });
+  // OV-1137: each member's menu is named for its member, as its title is.
+  const memberMenuNames = await memberMenus.evaluateAll((toggles) => toggles.map((toggle) => toggle.getAttribute('aria-label')));
+  expect(memberMenuNames.length).toBeGreaterThan(1);
+  expect(memberMenuNames.every((name) => /^FASTA of ./.test(String(name)))).toBe(true);
+  expect(new Set(memberMenuNames).size).toBe(memberMenuNames.length);
+  await expect(memberMenus.nth(0)).toHaveAccessibleName(memberMenuNames[0]);
   await memberMenus.nth(0).click();
   await memberMenus.nth(1).click();
   const firstMemberAaCopy = drawer.locator(
@@ -696,6 +704,12 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   const popupMemberAaCopy = featurePopup.locator(
     'button[title="Copy amino-acid FASTA"]'
   ).first();
+  const popupMemberMenus = similaritySection.locator('summary', { hasText: 'FASTA' });
+  const popupMemberMenuNames = await popupMemberMenus.evaluateAll((toggles) => toggles.map((toggle) => toggle.getAttribute('aria-label')));
+  expect(popupMemberMenuNames.length).toBeGreaterThan(1);
+  expect(new Set(popupMemberMenuNames).size).toBe(popupMemberMenuNames.length);
+  await similaritySection.locator('[data-similarity-members] > summary').click();
+  await expect(popupMemberMenus.nth(0)).toHaveAccessibleName(popupMemberMenuNames[0]);
   await popupGroupAaCopy.click();
   await expect(popupGroupAaCopy).toHaveText(/Copied!/);
   await expect(popupMemberAaCopy).toHaveText(/^\s*Copy aa\s*$/);
@@ -1087,9 +1101,10 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  expect(await loadGallerySession(page, 'hepatoplasmataceae_collinear.gbdraw-session.json.gz'))
+  // The historical Gallery Session's ribbons name ordinary similarity groups and carry no collinear
+  // group scope; the current Gallery Session stores a collinear result with scoped groups (OV-1048).
+  expect(await loadSessionUrl(page, '/tests/fixtures/performance/hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz'))
     .toMatchObject({ status: 'ok' });
-  // The Gallery ribbons name ordinary similarity groups and carry no collinear group scope.
   const ribbon = page.locator('.gbdraw-preview-surface path[data-match-kind="collinear"][data-collinearity-block-id="block_0024"]').first();
   await expect(ribbon).not.toHaveAttribute('data-collinear-group-scope', /./);
   await ribbon.dispatchEvent('click', { clientX: 500, clientY: 350 });
@@ -1120,6 +1135,13 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
   await groupButton.click();
   await expect(groupButton).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.locator('[data-match-group]')).toContainText('og_34');
+  // OV-1137: each member's FASTA menu is named for its member, as its title is.
+  const memberMenus = popup.locator('[data-match-group] summary', { hasText: 'FASTA' });
+  await expect(memberMenus).toHaveCount(5);
+  const memberMenuNames = await memberMenus.evaluateAll((toggles) => toggles.map((toggle) => toggle.getAttribute('aria-label')));
+  expect(memberMenuNames.every((name) => /^FASTA of ./.test(String(name)))).toBe(true);
+  expect(new Set(memberMenuNames).size).toBe(5);
+  await expect(memberMenus.nth(0)).toHaveAccessibleName(memberMenuNames[0]);
   await groupButton.click();
   await expect(groupButton).toHaveAttribute('aria-pressed', 'false');
   await expect(popup.locator('[data-match-group]')).toHaveCount(0);

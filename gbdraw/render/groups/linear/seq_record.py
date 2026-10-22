@@ -1,23 +1,26 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from collections import Counter
-from typing import Optional
+from typing import NamedTuple
 
 from Bio.SeqRecord import SeqRecord
-from gbdraw.svg.elements import Group, Line, Text
+from gbdraw.svg.elements import Group, Line, Rect, Text
 
 from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
+from ...drawers.label_backing import feature_label_box, label_halo, underline_casing
 from ...drawers.linear.labels import LabelDrawer
-from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
+from ....labels.label_ink import linear_label_ink
+from ....labels.label_style import label_leader_width_px
+from ....labels.linear import linear_leader_polyline, linear_record_labels, place_linear_label_row
+from ....labels.linear_types import LinearLabel
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
-from ....svg.ids import record_group_svg_id
+from ....svg.ids import record_group_svg_id, stable_svg_id
 from ....layout.record_labels import source_ruler_ticks
 from ...label_binding import bind_label_part
 from .feature_identity import LinearFeatureDomIndex
@@ -29,6 +32,19 @@ from .length_bar import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+class _LabelParts(NamedTuple):
+    """A feature label's drawn style parts: whether it has a leader, the leader line the leader layer draws
+    (two points, or none when the whole leader lies within its casing), the leader's tail in front of its
+    underline casing, the casing, the underline and the box (None when not drawn)."""
+
+    has_leader: bool
+    leader: tuple[tuple[float, float], ...]
+    tail: Line | None = None
+    casing: Line | None = None
+    underline: Line | None = None
+    box: Rect | None = None
+
 
 class SeqRecordGroup:
     """Manages the visualization of a SeqRecord in a linear layout."""
@@ -43,7 +59,7 @@ class SeqRecordGroup:
         feature_track_layout: LinearFeatureTrackLayout,
         axis_ruler_enabled: bool,
         feature_dom_index: LinearFeatureDomIndex,
-        precalculated_labels: Optional[list] = None,
+        precalculated_labels: list[LinearLabel] | None = None,
         draw_features: bool = True,
         label_font_size: float | None = None,
         orthogroup_label_member_ids: set[str | int] | None = None,
@@ -51,11 +67,12 @@ class SeqRecordGroup:
         record_index: int = 0,
         record_count: int = 1,
         group_id: str | None = None,
-        sequence_width: float | None = None,
         record_local_ruler: bool = False,
         feature_offset_y: float = 0.0,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_transform: RecordDisplayTransform | None = None,
+        *,
+        sequence_width: float,
     ) -> None:
         self.record_transform = record_transform
         self.gb_record = gb_record
@@ -80,7 +97,8 @@ class SeqRecordGroup:
                 record_count=self.record_count,
             )
         )
-        self.sequence_width = float(sequence_width) if sequence_width is not None else None
+        # The record's drawn axis width, from its placement (``solve_linear_horizontal_layout``).
+        self.sequence_width = float(sequence_width)
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)
         self.feature_lane_geometry = feature_lane_geometry
@@ -93,9 +111,6 @@ class SeqRecordGroup:
         self.show_labels = profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
-        # Keep legacy behavior: linear label leader line width uses the "long" value.
-        self.label_stroke_width = cfg.labels.stroke_width.long
-        self.normalize_length = geometry.normalize_length
         scale_cfg = cfg.objects.scale
         self.scale_style = str(scale_cfg.style).strip().lower()
         self.scale_stroke_color = scale_cfg.stroke_color
@@ -128,18 +143,17 @@ class SeqRecordGroup:
     def axis_ruler_enabled(self) -> bool:
         return self._axis_ruler_enabled
 
-    def draw_linear_axis(self, alignment_width: float, genome_size_normalization_factor: float) -> Line:
+    def draw_linear_axis(self, alignment_width: float) -> Line:
         """
         Draws a linear axis for the genomic record visualization.
 
         Args:
             alignment_width (float): Width of the alignment area.
-            genome_size_normalization_factor (float): Normalization factor based on the genome size.
 
         Returns:
             Line: An SVG line element representing the linear axis.
         """
-        bar_length: float = alignment_width * genome_size_normalization_factor
+        bar_length: float = alignment_width
         linear_axis_stroke_color: str = self._cfg.objects.axis.linear.stroke_color
         start_x: float = 0
         start_y: float = 0
@@ -187,6 +201,42 @@ class SeqRecordGroup:
                 coordinates.append(int(tick))
             tick += tick_interval
         return sorted(coordinates, reverse=(start_coord > end_coord))
+
+    def _leader_part(self, start: tuple[float, float], end: tuple[float, float], feature_id: str, width: float) -> Line:
+        """One straight part of a feature label's leader, or its underline: one style for both (LP-D95)."""
+
+        part = Line(start=start, end=end, stroke=self.label_stroke_color, stroke_width=width)
+        bind_label_part(part, feature_id)
+        return part
+
+    def _label_style_parts(self, label: LinearLabel, leader: tuple[tuple[float, float], ...]) -> _LabelParts:
+        """A label's drawn parts in the style of its mode (``FeatureLabelStyle``)."""
+
+        style = self.profile.label_style
+        if not style.draws_from_ink:
+            return _LabelParts(bool(leader), leader)
+        ink = linear_label_ink(label, leader, style)
+        feature_id = label["feature_id"]
+        box = feature_label_box(ink, feature_id) if ink.draws_box(style) else None
+        if not leader:
+            # A turned label on its feature has its box too (OV-1361).
+            return _LabelParts(False, leader, box=box)
+        width = label_leader_width_px(label)
+        underline = casing = tail = None
+        line = ink.underline
+        if line is not None:
+            # The leader ends on its underline, which continues it (LP-D88), or stops above the letters.
+            leader = (leader[0], line[0])
+            if line[1] != line[2]:
+                underline = self._leader_part(line[1], line[2], feature_id, width)
+                # The leader layer draws the leader up to its casing; its tail is drawn in front of the casing.
+                cased = underline_casing(line[1], line[2], float(label["font_size"]))
+                entry = cased.entry(leader[0], line[0])
+                casing = cased.element(feature_id)
+                tail = self._leader_part(entry, line[0], feature_id, width)
+                leader_layer = () if entry == leader[0] else (leader[0], entry)
+                return _LabelParts(True, leader_layer, tail, casing, underline, box)
+        return _LabelParts(True, leader, None, None, None, box)
 
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
         if not self.axis_ruler_enabled or bar_length <= 0 or record_length <= 0:
@@ -264,16 +314,15 @@ class SeqRecordGroup:
         record_length: int,
         cds_height: float,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         separate_strands: bool,
         arrow_length: float,
         group: Group,
-        label_list: list,
+        label_list: list[LinearLabel],
     ) -> Group:
         """Draws the genomic features onto the provided SVG group."""
-        bar_length: float = alignment_width * genome_size_normalization_factor
+        bar_length: float = alignment_width
         # Draw the axis
-        axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
+        axis_path = self.draw_linear_axis(alignment_width)
         group.add(axis_path)
         self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
 
@@ -284,12 +333,15 @@ class SeqRecordGroup:
 
         # Process labels if enabled. Each label gets its feature identity on a
         # copy: the prepared labels are this content's arguments.
+        styled: list[_LabelParts] = []
         if self.show_labels and self.draw_features_enabled:
-            bound_labels = []
+            bound_labels: list[LinearLabel] = []
             for label in label_list:
-                source_feature_index = label.get("source_feature_index")
-                feature_id = self.feature_dom_index.by_source_index.get(
-                    (self.record_index, source_feature_index)
+                source_feature_index = label["source_feature_index"]
+                feature_id = (
+                    None
+                    if source_feature_index is None
+                    else self.feature_dom_index.by_source_index.get((self.record_index, source_feature_index))
                 )
                 if not feature_id:
                     raise ValueError(
@@ -297,35 +349,27 @@ class SeqRecordGroup:
                     )
                 label = {**label, "feature_id": feature_id}
                 bound_labels.append(label)
-                leader = linear_leader_polyline(label)
-                if leader:
-                    line_path = Line(
-                        start=leader[0],
-                        end=leader[1],
-                        stroke=self.label_stroke_color,
-                        stroke_width=self.label_stroke_width,
+                parts = self._label_style_parts(label, linear_leader_polyline(label))
+                styled.append(parts)
+                if parts.leader:
+                    feature_group.add(
+                        self._leader_part(
+                            parts.leader[0], parts.leader[1], feature_id, label_leader_width_px(label)
+                        )
                     )
-                    bind_label_part(line_path, feature_id)
-                    feature_group.add(line_path)
             label_list = bound_labels
 
         # Draw features
         if self.draw_features_enabled:
             feature_drawer = FeatureDrawer(self.feature_config)
-            feature_id_counts = Counter(
-                feature_drawer.get_feature_data_id(feature_object)
-                for feature_object in feature_dict.values()
-            )
             for feature_object in feature_dict.values():
                 feature_strand = feature_object.strand
-                stable_feature_id = feature_drawer.get_feature_data_id(feature_object)
                 feature_group = feature_drawer.draw(
                     feature_object=feature_object,
                     group=feature_group,
                     genome_length=record_length,
                     cds_height=cds_height,
                     alignment_width=alignment_width,
-                    normalization_factor=genome_size_normalization_factor,
                     feature_strand=feature_strand,
                     separate_strands=separate_strands,
                     arrow_length=arrow_length,
@@ -334,18 +378,28 @@ class SeqRecordGroup:
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_index=self.record_index,
                     record_count=self.record_count,
-                    feature_instance_id=(
-                        feature_object.source_feature_index
-                        if stable_feature_id
-                        and feature_id_counts[stable_feature_id] > 1
-                        else None
-                    ),
+                    feature_instance_id=feature_object.rendered_instance_index,
                 )
 
-        # Add labels
+        # Add labels: in front of every leader and glyph, the boxes, the halos, the underline casings, the
+        # leader tails, the underlines, then the letters (a halo or a casing must not erode an underline).
         if self.show_labels:
+            letters_at = len(feature_group.elements)
             for label in label_list:
                 feature_group = LabelDrawer().draw(label, feature_group)
+            texts = feature_group.elements[letters_at:]
+            halos = [
+                label_halo(text, stable_svg_id("label_text", self.record_group_id, label["feature_id"], index))
+                for index, (label, text, parts) in enumerate(zip(label_list, texts, styled))
+                if parts.has_leader and self.profile.label_style.protection == "halo"
+            ]
+            feature_group.elements[letters_at:letters_at] = [
+                *(parts.box for parts in styled if parts.box is not None),
+                *halos,
+                *(parts.casing for parts in styled if parts.casing is not None),
+                *(parts.tail for parts in styled if parts.tail is not None),
+                *(parts.underline for parts in styled if parts.underline is not None),
+            ]
 
         if has_feature_shift:
             feature_group.translate(0.0, self.feature_offset_y)
@@ -361,13 +415,8 @@ class SeqRecordGroup:
         Returns:
             Group: The SVG group prepared for SeqRecord visualization.
         """
-        alignment_width: float = (
-            self.sequence_width
-            if self.sequence_width is not None
-            else self.geometry.alignment_width
-        )
+        alignment_width: float = self.sequence_width
         cds_height: float = self.geometry.cds_height
-        longest_genome: int = self.geometry.longest_genome
         arrow_length: float = self.geometry.arrow_length
 
         separate_strands = self.separate_strands
@@ -385,24 +434,16 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
-        if self.sequence_width is not None:
-            genome_size_normalization_factor: float = 1.0
-        elif self.normalize_length:
-            genome_size_normalization_factor = 1.0
-        else:
-            genome_size_normalization_factor = record_length / longest_genome
-
         feature_dict = self.feature_layers.foreground_features
-        label_list = []
+        label_list: list[LinearLabel] = []
         if self.show_labels and self.draw_features_enabled:
             if self.precalculated_labels is not None:
                 label_list = self.precalculated_labels
             else:
-                label_list = prepare_label_list_linear(
+                record_labels = linear_record_labels(
                     feature_dict,
                     record_length,
                     alignment_width,
-                    genome_size_normalization_factor,
                     cds_height,
                     separate_strands,
                     self.track_layout,
@@ -417,13 +458,15 @@ class SeqRecordGroup:
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_transform=self.record_transform,
                 )
+                label_list = place_linear_label_row(
+                    [(record_labels, 0.0)], profile=self.profile, track_layout=self.track_layout
+                )[0]
 
         record_group = self.draw_record(
             feature_dict,
             record_length,
             cds_height,
             alignment_width,
-            genome_size_normalization_factor,
             separate_strands,
             arrow_length,
             record_group,

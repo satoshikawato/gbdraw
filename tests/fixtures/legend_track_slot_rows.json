@@ -1,5 +1,5 @@
 {
-  "description": "The Legend rows Python draws for a request with explicit track slots (gbdraw/diagrams/circular/assemble.py::_sync_legend_table_for_circular_slots, gbdraw/diagrams/linear/assemble.py::_sync_legend_table_for_linear_slots). `slots` are the entries of the canonical request (diagramOptions.tracks.circularTrackSlots or linearTrackSlots): spec strings or slot objects. `legend` gives rows the Legend table holds before the slots (feature rows). `palette` gives the gc_content, skew_high and skew_low colors of the Generate. `rows` is the whole table in order, each row as [key, palette key of its fill, the slot that draws it (null: no explicit slot), fill]. A slot whose row has the name and the swatch of an earlier row draws no row of its own; it still takes its key, listed in `shared`, so the keys of the later slots do not depend on which rows are shared (the Legend draws names, numbered by tests/fixtures/legend_names.json, never keys). Python's answer is the keys and fills (tests/test_legend_row_facts.py reads the slots as the request decoder and the slot parsers do). The Web app's answer is the slot and the palette key it reads for each key of the displayed Result (services/track-legend-rows.js, tests/web/track-legend-row-colors.test.mjs); a null palette key is a row the Web app claims no track for, so it keeps the color Python drew. The rows of a request without explicit slots are in legend_generated_rows.json.",
+  "description": "The Legend rows Python draws for a request with explicit track slots (gbdraw/diagrams/circular/assemble.py::_sync_legend_table_for_circular_slots, gbdraw/diagrams/linear/assemble.py::_sync_legend_table_for_linear_slots). `slots` are the entries of the canonical request (diagramOptions.tracks.circularTrackSlots or linearTrackSlots): spec strings or slot objects. `legend` gives rows the Legend table holds before the slots (feature rows). `depthTracks` gives the request's Depth series (diagramOptions.depthTracks: label and color; a blank label is Python's default label), and a null `slots` is a Circular request without explicit slots, which names a row per series (OV-1198). `palette` gives the gc_content, skew_high and skew_low colors of the Generate. `rows` is the whole table in order, each row as [key, palette key of its fill, the slot that draws it (null: no explicit slot), fill]. A slot whose row has the name and the swatch of an earlier row draws no row of its own; it still takes its key, listed in `shared`, so the keys of the later slots do not depend on which rows are shared (the Legend draws names, numbered by tests/fixtures/legend_names.json, never keys). Python's answer is the keys and fills (tests/test_legend_row_facts.py reads the slots as the request decoder and the slot parsers do). The Web app's answer is the slot and the palette key it reads for each key of the displayed Result (services/track-legend-rows.js, tests/web/track-legend-row-colors.test.mjs); a palette key `depth` is a Depth series' row, filled by the series; a null palette key is a row the Web app claims no track for, so it keeps the color Python drew. The rows of a request without explicit slots are in legend_generated_rows.json.",
   "cases": [
     {
       "name": "circular: a GC skew slot and an AT skew slot with its own colors and label",
@@ -676,7 +676,7 @@
       ]
     },
     {
-      "name": "circular: a slot labelled like a feature row leaves both rows unclaimed",
+      "name": "circular: a slot labelled like a feature row claims its numbered row",
       "mode": "circular",
       "dinucleotide": "GC",
       "palette": {
@@ -754,8 +754,8 @@
         ],
         [
           "CDS (2)",
-          null,
-          null,
+          "skew_high",
+          "cds_named",
           "#123456"
         ],
         [
@@ -884,7 +884,7 @@
       ]
     },
     {
-      "name": "linear: the default content row stays, and three skew slots replace the default skew rows",
+      "name": "linear: a content slot draws its own row under its dinucleotide, and three skew slots replace the default skew rows",
       "mode": "linear",
       "dinucleotide": "GC",
       "palette": {
@@ -958,9 +958,9 @@
       ],
       "rows": [
         [
-          "GC content",
+          "AT content",
           "gc_content",
-          null,
+          "gc_content",
           "#a0a0a0"
         ],
         [
@@ -999,7 +999,7 @@
       ]
     },
     {
-      "name": "linear: spec strings with aliases, under a request of another dinucleotide",
+      "name": "linear: spec strings with aliases, under a request of another dinucleotide; without a content slot there is no content row",
       "mode": "linear",
       "dinucleotide": "AT",
       "palette": {
@@ -1013,12 +1013,6 @@
         "s2:gc_skew@dinucleotide=gc,high_color=Red,label=GC bias"
       ],
       "rows": [
-        [
-          "AT content",
-          "gc_content",
-          null,
-          "#a0a0a0"
-        ],
         [
           "AT skew (+)",
           "skew_high",
@@ -1042,6 +1036,42 @@
           "skew_low",
           "s2",
           "#222222"
+        ]
+      ]
+    },
+    {
+      "name": "linear: a content slot's legend_label (alias label) names its row (OV-846)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": [
+        "features:features",
+        "c1:dinucleotide_content@legend_label=Coverage of GC",
+        "c2:content@nt=AT,label=AT share",
+        "c3:content"
+      ],
+      "rows": [
+        [
+          "Coverage of GC",
+          "gc_content",
+          "c1",
+          "#a0a0a0"
+        ],
+        [
+          "AT share",
+          "gc_content",
+          "c2",
+          "#a0a0a0"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          "c3",
+          "#a0a0a0"
         ]
       ]
     },
@@ -1175,6 +1205,567 @@
         "GC content (2)",
         "GC skew (+) (2)",
         "GC skew (-) (2)"
+      ]
+    },
+    {
+      "name": "circular: Depth series without slots each draw a row, a repeated label numbered (OV-1198)",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "depth",
+          "color": "#4a90e2"
+        },
+        {
+          "label": "depth",
+          "color": "#e24a4a"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "depth",
+          "depth",
+          null,
+          "#4a90e2"
+        ],
+        [
+          "depth (2)",
+          "depth",
+          null,
+          "#e24a4a"
+        ]
+      ]
+    },
+    {
+      "name": "circular: Depth slots draw their series in slot order, a repeated label numbered and a legend_label honored (OV-1198)",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "slots": [
+        "features:features",
+        "d1:depth@track_index=1",
+        "gc_content:dinucleotide_content",
+        "d0:depth",
+        "d2:depth@track_index=2,legend_label=Reads C"
+      ],
+      "depthTracks": [
+        {
+          "label": "depth",
+          "color": "#4a90e2"
+        },
+        {
+          "label": "depth",
+          "color": "#e24a4a"
+        },
+        {
+          "label": "",
+          "color": "#00aa00"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "depth",
+          "depth",
+          "d1",
+          "#e24a4a"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          "gc_content",
+          "#a0a0a0"
+        ],
+        [
+          "depth (2)",
+          "depth",
+          "d0",
+          "#4a90e2"
+        ],
+        [
+          "Reads C",
+          "depth",
+          "d2",
+          "#00aa00"
+        ]
+      ]
+    },
+    {
+      "name": "linear: enabled Depth slots draw rows between the content and the skew rows; a disabled one and a missing series draw none (OV-1198)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "slots": [
+        "features:features",
+        "gc_skew:dinucleotide_skew",
+        "d0:depth",
+        {
+          "kind": "linearTrackSlot",
+          "id": "d1",
+          "renderer": "depth",
+          "enabled": false,
+          "side": null,
+          "height": null,
+          "spacing": null,
+          "z": 0,
+          "params": {
+            "track_index": 1
+          }
+        },
+        "d1b:depth@track_index=1,label=Reads B",
+        "d9:depth@track_index=9",
+        "gc_content:dinucleotide_content"
+      ],
+      "depthTracks": [
+        {
+          "label": "",
+          "color": "#4a90e2"
+        },
+        {
+          "label": "",
+          "color": "#e24a4a"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          "gc_content",
+          "#a0a0a0"
+        ],
+        [
+          "Depth 1",
+          "depth",
+          "d0",
+          "#4a90e2"
+        ],
+        [
+          "Reads B",
+          "depth",
+          "d1b",
+          "#e24a4a"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          "gc_skew",
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          "gc_skew",
+          "#222222"
+        ]
+      ]
+    },
+    {
+      "name": "linear: without slots one Depth series draws a row under its label (OV-1198)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "depth",
+          "color": "#4a90e2"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "depth",
+          "depth",
+          null,
+          "#4a90e2"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
+        ]
+      ]
+    },
+    {
+      "name": "circular: one Depth series without a label or slots draws a row named Depth (OV-1198)",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "",
+          "color": "#4a90e2"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "Depth",
+          "depth",
+          null,
+          "#4a90e2"
+        ]
+      ]
+    },
+    {
+      "name": "circular: three Depth series without labels or slots draw rows named Depth 1, Depth 2 and Depth 3 (OV-1508)",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "",
+          "color": "#4a90e2"
+        },
+        {
+          "label": "",
+          "color": "#e24a4a"
+        },
+        {
+          "label": "",
+          "color": "#4ae24a"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "Depth 1",
+          "depth",
+          null,
+          "#4a90e2"
+        ],
+        [
+          "Depth 2",
+          "depth",
+          null,
+          "#e24a4a"
+        ],
+        [
+          "Depth 3",
+          "depth",
+          null,
+          "#4ae24a"
+        ]
+      ]
+    },
+    {
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ],
+        [
+          "tRNA",
+          "#e5c07b"
+        ]
+      ],
+      "name": "circular: a Depth series labelled like a feature row of its fill shares that row and claims none (OV-1198)",
+      "depthTracks": [
+        {
+          "label": "tRNA",
+          "color": "#e5c07b"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "tRNA",
+          null,
+          null,
+          "#e5c07b"
+        ]
+      ],
+      "shared": [
+        "tRNA (2)"
+      ]
+    },
+    {
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ],
+        [
+          "tRNA",
+          "#e5c07b"
+        ]
+      ],
+      "name": "circular: a Depth series labelled like a feature row of another fill claims its numbered row (OV-1198)",
+      "depthTracks": [
+        {
+          "label": "tRNA",
+          "color": "#4a90e2"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "tRNA",
+          null,
+          null,
+          "#e5c07b"
+        ],
+        [
+          "tRNA (2)",
+          "depth",
+          null,
+          "#4a90e2"
+        ]
+      ]
+    },
+    {
+      "name": "linear: one Depth series without a label or slots draws a row named Depth (OV-1198)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "",
+          "color": "#4a90e2"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "Depth",
+          "depth",
+          null,
+          "#4a90e2"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
+        ]
+      ]
+    },
+    {
+      "name": "linear: without slots each Depth series draws a row, between the content and the skew rows (OV-1198)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": null,
+      "legend": [
+        [
+          "CDS",
+          "#84b9ec"
+        ]
+      ],
+      "depthTracks": [
+        {
+          "label": "depth",
+          "color": "#4a90e2"
+        },
+        {
+          "label": "",
+          "color": "#e24a4a"
+        }
+      ],
+      "rows": [
+        [
+          "CDS",
+          null,
+          null,
+          "#84b9ec"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "depth",
+          "depth",
+          null,
+          "#4a90e2"
+        ],
+        [
+          "Depth 2",
+          "depth",
+          null,
+          "#e24a4a"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
+        ]
       ]
     }
   ]

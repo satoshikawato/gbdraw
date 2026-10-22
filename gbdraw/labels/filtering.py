@@ -52,6 +52,19 @@ _LABEL_OVERRIDE_HEADER = (
 )
 
 
+def _refuse_missing_values(df: DataFrame, required_cols: list[str], filepath: str) -> None:
+    """Refuse a label table row with an empty column, naming the row and its columns (OV-1241)."""
+
+    null_rows = df[df.isnull().any(axis=1)]
+    if null_rows.empty:
+        return
+    row = null_rows.iloc[0]
+    missing = [c for c in required_cols if pd.isna(row[c])]
+    raise ValidationError(
+        f"Missing values in '{filepath}' at line {int(null_rows.index[0]) + 1}. Missing columns: {missing}."
+    )
+
+
 def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     if not filepath:
         return None
@@ -68,28 +81,15 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in qualifier priority file '{filepath}': {e}"
         ) from e
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Qualifier priority file not found: {e}")
         raise InputFileError(f"Qualifier priority file not found: {e}") from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        raise ValidationError(
-            f"Missing values in '{filepath}'. See log for details."
-        )
+    _refuse_missing_values(df, required_cols, filepath)
 
     logger.info(f"Successfully loaded qualifier priority from {filepath}")
     return df
@@ -108,32 +108,28 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
             label="filter list file",
             filepath=filepath,
             legacy_rows=LEGACY_TABLE_ROWS["label-whitelist"],
+            keep_default_na=False,
+            na_filter=False,
         )
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in filter list file '{filepath}': {e}"
         ) from e
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Filter list file not found: {e}")
         raise InputFileError(f"Filter list file not found: {e}") from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        raise ValidationError(
-            f"Missing values in '{filepath}'. See log for details."
-        )
+    # OV-350: an empty keyword cell is the empty pattern, which matches every
+    # value of its qualifier. An empty feature type or qualifier, or a row
+    # without a keyword cell, is still a missing value.
+    _refuse_missing_values(
+        df.assign(**{column: df[column].mask(df[column] == "") for column in ("feature_type", "qualifier")}),
+        required_cols,
+        filepath,
+    )
 
     logger.info(f"Successfully loaded filter list from {filepath}")
     return df
@@ -148,7 +144,6 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     try:
         lines = read_table_lines(filepath)
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Label override file not found: {e}")
         raise InputFileError(f"Label override file not found: {e}") from e
 
     try:
@@ -163,25 +158,13 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in label override file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in label override file '{filepath}': {e}"
         ) from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        raise ValidationError(
-            f"Missing values in '{filepath}'. See log for details."
-        )
+    _refuse_missing_values(df, required_cols, filepath)
 
     logger.info(f"Successfully loaded label override table from {filepath}")
     return df
@@ -263,22 +246,18 @@ def _build_label_override_rules(label_override_df: Optional[DataFrame]) -> Optio
             continue
 
         if not record_id:
-            logger.error(f"ERROR: Missing record_id token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing record_id token in label override table at row {idx}."
             )
         if not feature_type:
-            logger.error(f"ERROR: Missing feature_type token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing feature_type token in label override table at row {idx}."
             )
         if not qualifier:
-            logger.error(f"ERROR: Missing qualifier token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing qualifier token in label override table at row {idx}."
             )
         if not value_pattern:
-            logger.error(f"ERROR: Missing value regex token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing value regex token in label override table at row {idx}."
             )
@@ -286,9 +265,6 @@ def _build_label_override_rules(label_override_df: Optional[DataFrame]) -> Optio
         try:
             pattern = re.compile(value_pattern, re.IGNORECASE)
         except re.error as e:
-            logger.error(
-                f"ERROR: Invalid regex in label override table at row {idx}: '{value_pattern}' ({e})"
-            )
             raise ParseError(
                 f"Invalid regex in label override table at row {idx}: '{value_pattern}' ({e})"
             ) from e
@@ -322,9 +298,6 @@ def _build_whitelist_map(whitelist_df: Optional[DataFrame]) -> Optional[dict[str
         try:
             pattern = re.compile(value_pattern, re.IGNORECASE)
         except re.error as e:
-            logger.error(
-                f"ERROR: Invalid regex in label whitelist table at row {idx}: '{value_pattern}' ({e})"
-            )
             raise ParseError(
                 f"Invalid regex in label whitelist table at row {idx}: '{value_pattern}' ({e})"
             ) from e

@@ -19,6 +19,7 @@ import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.legend.sources import ComparisonLegendSource
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -304,28 +305,11 @@ def _translate_xy_or_zero(transform: str | None) -> tuple[float, float]:
 
 
 def _build_collinearity_match_group() -> PairWiseMatchGroup:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
+    return ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
+        collinearity_orientation_min_colors={"plus": "#eeeeee", "minus": "#ffeeee"},
     )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
-    group.collinearity_orientation_min_colors = {"plus": "#eeeeee", "minus": "#ffeeee"}
-    return group
 
 
 def _web_protein_entry(
@@ -2360,13 +2344,15 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
             },
         ],
         "pairs": [
@@ -2417,13 +2403,13 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     typed_fields = result["collinearityResult"]["value"]["fields"]
     assert typed_fields["blocks"][0]["fields"]["blockId"] == "block_0001"
     assert len(typed_fields["orthogroups"]["fields"]["orthogroups"]) == 8
-    rows = result["pairs"][0]["rows"]
+    rows = converted_pair_rows(result["pairs"][0])
     assert len(rows) == 1
     assert rows[0]["collinearity_block_id"] == "block_0001"
     assert rows[0]["collinearity_block_kind"] == "cluster"
     assert rows[0]["collinearity_anchor_count"] == 8
     assert rows[0]["collinearity_color_mode"] == "orientation"
-    assert rows[0]["collinearity_block_evalue"] == ""
+    assert pd.isna(rows[0]["collinearity_block_evalue"])
     assert rows[0]["group_kind"] == "collinear_gene_group"
     assert rows[0]["group_scope"] == "adjacent_local"
     assert rows[0]["collinear_group_scope"] == "adjacent_local"
@@ -2435,11 +2421,12 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     assert rows[0]["query_view_feature_svg_id"] == rows[0][
         "query_feature_svg_id"
     ]
-    assert set(result) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert set(result) == {"pairs", "collinearityResult", "identity", "identityKey", "provenance", "cache"}
     assert result["provenance"]["upstreamRawKeys"] == ["pair-a-b", "pair-b-a"]
     assert result["provenance"]["orthogroup"] == {
         "membershipMode": "anchor_core_v1",
         "memberMaxHits": None,
+        "maxParalogLinksPerOrthogroup": 2,
     }
     assert result["provenance"]["collinear"]["unitMode"] == {
         "requested": "cds",
@@ -2509,13 +2496,15 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
             },
         ],
         "pairs": [
@@ -2562,7 +2551,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    rows = result["pairs"][0]["rows"]
+    rows = converted_pair_rows(result["pairs"][0])
     assert len(rows) == 1
     assert rows[0]["collinearity_anchor_count"] == expected_anchor_count
     assert result["provenance"]["collinear"]["anchorMode"] == anchor_mode
@@ -2593,7 +2582,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
         min_two = json.loads(str(raw_min_two))
 
         assert "error" not in min_two
-        assert min_two["pairs"][0]["rows"] == []
+        assert converted_pair_rows(min_two["pairs"][0]) == []
 
 
 @pytest.mark.linear
@@ -2646,19 +2635,22 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": a_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": b_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
             },
             {
                 "recordIndex": 2,
                 "recordId": "record_c",
                 "proteinMap": c_map,
-                "proteinCacheKey": "record-c-cache",
+                "runtimeBindingHash": "record-c-cache-runtime",
+                "displayBindingHash": "record-c-cache-display",
             },
         ],
         "pairs": [
@@ -2784,8 +2776,8 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
 
     adjacent_member_sets = member_sets(adjacent)
     all_member_sets = member_sets(all_records)
-    assert set(adjacent) == {"pairs", "collinearityResult", "provenance", "cache"}
-    assert set(all_records) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert set(adjacent) == {"pairs", "collinearityResult", "identity", "identityKey", "provenance", "cache"}
+    assert set(all_records) == {"pairs", "collinearityResult", "identity", "identityKey", "provenance", "cache"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
     assert {
@@ -2855,26 +2847,10 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
 
 @pytest.mark.linear
 def test_collinearity_match_path_with_metadata_serializes() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
+    group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
     )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
 
     row = SimpleNamespace(
         identity=95,
@@ -3459,26 +3435,10 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
 
 @pytest.mark.linear
 def test_collinearity_orientation_colors_use_default_color_overrides() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
+    group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
     )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
 
     row = SimpleNamespace(
         identity=95,
@@ -3613,25 +3573,7 @@ def test_average_identity_collinearity_ignores_orientation_colors() -> None:
 
 @pytest.mark.linear
 def test_non_collinearity_match_path_does_not_add_metadata_attributes() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
-    )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
+    group = ribbon_group([_record("record_a", []), _record("record_b", [])])
 
     row = SimpleNamespace(
         identity=95,
@@ -3676,31 +3618,8 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
         },
     ]
     comparison_df = pd.DataFrame.from_records(rows)
-    canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
-        align_center=False,
-    )
-    blast_config = SimpleNamespace(
-        fill_color="#d3d3d3",
-        min_color="#ffffff",
-        max_color="#000000",
-        fill_opacity=1.0,
-        stroke_color="none",
-        stroke_width=0,
-        identity=0,
-        sequence_length_dict={},
-    )
-    match_group = PairWiseMatchGroup(
-        canvas_config,
-        blast_config.sequence_length_dict,
-        comparison_df,
-        40,
-        1,
-        blast_config,
-        [_record("record_a", []), _record("record_b", [])],
-        align_center=canvas_config.align_center,
+    match_group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])], comparison_df, fill_opacity=1.0
     ).get_group()
 
     drawing = Drawing(debug=False)
@@ -3869,3 +3788,66 @@ def test_chain_merge_preserves_float_score_and_final_order(reverse, min_anchors,
         m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
         expected = cluster_lossless_collinearity_anchors(anchors, params=params)
     assert actual == expected
+
+
+def _left_to_right_sum(values, /, start=0):
+    """``sum()`` as Python 3.10 and 3.11 add floats (3.12 compensates them)."""
+
+    total = start
+    for value in values:
+        total = total + value
+    return total
+
+
+def _protein_float_reductions():
+    anchors = tuple(
+        replace(_anchor(index, index, bitscore=0.1), identity=0.1, alignment_length=1)
+        for index in range(10)
+    )
+    block = CollinearityBlock(
+        block_id="block",
+        query_record_index=0,
+        subject_record_index=1,
+        orientation="plus",
+        score=collinearity_module._anchor_bitscore_total(anchors),
+        anchors=anchors,
+    )
+    (row,) = convert_collinearity_blocks_to_pair_comparisons(
+        CollinearityResult(blocks=(block,)), record_ids=["a", "b"]
+    )[(0, 1)][["bitscore", "identity"]].itertuples(index=False)
+    size = 12
+    hits = pd.DataFrame(
+        {
+            "query": [f"q{index % 3}" for index in range(size)],
+            "subject": [f"s{index % 2}" for index in range(size)],
+            "length_product": [float(100 + (index % 7) * 17) for index in range(size)],
+            "bitscore": [float(10 + (index % 4) * 3) for index in range(size)],
+        }
+    )
+    return (
+        block.score,
+        collinearity_module._weighted_identity(anchors),
+        tuple(row),
+        protein_colinearity_module._fit_expected_bitscore_model(hits, top_fraction=1.0),
+    )
+
+
+def test_protein_float_reductions_do_not_depend_on_the_python_version(monkeypatch) -> None:
+    """Stored Gallery protein results equal a rebuild on every Python (OV-1237).
+
+    Python 3.12 changed ``sum()`` of floats to compensated summation, so a
+    result built with ``sum()`` on 3.10 or 3.11 differed in its last bits from
+    the 3.13 Sessions and the Web's Pyodide.
+    """
+
+    current = _protein_float_reductions()
+    with monkeypatch.context() as patched:
+        patched.setattr("builtins.sum", _left_to_right_sum)
+        left_to_right = _protein_float_reductions()
+
+    assert current == left_to_right
+    score, identity, (bitscore, row_identity), model = current
+    assert score == bitscore == 1.0
+    assert identity == row_identity == 0.1
+    # CPython 3.12+ sum() values; left-to-right addition gives (0.2345015637431571, 0.645579356667975).
+    assert model == (0.23450156374315714, 0.6455793566679746)

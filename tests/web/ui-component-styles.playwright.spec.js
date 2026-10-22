@@ -1,8 +1,8 @@
-// UI-01: the component rules of index.html (.card, .form-input, .btn, ...) take
-// effect. Tailwind Play compiles @apply only inside <style type="text/tailwindcss">;
-// in a plain <style> every rule was dropped and inputs had no frame. The rules that
-// refine .form-input must follow it in the same layer, or the compact fields clip
-// their text and the "(auto)" values drawn behind transparent inputs disappear.
+// UI-01: the component rules (.card, .form-input, .btn, ...) take effect. They live in
+// css/tailwind.input.css, which tools/generate_web_tailwind_css.mjs compiles into the
+// linked css/tailwind.css; @apply in a plain <style> was dropped and inputs had no frame.
+// The rules that refine .form-input must follow it in the same layer, or the compact
+// fields clip their text and the "(auto)" values drawn behind transparent inputs disappear.
 // Checks of the Web GUI audit 2026-10-05 (PLAN §2.3) at a desktop and a phone width,
 // with HmmtDNA and a Depth TSV loaded, a custom track stack, Label Mode Out, and every
 // disclosure open.
@@ -414,7 +414,7 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
 
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
-  await expect(page.locator('[data-circular-discovery-status]')).toContainText('source record(s) inspected', { timeout: 120_000 });
+  await expect(page.locator('[data-circular-discovery-status]')).toContainText(/source records? inspected/, { timeout: 120_000 });
   await expect(zone).toHaveClass(/\bready\b/);
   await expect(zone).not.toHaveClass(/\bfailed\b/);
   await expect(zone.locator('.ph-check-circle')).toHaveCount(1);

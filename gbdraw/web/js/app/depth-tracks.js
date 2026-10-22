@@ -1,12 +1,8 @@
 // @ts-check
 
-/** @import { FileLike } from '../services/session-resource-backing.js' */
+import { defaultDepthSeriesLabel } from '../services/depth-track-state.js';
 
-/** @param {number} index */
-export const getDepthTrackFallbackLabel = (index) => {
-  const numericIndex = Math.max(0, Number(index) || 0);
-  return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
-};
+/** @import { FileLike } from '../services/session-resource-backing.js' */
 
 /** @param {FileLike | null | undefined} file */
 export const getDepthTrackFileBaseName = (file) => {
@@ -18,15 +14,6 @@ export const getDepthTrackFileBaseName = (file) => {
 };
 
 /**
- * @param {FileLike | null | undefined} file
- * @param {number} index
- */
-export const getDepthTrackLabelFromFile = (file, index) => {
-  const baseName = getDepthTrackFileBaseName(file);
-  return baseName || getDepthTrackFallbackLabel(index);
-};
-
-/**
  * @param {unknown} label
  * @param {number} index
  * @param {FileLike | null} [file]
@@ -34,7 +21,9 @@ export const getDepthTrackLabelFromFile = (file, index) => {
 export const isDepthTrackAutoLabel = (label, index, file = null) => {
   const normalized = String(label ?? '').trim();
   if (!normalized) return true;
-  if (normalized === getDepthTrackFallbackLabel(index)) return true;
+  // A default name the series has for some series count: one a Session saved
+  // before OV-1508 stored (Depth for the first of several series included).
+  if ([index + 1, index + 2].some((count) => normalized === defaultDepthSeriesLabel(index, count))) return true;
   const fileBaseName = getDepthTrackFileBaseName(file);
   return Boolean(fileBaseName && normalized === fileBaseName);
 };

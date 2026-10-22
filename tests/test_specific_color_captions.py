@@ -528,3 +528,60 @@ def test_a_saved_session_is_read_without_the_color_ids_of_its_own_rules(form, tm
     assert rows_drawn["Complex IV [#ffe700]"][:2] == ("Complex IV", "Complex IV (1)")
     assert rows_drawn["Complex IV [#1f77b4]"][:2] == ("Complex IV", "Complex IV (2)")
     assert rows_drawn["Complex I [#ffe700]"][:2] == ("Complex I [#ffe700]", "Complex I [#ffe700]")
+
+
+@pytest.mark.parametrize(
+    ("caption", "pairwise"),
+    [
+        ("Pairwise match identity", None),
+        ("Average identity", "average"),
+        ("Collinear", "orientation"),
+        ("Inverted", "orientation"),
+    ],
+)
+def test_rule_captioned_like_a_comparison_legend_row_keeps_its_own_row(caption: str, pairwise: str | None) -> None:
+    """OV-646 (D-03 option A): the comparison gradient replaced the rule row of its label.
+
+    The gradient takes a source key (``<label> (2)``) when a rule already holds
+    its label, as Circular's conservation rows do; both rows are drawn and
+    numbered by the naming rule.
+    """
+
+    from gbdraw.legend.table import PairwiseIdentityGradient, PairwiseIdentityLegend, legend_row_names, prepare_legend_table
+    from gbdraw.legend.sources import ComparisonLegendSource
+
+    numeric = SimpleNamespace(
+        show_gc=False, show_skew=False, dinucleotide="GC", stroke_color="none", stroke_width=0,
+        high_fill_color="#ffffff", low_fill_color="#000000",
+    )
+    features = SimpleNamespace(
+        color_table=pd.DataFrame(
+            [("CDS", "locus_tag", "FL1", "#ff0000", caption)],
+            columns=["feature_type", "qualifier", "value", "color", "caption"],
+        ),
+        default_colors=pd.DataFrame([("CDS", "#54bcf8"), ("default", "#d3d3d3")], columns=["feature_type", "color"]),
+        block_stroke_color="none",
+        block_stroke_width=0,
+    )
+    legend = {
+        None: PairwiseIdentityLegend(),
+        "average": PairwiseIdentityLegend(label="Average identity"),
+        "orientation": PairwiseIdentityLegend(gradients=(
+            PairwiseIdentityGradient("Collinear", "#eeeeee", "#112233"),
+            PairwiseIdentityGradient("Inverted", "#ffeeee", "#445566"),
+        )),
+    }[pairwise]
+    table = prepare_legend_table(
+        numeric, numeric, features, ["CDS"],
+        comparison=ComparisonLegendSource.of(SimpleNamespace(min_color="#ffffff", max_color="#000000", identity=0)),
+        used_color_rules={(caption, "#ff0000")},
+        show_gc=False, show_skew=False, show_depth=False,
+        pairwise_identity_legend=legend,
+    )
+
+    assert table[caption]["type"] == "solid" and table[caption]["fill"] == "#ff0000"
+    gradient_key = f"{caption} (2)"
+    assert table[gradient_key]["type"] == "gradient"
+    names = legend_row_names(table)
+    assert (names[caption].name, names[gradient_key].name) == (caption, caption)
+    assert (names[caption].drawn, names[gradient_key].drawn) == (f"{caption} (1)", f"{caption} (2)")

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from collections import Counter
 from typing import Dict, Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -50,8 +49,6 @@ class SeqRecordGroup:
 
         self.show_labels = render_context.profile.labels_enabled
 
-        self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.length_param)
-        self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         self.font_size = cfg.labels.font_size.for_length_param(self.length_param)
         self.strandedness = render_context.profile.strandedness
         self.track_ratio_factors = geometry.track_ratio_factors
@@ -92,12 +89,7 @@ class SeqRecordGroup:
             self.feature_config,
             self.render_context.feature_layout,
         )
-        feature_id_counts = Counter(
-            feature_drawer.get_feature_data_id(feature_object)
-            for feature_object in feature_dict.values()
-        )
         for feature_object in feature_dict.values():
-            stable_feature_id = feature_drawer.get_feature_data_id(feature_object)
             group = feature_drawer.draw(
                 feature_object,
                 group,
@@ -108,12 +100,7 @@ class SeqRecordGroup:
                 self.render_context.track_preset,
                 self.strandedness,
                 self.length_param,
-                feature_instance_id=(
-                    feature_object.source_feature_index
-                    if stable_feature_id
-                    and feature_id_counts[stable_feature_id] > 1
-                    else None
-                ),
+                feature_instance_id=feature_object.rendered_instance_index,
                 feature_dom_namespace=self.feature_dom_namespace,
             )
         if self.show_labels:

@@ -4,18 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, get_args, get_type_hints
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "contracts" / "schema.generated.js"
 REQUEST_TARGET = TARGET.with_name("request.generated.js")
 SESSION_TARGET = TARGET.with_name("session.generated.js")
 REQUEST_SHAPE_TARGET = TARGET.with_name("request-shape.generated.js")
+SESSION_SHAPE_TARGET = TARGET.with_name("session-shape.generated.js")
 sys.path.insert(0, str(REPO_ROOT))
 
 # (Web name, Python module that defines the value, Python name). The Web keeps
@@ -26,11 +29,15 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("TYPED_DRAFT_SESSION_VERSION", "gbdraw.session_io", "TYPED_DRAFT_SESSION_MIN_VERSION"),
     ("MODE_SCOPED_SESSION_VERSION", "gbdraw.session_io", "MODE_SCOPED_SESSION_MIN_VERSION"),
     ("ROW_KEYED_LEGEND_SESSION_VERSION", "gbdraw.session_io", "ROW_KEYED_LEGEND_SESSION_MIN_VERSION"),
+    ("FILE_IMPORT_ORIGIN_SESSION_VERSION", "gbdraw.session_io", "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION"),
     ("DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION", "gbdraw.session_io", "DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION"),
     ("CURRENT_AUTHORITY_SESSION_MIN_VERSION", "gbdraw.session_io", "CURRENT_AUTHORITY_SESSION_MIN_VERSION"),
     ("CURRENT_ARTIFACT_SESSION_MIN_VERSION", "gbdraw.session_io", "CURRENT_ARTIFACT_SESSION_MIN_VERSION"),
     ("CANONICAL_SESSION_MIN_VERSION", "gbdraw.session_io", "CANONICAL_SESSION_MIN_VERSION"),
     ("DRAWN_HASH_RULE_SESSION_MAX_VERSION", "gbdraw.session_io", "DRAWN_HASH_RULE_SESSION_MAX_VERSION"),
+    ("MAIN_DISPLAY_FRAME_SESSION_VERSION", "gbdraw.api.session_compat", "MAIN_DISPLAY_FRAME_SESSION_VERSION"),
+    ("DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION", "gbdraw.api.session_compat",
+     "DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION"),
     ("CANONICAL_REQUEST_SCHEMA", "gbdraw.session_request_codec", "CANONICAL_REQUEST_SCHEMA"),
     ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
     ("FEATURE_OVERRIDE_SCHEMA", "gbdraw.session_request_codec", "FEATURE_OVERRIDE_SCHEMA"),
@@ -51,6 +58,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
+    ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.config.models.objects", "UNSET_NUMBER_SPELLINGS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.
     ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),
     ("OTHER_MODE_RESULT_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_FIELDS"),
@@ -60,12 +68,30 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("OTHER_MODE_RESULT_RUN_METADATA_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_RUN_METADATA_FIELDS"),
     ("CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS", "gbdraw.session_io", "CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS"),
 )
-_CAPABILITIES = ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities")
+# (Web name, Python module, function): values a Python function derives from
+# its owner, written in this order after the constants.
+_DERIVED: tuple[tuple[str, str, str], ...] = (
+    ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities"),
+    ("CONFIG_UNSET_NUMBER_PATHS", "gbdraw.config.modify", "config_paths_reading_unset_spellings"),
+    ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
+)
+# (Web name, Python module, dataclass, field): the values of a field typed as a
+# string Literal (typing.get_args, in the owner's order) and the field's
+# default, written after the derived values. The Web shows these values in the
+# UI language (app/pairwise-match-popup.js).
+_LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
+    ("ORTHOGROUP_MEMBER_ROLE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "role"),
+    ("ORTHOGROUP_MEMBER_CONFIDENCE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "confidence"),
+)
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 
 
 def _scalar(value: object) -> str:
-    if isinstance(value, bool) or not isinstance(value, (int, str)):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and math.isfinite(value):
+        return repr(value)
+    if not isinstance(value, (int, str)):
         raise TypeError(f"Unsupported Web contract value: {value!r}")
     if isinstance(value, int):
         return str(value)
@@ -78,9 +104,9 @@ def _frozen(value: object, indent: str = "") -> str:
     if isinstance(value, dict):
         fields = []
         for key, item in value.items():
-            if not _IDENTIFIER.fullmatch(str(key)):
-                raise TypeError(f"Unsupported Web contract key: {key!r}")
-            fields.append(f"{inner}{key}: {_frozen(item, inner)}")
+            # A key that is no identifier or index is quoted (a dotted config path).
+            name = str(key) if _IDENTIFIER.fullmatch(str(key)) else json.dumps(key)
+            fields.append(f"{inner}{name}: {_frozen(item, inner)}")
         return "Object.freeze({\n" + ",\n".join(fields) + f"\n{indent}}})"
     if isinstance(value, list):
         return "Object.freeze([" + ", ".join(_scalar(item) for item in value) + "])"
@@ -113,6 +139,22 @@ def _owner(module: str, name: str) -> str:
     return f"// {module.replace('.', '/')}.py: {name}\n"
 
 
+def _literal_field_declaration(web_name: str, owner: type, field_name: str) -> str:
+    """The values and the default of a dataclass field typed as a string Literal."""
+    values = get_args(get_type_hints(owner)[field_name])
+    default = next(field.default for field in dataclasses.fields(owner) if field.name == field_name)
+    if not values or not all(isinstance(value, str) for value in values) or default not in values:
+        raise TypeError(f"{owner.__name__}.{field_name} is not a string Literal field with a listed default")
+    union = f"readonly ({' | '.join(_scalar(value) for value in values)})[]"
+    return (
+        f"/** @type {{Readonly<{{ values: {union}, default: {_scalar(default)} }}>}} */\n"
+        f"export const {web_name} = Object.freeze({{\n"
+        f"  values: /** @type {{{union}}} */ ({_frozen(list(values))}),\n"
+        f"  default: {_scalar(default)}\n"
+        "});\n"
+    )
+
+
 def render_web_contracts_module() -> str:
     parts = [
         "// @ts-check\n"
@@ -122,9 +164,19 @@ def render_web_contracts_module() -> str:
     for web_name, module, name in _CONSTANTS:
         value = getattr(importlib.import_module(module), name)
         parts.append(_owner(module, name) + _declaration(web_name, value))
-    web_name, module, name = _CAPABILITIES
-    manifest = getattr(importlib.import_module(module), name)()
-    parts.append(_owner(module, f"{name}()") + f"export const {web_name} = {_frozen(manifest)};\n")
+    for web_name, module, name in _DERIVED:
+        value = getattr(importlib.import_module(module), name)()
+        declaration = (
+            _declaration(web_name, value)
+            if isinstance(value, (frozenset, set))
+            else f"export const {web_name} = {_frozen(value)};\n"
+        )
+        parts.append(_owner(module, f"{name}()") + declaration)
+    for web_name, module, class_name, field_name in _LITERAL_FIELDS:
+        owner = getattr(importlib.import_module(module), class_name)
+        parts.append(
+            _owner(module, f"{class_name}.{field_name}") + _literal_field_declaration(web_name, owner, field_name)
+        )
     return "\n".join(parts)
 
 
@@ -231,17 +283,34 @@ def _references(shape: object) -> set[str]:
 
 
 def render_session_typedefs_module() -> str:
-    from gbdraw.session_contract import describe_session_document
+    from gbdraw.session_contract import describe_session_admission, describe_session_document
     from gbdraw.session_request_codec import describe_canonical_request
 
     description = describe_session_document()
     types = description["types"]
+    admission = describe_session_admission()
+    shared = set(types) & set(admission["types"])
+    if shared:
+        raise RuntimeError(f"The admission description reuses writer type name(s): {sorted(shared)}")
+    bands = " | ".join(band["root"] for band in admission["bands"])
     # A name the Session does not define is the request's; a leaf may import a leaf (R13).
     imported = sorted(_references(types) - set(types))
     unknown = set(imported) - set(describe_canonical_request()["types"])
     if unknown:
         raise RuntimeError(f"The Session description refers to undescribed type(s): {sorted(unknown)}")
     root = types[description["root"]]["fields"]
+    # A closed band holds no other SessionInput key (the reader drops it): the
+    # typedef says so, as the open bands below 46 say it of `otherModeResult`.
+    band_types = dict(admission["types"])
+    for band in admission["bands"]:
+        shape = band_types[band["root"]]
+        if not shape["open"]:
+            absent = [key for key in types["SessionInput"]["fields"] if key not in shape["fields"]]
+            band_types[band["root"]] = {
+                **shape,
+                "fields": {**shape["fields"], **{key: {"kind": "literal", "values": []} for key in absent}},
+                "optional": [*shape["optional"], *absent],
+            }
     return (
         "// @ts-check\n"
         "// Generated by tools/generate_web_contracts.py from describe_session_document()\n"
@@ -249,13 +318,16 @@ def render_session_typedefs_module() -> str:
         f"// {description['root']} is a Session of the current version as its writers write it.\n"
         "// A reader takes a SessionInput: the keys a Session of any supported version may\n"
         "// hold, with unvalidated values; a SessionEnvelope is one whose format and version\n"
-        "// were read.\n"
+        "// were read. SessionChecked is a stored Session of any supported version as\n"
+        "// validate_session proves it (describe_session_admission()): one type per band.\n"
         "\n"
         f"/** @import {{ {', '.join(imported)} }} from './{REQUEST_TARGET.name}' */\n"
         + _typedefs(types)
         + "/** @typedef {SessionInput & { format: "
         + f"{_jsdoc_type(root['format'])}, version: {_jsdoc_type(root['version'])}"
         + " }} SessionEnvelope */\n"
+        + _typedefs(band_types)
+        + f"/** @typedef {{{bands}}} SessionChecked */\n"
         "export {};\n"
     )
 
@@ -319,6 +391,17 @@ def render_request_shape_module() -> str:
     )
 
 
+def render_session_shape_module() -> str:
+    from gbdraw.session_contract import describe_session_admission
+
+    return render_description_module(
+        describe_session_admission(),
+        export_name="SESSION_ADMISSION_DESCRIPTION",
+        owner="describe_session_admission() in gbdraw/session_contract.py",
+        description_type="BandedContractDescription",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -333,6 +416,7 @@ def main() -> int:
         REQUEST_TARGET: render_request_typedefs_module(),
         SESSION_TARGET: render_session_typedefs_module(),
         REQUEST_SHAPE_TARGET: render_request_shape_module(),
+        SESSION_SHAPE_TARGET: render_session_shape_module(),
     }
     if args.check:
         stale = [

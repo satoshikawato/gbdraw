@@ -5,7 +5,9 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
-  DIAGRAM_HELPER_OPERATIONS
+  DIAGRAM_HELPER_OPERATIONS,
+  readFeatureCatalogRevision,
+  readSvgDocumentParts
 } from './diagram-worker-protocol.js';
 import {
   recordSessionLifecycleEvent,
@@ -13,15 +15,19 @@ import {
   runtimeTestHooksEnabled
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
-import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
+import { markCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { normalizeLabelFitFailure } from './label-fit.js';
 /** @import { LabelFitFailure } from './label-fit.js' */
 import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
+/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
+/** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
 /**
  * The fingerprint of the artifact a Generate returned.
@@ -51,13 +57,17 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
  * @property {unknown} [error]
  * @property {unknown} [results]
  * @property {unknown} [metadata]
+ * @property {unknown} [featureCatalog] The feature catalog's UTF-8 JSON bytes; absent when Python reports it unchanged.
+ * @property {unknown} [featureCatalogRevision] The catalog revision with its digest, or null.
  * @property {unknown} [labelFit] The JSON text of a label fit report, next to an error.
  * @property {Partial<GeneratedArtifactIdentity> | null} [artifactIdentity]
  */
 
 /**
- * A Result entry as the Worker sends it: its `content` is text or UTF-8 bytes.
- * @typedef {{ content?: unknown, [key: string]: unknown }} WorkerResultEntry
+ * A Result entry as the Worker sends it: its `document` pieces and the
+ * `segments` buffer of the children texts it sent, or (a test, a caller of
+ * the array shape) its `content` text.
+ * @typedef {{ document?: unknown, segments?: unknown, content?: unknown, [key: string]: unknown }} WorkerResultEntry
  */
 
 /**
@@ -110,68 +120,190 @@ export class DiagramGenerationCanceledError extends Error {
 export const isDiagramGenerationCanceled = (error) =>
   Boolean(error?.canceled || error?.name === 'DiagramGenerationCanceledError');
 
+/** @param {unknown} value */
+const viewBytes = (value) => (
+  value instanceof ArrayBuffer
+    ? new Uint8Array(value)
+    : ArrayBuffer.isView(value)
+      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+      : null
+);
+
 /**
+ * Decode one Result of a Generate reply into its admission candidate: the
+ * document with each sent children text decoded once, and under `SEGMENTS`
+ * the segment of the request's snapshot that each held piece names. A held
+ * piece the snapshot lacks, or names with another length, is an invalid
+ * reply. A Result with `content` text passes unchanged.
  * @param {WorkerResultEntry | string | number | boolean | null | undefined} result
  * @param {number} resultIndex
+ * @param {ReadonlyMap<string, Readonly<HeldSegment>>} heldSegments The request's snapshot.
  */
-const decodeGenerationResultContent = (result, resultIndex) => {
-  if (!result || typeof result !== 'object' || typeof result.content === 'string') {
-    return result;
+const decodeGenerationResult = (result, resultIndex, heldSegments) => {
+  if (!result || typeof result !== 'object' || !Object.hasOwn(result, 'document')) return result;
+  const { document, segments, ...rest } = result;
+  const buffer = segments === undefined ? new Uint8Array(0) : viewBytes(segments);
+  if (!buffer) throw invalidGenerationResult();
+  const parts = readSvgDocumentParts(document, buffer.byteLength, invalidGenerationResult);
+  const decoder = new TextDecoder();
+  /** @type {Map<string, Readonly<HeldSegment>>} */
+  const held = new Map();
+  if (segments !== undefined) {
+    recordSessionLifecycleEvent('result-binary-decode-start', { resultIndex, bytes: buffer.byteLength });
   }
-  const bytes = result.content instanceof ArrayBuffer
-    ? new Uint8Array(result.content)
-    : ArrayBuffer.isView(result.content)
-      ? new Uint8Array(
-          result.content.buffer,
-          result.content.byteOffset,
-          result.content.byteLength
-        )
-      : null;
-  if (!bytes) return result;
-  recordSessionLifecycleEvent('result-binary-decode-start', {
-    resultIndex,
-    bytes: bytes.byteLength
+  const pieces = parts.pieces.map((piece) => {
+    if (piece.kind === 'raw') return piece;
+    const { start, revision, bytes } = piece;
+    if (piece.offset === undefined) {
+      const segment = heldSegments.get(revision);
+      if (!segment || segment.bytes !== bytes) throw invalidGenerationResult();
+      held.set(revision, segment);
+      return /** @type {Readonly<DecodedContentPiece>} */ (Object.freeze({ kind: 'content', start, revision, bytes }));
+    }
+    const children = decoder.decode(buffer.subarray(piece.offset, piece.offset + bytes));
+    return /** @type {Readonly<DecodedContentPiece>} */ (Object.freeze({ kind: 'content', start, revision, bytes, children }));
   });
-  const content = new TextDecoder().decode(bytes);
-  recordStructuralMetric('resultBinaryDecodeCount', 1, { resultIndex });
-  recordStructuralMetric('resultBinaryDecodedBytes', bytes.byteLength, { resultIndex });
-  recordSessionLifecycleEvent('result-binary-decode-end', {
-    resultIndex,
-    bytes: bytes.byteLength,
-    characters: content.length
-  });
-  return { ...result, content };
+  if (segments !== undefined) {
+    recordStructuralMetric('resultBinaryDecodeCount', 1, { resultIndex });
+    recordStructuralMetric('resultBinaryDecodedBytes', buffer.byteLength, { resultIndex });
+    recordSessionLifecycleEvent('result-binary-decode-end', { resultIndex, bytes: buffer.byteLength });
+  }
+  /** @type {Readonly<DecodedSvgDocument>} */
+  const decoded = Object.freeze({ head: parts.head, tail: parts.tail, pieces: Object.freeze(pieces) });
+  return { ...rest, document: decoded, [SEGMENTS]: held };
 };
 
-/** @param {unknown} results */
-const decodeGenerationResults = (results) => (
+/**
+ * @param {unknown} results
+ * @param {ReadonlyMap<string, Readonly<HeldSegment>>} heldSegments
+ */
+const decodeGenerationResults = (results, heldSegments) => (
   Array.isArray(results)
-    ? results.map(decodeGenerationResultContent)
+    ? results.map((result, resultIndex) => decodeGenerationResult(result, resultIndex, heldSegments))
     : results
 );
 
 /**
- * @param {unknown} metadata The Worker's metadata: an object, or its UTF-8 JSON bytes.
+ * The two JSON payloads of a Generate reply and the names their decoding reports.
+ * @typedef {{ event: string, countMetric: string, bytesMetric: string }} GenerationJsonPart
+ */
+/** @type {Readonly<Record<'metadata' | 'featureCatalog', GenerationJsonPart>>} */
+const GENERATION_JSON_PARTS = Object.freeze({
+  metadata: Object.freeze({
+    event: 'result-metadata-binary-decode',
+    countMetric: 'resultMetadataBinaryDecodeCount',
+    bytesMetric: 'resultMetadataBinaryDecodedBytes'
+  }),
+  featureCatalog: Object.freeze({
+    event: 'result-feature-catalog-binary-decode',
+    countMetric: 'resultFeatureCatalogBinaryDecodeCount',
+    bytesMetric: 'resultFeatureCatalogBinaryDecodedBytes'
+  })
+});
+
+/**
+ * @param {unknown} value The Worker's value: an object, or its UTF-8 JSON bytes.
+ * @param {GenerationJsonPart} part
  * @returns {unknown}
  */
-const decodeGenerationMetadata = (metadata) => {
-  const bytes = metadata instanceof ArrayBuffer
-    ? new Uint8Array(metadata)
-    : ArrayBuffer.isView(metadata)
-      ? new Uint8Array(metadata.buffer, metadata.byteOffset, metadata.byteLength)
-      : null;
-  if (!bytes) return metadata;
-  recordSessionLifecycleEvent('result-metadata-binary-decode-start', {
+const decodeGenerationJson = (value, { event, countMetric, bytesMetric }) => {
+  const bytes = viewBytes(value);
+  if (!bytes) return value;
+  recordSessionLifecycleEvent(`${event}-start`, {
     bytes: bytes.byteLength
   });
   const decoded = JSON.parse(new TextDecoder().decode(bytes));
-  recordStructuralMetric('resultMetadataBinaryDecodeCount');
-  recordStructuralMetric('resultMetadataBinaryDecodedBytes', bytes.byteLength);
-  recordSessionLifecycleEvent('result-metadata-binary-decode-end', {
+  recordStructuralMetric(countMetric);
+  recordStructuralMetric(bytesMetric, bytes.byteLength);
+  recordSessionLifecycleEvent(`${event}-end`, {
     bytes: bytes.byteLength
   });
   return decoded;
 };
+
+/**
+ * The revision each feature catalog this page received arrived with, and its
+ * items' Result names then (before a rerender renames them, OV-136). Keyed by
+ * the object the page owns: no copy, and the record dies with the object.
+ * @type {WeakMap<object, { revision: Readonly<FeatureCatalogRevision>, resultNames: readonly string[] }>}
+ */
+const featureCatalogRevisions = new WeakMap();
+
+/**
+ * @param {FeatureCatalog} catalog
+ * @returns {string[]}
+ */
+const itemResultNames = (catalog) => catalog.items.map((item) => String(item?.resultName ?? ''));
+
+/**
+ * A feature catalog the page received, with the revision it arrived with.
+ * @typedef {{ catalog: FeatureCatalog, revision: Readonly<FeatureCatalogRevision> }} HeldFeatureCatalog
+ */
+
+/**
+ * The catalog the page may name to the Worker for the drawing it renders: one
+ * it received from this Worker, whose items still carry the Result names the
+ * render expects. A rerender expects the names its Results keep (`resultNames`,
+ * OV-136); a Generate expects the engine's names, recorded at receipt.
+ * @param {FeatureCatalog | null | undefined} catalog
+ * @param {readonly string[] | null} resultNames
+ * @returns {HeldFeatureCatalog | null}
+ */
+const selectHeldFeatureCatalog = (catalog, resultNames) => {
+  const record = catalog && typeof catalog === 'object' ? featureCatalogRevisions.get(catalog) : undefined;
+  if (!catalog || !record) return null;
+  const expected = resultNames ?? record.resultNames;
+  const names = itemResultNames(catalog);
+  if (names.length !== expected.length || names.some((name, index) => name !== expected[index])) return null;
+  return { catalog, revision: record.revision };
+};
+
+/**
+ * What the page holds for one render of the shown drawing, taken once when the
+ * request starts: the feature catalog it may name, and the sanitized children
+ * texts its committed Results keep. The reply is resolved against this
+ * snapshot only, so a commit while the request runs changes nothing it names.
+ * @typedef {object} HeldRenderState
+ * @property {HeldFeatureCatalog | null} catalog
+ * @property {ReadonlyMap<string, Readonly<HeldSegment>>} segments
+ */
+
+/** @type {Readonly<HeldRenderState>} */
+const NOTHING_HELD = Object.freeze({ catalog: null, segments: new Map() });
+
+/**
+ * The held render state of the shown drawing: its catalog (as
+ * `selectHeldFeatureCatalog` above) and the segments of its committed Results.
+ * @param {FeatureCatalog | null | undefined} catalog
+ * @param {readonly unknown[] | null | undefined} results The drawing's committed Results.
+ * @param {readonly string[] | null} resultNames
+ * @returns {Readonly<HeldRenderState>}
+ */
+export const selectHeldRenderState = (catalog, results, resultNames) => {
+  /** @type {Map<string, Readonly<HeldSegment>>} */
+  const segments = new Map();
+  // A reactive Result would hand out a reactive Map for its symbol key.
+  for (const result of toRaw(results) ?? []) {
+    const raw = result && typeof result === 'object' ? toRaw(result) : null;
+    /** @type {unknown} */
+    const held = raw ? /** @type {{ [SEGMENTS]?: unknown }} */ (raw)[SEGMENTS] : undefined;
+    if (held instanceof Map) held.forEach((segment, revision) => segments.set(revision, segment));
+  }
+  return Object.freeze({ catalog: selectHeldFeatureCatalog(catalog, resultNames), segments });
+};
+
+/**
+ * The held segments a run message names: revisions and byte counts only, sorted.
+ * @param {Readonly<HeldRenderState>} held
+ * @returns {WorkerHeldSegment[]}
+ */
+const heldSegmentList = (held) => [...held.segments.values()]
+  .map(({ revision, bytes }) => ({ revision, bytes }))
+  .sort((left, right) => (left.revision < right.revision ? -1 : left.revision > right.revision ? 1 : 0));
+
+const invalidGenerationResult = () => deserializeWorkerError({
+  code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
+});
 
 /**
  * @param {Partial<GeneratedArtifactIdentity> | null | undefined} identity
@@ -204,12 +336,14 @@ const normalizeGeneratedArtifactIdentity = (identity) => {
 
 /**
  * @param {unknown[] | WorkerGenerationPayload | string | number | boolean | null | undefined} payload
+ * @param {Readonly<HeldRenderState>} [held] What the request named: an "unchanged" reply keeps its
+ *   catalog, and a held piece takes its segment.
  * @returns {NormalizedGeneration}
  */
-export const normalizeGenerationResponse = (payload) => {
+export const normalizeGenerationResponse = (payload, held = NOTHING_HELD) => {
   if (Array.isArray(payload)) {
     return markCurrentWorkerGenerationResponse({
-      results: decodeGenerationResults(payload),
+      results: decodeGenerationResults(payload, held.segments),
       metadata: {},
       artifactIdentity: null
     });
@@ -231,17 +365,43 @@ export const normalizeGenerationResponse = (payload) => {
     });
   }
   const results = Array.isArray(payload.results)
-    ? decodeGenerationResults(payload.results)
+    ? decodeGenerationResults(payload.results, held.segments)
     : [];
-  const decodedMetadata = decodeGenerationMetadata(payload.metadata);
+  const decodedMetadata = decodeGenerationJson(payload.metadata, GENERATION_JSON_PARTS.metadata);
+  // A copy: the catalog joins it below, and a decoded object is the caller's.
+  /** @type {Record<string, unknown>} */
   const metadata = (
     decodedMetadata &&
     typeof decodedMetadata === 'object' &&
     !Array.isArray(decodedMetadata)
   )
-    // A non-array object, by the condition.
-    ? /** @type {Record<string, unknown>} */ (decodedMetadata)
+    ? { ...decodedMetadata }
     : {};
+  // The catalog travels beside the metadata, never inside it (step 3a).
+  if (Object.hasOwn(metadata, 'featureCatalog')) throw invalidGenerationResult();
+  const replyRevision = readFeatureCatalogRevision(payload.featureCatalogRevision, invalidGenerationResult);
+  if (payload.featureCatalog == null) {
+    // "Unchanged": only for the revision this request named.
+    const heldCatalog = held.catalog;
+    if (!replyRevision || !heldCatalog || heldCatalog.revision.revision !== replyRevision.revision) {
+      throw invalidGenerationResult();
+    }
+    metadata.featureCatalog = heldCatalog.catalog;
+    recordStructuralMetric('featureCatalogReuseCount');
+    recordSessionLifecycleEvent('catalog.reused', {
+      resultCount: Array.isArray(payload.results) ? payload.results.length : 0
+    });
+  } else {
+    const catalog = decodeGenerationJson(payload.featureCatalog, GENERATION_JSON_PARTS.featureCatalog);
+    if (replyRevision && catalog && typeof catalog === 'object' && Array.isArray(/** @type {{ items?: unknown }} */ (catalog).items)) {
+      const received = /** @type {FeatureCatalog} */ (catalog);
+      featureCatalogRevisions.set(received, {
+        revision: replyRevision,
+        resultNames: Object.freeze(itemResultNames(received))
+      });
+    }
+    metadata.featureCatalog = catalog;
+  }
   return markCurrentWorkerGenerationResponse({
     results,
     metadata,
@@ -256,6 +416,12 @@ let worker = null;
 let workerInitialized = false;
 /** @type {ReturnType<typeof validateWebRuntimeCapabilities> | null} */
 let workerCapabilities = null;
+/**
+ * Why a Worker of this page could not restore the Pyodide snapshot; null
+ * while none failed. The Workers started after a failure boot cold.
+ * @type {string | null}
+ */
+let pyodideSnapshotError = null;
 /** @typedef {Readonly<{ step: number, total: number, label: string }>} RuntimePreparationStep */
 /**
  * The pending Worker initialization: its promise, the reject that settles it,
@@ -351,7 +517,8 @@ const buildInitPayload = (id) => {
     type: 'init',
     id,
     fonts: workerFontFiles(workerFontSource.readFonts()),
-    ...buildPyodideAssetManifest()
+    ...buildPyodideAssetManifest(),
+    ...(pyodideSnapshotError === null ? {} : { pyodideSnapshotUrl: null })
   };
 };
 
@@ -467,8 +634,18 @@ const ensureWorkerInitialized = (onStep = null) => {
       return;
     }
     if (data.type !== 'init' || data.id !== id) return;
+    const stepListeners = initState?.stepListeners;
     cleanup();
     initState = null;
+    if (!data.ok && typeof data.snapshotError === 'string') {
+      // The snapshot restore failed: this Worker is discarded and a new one
+      // boots cold, for this initialization and every later one.
+      pyodideSnapshotError = data.snapshotError || 'unknown';
+      if (worker === currentWorker) terminateWorker();
+      ensureWorkerInitialized((step) => stepListeners?.forEach((listener) => listener(step)))
+        .then(resolveInit, rejectInit);
+      return;
+    }
     if (data.ok) {
       try {
         workerCapabilities = validateWebRuntimeCapabilities(data.capabilities);
@@ -477,6 +654,9 @@ const ensureWorkerInitialized = (onStep = null) => {
         return;
       }
       workerInitialized = true;
+      recordStructuralMetric('workerBoot', 1, {
+        boot: pyodideSnapshotError === null ? String(data.boot) : `cold after snapshot error: ${pyodideSnapshotError}`
+      });
       const lost = lostWorkerFonts(data.lostFonts);
       if (lost.length > 0) workerFontSource.onFontsLost(lost);
       resolveInit(currentWorker);
@@ -535,10 +715,12 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null }} [options]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState> }} [options]
+ *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
+ *   catalog's revision and each segment's revision and byte count are posted.
  * @returns {Promise<GenerationResponse>}
  */
-export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -594,7 +776,9 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
-        fontIdentities: requestFontIdentities(payload.request)
+        fontIdentities: requestFontIdentities(payload.request),
+        heldFeatureCatalogRevision: held.catalog?.revision ?? null,
+        heldSegments: heldSegmentList(held)
       };
 
       const cleanup = () => {
@@ -646,7 +830,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
           /** @type {NormalizedGeneration} */
           let normalized;
           try {
-            normalized = normalizeGenerationResponse(data.results);
+            normalized = normalizeGenerationResponse(data.results, held);
           } catch (error) {
             failWorker(error);
             return;
@@ -858,7 +1042,10 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
   }
   recordStructuralMetric('diagramHelperRequest', 1, { operation: normalizedOperation });
   // Helpers that read the records of a committed request stage its resources.
-  const staging = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE ? payload
+  /** @type {readonly string[]} */
+  const stagingOperations = [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE,
+    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES];
+  const staging = stagingOperations.includes(normalizedOperation) ? payload
     : (normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT ? payload.projection : undefined);
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({

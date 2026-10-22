@@ -2,8 +2,8 @@
 // open items). Each mode has its own drawing, so the switch sets `mode`, swaps
 // the artifact slots, and writes no setting or edit:
 //   1. no watcher's source changes on a switch except the ones that watch the
-//      mode itself, so the drawing watchers (palette colors, Canvas padding,
-//      bulk label text) never take a switch for an edit;
+//      mode itself, so the drawing watchers (palette colors, Canvas padding)
+//      never take a switch for an edit;
 //   2. the transition writes no drawing member and does not commit a Result
 //      edit;
 //   3. the Depth panels read the drawing's series and never write them (OV-109).
@@ -22,7 +22,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
+const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
 
 // Any port of the watcher owner: a function that does nothing.
@@ -46,6 +46,7 @@ const closedDialogs = [];
 const { resetModeTransientUi } = setupWatchers({
   state,
   rulePreparation: port(),
+  trackAuxiliaryFileImport: createAuxiliaryFileImports((target) => target).track,
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
   watch: (source, callback) => {
@@ -73,7 +74,7 @@ const { resetModeTransientUi } = setupWatchers({
 test('a mode switch changes the source of no drawing watcher', () => {
   assert.ok(watchers.length > 10, 'the watchers were registered');
   const drawingWatchers = watchers.filter(({ line }) => /drawing\./.test(line));
-  assert.ok(drawingWatchers.length >= 6, 'each drawing has its own palette, padding, and label text watchers');
+  assert.ok(drawingWatchers.length >= 4, 'each drawing has its own palette and padding watchers');
 
   // Distinct values in each drawing, so a watcher that followed the shown
   // drawing would see its source change.
@@ -81,8 +82,6 @@ test('a mode switch changes the source of no drawing watcher', () => {
   state.drawings.linear.currentColors.value = { CDS: '#222222' };
   state.drawings.circular.canvasPadding.top = 5;
   state.drawings.linear.canvasPadding.top = 9;
-  state.drawings.circular.labelTextBulkOverrides.hypothetical = 'HP';
-  state.drawings.linear.canonicalLabelOverrideRows.value = [{ kept: true }];
 
   for (const [from, to] of [['circular', 'linear'], ['linear', 'circular']]) {
     state.mode.value = from;
@@ -94,9 +93,6 @@ test('a mode switch changes the source of no drawing watcher', () => {
     const unexpected = changed.filter((line) => !/\bmode\.value\b|state\.mode\b|mode\b\.value/.test(line));
     assert.deepEqual(unexpected, [], `${from} -> ${to}: these watchers would fire on the switch`);
   }
-  // The bulk label text watcher of the Linear drawing did not run, so the
-  // Linear drawing keeps its saved label table.
-  assert.deepEqual(state.drawings.linear.canonicalLabelOverrideRows.value, [{ kept: true }]);
   state.mode.value = 'circular';
 });
 
@@ -121,7 +117,7 @@ const functionBody = (name) => {
   }
   throw new Error(`${name} has no end`);
 };
-const DRAWING_WRITE = /\bdrawing\.[\w.]+(\.value)?\s*(=(?!=)|\+=|-=)|\bdrawing\.[\w.]+\.(splice|push|pop|shift|unshift)\(|\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|applyConfigData)\(/;
+const DRAWING_WRITE = /\bdrawing\.[\w.]+(\.value)?\s*(=(?!=)|\+=|-=)|\bdrawing\.[\w.]+\.(splice|push|pop|shift|unshift)\(|\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|apply(?:Captured)?ConfigData)\(/;
 
 test('the mode transition writes no drawing member and commits no Result edit', () => {
   const body = functionBody('transitionDiagramMode');

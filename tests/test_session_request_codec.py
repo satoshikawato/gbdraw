@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 import copy
 import json
-from dataclasses import replace
+import math
+import typing
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 import pandas as pd
 import pytest
@@ -85,6 +88,7 @@ from gbdraw.session_request_codec import (
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
+    encode_canonical_table,
     encode_canonical_typed_resource,
 )
 from gbdraw.tracks import (
@@ -93,6 +97,8 @@ from gbdraw.tracks import (
     ScalarSpec,
     normalize_circular_track_slots,
     normalize_linear_track_slots,
+    parse_circular_track_slot,
+    parse_linear_track_slot,
 )
 
 
@@ -1203,6 +1209,50 @@ def test_decoded_comparisons_re_encode_with_their_kind_and_bytes(tmp_path: Path)
     assert comparisons(canonical)[0][3] == nucleotide_bytes
 
 
+def test_canonical_table_encoder_writes_the_one_tsv_form(tmp_path: Path) -> None:
+    # D-66: the request tables and the Web protein comparison tables share one
+    # encoder, so an equal frame gives equal bytes on every surface (OV-1049).
+    frame = pd.DataFrame(
+        {
+            "query": ["a\tb", 'say "x"', "\u03b2-lactamase"],
+            "hit": [283, 100, 7],
+            "bitscore": [283.0, 1.0, 0.5],
+            "evalue": [1.38e-92, 1e-05, float("nan")],
+            "rbh": [True, False, True],
+            "note": ["", None, "kept"],
+        }
+    )
+
+    assert encode_canonical_table(frame) == (
+        "query\thit\tbitscore\tevalue\trbh\tnote\n"
+        '"a\tb"\t283\t283.0\t1.38e-92\tTrue\t\n'
+        '"say ""x"""\t100\t1.0\t1e-05\tFalse\t\n'
+        "\u03b2-lactamase\t7\t0.5\t\tTrue\tkept\n"
+    )
+    assert encode_canonical_table(frame.iloc[0:0]) == "query\thit\tbitscore\tevalue\trbh\tnote\n"
+
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(
+                RecordInput(source=GenBankInputSource(_source_file(tmp_path / "a.gbk"))),
+                RecordInput(source=GenBankInputSource(_source_file(tmp_path / "b.gbk"))),
+            ),
+            options=LinearDiagramOptions(protein_comparisons=(frame,)),
+            output=RenderOutputRequest(output_prefix="canonical-linear"),
+        )
+    )
+    (comparison,) = encoded.payload["comparisons"]
+    (resource,) = (
+        item for item in encoded.resources if item.resource_id == comparison["resourceId"]
+    )
+    assert resource.content == encode_canonical_table(frame).encode("utf-8")
+
+    with pytest.raises(CanonicalRequestEncodingError, match="^comparison must be a pandas DataFrame.$"):
+        encode_canonical_table([{"query": "a"}], name="comparison")
+    with pytest.raises(CanonicalRequestEncodingError, match="'comparison' must have at least one column"):
+        encode_canonical_table(pd.DataFrame(), name="comparison")
+
+
 @pytest.mark.parametrize("schema", (1, 2))
 def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
     tmp_path: Path,
@@ -1592,6 +1642,55 @@ def test_spanning_annotation_slot_round_trips_with_to_slot(tmp_path: Path, mode:
     assert decoded_slots == slots
     assert normalize(decoded_slots)[2].annotation.to_slot == "gc_content"
     assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_annotation_slot_mark_filter_from_a_spec_is_written_as_a_list(
+    tmp_path: Path, mode: str
+) -> None:
+    """A CLI ``marks=`` filter reaches the Session as the list the Web reads (OV-1298)."""
+
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    spec = "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,layer=underlay,marks=highlight|Line,z=-1"
+    parsed = parse_circular_track_slot(spec) if mode == "circular" else parse_linear_track_slot(spec)
+    # A Python API slot with a text filter and a style override (review F3).
+    styled = replace(parsed, params={
+        **dict(parsed.params or {}), "marks": "line", "style_override": RegionAnnotationStyle(stroke="#000000"),
+    })
+    for index, (slot, marks) in enumerate(((parsed, ["highlight", "line"]), (styled, ["line"]))):
+        request: CircularDiagramRequest | LinearDiagramRequest
+        if mode == "circular":
+            assert isinstance(slot, CircularTrackSlot)
+            request = CircularDiagramRequest(
+                records=(RecordInput(source=InMemoryRecordSource(record)),),
+                options=CircularDiagramOptions(tracks=CircularTrackOptions(circular_track_slots=(
+                    CircularTrackSlot(id="features", renderer="features"),
+                    slot,
+                ))),
+            )
+        else:
+            assert isinstance(slot, LinearTrackSlot)
+            request = LinearDiagramRequest(
+                records=(RecordInput(source=InMemoryRecordSource(record)),),
+                options=LinearDiagramOptions(tracks=LinearTrackOptions(
+                    linear_track_slots=(
+                        LinearTrackSlot(id="features", renderer="features", side="overlay"),
+                        slot,
+                    ),
+                    linear_track_axis_index=0,
+                )),
+            )
+
+        encoded = encode_canonical_request(request)
+        params = encoded.payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"][1]["params"]
+        decoded = decode_canonical_request(
+            encoded.payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / f"marks-{index}"),
+            output_directory=tmp_path / "output",
+        )
+
+        assert params["marks"] == marks
+        assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 @pytest.mark.parametrize("field", ["width", "radius"])
@@ -3259,3 +3358,266 @@ def test_typed_tree_codec_resolves_type_hints_once_per_class(
 
     assert decoded == members
     assert hint_calls <= 1  # One class, however many nodes.
+
+
+# The contract check is compiled once per type hint. The expected values below were
+# recorded from the interpreting checker it replaced (base a86dd2d74), so they pin
+# its semantics: bool is not int, floats are finite, Literal compares the exact
+# type, str and bytes are not sequences, and every item of a tuple is checked
+# against its first argument, also for tuple[X, Y].
+_CONTRACT_HINT_GOLDENS: tuple[tuple[str, object, tuple[object, ...], tuple[bool, ...]], ...] = (
+    ("any", Any, (None, 1, "x", pd.DataFrame()), (True, True, True, True)),
+    ("object", object, (None, 1, "x"), (True, True, True)),
+    ("bool", bool, (True, False, 1, 0, None), (True, True, False, False, False)),
+    ("int", int, (1, 0, -3, True, 1.0, "1", None), (True, True, True, False, False, False, False)),
+    (
+        "float",
+        float,
+        (1, 1.5, -0.0, True, math.nan, math.inf, -math.inf, "1.5", None),
+        (True, True, True, False, False, False, False, False, False),
+    ),
+    ("str", str, ("", "x", b"x", 1, None), (True, True, False, False, False)),
+    ("none", type(None), (None, 0, "", False), (True, False, False, False)),
+    (
+        "literal-int-str",
+        Literal[1, "a"],
+        (1, True, 1.0, "a", "b", 2),
+        (True, False, False, True, False, False),
+    ),
+    ("literal-true", Literal[True], (True, 1, 1.0, False), (True, False, False, False)),
+    ("literal-float", Literal[0.5], (0.5, 1, "0.5"), (True, False, False)),
+    ("optional-int-pipe", int | None, (None, 1, True, 1.5, "1"), (True, True, False, False, False)),
+    (
+        "optional-float-typing",
+        Optional[float],
+        (None, 1, 1.5, math.nan, True),
+        (True, True, True, False, False),
+    ),
+    ("union-int-str", Union[int, str], (1, "x", True, 1.5, None), (True, True, False, False, False)),
+    (
+        "union-literal-float",
+        Literal["auto"] | float,
+        ("auto", "Auto", 2.0, 2, math.inf, True),
+        (True, False, True, True, False, False),
+    ),
+    (
+        "tuple-ellipsis-str",
+        tuple[str, ...],
+        ((), ("a", "b"), ["a"], ("a", 1), "ab", b"ab", {"a": 1}, None),
+        (True, True, True, False, False, False, False, False),
+    ),
+    ("tuple-int-str", tuple[int, str], ((1, 2), (1, "x"), (1,), ()), (True, False, True, True)),
+    ("tuple-bare-typing", Tuple, ((), (1, "x"), [1], "x"), (True, True, True, False)),
+    (
+        "list-int",
+        list[int],
+        ([], [1, 2], (1, 2), [1, True], [1.0], "12"),
+        (True, True, True, False, False, False),
+    ),
+    (
+        "sequence-float",
+        Sequence[float],
+        ([1, 2.5], (math.nan,), [True], range(3), bytearray(b"ab")),
+        (True, False, False, True, False),
+    ),
+    ("sequence-abc-int", SequenceABC[int], ([1], [1.0], (True,)), (True, False, False)),
+    ("sequence-bare", Sequence, ([], (1,), "x"), (True, True, False)),
+    (
+        "dict-str-int",
+        dict[str, int],
+        ({}, {"a": 1}, {"a": True}, {1: 1}, [("a", 1)], None),
+        (True, True, False, False, False, False),
+    ),
+    ("mapping-bare", Mapping, ({}, {"a": object()}, []), (True, True, False)),
+    (
+        "mapping-abc-str-float",
+        MappingABC[str, float],
+        ({"a": 1}, {"a": math.nan}, {"a": "1"}),
+        (True, False, False),
+    ),
+    (
+        "nested-dict",
+        dict[str, dict[str, tuple[float, ...]]],
+        (
+            {},
+            {"a": {}},
+            {"a": {"b": (1.0, 2)}},
+            {"a": {"b": (1.0, True)}},
+            {"a": {"b": [math.inf]}},
+            {"a": []},
+        ),
+        (True, True, True, False, False, False),
+    ),
+    (
+        "tuple-of-optional-literal",
+        tuple[Literal["x", "y"] | None, ...],
+        ((), ("x", None), ("x", "z"), (None,)),
+        (True, True, False, True),
+    ),
+    ("path", Path, (Path("a"), "a", None), (True, False, False)),
+    ("string-hint", "int", (1, "int"), (False, False)),
+)
+
+
+@pytest.mark.parametrize(
+    ("hint", "values", "expected"),
+    [pytest.param(hint, values, expected, id=name) for name, hint, values, expected in _CONTRACT_HINT_GOLDENS],
+)
+def test_contract_type_check_keeps_the_recorded_answers(
+    hint: object, values: tuple[object, ...], expected: tuple[bool, ...]
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    assert tuple(codec_module._matches_type(value, hint) for value in values) == expected
+    # A second call answers from the compiled checker and must not differ.
+    assert tuple(codec_module._matches_type(value, hint) for value in values) == expected
+
+
+@pytest.mark.parametrize(
+    ("hint", "value", "error"),
+    [
+        pytest.param(Literal["a"], pd.DataFrame({"a": [1]}), ValueError, id="dataframe-literal"),
+        pytest.param(float, 10**400, OverflowError, id="huge-int-float"),
+    ],
+)
+def test_contract_type_check_raises_where_it_raised(
+    hint: object, value: object, error: type[BaseException]
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    with pytest.raises(error):
+        codec_module._matches_type(value, hint)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ({"a": [1, 2]}, {"a": (1, 2)}),
+        ({"a": "b"}, {"a": "b"}),
+        ({"a": [1, "b"]}, None),
+    ],
+)
+def test_typed_tree_union_selects_the_recorded_branch(
+    value: object, expected: object
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    hint = dict[str, tuple[int, ...]] | dict[str, str]
+    if expected is None:
+        with pytest.raises(CanonicalRequestDecodingError, match="union contract"):
+            codec_module._decode_typed_tree(value, hint, path="p", resource_schema=3)
+        return
+    decoded = codec_module._decode_typed_tree(value, hint, path="p", resource_schema=3)
+    assert decoded == expected
+    assert type(decoded["a"]) is type(expected["a"])
+
+
+@dataclass(frozen=True)
+class _ContractLongTuple:
+    values: tuple[int, ...]
+
+
+def test_contract_validation_does_not_interpret_hints_per_item(monkeypatch) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    calls = 0
+    real_get_origin = typing.get_origin
+
+    def count_get_origin(hint: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_get_origin(hint)
+
+    monkeypatch.setattr(codec_module, "get_origin", count_get_origin)
+
+    def count_for(size: int) -> int:
+        nonlocal calls
+        calls = 0
+        codec_module._validate_dataclass_contract(
+            _ContractLongTuple(tuple(range(size))), path="value", error="decode"
+        )
+        return calls
+
+    count_for(3)
+    assert count_for(1_000) == count_for(10)
+    assert count_for(1_000) < 10
+
+
+def _reachable_contract_hints() -> list[tuple[str, object]]:
+    import dataclasses
+
+    import gbdraw.session_request_codec as codec_module
+
+    roots: list[object] = [
+        CircularDiagramRequest,
+        LinearDiagramRequest,
+        CircularBatchRequest,
+        *codec_module._TYPED_TREE_CLASSES.values(),
+    ]
+    seen: set[int] = set()
+    found: list[tuple[str, object]] = []
+    stack: list[tuple[str, object]] = [(getattr(root, "__name__", repr(root)), root) for root in roots]
+    while stack:
+        where, hint = stack.pop()
+        if id(hint) in seen:
+            continue
+        seen.add(id(hint))
+        found.append((where, hint))
+        if isinstance(hint, type) and dataclasses.is_dataclass(hint):
+            for name, field_hint in codec_module._class_type_hints(hint).items():
+                stack.append((f"{hint.__name__}.{name}", field_hint))
+        for arg in typing.get_args(hint):
+            if not isinstance(arg, (str, int, float, bool, type(None), type(Ellipsis))):
+                stack.append((where, arg))
+    return found
+
+
+def test_every_reachable_contract_hint_is_hashable() -> None:
+    hints = _reachable_contract_hints()
+    assert len(hints) > 50
+    unhashable = []
+    for where, hint in hints:
+        try:
+            hash(hint)
+        except TypeError:
+            unhashable.append(where)
+    assert unhashable == []
+
+
+def _reencoded(text: str, tmp_path: Path) -> str:
+    from gbdraw.session_request_codec import _read_canonical_table, encode_canonical_table
+
+    path = tmp_path / "table.tsv"
+    path.write_text(text, encoding="utf-8", newline="")
+    return encode_canonical_table(_read_canonical_table(path, context="test"))
+
+
+def test_canonical_table_read_keeps_floats_exact(tmp_path: Path) -> None:
+    # OV-1110: pandas' default float parser reads 2.7300000000000002e-64 as 2.73e-64.
+    text = "evalue\tbitscore\n2.7300000000000002e-64\t283.0\n1.81e-82\t1.5\n"
+    assert _reencoded(text, tmp_path) == text
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "BGC0000708-BGC0000713.gbdraw-session.json",
+        "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+        "majanivirus_orthogroup.gbdraw-session.json.gz",
+    ],
+)
+def test_gallery_comparison_tables_survive_a_read_unchanged(name: str, tmp_path: Path) -> None:
+    import base64
+    import gzip
+
+    path = Path(__file__).resolve().parents[1] / "gbdraw/web/gallery/sessions" / name
+    raw = path.read_bytes()
+    session = json.loads(gzip.decompress(raw) if name.endswith(".gz") else raw)
+    tables = [
+        base64.b64decode(resource["data"]).decode("utf-8")
+        for resource_id, resource in session["resources"].items()
+        if resource_id.startswith("comparison-protein-")
+    ]
+    assert tables
+    for text in tables:
+        assert _reencoded(text, tmp_path) == text

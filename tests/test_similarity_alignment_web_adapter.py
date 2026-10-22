@@ -241,7 +241,7 @@ def bgc_og18(tmp_path_factory):
 
     session = json.loads(BGC_SESSION.read_text())
     resource = decode_canonical_typed_resource(
-        base64.b64decode(session["resources"]["comparison-canonical-orthogroups-1"]["data"]),
+        base64.b64decode(session["resources"]["comparison-orthogroups"]["data"]),
         value_kind="orthogroupResult", expected=OrthogroupResult | OrthogroupGraphResult,
     )
     gene = {m.protein_id: m.gene or m.label for m in resource.orthogroups["og_18"]}
@@ -249,7 +249,7 @@ def bgc_og18(tmp_path_factory):
     rendered = render_embedded_canonical_web_request(
         session["renderRequest"], resources=session["resources"], workspace=str(tmp / "render")
     )
-    item = rendered["metadata"]["featureCatalog"]["items"][0]
+    item = rendered["featureCatalog"]["items"][0]
     group = next(entry for entry in item["orthogroups"] if entry["id"] == "og_18")
     features = {(f["recordKey"], f["biologicalFeatureId"]): f for f in item["biologicalFeatures"]}
     lengths = dict(zip(item["recordKeys"], (len(s["sequence"]) for s in item["sequenceSources"])))

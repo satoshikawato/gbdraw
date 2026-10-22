@@ -246,6 +246,12 @@ try {
   ).toString('utf8'));
   assert.deepEqual(replacementSession.losatCache.entries.map(entry => entry.key),
     ['current', 'valid-dormant', 'nucleotide']);
+  // An entry without a Raw LOSAT row is cache only: hidden, without a name, as
+  // the CLI writes it (OV-1013, tests/test_session_io.py).
+  assert.deepEqual(
+    replacementSession.losatCache.entries.map(({ filename, display }) => [filename, display]),
+    [['losat_pair_2.tsv', true], ['', false], ['', false]]
+  );
   assert.equal(replacementSession.losatCache.entries[0].text, currentRaw.text);
   assert.doesNotThrow(() => validateSessionLosatArtifacts(replacementSession, replacementSession.version));
   assert.deepEqual([...state.losatCache.value], entries, 'Save must not mutate live cache/History state');

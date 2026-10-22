@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import gzip
 import json
 import hashlib
 import os
@@ -297,18 +298,24 @@ def _zero_hit_derived_payload(
     mode: str,
     *,
     include_identity: bool = True,
+    table_form: str = "rows",
 ) -> dict:
+    # `rows: []` is the zero-hit form derived entries carried from #312 (17e2c9dee,
+    # first-parent main) until D-66; the current writer emits a header-only
+    # `canonicalTsv`. Admission accepts exactly one of the two (D-69).
+    pair: dict = {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "hit_count": 0,
+    }
+    if table_form == "rows":
+        pair["rows"] = []
+    else:
+        pair["canonicalTsv"] = "query\tsubject\tidentity\n"
     payload = {
-        "pairs": [
-            {
-                "pair_index": 0,
-                "query_index": 0,
-                "subject_index": 1,
-                "tsv": "",
-                "rows": [],
-                "hit_count": 0,
-            }
-        ],
+        "pairs": [pair],
         "orthogroups": [],
     }
     if include_identity:
@@ -513,7 +520,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert payload["losatDerivedCache"] == {"entries": []}
 
     sidecar.write_text("keep this session", encoding="utf-8")
-    with pytest.raises(ValidationError, match="--overwrite"):
+    from gbdraw.render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
+
+    # OV-1240: the refusal is one error; the CLI prints it with --overwrite.
+    with pytest.raises(OutputExistsError, match="Session output already exists") as refused:
         save_session_sidecar_if_requested(
             save_session=True,
             session_output=str(sidecar),
@@ -521,6 +531,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
             run_result=run_result,
             cmd_args=(),
         )
+    assert "--overwrite" in refused.value.message(CLI_OVERWRITE_OPTION)
     assert sidecar.read_text(encoding="utf-8") == "keep this session"
 
     save_session_sidecar_if_requested(
@@ -536,10 +547,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
 def test_current_session_version_matches_web_config() -> None:
     # The Web reads these values from `contracts/schema.generated.js`.
-    assert CURRENT_SESSION_VERSION == ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
+    assert CURRENT_SESSION_VERSION == 48 and ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
     assert MODE_SCOPED_SESSION_MIN_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
     )
 
 
@@ -1044,7 +1055,7 @@ def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> 
         "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
     }
 
-    assert payload["version"] == CURRENT_SESSION_VERSION == 47
+    assert payload["version"] == CURRENT_SESSION_VERSION == 48
     validate_session(payload)
 
     triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))
@@ -1211,6 +1222,7 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
         validate_session(payload)
 
 
+@pytest.mark.parametrize("table_form", ("rows", "canonicalTsv"))
 @pytest.mark.parametrize(
     ("mode", "include_identity"),
     (
@@ -1222,6 +1234,7 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
 def test_current_session_accepts_strict_zero_hit_derived_results(
     mode: str,
     include_identity: bool,
+    table_form: str,
 ) -> None:
     manifest = _protein_identity_manifest()
 
@@ -1230,6 +1243,7 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
         _zero_hit_derived_payload(
             mode,
             include_identity=include_identity,
+            table_form=table_form,
         ),
         mode=mode,
     )
@@ -1238,10 +1252,31 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
 
 
 @pytest.mark.parametrize(
+    "member",
+    ({"note": "arbitrary"}, {"collinearGroupScope": "invalid"}),
+    ids=("arbitrary-field", "other-collinear-scope"),
+)
+def test_a_zero_hit_derived_result_may_hold_members_without_values(member: dict) -> None:
+    """OV-1127: no member list; a member that holds no array or object entry names no protein."""
+
+    payload = _zero_hit_derived_payload("collinear")
+    payload.update(member)
+    validate_session(_current_derived_session(_protein_identity_manifest(), payload, mode="collinear"))
+
+
+def _replace_rows_with_table(payload: dict, table: object) -> None:
+    pair = payload["pairs"][0]
+    del pair["rows"]
+    pair["canonicalTsv"] = table
+
+
+@pytest.mark.parametrize(
     "mutate",
     (
-        lambda payload: payload.update({"note": "arbitrary"}),
         lambda payload: payload["pairs"][0].update({"rows": [{}]}),
+        lambda payload: payload["pairs"][0].update({"canonicalTsv": "query\n"}),
+        lambda payload: _replace_rows_with_table(payload, "query\nq1\n"),
+        lambda payload: _replace_rows_with_table(payload, ["query"]),
         lambda payload: payload["pairs"][0].update({"tsv": "unexpected"}),
         lambda payload: payload["pairs"][0].update({"hit_count": 1}),
         lambda payload: payload["pairs"][0].update({"pair_index": "0"}),
@@ -1250,14 +1285,15 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
         lambda payload: payload.update({"orthogroups": [{}]}),
         lambda payload: payload.update({"collinearGroups": [{}]}),
         lambda payload: payload.update({"collinearityBlocks": [{}]}),
-        lambda payload: payload.update({"collinearGroupScope": "invalid"}),
         lambda payload: payload.update({"identity": None}),
         lambda payload: payload["identity"].update({"rawCacheKeys": [None]}),
         lambda payload: payload["identity"].update({"mode": "orthogroup"}),
     ),
     ids=(
-        "arbitrary-field",
         "nonempty-rows",
+        "both-table-forms",
+        "nonempty-canonical-table",
+        "nonstring-canonical-table",
         "nonempty-tsv",
         "nonzero-hit-count",
         "noninteger-pair-index",
@@ -1266,7 +1302,6 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
         "nonempty-orthogroups",
         "nonempty-collinear-groups",
         "nonempty-collinearity-blocks",
-        "invalid-collinear-scope",
         "null-identity",
         "invalid-raw-cache-binding",
         "identity-mode-mismatch",
@@ -1970,7 +2005,7 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
     flat["version"] = 44
     flat["config"] = flat.pop("modes")["circular"]["config"]
     with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
-        session_io_module._validate_current_retired_active_config_paths(flat)
+        session_io_module._validate_current_retired_active_config_paths(flat, 44)
 
 
 def test_current_comparison_authority_validates_file_bindings() -> None:
@@ -3575,8 +3610,8 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     The request names the crop (in source coordinates) and the orientation, as
     the Web writes them, instead of a re-serialized copy of the drawn record.
     The Web draft that loads the bound input file then draws the same record,
-    and a replay draws the same SVG. Orientation applied before a crop (the
-    CLI order) is written as the equivalent source-coordinate crop.
+    and a replay draws the same SVG. ``--reverse_complement`` applies after
+    the crop, as ``:rc`` does (OV-1279), so the request names the same crop.
     """
 
     single, multi = _cli_session_inputs(tmp_path)
@@ -3602,9 +3637,9 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     ] == [
         (first, None, single_region, False),
         (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
-        # Reversed 360 bp record cropped to 21..300 = source 61..340, reversed.
+        # Cropped to source 21..300, then reversed.
         (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
-                        "start": 61, "end": 340, "reverseComplement": True}, False),
+                        "start": 21, "end": 300, "reverseComplement": True}, False),
     ]
     assert _resource_bytes(session, first) == single.read_bytes()
     assert _resource_bytes(session, second) == multi.read_bytes()
@@ -4222,3 +4257,74 @@ def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:
     validate_session(payload)
     for card in payload["webFiles"]["bindings"]["linearSeqs"]:
         assert {key: card.get(key) for key in defaults} == defaults
+
+
+def test_legacy_renames_are_spelled_only_by_their_owner() -> None:
+    """OV-818: the `sqrt` and `repeat_region` renames are read from one owner."""
+
+    import ast
+
+    import gbdraw.session_io as session_io_module
+    import gbdraw.session_request_codec as codec_module
+    from gbdraw.session_legacy_values import LEGACY_FEATURE_SHAPES, LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES
+
+    renamed = {*LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES, *LEGACY_FEATURE_SHAPES}
+    assert renamed == {"sqrt", "repeat_region"}
+    for module in (session_io_module, codec_module):
+        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        literals = sorted(
+            f"{node.value}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in renamed
+        )
+        assert literals == [], module.__name__
+
+
+def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
+    tmp_path: Path,
+) -> None:
+    # OV-1007: the CLI writer copied a saved `{}` or `7` through. The Web reads
+    # such a name as the entry's default, `losat_pair_<n>.tsv` (`n` counts the
+    # saved entries from 1), and saves that name: tests/web/session-losat-cache-
+    # validation.test.mjs ("... file name that is no text loads as the default
+    # name") pins the same values for the same edit of this fixture.
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(source.read_bytes()))
+    first, second, third = session["losatCache"]["entries"]
+    first["filename"] = {}
+    second["filename"] = 7
+    edited = tmp_path / "edited.gbdraw-session.json"
+    edited.write_text(json.dumps(session), encoding="utf-8")
+
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
+                   "--format", "svg", "--session_output", str(sidecar)])
+    assert [entry["filename"] for entry in load_session(sidecar)["losatCache"]["entries"]] == [
+        "losat_pair_1.tsv", "losat_pair_2.tsv", third["filename"]
+    ]
+
+    first["filename"] = ""
+    second["filename"] = ["b.tsv"]
+    second["display"] = False
+    written = copy.deepcopy(session)
+    session_io_module.normalize_current_session_artifacts(written)
+    assert [(entry["filename"], entry["display"]) for entry in written["losatCache"]["entries"]] == [
+        ("losat_pair_1.tsv", True), ("", False), (third["filename"], True)
+    ]
+
+
+def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does() -> None:
+    # OV-1013: a hidden (`display: false`) raw entry is cache only. The Web Load
+    # gives it no Raw LOSAT row (config.js applyLosatCache) and its Save writes
+    # an entry without a row with `filename: ""` (serializeLosatCache;
+    # tests/web/session-export-validation.test.mjs pins it). The CLI writer kept
+    # a hidden entry's text name.
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(source.read_bytes()))
+    first, second, third = session["losatCache"]["entries"]
+    assert isinstance(second["filename"], str) and second["filename"]
+    second["display"] = False
+    session_io_module.normalize_current_session_artifacts(session)
+    assert [(entry["filename"], entry["display"]) for entry in session["losatCache"]["entries"]] == [
+        (first["filename"], True), ("", False), (third["filename"], True)
+    ]

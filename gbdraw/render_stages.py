@@ -33,7 +33,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from enum import Enum
-from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, ParamSpec, TypeVar, cast
+from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, ParamSpec, Sequence, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -88,6 +88,7 @@ RenderStageName = Literal[
     "label_leaders_content",
     "label_text_content",
     "record_merge",
+    "record_gc_percent",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
@@ -121,8 +122,9 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
     "plot_title_content": frozenset(),
-    # The Circular title is a shared-common definition (its font and interval).
-    "circular_plot_title_content": frozenset({"objects.definition", "objects.text"}),
+    # The Circular title and definition take their font and interval as a
+    # ``CircularDefinitionStyle`` argument, not the config (OV-1115).
+    "circular_plot_title_content": frozenset(),
     "composition_plan": frozenset(),
     # The Circular track groups take their norm factor from the radial plan.
     "gc_content_content": frozenset(),
@@ -130,12 +132,11 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "depth_content": frozenset(),
     "length_bar_content": frozenset(),
     "definition_content": frozenset(),
-    # The Circular centre or edge definition reads its font and interval.
-    "circular_definition_content": frozenset({"objects.definition", "objects.text"}),
+    "circular_definition_content": frozenset(),
     "annotation_content": frozenset(),
-    # Linear: the record group draws the axis, the ruler, features and labels.
+    # Linear: the record group draws the axis, the ruler, features and labels (with their style).
     "record_content": frozenset(
-        {"labels.stroke_color", "labels.stroke_width", "objects.axis", "objects.scale", "objects.text"}
+        {"labels.linear", "labels.stroke_color", "objects.axis", "objects.scale", "objects.text"}
     ),
     # Circular: the record group sizes features and embedded labels (the label
     # drawer reads the preset track factors).
@@ -144,8 +145,6 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
             "canvas.circular",
             "labels.font_size",
             "labels.length_threshold",
-            "labels.stroke_color",
-            "labels.stroke_width",
             "objects.text",
         }
     ),
@@ -170,9 +169,13 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "conservation_sources": frozenset(),
     "conservation_tracks": frozenset(),
     "conservation_content": frozenset({"objects.conservation"}),
-    "label_leaders_content": frozenset({"labels.stroke_color", "labels.stroke_width"}),
-    "label_text_content": frozenset({"labels.font_size", "labels.length_threshold", "objects.text"}),
+    # The leaders end on their underlines, which the text layer draws with the leader's stroke.
+    "label_leaders_content": frozenset({"labels.circular", "labels.stroke_color"}),
+    "label_text_content": frozenset(
+        {"labels.circular", "labels.font_size", "labels.length_threshold", "labels.stroke_color", "objects.text"}
+    ),
     "record_merge": frozenset(),
+    "record_gc_percent": frozenset(),
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
@@ -205,6 +208,43 @@ _PLAIN_TYPES = (bool, int, float, str, bytes)
 
 class _Unkeyable(Exception):
     """An argument has no key; the call is not cached in this request."""
+
+
+_T = TypeVar("_T")
+
+
+class _PreKeyed(tuple[_T, ...]):
+    """A tuple keyed once, for an argument that several stages take unchanged.
+
+    Built by :func:`_pre_keyed`; ``key`` is the key of the equal plain tuple,
+    or ``None`` outside a cache transaction or when an item has no key.
+    """
+
+    key: Hashable | None
+
+    def __new__(cls, items: Iterable[_T]) -> _PreKeyed[_T]:
+        keyed = super().__new__(cls, items)
+        keyed.key = None
+        return keyed
+
+
+def _pre_keyed(items: Iterable[_T]) -> _PreKeyed[_T]:
+    """Key ``items`` once, so each stage that takes them reads the key.
+
+    The items must be values nobody else holds (copies), so they cannot change
+    after the key is computed. Outside a cache transaction nothing is keyed.
+    """
+
+    from gbdraw.api import prepared
+
+    keyed = _PreKeyed(items)
+    if prepared.active_render_stage_transaction() is not None:
+        try:
+            keyed.key = _key(tuple(keyed), config_path=None)
+        except _Unkeyable:
+            # The stage meets the same item and takes its uncacheable path.
+            pass
+    return keyed
 
 
 @dataclass(eq=False)
@@ -480,6 +520,10 @@ def _key(
 
     if value is None:
         return None
+    if type(value) is _PreKeyed:
+        if value.key is not None:
+            return value.key
+        value = tuple(value)
     if isinstance(value, Enum):
         return ("enum", _type_name(value), value.value)
     if isinstance(value, float):
@@ -854,4 +898,33 @@ def render_stage(
     return result
 
 
-__all__ = ["RENDER_STAGE_SETTINGS", "RenderStageName", "render_stage"]
+def render_stage_revision(name: RenderStageName, results: Sequence[object]) -> str | None:
+    """Name the builds of ``results``, the stage ``name`` results of this transaction, in order.
+
+    The revision is the cache epoch and the build number of each result
+    (gbdraw/web/CLAUDE.md, Runtime data flow): equal revisions name the same
+    builds in one cache. ``None`` when a result was not stored under a
+    ``name`` key (uncacheable, an undeclared read, or not built by the stage),
+    outside a transaction, or when the cache has no epoch.
+    """
+
+    from gbdraw.api import prepared
+
+    transaction = prepared.active_render_stage_transaction()
+    if transaction is None or not results:
+        return None
+    epoch: str | None = None
+    build_ids: list[str] = []
+    for result in results:
+        key = prepared.prepared_value_identity(result)
+        if not (isinstance(key, tuple) and key[:2] == ("render-stage", name)):
+            return None
+        build = prepared.render_stage_build(transaction, key)
+        if build is None:
+            return None
+        epoch = build[0]
+        build_ids.append(str(build[1]))
+    return f"{epoch}:{'.'.join(build_ids)}"
+
+
+__all__ = ["RENDER_STAGE_SETTINGS", "RenderStageName", "render_stage", "render_stage_revision"]

@@ -16,6 +16,12 @@ await writeFile(
   'utf8'
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
+// specific-color-rules.js reads rule rows with the shared shape checker.
+await writeFile(
+  join(tempRoot, 'utils', 'contract-shape.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'contract-shape.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(
   join(tempRoot, 'utils', 'error-normalization.js'),
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
@@ -34,6 +40,16 @@ await writeFile(
 await writeFile(
   join(tempRoot, 'utils', 'named-colors.js'),
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'named-colors.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempRoot, 'utils', 'i18n.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'i18n.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempRoot, 'utils', 'vue-raw.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'vue-raw.js'), 'utf8'),
   'utf8'
 );
 await writeFile(

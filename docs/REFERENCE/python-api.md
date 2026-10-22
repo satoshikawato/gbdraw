@@ -102,6 +102,9 @@ Important `LinearComparisonOptions` defaults are:
 |---|---|
 | `losat` | `None` |
 | `losatp_mode` | `similarity_groups` (used when `losat="losatp"`) |
+| `losatn_task` | `megablast` (used when `losat="losatn"`) |
+| `gencodes` | `None` (runtime default, 1; used when `losat="tlosatx"`) |
+| `pairs` | `None` (records in adjacent rows are compared) |
 | `match_style` | `ribbon` |
 | `collinearity_unit` | `auto` |
 | `collinearity_anchor` | `rbh` |
@@ -116,7 +119,7 @@ Important `LinearComparisonOptions` defaults are:
 | `member_max_hits` | `None` (unbounded) |
 | `max_paralog_links` | `2` |
 
-`losat="losatp"` runs a LOSATP protein comparison; `losat=None` runs no search. `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
+`losat` takes `"losatn"`, `"tlosatx"`, or `"losatp"` and runs that search; `losat=None` runs no search. `gencodes` is one translation table for every record or one per record. `pairs` lists explicit `(query, subject)` record indexes for any program (LOSATP: Pairwise only). `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
 
 `similarity_alignment` defaults to `None`. With `losat="losatp"` and `losatp_mode="similarity_groups"`,
 `SimilarityAlignmentReference(feature_id="CAG38695.1")` aligns the records on
@@ -127,6 +130,9 @@ alignment](#typed-linear-similarity-group-alignment).
 
 `LinearComparisonOptions(blast_files=...)` reads prepared comparison TSV
 files. Supplying those files does not start a nucleotide or protein search.
+`blast_files` and `protein_comparisons` are ordered: table *n* joins records
+*n* and *n + 1*. A table past the last record pair stops the render with a
+`ValidationError`; it is not dropped.
 
 ## Label override paths
 
