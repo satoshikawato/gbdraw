@@ -5,6 +5,8 @@
 
 A whole-line comment is blanked, and a ``"`` is part of the cell value: the Web
 writes each value as typed, so these tables are read with CSV quoting off.
+The numeric tables (comparisons, depth, canonical Session tables) read their
+floats with :data:`EXACT_FLOAT_READ_OPTIONS`.
 """
 
 from __future__ import annotations
@@ -22,6 +24,16 @@ import pandas as pd
 from ..exceptions import ParseError
 
 logger = logging.getLogger(__name__)
+
+# ``pandas.read_csv`` options that read every float as the nearest double, so a
+# value is the same under every pandas version. Before 3.1 the default parser can
+# miss by one unit in the last place ("2.41e-73" -> 2.4100000000000003e-73); 3.1
+# reads exactly by default and deprecates ``float_precision``.
+EXACT_FLOAT_READ_OPTIONS: dict[str, str] = (
+    {}
+    if tuple(int(part) for part in pd.__version__.split(".")[:2]) >= (3, 1)
+    else {"float_precision": "round_trip"}
+)
 
 
 def read_table_lines(filepath: str) -> list[str]:

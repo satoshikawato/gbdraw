@@ -2628,3 +2628,12 @@ def test_drawn_depth_follows_crop_and_reverse_complement(
     }
     assert "100x" in tick_labels
     assert not {"500x", "900x"} & tick_labels
+
+
+def test_depth_tsv_reads_each_value_as_the_nearest_double(tmp_path: Path) -> None:
+    # OV-1534: depth values are read with the same exact float parsing as comparison tables.
+    depth_path = tmp_path / "depth.tsv"
+    depth_path.write_text("chr\t1\t2.41e-73\nchr\t2\t6.69e-59\n", encoding="utf-8")
+    clear_depth_tsv_cache()
+
+    assert [repr(value) for value in read_depth_tsv(str(depth_path))["depth"]] == ["2.41e-73", "6.69e-59"]
