@@ -1,0 +1,15 @@
+id	regex	flags	message	severity
+ja-default-katakana	デフォルト	u	Default is 既定, not デフォルト (D-13).	error
+ja-linear-senjo	線状	u	Linear is 直鎖状 (the Record Size Mode option is 線形), not 線状 (D-20).	error
+ja-padding-katakana	パディング	u	Padding is 余白, not パディング (glossary Padding).	error
+ja-feature-kanji	特徴|機能	u	Feature is フィーチャー, never 特徴 or 機能 (STYLE 2.1 seeds); keep these only for their own meaning.	warn
+ja-record-kiroku	記録(?!さ|し)	u	Record is レコード, never 記録 (STYLE 2.1 seeds); 記録 stays only where it means logging.	warn
+ja-ambiguous	曖昧	u	State the cause in a sentence (e.g. 複数のレコードまたはソースに一致) instead of 曖昧 (glossary Ambiguous, R2).	warn
+ja-keikaku	計画	u	Alignment plan is 比較の設定, not 計画 (glossary).	warn
+ja-kudasai-kanji	して下さい|下さい	u	Write ください in hiragana (STYLE 2.2).	error
+ja-mashou	しましょう	u	No 〜しましょう in the UI; use 〜してください (STYLE 2.2).	error
+ja-latin-space	[\u3040-\u30ff\u4e00-\u9fff] [A-Za-z0-9{]|[A-Za-z0-9}%] [\u3040-\u30ff\u4e00-\u9fff]	u	No half-width space between Latin or digits and Japanese: GC含量, LOSATを実行 (STYLE 2.3).	warn
+ja-ascii-ellipsis	\.\.\.	u	Write … (U+2026), not three ASCII periods.	error
+ja-fullwidth-digit	[０-９]	u	Write ASCII digits 0-9 (STYLE 2.4).	error
+ja-long-vowel	(エディタ|フィルタ|レンダラ|レイヤ|ユーザ|サーバ|パラメータ|フォルダ|ヘッダ|マーカ)(?!ー)	u	Words ending in -er/-or/-ar take ー (エディター, フィルター, レンダラー, レイヤー, ユーザー, サーバー, パラメーター, フォルダー, ヘッダー, マーカー) (STYLE 2.1).	error
+ja-period-after-period	。 	u	No space follows 。 between two sentences (D-18).	error

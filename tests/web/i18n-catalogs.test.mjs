@@ -1,22 +1,17 @@
 // The Web UI translation runtime (gbdraw/web/js/utils/i18n.js) and its
-// catalogs (gbdraw/web/js/utils/i18n-catalogs/<locale>.js). English is the
-// key: the literal first argument of `t()` and of `msg()` (a text kept until
-// it is shown, which `tm()` translates there), the `one` and the `other`
-// argument of `tn()` (the shown locale's plural rules pick one of them),
-// `context + '\u0004' + text` of `tx()`, the table values of the error
-// wording owner (tests/web/helpers/error-text-keys.mjs), and the labels of
-// the similarity group member values that Python owns, which
-// app/pairwise-match-popup.js derives and lists (`memberValueLabelKeys`,
-// shown with `tmx()`). This test lists those literals in index.html and the
-// modules, and fails on a call whose key is not a literal,
-// on a `tm()` given a literal (that is a `t()` call), on a `tmx()` given a
-// literal text (that is a `tx()` call),
-// on a catalog key that no call produces, on a translation whose placeholders
-// differ from the English, and on a value that is not a string. It prints
-// the coverage of each locale without failing.
+// catalogs (gbdraw/web/js/utils/i18n-catalogs/<locale>.js). The keys of the
+// sources are read by tools/i18n/source-keys.mjs, which lists what a key is.
+// This test fails on a call whose key is not a literal, on a `tm()` given a
+// literal (that is a `t()` call), on a `tmx()` given a literal text (that is
+// a `tx()` call), on a catalog key that no call produces, on a translation
+// whose placeholders differ from the English, and on a value that is not a
+// string. It prints the coverage of each locale without failing: a new key
+// ships in English until the batch translation before a release, and the
+// release tier requires every key (`node tools/i18n/sync.mjs status
+// --require-complete`, .claude/skills/translate-web-ui/SKILL.md).
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
@@ -24,167 +19,14 @@ import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale, uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
-import { settingsShortKeys } from '../../gbdraw/web/js/services/settings-sections.js';
-import { errorTextKeys } from './helpers/error-text-keys.mjs';
+import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
+import {
+  PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
+} from '../../tools/i18n/source-keys.mjs';
 
-const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const jsRoot = join(webRoot, 'js');
-const catalogRoot = join(jsRoot, 'utils', 'i18n-catalogs');
-// The runtime's own source and the catalogs hold no UI text of their own.
-const RUNTIME_FILES = new Set(['utils/i18n.js']);
+const catalogFiles = () => CATALOG_LOCALES.map((locale) => `${locale}.js`).sort();
 
-// For each function, the argument positions that are literal keys, and the
-// catalog keys they make, each with its English text.
-const CALLS = {
-  t: { literals: [0], keys: ([text]) => [[text, text]] },
-  msg: { literals: [0], keys: ([text]) => [[text, text]] },
-  tn: { literals: [1, 2], keys: ([, one, other]) => [[one, one], [other, other]] },
-  tx: { literals: [0, 1], keys: ([context, text]) => [[context + CONTEXT_SEPARATOR + text, text]] }
-};
-const CALL_START = /(?<![\w$.])(msg|tn|tx|t)\(/g;
-// `tm()` translates a value that `msg()` marked; a literal there is a `t()` call.
-const TM_LITERAL = /(?<![\w$.])tm\(\s*['"`]/g;
-// `tmx()` translates a derived text; a literal text there is a `tx()` call.
-const TMX_LITERAL = /(?<![\w$.])tmx\(\s*(['"`])(?:\\.|(?!\1)[^\\])*\1\s*,\s*['"`]/g;
-const ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', 0: '\0' };
-const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-
-/**
- * Reads the string literal that starts at `start` ('…', "…", or `…` without
- * `${`). Returns its value and the index after it, or null for a template
- * literal with a substitution.
- */
-const readLiteral = (source, start) => {
-  const quote = source[start];
-  let value = '';
-  for (let at = start + 1; at < source.length; at += 1) {
-    const char = source[at];
-    if (char === quote) return { value, end: at + 1 };
-    if (quote === '`' && char === '$' && source[at + 1] === '{') return null;
-    if (char !== '\\') {
-      value += char;
-      continue;
-    }
-    const next = source[at + 1];
-    if (next === 'u' && source[at + 2] === '{') {
-      const close = source.indexOf('}', at);
-      value += String.fromCodePoint(parseInt(source.slice(at + 3, close), 16));
-      at = close;
-    } else if (next === 'u') {
-      value += String.fromCharCode(parseInt(source.slice(at + 2, at + 6), 16));
-      at += 5;
-    } else if (next === 'x') {
-      value += String.fromCharCode(parseInt(source.slice(at + 2, at + 4), 16));
-      at += 3;
-    } else {
-      value += ESCAPES[next] ?? next;
-      at += 1;
-    }
-  }
-  throw new Error(`unterminated literal at ${start}`);
-};
-
-/** Skips one argument expression; returns the index of the `,` or `)` that ends it. */
-const skipExpression = (source, start) => {
-  let depth = 0;
-  for (let at = start; at < source.length; at += 1) {
-    const char = source[at];
-    if (char === '\'' || char === '"' || char === '`') {
-      const literal = readLiteral(source, at);
-      if (!literal) {
-        // A template literal with substitutions: skip to its closing backtick.
-        at = source.indexOf('`', source.indexOf('}', at));
-        continue;
-      }
-      at = literal.end - 1;
-    } else if ('([{'.includes(char)) depth += 1;
-    else if (')]}'.includes(char)) {
-      if (depth === 0) return at;
-      depth -= 1;
-    } else if (char === ',' && depth === 0) return at;
-  }
-  throw new Error(`unterminated call at ${start}`);
-};
-
-/**
- * The calls of `t`, `tn`, `tx` in `source`: each with its key, or with the
- * problem that keeps the key from being read.
- * @param {string} source
- * @param {string} file the name that problems report
- */
-const extractCalls = (source, file) => {
-  const calls = [];
-  for (const match of source.matchAll(CALL_START)) {
-    const name = match[1];
-    const line = source.slice(0, match.index).split('\n').length;
-    const where = `${file}:${line}`;
-    const args = [];
-    let at = match.index + match[0].length;
-    let problem = '';
-    while (args.length <= Math.max(...CALLS[name].literals)) {
-      while (/\s/.test(source[at])) at += 1;
-      const index = args.length;
-      const literal = '\'"`'.includes(source[at]) ? readLiteral(source, at) : null;
-      let end = literal ? literal.end : at;
-      while (/\s/.test(source[end])) end += 1;
-      // A literal that is only part of the argument (`'Go to ' + name`) is no key.
-      const whole = literal && (source[end] === ',' || source[end] === ')');
-      args.push(whole ? literal.value : null);
-      if (!whole) end = skipExpression(source, at);
-      if (CALLS[name].literals.includes(index) && args[index] === null) {
-        problem = `${where}: argument ${index + 1} of ${name}() is not a string literal`;
-        break;
-      }
-      if (source[end] === ')' && args.length <= Math.max(...CALLS[name].literals)) {
-        problem = `${where}: ${name}() has too few arguments`;
-        break;
-      }
-      at = end + 1;
-    }
-    if (problem) {
-      calls.push({ where, problem });
-      continue;
-    }
-    // An in-DOM template sees an entity decoded, an x-template does not: write the character.
-    if (/&(?:[A-Za-z]+|#\d+|#x[0-9A-Fa-f]+);/.test(args.join(''))) {
-      calls.push({ where, problem: `${where}: ${name}() key holds an HTML entity; write the character` });
-      continue;
-    }
-    for (const [key, english] of CALLS[name].keys(args)) calls.push({ where, name, key, english });
-  }
-  for (const match of source.matchAll(TM_LITERAL)) {
-    const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
-    calls.push({ where, problem: `${where}: tm() takes a value that msg() marked; write t() for a literal` });
-  }
-  for (const match of source.matchAll(TMX_LITERAL)) {
-    const where = `${file}:${source.slice(0, match.index).split('\n').length}`;
-    calls.push({ where, problem: `${where}: tmx() takes a derived text; write tx() for a literal` });
-  }
-  return calls;
-};
-
-const NAMED_ENTITIES = { quot: '"', amp: '&', lt: '<', gt: '>', apos: '\'', '#39': '\'', nbsp: ' ' };
-const ENTITY = /&(#x[0-9A-Fa-f]+|#\d+|[A-Za-z][A-Za-z0-9]*);/g;
-const X_TEMPLATE = /<script\b[^>]*type="text\/x-template"[^>]*>[\s\S]*?<\/script>/g;
-
-/**
- * Decodes the entities of the list above and numeric references the way the
- * browser does; any other named entity stays as written, so the check below
- * can refuse it.
- */
-const decodeEntities = (text) => text.replace(ENTITY, (whole, name) => {
-  if (name[0] === '#' && name[1] !== 'x' && name[1] !== 'X') return String.fromCodePoint(Number(name.slice(1)));
-  if (name[0] === '#' && /^#[xX]/.test(name)) return String.fromCodePoint(parseInt(name.slice(2), 16));
-  return NAMED_ENTITIES[name] ?? whole;
-});
-
-/**
- * index.html as Vue compiles it: Vue decodes entities itself, in attributes
- * and in {{ }}, in the in-DOM root and in an x-template alike.
- */
-const compiledHtml = (html) => decodeEntities(html);
-
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 const TRANSLATED = /(?<![\w$.])(?:tn|tx|t)\(|<i18n-text\b/;
 
 /**
@@ -198,17 +40,7 @@ const vMemoProblems = (source, file) => {
   for (const start of source.matchAll(/<([A-Za-z][\w-]*)\b(?:"[^"]*"|'[^']*'|[^'">])*?\sv-memo=(?:"([^"]*)"|'([^']*)')(?:"[^"]*"|'[^']*'|[^'">])*>/g)) {
     const tag = start[1].toLowerCase();
     const deps = start[2] ?? start[3];
-    // Find the matching end tag by counting the same tag name.
-    const tags = new RegExp(`<(/?)${tag}\\b(?:"[^"]*"|'[^']*'|[^'">])*?(/?)>`, 'gi');
-    tags.lastIndex = start.index + start[0].length;
-    let depth = 1;
-    let end = source.length;
-    for (let next = tags.exec(source); next; next = tags.exec(source)) {
-      if (next[1]) depth -= 1;
-      else if (!next[2] && !VOID_TAGS.has(tag)) depth += 1;
-      if (depth === 0) { end = next.index; break; }
-    }
-    const body = source.slice(start.index, end);
+    const body = source.slice(start.index, elementEnd(source, tag, start.index + start[0].length));
     if (TRANSLATED.test(body) && !deps.includes('uiLocale.value')) {
       problems.push(`${file}:${source.slice(0, start.index).split('\n').length}: v-memo="${deps}" shows UI text but does not list uiLocale.value`);
     }
@@ -256,45 +88,6 @@ const rawQuoteProblems = (html, file) => {
   }
   return problems;
 };
-
-const sourceFiles = () => [
-  join(webRoot, 'index.html'),
-  ...readdirSync(jsRoot, { recursive: true })
-    .map((path) => String(path))
-    .filter((path) => path.endsWith('.js'))
-    .filter((path) => !RUNTIME_FILES.has(path.split(sep).join('/')))
-    .filter((path) => !path.split(sep).join('/').startsWith('utils/i18n-catalogs/'))
-    .map((path) => join(jsRoot, path))
-];
-
-const sourceText = (path) => {
-  const source = readFileSync(path, 'utf8');
-  return path.endsWith('.html') ? compiledHtml(source) : source;
-};
-
-const sourceCalls = () => sourceFiles().flatMap((path) => (
-  extractCalls(sourceText(path), relative(webRoot, path).split(sep).join('/'))
-));
-
-const placeholdersOf = (text) => [...new Set([...text.matchAll(PLACEHOLDER)].map((match) => match[1]))].sort();
-
-/**
- * The problems of one catalog against the English keys of the sources.
- * @param {Map<string, string>} english the key of each call and its English text
- * @param {Record<string, unknown>} catalog
- */
-const catalogProblems = (english, catalog) => Object.entries(catalog).flatMap(([key, value]) => {
-  if (typeof value !== 'string') return [`${JSON.stringify(key)}: the value is not a string`];
-  if (!english.has(key)) return [`${JSON.stringify(key)}: no t(), tn() or tx() call has this key`];
-  const expected = placeholdersOf(english.get(key));
-  const actual = placeholdersOf(value);
-  return expected.join() === actual.join() ? []
-    : [`${JSON.stringify(key)}: placeholders {${actual.join('}, {')}} differ from the English {${expected.join('}, {')}}`];
-});
-
-const catalogFiles = () => (existsSync(catalogRoot)
-  ? readdirSync(catalogRoot).filter((name) => name.endsWith('.js')).sort()
-  : []);
 
 test('extraction reads the quoting forms of templates and modules', () => {
   const source = [
@@ -406,7 +199,7 @@ test('a space at the edge of an element beside a mustache is written as {{ \' \'
 });
 
 test('every v-memo in the Web UI that shows UI text lists uiLocale.value', () => {
-  const problems = sourceFiles().flatMap((path) => vMemoProblems(readFileSync(path, 'utf8'), relative(webRoot, path).split(sep).join('/')));
+  const problems = sourceFiles().flatMap((path) => vMemoProblems(readFileSync(path, 'utf8'), webPath(path)));
   assert.deepEqual(problems, []);
 });
 
@@ -433,18 +226,23 @@ test('every t(), tn() and tx() call in the Web UI has a literal key', () => {
   assert.deepEqual(problems, []);
 });
 
-test('catalog check: stale keys, placeholder sets and non-string values', () => {
+test('catalog check: placeholder sets and non-string or empty values; a stale key is no problem', () => {
   const english = new Map([['Save Session', 'Save Session'], ['{count} rows', '{count} rows']]);
   assert.deepEqual(catalogProblems(english, {
     'Save Session': 'セッションを保存',
     '{count} rows': '{n} 行',
     'Load Session': 'セッションを読み込む',
-    'Undo': 1
+    'Undo': 1,
+    'Empty': 1
   }), [
-    '"{count} rows": placeholders {n} differ from the English {count}',
-    '"Load Session": no t(), tn() or tx() call has this key',
-    '"Undo": the value is not a string'
+    '"{count} rows": placeholders {n} differ from the English {count}'
   ]);
+  const withUndo = new Map([...english, ['Undo', 'Undo'], ['Blank', 'Blank']]);
+  assert.deepEqual(catalogProblems(withUndo, { Undo: 1, Blank: ' \n' }), [
+    '"Undo": the value is not a string',
+    '"Blank": the translation is empty'
+  ]);
+  assert.deepEqual(catalogStatus(english.keys(), { 'Save Session': 'x', 'Load Session': 'y' }).stale, ['Load Session']);
 });
 
 // A module that marks keys with msg() imports it from utils/i18n.js, or, when
@@ -468,25 +266,26 @@ test('msg() is the marker of utils/i18n.js or its identity where a test loads th
   assert.equal(markerProblems('import { msg } from \'../utils/i18n.js\';\nconst msg = (text) => text;\nmsg(\'A\');', 'e.js').length, 1);
   assert.equal(markerProblems('const msg = (text) => text.trim();\nmsg(\'A\');', 'd.js').length, 1);
   assert.deepEqual(sourceFiles().filter((path) => path.endsWith('.js'))
-    .flatMap((path) => markerProblems(readFileSync(path, 'utf8'), relative(webRoot, path).split(sep).join('/'))), []);
+    .flatMap((path) => markerProblems(readFileSync(path, 'utf8'), webPath(path))), []);
 });
 
 test('every catalog matches the keys and placeholders of the sources', async () => {
-  const english = new Map(sourceCalls().filter((call) => call.key).map((call) => [call.key, call.english]));
-  // The error text keys are the values of the wording owner's tables (D-17), read without msg() markers.
-  for (const key of await errorTextKeys()) english.set(key, key);
-  // The member role and confidence labels, derived from the values Python owns (OV-1390).
-  for (const { context, english: text } of memberValueLabelKeys()) english.set(context + CONTEXT_SEPARATOR + text, text);
-  // The rail short names with a context key of their own (OV-1417).
-  for (const { context, english: text } of settingsShortKeys()) english.set(context + CONTEXT_SEPARATOR + text, text);
+  const { keys } = await sourceKeys();
+  const english = new Map([...keys.values()].map(({ key, english: text }) => [key, text]));
+  assert.deepEqual(readdirSync(CATALOG_ROOT).sort(), catalogFiles(), 'one catalog per UI language except English');
   for (const file of catalogFiles()) {
-    const { default: catalog } = await import(pathToFileURL(join(catalogRoot, file)).href);
+    const { default: catalog } = await import(pathToFileURL(join(CATALOG_ROOT, file)).href);
     assert.ok(Object.isFrozen(catalog), `${file} exports a frozen object`);
     assert.deepEqual(catalogProblems(english, catalog), [], file);
-    const missing = [...english.keys()].filter((key) => !Object.hasOwn(catalog, key));
-    console.log(`${file}: ${english.size - missing.length} of ${english.size} keys translated`);
+    // Stale keys wait for the translation batch (sync.mjs apply drops them);
+    // only the release tier fails on them.
+    const { translated, stale } = catalogStatus(english.keys(), catalog);
+    console.log(`${file}: ${translated.length} of ${english.size} keys translated, ${stale.length} stale`);
   }
-  console.log(`${english.size} keys in the sources; catalogs: ${catalogFiles().join(', ') || 'none'}`);
+  // The keys a module derives rather than writes as literals.
+  assert.ok(english.has(`member role${CONTEXT_SEPARATOR}anchor`), 'the member value labels (OV-1390)');
+  assert.ok(english.has(`rail${CONTEXT_SEPARATOR}Features`), 'the rail short names with a context (OV-1417)');
+  console.log(`${english.size} keys in the sources; catalogs: ${catalogFiles().join(', ')}`);
 });
 
 // A locale's lint list (tests/web/i18n-lint/<locale>.tsv, docs/internal/I18N_STYLE.md):
@@ -546,15 +345,14 @@ test('lint check: placeholder names are masked; a match reports its rule and key
   assert.throws(() => parseLintRules(`${LINT_COLUMNS}\nx\ta\tu\tm\tinfo\n`));
 });
 
-test('every catalog with a lint list matches none of its error rules', async () => {
+test('every catalog has a lint list and matches none of its error rules', async () => {
   const lists = readdirSync(lintRoot).filter((name) => name.endsWith('.tsv')).sort();
-  assert.ok(lists.length > 0);
+  assert.deepEqual(lists, CATALOG_LOCALES.map((locale) => `${locale}.tsv`).sort());
   for (const list of lists) {
     const locale = list.slice(0, -'.tsv'.length);
-    assert.ok(catalogFiles().includes(`${locale}.js`), `${list} names a catalog`);
     const rules = parseLintRules(readFileSync(join(lintRoot, list), 'utf8'));
     assert.equal(new Set(rules.map(({ id }) => id)).size, rules.length, `${list}: rule ids are unique`);
-    const { default: catalog } = await import(pathToFileURL(join(catalogRoot, `${locale}.js`)).href);
+    const { default: catalog } = await import(pathToFileURL(join(CATALOG_ROOT, `${locale}.js`)).href);
     const matches = lintMatches(rules, catalog);
     const format = ({ rule, key, value }) => `${locale} ${rule.id} ${JSON.stringify(key)} -> ${JSON.stringify(value)}: ${rule.message}`;
     for (const match of matches.filter(({ rule }) => rule.severity === 'warn')) console.log(`warn: ${format(match)}`);
@@ -719,14 +517,14 @@ test('OV-1475: a counted sentence is a tn() call, never a plain key with (s)', (
     const text = readFileSync(path, 'utf8');
     return [...text.matchAll(counted)]
       .filter((match) => !/Error\(\s*$/.test(text.slice(Math.max(0, match.index - 40), match.index)))
-      .map((match) => `${relative(webRoot, path)} ${match[0].slice(0, 80)}`);
+      .map((match) => `${webPath(path)} ${match[0].slice(0, 80)}`);
   });
   assert.deepEqual(literals, []);
 });
 
 // OV-1476: the English names only what the UI shows.
 test('OV-1476: no key names a control, row or syntax the UI does not have', async () => {
-  const keys = [...sourceCalls().map((call) => call.key).filter(Boolean), ...await errorTextKeys()];
+  const keys = [...(await sourceKeys()).keys.keys()];
   const stale = [/All adjacent LOSAT/, /the GC (?:content|skew) row/, /\(\?i\)/, /style size/, /TLOSATX code/, /from file \{n\}/, /#index/, /^\{count\} needs? a choice$/];
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
   for (const key of [

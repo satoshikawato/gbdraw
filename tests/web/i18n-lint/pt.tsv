@@ -1,0 +1,16 @@
+id	regex	flags	message	severity
+pt-never-words	(?<![\p{L}])(deletar|resetar|setar|printar|upar|ficheiro|ecrã|guardar|registo|registos|secção|secções|utilizador|utilizadores)(?![\p{L}])	iu	Word on the STYLE 8.1 Never list: excluir, redefinir, definir, imprimir, enviar, arquivo, tela, salvar, registro, seção, usuário.	error
+pt-por-favor	por favor	iu	"please" is not written in the UI (STYLE 8.1 Never): use the imperative.	error
+pt-feature-words	(?<![\p{L}])(característica|características)(?![\p{L}])	iu	Feature stays the English noun feature (f.), never característica or elemento (STYLE 8.1); keep these only for their own meaning.	warn
+pt-cadeia-strand	cadeia	iu	Strand is fita, never cadeia (STYLE 8.1).	warn
+pt-pb-kpb	(?<![\p{L}])k?pb(?![\p{L}])	u	Write bp / kb, never pb or kpb (STYLE 8.1).	error
+pt-query-consulta	(?<![\p{L}])consulta(?![\p{L}])	iu	Never mix query with its translation: write query (STYLE 8.1); consulta stays only for an unrelated sense.	warn
+pt-record-sequencia	ID de registro|mapa	iu	Record ID is ID do registro, never ID de registro; the drawn map is diagrama, never mapa (glossary).	warn
+pt-reparo	reparo	iu	Fix is corrigir / correção; reparo is DNA repair (glossary Fix).	warn
+pt-micro-strain	micróbios	iu	The tagline writes microrganismos, not micróbios (glossary microbes).	error
+pt-replicon-accent	réplicon	iu	Replicon is replicon, not réplicon (glossary Replicon).	error
+pt-translation-table	tabela de tradução	iu	Genetic code is código genético, not tabela de tradução (glossary Translation table).	error
+pt-config-alignment	configuração do alinhamento	iu	Alignment plan is plano de alinhamento; configuração is Settings (round 2 D5).	error
+pt-pan-panoramica	panorâmica	iu	Pan is deslocar a visualização, not panorâmica (glossary pan).	error
+pt-mirror	espelhar	iu	Reverse is inverter / invertido, never espelhar (glossary Reverse).	error
+pt-pular-prevista	(?<![\p{L}])pular(?![\p{L}])	iu	Skip is Ignorar, not pular (STYLE 8.1).	error
