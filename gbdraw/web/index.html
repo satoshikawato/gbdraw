@@ -350,22 +350,26 @@
             background: #ffffff;
             border-radius: 0.5rem;
         }
-        /* A block box centred by align-content, not a flex box: an ellipsis shows only on a block
-           box, and a long value was cut at the field's edge without one (OV-1519). */
-        .auto-value-placeholder {
+        /* The automatic value shown in an empty field (a number field, a track slot's height, spacing or
+           gap): a block box centred by align-content, not a flex box, because an ellipsis shows only on
+           a block box; a long value was cut at the field's edge without one (OV-1519, OV-1521). */
+        .auto-value-placeholder,
+        .track-slot-auto-placeholder {
             position: absolute;
             inset: 0;
             display: block;
             align-content: center;
             min-width: 0;
-            padding: 0.2rem 0.5rem;
             color: var(--ui-muted);
-            font-size: 10px;
             line-height: 1.2;
             pointer-events: none;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        .auto-value-placeholder {
+            padding: 0.2rem 0.5rem;
+            font-size: 10px;
         }
         .track-slot-pixel-field .track-slot-geometry-input::placeholder {
             color: transparent;
@@ -378,19 +382,8 @@
             opacity: 1;
         }
         .track-slot-auto-placeholder {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            min-width: 0;
             padding: 0.25rem 0.45rem;
-            color: var(--ui-muted);
             font-size: 11px;
-            line-height: 1.2;
-            pointer-events: none;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
         .track-slot-unit-suffix {
             position: absolute;
@@ -1555,7 +1548,6 @@
 
             .app-language-select {
                 min-width: 0;
-                text-overflow: ellipsis;
             }
 
             .app-mode-button {

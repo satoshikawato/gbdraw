@@ -87,6 +87,8 @@
     .form-input:disabled { cursor: not-allowed; opacity: 0.5; }
     .auto-value-field:has(> .form-input:disabled) > .auto-value-placeholder,
     .track-slot-pixel-field:has(> .form-input:disabled) > :is(.track-slot-auto-placeholder, .track-slot-unit-suffix) { opacity: 0.5; }
+    /* A closed select ends a chosen value too long for it with an ellipsis instead of cutting it (OV-1523). */
+    select { text-overflow: ellipsis; }
     .form-checkbox { @apply h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500; }
 
     /* Not text-base: its 24 px line height would survive a per-element text size. */
