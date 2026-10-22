@@ -252,7 +252,7 @@ def _configure_all_record_collinear(
     max_target_seqs.press("Tab")
     expect(max_target_seqs).to_have_value("")
     expect(
-        settings.get_by_label("Member hits per protein", exact=True)
+        settings.get_by_label("Max hits per protein for groups", exact=True)
     ).to_have_value("5")
 
     settings.get_by_label("Collinear max unit gap", exact=True).fill("0")
@@ -594,7 +594,7 @@ def _assert_input_capture_framing(page: Page) -> None:
 def _frame_collinear_settings(settings: Any) -> None:
     """Show LOSATP, Collinear blocks, inference, and scope together.
 
-    Search limits (Max target seqs, Member hits per protein) sit below the
+    Search limits (Max target seqs, Max hits per protein for groups) sit below the
     result filters, so they are outside this frame.
     """
 

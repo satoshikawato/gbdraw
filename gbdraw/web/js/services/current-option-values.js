@@ -163,7 +163,7 @@ export const requireCurrentProteinBlastpMaxHits = (value) => (
 
 /** @param {unknown} value */
 export const requireCurrentOrthogroupMemberMaxHits = (value) => (
-  requireCurrentInteger(value, null, 1, 'Protein BLASTP member hits per protein')
+  requireCurrentInteger(value, null, 1, 'Protein BLASTP max hits per protein for groups')
 );
 
 /** @param {unknown} value */

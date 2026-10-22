@@ -184,7 +184,7 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
         ':data-linear-unplaced-draft="unplaced.draft.id"' in index
     )
     assert "linearComparisonTimeline.unplacedDrafts" in index
-    assert "Zipped adjacent pairs" in index
+    assert "Adjacent-row pairs (same position in each row)" in index
     assert "All adjacent-row pairs (cross-product)" in index
     assert ">Omit all</button>" in index
 

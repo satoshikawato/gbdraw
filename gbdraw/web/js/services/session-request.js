@@ -58,6 +58,7 @@ import {
 } from './linear-track-slot-model.js';
 import {
   activeDepthTrackIndices,
+  defaultDepthSeriesLabel,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -2111,7 +2112,7 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
     const track = tracks[trackIndex] || {};
     return {
       source,
-      label: String(track.label || (logicalTrackCount === 1 ? 'Depth' : `Depth ${trackIndex + 1}`)),
+      label: String(track.label || defaultDepthSeriesLabel(trackIndex, logicalTrackCount)),
       color: String(track.color || drawing.adv.depth_color || '#4A90E2'),
       height: state.mode.value === 'linear'
         ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
@@ -4155,7 +4156,7 @@ const projectCanonicalDepthTracks = ({
     const label = canonicalDepthText(track.label, `${fieldName}.label`);
     const color = canonicalDepthText(track.color, `${fieldName}.color`);
     return {
-      label: label ?? (options.depthTracks.length === 1 ? 'Depth' : `Depth ${trackIndex + 1}`),
+      label: label ?? defaultDepthSeriesLabel(trackIndex, options.depthTracks.length),
       color: color ?? '#4A90E2',
       height: mode === 'linear'
         ? canonicalDepthNumber(track.height, `${fieldName}.height`)

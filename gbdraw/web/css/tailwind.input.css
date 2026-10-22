@@ -25,23 +25,26 @@
     .settings-index-tip[data-side="right"] { transform: translateY(-50%); }
 
     /* The same index as the rail: a 60 px column, the switch back first, then one entry per section
-       (icon over a short name, 48 px high, less when the window is low, and the column scrolls with a
-       thin scrollbar when they still do not fit; its padding keeps the focus ring of an entry inside
+       (icon over a short name, 48 px high, less when the window is low but never less than its content,
+       and the column scrolls with a thin scrollbar when they still do not fit; its padding keeps the focus ring of an entry inside
        it). A line sets the entries that choose what is drawn apart from the rest, About & Citation sits
-       at the end, and the docked entry carries the accent and a bar at its left. */
+       at the end, and the docked entry carries the accent and a bar at its left. A name that does not
+       fit on one line wraps at a word break, or between Japanese characters under the strict rules (not
+       before a small kana or ー), and its entry grows to hold it (OV-1506); a name that fits keeps one
+       line. A single word too long for the entry takes a soft hyphen in its rail key. */
     [data-settings-display="rail"] > .settings-index { @apply mb-0 flex-col items-stretch overflow-hidden; min-height: 0; padding: 6px 0 3px; }
     [data-settings-display="rail"] > .settings-index > .settings-index-switch { width: auto; height: 28px; margin: 0 4px; border-radius: 8px; }
     [data-settings-display="rail"] > .settings-index > .settings-index-switch::before { content: none; }
     [data-settings-display="rail"] > .settings-index > nav { @apply flex-col flex-nowrap; flex: 1 1 auto; min-height: 0; gap: 2px; padding: 0 4px 3px; overflow-y: auto; }
-    [data-settings-display="rail"] > .settings-index > nav > button { @apply flex-col; flex: 0 1 48px; gap: 2px; min-width: 0; max-width: none; min-height: 34px; border-radius: 8px; font-size: 20px; }
-    [data-settings-display="rail"] > .settings-index > nav > button > span { font-size: 10px; font-weight: 600; line-height: 1.1; color: var(--ui-text-2); white-space: nowrap; }
+    [data-settings-display="rail"] > .settings-index > nav > button { @apply flex-col; flex: 0 1 48px; gap: 2px; min-width: 0; max-width: none; min-height: min-content; border-radius: 8px; font-size: 20px; }
+    [data-settings-display="rail"] > .settings-index > nav > button > span { font-size: 10px; font-weight: 600; line-height: 1.1; color: var(--ui-text-2); text-align: center; line-break: strict; }
     [data-settings-display="rail"] > .settings-index > nav > button[aria-current="true"] > span { color: var(--ui-accent); }
     [data-settings-display="rail"] > .settings-index > nav > button[aria-current="true"]::before { content: ''; position: absolute; left: -4px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background-color: var(--ui-accent); }
     [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 9px; }
     [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { content: ''; position: absolute; left: 8px; right: 8px; top: -6px; height: 1px; background-color: var(--ui-line); }
     [data-settings-display="rail"] > .settings-index > nav > .at-end { margin-top: auto; }
     @media (max-height: 800px) {
-        [data-settings-display="rail"] > .settings-index > nav > button { min-height: 30px; font-size: 17px; }
+        [data-settings-display="rail"] > .settings-index > nav > button { font-size: 17px; }
         [data-settings-display="rail"] > .settings-index > nav > button > span { font-size: 9px; }
         [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 5px; }
         [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { top: -4px; }

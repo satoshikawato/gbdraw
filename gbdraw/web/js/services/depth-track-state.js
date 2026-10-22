@@ -118,6 +118,18 @@ const cloneParams = (params = {}) => {
   return { ...params };
 };
 
+/**
+ * The name the figure draws for a Depth series without a label: Depth for
+ * the only series, Depth N for each of several (Python
+ * `_default_depth_track_labels`, gbdraw/analysis/depth_tracks.py). Figure
+ * text, so it stays English in every UI locale; the legend-name fields show it
+ * as their placeholder.
+ * @param {number} index The series' index.
+ * @param {number} count The number of series.
+ * @returns {string}
+ */
+export const defaultDepthSeriesLabel = (index, count) => (count === 1 ? 'Depth' : `Depth ${index + 1}`);
+
 /** @param {unknown} index */
 const fallbackLabel = (index) => {
   const numericIndex = Math.max(0, Number(index) || 0);

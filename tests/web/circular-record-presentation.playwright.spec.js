@@ -272,7 +272,7 @@ test('History restore re-inspects sources and reconciles missing or ambiguous se
   await page.getByLabel('Circular region end').blur();
   await page.evaluate(() => { window.__GBDRAW_APP__.form.circular_record_selector = 'missing'; });
   await expect(page.getByLabel('Circular region start')).toBeDisabled();
-  await expect(page.getByText("Record selector 'missing' was not found in the current input.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No record in the current input matches the record selector 'missing'.", { exact: true })).toBeVisible();
   await nativeUpload(page, `${singleSource}\n${singleSource}`);
   await ready(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.form.circular_record_selector = 'NC_012920.1'; });

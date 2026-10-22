@@ -19,6 +19,9 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
+// - in en, ja, es and fr at 1024x768 and 1440x900: every rail name stays
+//   inside its entry, and the footer holds its text without a page scroll
+//   (OV-1506, OV-1427);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // Not checked here: PNG and PDF bytes, the shown Run Info text, and the
 // diagnostics text.
@@ -306,6 +309,50 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
       inside: inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5
     };
   })).toEqual({ size: '12px', inside: true });
+  expect(errors).toEqual([]);
+});
+
+// The text of a rail name, as line boxes, against its entry; the footer's
+// children against the footer and the page height against the window.
+const railAndFooterFit = (page) => page.evaluate(() => {
+  const names = [...document.querySelectorAll('.settings-index nav > button > span')].filter((span) => span.offsetParent);
+  const outside = names.flatMap((span) => {
+    const entry = span.parentElement.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+    const left = Math.min(...lines.map((rect) => rect.left));
+    const right = Math.max(...lines.map((rect) => rect.right));
+    return left < entry.left - 0.5 || right > entry.right + 0.5 ? [span.textContent.trim()] : [];
+  });
+  const footer = document.querySelector('[data-app-footer]');
+  const box = footer.getBoundingClientRect();
+  const content = [...footer.children].map((child) => child.getBoundingClientRect());
+  return {
+    names: names.length,
+    outside,
+    footerHoldsText: Math.min(...content.map((rect) => rect.top)) >= box.top - 0.5 && Math.max(...content.map((rect) => rect.bottom)) <= box.bottom + 0.5,
+    pageScrolls: document.documentElement.scrollHeight > innerHeight
+  };
+});
+
+test('rail names stay inside their entries and the footer fits, in Latin and Japanese text at two window sizes', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openApp(page);
+  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+  for (const tag of ['en', 'ja', 'es', 'fr']) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    for (const viewport of [{ width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
+      await page.setViewportSize(viewport);
+      await expect.poll(() => railAndFooterFit(page), { message: `${tag} at ${viewport.width}x${viewport.height}` })
+        .toEqual({ names: 13, outside: [], footerHoldsText: true, pageScrolls: false });
+    }
+    await page.setViewportSize({ width: 1024, height: 768 });
+  }
   expect(errors).toEqual([]);
 });
 

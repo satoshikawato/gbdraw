@@ -332,7 +332,7 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await page.locator('.result-tabs button').first().click();
   await expect(search).toBeVisible();
   expect(await page.evaluate(() => window.__s03Nodes.search === document.querySelector('.preview-feature-search'))).toBe(true);
-  await page.getByRole('combobox', { name: 'Search field' }).selectOption('label');
+  await page.getByRole('combobox', { name: 'Field to search' }).selectOption('label');
   await search.fill('tRNA');
   await search.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(0);

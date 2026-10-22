@@ -296,6 +296,7 @@ import {
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
+  defaultDepthSeriesLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
   syncDepthSlotLabels,
@@ -6037,7 +6038,7 @@ export const createAppSetup = () => {
       return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: current });
     }
     if (selection.status === 'missing') {
-      return t('Record selector \'{selector}\' was not found in the current input.', { selector: current });
+      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: current });
     }
     return '';
   });
@@ -6655,7 +6656,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return (
       linearSourceMovePlan(drawing, 0, 1).reason === 'custom-layout'
-        ? t('File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to give each File its own consecutive rows.')
+        ? t('Files cannot be moved while Record Layout does not give each File its own consecutive rows. Change the rows in Advanced comparison and layout → Record Layout.')
         : ''
     );
   });
@@ -6960,6 +6961,7 @@ export const createAppSetup = () => {
     enabledOptionClass,
     depthToggleOptionClass,
     depthTrackCountLabel,
+    defaultDepthSeriesLabel,
     getDepthTrackLabel,
     setDepthTrackLabel,
     getDepthTrackColor,

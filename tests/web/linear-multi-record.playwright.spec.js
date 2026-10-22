@@ -3871,7 +3871,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   await settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true }).selectOption('1');
   await settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true }).selectOption('2');
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'));
-  const member = settings.getByRole('spinbutton', { name: 'Member hits per protein', exact: true });
+  const member = settings.getByRole('spinbutton', { name: 'Max hits per protein for groups', exact: true });
   await expect(member).toHaveValue('');
   await expect(member).toHaveAttribute('placeholder', 'Unbounded');
   await member.fill('7');

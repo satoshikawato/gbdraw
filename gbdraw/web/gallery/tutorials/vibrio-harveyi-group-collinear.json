@@ -686,7 +686,7 @@
         },
         {
           "type": "select",
-          "selector": "select[aria-label='Search field']",
+          "selector": "select[aria-label='Field to search']",
           "value": "qualifier-value"
         },
         {
@@ -804,7 +804,7 @@
               },
               {
                 "type": "select",
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "qualifier-value"
               },
               {
@@ -840,7 +840,7 @@
             ],
             "visibleControls": [
               {
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "Qualifier value"
               },
               {
@@ -877,7 +877,7 @@
               },
               {
                 "type": "select",
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "qualifier-value"
               },
               {
@@ -1002,7 +1002,7 @@
         },
         {
           "type": "select",
-          "selector": "select[aria-label='Search field']",
+          "selector": "select[aria-label='Field to search']",
           "value": "qualifier-value"
         },
         {
@@ -1124,7 +1124,7 @@
               },
               {
                 "type": "select",
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "qualifier-value"
               },
               {
@@ -1160,7 +1160,7 @@
             ],
             "visibleControls": [
               {
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "Qualifier value"
               },
               {

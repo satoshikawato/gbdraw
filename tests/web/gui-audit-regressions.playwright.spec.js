@@ -106,7 +106,7 @@ test('label search includes live edits and shows no match status before a search
   await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.labelReflowProcessing && !window.__GBDRAW_APP__.processing);
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('label');
+  await page.getByRole('combobox', { name: 'Field to search', exact: true }).selectOption('label');
   await search.fill('AUDIT_RENAMED_FEATURE');
   await search.press('Enter');
   await expect(status).toHaveText('1 of 1 match');
@@ -124,7 +124,7 @@ test('similarity group names and descriptions survive temporary mode changes', a
   await drawer.locator('textarea:visible').fill('AUDIT_DESCRIPTION');
   await drawer.locator('textarea:visible').press('Tab');
   await page.locator('.drawer-toggle').click();
-  await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('orthogroup');
+  await page.getByRole('combobox', { name: 'Field to search', exact: true }).selectOption('orthogroup');
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   for (const query of ['AUDIT_GROUP', 'AUDIT_DESCRIPTION']) {
     await search.fill(query);

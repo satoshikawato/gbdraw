@@ -908,7 +908,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   const error = dialog.locator('[data-similarity-alignment-error]');
   await expect(error).toBeVisible({ timeout: 180000 });
-  await expect(error).toContainText('Comparison endpoints disagree');
+  await expect(error).toContainText('The features at the ends of comparison links do not match');
   // The failed run put the Result back; the review goes on with the figure fitted beside it.
   await expect.poll(async () => {
     const view = await previewView(page);
@@ -1176,7 +1176,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await normalAlign.click();
   await expect(resolvedReview).toBeVisible({ timeout: 180000 });
   const retryError = resolvedReview.locator('[data-similarity-alignment-error]');
-  await expect(retryError).toContainText('Comparison endpoints disagree with the displayed features.');
+  await expect(retryError).toContainText('The features at the ends of comparison links do not match the displayed features.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'COMPARISON_IDENTITY',operation:'align',stage:'result-admission',secondary:[{code:'CLEANUP_FAILED',stage:'cleanup'}]});
   await expect(page.getByRole('alert', { name: 'Alignment error' })).toHaveCount(1);
   await expect(retryError).toBeFocused();
