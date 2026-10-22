@@ -270,6 +270,37 @@ test('French and Korean show their catalogs and plural forms, and French changes
   // A Generate in French writes the Source recipe and Exact replay of one in English.
   const frenchRecipes = await generatedRecipes(page);
   expect(frenchRecipes).toContain('gbdraw');
+  // With the Result in French: the drawer's Legend toolbar stays inside the
+  // drawer (OV-1520), and the feature popup's tabs show their whole names, also
+  // at phone width (OV-1527).
+  const drawer = page.locator('.right-drawer');
+  await page.locator('.drawer-toggle').click();
+  await drawer.locator('[aria-controls="right-drawer-panel-legend"]').click();
+  expect(await drawer.evaluate((panel) => {
+    const toolbar = panel.querySelector('[data-legend-tab-toolbar]');
+    const right = panel.getBoundingClientRect().right;
+    return {
+      scrolls: toolbar.scrollWidth > toolbar.clientWidth || panel.scrollWidth > panel.clientWidth,
+      past: [...toolbar.children].filter((child) => child.getBoundingClientRect().right > right + 0.5).map((child) => child.textContent.trim())
+    };
+  })).toEqual({ scrolls: false, past: [] });
+  await drawer.locator('[aria-controls="right-drawer-panel-features"]').click();
+  await drawer.getByRole('button', { name: fr.Edit, exact: true }).first().click();
+  const featurePopup = page.locator('.feature-popup');
+  await expect(featurePopup).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => featurePopup.evaluate((element) => {
+    const strip = element.querySelector('button:has(> .ph-list-bullets)').parentElement;
+    const box = strip.getBoundingClientRect();
+    return [...strip.querySelectorAll('button')].filter((tab) => {
+      const name = tab.querySelector('span');
+      const rect = tab.getBoundingClientRect();
+      return name.scrollWidth > name.clientWidth || rect.left < box.left - 0.5 || rect.right > box.right + 0.5;
+    }).map((tab) => tab.textContent.trim());
+  })).toEqual([]);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole('button', { name: fr['Close feature popup'], exact: true }).click();
+  await page.locator('.drawer-toggle').click();
   await menu(page).selectOption('en');
   await expect.poll(() => pageLanguage(page)).toBe('en');
   expect(await generatedRecipes(page)).toBe(frenchRecipes);
@@ -376,8 +407,9 @@ const railAndFooterFit = (page) => page.evaluate(() => {
     range.setStart(next, at);
     range.setEnd(next, at + 1);
     const separator = range.getBoundingClientRect();
-    const linkLines = [...link.getClientRects()];
-    return Math.abs(separator.top - linkLines[linkLines.length - 1].top) < 3 ? [] : [link.textContent.trim()];
+    const linkLines = lineTops(link);
+    // A link name keeps one line (Satoshi / Kawato split before OV-1517), and its separator follows on that line.
+    return linkLines.length === 1 && Math.abs(separator.top - linkLines[0]) < 3 ? [] : [link.textContent.trim()];
   });
   return {
     names: names.length,
@@ -392,17 +424,75 @@ const railAndFooterFit = (page) => page.evaluate(() => {
   };
 });
 
-test('rail names stay inside their entries and nothing covers the footer, in Latin and Japanese text at three window sizes', async ({ page }) => {
+// Control names and automatic values in the settings pane: the Colors Apply and
+// Add buttons keep their name on one line (OV-1516); a Japanese control name
+// breaks between phrases, but an element that asks for break-all keeps it
+// (OV-1518, OV-1522); the automatic value shown in an empty field, in a number
+// field or a track slot, is a block box that ends a long value with an
+// ellipsis (OV-1519, OV-1521); a closed select does too (OV-1523).
+const controlFit = (page) => page.evaluate(() => {
+  const colors = document.querySelector('[data-settings-section="colors"]');
+  colors.querySelectorAll('details').forEach((details) => { details.open = true; });
+  // The text lines of an element (its icon aside).
+  const lines = (element) => {
+    const range = document.createRange();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const tops = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      range.selectNodeContents(node);
+      tops.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => rect.top));
+    }
+    return tops.filter((top, index) => tops.findIndex((other) => Math.abs(other - top) < 3) === index).length;
+  };
+  const buttons = [...colors.querySelectorAll('button:has(> .ph-magic-wand), button:has(> .ph-plus)')].filter((button) => button.getClientRects().length > 0);
+  const probe = (tag, className) => {
+    const element = document.createElement(tag);
+    element.className = className;
+    element.textContent = 'x';
+    document.getElementById('app').appendChild(element);
+    const style = getComputedStyle(element);
+    const read = { display: style.display, textOverflow: style.textOverflow, wordBreak: style.wordBreak };
+    element.remove();
+    return read;
+  };
+  const placeholders = [...document.querySelectorAll('.auto-value-placeholder')].filter((span) => span.getClientRects().length > 0);
+  const slot = probe('span', 'track-slot-auto-placeholder');
+  const select = getComputedStyle(document.querySelector('header select[data-ui-language]'));
+  return {
+    buttons: buttons.length,
+    wrappedButtons: buttons.filter((button) => lines(button) > 1).map((button) => button.textContent.trim()),
+    placeholders: placeholders.length > 0,
+    placeholderBoxes: [...new Set([...placeholders.map((span) => getComputedStyle(span)), slot].map((style) => `${style.display}/${style.textOverflow}`))],
+    selectOverflow: select.textOverflow,
+    buttonBreak: probe('button', '').wordBreak,
+    breakAll: probe('h2', 'break-all').wordBreak
+  };
+});
+
+test('rail names stay inside their entries, nothing covers the footer, and control names fit, in Latin, Thai, Chinese and Japanese text at three window sizes', async ({ page }) => {
   test.setTimeout(300_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.setViewportSize({ width: 1024, height: 768 });
   await openApp(page);
+  for (const tag of ['zh-Hans', 'ja']) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    await expect.poll(() => controlFit(page), { message: `${tag} at 1024x768` }).toEqual({
+      buttons: 3,
+      wrappedButtons: [],
+      placeholders: true,
+      placeholderBoxes: ['block/ellipsis'],
+      selectOverflow: 'ellipsis',
+      buttonBreak: tag === 'ja' ? 'auto-phrase' : 'normal',
+      breakAll: 'break-all'
+    });
+  }
   const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];
   const fit = { outside: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
   for (const display of ['stacked', 'rail']) {
     if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-    for (const tag of display === 'rail' ? ['en', 'ja', 'es', 'fr'] : ['en', 'ja']) {
+    for (const tag of display === 'rail' ? ['en', 'ja', 'es', 'fr', 'vi', 'th'] : ['en', 'ja']) {
       await menu(page).selectOption(tag);
       await expect.poll(() => pageLanguage(page)).toBe(tag);
       for (const viewport of viewports) {
