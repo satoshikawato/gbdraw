@@ -25,6 +25,12 @@
 //   bar and the Result pane ending above it (stacked: en, ja; rail: en, ja,
 //   es, fr) (OV-1506, OV-1427, OV-1509);
 // - storage that throws, or a catalog that fails to load, leaves English.
+// - in every language, the "Suggest a translation fix" link beside the menu is
+//   named in that language (English where the catalog has no entry), opens a
+//   new tab, and links the translation feedback form with only the shown
+//   language and the gbdraw version, with the language tag in the issue title
+//   (PD-OI-106 scenario revision 5);
+//   at 1024, 1280 and 1440 px the header keeps the menu and the link in view;
 // Not checked here: PNG and PDF bytes, the shown Run Info text, and the
 // diagnostics text.
 const { test, expect } = require('@playwright/test');
@@ -376,6 +382,43 @@ test('rail names stay inside their entries and nothing covers the footer, in Lat
     }
     await menu(page).selectOption('en');
     await page.setViewportSize(viewports[0]);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('in every language, the link beside the menu opens the feedback form with only the shown language and the gbdraw version', async ({ page }) => {
+  test.setTimeout(180_000);
+  const version = /^version\s*=\s*"([^"]+)"/m.exec(readFileSync(join(process.cwd(), 'pyproject.toml'), 'utf8'))[1];
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await openApp(page);
+  const link = page.locator('header .app-language a[data-translation-feedback]');
+  // Beside the menu: the next element after it.
+  expect(await menu(page).evaluate((select) => select.nextElementSibling?.matches('a[data-translation-feedback]'))).toBe(true);
+  const tags = await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.value));
+  expect(tags).toHaveLength(11);
+  for (const tag of tags) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    const catalog = tag === 'en' ? {} : await catalogOf(tag);
+    const name = catalog['Suggest a translation fix'] ?? 'Suggest a translation fix';
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAccessibleName(name);
+    await expect(link).toHaveAttribute('title', name);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    const href = new URL(await link.getAttribute('href'));
+    expect(href.origin + href.pathname).toBe('https://github.com/satoshikawato/gbdraw/issues/new');
+    expect([...href.searchParams]).toEqual([['template', 'translation-feedback.yml'], ['language', tag], ['version', version], ['title', `[Translation] ${tag}: `]]);
+    // The header keeps one row inside the window, with the menu and the link in view (OV-1495: es, fr and pt at 1440 px).
+    for (const width of [1024, 1440, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      const fit = await page.locator('header').evaluate((header) => {
+        const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
+        return { inside: right <= document.documentElement.clientWidth, scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+      });
+      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false });
+    }
   }
   expect(errors).toEqual([]);
 });

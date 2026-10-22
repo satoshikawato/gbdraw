@@ -1,0 +1,15 @@
+id	regex	flags	message	severity
+es-r1-mismatches	Discordancia|Desapareamiento	iu	Mismatches (BLAST column) is Desemparejamientos, not Discordancias or Desapareamientos (round 1, D-05).	error
+es-r1-locus-tag	etiqueta de locus	iu	Write the Latin term locus tag; etiqueta de locus is not found in Spanish writing (glossary Locus tag).	error
+es-never-words	(?<![\p{L}])(fichero|ordenador|computadora|salvar|remover|resetear|setear|chequear|clicar|cliquear|pinchar|pulsar|similaridad|accesión|cualificador|hebra|organelo|rasgo|coger)s?(?![\p{L}])	iu	Word on the STYLE 6.1 Never list: write archivo for fichero, the device name or nothing for ordenador / computadora, guardar for salvar, quitar for remover, restablecer for resetear, configurar for setear, comprobar for chequear, hacer clic for clicar / cliquear / pinchar / pulsar, similitud, número de acceso, calificador, cadena for hebra, orgánulo, the glossary term for rasgo, tomar for coger.	error
+es-glossary-verbs	(?<![\p{L}])(reinici\p{L}*|añad\p{L}*)(?![\p{L}])	iu	Reset is Restablecer and Add is Agregar (glossary); reiniciar / añadir may still fit another sense (restart the browser).	warn
+es-never-vale	(?<![\p{L}])vale(?![\p{L}])	iu	vale is on the STYLE 6.1 Never list (Accept is Aceptar); keep it only as the verb valer.	warn
+es-loanword-english	(?<![\p{L}_])(track|feature|slot|preset|lane|popup|default|reset)s?(?![\p{L}_])	iu	English word that STYLE 6.1 never keeps: pista, característica, ranura, preajuste, carril, ventana emergente, predeterminado, restablecer.	warn
+es-feature-words	(?<![\p{L}])(función|funciones)(?![\p{L}])	iu	Feature is característica, never función or elemento (glossary Feature); keep these only for their own meaning.	warn
+es-linear-topology	(registro|secuencia) lineal|escala lineal	iu	Never registro/secuencia lineal (a topology) or escala lineal (linear vs logarithmic): write diagrama lineal or the glossary form (glossary Linear).	error
+es-on-axis	sobre el eje	iu	On axis is En el eje; Sobre el eje reads as above (glossary On axis).	error
+es-pin-anchor	(?<![\p{L}])anclar(?![\p{L}])	iu	Pin is Fijar; anclar would echo ancla (Anchor) (glossary Pin).	error
+es-orgánulo-nhgri	(?<![\p{L}])organelo	iu	Organelle is orgánulo; organelo is not used (glossary Organelle).	error
+es-astil	(?<![\p{L}])astil	iu	Arrow shaft is the glossary form, not astil (archery jargon).	error
+es-exact-ref	referencia exacta	iu	Exact reference is Característica de referencia, not referencia exacta (glossary).	error
+es-pb-unit	(?<![\p{L}])pb(?![\p{L}])	u	The base-pair unit is bp, never pb (glossary bp).	error

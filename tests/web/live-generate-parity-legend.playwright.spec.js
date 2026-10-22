@@ -1703,6 +1703,23 @@ test('OV-1236: hiding the only feature of one color of a shared caption leaves o
   await expectNamesLiveAndGenerated(page, ['alpha', 'other proteins', 'repeat_region'], 'FL2 hidden');
 });
 
+// OV-1486 (PD-OI-063, D-08): Generate replays a sorted order after a color
+// rule's removal brings back a row the order never held: the sorted rows keep
+// their places and the returning row follows them, live and at Generate. The
+// inventory a drawn Result leaves is Python's order of its rows, which the
+// executor recorded before it replayed the sorted order, not the order shown.
+test('OV-1486: a sorted Legend order keeps its places when removing a color rule brings back the CDS row, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, RULE_ROWS[0]);
+  await generate(page);
+  await expectLegendNames(page, ['alpha', 'other proteins', 'repeat_region'], 'a rule takes one CDS');
+  await appAction(page, 'sortLegendEntries', 'desc');
+  await expectNamesLiveAndGenerated(page, ['repeat_region', 'other proteins', 'alpha'], 'the Legend sorted Z to A');
+  await appAction(page, 'removeSpecificRule', 0);
+  await expectNamesLiveAndGenerated(page, ['repeat_region', 'CDS'], 'the rule removed in the sorted order');
+});
+
 // OV-660: a stroke stored on a rule row follows the row when its key changes
 // with the sharing of its name (`alpha [#e63946]` to `alpha` and back), live
 // and at Generate.

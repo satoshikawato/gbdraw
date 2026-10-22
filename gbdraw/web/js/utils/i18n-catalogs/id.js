@@ -2149,6 +2149,7 @@ export default Object.freeze({
   "Subtitle": "Subjudul",
   "Subtitle / title (optional)": "Subjudul / judul (opsional)",
   "Subtitle / title for sequence {n}": "Subjudul / judul untuk sekuens {n}",
+  "Suggest a translation fix": "Usulkan perbaikan terjemahan",
   "Summary": "Ringkasan",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "Berikan input GenBank atau input GFF3 dan FASTA yang sesuai.",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "Berikan file sekuens perbandingan (FASTA, GenBank, atau DDBJ) atau BLAST outfmt 6/7 sesuai kebutuhan.",

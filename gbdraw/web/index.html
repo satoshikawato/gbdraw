@@ -1444,9 +1444,16 @@
            Language menu in view; the logo keeps its size, and the Session title
            narrows when the labels still do not fit. Below 769px, where the toolbar
            wraps, the closed Language select shrinks and clips the longer names
-           (Bahasa Indonesia, Tiếng Việt) before it pushes its row to wrap; the open
-           list still shows every name in full. */
-        .app-header .app-brand { flex-shrink: 1000; min-width: min-content; }
+           (at 390px, those longer than English) before it pushes its row to wrap;
+           the open list still shows every name in full. OV-1495: at 1440px and wider the
+           tagline takes only the room the toolbar leaves, cut with an ellipsis,
+           and is hidden when that room is under 10rem; so the Session title and
+           the Language menu stay in view there too in es, fr and pt. */
+        .app-header .app-brand { flex: 1 1000 auto; min-width: min-content; }
+        .app-header .app-tagline-room { flex: 1 1 0; width: 0; container-type: inline-size; }
+        @container (max-width: 10rem) {
+            .app-tagline { visibility: hidden; }
+        }
         .app-header .app-logo-title { max-width: none; }
         @media (max-width: 1439px) {
             .app-tagline {
@@ -2129,7 +2136,7 @@
             <div class="app-brand flex items-center gap-3 min-w-0">
                 <img src="./assets/gbdraw-logo-title-outlined.svg" alt="gbdraw" class="app-logo-title h-9 w-auto shrink-0">
                 <h1 class="sr-only">gbdraw</h1>
-                <span class="app-tagline text-slate-500 text-sm font-normal truncate">{{ t('A genome diagram generator for microbes and organelles') }}</span>
+                <span class="app-tagline-room"><span class="app-tagline block text-slate-500 text-sm font-normal truncate">{{ t('A genome diagram generator for microbes and organelles') }}</span></span>
             </div>
 
                 <div class="app-toolbar flex items-center gap-2 min-w-0">
@@ -2174,12 +2181,13 @@
                     <button type="button" :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
                     <button type="button" :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
                 </div>
-                <!-- PD-OI-106: the UI language. A globe and each language's own name keep it findable in any language; a choice is no History step. -->
+                <!-- PD-OI-106: the UI language. A globe and each language's own name keep it findable in any language; a choice is no History step. The link beside it opens the translation feedback form in a new tab. -->
                 <div class="app-language flex items-center gap-1 text-slate-500" :title="t('Language')">
                     <i class="ph ph-globe text-base" aria-hidden="true"></i>
                     <select data-ui-language data-history-ignore :value="uiLocale.value" @change="chooseUiLanguage" :aria-label="t('Language')" class="app-language-select text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded px-1 py-0.5 cursor-pointer hover:border-slate-300">
                         <option v-for="option in UI_LOCALES" :key="option.tag" :value="option.tag" :lang="option.tag">{{ option.name }}</option>
                     </select>
+                    <a data-translation-feedback :href="translationFeedbackUrl(uiLocale.value)" target="_blank" rel="noopener noreferrer" :aria-label="t('Suggest a translation fix')" :title="t('Suggest a translation fix')" class="app-translation-feedback shrink-0 p-0.5 rounded text-slate-500 hover:text-blue-700 hover:bg-slate-100"><i class="ph ph-chat-circle-text text-base" aria-hidden="true"></i></a>
                 </div>
             </div>
         </div>

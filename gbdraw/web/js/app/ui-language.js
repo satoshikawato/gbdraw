@@ -4,6 +4,9 @@
 // (services/browser-preferences.js). It changes no Result, setting, or
 // History: the menu is `data-history-ignore`, and nothing here writes a
 // drawing. The Session, the figure, and every export stay as they are.
+// Beside the menu, a link opens the GitHub translation feedback form with the
+// shown language and the gbdraw version filled in, and nothing else.
+import { GBDRAW_VERSION } from '../config.js';
 import { readUiLanguage, writeUiLanguage } from '../services/browser-preferences.js';
 import { setUiLocale, uiLocale, uiLocaleOf } from '../utils/i18n.js';
 
@@ -48,4 +51,22 @@ export const chooseUiLanguage = async (event) => {
     return;
   }
   menu.value = uiLocale.value;
+};
+
+const TRANSLATION_FEEDBACK_FORM = 'https://github.com/satoshikawato/gbdraw/issues/new?template=translation-feedback.yml';
+
+/**
+ * The link of the translation feedback form (`.github/ISSUE_TEMPLATE/translation-feedback.yml`)
+ * with its `language` and `version` fields filled in and the language tag in
+ * the issue title. No file, setting,
+ * Result or Session content goes into it (PD-OI-106).
+ * @param {UiLocale} language the shown UI language
+ * @returns {string}
+ */
+export const translationFeedbackUrl = (language) => {
+  const url = new URL(TRANSLATION_FEEDBACK_FORM);
+  url.searchParams.set('language', language);
+  url.searchParams.set('version', GBDRAW_VERSION);
+  url.searchParams.set('title', `[Translation] ${language}: `);
+  return url.href;
 };

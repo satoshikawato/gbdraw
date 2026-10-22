@@ -2149,6 +2149,7 @@ export default Object.freeze({
   "Subtitle": "Tiêu đề phụ",
   "Subtitle / title (optional)": "Tiêu đề phụ / tiêu đề (không bắt buộc)",
   "Subtitle / title for sequence {n}": "Tiêu đề phụ / tiêu đề cho trình tự {n}",
+  "Suggest a translation fix": "Đề xuất sửa bản dịch",
   "Summary": "Tóm tắt",
   "Supply GenBank input or matching GFF3 and FASTA inputs.": "Cung cấp đầu vào GenBank hoặc cặp đầu vào GFF3 và FASTA tương ứng.",
   "Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.": "Cung cấp tệp trình tự so sánh (FASTA, GenBank hoặc DDBJ) hoặc BLAST outfmt 6/7 theo yêu cầu.",

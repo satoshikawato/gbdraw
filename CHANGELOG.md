@@ -125,6 +125,11 @@ write-up of a release.
   `data-label-feature-id`), so the live Web Result and Generate agree. When the
   first feature of a record is one of them, its instance is `0` instead of
   `item` (OV-1485).
+- Web app, Legend: after you sort or move the Legend rows, removing a color
+  rule that brings back a feature-type row (for example **CDS**) keeps your
+  order at the next Generate, with the returning row last, as the live Result
+  shows it; Generate no longer returns the Legend to the default order
+  (OV-1486).
 - Web app, History: the notice about discarded Undo history appears only when
   the memory limit drops steps, not for the routine 30-step window.
 - Web app: **Undo** and **Redo** are disabled while the step they would take
