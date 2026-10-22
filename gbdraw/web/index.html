@@ -155,7 +155,7 @@
         /* Japanese control names (buttons, tabs, labels, headings): a name that wraps breaks between phrases
            (適用, not 適 / 用; TSVを / インポート, not TSVを / インポ / ート), as a Latin name breaks between words (OV-1518).
            A phrase wider than its box still breaks rather than overflow. Browsers without phrase breaking keep
-           the normal Japanese breaks. The rail names keep their own strict breaks (css/tailwind.input.css), and an
+           the normal Japanese breaks. The rail names keep their own breaks, never inside a word (css/tailwind.input.css), and an
            element that asks for break-all (a file name) keeps it. */
         :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *, .break-all) { word-break: auto-phrase; overflow-wrap: break-word; }
         /* Japanese and Chinese hints, paragraphs and field labels: a wrapped text does not end on a line of one

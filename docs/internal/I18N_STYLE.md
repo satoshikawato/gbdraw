@@ -1,7 +1,7 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
 
 Revision 10, 2026-10-22 (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
-locale, rail names may take two lines in every locale, ja/zh comparative-genomics terms with no established use stay English,
+locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
 ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
 and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
 track, mode, control and setting names are no longer placeholders inside sentences (§1.3, §7.5); fr Feature and MB confirmed
@@ -142,12 +142,14 @@ nothing states that they are reviewed.
   the CJK CSS raises 10–11 px text to 12 px. Count width, not characters.
 - Rail short names (52 px entries; 10 px, CJK 12 px, Thai 12 px): prefer a
   name that fits on one line (CJK at most 4 full-width glyphs, 5 at most;
-  Latin about nine letters). A name that does not fit takes two lines in every
-  locale and its entry grows; a break falls at a space, between CJK glyphs
-  (never before ー or a small kana), or at a soft hyphen. A single word wider
-  than the entry cannot break and crosses the entry: give it a rail key
-  (`tx('rail', '…')`) with a shorter name or a soft hyphen (U+00AD) at a
-  correct hyphenation point. Rail keys: `rail\u0004Features`,
+  Latin about nine letters). A name never breaks inside a word in any
+  locale: CJK words keep their glyphs together (`keep-all`) and Latin words
+  are not hyphenated (no soft hyphens in rail values). A name that does not
+  fit takes two lines, breaking only between words (GC / sesgo, Acerca de),
+  and its entry grows. A single word wider than the entry stays on one line
+  and may run into the rail column's padding (58 px inside the column at most;
+  ja フィーチャー uses proportional kana to fit); a word wider than that needs a
+  shorter rail key (`tx('rail', '…')`). Rail keys: `rail\u0004Features`,
   `rail\u0004Layout`, `rail\u0004Labels`; a catalog value equal to the
   section title is correct when it fits. Header and bar buttons: no wider than
   the English label. Option labels inside 10 px rows: as short as the
@@ -244,8 +246,8 @@ Japanese is usually 0.5–0.8× the English character count, which is about
 the same pixel width. Buttons stay within 8 full-width glyphs where
 possible; rail short names within 5 (Features is the known exception).
 
-- フィーチャー on the rail takes two lines (フィー / チャー) at every window
-  size; this is accepted, no shorter rail form.
+- フィーチャー on the rail keeps one line at every window size (never
+  フィー / チャー, Owner 2026-10-22); no shorter rail form.
 
 ## 3. Simplified Chinese (`zh-Hans`, mainland usage)
 

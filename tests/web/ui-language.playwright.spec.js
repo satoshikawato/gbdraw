@@ -19,11 +19,12 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
-// - at 1024x768, 1280x800 and 1440x900: every rail name stays inside its
-//   entry (en, ja, es, fr), and the footer holds its text without a page
+// - at 1024x768, 1280x800 and 1440x900, in all 11 languages: every rail name
+//   stays inside the rail column (inside its border and padding) and no word of
+//   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
 //   scroll, with nothing drawn over it and the settings pane, its Generate
-//   bar and the Result pane ending above it (stacked: en, ja; rail: en, ja,
-//   es, fr) (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
+//   bar and the Result pane ending above it (stacked: en, ja; rail: all 11)
+//   (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
 //   the header's mode and Session names keep one line (OV-1515), and each
 //   footer separator stays on the line of the link before it (OV-1517);
 // - storage that throws, or a catalog that fails to load, leaves English.
@@ -353,20 +354,39 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
   expect(errors).toEqual([]);
 });
 
-// The text of a rail name, as line boxes, against its entry; the footer's
-// text lines against what is drawn over them, the bottoms of the settings
-// pane, its Generate bar and the Result pane against the footer's top, and
-// the page height against the window.
+// The text of a rail name, as line boxes, against the rail column inside its
+// border and padding, and each word of it (the words of the page language)
+// against the lines it lies on; the footer's text lines against what is drawn
+// over them, the bottoms of the settings pane, its Generate bar and the Result
+// pane against the footer's top, and the page height against the window.
 const railAndFooterFit = (page) => page.evaluate(() => {
   const names = [...document.querySelectorAll('.settings-index nav > button > span')].filter((span) => span.offsetParent);
   const outside = names.flatMap((span) => {
-    const entry = span.parentElement.getBoundingClientRect();
+    const column = span.closest('.settings-index');
+    const box = column.getBoundingClientRect();
+    const style = getComputedStyle(column);
     const range = document.createRange();
     range.selectNodeContents(span);
     const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
     const left = Math.min(...lines.map((rect) => rect.left));
     const right = Math.max(...lines.map((rect) => rect.right));
-    return left < entry.left - 0.5 || right > entry.right + 0.5 ? [span.textContent.trim()] : [];
+    const innerLeft = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const innerRight = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    return left < innerLeft - 0.5 || right > innerRight + 0.5 ? [span.textContent.trim()] : [];
+  });
+  const words = new Intl.Segmenter(document.documentElement.lang, { granularity: 'word' });
+  const splitWords = names.flatMap((span) => {
+    const text = span.firstChild;
+    const range = document.createRange();
+    const lineTop = (index) => {
+      range.setStart(text, index);
+      range.setEnd(text, index + 1);
+      return [...range.getClientRects()].find((rect) => rect.width > 0)?.top;
+    };
+    return [...words.segment(text.textContent)].filter((word) => word.isWordLike).flatMap((word) => {
+      const tops = [...word.segment].map((_, offset) => lineTop(word.index + offset)).filter((top) => top !== undefined);
+      return tops.some((top) => Math.abs(top - tops[0]) > 3) ? [word.segment] : [];
+    });
   });
   const footer = document.querySelector('[data-app-footer]');
   const box = footer.getBoundingClientRect();
@@ -414,6 +434,7 @@ const railAndFooterFit = (page) => page.evaluate(() => {
   return {
     names: names.length,
     outside,
+    splitWords,
     wrappedHeaderNames,
     separatorsAlone,
     pageScrollsX: document.documentElement.scrollWidth > innerWidth,
@@ -472,8 +493,8 @@ const controlFit = (page) => page.evaluate(() => {
   };
 });
 
-test('rail names stay inside their entries, nothing covers the footer, and control names fit, in Latin, Thai, Chinese and Japanese text at three window sizes', async ({ page }) => {
-  test.setTimeout(300_000);
+test('rail names stay inside the rail and keep each word on one line, nothing covers the footer, and control names fit, in every language at three window sizes', async ({ page }) => {
+  test.setTimeout(480_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.setViewportSize({ width: 1024, height: 768 });
@@ -493,10 +514,10 @@ test('rail names stay inside their entries, nothing covers the footer, and contr
     });
   }
   const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];
-  const fit = { outside: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
+  const fit = { outside: [], splitWords: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
   for (const display of ['stacked', 'rail']) {
     if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-    for (const tag of display === 'rail' ? ['en', 'ja', 'es', 'fr', 'vi', 'th'] : ['en', 'ja']) {
+    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th'] : ['en', 'ja']) {
       await menu(page).selectOption(tag);
       await expect.poll(() => pageLanguage(page)).toBe(tag);
       for (const viewport of viewports) {
