@@ -226,6 +226,7 @@ const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+const { readComparisonSequence } = await import('../../gbdraw/web/js/services/record-discovery.js');
 
 const artifactSnapshots = createHistorySnapshotService({
   state,
@@ -1432,6 +1433,24 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.semanticFileWatchersSuppressed.value = false;
 });
 
+test('a ring comparison file is read once, and a failed read is read again', async () => {
+  const file = new File(['>ring\nacgt\n'], 'ring.fasta', { type: 'text/plain' });
+  const operations = [];
+  const replies = [
+    { result: { error: new Error('injected ring read failure') } },
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring' } }
+  ];
+  const runHelperOperation = async (operation) => {
+    operations.push(operation);
+    return replies.shift();
+  };
+  await assert.rejects(readComparisonSequence({ file, runHelperOperation }), /injected ring read failure/);
+  const read = await readComparisonSequence({ file, runHelperOperation });
+  assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring' });
+  assert.equal(await readComparisonSequence({ file, runHelperOperation }), read);
+  assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence']);
+});
+
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
   const resourceMetrics = [];
   const previousTestHooks = globalThis.__GBDRAW_TEST_HOOKS__;
@@ -1640,6 +1659,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         recordIds: [fasta.slice(1).split('\n')[0]]
       }
     }));
+    // Add Seq reads the first ring file with the same reader before Generate,
+    // which reuses that read (OV-1545).
+    assert.equal((await readComparisonSequence({ file: comparisonViews[0] })).fasta, comparisonTexts[0]);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(),
@@ -1647,7 +1669,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
-    // Every ring file goes through the one Python reader (no JavaScript reader).
+    // Every ring file goes through the one Python reader (no JavaScript reader), once.
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
         .map(({ operation }) => operation),
@@ -1674,6 +1696,35 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       workerMessages.filter(({ type }) => type === 'run').at(-1)
         .payload.request.diagramOptions.conservationColors,
       ['#4e79a7', '#e15759', '#59a14f']
+    );
+
+    // A second Generate on the same files reads no ring file again (OV-1545):
+    // neither the reference nor a comparison, and it sends the same LOSAT rows.
+    const firstConservation = workerMessages.filter(({ type }) => type === 'run').at(-1)
+      .payload.request.diagramOptions;
+    const helperMessagesBeforeRepeat = workerMessages.filter(({ type }) => type === 'helper').length;
+    resourceMetrics.splice(0);
+    const repeatResult = result('lazy-circular-repeat.svg', 'lazy-circular-repeat');
+    workerResponses.push(response(repeatResult, validCatalog(repeatResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 0);
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'helper').length,
+      helperMessagesBeforeRepeat
+    );
+    assert.deepEqual(
+      resourceMetrics.filter(({ name, resourceId }) => name === 'resourceTextReadCount'
+        || (name === 'resourceByteReadCount' && resourceId.startsWith('comparison-'))),
+      []
+    );
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'run').at(-1)
+        .payload.request.diagramOptions.conservationLabels,
+      firstConservation.conservationLabels
     );
 
     const invalidFile = Object.freeze({

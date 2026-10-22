@@ -250,9 +250,9 @@ import {
 } from './comparison-ui.js';
 import {
   circularDiscoveryForInput,
-  discoverComparisonSequenceRecordLabel,
   discoverGffFastaRecords,
-  discoverSequenceRecords
+  discoverSequenceRecords,
+  readComparisonSequence
 } from '../services/record-discovery.js';
 import {
   applyComparisonSequenceRecordLabel,
@@ -3011,8 +3011,8 @@ export const createAppSetup = () => {
     // D12: the Python ring reader names a GenBank or DDBJ row after it is added
     // (a read failure keeps the file-name default; Generate reports it).
     // Generate waits for these reads before it reads the row labels.
-    const pending = discoverComparisonSequenceRecordLabel({ file: selectedFile })
-      .then((recordLabel) => applyComparisonSequenceRecordLabel({
+    const pending = readComparisonSequence({ file: selectedFile })
+      .then(({ recordLabel }) => applyComparisonSequenceRecordLabel({
         series: drawing.circularConservation.series,
         sourceFiles: getCircularConservationSourceFiles(drawing),
         file: selectedFile,
