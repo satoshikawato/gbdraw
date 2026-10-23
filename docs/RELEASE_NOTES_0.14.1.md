@@ -67,17 +67,21 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   grows to hold it, and **Reset Layout** returns the automatic canvas.
 - A Circular **Inner gap** or **Outer gap** typed as `1px` is stored as `1`, so
   Save and a fresh Load agree.
-- The HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 Gallery
-  tutorials start from the Web defaults and generate after each change.
 - The compact Result Preview layout and the width of **Reset zoom** apply in
   every UI language; they applied only in English.
 - The Run info tab, the feature popup's label note, the Label Not Shown dialog,
-  and the Choose records dialog show the UI language in the nine other locales.
+  and the Choose records dialog show the UI language in every language other than English.
   The Run info text that Generate builds stays English.
 - Panning the Result from blank space and releasing over a feature or a
   pairwise match no longer opens that popup.
 - A Legend offset that nothing names is released with its Result, and a reflow
   lands in its own Result's drawing.
+
+## Documentation
+
+- The HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 Gallery
+  tutorials start from the Web defaults and generate after each change, with a
+  preview of every stage.
 - The Vibrio harveyi group collinear tutorial says that the Linear ruler keeps
   each record's own coordinates.
 
@@ -129,6 +133,9 @@ The drawn figures are the same as before.
   Instant Preview, the LOSAT execution, or the input drafts, are project steps
   that either drawing can undo. Reset settings is one step: one Undo restores
   both drawings. The dialog is unchanged.
+- Reset settings also gives the multi-record layout a new drawing's defaults,
+  derives the Circular comparison rings again from the kept files, and resets a
+  hidden drawing's applied palette and alignment Reset receipt with it.
 - Instant Preview **On** applies every drawing's queued palette in one step.
 - A drawing switch waits while a color rule table edit is being matched.
 - In **Canvas padding**, an empty or partial entry keeps the side until you leave
@@ -157,6 +164,16 @@ saved by 0.14.0 opens in 0.14.1. See
 
 New in this release:
 
+- On a Circular figure with a custom track stack and blank radii, whether the
+  inside rows (GC content, skews, ticks) sit on the preset's positions or pack
+  under the features depends on the size of the center definition (OV-1711). An
+  edit that shrinks the definition, such as a shorter species or strain name or
+  several records on one Multi-Record Canvas, can move those rings and run the
+  tick labels together. Give the rows explicit radii (**Radius**) in the track
+  table: a pinned row keeps its radius, and one that would overlap the
+  definition is reported as an error. **Keep Full Definition with Plot Title**
+  affects only a titled Multi-Record Canvas, so it does not cover the other
+  edits.
 - A Session saved by 0.14.0 with a crop and ring LOSAT still holds unconverted
   rows. Its ring draws as in 0.14.0 on a forward crop, and at another
   unconverted place on a reverse-complemented crop, until the next **Generate

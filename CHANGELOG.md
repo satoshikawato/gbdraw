@@ -45,6 +45,10 @@ write-up of a release.
     first blastp Generate after an upload sends and parses each new file once
     for all File cards and the diagram: about 4.4-5.1 s instead of 7.6-8.0 s
     for six cards of a 17.5 MB GenBank file (#1307).
+- Web app: Circular **Generate Diagram** with similarity rings reads each ring
+  file and the reference sequence once per file, not on every Generate, so a
+  repeat Generate no longer waits on "Preparing sequence comparisons for the
+  circular diagram" (#1291).
 - Changed: the command line and the Python API search the whole reference file
   for Circular similarity rings (`--losat losatn` / `tlosatx`), as the web app
   does: every record with a sequence, uncropped, also records that are not
@@ -54,8 +58,9 @@ write-up of a release.
   Session saved from the command line opened in the web app reuses its ring
   LOSAT results. The ring rows stay in the search frame of the drawn record,
   so `--losat_output_dir`, `conservation.tsv`, and Sessions hold the same
-  frame as before; the raw-cache entries keep the whole-file search output.
-- Fixed: Circular similarity rings (PD-OI-073).
+  frame as before; the raw-cache entries keep the whole-file search output
+  (#1314).
+- Fixed: Circular similarity rings (PD-OI-073, #1323).
   - Every ring table (an uploaded table, `--conservation_table`, the ring
     tables of a Session) is read in the search frame of the drawn record: the
     record after its crop, on its source strand, 1-based. On a
@@ -79,8 +84,8 @@ write-up of a release.
 - Fixed: a Circular legend at a corner (`upper_left`, `upper_right`,
   `lower_left`, `lower_right`) on a Multi-Record Canvas, which the web app
   uses by default, was drawn over the records; it now clears them and the
-  canvas grows as on a single-record canvas.
-- Fixed: diagram layout collisions.
+  canvas grows as on a single-record canvas (OV-1600, #1292).
+- Fixed: diagram layout collisions (#1316, #1317).
   - A top or bottom plot title is drawn outside a corner legend that was
     moved above or below the diagram, in the drawing and in the web app's
     live preview; it was drawn through the legend rows.
@@ -97,7 +102,7 @@ write-up of a release.
   records table start, or the web app's **Rotate record using this feature**) shows
   its length in the definition, like a record without a start, for example
   `16,569 bp`, in Circular and Linear; it showed the wrapped source spans, for
-  example `[3,307..16,569], [1..3,306] bp` (OV-1694). Rulers and ticks keep
+  example `[3,307..16,569], [1..3,306] bp` (OV-1694, #1327). Rulers and ticks keep
   their source coordinates.
 - Fixed: adding a plot title to a single-record Circular figure no longer moves
   the GC content, GC skew, and tick rings. The layout reserves the center
@@ -123,6 +128,10 @@ write-up of a release.
     Instant Preview, the LOSAT execution, or the input drafts, are project
     steps that either drawing can undo. Reset settings is one step: one Undo
     restores both drawings.
+  - Reset settings also gives the multi-record layout a new drawing's
+    defaults, derives the Circular comparison rings again from the kept files,
+    and resets a hidden drawing's applied palette and alignment Reset receipt
+    with it.
   - Each drawing keeps 30 Undo steps and the project stream keeps 30 more,
     under one shared memory budget (0.14.0 kept 30 in all).
   - Instant Preview **On** applies every drawing's queued palette in one step.
@@ -143,8 +152,8 @@ write-up of a release.
 - Fixed: the compact Result Preview layout and the width of **Reset zoom**
   apply in every UI language; they applied only in English (OV-1535, #1290).
 - Fixed: the Run info tab, the feature popup's label note, the Label Not Shown
-  dialog, and the Choose records dialog show the UI language in the nine other
-  locales (#1312). The Run info text that Generate builds stays English.
+  dialog, and the Choose records dialog show the UI language in every language other
+  than English (#1312). The Run info text that Generate builds stays English.
 - Fixed: panning the Result from blank space and releasing over a feature or a
   pairwise match no longer opens that popup (OV-1537, #1308).
 - Documentation: the Vibrio harveyi group collinear tutorial says that the
