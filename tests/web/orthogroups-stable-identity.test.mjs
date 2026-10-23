@@ -1389,7 +1389,7 @@ assert.deepEqual(
   { svg_id: 'not-a-group-member' }
 );
 const state = {
-  orthogroups: ref([group]),
+  mode: 'linear', orthogroups: ref([group]),
   orthogroupNameOverrides: {},
   orthogroupDescriptionOverrides: {},
   selectedOrthogroupId: ref('og_1'),
