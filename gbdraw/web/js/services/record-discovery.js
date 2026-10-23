@@ -599,14 +599,16 @@ export const discoverGffFastaRecords = async ({
 };
 
 /**
- * The selector a FASTA reader of a GFF3 and FASTA pair reads for a record selector: `#N` counts the records the
- * GFF3 names, as load_gff_fasta reads them, while a FASTA reader counts every entry, so `#N` becomes the record ID
- * the record list gives it (OV-1681). Any other selector, or a `#N` the list does not hold, is returned as it is.
+ * The selector a FASTA reader of a GFF3 and FASTA pair reads for a record selector. load_gff_fasta reads only the
+ * records the GFF3 names, in FASTA order, while a FASTA reader reads every entry. So the automatic record (an empty
+ * selector) and `#N` become the record ID the record list gives them (OV-1681). A record ID, a `#N` the list does
+ * not hold, or a card without both files keeps its selector.
  * @param {{ gffFile: FileLike | null | undefined, fastaFile: FileLike | null | undefined, selector: string }} options
  * @returns {Promise<string>}
  */
 export const gffFastaReaderSelector = async ({ gffFile, fastaFile, selector }) => {
-  if (!selector.startsWith('#')) return selector;
+  if ((selector && !selector.startsWith('#')) || !gffFile || !fastaFile) return selector;
   const records = await discoverGffFastaRecords({ gffFile, fastaFile });
-  return records.find((record) => record.selector === selector)?.recordId ?? selector;
+  const record = selector ? records.find((entry) => entry.selector === selector) : records[0];
+  return record?.recordId ?? selector;
 };

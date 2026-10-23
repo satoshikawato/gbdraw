@@ -609,3 +609,24 @@ test('a restored GFF3 record selector counts the records the GFF3 names (OV-1681
     { recordId: 'G2', sequence: 'ATGGGGTAA' }
   ]);
 });
+
+// OV-1681: the automatic record of a restored GFF3 card is the first record the GFF3 names, and a card without
+// both files keeps its selector, so the other cards keep their sources.
+test('a restored GFF3 automatic record is the first record the GFF3 names (OV-1681)', async () => {
+  const gff = namedTextFile('g1-only.gff', '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n');
+  const fasta = namedTextFile('x-first.fasta', '>X\nCCCCCCCCC\n>G1\nATGAAATAA\n');
+  const automatic = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff', linearSeqs: [{ gff, fasta, region_record_id: '' }]
+  });
+  assert.deepEqual(automatic.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'G1', sequence: 'ATGAAATAA' }
+  ]);
+  const missingGff = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff',
+    linearSeqs: [{ gff, fasta, region_record_id: 'G1' }, { gff: null, fasta, region_record_id: '#1' }]
+  });
+  assert.deepEqual(missingGff.map(({ key, recordId }) => ({ key, recordId })), [
+    { key: 'linear:record:0', recordId: 'G1' },
+    { key: 'linear:record:1', recordId: 'X' }
+  ]);
+});

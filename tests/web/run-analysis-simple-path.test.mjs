@@ -2484,6 +2484,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerResponses.push(response(namedResult, validCatalog(namedResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
+    // The automatic record (an empty selector) is the first record the GFF3 names too: a FASTA file whose first
+    // entry X has no GFF3 feature draws G1, so LOSAT searches G1 (OV-1681).
+    const g1Gff = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'g1-only.gff');
+    const xFirstFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n'], 'x-first.fasta');
+    Object.assign(state.linearSeqs[0], { gff: g1Gff, fasta: xFirstFasta, region_record_id: '' });
+    const autoResult = result('gff-auto.svg', 'gff-auto');
+    workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
     state.lInputType.value = 'gb';
   } finally {
     state.similarityAlignmentPlan.value = null;
