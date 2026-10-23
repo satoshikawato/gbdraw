@@ -73,9 +73,9 @@ LAYOUT_RESULT_CAPTURES = {
         "visible_text": {"NC_001416.1", "48,502 bp", "major capsid protein", "CDS"},
     },
     "tobacco-chloroplast": {
-        "src": "./media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp",
-        "selector": "svg[data-capture-chloroplast-final='true']",
-        "viewport": {"width": 1400, "height": 1000},
+        "src": "./media/tobacco-chloroplast/manual-08-02-chloroplast-preview.webp",
+        "selector": "svg[data-capture-chloroplast-preview='true']",
+        "viewport": {"width": 1400, "height": 1400},
         "state": {
             "mode": "circular",
             "form.legend": "upper_left",
@@ -85,8 +85,8 @@ LAYOUT_RESULT_CAPTURES = {
         "visible_text": {"Nicotiana tabacum", "NC_001879.2", "LSC", "IRb", "SSC", "IRa", "GC content"},
     },
     "Vnig_TUMSAT-TG-2018": {
-        "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
-        "selector": "svg[data-capture-vnig-multirecord-final='true']",
+        "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-02-multirecord-preview.webp",
+        "selector": "svg[data-capture-vnig-preview='true']",
         "viewport": {"width": 1600, "height": 1100},
         "state": {
             "mode": "circular",
@@ -131,8 +131,8 @@ LAYOUT_RESULT_CAPTURES = {
         "visible_text": {"Vibrio parahaemolyticus", "Vibrio alginolyticus", "Collinear", "Inverted"},
     },
     "HmmtDNA_ATskew": {
-        "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
-        "selector": "svg[data-capture-hmmt-atskew-final='true']",
+        "src": "./media/HmmtDNA_ATskew/manual-09-02-atskew-preview.webp",
+        "selector": "svg[data-capture-hmmt-preview='true']",
         "viewport": {"width": 1400, "height": 1000},
         "state": {
             "mode": "circular",
@@ -439,6 +439,71 @@ def test_vibrio_previews_replay_each_generate_step() -> None:
         assert "(D-07)" in scripts
 
 
+PROGRESSIVE_CIRCULAR_TUTORIALS = {
+    # Generate steps, the preview selector, and the replay selectors the finished figure needs
+    # beyond the Web defaults (OV-1695, OV-1699: Multi-Record Canvas off).
+    "Vnig_TUMSAT-TG-2018": {
+        "generate_steps": [3, 4, 5, 6],
+        "selector": "svg[data-capture-vnig-preview='true']",
+        "required_selectors": {"select[aria-label^='Row for #3 (']"},
+    },
+    "HmmtDNA_ATskew": {
+        "generate_steps": [3, 4, 5, 6, 7, 9],
+        "selector": "svg[data-capture-hmmt-preview='true']",
+        "required_selectors": {"input[data-circular-canvas-setting]", "input[aria-label='Separate Strands']"},
+    },
+    "tobacco-chloroplast": {
+        "generate_steps": [3, 4, 5, 6, 7, 8],
+        "selector": "svg[data-capture-chloroplast-preview='true']",
+        "required_selectors": {
+            "input[data-circular-canvas-setting]",
+            "button[aria-label='Remove repeat_region']",
+            "input[aria-label='Block stroke color']",
+            "input[aria-label='Circular Label Spacing']",
+        },
+    },
+}
+
+
+@pytest.mark.parametrize("example_id", PROGRESSIVE_CIRCULAR_TUTORIALS)
+def test_progressive_tutorials_capture_each_generate_by_replay(example_id: str) -> None:
+    """Each Generate step shows its own preview, replayed from the Web defaults (TV-D18)."""
+
+    expected = PROGRESSIVE_CIRCULAR_TUTORIALS[example_id]
+    sample = load_ready_examples(example_id)[0]
+    tutorial = _load_tutorial(sample)
+    steps = tutorial["manualSteps"]
+    generate_steps = []
+    for number, step in enumerate(steps, start=1):
+        types = [action["type"] for action in step.get("replay", [])]
+        if "generate" in types:
+            generate_steps.append(number)
+            assert types.count("generate") == 1 and types[-1] == "generate", number
+    assert generate_steps == expected["generate_steps"]
+
+    for number in generate_steps:
+        previews = [
+            operation
+            for operation in steps[number - 1]["operations"]
+            if operation.get("capture", {}).get("selector") == expected["selector"]
+        ]
+        assert len(previews) == 1, number
+        capture = previews[0]["capture"]
+        assert previews[0]["dataDependent"] is True
+        assert capture["replayThrough"] == number
+        assert capture["session"] == sample["session"]
+    final = steps[generate_steps[-1] - 1]["operations"][-1]
+    assert final["media"]["src"] == LAYOUT_RESULT_CAPTURES[example_id]["src"]
+
+    replayed = [action for step in steps for action in step.get("replay", [])]
+    assert expected["required_selectors"] <= {action.get("selector") for action in replayed}
+    downloads = {entry["targetName"] for entry in tutorial["downloads"]}
+    for action in replayed:
+        if action["type"] == "upload":
+            assert action["path"].startswith("gallery/files/")
+            assert Path(action["path"]).name in downloads
+
+
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)
 def test_layout_sensitive_gallery_results_have_exact_capture_contracts(
     example_id: str,
@@ -636,13 +701,70 @@ def test_replay_capture_names_a_step_up_to_its_own(replay_through: object) -> No
 
 def test_step_replay_accepts_reader_actions_only() -> None:
     result = ValidationResult(errors=[], warnings=[])
-    step = {"replay": [{"type": "fill"}, {"type": "generate"}, {"type": "resetSettings"}, {"type": "upload"}]}
+    step = {
+        "replay": [
+            {"type": "fill"},
+            {"type": "generate"},
+            {"type": "resetSettings"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']", "path": "gallery/files/qualifier_priority.tsv"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']", "path": "../../pyproject.toml"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']", "path": "gallery/files/missing.tsv"},
+            {"type": "upload", "path": "gallery/files/qualifier_priority.tsv"},
+        ]
+    }
 
     add_step_replay_validation(result, _manual_context(1), step)
 
-    assert len(result.errors) == 2
-    assert "replay action 3" in result.errors[0]
-    assert "replay action 4" in result.errors[1]
+    assert [error.split(": ", 1)[1].split(" ")[2] for error in result.errors] == ["3", "5", "6", "7", "8"]
+    assert "unsupported type" in result.errors[0]
+    assert all("upload" in error for error in result.errors[1:])
+
+
+def test_upload_action_chooses_the_file_through_the_named_button() -> None:
+    """A reader's table upload: click the button that opens the file chooser, then choose the file."""
+
+    events: list[object] = []
+
+    class FakeChooser:
+        def set_files(self, path: str) -> None:
+            events.append(("set_files", path))
+
+    class FakeChooserInfo:
+        value = FakeChooser()
+
+        def __enter__(self) -> FakeChooserInfo:
+            events.append("expect_file_chooser")
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            events.append("file_chooser_opened")
+
+    class FakeLocator:
+        def __init__(self, selector: str) -> None:
+            self.selector = selector
+
+        @property
+        def first(self) -> FakeLocator:
+            return self
+
+        def click(self) -> None:
+            events.append(("click", self.selector))
+
+    class FakePage:
+        def expect_file_chooser(self) -> FakeChooserInfo:
+            return FakeChooserInfo()
+
+        def locator(self, selector: str) -> FakeLocator:
+            return FakeLocator(selector)
+
+    selector = "role=button[name='Choose Priority File (TSV)']"
+    capture_tool.apply_capture_action(
+        FakePage(), {"type": "upload", "selector": selector, "path": "gallery/files/qualifier_priority.tsv"}
+    )
+
+    expected = capture_tool.WEB_ROOT.resolve() / "gallery/files/qualifier_priority.tsv"
+    assert events == ["expect_file_chooser", ("click", selector), "file_chooser_opened", ("set_files", str(expected))]
 
 
 def test_replay_resets_then_performs_steps_through_the_named_one(
@@ -708,6 +830,10 @@ def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
     waits = [event for event in events[3:] if "labelReflowProcessing" in event]
     assert len(waits) == 1
     assert "processing" in waits[0].replace("labelReflowProcessing", "")
+    # After the redraw, History can stay busy for many seconds (OV-1700); the replay's next
+    # step needs the mode buttons, so Reset also waits until they are enabled.
+    switch_waits = [event for event in events[3:] if ".app-mode-button" in event]
+    assert len(switch_waits) == 1 and "disabled" in switch_waits[0]
 
 
 def test_vibrio_rotation_steps_follow_the_open_popup_and_close_it() -> None:

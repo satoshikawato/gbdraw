@@ -1,9 +1,41 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-10-12
+Last updated: 2026-10-23
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Progressive HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 tutorials (2026-10-23)
+
+The three Circular tutorials now start from the Web defaults and Generate after
+each change, as the BGC and Vibrio tutorials do. Every manual step carries
+`replay`, and each preview is captured by replay through its own step
+(Gallery Session, **Reset Settings**, steps 1..N). The tobacco steps choose
+their tables with the capture tool's `upload` action (the files under
+`gallery/files/`, the reader's downloads). Each tutorial now lists every
+setting its Gallery figure needs: Multi-Record Canvas off and Separate Strands
+off for HmmtDNA_ATskew (OV-1695); Multi-Record Canvas off, the outline colors
+and widths, `rep_origin`, and Circular Label Spacing for tobacco (OV-1699).
+Settings that equal the Web defaults (Track Preset Tuckin, Legend position
+Left on Circular, Separate Strands on for Vnig) are not taught. Sessions,
+source SVGs, thumbnails, and `examples.json` are unchanged.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `Vnig_TUMSAT-TG-2018` | `manual-03-01-default-preview.webp`, `manual-04-02-plasmid-row-preview.webp`, `manual-05-02-orchid-preview.webp`, `manual-06-02-multirecord-preview.webp` | Add (the last replaces `manual-06-01-multirecord-preview.webp`) | Replay through steps 3, 4, 5, 6; Record Order rows and palette asserted per stage | Captured at DSF 3; accepted |
+| `Vnig_TUMSAT-TG-2018` | `manual-04-01-record-order.webp` | Replace `manual-04-00-multirecord-toggle.webp` | Replay through step 4; the row select of record #3 (found by its `Row for #3 (` name) highlighted with value 2 | Captured at DSF 3; accepted |
+| `Vnig_TUMSAT-TG-2018` | `manual-05-01-palette-orchid.webp`, `manual-06-01-bottom-title.webp`, `manual-07-01-feature-popup.webp` | Recapture; renamed from `manual-03-01-…`, `manual-05-01-…`, `manual-08-01-…` | Session alone, as before | Captured at DSF 3; accepted |
+| `Vnig_TUMSAT-TG-2018` | `manual-03-00-circular-layout-settings.webp`, `manual-03-02-legend-position-left.webp`, `manual-03-03-selected-features.webp` | Delete | None: they showed Web defaults | Deleted |
+| `HmmtDNA_ATskew` | `manual-03-01-default-preview.webp`, `manual-04-03-labels-preview.webp`, `manual-05-01-restyle-preview.webp`, `manual-06-03-layout-preview.webp`, `manual-07-02-middle-stack-preview.webp`, `manual-09-02-atskew-preview.webp` | Add (the last replaces `manual-09-01-atskew-preview.webp`) | Replay through steps 3, 4, 5, 6, 7, 9; the final asserts the five-slot stack and the a_skew_2 parameters | Captured at DSF 3; accepted |
+| `HmmtDNA_ATskew` | `manual-06-01-layout-options.webp` | Add | Session; Separate Strands and Multi-Record Canvas cleared (`visibleControls`) | Captured at DSF 3; accepted |
+| `HmmtDNA_ATskew` | `manual-08-01-at-skew-slot-context.webp` | Recapture; renamed from `manual-06-01-…`; recipe corrected | Replay through step 8, so ticks is still second and a_skew_2 last (slot 4); disclosure open from the replay | Captured at DSF 3; accepted |
+| `HmmtDNA_ATskew` | `manual-04-01-label-mode-out.webp`, `manual-04-02-cds-label-priority.webp`, `manual-06-02-window-step.webp`, `manual-07-01-middle-template.webp`, `manual-09-01-tick-track-context.webp` | Recapture or rename (renumbered from `manual-03-02`, `08-01`, `04-01`, `05-01`, `07-01`) | Session alone, as before; `window-step` has no recipe and keeps its bytes | Accepted |
+| `HmmtDNA_ATskew` | `manual-03-01-track-preset-middle.webp`, `manual-03-03-legend-position-left.webp` | Delete | None: the Middle template sets the track preset, and Left is the Circular default | Deleted |
+| `tobacco-chloroplast` | `manual-03-01-default-preview.webp`, `manual-04-04-labels-preview.webp`, `manual-05-02-colors-preview.webp`, `manual-06-03-regions-preview.webp`, `manual-07-02-tint-preview.webp`, `manual-08-02-chloroplast-preview.webp` | Add (the last replaces `manual-08-01-chloroplast-preview.webp`) | Replay through steps 3..8 at 1400x1400 with the footer hidden; the final also waits for the eight annotation ids | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-04-03-qualifier-priority.webp`, `manual-05-01-specific-color-table.webp` | Recapture; recipe replaced | Replay through step 4 or 5: the file is chosen with `upload`, so the crop shows the reader's file name without renaming the restored File | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-06-02-region-ring-slots.webp` | Add | Replay through step 6: features, plastome_regions, gc_content with their Width/Radius values | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-08-01-layout-options.webp` | Replace `manual-04-01-layout-options.webp` | Replay through step 8; Separate Strands on, Multi-Record Canvas off | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-02-02-basic-settings.webp`, `manual-04-01-label-mode-both.webp`, `manual-04-02-label-placement-radial.webp` | Recapture; renamed from `manual-03-01`, `04-02`, `04-03` | Session alone, as before | Captured at DSF 3; accepted |
 
 ## Edit-surface redesign: feature popup, search bar, Legend tab (2026-10-12)
 

@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Gallery: the HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018
+  tutorials start from the Web defaults and generate after each change, with a
+  preview of every stage; each now lists every setting the Gallery figure needs
+  (Multi-Record Canvas off, outline colors, `rep_origin`, label spacing).
 - Web app: work repeated on unchanged inputs was removed (redundant-work audit).
   - **Generate Diagram** encodes a newly added file in milliseconds instead of
     about 0.5 s per 12 MB, **Save Session** no longer re-reads or re-hashes the
