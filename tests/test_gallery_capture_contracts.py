@@ -636,13 +636,70 @@ def test_replay_capture_names_a_step_up_to_its_own(replay_through: object) -> No
 
 def test_step_replay_accepts_reader_actions_only() -> None:
     result = ValidationResult(errors=[], warnings=[])
-    step = {"replay": [{"type": "fill"}, {"type": "generate"}, {"type": "resetSettings"}, {"type": "upload"}]}
+    step = {
+        "replay": [
+            {"type": "fill"},
+            {"type": "generate"},
+            {"type": "resetSettings"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']", "path": "gallery/files/qualifier_priority.tsv"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']", "path": "../../pyproject.toml"},
+            {"type": "upload", "selector": "role=button[name='Import TSV']", "path": "gallery/files/missing.tsv"},
+            {"type": "upload", "path": "gallery/files/qualifier_priority.tsv"},
+        ]
+    }
 
     add_step_replay_validation(result, _manual_context(1), step)
 
-    assert len(result.errors) == 2
-    assert "replay action 3" in result.errors[0]
-    assert "replay action 4" in result.errors[1]
+    assert [error.split(": ", 1)[1].split(" ")[2] for error in result.errors] == ["3", "5", "6", "7", "8"]
+    assert "unsupported type" in result.errors[0]
+    assert all("upload" in error for error in result.errors[1:])
+
+
+def test_upload_action_chooses_the_file_through_the_named_button() -> None:
+    """A reader's table upload: click the button that opens the file chooser, then choose the file."""
+
+    events: list[object] = []
+
+    class FakeChooser:
+        def set_files(self, path: str) -> None:
+            events.append(("set_files", path))
+
+    class FakeChooserInfo:
+        value = FakeChooser()
+
+        def __enter__(self) -> FakeChooserInfo:
+            events.append("expect_file_chooser")
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            events.append("file_chooser_opened")
+
+    class FakeLocator:
+        def __init__(self, selector: str) -> None:
+            self.selector = selector
+
+        @property
+        def first(self) -> FakeLocator:
+            return self
+
+        def click(self) -> None:
+            events.append(("click", self.selector))
+
+    class FakePage:
+        def expect_file_chooser(self) -> FakeChooserInfo:
+            return FakeChooserInfo()
+
+        def locator(self, selector: str) -> FakeLocator:
+            return FakeLocator(selector)
+
+    selector = "role=button[name='Choose Priority File (TSV)']"
+    capture_tool.apply_capture_action(
+        FakePage(), {"type": "upload", "selector": selector, "path": "gallery/files/qualifier_priority.tsv"}
+    )
+
+    expected = capture_tool.WEB_ROOT.resolve() / "gallery/files/qualifier_priority.tsv"
+    assert events == ["expect_file_chooser", ("click", selector), "file_chooser_opened", ("set_files", str(expected))]
 
 
 def test_replay_resets_then_performs_steps_through_the_named_one(

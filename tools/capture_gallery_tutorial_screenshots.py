@@ -70,6 +70,7 @@ CAPTURE_ACTION_TYPES = frozenset(
         "wait",
         "resetSettings",
         "generate",
+        "upload",
     }
 )
 CAPTURE_SELECT_MENU_SELECTOR = ".gbdraw-capture-select-menu"
@@ -480,6 +481,27 @@ def add_step_replay_validation(
             result.errors.append(
                 f"{context.label}: replay action {index} has an unsupported type: {action_type or action!r}"
             )
+        elif action_type == "upload":
+            try:
+                resolve_upload_file(action)
+            except ValueError as error:
+                result.errors.append(f"{context.label}: replay action {index} {error}")
+
+
+def resolve_upload_file(action: dict[str, Any]) -> Path:
+    """The file an `upload` action chooses: a file under gbdraw/web, named by its path from there.
+
+    The Gallery serves that folder, so the path is the one a reader downloads (`gallery/files/...`).
+    """
+
+    reference = as_text(action.get("path"))
+    web_root = WEB_ROOT.resolve()
+    path = (web_root / reference).resolve()
+    if not as_text(action.get("selector")):
+        raise ValueError("upload needs the selector of the button that opens the file chooser.")
+    if not reference or not path.is_relative_to(web_root) or not path.is_file():
+        raise ValueError(f"upload path must name a file under gbdraw/web: {reference or '(none)'}")
+    return path
 
 
 def validate_tutorial_media(
@@ -673,6 +695,11 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         )
     elif action_type == "generate":
         generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))
+    elif action_type == "upload":
+        path = resolve_upload_file(action)
+        with page.expect_file_chooser() as chooser:
+            page.locator(selector).first.click()
+        chooser.value.set_files(str(path))
     else:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
 
