@@ -513,13 +513,13 @@
           "path": "tests/web/owner-graph-baseline.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
-          "retireWhen": "never: the layer, forward-closure, heavy-derived, identity-from-display, injection-edge, and whole-object-port detectors stay; the state-backdoor detector left it when state was frozen, and the projection call-shape count when the pull-request random walk landed"
+          "retireWhen": "never: the layer, forward-closure, heavy-derived, identity-from-display, injection-edge, and whole-object-port detectors stay; the state-backdoor detector left it when state was frozen; the projection call-shape count stays (the pull-request random walk compares live with Generate and never sees how a projection is called)"
         },
         {
           "path": "tests/web/owner-graph-detectors.test.mjs",
           "rootCause": "P10",
           "job": "web-contracts-pr",
-          "retireWhen": "never: it tests the detectors; the state-backdoor and projection call-shape cases leave with their code in the checker-only pull request that deletes it"
+          "retireWhen": "never: it tests the detectors; the state-backdoor cases leave with their code in the checker-only pull request that deletes it"
         },
         {
           "path": "tests/web/owner-graph-replay.test.mjs",
@@ -532,6 +532,11 @@
         {
           "path": "tests/web/owner-graph-baseline.test.mjs",
           "symbol": "OWNER_GRAPH_BASELINE",
+          "kind": "count-map"
+        },
+        {
+          "path": "tests/web/owner-graph-baseline.test.mjs",
+          "symbol": "PROJECTION_SHAPE_BASELINE",
           "kind": "count-map"
         }
       ]

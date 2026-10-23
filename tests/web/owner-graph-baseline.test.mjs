@@ -8,11 +8,11 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 // detectors in tools/web-owner-graph-detectors.mjs observe the coupling
 // channels the import graph does not: owner objects injected at composition,
 // closures bound to owners created later, factories that take whole owner
-// objects, heavy derived trigger sites, and identities read from display
-// values. `state` is frozen (tests/web/drawing-context.test.mjs), so no
-// detector counts functions assigned into it, and the pull-request random walk
-// (R3) replaced the count of projection call shapes; the code of both
-// detectors leaves in a checker-only pull request.
+// objects, heavy derived trigger sites, identities read from display values,
+// and the call shapes of each projection domain outside its owner.
+// `state` is frozen (tests/web/drawing-context.test.mjs), so no detector counts
+// functions assigned into it; that detector's code leaves in a checker-only
+// pull request.
 //
 // The literal is a registered design-rule allowlist
 // (tools/web-design-rule-guards.json, R13, kind `count-map`): an observed
@@ -73,6 +73,18 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|restoreLegendStructure|shown-join': 1
 };
 
+// Distinct call shapes per projection domain outside its owner (R3: one
+// projection is one call shape). May not grow.
+const PROJECTION_SHAPE_BASELINE = {
+  'feature-visibility': 1,
+  'feature-visibility-labels': 1,
+  'label-intent': 1,
+  'legend-order': 1,
+  'palette-rules': 1,
+  'strokes': 0,
+  'composition': 1
+};
+
 const SUBJECT_DETECTORS = [
   'owner-graph.injection-edge.v1',
   'owner-graph.forward-closure.v2',
@@ -94,6 +106,13 @@ test('no owner-graph subject in the working tree exceeds its baseline entry (R13
   reportLowerable(t, 'OWNER_GRAPH_BASELINE', lowerable);
   assert.deepEqual(above.map(({ key, observed: count }) => `${key}: ${count}`), [],
     'new owner-graph subjects (R13): remove the coupling, or register the entry in an authority-only pull request');
+});
+
+test('the distinct projection call shapes per domain do not grow (R3, R13)', (t) => {
+  const { above, lowerable } = compareCountBaseline(results['projection.call-shape.v1'].shapesByDomain, PROJECTION_SHAPE_BASELINE);
+  reportLowerable(t, 'PROJECTION_SHAPE_BASELINE', lowerable);
+  assert.deepEqual(above.map(({ key, observed: count }) => `${key}: ${count}`), [],
+    `new projection call shapes (R3): ${JSON.stringify(results['projection.call-shape.v1'].observedShapes.map(({ domain, path, line, shape }) => `${domain} ${path}:${line} ${shape}`), null, 1)}`);
 });
 
 // R13 layers (`webLayerOf` in tools/web-owner-graph-detectors.mjs): a module

@@ -209,22 +209,27 @@ const enclosingFunction = (functions, index) => functions
   .filter(([, start, end]) => start <= index && index < end).at(-1)?.[0] || '';
 
 // The slice-writer import guard: the calls of the writers a module imports
-// from the slice modules of `handles` (`import { … } from '…/drawing/<slice>.js'`),
+// from the slice modules of `handles` (`import { … } from '…/drawing/<slice>.js'`,
+// single or double quotes, on one line or several, or `import * as p from …`),
 // whatever handle or alias they receive. A writer is an imported function that
 // `SLICE_READERS` does not list, or a method of an imported slice object other
-// than the listed `capture` and `create`, which makes a new slice. A slice
-// writer handed on as a value (passed or stored, not called) is not seen.
+// than the listed `capture` and `create`, which makes a new slice; through a
+// namespace import, a function `p.name(` that `SLICE_READERS` does not list. A
+// slice writer handed on as a value (passed or stored, not called), reached
+// through another module's re-export, or called as `p.SLICE.method(` on a
+// namespace is not seen.
 const sliceModuleOf = (handle) => `${handle.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}.js`;
 const importedSliceWriterCalls = (source, code, handles) => {
   const files = new Set(handles.map(sliceModuleOf));
-  return [...source.matchAll(/\bimport\s*\{([^}]*)\}\s*from\s*'([^']*\/drawing\/([\w-]+\.js))'/g)]
-    .filter(({ index, 3: file }) => files.has(file) && code.startsWith('import', index))
-    .flatMap(({ 1: names }) => names.split(',').map((name) => name.trim()).filter(Boolean).map((name) => {
-      const [, exported, local = exported] = name.match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/);
-      return { exported, local };
-    }))
+  return [...source.matchAll(/\bimport\s*(?:\{([^}]*)\}|\*\s*as\s+([\w$]+))\s*from\s*(['"])([^'"]*\/drawing\/([\w-]+\.js))\3/g)]
+    .filter(({ index, 5: file }) => files.has(file) && code.startsWith('import', index))
+    .flatMap(({ 1: names, 2: namespace }) => namespace ? [{ exported: '', local: namespace }]
+      : names.split(',').map((name) => name.trim()).filter(Boolean).map((name) => {
+        const [, exported, local = exported] = name.match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/);
+        return { exported, local };
+      }))
     .flatMap(({ exported, local }) => [...code.matchAll(new RegExp(`(?<![\\w$.])${local}\\b(?:\\s*\\.\\s*([\\w$]+))?\\s*\\(`, 'g'))]
-      .filter(({ 1: method }) => method !== 'create' && !SLICE_READERS.includes(method ? `${exported}.${method}` : exported))
+      .filter(({ 1: method }) => method !== 'create' && !SLICE_READERS.includes(exported && method ? `${exported}.${method}` : exported || method))
       .map(({ index }) => index));
 };
 
@@ -430,6 +435,19 @@ test('the writer guard flags a direct edit and leaves reads alone', () => {
     '  PAINT_SLICE.install(held, rows);',
     '};'
   ].join('\n')).sort(), ['renameRow:4', 'restoreRows:8']);
+  // Double quotes, a multi-line list, and a namespace import are seen too.
+  assert.deepEqual(paintWriters([
+    'import {',
+    '  paintOf,',
+    '  renameListedLegendRow',
+    '} from "../../services/drawing/paint.js";',
+    "import * as paint from '../../services/drawing/paint.js';",
+    'const renameRow = (held, row) => {',
+    '  renameListedLegendRow(held, row, {});',
+    '  paint.renameListedLegendRow(held, row, {});',
+    '  return paintOf(held);',
+    '};'
+  ].join('\n')).sort(), ['renameRow:7', 'renameRow:8']);
   assert.match(ruleWriterProblems({ 'js/app/new-import.js': ['importRules:9'] }).join('\n'),
     /js\/app\/new-import\.js: importRules:9 writes featureVisibilityManualRules/);
   assert.match(ruleWriterProblems({}).join('\n'), /editFeatureVisibilityRules no longer writes/);

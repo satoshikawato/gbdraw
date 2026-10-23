@@ -354,7 +354,8 @@ passes, by its name, by module, with its route; a slice reader is one only by
 the `SLICE_READERS` list in `tests/web/helpers/drawing-state.mjs`, which the
 isolation table in `tests/web/per-mode-drawings.test.mjs` proves changes no
 drawing, and a new reader is an authority-only change; a write through a row
-read from the list, or a slice writer handed on as a value, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
+read from the list, a slice writer handed on as a value, one reached through another
+module's re-export, and `p.SLICE.method(` on a namespace import are not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
 `tests/web/feature-label-visual-unit.test.mjs`;
@@ -403,7 +404,9 @@ reactive object holds display values only, never a copy of an owner's data.
 
 One projection means one call shape: a domain's projection function is called
 from outside its owner in one form, not re-implemented or re-sequenced per
-caller.
+caller. The count of distinct call shapes per domain stays at or below its
+baseline (R13): lowering an entry is optional, and adding or raising one is an
+authority-only change.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
 parity case or a step of the random walk compares a live path with Python's
@@ -446,7 +449,8 @@ replace, and named regression cases) with
 `tests/web/live-generate-parity-legend.playwright.spec.js` and
 `tests/web/live-generate-parity-track-data.playwright.spec.js` (named
 regression cases of Legend edits, track-data changes, and drawing switches): a
-live edit equals the next Generate.
+live edit equals the next Generate; and the `projection-shapes` baseline in
+`tests/web/owner-graph-baseline.test.mjs`.
 
 ### R4: A fast path matches the canonical reader or declines
 
@@ -645,7 +649,8 @@ or Reset Settings).
   on the drawing list (adding, duplicating, renaming, moving, or deleting a
   drawing), Reset all drawings (until the Reset dialog offers Reset this drawing, Reset
   Settings resets all drawings), until each drawing binds its own auxiliary file cards a
-  card's import, Remove, and Retry (R10), or
+  card's import, Remove, and Retry (R10), once a genome input file can be replaced
+  for every drawing that uses it (R16-5) that replacement, or
   a step that changes only Session-level values (the Session title, Auto
   Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
   Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
@@ -746,7 +751,8 @@ Guards:
   drawing's steps and the project steps and never change the other drawing (a
   hash of each drawing per step); a switch settles the departing drawing's open
   step in that drawing and records none; Reset Settings, an Instant Preview
-  step, and a card import's Retry are one project step each; a Session-level
+  step are one project step each, and while a card's file is shared by every
+  drawing (R10) so is a card import's Retry; a Session-level
   edit is a project step; the project step limit and the slot port of a
   drawing that is not shown.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
@@ -846,8 +852,8 @@ an entry is optional (the test names what may be lowered). Adding or raising an
 entry is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
-closures `owner-graph.forward-closure.v2`, whole-object ports, heavy derived
-trigger sites
+closures `owner-graph.forward-closure.v2`, whole-object ports,
+projection call shapes, heavy derived trigger sites
 `heavy-derived.trigger-site.v2`, identity read from a display value
 `owner-graph.identity-from-display.v1` (a join on a fill or stroke, and a join
 on the values a Result shows), and import direction
@@ -952,8 +958,8 @@ nothing else.
 
 A project has one or more drawings, held by ID in the drawing store of
 `state.js`, a `ReadonlyMap` that `createDrawingState` fills and only
-`state.drawingList()`, `state.drawingOf(id)`, and `state.drawingOfMode(mode)`
-read. `state.activeDrawingId` names the shown
+`state.drawingList()`, `state.drawingOf(id)`, and, until the Session format holds
+a list of drawings, `state.drawingOfMode(mode)` read. `state.activeDrawingId` names the shown
 drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
 comes from the kind it is created as (`circular`, `linear`, `linear-2`, …) and never
 changes, and its `mode` is fixed at creation; once the Session format holds a list of
@@ -1038,8 +1044,9 @@ one drawing never reaches another (PD-OI-090).
   Until the Session format holds a list of drawings, `services/mode-scoped-migration.js`
   splits a Session 27–44 draft into the two slices, and `split_draft_into_modes` in
   `gbdraw/session_io.py` is its Python twin; then Python alone converts a Session 27–44,
-  once at Load. A Session 46, 47, or 48 moves to the list without Python, and Load makes
-  the drawing of a mode that has no Result only when the Session shows that mode was used
+  once at Load. Once the Session format holds a list of drawings, a Session 46, 47, or 48
+  moves to the list without Python, and Load makes the drawing of a mode that has no
+  Result only when the Session shows that mode was used
   (its input files, a Save while it was shown, or a setting that differs from the default
   and from the other mode's). A Session 45 is not read.
 
