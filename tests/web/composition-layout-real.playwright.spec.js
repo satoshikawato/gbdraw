@@ -837,3 +837,128 @@ test('real Circular render keeps a top title outside an Upper Left Legend a rena
   expect(overlaps(generated.automaticBounds.title, generated.automaticBounds.legend)).toBe(false);
   expect(externalRequests).toEqual([]);
 });
+
+// The root canvas, the Legend's box from its metadata at its translate, its
+// offset, and the saved Result's root.
+const canvasState = (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const composition = await import('./js/app/legend-layout/composition-actions.js');
+  const svg = app.svgContainer.querySelector('svg');
+  const binding = composition.bindCompositionMetadata(svg);
+  const legend = binding.legend.targets[0];
+  const [, lx, ly] = /translate\(\s*([^,\s)]+)[\s,]+([^)\s]+)\s*\)/.exec(legend.getAttribute('transform')).map(Number);
+  const local = binding.metadata.legend.localBounds;
+  const rootOf = (root) => ({
+    viewBox: root.getAttribute('viewBox'), width: root.getAttribute('width'), height: root.getAttribute('height')
+  });
+  const saved = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml').documentElement;
+  return {
+    root: rootOf(svg),
+    saved: rootOf(saved),
+    base: svg.getAttribute('data-original-view-box'),
+    legendBox: { x: local.x + lx, y: local.y + ly, width: local.width, height: local.height },
+    legendTransform: legend.getAttribute('transform'),
+    delta: composition.compositionUserDeltas(svg).legend,
+    edge: binding.metadata.spacing.edgePaddingPx,
+    screenOverflow: legend.getBoundingClientRect().left - svg.getBoundingClientRect().left
+  };
+});
+const expectHoldsLegend = (state) => {
+  const [x, y, width, height] = state.root.viewBox.split(' ').map(Number);
+  const box = state.legendBox;
+  expect(box.x - state.edge, JSON.stringify(state)).toBeGreaterThanOrEqual(x - 1e-6);
+  expect(box.y - state.edge).toBeGreaterThanOrEqual(y - 1e-6);
+  expect(box.x + box.width + state.edge).toBeLessThanOrEqual(x + width + 1e-6);
+  expect(box.y + box.height + state.edge).toBeLessThanOrEqual(y + height + 1e-6);
+  expect(state.saved, 'the saved Result has the shown canvas').toEqual(state.root);
+};
+
+// OV-1631 (Owner 2026-10-23: the canvas grows so a moved item stays inside
+// it): a Legend dragged past the left edge, then moved to Top, keeps its
+// offset; the canvas holds it with the edge padding when it is dropped and
+// when Generate places it, a second Generate draws the same canvas, the saved
+// Result has the shown size, and Reset Layout returns the automatic canvas.
+test('real Circular render grows the canvas to hold a Legend dragged off the edge, on the drop and on Generate', async ({ page, baseURL }) => {
+  test.setTimeout(600000);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
+  await openApp(page);
+  await renderRealDiagram(page, 'circular', readFileSync(genbankPath, 'utf8'), { legendSide: 'right' });
+  const fresh = await canvasState(page);
+  expect(fresh.base).toBeNull();
+  // Drag the Legend so its left edge lands 60 screen px left of the canvas.
+  await dragCompositionRole(page, 'legend', -(fresh.screenOverflow + 60), 67);
+  const dropped = await canvasState(page);
+  expect(Number(dropped.root.viewBox.split(' ')[0]), 'the canvas grew to the left').toBeLessThan(0);
+  expectHoldsLegend(dropped);
+
+  await page.evaluate(async () => { window.__GBDRAW_APP__.form.legend = 'top'; await window.Vue.nextTick(); });
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  await page.waitForFunction(() => JSON.parse(
+    document.querySelector('svg[data-gbdraw-composition]').getAttribute('data-gbdraw-composition')
+  ).legendSide === 'top', null, { timeout: 120000 });
+  const top = await canvasState(page);
+  dropped.delta.forEach((value, index) => expect(top.delta[index], 'the offset is kept').toBeCloseTo(value, 6));
+  expectHoldsLegend(top);
+
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const again = await canvasState(page);
+  expect({ root: again.root, legend: again.legendTransform }, 'Generate again draws the same canvas')
+    .toEqual({ root: top.root, legend: top.legendTransform });
+
+  await page.evaluate(async () => { window.__GBDRAW_APP__.resetLayout(); await window.Vue.nextTick(); });
+  await expect.poll(async () => (await canvasState(page)).delta.every((value) => value === 0), { timeout: 30000 }).toBe(true);
+  const reset = await canvasState(page);
+  expect(reset.base, 'the automatic canvas keeps no record of the growth').toBeNull();
+  expect(reset.saved).toEqual(reset.root);
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await canvasState(page)).root, 'Reset Layout returns the automatic canvas Generate draws').toEqual(reset.root);
+  expect(externalRequests).toEqual([]);
+});
+
+// R3: a Legend edit on the live Result (the in-place JS replan, no render)
+// with a Legend dragged off the edge grows the canvas exactly as Generate of
+// the same draft does.
+test('real Circular render: the live canvas of a moved Legend equals Generate after an in-place Legend edit', async ({ page, baseURL }) => {
+  test.setTimeout(600000);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
+  await openApp(page);
+  await renderRealDiagram(page, 'circular', readFileSync(genbankPath, 'utf8'), { legendSide: 'right' });
+  await loadEditorLegendRows(page, [[addedLegendKey, legendColor]]);
+  await page.waitForFunction((key) => Array.from(document.querySelectorAll('g[data-legend-key]'))
+    .some((entry) => entry.getAttribute('data-legend-key') === key), addedLegendKey, { timeout: 180000 });
+  const fresh = await canvasState(page);
+  await dragCompositionRole(page, 'legend', -(fresh.screenOverflow + 60), 67);
+  await page.evaluate(() => {
+    window.__q3Renders = 0;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...window.__GBDRAW_TEST_HOOKS__,
+      beforeDiagramGenerationResponse: () => { window.__q3Renders += 1; }
+    };
+  });
+  await page.evaluate(async ({ key, caption }) => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === key), caption);
+  }, { key: addedLegendKey, caption: renamedLegendCaption });
+  await page.waitForFunction(({ key, caption }) => Array.from(document.querySelectorAll('g[data-legend-key]'))
+    .some((entry) => entry.getAttribute('data-legend-key') === key && entry.querySelector('text')?.textContent === caption),
+  { key: addedLegendKey, caption: renamedLegendCaption }, { timeout: 180000 });
+  const live = await canvasState(page);
+  expect(await page.evaluate(() => window.__q3Renders), 'the Legend edit replans in place').toBe(0);
+  expect(Number(live.root.viewBox.split(' ')[0]), 'the live canvas grew to the left').toBeLessThan(0);
+  expectHoldsLegend(live);
+
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  await page.waitForFunction((key) => Array.from(document.querySelectorAll('g[data-legend-key]'))
+    .some((entry) => entry.getAttribute('data-legend-key') === key), addedLegendKey, { timeout: 180000 });
+  const generated = await canvasState(page);
+  const numbers = (state) => [
+    ...state.root.viewBox.split(' ').map(Number),
+    Number.parseFloat(state.root.width), Number.parseFloat(state.root.height),
+    state.legendBox.x, state.legendBox.y, state.legendBox.width, state.legendBox.height
+  ];
+  numbers(generated).forEach((value, index) => {
+    expect(value, `canvas/Legend value ${index}: live equals Generate`).toBeCloseTo(numbers(live)[index], 6);
+  });
+  live.delta.forEach((value, index) => expect(generated.delta[index]).toBeCloseTo(value, 6));
+  expect(externalRequests).toEqual([]);
+});
