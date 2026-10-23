@@ -2,6 +2,8 @@
 import { normalizeDefaultColor, normalizeSpecificRuleColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
+import { CARD_ROW_MARKS } from './card-row-marks.js';
+/** @import { CardRowMarks } from './card-row-marks.js' */
 
 /**
  * A row of a pre-normalization table (Sessions 31-39) that was repaired or dropped.
@@ -289,17 +291,6 @@ export const parseBlacklistWords = (text) => {
 /** @typedef {{ feat: string, qual: string, key: string, importedFrom?: 'whitelist' }} WhitelistRuleRow */
 
 /**
- * The mark a row of each card's file carries.
- * @typedef {{ t_color: { fromFile: true }, whitelist: { importedFrom: 'whitelist' }, qualifier_priority: { importedFrom: 'qualifier_priority' } }} CardRowMarks
- */
-/** @type {Readonly<CardRowMarks>} */
-const CARD_ROW_MARKS = Object.freeze({
-  t_color: Object.freeze({ fromFile: true }),
-  whitelist: Object.freeze({ importedFrom: 'whitelist' }),
-  qualifier_priority: Object.freeze({ importedFrom: 'qualifier_priority' })
-});
-
-/**
  * Whether `row` is a row `card`'s file added.
  * @param {Readonly<CardMarkedRow>} row
  * @param {RowFileCard} card
@@ -318,30 +309,17 @@ export const isCardRow = (row, card) => card === 't_color'
  */
 export const markedRows = (rows, card) => rows.map((row) => ({ ...row, ...CARD_ROW_MARKS[card] }));
 
-/**
- * Makes `row` the user's: it loses `card`'s mark (an edit of the row).
- * @param {CardMarkedRow} row Changed in place.
- * @param {RowFileCard} card
- */
-export const unmarkCardRow = (row, card) => {
-  Object.keys(CARD_ROW_MARKS[card]).forEach((key) => { delete row[/** @type {keyof CardMarkedRow} */ (key)]; });
-};
-
 /** @param {unknown} left @param {unknown} right */
 const sameColor = (left, right) => String(left ?? '').toLowerCase() === String(right ?? '').toLowerCase();
 
 /**
- * The Default colors with a file's colors, and what the file set.
- * @param {Readonly<Record<string, string>>} current
+ * What a Default colors file set: each type's color and the user color it replaced.
  * @param {Readonly<Record<string, string>>} colors The file's colors by feature type.
  * @param {(type: string) => string | null} userColorOf The user color a type has now (`null`: the palette's).
- * @returns {{ colors: Record<string, string>, imported: Record<string, ImportedDefaultColor> }}
+ * @returns {Record<string, ImportedDefaultColor>}
  */
-export const withImportedDefaultColors = (current, colors, userColorOf) => ({
-  colors: { ...current, ...colors },
-  imported: Object.fromEntries(Object.entries(colors)
-    .map(([type, color]) => [type, { color, handColor: userColorOf(type) }]))
-});
+export const importedDefaultColors = (colors, userColorOf) => Object.fromEntries(Object.entries(colors)
+  .map(([type, color]) => [type, { color, handColor: userColorOf(type) }]));
 
 /**
  * The Default colors without what a file set: each type that still has the

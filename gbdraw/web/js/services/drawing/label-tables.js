@@ -10,6 +10,7 @@
 // imports, and Load, a History restore, and Reset (`install`, `reset`).
 import { reactive, ref } from '../../utils/reactivity.js';
 import { cloneJsonData } from '../json-clone.js';
+import { unmarkCardRow } from '../card-row-marks.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
 /** @import { ReadonlyRef, Ref } from '../../utils/reactivity.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
@@ -219,8 +220,7 @@ export const setWhitelistRuleField = (slice, rule, field, value) => {
   const row = membersOf(slice).manualWhitelist.find((candidate) => candidate === rule);
   if (!row) return;
   row[field] = value;
-  // The mark of the Whitelist file card (services/file-imports.js).
-  delete row.importedFrom;
+  unmarkCardRow(row, 'whitelist');
 };
 
 /**

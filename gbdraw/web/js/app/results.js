@@ -5,7 +5,7 @@ import { clearQueuedPalette, queuePalette, replaceDefaultColors, selectPalette a
 /** @import { PaletteDrawing } from '../services/drawing/palette.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 import { listText, t } from '../utils/i18n.js';
-import { withImportedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
+import { importedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
 /** @import { FileImports } from '../services/file-imports.js' */
 
 // The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
@@ -288,7 +288,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {Record<string, string>} colors
    */
   const importDefaultColors = (drawing, colors) => {
-    const { imported } = withImportedDefaultColors(drawing.currentColors.value, colors, (type) => readUserDefaultColor(drawing, type));
+    const imported = importedDefaultColors(colors, (type) => readUserDefaultColor(drawing, type));
     editDefaultColors(drawing, colors);
     drawing.fileImports.d_color = imported;
   };

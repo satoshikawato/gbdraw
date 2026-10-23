@@ -3782,13 +3782,8 @@ export const createRunAnalysis = ({
           } else {
             entry = await readOncePerFile(readFiles, `losat-fasta:${persistentCacheKey}`, async () => {
               extracted = true;
-              try {
-                // One parse per file (OV-1556); each card slices its record and region from it.
-                const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
-                if (!records) throw diagnosticError('INPUT_UNREADABLE');
-                if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
-                return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
-              } catch (fastError) {
+              /** @param {unknown} [reason] Why the browser reader did not serve the file (none: it has no reader for it). */
+              const extractWithWorker = async (reason) => {
                 const response = await runDiagramHelperOperation(
                   DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA,
                   {
@@ -3806,14 +3801,25 @@ export const createRunAnalysis = ({
                 if (res.error) throw res.error;
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;
-                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', formatError(fastError));
+                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', reason ? formatError(reason) : '');
                 }
                 return Object.freeze({
                   fasta: res.fasta,
                   recordId: res.record_id || `seq_${idx + 1}`,
                   canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
                 });
+              };
+              try {
+                // One parse per file (OV-1556); each card slices its record and region from it.
+                const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
+                if (records) {
+                  if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
+                  return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
+                }
+              } catch (fastError) {
+                return await extractWithWorker(fastError);
               }
+              return await extractWithWorker();
             }, LOSAT_FASTA_READS_PER_FILE);
             if (!extracted && losatTiming) losatTiming.fastaCacheHits += 1;
           }

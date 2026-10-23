@@ -2,7 +2,9 @@
 // The settings slice of a drawing: its sixteen draft settings (Session 46
 // `modes.<m>.config` and the drawing's `ui` values), among them what the
 // Default colors and Blacklist files set (`fileImports`, Session 48, OV-1280;
-// its owner is services/file-imports.js). Unlike an editor slice,
+// its writers are app/watchers.js, the Blacklist import, and app/results.js,
+// the Default colors import; services/file-imports.js holds the pure helpers).
+// Unlike an editor slice,
 // the controls and owners that edit a setting keep writing it (plan-r2 §13
 // items 3 and 4): this module owns the whole-member paths only. Load and a
 // History restore write members with `install`, the live-input rollback and

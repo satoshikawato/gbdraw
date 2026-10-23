@@ -10,6 +10,7 @@ const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', '
 const serviceNames = [
   'current-worker-result-source.js',
   'drawn-groups.js',
+  'card-row-marks.js',
   'file-imports.js',
   'legend-row-names.js',
   'drawing/paint.js',

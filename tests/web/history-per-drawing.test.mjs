@@ -642,3 +642,14 @@ for (const later of ['redraw', 'rename']) test(`an Undo from the other drawing $
   await app.undoHistory();
   assert.deepEqual(captions(), later === 'redraw' ? ['Hand', 'Imported', 'GC content'] : ['Hand', 'GC']);
 });
+
+// A Retry of a failed card import changes every drawing its apply reaches (the
+// earlier file's part leaves the other drawings), so it is recorded as the
+// card's own import is: one project step, not the shown drawing's checkpoint.
+test('Retry of a failed card import is recorded as a project step', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  const retry = source.split('\n').find((line) => line.includes('retryAuxiliaryImportFailure: () =>')) || '';
+  assert.match(retry, /history\.runProjectStep\(/);
+  assert.doesNotMatch(retry, /runUndoableCheckpoint/);
+});

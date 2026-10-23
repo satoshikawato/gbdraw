@@ -24,7 +24,7 @@ import {
   serializeQualifierPriorityRules,
   serializeSpecificRules,
   withImportedBlacklistWords,
-  withImportedDefaultColors
+  importedDefaultColors
 } from './file-imports.js';
 /** @import { FileImports } from './file-imports.js' */
 import {
@@ -5713,7 +5713,7 @@ export const projectCanonicalSessionRequest = ({
   /** @type {FileImports} */
   const projectedFileImports = {};
   if (fromCardFiles && defaultColorsRef?.resourceId) {
-    projectedFileImports.d_color = withImportedDefaultColors({}, projectedDefaultColors, () => null).imported;
+    projectedFileImports.d_color = importedDefaultColors(projectedDefaultColors, () => null);
   }
   // A CLI blacklist file gives every word of the text the request holds.
   const blacklistImport = fromCardFiles && explicitBindings?.blacklist != null
