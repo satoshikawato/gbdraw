@@ -430,6 +430,19 @@ export const losatSearchSequences = (drawn, sequences) => {
  * @template Spec
  * @typedef {{ query: LosatSourceSide, subject: LosatSourceSide, searchContext: string | null, args: readonly unknown[], scope: LosatSourceScope, specs: Spec[] }} LosatSourceBatch
  */
+/**
+ * A side's renamed FASTA and digest, as `prepareLosatSourceBatches` built it from these record entries with this
+ * digest function (OV-1565): Generate reuses the record entries it extracted before, so an unchanged side is not
+ * rebuilt or rehashed. `ids` lists each renamed identifier with its record's position in the side and original ID.
+ * @typedef {{ entries: readonly object[], hashText: (text: string) => Promise<string>, fasta: string, hash: string,
+ *   ids: readonly (readonly [string, number, string])[] }} PreparedLosatSide
+ */
+/**
+ * The sides the last call prepared, by kind and card uids (the other inputs of the renamed FASTA). Only the last
+ * call's sides stay, so the hold is one Generate's sides whatever their count.
+ * @type {Map<string, PreparedLosatSide>}
+ */
+let lastPreparedLosatSides = new Map();
 
 /**
  * @template {Partial<LinearSeq>} S
@@ -448,33 +461,48 @@ export const prepareLosatSourceBatches = async ({
   const plan = planLosatSourceJobs({ sequences, specs, buildArgs, drawnCount });
   /** @type {Map<string, LosatSourceSide>} */
   const sides = new Map();
+  /** @type {Map<string, PreparedLosatSide>} */
+  const preparedSides = new Map();
   /** @param {number[]} indexes */
   const prepareSide = async (indexes) => {
     const ordered = [...indexes].sort((a, b) => String(sequences[a].uid).localeCompare(String(sequences[b].uid)));
     const key = ordered.join(',');
     // `sides` holds the sides prepared under a key.
     if (sides.has(key)) return /** @type {LosatSourceSide} */ (sides.get(key));
-    /** @type {LosatSourceSide['ids']} */
-    const ids = new Map();
-    /** @type {string[]} */
-    const parts = [];
-    for (const index of ordered) {
-      const entry = await getEntry(index);
-      let fasta = entry.fasta;
-      const prefix = !protein && ordered.length > 1
-        ? `n_${await hashText(String(sequences[index].uid))}` : '';
-      let ordinal = 0;
-      fasta = fasta.replace(/^>(\S+)([^\r\n]*)/gm, (/** @type {string} */ _header, /** @type {string} */ originalId, /** @type {string} */ description) => {
-        const id = prefix ? `${prefix}_${ordinal++}` : originalId;
-        if (ids.has(id)) throw new Error(`Duplicate LOSAT source identifier: ${id}`);
-        ids.set(id, { index, originalId });
-        return `>${id}${description}`;
-      });
-      parts.push(fasta.endsWith('\n') ? fasta : `${fasta}\n`);
+    /** @type {{ fasta: string }[]} */
+    const entries = [];
+    for (const index of ordered) entries.push(await getEntry(index));
+    const uids = ordered.map((index) => String(sequences[index].uid));
+    const preparedKey = JSON.stringify([Boolean(protein), uids]);
+    let prepared = preparedSides.get(preparedKey) || lastPreparedLosatSides.get(preparedKey) || null;
+    if (!prepared || prepared.hashText !== hashText
+      || prepared.entries.some((entry, position) => entry !== entries[position])) {
+      /** @type {Map<string, [string, number, string]>} */
+      const renamed = new Map();
+      /** @type {string[]} */
+      const parts = [];
+      for (const [position, entry] of entries.entries()) {
+        const prefix = !protein && ordered.length > 1 ? `n_${await hashText(uids[position])}` : '';
+        let ordinal = 0;
+        const fasta = entry.fasta.replace(/^>(\S+)([^\r\n]*)/gm, (/** @type {string} */ _header, /** @type {string} */ originalId, /** @type {string} */ description) => {
+          const id = prefix ? `${prefix}_${ordinal++}` : originalId;
+          if (renamed.has(id)) throw new Error(`Duplicate LOSAT source identifier: ${id}`);
+          renamed.set(id, [id, position, originalId]);
+          return `>${id}${description}`;
+        });
+        parts.push(fasta.endsWith('\n') ? fasta : `${fasta}\n`);
+      }
+      const fasta = parts.join('');
+      prepared = { entries, hashText, fasta, hash: await hashText(fasta), ids: [...renamed.values()] };
     }
-    const fasta = parts.join('');
-    const hash = await hashText(fasta);
-    const side = { indexes: ordered, ids, fasta, sequenceKey: `source:${hash}`, hash };
+    preparedSides.set(preparedKey, prepared);
+    const side = {
+      indexes: ordered,
+      ids: new Map(prepared.ids.map(([id, position, originalId]) => [id, { index: ordered[position], originalId }])),
+      fasta: prepared.fasta,
+      sequenceKey: `source:${prepared.hash}`,
+      hash: prepared.hash
+    };
     sides.set(key, side);
     return side;
   };
@@ -492,6 +520,7 @@ export const prepareLosatSourceBatches = async ({
     batches.push(batch);
     job.specs.forEach((spec) => bySpec.set(spec, batch));
   }
+  lastPreparedLosatSides = preparedSides;
   return { batches, bySpec };
 };
 

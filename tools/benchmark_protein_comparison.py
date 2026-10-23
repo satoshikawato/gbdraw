@@ -427,37 +427,57 @@ def isolated_merge_operations(cc, operations):
     return isolated
 
 def cache_case(root, pc, name):
+    """Real Web conversion of `size` raw tables: cold, display-only change, threshold change, smaller comparison.
+
+    The hold of the last conversion's tables (OV-1579) keeps every table of a comparison of any size, so the
+    display-only change reuses all of them, the threshold change filters again without parsing, and the next,
+    smaller conversion replaces the hold.
+    """
     size = int(name.split("-")[1])
     ns = helpers(root)
-    raw = "q\ts\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t200\n"
+    def entry(pid, record_index, record_id, feature_index=0, start=0, end=90):
+        return {"protein_id": pid, "record_index": record_index, "feature_index": feature_index,
+                "record_id": record_id, "start": start, "end": end, "strand": 1, "label": pid,
+                "protein_length": 30, "feature_svg_id": f"feature_{pid}", "feature_type": "CDS",
+                "feature_hash_start": start, "feature_hash_end": end, "feature_hash_strand": 1,
+                "gene": None, "product": None, "note": None}
+    maps = ({"a1": entry("a1", 0, "record_a")},
+            {"b": entry("b", 1, "record_b"), "b2": entry("b2", 1, "record_b", 1, 100, 190)})
+    raw = ("a1\tb\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t300\n"
+           "a1\tb2\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t60\n")
+    def payload(count):
+        return {"records": [{"recordIndex": i, "recordId": rid, "proteinMap": pm,
+                             "runtimeBindingHash": f"{rid}-runtime", "displayBindingHash": f"{rid}-display",
+                             "viewTransform": {"length": 200, "reverse": False}}
+                            for i, (rid, pm) in enumerate((("record_a", maps[0]), ("record_b", maps[1])))],
+                "pairs": [{"pairIndex": 0, "queryIndex": 0, "subjectIndex": 1, "displayPair": i == 0,
+                           "cacheKey": f"pair-{i}", "rawTsvOffset": i * len(raw.encode()),
+                           "rawTsvBytes": len(raw.encode())} for i in range(count)]}
     def run():
-        ns["_WEB_LOSATP_FILTERED_HIT_CACHE"].clear()
-        ns["_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE"].clear()
+        for table in ("_WEB_LOSATP_HIT_TABLES", "_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE"):
+            ns[table].clear()
         ns["_WEB_LOSATP_CACHE_ORDER"].clear()
-        def parsed():
-            return pc.filter_protein_hits_by_thresholds(pc.parse_losatp_outfmt6(raw),
-                bitscore=50, evalue=0.01, identity=0, alignment_length=0)
-        for i in range(size):
-            ns["_web_losatp_cache_set"]("filtered", str(i), parsed())
-        ns["_web_losatp_cache_set"]("converted", "previous-result", "{}")
-        hits = misses = 0
-        outputs = []
-        for i in range(size):
-            cached = ns["_web_losatp_cache_get"]("filtered", str(i))
-            if cached is None:
-                misses += 1
-                cached = parsed()
-                ns["_web_losatp_cache_set"]("filtered", str(i), cached)
-            else:
-                hits += 1
-            outputs.append(cached)
-        retained = ns["_WEB_LOSATP_FILTERED_HIT_CACHE"]
-        return {"semantic": outputs, "diagnostics": {"warmHits": hits, "warmMisses": misses, "coldParses": size, "warmParses": misses,
-                "retainedFilteredTables": len(retained),
-                "retainedDataFrameBytes": sum(int(df.memory_usage(index=True, deep=True).sum()) for df in retained.values()),
-                "convertedPayloads": len(ns["_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE"])}}
+        with tempfile.TemporaryDirectory(prefix="gbdraw-cache-case-") as directory:
+            directory = Path(directory)
+            def convert(count, max_hits, bitscore):
+                (directory / "pairs.json").write_text(json.dumps(payload(count)))
+                (directory / "raw.tsv").write_bytes(raw.encode() * count)
+                result = json.loads(str(ns["convert_losatp_blastp_pairs_to_genomic_payload"](
+                    str(directory / "pairs.json"), str(directory / "raw.tsv"), "pairwise",
+                    max_hits, bitscore, "1e-2", 0, 0)))
+                return result["pairs"], result["cache"]
+            steps = {"cold": convert(size, 5, 50), "displayOnly": convert(size, 4, 50),
+                     "thresholds": convert(size, 4, 100), "smaller": convert(1, 4, 100)}
+        held = ns["_WEB_LOSATP_HIT_TABLES"]
+        return {"semantic": {k: v[0] for k, v in steps.items()},
+                "diagnostics": {"coldMisses": steps["cold"][1]["filteredHitCacheMisses"],
+                                "displayOnlyHits": steps["displayOnly"][1]["filteredHitCacheHits"],
+                                "displayOnlyMisses": steps["displayOnly"][1]["filteredHitCacheMisses"],
+                                "thresholdMisses": steps["thresholds"][1]["filteredHitCacheMisses"],
+                                "heldTablesAfterSmaller": len(held),
+                                "convertedPayloads": len(ns["_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE"])}}
     return {"tableCount": size, "rawSha256": digest(raw.encode()),
-            "boundary": "real Python helper LRU functions + native parse/filter; no raw search or JS derived hit"}, {"cache_cycle": run}
+            "boundary": "real Web conversion helper (hold of the last conversion's tables) + native parse/filter; no raw search or JS derived hit"}, {"cache_cycle": run}
 
 
 def build_case(root, pc, cc, name, seed, path_representation="graph", unit_stages=False):

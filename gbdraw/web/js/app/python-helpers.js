@@ -31,11 +31,11 @@ def _start_web_worker_state():
     epoch and the random seed. The helpers call it when they load; a Worker
     restored from a Pyodide snapshot calls it again, so no two Workers share
     the state the snapshot froze (OV-1000)."""
-    global _WEB_LOSATP_FILTERED_HIT_CACHE, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
+    global _WEB_LOSATP_HIT_TABLES, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
     global _WEB_PREPARED_INPUT_CACHE, _WEB_LABEL_FIT_SEARCHES
     import random
     random.seed()
-    _WEB_LOSATP_FILTERED_HIT_CACHE = {}
+    _WEB_LOSATP_HIT_TABLES = {}
     _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
     _WEB_LOSATP_CACHE_ORDER = []
     _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
@@ -44,8 +44,6 @@ def _start_web_worker_state():
     _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
 
 def _web_losatp_cache_by_name(name):
-    if name == "filtered":
-        return _WEB_LOSATP_FILTERED_HIT_CACHE
     if name == "converted":
         return _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE
     raise KeyError(name)
@@ -957,6 +955,23 @@ def _web_derived_settings(settings):
         _WEB_DERIVED_SETTING_NAMES[name]: value for name, value in settings.items()
     })
 
+# The last valid protein identity manifest, by its exact JSON text (OV-1553): Generate's key request and every
+# table of Download all send the same manifest, and its validation reads nothing else. A manifest that fails is not
+# kept, and the helpers that read the kept one do not change it.
+_web_validated_protein_manifest = (None, None)
+
+def _validated_web_protein_manifest(identity_manifest_json):
+    global _web_validated_protein_manifest
+    from gbdraw.analysis.protein_colinearity import validate_protein_identity_manifest
+
+    text = str(identity_manifest_json)
+    held_text, held_manifest = _web_validated_protein_manifest
+    if held_text == text:
+        return held_manifest
+    manifest = validate_protein_identity_manifest(json.loads(text))
+    _web_validated_protein_manifest = (text, manifest)
+    return manifest
+
 def build_protein_losat_cache_keys_json(
     identity_manifest_json,
     pairs_json,
@@ -978,10 +993,9 @@ def build_protein_losat_cache_keys_json(
         from gbdraw.analysis.protein_colinearity import (
             build_protein_losat_cache_key,
             build_protein_losat_pair_identity,
-            validate_protein_identity_manifest,
         )
 
-        manifest = validate_protein_identity_manifest(json.loads(str(identity_manifest_json)))
+        manifest = _validated_web_protein_manifest(identity_manifest_json)
         pairs = json.loads(str(pairs_json))
         keys = []
         for pair in pairs:
@@ -1053,8 +1067,7 @@ def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
         from gbdraw.analysis.protein_colinearity import hydrate_protein_losat_tsv
 
         entry = json.loads(str(entry_json))
-        manifest = json.loads(str(identity_manifest_json))
-        text = hydrate_protein_losat_tsv(entry, manifest)
+        text = hydrate_protein_losat_tsv(entry, _validated_web_protein_manifest(identity_manifest_json))
         return json.dumps({
             "status": "ok",
             "text": text,
@@ -1369,6 +1382,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             combined_protein_map.update(protein_map)
         extraction = _build_web_protein_extraction(protein_maps_by_record.values())
 
+        # The tables of the last conversion, by raw key: the parsed hits and the hits the last thresholds kept
+        # (OV-1579). A threshold change filters again without reading or parsing a table, and only this
+        # conversion's tables stay, so the hold does not depend on a count limit the tables can exceed.
+        global _WEB_LOSATP_HIT_TABLES
+        thresholds = (
+            str(settings.bitscore),
+            str(settings.evalue),
+            str(settings.identity),
+            str(settings.alignment_length),
+        )
+        kept_tables = {}
         filtered_cache_hits = 0
         filtered_cache_misses = 0
         pair_items = []
@@ -1379,31 +1403,30 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing queryIndex {query_index}.")
             if subject_index not in protein_maps_by_record:
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing subjectIndex {subject_index}.")
-            filter_cache_key = (
-                item["cache_key"],
-                str(settings.bitscore),
-                str(settings.evalue),
-                str(settings.identity),
-                str(settings.alignment_length),
-            )
-            filtered = _web_losatp_cache_get("filtered", filter_cache_key)
-            if filtered is None:
+            table = kept_tables.get(item["cache_key"]) or _WEB_LOSATP_HIT_TABLES.get(item["cache_key"])
+            if table is None:
                 with open(str(raw_tsv_path), "rb") as raw_tsv_handle:
                     raw_tsv_handle.seek(item["raw_tsv_offset"])
                     blast_text = raw_tsv_handle.read(item["raw_tsv_bytes"]).decode("utf-8")
-                hits = parse_losatp_outfmt6(blast_text)
-                filtered = filter_protein_hits_by_thresholds(
-                    hits,
-                    evalue=settings.evalue,
-                    bitscore=settings.bitscore,
-                    identity=settings.identity,
-                    alignment_length=settings.alignment_length,
-                )
-                _web_losatp_cache_set("filtered", filter_cache_key, filtered.copy())
-                filtered_cache_misses += 1
-            else:
-                filtered = filtered.copy()
+                table = {"hits": parse_losatp_outfmt6(blast_text), "thresholds": None, "filtered": None}
+            if table["thresholds"] == thresholds:
                 filtered_cache_hits += 1
+            else:
+                # The filter copies the parsed hits, so the kept ones stay unchanged.
+                table = {
+                    "hits": table["hits"],
+                    "thresholds": thresholds,
+                    "filtered": filter_protein_hits_by_thresholds(
+                        table["hits"],
+                        evalue=settings.evalue,
+                        bitscore=settings.bitscore,
+                        identity=settings.identity,
+                        alignment_length=settings.alignment_length,
+                    ),
+                }
+                filtered_cache_misses += 1
+            kept_tables[item["cache_key"]] = table
+            filtered = table["filtered"].copy()
             pair_items.append(
                 {
                     "pair_index": item["pair_index"],
@@ -1415,6 +1438,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 }
             )
 
+        _WEB_LOSATP_HIT_TABLES = kept_tables
         cache_stats = {
             "convertedPayloadHit": False,
             "filteredHitCacheHits": filtered_cache_hits,
