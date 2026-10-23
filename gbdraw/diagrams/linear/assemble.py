@@ -1777,9 +1777,7 @@ def _collect_linear_primary_bounds(
     render_context: LinearRecordRenderContext,
     cfg: GbdrawConfig,
     multi_record_enabled: bool,
-    length_bar_group: GroupContent | None,
-    length_bar_offset_x: float,
-    length_bar_offset_y: float,
+    length_bar_bounds: Aabb | None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Aabb:
     """Collect one authoritative plot-space box without inspecting rendered SVG."""
@@ -1922,13 +1920,8 @@ def _collect_linear_primary_bounds(
             )
         )
 
-    if length_bar_group is not None and _content_bounds(length_bar_group).width > 0.0:
-        bounds.append(
-            _content_bounds(length_bar_group).translated(
-                horizontal_offset + float(length_bar_offset_x),
-                float(length_bar_offset_y),
-            )
-        )
+    if length_bar_bounds is not None:
+        bounds.append(length_bar_bounds)
     primary_bounds = union_aabbs(bounds)
     if primary_bounds is None or primary_bounds.width <= 0.0 or primary_bounds.height <= 0.0:
         raise RuntimeError("linear assembly produced no primary painted bounds")
@@ -3248,6 +3241,16 @@ def assemble_linear_diagram(
         for element in getattr(canvas, "elements", [])[primary_target_start:]
         if isinstance(element, Group)
     )
+    # The scale's painted bounds where `add_length_bar_on_linear_canvas` drew
+    # it: one value for the primary bounds and the composition metadata.
+    length_bar_bounds = (
+        _content_bounds(length_bar_group).translated(
+            float(canvas_config.horizontal_offset) + float(length_bar_offset_x),
+            float(length_bar_offset_y),
+        )
+        if length_bar_group is not None and _content_bounds(length_bar_group).width > 0.0
+        else None
+    )
     source_primary_bounds = _collect_linear_primary_bounds(
         records=records,
         record_placements=record_placements,
@@ -3266,9 +3269,7 @@ def assemble_linear_diagram(
         render_context=render_context,
         cfg=cfg,
         multi_record_enabled=multi_record_enabled,
-        length_bar_group=length_bar_group,
-        length_bar_offset_x=length_bar_offset_x,
-        length_bar_offset_y=length_bar_offset_y,
+        length_bar_bounds=length_bar_bounds,
         record_transforms=record_transforms,
     )
 
@@ -3342,6 +3343,7 @@ def assemble_linear_diagram(
         ),
         title_target=title_target,
         title_side=title_placement,
+        length_bar_local_bounds=length_bar_bounds,
     )
 
     primary_placement = composition_plan.placement_for("primary")

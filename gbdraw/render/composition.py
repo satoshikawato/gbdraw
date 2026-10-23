@@ -97,9 +97,10 @@ def _metadata_payload(
     legend_side: LegendPlacement,
     title_side: TitlePlacement,
     legend_reflow_metrics: Mapping[str, object] | None,
+    length_bar_local_bounds: Aabb | None,
 ) -> str:
     spacing = plan.spacing
-    payload = {
+    payload: dict[str, Any] = {
         "legend": (
             _target_payload(
                 legend_placement,
@@ -156,6 +157,11 @@ def _metadata_payload(
         ),
         "titleSide": title_side.value,
     }
+    # Only a drawn Linear scale has bounds: the key is absent otherwise, so a
+    # Result without a scale keeps its metadata bytes (PD-OI-052 scenario
+    # revision 2 admits the scale's size and nothing else).
+    if length_bar_local_bounds is not None:
+        payload["lengthBar"] = {"localBounds": _bounds_payload(length_bar_local_bounds)}
     return json.dumps(
         payload,
         allow_nan=False,
@@ -313,11 +319,15 @@ def apply_composition_plan(
     title_target: Group | None = None,
     title_role: str = _TITLE_ROLE,
     title_side: TitlePlacement | str = TitlePlacement.NONE,
+    length_bar_local_bounds: Aabb | None = None,
 ) -> None:
     """Apply ``plan`` once without changing the drawing's group topology.
 
     ``primary_targets`` share one planner placement, which lets callers retain
     several existing top-level primary groups instead of inserting a wrapper.
+    ``length_bar_local_bounds`` are the painted bounds of the Linear scale, a
+    primary target, before its leading composition translate; the Web grows
+    the canvas with them for a moved scale.
     The role arguments name placements in ``plan``; the SVG bookkeeping roles
     remain the stable internal values ``primary``, ``legend``, and ``title``.
     """
@@ -331,6 +341,8 @@ def apply_composition_plan(
     )
     resolved_legend_side = _coerce_legend_side(legend_side)
     resolved_title_side = _coerce_title_side(title_side)
+    if length_bar_local_bounds is not None and not isinstance(length_bar_local_bounds, Aabb):
+        raise TypeError("length_bar_local_bounds must be an Aabb or None")
     resolved_legend_reflow = _validate_legend_reflow_metrics(
         legend_reflow_metrics,
         required=legend_target is not None,
@@ -375,6 +387,7 @@ def apply_composition_plan(
         legend_side=resolved_legend_side,
         title_side=resolved_title_side,
         legend_reflow_metrics=resolved_legend_reflow,
+        length_bar_local_bounds=length_bar_local_bounds,
     )
 
     primary_count = len(primary_targets)
