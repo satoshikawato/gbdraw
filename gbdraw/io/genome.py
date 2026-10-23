@@ -372,6 +372,28 @@ def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
         return list(SeqIO.parse(handle, "fasta"))
 
 
+def read_sequence_file_records(path: str, fmt: str) -> list[SeqRecord]:
+    """Every record of one sequence file, in file order, as the render reads it.
+
+    ``genbank`` reads with :func:`load_gbks`; ``fasta`` with the FASTA reader of
+    :func:`parse_gff_fasta`, so it keeps every entry, also one the GFF3 file does
+    not name. The Circular similarity ring database (whole source file, D-25) and
+    the Web's whole-file reader (``read_all_sequence_records``) read files here.
+    """
+    if fmt == "genbank":
+        return load_gbks([path])
+    if fmt == "fasta":
+        return _read_fasta_records(path)
+    raise ValueError(f"Unsupported format: {fmt}")
+
+
+def record_sequence_text(record: SeqRecord) -> str | None:
+    """A record's sequence in upper case, or ``None`` when it has none (a CON record)."""
+    if not getattr(record.seq, "defined", True):
+        return None
+    return str(record.seq).upper()
+
+
 def parse_gff_fasta(
     gff_file: str,
     fasta_file: str,
@@ -483,6 +505,8 @@ def load_gff_fasta(
 __all__ = [
     "load_gbks",
     "parse_gff_fasta",
+    "read_sequence_file_records",
+    "record_sequence_text",
     "load_gff_fasta",
     "merge_gff_fasta_records",
     "scan_features_recursive",

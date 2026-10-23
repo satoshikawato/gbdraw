@@ -342,7 +342,7 @@ class ComparisonRingOptions:
     """Circular sequence-similarity comparison rings and their shared geometry.
 
     ``losat`` (``"losatn"`` or ``"tlosatx"``) searches each track's comparison
-    genome (query) against the displayed records (subject). ``losatn_task``
+    genome (query) against the whole reference file (subject). ``losatn_task``
     applies to LOSATN and ``reference_gencode`` to TLOSATX. The runtime fields
     choose the executable; ``None`` resolves one automatically.
     """

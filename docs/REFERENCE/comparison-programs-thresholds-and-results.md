@@ -28,7 +28,16 @@ the same source-file databases as the web app and write the same raw-cache
 keys, so a Session saved from either reuses its LOSAT results in the other.
 For Circular similarity rings they run LOSATN or TLOSATX: each comparison
 genome (`--conservation_sequence`, one file per ring) is the query and the
-displayed records are the subject database, as in the web app. A comparison
+subject database is the whole reference file, as in the web app: every record
+of the file that has a sequence, uncropped and on the file's strand, also
+records that are not drawn (for GFF3 input, every entry of the FASTA file,
+also one the GFF3 file does not name). A record without a sequence (a CON
+record) is left out. Turning records off, drawing one record of the file, or
+a crop does not change ring E-values, and the subject gets the web app's
+raw-cache key. With several reference files, each file is searched whole, in
+input order; records passed to the Python API in memory are searched as
+given. Ring rows are in the coordinates of the whole reference records, and a
+cropped or reverse-complemented record draws them at their place in it. A comparison
 FASTA with ID-only headers and 60-column uppercase lines, like the tutorial
 files, gets the web app's raw-cache key; other FASTA layouts and GenBank or
 DDBJ files give the same rows under a different key. Precomputed rings read

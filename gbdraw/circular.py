@@ -342,9 +342,9 @@ def _get_args(
         help=(
             'Build the similarity rings with LOSAT: losatn compares nucleotide '
             'sequences (LOSAT blastn) and tlosatx their translations (LOSAT tblastx). '
-            'Each --conservation_sequence genome is the query and the displayed '
-            'records are the subject. Cannot be combined with --conservation_blast '
-            '(default: no LOSAT search).'
+            'Each --conservation_sequence genome is the query and every record of '
+            'the reference file (uncropped, also records not drawn) is the subject. '
+            'Cannot be combined with --conservation_blast (default: no LOSAT search).'
         ),
     )
     parser.add_argument(
@@ -887,7 +887,7 @@ def _cli_ring_error(exc: ValidationError, args: argparse.Namespace) -> Validatio
         )
     elif flag == "--conservation_reference":
         message = (
-            "--losat uses the displayed records as the subject; "
+            "--losat uses the reference file as the subject; "
             "--conservation_reference must be auto or subject."
         )
     else:

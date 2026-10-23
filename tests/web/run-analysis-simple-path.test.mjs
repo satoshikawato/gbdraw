@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -2636,6 +2638,126 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     } else {
       globalThis.__GBDRAW_TEST_HOOKS__ = previousTestHooks;
     }
+    if (previousLosatExecutor === undefined) {
+      delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+    } else {
+      globalThis.__GBDRAW_LOSAT_EXECUTOR__ = previousLosatExecutor;
+    }
+  }
+});
+
+test('the Circular ring subject database and its raw cache key equal the CLI ones (D-25)', async () => {
+  // The Python oracle plans the CLI request that draws what each Web state below draws (records OFF, a single
+  // presentation, a crop, GFF3 with an unnamed FASTA entry, a byte order mark) and returns the subject FASTA its
+  // ring search reads, the raw cache key, and the Worker helper's reply for a file the browser reader declines.
+  const oracle = spawnSync(
+    process.env.PYTHON || 'python',
+    ['tests/web/circular-ring-subject-oracle.py'],
+    { cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }
+  );
+  assert.equal(oracle.status, 0, `Python ring subject oracle failed:\n${oracle.stderr}`);
+  const { query, cases } = JSON.parse(oracle.stdout);
+  const webStates = {
+    'records not drawn': { selector: '', multi: true, off: ['#2'], region: [null, null] },
+    'single presentation': { selector: '#2', multi: false, off: [], region: [null, null] },
+    crop: { selector: '#2', multi: false, off: [], region: [11, 50] },
+    'gff3 with an unnamed fasta entry': { selector: '', multi: false, off: [], region: [null, null] },
+    'byte order mark': { selector: '#1', multi: false, off: [], region: [null, null] }
+  };
+  assert.deepEqual(cases.map(({ name }) => name), Object.keys(webStates));
+
+  const queryFile = new AuditFile([query], 'ring-query.fasta');
+  const drawing = state.activeDrawing();
+  state.mode.value = 'circular';
+  drawing.form.prefix = 'ring-subject';
+  drawing.form.show_depth = false;
+  drawing.adv.circular_track_slots_enabled = false;
+  drawing.adv.circular_track_slots = [];
+  Object.assign(drawing.circularConservation, {
+    enabled: true, source: 'losat', losat_program: 'blastn', subject_gencode: 1, reference: 'auto', labels: ''
+  });
+  drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, {
+    sourceKey: `${queryFile.name}|${queryFile.size}|1|0`, fileName: queryFile.name, sourceIndex: 0,
+    label: 'query', color: '#4e79a7', losat_gencode: 1
+  });
+  drawing.annotationSets.splice(0);
+  Object.assign(state.files, {
+    c_depth: null, c_conservation_blasts: [], c_conservation_fastas: [queryFile],
+    c_conservation_sequence_sources: []
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    recordDisplayRows: { value: [] },
+    serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    getCommittedCanonicalSession: () => null,
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  /** @type {{ subject: string, cacheKeys: string[] } | null} */
+  let searched = null;
+  const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+    const subjectKey = [...options.sequences.keys()].find((key) => key.startsWith('circular-subject:'));
+    searched = { subject: options.sequences.get(subjectKey), cacheKeys: jobs.map(({ cacheKey }) => cacheKey) };
+    return jobs.map(({ cacheKey }) => ({ cacheKey, text: '' }));
+  };
+  // The ring query is read once, by the Python reader, for every case.
+  workerHelperResponses.push({
+    ok: true, result: { fasta: query, format: 'fasta', recordLabel: null, recordIds: ['QUERY1'] }
+  });
+  try {
+    for (const [index, testCase] of cases.entries()) {
+      const webState = webStates[testCase.name];
+      const files = Object.fromEntries(Object.entries(testCase.files).map(([role, data]) => [
+        role, new AuditFile([Buffer.from(data, 'base64')], `ring-subject-${index}-${role}`)
+      ]));
+      const gff = Boolean(files.fasta);
+      state.cInputType.value = gff ? 'gff' : 'gb';
+      Object.assign(state.files, {
+        c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
+      });
+      state.circularRecordList.value = testCase.helperReply.records.map(({ id, sequence }, recordIndex) => ({
+        selector: `#${recordIndex + 1}`, record_id: id, record_length: sequence.length
+      }));
+      Object.assign(state.circularRecordDiscovery, {
+        status: 'ready', error: '', inputType: gff ? 'gff' : 'gb',
+        primaryFile: files.source, pairedFile: gff ? files.fasta : null
+      });
+      Object.assign(drawing.form, {
+        circular_record_selector: webState.selector, multi_record_canvas: webState.multi,
+        circular_region_start: webState.region[0], circular_region_end: webState.region[1]
+      });
+      drawing.recordsOff.splice(0, drawing.recordsOff.length, ...webState.off);
+      state.losatCache.value = new Map();
+      state.losatDerivedCache.value = new Map();
+      // The page reads the file with its own reader, or, for a byte order mark, through the Worker helper.
+      if (testCase.name === 'byte order mark') {
+        workerHelperResponses.push({ ok: true, result: testCase.helperReply });
+      }
+      searched = null;
+      const caseResult = result(`ring-subject-${index}.svg`, `ring-subject-${index}`);
+      workerResponses.push(response(caseResult, validCatalog(caseResult.name)));
+      assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, `${testCase.name}: ${JSON.stringify(state.errorLog.value)}`);
+      assert.equal(workerHelperResponses.length, 0, testCase.name);
+      assert.equal(searched?.subject, testCase.cliSubjectFasta, testCase.name);
+      assert.deepEqual(searched?.cacheKeys, [testCase.cliCacheKey], testCase.name);
+    }
+  } finally {
+    workerHelperResponses.splice(0);
+    drawing.recordsOff.splice(0);
+    Object.assign(drawing.form, {
+      circular_record_selector: '', multi_record_canvas: false, circular_region_start: null, circular_region_end: null
+    });
+    drawing.circularConservation.enabled = false;
+    state.files.c_conservation_fastas = [];
     if (previousLosatExecutor === undefined) {
       delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     } else {

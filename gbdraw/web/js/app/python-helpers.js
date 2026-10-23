@@ -1727,14 +1727,12 @@ def list_gff_fasta_records(gff_path, fasta_path):
         return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
 def read_all_sequence_records(path, fmt):
-    """Every record of a sequence file, in file order, as the CLI loader reads it: load_gbks, or the
-    FASTA reader of parse_gff_fasta. The page reads it when its own reader declines the file (a UTF-8
-    byte order mark, OV-1599). A record without a sequence (a CON record) has none."""
+    """Every record of a sequence file, in file order, as the CLI reads it (read_sequence_file_records,
+    the reader of the CLI ring database). The page reads it when its own reader declines the file (a
+    UTF-8 byte order mark, OV-1599). A record without a sequence (a CON record) has none."""
     try:
-        from gbdraw.io.genome import _read_fasta_records, load_gbks
-        if fmt not in {"genbank", "fasta"}:
-            raise ValueError(f"Unsupported format: {fmt}")
-        records = load_gbks([path]) if fmt == "genbank" else _read_fasta_records(path)
+        from gbdraw.io.genome import read_sequence_file_records, record_sequence_text
+        records = read_sequence_file_records(path, fmt)
         payload = []
         for record in records:
             names = (
@@ -1744,7 +1742,7 @@ def read_all_sequence_records(path, fmt):
             payload.append({
                 "id": str(record.id),
                 "aliases": list(dict.fromkeys(str(name) for name in names if name)),
-                "sequence": str(record.seq).upper() if getattr(record.seq, "defined", True) else None,
+                "sequence": record_sequence_text(record),
             })
         return json.dumps({"records": payload})
     except Exception as error:

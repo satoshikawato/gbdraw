@@ -35,6 +35,17 @@ write-up of a release.
     first blastp Generate after an upload sends and parses each new file once
     for all File cards and the diagram: about 4.4-5.1 s instead of 7.6-8.0 s
     for six cards of a 17.5 MB GenBank file (#1307).
+- Changed: the command line and the Python API search the whole reference file
+  for Circular similarity rings (`--losat losatn` / `tlosatx`), as the web app
+  does: every record with a sequence, uncropped, also records that are not
+  drawn, and every FASTA entry in GFF3 mode. Ring E-values (and so the E-value
+  filter) and LOSAT raw-cache keys change for runs that draw some records of
+  a file, one record of it, or a crop; they now equal the web app's, so a
+  Session saved from the command line opened in the web app reuses its ring
+  LOSAT results.
+- Fixed: Circular similarity ring hits on a cropped or reverse-complemented
+  record are drawn at their place in the record; they were drawn as if the
+  record were uncropped and on its source strand.
 - Fixed: LOSAT, the Circular conservation database, and restored match
   sequences now read the same records as the drawing when a GenBank file holds
   a record without a sequence, a file starts with a UTF-8 byte order mark, or a
