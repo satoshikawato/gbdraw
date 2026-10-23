@@ -173,16 +173,6 @@ BGC_COMMAND = (
     "gbdraw linear --losat losatp --losatp_mode similarity_groups "
     "--similarity_alignment_feature CAF33315.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
-    "--record_label '<i>Streptomyces lividus</i> CBS 844.73' "
-    "--record_label '<i>Streptomyces fradiae</i> ATCC 10745' "
-    "--record_label '<i>Streptomyces fradiae</i> MCIMB 8233' "
-    "--record_label '<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455' "
-    "--record_label '<i>Streptomyces ribosidificus</i> ATCC 21294' "
-    "--record_subtitle 'Lividomycin biosynthetic gene cluster' "
-    "--record_subtitle 'Neomycin biosynthetic gene cluster' "
-    "--record_subtitle 'Neomycin biosynthetic gene cluster' "
-    "--record_subtitle 'Paromomycin biosynthetic gene cluster' "
-    "--record_subtitle 'Ribostamycin biosynthetic gene' "
     "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
     "--reverse_complement 0 --reverse_complement 1 "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
@@ -193,7 +183,7 @@ BGC_COMMAND = (
     "--pairwise_match_style curve --scale_style ruler "
     "--plot_title 'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.' "
     "--keep_definition_left_aligned --identity 30 --block_stroke_width 2 "
-    "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 "
+    "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_color '#808080' --axis_stroke_width 5 "
     "--legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 "
     "--arrow_shaft_width_ratio 0.6 --arrow_head_length_ratio 0.64 "
     "--ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold "
@@ -203,16 +193,9 @@ BGC_COMMAND = (
     "-l bottom -o BGC0000708-BGC0000713"
 )
 
-# A Web-saved Session (fresh upload, then the tutorial's steps): the record name lines are the names the Web
-# infers from each file's organism and strain; the CLI draws them only from --record_label (OV-1698).
 HEPATOPLASMATACEAE_COLLINEAR_COMMAND = (
     "gbdraw linear --losat_threads 32 --losat losatp --losatp_mode collinear -f interactive_svg "
     "--gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb "
-    "--record_label '<i>Ca.</i> Tyloplasma litorale Fukuoka2020' "
-    "--record_label '<i>Ca.</i> Hepatoplasma vulgare Av-JP' "
-    "--record_label '<i>Ca.</i> Hepatoplasma scabrum Ps-JP' "
-    "--record_label '<i>Ca.</i> Hepatoplasma crinochetorum Tokyo2021' "
-    "--record_label '<i>Ca.</i> Hepatoplasma crinochetorum Av' "
     "--align_center --separate_strands --pairwise_match_style curve --scale_style ruler "
     "--gc --skew --palette ajisai --collinear_color_mode orientation_identity "
     "-o hepatoplasmataceae_collinear"
@@ -225,15 +208,6 @@ MAJANIVIRUS_COMMAND = (
     "-d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center "
     "--bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg "
     "--pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 "
-    "--record_label 'Marsupenaeus japonicus endogenous nimavirus' "
-    "--record_label 'Melicertus latisulcatus majanivirus' "
-    "--record_label 'Penaeus monodon majanivirus A' "
-    "--record_label 'Penaeus semisulcatus majanivirus' "
-    "--record_label 'Penaeus monodon majanivirus B' "
-    "--record_label 'Litopenaeus vannamei majanivirus' "
-    "--record_label 'Trachysalambria curvirostris majanivirus' "
-    "--record_label 'Metapenaeus ensis majanivirus' "
-    "--record_label 'Metapenaeus joyneri majanivirus' "
     "--gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb "
     "TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb "
     "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
@@ -551,8 +525,42 @@ def _session_command(session: dict[str, Any]) -> str:
     return shlex.join(["gbdraw", mode, "--session", "session.gbdraw-session.json"])
 
 
+def _with_session_record_names(command: str, session: dict[str, Any]) -> str:
+    """Add the record names a Web-saved Session draws to its card command, after the --gbk files.
+
+    The Web writes each record's name and subtitle into the Session's request; the CLI draws names
+    only from --record_label and --record_subtitle (OV-1698). The Session is their one owner, so
+    the declared command never repeats them by hand. A CLI-made Session draws its own command's names.
+    """
+
+    if _session_cli_invocation(session):
+        return command
+    render_request = session.get("renderRequest")
+    records = render_request.get("records") if isinstance(render_request, dict) else None
+    presentations = [
+        record.get("presentation") if isinstance(record, dict) and isinstance(record.get("presentation"), dict) else {}
+        for record in (records if isinstance(records, list) else [])
+    ]
+    names: list[str] = []
+    for key, flag in (("label", "--record_label"), ("subtitle", "--record_subtitle")):
+        values = [str(presentation.get(key) or "") for presentation in presentations]
+        if any(values):
+            names.extend(f"{flag} {shlex.quote(value)}" for value in values)
+    if not names:
+        return command
+    tokens = command.split(" ")
+    if "--gbk" not in tokens:
+        raise ValueError("A Web-saved Gallery command with record names must declare its --gbk files.")
+    end = tokens.index("--gbk") + 1
+    while end < len(tokens) and not tokens[end].startswith("-"):
+        end += 1
+    return " ".join([*tokens[:end], *names, *tokens[end:]])
+
+
 def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
     command = example.command or _session_command(session)
+    if example.command and not example.session_from_command:
+        command = _with_session_record_names(command, session)
     return command.replace("interactive-svg", "interactive_svg")
 
 

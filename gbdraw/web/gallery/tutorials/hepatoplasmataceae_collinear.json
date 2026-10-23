@@ -36,10 +36,11 @@
     },
     {
       "label": "NZ_CP006932",
-      "source": "NCBI Nucleotide",
-      "accession": "NZ_CP006932",
+      "source": "NCBI Nucleotide revision",
+      "accession": "NZ_CP006932.1",
       "targetName": "NZ_CP006932.gb",
-      "note": "Download the complete record as a GenBank flat file."
+      "note": "Download the revision this example uses as a GenBank flat file; the current RefSeq record may carry newer annotation.",
+      "href": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=NZ_CP006932.1&sat=60&satkey=39275474"
     }
   ],
   "manualSteps": [
@@ -65,21 +66,6 @@
     {
       "title": "Add the first genome",
       "body": "Download the five GenBank files listed under Files. In File 1, click the GenBank / DDBJ File box and choose AP027078.gb. Leave Organism / strain and Subtitle / title empty: the app reads the organism and isolate or strain from the file and draws them as the record's name line.",
-      "replay": [
-        {
-          "type": "evaluate",
-          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-1'])\").open = true"
-        },
-        {
-          "type": "upload",
-          "selector": "[role='button']:has(> input[data-testid='linear-genbank-1'])",
-          "path": "tutorial-data/hepatoplasmataceae-five/AP027078.gb"
-        },
-        {
-          "type": "waitForFunction",
-          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[0]; return Boolean(s?.gb && s.inferred_definition); }"
-        }
-      ],
       "operations": [
         {
           "dataDependent": true,
@@ -155,60 +141,6 @@
           ]
         ]
       },
-      "replay": [
-        {
-          "type": "evaluate",
-          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-2'])\").open = true"
-        },
-        {
-          "type": "upload",
-          "selector": "[role='button']:has(> input[data-testid='linear-genbank-2'])",
-          "path": "tutorial-data/hepatoplasmataceae-five/AP027131.gb"
-        },
-        {
-          "type": "waitForFunction",
-          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[1]; return Boolean(s?.gb && s.inferred_definition); }"
-        },
-        {
-          "type": "evaluate",
-          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-3'])\").open = true"
-        },
-        {
-          "type": "upload",
-          "selector": "[role='button']:has(> input[data-testid='linear-genbank-3'])",
-          "path": "tutorial-data/depth-1kb/AP027133.gb"
-        },
-        {
-          "type": "waitForFunction",
-          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[2]; return Boolean(s?.gb && s.inferred_definition); }"
-        },
-        {
-          "type": "evaluate",
-          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-4'])\").open = true"
-        },
-        {
-          "type": "upload",
-          "selector": "[role='button']:has(> input[data-testid='linear-genbank-4'])",
-          "path": "tutorial-data/hepatoplasmataceae-five/AP027132.gb"
-        },
-        {
-          "type": "waitForFunction",
-          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[3]; return Boolean(s?.gb && s.inferred_definition); }"
-        },
-        {
-          "type": "evaluate",
-          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-5'])\").open = true"
-        },
-        {
-          "type": "upload",
-          "selector": "[role='button']:has(> input[data-testid='linear-genbank-5'])",
-          "path": "tutorial-data/hepatoplasmataceae-five/NZ_CP006932.gb"
-        },
-        {
-          "type": "waitForFunction",
-          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[4]; return Boolean(s?.gb && s.inferred_definition); }"
-        }
-      ],
       "operations": [
         {
           "dataDependent": true,

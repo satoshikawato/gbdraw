@@ -251,6 +251,9 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('AP027078.gb')).toBeVisible();
   await expect(filesPanel.getByText('NZ_CP006932.gb')).toBeVisible();
+  // RefSeq re-annotates NZ_CP006932.1 in place: the link names the revision the Session uploads.
+  await expect(filesPanel.getByRole('link', { name: 'NCBI Nucleotide revision: NZ_CP006932.1' }))
+    .toHaveAttribute('href', /id=NZ_CP006932\.1&sat=60&satkey=39275474$/);
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 
   expect(pageErrors).toEqual([]);

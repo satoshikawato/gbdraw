@@ -529,8 +529,8 @@ def test_progressive_tutorials_capture_each_generate_by_replay(example_id: str) 
     downloads = {entry["targetName"] for entry in tutorial["downloads"]}
     for action in replayed:
         if action["type"] == "upload":
-            # A file the Gallery serves (gallery/files or the pinned tutorial-data copies), named as a reader downloads it.
-            assert capture_tool.resolve_upload_file(action).name in downloads
+            assert action["path"].startswith("gallery/files/")
+            assert Path(action["path"]).name in downloads
 
 
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)

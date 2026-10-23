@@ -48,6 +48,24 @@
       "expected": "<i>Ca.</i> Hepatoplasma Av"
     },
     {
+      "name": "a tab after Candidatus is whitespace",
+      "organism": "Candidatus\tTyloplasma litorale",
+      "strain": "Fukuoka2020",
+      "expected": "<i>Ca.</i> Tyloplasma litorale Fukuoka2020"
+    },
+    {
+      "name": "an organism already abbreviated to Ca. keeps one italic Ca.",
+      "organism": "Ca. Hepatoplasma crinochetorum",
+      "strain": "Av",
+      "expected": "<i>Ca.</i> Hepatoplasma crinochetorum Av"
+    },
+    {
+      "name": "a one-word organism abbreviated to Ca. stays upright",
+      "organism": "Ca. Hepatoplasma",
+      "strain": "Av",
+      "expected": "<i>Ca.</i> Hepatoplasma Av"
+    },
+    {
       "name": "non-organism falls back to the strain",
       "organism": "synthetic construct",
       "strain": "cloning vector pUC19",

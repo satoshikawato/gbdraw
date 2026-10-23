@@ -120,8 +120,10 @@ export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}
   const rawOrganism = String(organism || '').trim();
   const rawStrain = String(strain || '').trim();
 
-  const isCandidatus = /^Candidatus\s+/i.test(rawOrganism);
-  const nameWithoutCand = isCandidatus ? rawOrganism.replace(/^Candidatus\s+/i, '').trim() : rawOrganism;
+  // "Candidatus" or an already abbreviated "Ca.", then any whitespace.
+  const candidatusPrefix = /^(?:candidatus|ca\.)\s+/i;
+  const isCandidatus = candidatusPrefix.test(rawOrganism);
+  const nameWithoutCand = isCandidatus ? rawOrganism.replace(candidatusPrefix, '').trim() : rawOrganism;
   if (!nameWithoutCand || NON_ORGANISM_PATTERN.test(nameWithoutCand)) {
     return rawStrain;
   }

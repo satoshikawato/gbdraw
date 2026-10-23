@@ -12,12 +12,18 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Gallery: like the other Gallery tutorials, hepatoplasmataceae_collinear now generates after each step
-  (defaults, LOSATP collinear blocks, identity colors, layout), and its
-  figure and Session now come from a fresh upload, so they show the organism
-  name lines a reader's own upload shows. The card commands of this example and
-  of BGC0000708-BGC0000713 declare those names with `--record_label` (and
-  `--record_subtitle`), since the CLI draws record names only from them.
+- Gallery: like the other Gallery tutorials, hepatoplasmataceae_collinear now
+  generates after each step (defaults, LOSATP collinear blocks, identity
+  colors, layout), and its figure and Session now come from a fresh upload, so
+  they show the organism name lines a reader's own upload shows. The card
+  command of a Gallery figure saved in the Web app now declares the record
+  names its Session draws with `--record_label` and `--record_subtitle`, since
+  the CLI draws record names only from them; the BGC0000708-BGC0000713 command
+  also declares its gray axis (`--axis_stroke_color '#808080'`, OV-1703), so
+  it draws the Gallery figure.
+- Gallery: a published Session made in the Web app keeps the File card rows
+  that Save writes, so Load restores an inferred record name as inferred and
+  **Reset Settings** no longer clears it (OV-1701).
 - Web app: a record name inferred from a *Candidatus* organism now reads
   `<i>Ca.</i> Tyloplasma litorale Fukuoka2020`: the abbreviation in italics
   and the name upright, as nomenclature requires. It read `Candidatus

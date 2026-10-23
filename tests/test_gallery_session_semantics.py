@@ -21,7 +21,7 @@ from gbdraw.api import (
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
+from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample, _example_command
 
 
 pytestmark = pytest.mark.gallery
@@ -478,16 +478,18 @@ def test_web_saved_gallery_names_are_declared_in_the_card_command(
 ) -> None:
     """A Web-saved Gallery Session draws the record names the Web wrote into its request;
     the CLI draws names only from --record_label and --record_subtitle, so the card command
-    declares the same values in record order (OV-1698, OV-1701)."""
+    declares the same values in record order (OV-1698, OV-1702). The Session owns them: the
+    command is built from it, and the hand-written declaration repeats none of them."""
 
     example, session = gallery_sessions[example_id]
     if "cliInvocation" in session:
         pytest.skip("CLI-made Session: its names come from its own recorded command")
     presentations = [record["presentation"] for record in _request(session)["records"]]
+    command = _example_command(example, session)
     for key, flag in (("label", "--record_label"), ("subtitle", "--record_subtitle")):
         values = [presentation[key] for presentation in presentations]
-        declared = _declared_values(example.command, flag)
-        assert declared == ([] if not any(values) else values), (example_id, flag)
+        assert _declared_values(command, flag) == ([] if not any(values) else values), (example_id, flag)
+        assert _declared_values(example.command, flag) == [], (example_id, flag)
 
 
 def test_hepatoplasmataceae_collinear_session_is_a_fresh_upload_with_name_lines(

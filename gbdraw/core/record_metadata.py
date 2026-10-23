@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
@@ -324,6 +325,9 @@ _NON_ORGANISM_NAMES = frozenset(
 )
 
 
+_CANDIDATUS_PREFIX = re.compile(r"(?:candidatus|ca\.)\s+", re.IGNORECASE)
+
+
 def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
     """Format organism and strain into publication-style HTML.
 
@@ -333,11 +337,10 @@ def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
     organism = str(metadata.organism or "").strip()
     strain = str(metadata.strain or "").strip()
 
-    candidatus = False
-    clean_org = organism
-    if clean_org.lower().startswith("candidatus "):
-        candidatus = True
-        clean_org = clean_org[11:].strip()
+    # "Candidatus" or an already abbreviated "Ca.", then any whitespace.
+    prefix = _CANDIDATUS_PREFIX.match(organism)
+    candidatus = prefix is not None
+    clean_org = organism[prefix.end():].strip() if prefix else organism
 
     if not clean_org or clean_org.lower() in _NON_ORGANISM_NAMES:
         return strain
