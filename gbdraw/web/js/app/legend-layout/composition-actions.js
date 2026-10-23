@@ -983,24 +983,67 @@ const setRootAttribute = (svg, name, value) => {
 };
 
 /**
- * Apply editor canvas padding around the unpadded canvas of one SVG root. The
- * unpadded viewBox and size are recorded once on the root, so applying the
- * same padding again changes nothing. Returns whether the root changed.
+ * The bounds, widened by the edge padding, of each Legend or plot title the
+ * user moved: a moved item keeps its offset and the canvas grows to hold it
+ * (Owner, 2026-10-23). An unmoved or hidden item adds nothing. The bounds are
+ * Python's (`localBounds`) at the item's current translate, so a detached
+ * candidate needs no browser measurement.
+ * @param {CompositionBinding | null} binding Null for a root without composition metadata.
+ * @returns {CompositionBounds[]}
+ */
+const movedDecorationBounds = (binding) => {
+  if (!binding) return [];
+  const { metadata } = binding;
+  const edge = metadata.spacing.edgePaddingPx;
+  /** @type {Array<{ role: 'legend' | 'title', side: string, target: CompositionLocalTarget | null, element: SVGGraphicsElement | undefined }>} */
+  const items = [
+    { role: 'legend', side: metadata.legendSide, target: metadata.legend, element: binding.legend.targets[0] },
+    { role: 'title', side: metadata.titleSide, target: metadata.title, element: binding.title.targets[0] }
+  ];
+  return items.flatMap(({ role, side, target, element }) => {
+    if (!target || !element || side === 'none') return [];
+    const current = targetLeadingTranslate(element, role);
+    if (current.x === target.automaticTranslation[0] && current.y === target.automaticTranslation[1]) return [];
+    const bounds = target.localBounds;
+    return [{
+      x: bounds.x + current.x - edge,
+      y: bounds.y + current.y - edge,
+      width: bounds.width + (2 * edge),
+      height: bounds.height + (2 * edge)
+    }];
+  });
+};
+
+/**
+ * Size the canvas of one SVG root: the automatic canvas, grown so that each
+ * moved Legend or plot title stays inside it with the edge padding (Owner,
+ * 2026-10-23; never smaller than the automatic canvas), then the editor
+ * canvas padding around it. The automatic viewBox and size are recorded once
+ * on the root, so applying the same state again changes nothing, and a Result
+ * that neither grows nor is padded stays byte-identical. Returns whether the
+ * root changed.
  * @param {Element} svg
- * @param {Partial<Record<string, unknown>> | null | undefined} value
+ * @param {Partial<Record<string, unknown>> | null | undefined} value The canvas padding.
+ * @param {CompositionBinding | null} [binding] The root's binding when the caller holds it.
  * @returns {boolean}
  */
-export const applyCanvasPaddingToSvg = (svg, value) => {
+export const applyCanvasToSvg = (svg, value, binding = null) => {
   const padding = normalizeCanvasPadding(value);
   const padded = Object.values(padding).some((number) => number !== 0);
+  const moved = movedDecorationBounds(binding
+    || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null));
   const recordedBase = svg.getAttribute('data-original-view-box');
-  if (!recordedBase && !padded) return false;
+  if (!recordedBase && !padded && !moved.length) return false;
   // A missing viewBox gives NaN below and throws, so `base` is a string past that check.
   const base = /** @type {string} */ (recordedBase || svg.getAttribute('viewBox'));
   const [x, y, width, height] = String(base || '').trim().split(/[\s,]+/).map(Number);
   if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
     throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
   }
+  const grows = moved.some((bounds) => (
+    bounds.x < x || bounds.y < y || maxX(bounds) > x + width || maxY(bounds) > y + height
+  ));
+  if (!recordedBase && !padded && !grows) return false;
   const baseWidth = svg.getAttribute('data-original-width')
     || String(Number.parseFloat(svg.getAttribute('width') ?? '') || width);
   const baseHeight = svg.getAttribute('data-original-height')
@@ -1011,23 +1054,26 @@ export const applyCanvasPaddingToSvg = (svg, value) => {
     changed = setRootAttribute(svg, 'data-original-width', baseWidth) || changed;
     changed = setRootAttribute(svg, 'data-original-height', baseHeight) || changed;
   }
-  if (!padded) {
+  if (!padded && !grows) {
     changed = setRootAttribute(svg, 'viewBox', base) || changed;
     changed = setRootAttribute(svg, 'width', `${baseWidth}px`) || changed;
     return setRootAttribute(svg, 'height', `${baseHeight}px`) || changed;
   }
-  const paddedWidth = width + padding.left + padding.right;
-  const paddedHeight = height + padding.top + padding.bottom;
-  /** @param {string} size @param {number} extent @param {number} paddedExtent */
-  const scaled = (size, extent, paddedExtent) => {
+  const automatic = { x, y, width, height };
+  // `grows` holds only when a moved item exists, so the union has it.
+  const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([automatic, ...moved])) : automatic;
+  const outerWidth = canvas.width + padding.left + padding.right;
+  const outerHeight = canvas.height + padding.top + padding.bottom;
+  /** @param {string} size @param {number} extent @param {number} outerExtent */
+  const scaled = (size, extent, outerExtent) => {
     const number = Number.parseFloat(size);
-    return number === extent ? paddedExtent : number * (paddedExtent / extent);
+    return number === extent ? outerExtent : number * (outerExtent / extent);
   };
   changed = setRootAttribute(svg, 'viewBox', [
-    x - padding.left, y - padding.top, paddedWidth, paddedHeight
+    canvas.x - padding.left, canvas.y - padding.top, outerWidth, outerHeight
   ].map(wireNumber).join(' ')) || changed;
-  changed = setRootAttribute(svg, 'width', `${wireNumber(scaled(baseWidth, width, paddedWidth))}px`) || changed;
-  return setRootAttribute(svg, 'height', `${wireNumber(scaled(baseHeight, height, paddedHeight))}px`) || changed;
+  changed = setRootAttribute(svg, 'width', `${wireNumber(scaled(baseWidth, width, outerWidth))}px`) || changed;
+  return setRootAttribute(svg, 'height', `${wireNumber(scaled(baseHeight, height, outerHeight))}px`) || changed;
 };
 
 /**
@@ -1143,9 +1189,9 @@ export const applyCompositionEdit = (svg, options = {}) => {
   svg.setAttribute('data-original-view-box', `0 0 ${baseWidth} ${baseHeight}`);
   svg.setAttribute('data-original-width', String(baseWidth));
   svg.setAttribute('data-original-height', String(baseHeight));
-  applyCanvasPaddingToSvg(svg, options.canvasPadding);
   svg.setAttribute(COMPOSITION_SCHEMA_ATTRIBUTE, String(COMPOSITION_SCHEMA_VERSION));
   svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
+  applyCanvasToSvg(svg, options.canvasPadding);
   return bindCompositionMetadata(svg);
 };
 

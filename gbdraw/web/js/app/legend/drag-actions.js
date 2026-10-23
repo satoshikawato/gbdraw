@@ -2,6 +2,7 @@
 import { parseTransform } from '../../services/legend-svg.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 import {
+  applyCanvasToSvg,
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
@@ -43,7 +44,7 @@ export const createLegendDragActions = ({
   let pendingLegendPointer = null;
   /** @type {Promise<any> | null} */
   let legendDragTxPromise = null;
-  /** @type {{ binding: ReturnType<typeof bindCompositionMetadata>, svg: any, pressedTransform: string | null } | null} */
+  /** @type {{ binding: ReturnType<typeof bindCompositionMetadata>, svg: Element, pressedTransform: string | null } | null} */
   let legendDragContext = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
@@ -164,7 +165,11 @@ export const createLegendDragActions = ({
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (moved) commitActiveResultEdit?.('legend-drag');
+    if (moved && completedDragContext) { // only a bound drag moves the Legend
+      // The drop places the Legend: the canvas grows to hold it (Owner, 2026-10-23).
+      applyCanvasToSvg(completedDragContext.svg, state.activeDrawing().canvasPadding, completedDragContext.binding);
+      commitActiveResultEdit?.('legend-drag');
+    }
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
@@ -202,6 +207,7 @@ export const createLegendDragActions = ({
     );
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
+    applyCanvasToSvg(svg, state.activeDrawing().canvasPadding, binding);
 
     commitActiveResultEdit?.('legend-position-reset');
   };

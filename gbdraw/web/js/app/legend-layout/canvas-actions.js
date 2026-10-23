@@ -1,6 +1,6 @@
 // @ts-check
 import {
-  applyCanvasPaddingToSvg,
+  applyCanvasToSvg,
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
@@ -39,7 +39,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     const svg = currentSvg();
     if (!svg) return false;
     bindCompositionMetadata(svg);
-    if (!applyCanvasPaddingToSvg(svg, drawing.canvasPadding)) return false;
+    if (!applyCanvasToSvg(svg, drawing.canvasPadding)) return false;
     return Boolean(commitActiveResultEdit?.('canvas-padding'));
   };
 
