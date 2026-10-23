@@ -1292,7 +1292,6 @@ def _definition_reserved_radius_px(
     cfg: GbdrawConfig,
     plot_title: str | None,
     definition_profile: str,
-    record_transform: RecordDisplayTransform | None = None,
     species_line_count: int = 1,
     record_presentation: RecordPresentation | None = None,
 ) -> float:
@@ -1303,7 +1302,6 @@ def _definition_reserved_radius_px(
         species=species,
         strain=strain,
         plot_title=plot_title,
-        record_transform=record_transform,
         species_line_count=species_line_count,
         record_presentation=record_presentation,
     ).get_group()
@@ -1368,7 +1366,6 @@ def _resolve_radial_layout_fitting_definition(
     definition_profile: str,
     definition_position: str,
     center_reserved_radius: float | None,
-    record_transform: RecordDisplayTransform | None,
     record_presentation: RecordPresentation | None,
 ) -> tuple[CircularRadialLayout, float | None, int]:
     """Place the slots around the center definition (PD-OI-078).
@@ -1397,7 +1394,6 @@ def _resolve_radial_layout_fitting_definition(
             cfg=cfg,
             plot_title=plot_title,
             definition_profile=definition_profile,
-            record_transform=record_transform,
             species_line_count=line_count,
             record_presentation=record_presentation,
         )
@@ -2616,7 +2612,6 @@ def add_record_on_circular_canvas(
             definition_profile=definition_profile,
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
-            record_transform=record_transform,
             record_presentation=record_presentation,
         )
     )
@@ -2641,7 +2636,6 @@ def add_record_on_circular_canvas(
                 plot_title=plot_title,
                 record_index=int(annotation_record_index),
                 record_count=int(definition_record_count),
-                record_transform=record_transform,
                 species_line_count=species_line_count,
                 record_presentation=record_presentation,
             )
@@ -2911,7 +2905,6 @@ def add_record_on_circular_canvas(
         strain,
         group_key=GroupKey(record_key, GroupKind.DEFINITION),
         **definition_kwargs,
-        record_transform=record_transform,
         record_presentation=record_presentation,
     )
     definition_target = next(
