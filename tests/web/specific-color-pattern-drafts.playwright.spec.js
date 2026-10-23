@@ -329,7 +329,8 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
     expect(await page.evaluate(() => window.__heldKind)).toBe('color');
     expect((await draft(page)).draft.pending).toBe(true);
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
-    if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.selectDrawing('linear'); a.selectDrawing('circular'); });
+    // The drawing switch waits while the rule edit is matched (OV-1100, PD-OI-090 scenario revision 2).
+    if (boundary === 'mode cycle') expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return [a.selectDrawing('linear').status, a.mode]; })).toEqual(['busy', 'circular']);
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));
     if (boundary === 'reorder') await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
     if (boundary === 'Session') expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionLoadAvailable)).toBe(false);
@@ -345,8 +346,16 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       expect(await draft(page)).toEqual({ text: '(?P<enzyme>NADH)', draft: null });
       return;
     }
+    if (boundary === 'mode cycle') {
+      // Nothing switched while it waited, so the edit is applied as one step of its drawing.
+      expect(current).toEqual(before);
+      expect(await draft(page)).toEqual({ text: '(?P<enzyme>NADH)', draft: null });
+      const applied = await snapshot(page);
+      expect([JSON.parse(applied.canonical)[0].val, applied.undo]).toEqual(['(?P<enzyme>NADH)', before.undo + 1]);
+      return;
+    }
     expect(await snapshot(page)).toEqual(current);
-    if (['drawer', 'mode cycle'].includes(boundary)) { expect((await draft(page)).text).toBe('(?P<enzyme>NADH)'); expect(await snapshot(page)).toEqual(before); }
+    if (boundary === 'drawer') { expect((await draft(page)).text).toBe('(?P<enzyme>NADH)'); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'reorder') expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return a.specificRulePattern(a.manualSpecificRules[1]); })).toBe('(?P<enzyme>NADH)');
     if (boundary === 'remove') expect(await draft(page)).toBe(null);
     if (boundary === 'Worker cancellation') { expect((await draft(page)).draft.error).toBe(null); expect(await snapshot(page)).toEqual(before); }
