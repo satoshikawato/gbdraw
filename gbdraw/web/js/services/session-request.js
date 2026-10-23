@@ -189,6 +189,7 @@ import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
+  getResourcePayloadIdentity,
   getResourcePayloadOwner,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
@@ -1077,10 +1078,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const encodedEntry = adoptedSource?.descriptor || entry;
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
-    const owner = getResourcePayloadOwner(entry);
-    const identity = /** @type {SessionResourceSource | null} */ (
-      getSessionResourceSource(owner)
-    )?.descriptor || owner;
+    const identity = getResourcePayloadIdentity(entry);
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
     /** @type {RawSessionResourceDescriptor} */
