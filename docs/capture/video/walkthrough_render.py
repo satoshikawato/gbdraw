@@ -402,6 +402,10 @@ class Language:
 
 # -- timeline ---------------------------------------------------------------
 
+# A normal-speed gap between two skims shorter than this (recording seconds) is a frame or two of the code between
+# them, not a moment for the viewer.
+SKIM_BRIDGE = 0.1
+
 @dataclass
 class TimeMap:
     """Piecewise-linear map from recording time to output time."""
@@ -422,6 +426,10 @@ class TimeMap:
                 factor = open_segment.get("factor") or max(1.0, length / open_segment["target"])
                 kind = "fast" if open_segment.get("factor") else "wait"
                 if factor > 1.05:
+                    if segments and open_segment["t"] - segments[-1][1] < SKIM_BRIDGE:
+                        # The code between two skims ran at normal speed: play it with the skim before it, so the
+                        # fast-forward badge does not blink off for a frame.
+                        segments[-1] = (segments[-1][0], open_segment["t"], *segments[-1][2:])
                     segments.append((open_segment["t"], event["t"], factor, kind))
                 open_segment = None
         starts, factors, outs = [begin], [1.0], [0.0]

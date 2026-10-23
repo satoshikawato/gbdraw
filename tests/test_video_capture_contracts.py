@@ -163,6 +163,23 @@ def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
     assert mapping.factor(mapping.out(4.0)) == pytest.approx(8.0)
 
 
+def test_a_frame_long_gap_between_skims_keeps_the_badge() -> None:
+    # The code between two skims runs for a few hundredths of a second at normal speed: the badge would blink off
+    # for a frame. Such a gap plays with the skim before it; a gap a viewer can see stays at normal speed.
+    events = [
+        {'t': 2.0, 'kind': 'speed_start', 'factor': 3.0, 'target': None},
+        {'t': 5.0, 'kind': 'speed_end'},
+        {'t': 5.04, 'kind': 'speed_start', 'factor': 4.0, 'target': None},
+        {'t': 9.0, 'kind': 'speed_end'},
+        {'t': 9.5, 'kind': 'speed_start', 'factor': 2.0, 'target': None},
+        {'t': 11.0, 'kind': 'speed_end'},
+    ]
+    mapping = TimeMap.build(events, 0.0, 20.0)
+    assert [(start, stop) for start, stop, *_ in mapping.segments] == [(2.0, 5.04), (5.04, 9.0), (9.5, 11.0)]
+    assert mapping.factor(mapping.out(5.02)) == pytest.approx(3.0)
+    assert mapping.factor(mapping.out(9.2)) == pytest.approx(1.0)
+
+
 def test_walkthrough_camera_eases_and_stays_inside_the_page() -> None:
     events = [
         {'t': 0.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0},
