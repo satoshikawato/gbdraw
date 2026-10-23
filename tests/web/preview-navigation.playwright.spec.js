@@ -199,6 +199,72 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 1 });
 });
 
+// OV-1537: Chrome sends the click of a drag to the element that holds both the
+// press and the release, here the svg, so a pan that began on the figure's
+// background and ends with a feature or a match under the pointer must open
+// nothing; a click on the same point still opens its popup.
+test('a pan that ends over a feature or a match opens no popup', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await settle(page);
+
+  for (const [selector, key] of [
+    ['[data-gbdraw-feature-id]', 'clickedFeature'],
+    ['[data-gbdraw-pairwise-match-id]', 'clickedPairwiseMatch']
+  ]) {
+    // A press on the svg's own background, so the drag's click goes to the svg.
+    const press = await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const svg = app.svgContainer.querySelector('svg');
+      const rect = app.canvasContainerRef.getBoundingClientRect();
+      for (let y = rect.y + 40; y < rect.bottom - 40; y += 10) {
+        for (let x = rect.x + 40; x < rect.right - 40; x += 10) {
+          if (document.elementFromPoint(x, y) === svg) return { x, y };
+        }
+      }
+      throw new Error('No svg background point.');
+    });
+    await page.mouse.move(press.x, press.y);
+    await page.mouse.down();
+    await page.mouse.move(press.x + 30, press.y + 20, { steps: 5 });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.isPanning)).toBe(true);
+    await page.mouse.up();
+    await settle(page);
+    const release = await page.evaluate((selector) => {
+      const rect = window.__GBDRAW_APP__.canvasContainerRef.getBoundingClientRect();
+      for (const element of window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)) {
+        const bounds = element.getBoundingClientRect();
+        const x = bounds.x + bounds.width / 2;
+        const y = bounds.y + bounds.height / 2;
+        if (x < rect.x || x > rect.right || y < rect.y || y > rect.bottom) continue;
+        if (document.elementFromPoint(x, y)?.closest(selector)) return { x, y };
+      }
+      throw new Error(`No visible target: ${selector}`);
+    }, selector);
+    // The click Chrome sends when that pan's release lands on the target (when
+    // the figure has not caught up with the pointer): to the svg, at the release.
+    await page.evaluate(({ x, y }) => {
+      window.__GBDRAW_APP__.svgContainer.querySelector('svg').dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, view: window
+      }));
+    }, release);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
+    expect(await page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), key)).toBe(false);
+    await expect(page.locator('.feature-popup, .pairwise-match-popup')).toHaveCount(0);
+
+    await page.mouse.click(release.x, release.y);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
+    await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), key)).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), key)).toBe(false);
+  }
+});
+
 test('docked search and controls remain reachable across Preview sizes and Editor transitions', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 844 });
