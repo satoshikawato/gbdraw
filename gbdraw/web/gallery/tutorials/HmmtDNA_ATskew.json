@@ -2,7 +2,7 @@
   "id": "HmmtDNA_ATskew",
   "version": 1,
   "title": "Add an AT skew ring to the human mitochondrial genome map",
-  "summary": "Add GC content, GC skew, and AT skew tracks to a circular human mitochondrial genome diagram, then configure its ticks, feature labels, and legend.",
+  "summary": "Start from the Web defaults for the human mitochondrial genome, then name the genes, restyle the figure, tidy the layout, and build a custom track stack with an added AT skew ring, generating after each change.",
   "appMode": "Circular",
   "primaryWorkflow": "Circular custom track slots with AT skew",
   "downloads": [
@@ -33,18 +33,39 @@
             "caption": "Select Circular."
           }
         }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": "role=button[name='Circular's]"
+        }
       ]
     },
     {
       "title": "Upload the GenBank file",
-      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1. Type the <i> tags in the Species field literally to italicize the center label.",
+      "body": "Upload HmmtDNA.gbk, the human mitochondrial reference record NC_012920.1. Set Output Prefix and Species; type the <i> tags in Species literally to italicize the center label.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Input Genomes", "GenBank"],
-          ["GenBank/DDBJ File", "HmmtDNA.gbk"],
-          ["Output Prefix", "HmmtDNA_ATskew"],
-          ["Species", "<i>Homo sapiens</i>"]
+          [
+            "Input Genomes",
+            "GenBank"
+          ],
+          [
+            "GenBank/DDBJ File",
+            "HmmtDNA.gbk"
+          ],
+          [
+            "Output Prefix",
+            "HmmtDNA_ATskew"
+          ],
+          [
+            "Species",
+            "<i>Homo sapiens</i>"
+          ]
         ]
       },
       "operations": [
@@ -55,60 +76,132 @@
             "caption": "Upload HmmtDNA.gbk in the Circular GenBank uploader."
           }
         }
+      ],
+      "replay": [
+        {
+          "type": "fill",
+          "selector": "#output-prefix",
+          "value": "HmmtDNA_ATskew"
+        },
+        {
+          "type": "fill",
+          "selector": "#circular-species",
+          "value": "<i>Homo sapiens</i>"
+        }
       ]
     },
     {
-      "title": "Set the basic circular layout",
-      "body": "Set Track Preset to Middle, Label Mode to Out, and Legend position to Left.",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Track Preset", "Middle"],
-          ["Legend position", "Left"],
-          ["Label Mode", "Out"],
-          ["Palette", "ajisai"],
-          ["Default font size", "28"],
-          ["Label Font Size", "20"],
-          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
-        ]
-      },
+      "title": "Generate with the defaults",
+      "body": "Click Generate Diagram. The defaults draw the features on two strands in the stock colors, a GC content ring, and a GC skew ring, with the legend at the left. No gene is named yet.",
+      "replay": [
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
-          "title": "Track preset selector",
-          "body": "Open Track Preset and choose Middle.",
+          "dataDependent": true,
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-03-01-track-preset-middle.webp",
-            "alt": "Layout card with the Track Preset menu open and the Middle option highlighted.",
-            "caption": "Open Track Preset in the Layout card and choose the highlighted Middle option."
+            "src": "./media/HmmtDNA_ATskew/manual-03-01-default-preview.webp",
+            "alt": "Human mitochondrial preview with the Web defaults: features on two strands in the stock colors, no gene labels, GC content and GC skew rings, and the legend at the left.",
+            "caption": "Web defaults: no gene names and the stock colors."
           },
           "capture": {
             "source": "webapp",
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 54,
-              "right": 16,
-              "bottom": 24,
-              "left": 16
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 3,
+            "viewport": {
+              "width": 1400,
+              "height": 1000
             },
-            "openSelect": {
-              "selectedLabel": "Middle",
-              "options": ["Tuckin", "Middle", "Spreadout"],
-              "label": "Track Preset"
-            },
-            "openDetails": ["Layout"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.adv) app.adv.circular_track_slots_enabled = false;"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
               }
+            ],
+            "selector": "svg[data-capture-hmmt-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.labels_mode": "none",
+              "form.legend": "left",
+              "selectedPalette": "default",
+              "adv.circular_track_slots_enabled": false
+            },
+            "visibleText": [
+              "Homo sapiens",
+              "NC_012920.1",
+              "GC content"
             ]
           }
+        }
+      ]
+    },
+    {
+      "title": "Name the genes",
+      "body": "Open Labels and set Label Mode to Out. Under Qualifier Priority, choose the feature type CDS, enter gene as the qualifier order, and click Add priority rule, so CDS labels show compact gene names such as ND1, COX1, ATP6, and CYTB instead of long product names. Set Label Font Size to 20 and click Generate Diagram.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Label Mode",
+            "Out"
+          ],
+          [
+            "Qualifier priority: CDS",
+            "gene"
+          ],
+          [
+            "Label Font Size",
+            "20"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Labels\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
         },
         {
-          "title": "Label mode selector",
-          "body": "Open Label Mode and choose Out.",
+          "type": "select",
+          "selector": "#circular-label-mode",
+          "value": "out"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='New priority rule feature type']",
+          "value": "CDS"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='New priority rule qualifier order']",
+          "value": "gene"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label='Add priority rule']"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Label Font Size']",
+          "value": 20
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-03-02-label-mode-out.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-04-01-label-mode-out.webp",
             "alt": "Labels card with the Label Mode menu open and the Out option highlighted.",
             "caption": "Open Label Mode in the Labels card and choose the highlighted Out option."
           },
@@ -123,85 +216,408 @@
             },
             "openSelect": {
               "selectedLabel": "Out",
-              "options": ["None", "Out", "Both (Out + Inner)"],
+              "options": [
+                "None",
+                "Out",
+                "Both (Out + Inner)"
+              ],
               "label": "Label Mode"
             },
-            "openDetails": ["Labels"]
+            "openDetails": [
+              "Labels"
+            ]
           }
         },
         {
-          "title": "Legend position selector",
-          "body": "Open Legend position and choose Left.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-03-03-legend-position-left.webp",
-            "alt": "Legend card with the Position menu open and the Left option highlighted.",
-            "caption": "Open Position in the Legend card and choose the highlighted Left option."
+            "src": "./media/HmmtDNA_ATskew/manual-04-02-cds-label-priority.webp",
+            "alt": "Qualifier Priority controls with a CDS rule prioritizing gene.",
+            "caption": "Add a qualifier priority rule for CDS with the qualifier order gene."
           },
           "capture": {
             "source": "webapp",
-            "crop": "openSelect",
+            "openDetails": [
+              "Labels"
+            ],
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => { const rules = window.__GBDRAW_APP__?.manualPriorityRules; return Array.isArray(rules) && rules.some((rule) => rule.feat === 'CDS' && rule.order === 'gene'); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent.includes('QUALIFIER PRIORITY')); const section = heading?.parentElement; const row = section?.querySelector('.space-y-1 > div'); if (!heading || !row) throw new Error('CDS qualifier-priority row not found.'); heading.dataset.capture = 'qualifier-priority-heading'; row.dataset.capture = 'qualifier-priority-cds-gene'; row.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='qualifier-priority-heading']",
+              "[data-capture='qualifier-priority-cds-gene']"
+            ],
             "cropPadding": {
-              "top": 54,
-              "right": 16,
-              "bottom": 24,
-              "left": 16
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
             },
-            "openSelect": {
-              "selector": "#legend-position",
-              "selectedLabel": "Left",
-              "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend position"
+            "waitForSelector": "[data-capture='qualifier-priority-cds-gene']"
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-04-03-labels-preview.webp",
+            "alt": "Human mitochondrial preview with gene names such as ND1, COX1, and ATP6 outside the feature ring, still in the stock colors.",
+            "caption": "Gene names now label the features outside the ring."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 4,
+            "viewport": {
+              "width": 1400,
+              "height": 1000
             },
-            "openDetails": ["Legend ·"]
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-hmmt-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.labels_mode": "out",
+              "form.legend": "left",
+              "selectedPalette": "default"
+            },
+            "visibleText": [
+              "Homo sapiens",
+              "NC_012920.1",
+              "GC content",
+              "ND1",
+              "COX1"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Set the dinucleotide calculation window",
-      "body": "Use a 500 nt window with a 50 nt step to show local variation in GC content, GC skew, and AT skew.",
+      "title": "Restyle the colors and the center text",
+      "body": "Open Colors and choose the ajisai palette. Open Titles and Record Labels and set Default font size to 28 for larger center text. Click Generate Diagram.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Dinucleotide", "GC"],
-          ["Window", "500"],
-          ["Step", "50"]
+          [
+            "Palette",
+            "ajisai"
+          ],
+          [
+            "Default font size",
+            "28"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Colors\", \"Titles and Record Labels\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Palette']",
+          "value": "ajisai"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Default font size']",
+          "value": 28
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-04-01-window-step.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-05-01-restyle-preview.webp",
+            "alt": "Human mitochondrial preview in the ajisai palette with larger center text, and gene labels outside the ring.",
+            "caption": "The ajisai palette and larger center text."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 5,
+            "viewport": {
+              "width": 1400,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-hmmt-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.labels_mode": "out",
+              "selectedPalette": "ajisai"
+            },
+            "visibleText": [
+              "Homo sapiens",
+              "NC_012920.1",
+              "GC content",
+              "ND1"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Tidy the layout",
+      "body": "The Gallery figure draws this one-record genome without the Multi-Record Canvas and with all features in one lane. Open Layout and clear Multi-Record Canvas and Separate Strands. Under Dinucleotide content/skew, set Window to 500 and Step to 50 for smoother GC rings. Click Generate Diagram.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Multi-Record Canvas",
+            "Off"
+          ],
+          [
+            "Separate Strands",
+            "Off"
+          ],
+          [
+            "Window",
+            "500"
+          ],
+          [
+            "Step",
+            "50"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Layout\", \"Dinucleotide content/skew\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "uncheck",
+          "selector": "input[data-circular-canvas-setting]"
+        },
+        {
+          "type": "uncheck",
+          "selector": "input[aria-label='Separate Strands']"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Window']",
+          "value": 500
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Step']",
+          "value": 50
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-06-01-layout-options.webp",
+            "alt": "Circular Layout options with Separate Strands and Multi-Record Canvas cleared.",
+            "caption": "Clear Separate Strands and Multi-Record Canvas."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'layout-summary'; options.dataset.capture = 'layout-options'; card.scrollIntoView({ block: 'start' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='layout-summary']",
+              "[data-capture='layout-options']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": false,
+              "form.separate_strands": false
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-capture='layout-options'] input[aria-label='Separate Strands']",
+                "checked": false
+              },
+              {
+                "selector": "[data-capture='layout-options'] input[data-circular-canvas-setting]",
+                "checked": false
+              }
+            ]
+          }
+        },
+        {
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-06-02-window-step.webp",
             "alt": "Dinucleotide content/skew controls set to Window 500, Step 50, and Dinucleotide GC.",
-            "caption": "Set Dinucleotide to GC, Window to 500, and Step to 50."
+            "caption": "Set Window to 500 and Step to 50; Dinucleotide stays GC."
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-06-03-layout-preview.webp",
+            "alt": "Human mitochondrial preview with all features in one lane and smoother GC content and GC skew rings.",
+            "caption": "All features in one lane, and smoother GC rings."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 6,
+            "viewport": {
+              "width": 1400,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-hmmt-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": false,
+              "form.separate_strands": false,
+              "form.legend": "left",
+              "adv.circular_track_slots_enabled": false
+            },
+            "visibleText": [
+              "Homo sapiens",
+              "NC_012920.1",
+              "GC content",
+              "mitochondrion"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Open Custom Track Slots",
-      "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template to start from the slot order used here.",
+      "title": "Build a custom track stack",
+      "body": "Only GC is shown so far, and the default rings leave no room for another one. Open Layout, open Custom Track Slots, and check Use custom stack. Click Replace the current custom stack with the Middle template (the button Middle under Reset to preset): the stack becomes features, ticks, gc_content, and gc_skew. Set the Width of gc_content and gc_skew to 0.1, then click Generate Diagram.",
       "table": {
-        "columns": ["Slot", "Renderer", "Position", "Key settings"],
+        "columns": [
+          "Slot",
+          "Renderer",
+          "Position",
+          "Key settings"
+        ],
         "rows": [
-          ["features", "Features", "on the axis", "Lane direction: split"],
-          ["ticks", "Ticks", "inside", "Labels inside / ticks outside"],
-          ["gc_content", "Dinucleotide content", "inside", "Width: 0.1"],
-          ["gc_skew", "Dinucleotide skew", "inside", "Width: 0.1"]
+          [
+            "features",
+            "Features",
+            "on the axis",
+            "Lane direction: split"
+          ],
+          [
+            "ticks",
+            "Ticks",
+            "inside",
+            "Labels inside / ticks outside"
+          ],
+          [
+            "gc_content",
+            "Dinucleotide content",
+            "inside",
+            "Width: 0.1"
+          ],
+          [
+            "gc_skew",
+            "Dinucleotide skew",
+            "inside",
+            "Width: 0.1"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Layout\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"
+        },
+        {
+          "type": "check",
+          "selector": "role=checkbox[name='Use custom stack's]"
+        },
+        {
+          "type": "click",
+          "selector": "button[title='Replace the current custom stack with the Middle template']"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.adv?.circular_track_slots || []).map((slot) => slot.id).join() === 'features,ticks,gc_content,gc_skew'"
+        },
+        {
+          "type": "fill",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot gc_content\"] [aria-label$='Width value']",
+          "value": "0.1"
+        },
+        {
+          "type": "fill",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot gc_skew\"] [aria-label$='Width value']",
+          "value": "0.1"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
-          "title": "Middle template slot stack",
-          "body": "Open Custom Track Slots and reset the stack to the Middle template before adding the AT skew track.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-05-01-middle-template.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-07-01-middle-template.webp",
             "alt": "Compact Custom Track Slots controls with Middle highlighted under Reset to preset and the Middle preset summary visible.",
             "caption": "Under Reset to preset, choose Middle; the template contains features, ticks, GC content, and GC skew."
           },
           "capture": {
             "source": "webapp",
-            "openDetails": ["Layout"],
+            "openDetails": [
+              "Layout"
+            ],
             "actions": [
               {
                 "type": "click",
@@ -216,7 +632,10 @@
                 "script": "() => { const app = window.__GBDRAW_APP__; const slots = app?.adv?.circular_track_slots; return app?.adv?.circular_track_slots_enabled === true && Array.isArray(slots) && slots.length === 4 && slots.map((slot) => slot.id).join(',') === 'features,ticks,gc_content,gc_skew'; }"
               }
             ],
-            "clipSelectors": ["#circular-custom-track-slots-panel > [role='group']", "#circular-custom-track-slots-panel > .rounded.border.border-sky-200"],
+            "clipSelectors": [
+              "#circular-custom-track-slots-panel > [role='group']",
+              "#circular-custom-track-slots-panel > .rounded.border.border-sky-200"
+            ],
             "highlightSelector": "button[title='Replace the current custom stack with the Middle template']",
             "cropPadding": {
               "top": 4,
@@ -226,49 +645,167 @@
             },
             "waitForSelector": "button[title='Replace the current custom stack with the Middle template']"
           }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-07-02-middle-stack-preview.webp",
+            "alt": "Human mitochondrial preview drawn from the Middle custom stack, with thinner GC content and GC skew rings inside the feature ring.",
+            "caption": "The Middle stack with thinner GC rings leaves room for another ring."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 7,
+            "viewport": {
+              "width": 1400,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-hmmt-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.track_type": "middle",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.length": 4
+            },
+            "visibleText": [
+              "Homo sapiens",
+              "NC_012920.1",
+              "GC content"
+            ]
+          }
         }
       ]
     },
     {
       "title": "Add the AT skew track",
-      "body": "Add another Dinucleotide skew row inside the axis and use it for AT skew rather than the default GC skew. The dinucleotide, legend label, and color fields are under the row's disclosure, the line below Width and Radius.",
+      "body": "Under the stack, choose Dinucleotide skew as the New circular track renderer and click Add track. Rename the new row to a_skew_2, then open its disclosure (the line below Width and Radius) and set it to AT skew with its own colors.",
       "table": {
-        "columns": ["Slot setting", "Value"],
+        "columns": [
+          "Slot setting",
+          "Value"
+        ],
         "rows": [
-          ["Slot id", "a_skew_2"],
-          ["Renderer", "Dinucleotide skew"],
-          ["Dinucleotide", "AT"],
-          ["Legend label", "AT skew"],
-          ["Width", "0.1"],
-          ["Positive skew color", "#deaf6e"],
-          ["Negative skew color", "#7294e3"]
+          [
+            "Slot id",
+            "a_skew_2"
+          ],
+          [
+            "Renderer",
+            "Dinucleotide skew"
+          ],
+          [
+            "Dinucleotide",
+            "AT"
+          ],
+          [
+            "Legend label",
+            "AT skew"
+          ],
+          [
+            "Width",
+            "0.1"
+          ],
+          [
+            "Positive skew color",
+            "#deaf6e"
+          ],
+          [
+            "Negative skew color",
+            "#7294e3"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "select",
+          "selector": "select[aria-label='New circular track renderer']",
+          "value": "dinucleotide_skew"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/Add track$/]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.adv?.circular_track_slots || []).length === 5"
+        },
+        {
+          "type": "fill",
+          "selector": "[role='group'][aria-label^='Circular track slot '] >> nth=4 >> input[placeholder='slot_id']",
+          "value": "a_skew_2"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot a_skew_2\"] summary:has-text('legend label')"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label=\"Circular track slot a_skew_2 Track dinucleotide\"]",
+          "value": "AT"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label=\"Circular track slot a_skew_2 Track legend label\"]",
+          "value": "AT skew"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label=\"Circular track slot a_skew_2 Width value\"]",
+          "value": "0.1"
+        },
+        {
+          "type": "fill",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot a_skew_2\"] [title='Positive skew color']",
+          "value": "#deaf6e"
+        },
+        {
+          "type": "fill",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot a_skew_2\"] [title='Negative skew color']",
+          "value": "#7294e3"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
-          "title": "Add AT skew slot",
-          "body": "Open the disclosure of the added dinucleotide skew slot, set dinucleotide to AT and legend label to AT skew, and choose the two colors.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-06-01-at-skew-slot-context.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-08-01-at-skew-slot-context.webp",
             "alt": "Custom circular track slot a_skew_2 with its disclosure open: dinucleotide AT, legend label AT skew, and custom positive and negative colors.",
             "caption": "Open the a_skew_2 row's disclosure, then set dinucleotide to AT, legend label to AT skew, and the two colors."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
-            "viewport": {"width": 1280, "height": 1100},
+            "viewport": {
+              "width": 1280,
+              "height": 1100
+            },
             "selector": "[data-capture='circular-track-slot-a_skew_2']",
             "highlightSelector": "[data-capture='circular-track-slot-a_skew_2']",
             "actions": [
-              {"type": "click", "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"},
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
               },
-              {"type": "click", "selector": "[data-track-slot-more='a_skew_2']:not([open]) > summary"},
-              {"type": "waitForSelector", "selector": "[data-track-slot-more='a_skew_2'][open]"},
-              {"type": "evaluate", "script": "document.querySelector(\"[data-capture='circular-track-slot-a_skew_2']\")?.scrollIntoView({ block: 'center' });"}
+              {
+                "type": "waitForSelector",
+                "selector": "[data-track-slot-more='a_skew_2'][open]"
+              },
+              {
+                "type": "evaluate",
+                "script": "document.querySelector(\"[data-capture='circular-track-slot-a_skew_2']\")?.scrollIntoView({ block: 'center' });"
+              }
             ],
             "cropPadding": {
               "top": 246,
@@ -276,49 +813,105 @@
               "bottom": 240,
               "left": 8
             },
-            "openDetails": ["Layout"],
+            "openDetails": [
+              "Layout"
+            ],
             "waitForSelector": "[data-capture='circular-track-slot-a_skew_2']",
             "assertAppState": {
               "mode": "circular",
               "adv.circular_track_slots_enabled": true,
-              "adv.circular_track_slots.3.id": "a_skew_2",
-              "adv.circular_track_slots.3.renderer": "dinucleotide_skew",
-              "adv.circular_track_slots.3.params.nt": "AT",
-              "adv.circular_track_slots.3.params.legend_label": "AT skew",
-              "adv.circular_track_slots.3.params.positive_color": "#deaf6e",
-              "adv.circular_track_slots.3.params.negative_color": "#7294e3"
+              "adv.circular_track_slots.4.id": "a_skew_2",
+              "adv.circular_track_slots.4.renderer": "dinucleotide_skew",
+              "adv.circular_track_slots.4.params.nt": "AT",
+              "adv.circular_track_slots.4.params.legend_label": "AT skew",
+              "adv.circular_track_slots.4.params.positive_color": "#deaf6e",
+              "adv.circular_track_slots.4.params.negative_color": "#7294e3"
             },
             "visibleControls": [
-              {"selector": "[aria-label='Circular track slot id a_skew_2']", "value": "a_skew_2"},
-              {"selector": "[aria-label='Circular track renderer a_skew_2']", "value": "Dinucleotide skew"},
-              {"selector": "[aria-label='Circular track slot a_skew_2 Track dinucleotide']", "value": "AT"},
-              {"selector": "[aria-label='Circular track slot a_skew_2 Track legend label']", "value": "AT skew"},
-              {"selector": "[aria-label='Circular track slot a_skew_2 Positive skew color']", "value": "#deaf6e"},
-              {"selector": "[aria-label='Circular track slot a_skew_2 Negative skew color']", "value": "#7294e3"}
-            ]
+              {
+                "selector": "[aria-label='Circular track slot id a_skew_2']",
+                "value": "a_skew_2"
+              },
+              {
+                "selector": "[aria-label='Circular track renderer a_skew_2']",
+                "value": "Dinucleotide skew"
+              },
+              {
+                "selector": "[aria-label='Circular track slot a_skew_2 Track dinucleotide']",
+                "value": "AT"
+              },
+              {
+                "selector": "[aria-label='Circular track slot a_skew_2 Track legend label']",
+                "value": "AT skew"
+              },
+              {
+                "selector": "[aria-label='Circular track slot a_skew_2 Positive skew color']",
+                "value": "#deaf6e"
+              },
+              {
+                "selector": "[aria-label='Circular track slot a_skew_2 Negative skew color']",
+                "value": "#7294e3"
+              }
+            ],
+            "replayThrough": 8
           }
         }
       ]
     },
     {
-      "title": "Move and configure the tick track",
-      "body": "After adding the AT skew row, use Move inward on the Middle template's Ticks row until it is last in the stack, immediately after a_skew_2. Keep it inside the axis so position labels sit inside the tick marks.",
+      "title": "Move the ticks inside and generate",
+      "body": "On the ticks row, click Move inward three times so ticks is last in the stack, after a_skew_2, and set its tick label layout to Labels inside / ticks outside. Click Generate Diagram: the figure now has GC content, GC skew, and AT skew rings, and the left legend lists AT skew (+) and AT skew (-).",
       "table": {
-        "columns": ["Slot setting", "Value"],
+        "columns": [
+          "Slot setting",
+          "Value"
+        ],
         "rows": [
-          ["Slot id", "ticks"],
-          ["Renderer", "Ticks"],
-          ["Stack position", "Last, after a_skew_2"],
-          ["Tick label layout", "label_in_tick_out"]
+          [
+            "Slot id",
+            "ticks"
+          ],
+          [
+            "Renderer",
+            "Ticks"
+          ],
+          [
+            "Stack position",
+            "Last, after a_skew_2"
+          ],
+          [
+            "Tick label layout",
+            "label_in_tick_out"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "click",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot ticks\"] button[title='Move inward']"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot ticks\"] button[title='Move inward']"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot ticks\"] button[title='Move inward']"
+        },
+        {
+          "type": "select",
+          "selector": "[role=\"group\"][aria-label=\"Circular track slot ticks\"] select:has(option[value='label_in_tick_out'])",
+          "value": "label_in_tick_out"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
-          "title": "Tick track slot",
-          "body": "Move the tick slot inward to the end of the custom stack and set the tick layout to Labels inside and ticks outside.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-context.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-09-01-tick-track-context.webp",
             "alt": "Custom circular tick slot set to Labels inside and ticks outside.",
             "caption": "Place ticks after the AT skew slot and keep Labels inside / ticks outside."
           },
@@ -332,7 +925,10 @@
             "selector": "[data-capture='circular-track-slot-ticks']",
             "highlightSelector": "[data-capture='circular-track-slot-ticks']",
             "actions": [
-              {"type": "click", "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"},
+              {
+                "type": "click",
+                "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"
+              },
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
@@ -348,7 +944,9 @@
               "bottom": 54,
               "left": 8
             },
-            "openDetails": ["Layout"],
+            "openDetails": [
+              "Layout"
+            ],
             "waitForSelector": "[data-capture='circular-track-slot-ticks']",
             "assertAppState": {
               "mode": "circular",
@@ -363,65 +961,18 @@
               "Labels inside / ticks outside"
             ]
           }
-        }
-      ]
-    },
-    {
-      "title": "Prioritize gene labels for CDS features",
-      "body": "Set qualifier priority for CDS labels to gene so compact labels such as ND1, COX1, ATP6, and CYTB are used instead of long product names.",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Feature type", "CDS"],
-          ["Qualifier priority", "gene"]
-        ]
-      },
-      "operations": [
-        {
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-08-01-cds-label-priority.webp",
-            "alt": "Qualifier Priority controls with a CDS rule prioritizing gene.",
-            "caption": "Set CDS label priority to gene in the Labels card."
-          },
-          "capture": {
-            "source": "webapp",
-            "openDetails": ["Labels"],
-            "actions": [
-              {
-                "type": "waitForFunction",
-                "script": "() => { const rules = window.__GBDRAW_APP__?.manualPriorityRules; return Array.isArray(rules) && rules.some((rule) => rule.feat === 'CDS' && rule.order === 'gene'); }"
-              },
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent.includes('QUALIFIER PRIORITY')); const section = heading?.parentElement; const row = section?.querySelector('.space-y-1 > div'); if (!heading || !row) throw new Error('CDS qualifier-priority row not found.'); heading.dataset.capture = 'qualifier-priority-heading'; row.dataset.capture = 'qualifier-priority-cds-gene'; row.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "clipSelectors": ["[data-capture='qualifier-priority-heading']", "[data-capture='qualifier-priority-cds-gene']"],
-            "cropPadding": {
-              "top": 12,
-              "right": 12,
-              "bottom": 12,
-              "left": 12
-            },
-            "waitForSelector": "[data-capture='qualifier-priority-cds-gene']"
-          }
-        }
-      ]
-    },
-    {
-      "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The preview should show the labeled mitochondrial feature ring, GC content, GC skew, AT skew, and a left legend that includes AT skew (+) and AT skew (-).",
-      "operations": [
+        },
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
-            "alt": "Generated human mitochondrial AT skew preview with the custom track stack and left legend.",
-            "caption": "The generated preview includes the custom track stack and left legend."
+            "src": "./media/HmmtDNA_ATskew/manual-09-02-atskew-preview.webp",
+            "alt": "Finished human mitochondrial figure with the custom track stack: GC content, GC skew, and AT skew rings, ticks inside, gene labels outside, and the left legend with AT skew (+) and AT skew (-).",
+            "caption": "The finished figure with the AT skew ring and its legend entries."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 9,
             "viewport": {
               "width": 1400,
               "height": 1000
@@ -429,14 +980,14 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); const slots = Array.isArray(app?.adv?.circular_track_slots) ? app.adv.circular_track_slots : []; if (!svg || slots.map((slot) => slot.id).join(',') !== 'features,gc_content,gc_skew,a_skew_2,ticks' || !content.includes('Homo sapiens') || !content.includes('AT skew (+)') || !content.includes('AT skew (-)') || app?.form?.legend !== 'left') throw new Error('Restored mitochondrial AT-skew SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-atskew-final', 'true');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-preview', 'true');"
               },
               {
                 "type": "wait",
                 "ms": 100
               }
             ],
-            "selector": "svg[data-capture-hmmt-atskew-final='true']",
+            "selector": "svg[data-capture-hmmt-preview='true']",
             "cropPadding": 12,
             "assertAppState": {
               "mode": "circular",
@@ -514,7 +1065,10 @@
                 "script": "() => { const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-feature-id='fbdb78069']\"); const text = popup?.textContent || ''; if (!popup || !target || !text.includes('RNR2') || !text.includes('l-rRNA')) return false; const popupRect = popup.getBoundingClientRect(); const targetRect = target.getBoundingClientRect(); return popupRect.left >= 0 && popupRect.bottom <= window.innerHeight && targetRect.left >= 0 && targetRect.right <= window.innerWidth && popupRect.right <= targetRect.left; }"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='fbdb78069']", ".feature-popup"],
+            "clipSelectors": [
+              "[data-gbdraw-feature-id='fbdb78069']",
+              ".feature-popup"
+            ],
             "highlightSelector": "[data-gbdraw-feature-id='fbdb78069']",
             "cropPadding": {
               "top": 16,
@@ -617,8 +1171,12 @@
       "body": "Check that the added slot uses renderer Dinucleotide skew, dinucleotide AT, and legend label AT skew."
     },
     {
+      "title": "The features sit on two strands or the center text lacks the species",
+      "body": "Clear Separate Strands and Multi-Record Canvas in Layout, then click Generate Diagram again."
+    },
+    {
       "title": "The skew rings overlap labels or ticks",
-      "body": "Check that Custom Track Slots are enabled, reset to Middle if needed, and keep GC content, GC skew, AT skew, and ticks inside the axis."
+      "body": "Check that Use custom stack is on with the Middle template, and that ticks is the last row, after a_skew_2."
     },
     {
       "title": "Labels show long product names",
@@ -626,7 +1184,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input record NC_012920.1, Track Preset Middle, Label Mode Out, Legend position Left, Window 500, Step 50, AT skew colors, and the tick label layout."
+      "body": "Check input record NC_012920.1, Label Mode Out, Label Font Size 20, the ajisai palette, Default font size 28, Multi-Record Canvas and Separate Strands off, Window 500, Step 50, the AT skew colors, and the tick label layout."
     }
   ],
   "related": [

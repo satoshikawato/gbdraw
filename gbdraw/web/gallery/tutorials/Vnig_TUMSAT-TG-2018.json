@@ -2,7 +2,7 @@
   "id": "Vnig_TUMSAT-TG-2018",
   "version": 1,
   "title": "Vibrio nigripulchritudo chromosomes and plasmids on one canvas",
-  "summary": "Arrange two chromosomes and four plasmids from one RefSeq GBFF file on a shared circular canvas. The example uses automatic record sizing, two rows, GC content, GC skew, and a left legend.",
+  "summary": "Arrange two chromosomes and four plasmids from one RefSeq GBFF file on a shared circular canvas. Start from the Web defaults, then move the plasmids to their own row, choose a palette, and add a plot title, generating after each change.",
   "appMode": "Circular",
   "primaryWorkflow": "Circular multi-record canvas",
   "downloads": [
@@ -19,6 +19,12 @@
     {
       "title": "Switch to Circular mode",
       "body": "Open gbdraw.app and choose Circular before adding the GenBank file.",
+      "replay": [
+        {
+          "type": "click",
+          "selector": "role=button[name='Circular's]"
+        }
+      ],
       "operations": [
         {
           "media": {
@@ -31,7 +37,7 @@
     },
     {
       "title": "Upload the GenBank file",
-      "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The app will detect the two chromosomes and four plasmids in the file.",
+      "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The app finds the two chromosomes and the four plasmids in the file.",
       "operations": [
         {
           "dataDependent": true,
@@ -43,7 +49,10 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 900},
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
             "clipSelectors": [
               "[data-settings-section='input-genomes'] > .card-header",
               "[data-settings-section='input-genomes'] [role='group'][aria-label='GenBank/DDBJ File selection']"
@@ -53,40 +62,306 @@
               "mode": "circular",
               "files.c_gb.name": "GCF_015097735.1_ASM1509773v1_genomic.gbff"
             },
-            "visibleText": ["GCF_015097735.1_ASM1509773v1_genomic.gbff"]
+            "visibleText": [
+              "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Set the circular layout",
-      "body": "Use these circular layout settings and keep Multi-Record Canvas on (its default).",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Output Prefix", "Vnig_TUMSAT-TG-2018"],
-          ["Track Preset", "Tuckin"],
-          ["Palette", "orchid"],
-          ["Separate Strands", "on"],
-          ["Legend position", "Left"],
-          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
-        ]
-      },
+      "title": "Generate with the defaults",
+      "body": "Click Generate Diagram. Multi-Record Canvas is on by default, so the six records share one canvas. Record Size Mode Auto scales each circle by its length, features sit on two strands (Separate Strands), and the legend is on the left. Record Order fills the rows by record number: the first row holds chromosome 1, chromosome 2, and the plasmid pVNTG1, and the second row holds pVNTG2 to pVNTG4.",
+      "replay": [
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
-          "title": "Basic circular settings",
-          "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track Preset to Tuckin, and Separate Strands to on.",
+          "dataDependent": true,
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-00-circular-layout-settings.webp",
-            "alt": "Basic and Layout cards with Vnig_TUMSAT-TG-2018 as the output prefix, Tuckin as the track preset, and Separate Strands selected.",
-            "caption": "Set Output Prefix, Track Preset, and Separate Strands."
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-default-preview.webp",
+            "alt": "Vibrio multi-record preview with the Web defaults: chromosome 1, chromosome 2, and plasmid pVNTG1 in the first row and pVNTG2 to pVNTG4 in the second, stock colors, left legend, no title.",
+            "caption": "Web defaults: six circles on one canvas; pVNTG1 shares the first row with the chromosomes."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "replayThrough": 3,
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-vnig-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-vnig-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": true,
+              "form.legend": "left",
+              "form.track_type": "tuckin",
+              "adv.multi_record_size_mode": "auto",
+              "adv.multi_record_positions": [
+                {
+                  "selector": "#1",
+                  "row": 1
+                },
+                {
+                  "selector": "#2",
+                  "row": 1
+                },
+                {
+                  "selector": "#3",
+                  "row": 1
+                },
+                {
+                  "selector": "#4",
+                  "row": 2
+                },
+                {
+                  "selector": "#5",
+                  "row": 2
+                },
+                {
+                  "selector": "#6",
+                  "row": 2
+                }
+              ],
+              "selectedPalette": "default",
+              "form.plot_title": ""
+            },
+            "visibleText": [
+              "Chromosome 1",
+              "AP024087.1",
+              "pVNTG1",
+              "pVNTG4"
+            ]
           }
+        }
+      ]
+    },
+    {
+      "title": "Put the plasmids in their own row",
+      "body": "Only the two chromosomes belong in the first row. Open Layout and, in Record Order, set the row of record #3 (pVNTG1) to 2. Click Generate Diagram: the chromosomes now share the first row and the four plasmids the second.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Record Order, record #3 (pVNTG1)",
+            "Row 2"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Layout\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
         },
         {
-          "title": "Palette selector",
-          "body": "Open the default color palette selector and choose orchid.",
+          "type": "select",
+          "selector": "select[aria-label^='Row for #3 (']",
+          "value": "2"
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-palette-orchid.webp",
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-01-record-order.webp",
+            "alt": "Layout card with Multi-Record Canvas on and the six Record Order rows; the row of record #3 is set to 2.",
+            "caption": "In Record Order, set the row of record #3 (pVNTG1) to 2."
+          },
+          "capture": {
+            "source": "webapp",
+            "viewport": {
+              "width": 1600,
+              "height": 1800
+            },
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.includes('Multi-Record Canvas')); const row = document.querySelector(\"select[aria-label^='Row for #3 (']\"); if (!label || !row) throw new Error('Multi-Record Canvas controls not found.'); label.dataset.capture = 'multi-record-canvas-toggle'; row.dataset.capture = 'vnig-record-3-row'; document.querySelector(\"[data-capture='multi-record-canvas-controls']\")?.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='multi-record-canvas-toggle']",
+              "[data-capture='multi-record-canvas-controls']"
+            ],
+            "highlightSelector": "[data-capture='vnig-record-3-row']",
+            "cropPadding": {
+              "top": 14,
+              "right": 16,
+              "bottom": 16,
+              "left": 16
+            },
+            "waitForSelector": "[data-capture='multi-record-canvas-controls']",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "replayThrough": 4,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": true,
+              "adv.multi_record_positions": [
+                {
+                  "selector": "#1",
+                  "row": 1
+                },
+                {
+                  "selector": "#2",
+                  "row": 1
+                },
+                {
+                  "selector": "#3",
+                  "row": 2
+                },
+                {
+                  "selector": "#4",
+                  "row": 2
+                },
+                {
+                  "selector": "#5",
+                  "row": 2
+                },
+                {
+                  "selector": "#6",
+                  "row": 2
+                }
+              ]
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-capture='vnig-record-3-row']",
+                "value": "2"
+              }
+            ],
+            "visibleText": [
+              "Record Order"
+            ]
+          },
+          "dataDependent": true
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-02-plasmid-row-preview.webp",
+            "alt": "Vibrio multi-record preview with chromosome 1 and chromosome 2 in the first row and plasmids pVNTG1 to pVNTG4 in the second, in the default colors.",
+            "caption": "The chromosomes fill the first row; the four plasmids share the second."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "replayThrough": 4,
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-vnig-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-vnig-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": true,
+              "form.legend": "left",
+              "form.track_type": "tuckin",
+              "adv.multi_record_size_mode": "auto",
+              "adv.multi_record_positions": [
+                {
+                  "selector": "#1",
+                  "row": 1
+                },
+                {
+                  "selector": "#2",
+                  "row": 1
+                },
+                {
+                  "selector": "#3",
+                  "row": 2
+                },
+                {
+                  "selector": "#4",
+                  "row": 2
+                },
+                {
+                  "selector": "#5",
+                  "row": 2
+                },
+                {
+                  "selector": "#6",
+                  "row": 2
+                }
+              ],
+              "selectedPalette": "default",
+              "form.plot_title": ""
+            },
+            "visibleText": [
+              "Chromosome 1",
+              "AP024087.1",
+              "pVNTG1",
+              "pVNTG4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Choose a palette",
+      "body": "Open Colors and choose the orchid palette, then click Generate Diagram. The features, GC content, and GC skew take the orchid colors.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Palette",
+            "orchid"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Colors\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Palette']",
+          "value": "orchid"
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-palette-orchid.webp",
             "alt": "Colors card with the default color palette menu open and the orchid option highlighted.",
             "caption": "Open the default color palette selector in the Colors card and choose the highlighted orchid option."
           },
@@ -106,131 +381,126 @@
               "minWidth": 150,
               "placement": "right"
             },
-            "openDetails": ["Colors"]
+            "openDetails": [
+              "Colors"
+            ]
           }
         },
         {
-          "title": "Legend position selector",
-          "body": "Open Legend position and choose Left.",
+          "dataDependent": true,
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-02-legend-position-left.webp",
-            "alt": "Legend card with the Position menu open and the Left option highlighted.",
-            "caption": "Open Position in the Legend card and choose the highlighted Left option."
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-02-orchid-preview.webp",
+            "alt": "Vibrio multi-record preview in the orchid palette, with the chromosomes in the first row and the four plasmids in the second.",
+            "caption": "The orchid palette colors the features, GC content, and GC skew."
           },
           "capture": {
             "source": "webapp",
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 54,
-              "right": 16,
-              "bottom": 24,
-              "left": 16
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "replayThrough": 5,
+            "viewport": {
+              "width": 1600,
+              "height": 1100
             },
-            "openSelect": {
-              "selector": "#legend-position",
-              "selectedLabel": "Left",
-              "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend position"
-            },
-            "openDetails": ["Legend ·"]
-          }
-        },
-        {
-          "title": "Selected feature types",
-          "body": "Keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-03-selected-features.webp",
-            "alt": "Features card with CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
-            "caption": "Keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected."
-          },
-          "capture": {
-            "source": "webapp",
-            "openDetails": ["Features"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Features')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const section = content?.children?.[0]; if (!summary || !section) throw new Error('Feature Types controls not found.'); summary.setAttribute('data-capture', 'feature-types-summary'); section.setAttribute('data-capture', 'feature-types-section'); section.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "clipSelectors": ["[data-capture='feature-types-summary']", "[data-capture='feature-types-section']"],
-            "cropPadding": {
-              "top": 12,
-              "right": 12,
-              "bottom": 12,
-              "left": 12
-            }
-          }
-        }
-      ]
-    },
-    {
-      "title": "Set up the Multi-Record Canvas",
-      "body": "Keep Multi-Record Canvas on and use these sizing and row-placement values.",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Multi-Record Canvas", "on (default)"],
-          ["Record Size Mode", "Auto"],
-          ["Min Radius Ratio", "0.55"],
-          ["Column Gap Ratio", "0.1"],
-          ["Row Gap Ratio", "0.05"],
-          ["Record Order", "#1@1, #2@1, #3@2, #4@2, #5@2, #6@2"]
-        ]
-      },
-      "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row.",
-      "operations": [
-        {
-          "title": "Multi-Record Canvas controls",
-          "body": "Turn on Multi-Record Canvas, then set automatic sizing, gaps, and the two record rows.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-00-multirecord-toggle.webp",
-            "alt": "Layout card with Multi-Record Canvas selected, automatic sizing, gap values, and six Record Order rows.",
-            "caption": "Turn on Multi-Record Canvas and set automatic sizing, gaps, and Record Order."
-          },
-          "capture": {
-            "source": "webapp",
-            "viewport": {"width": 1600, "height": 1800},
-            "openDetails": ["Layout"],
-            "actions": [
-              {
-                "type": "waitForFunction",
-                "script": "() => { const app = window.__GBDRAW_APP__; const actual = (Array.isArray(app?.adv?.multi_record_positions) ? app.adv.multi_record_positions : []).map((entry) => `${entry.selector}@${entry.row}`).join(','); return app?.form?.multi_record_canvas === true && actual === '#1@1,#2@1,#3@2,#4@2,#5@2,#6@2'; }",
-                "timeout": 30000
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-vnig-preview', 'true');"
               },
               {
-                "type": "evaluate",
-                "script": "const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.includes('Multi-Record Canvas')); if (!label) throw new Error('Multi-Record Canvas toggle not found.'); label.dataset.capture = 'multi-record-canvas-toggle';"
+                "type": "wait",
+                "ms": 100
               }
             ],
-            "clipSelectors": ["[data-capture='multi-record-canvas-toggle']", "[data-capture='multi-record-canvas-controls']"],
-            "highlightSelector": "[data-capture='multi-record-canvas-toggle']",
-            "cropPadding": {
-              "top": 60,
-              "right": 16,
-              "bottom": 16,
-              "left": 16
+            "selector": "svg[data-capture-vnig-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": true,
+              "form.legend": "left",
+              "form.track_type": "tuckin",
+              "adv.multi_record_size_mode": "auto",
+              "adv.multi_record_positions": [
+                {
+                  "selector": "#1",
+                  "row": 1
+                },
+                {
+                  "selector": "#2",
+                  "row": 1
+                },
+                {
+                  "selector": "#3",
+                  "row": 2
+                },
+                {
+                  "selector": "#4",
+                  "row": 2
+                },
+                {
+                  "selector": "#5",
+                  "row": 2
+                },
+                {
+                  "selector": "#6",
+                  "row": 2
+                }
+              ],
+              "selectedPalette": "orchid",
+              "form.plot_title": ""
             },
-            "waitForSelector": "[data-capture='multi-record-canvas-controls']"
+            "visibleText": [
+              "Chromosome 1",
+              "AP024087.1",
+              "pVNTG1",
+              "pVNTG4"
+            ]
           }
         }
       ]
     },
     {
       "title": "Add the plot title",
-      "body": "Set the plot title and place it below the multi-record canvas.",
+      "body": "Open Titles and Record Labels, enter the plot title, and set Plot Title Position to Bottom. Type the <i> tags literally to italicize the species name. Click Generate Diagram to get the Gallery figure.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Plot Title", "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome"],
-          ["Plot Title Position", "Bottom"]
+          [
+            "Plot Title",
+            "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome"
+          ],
+          [
+            "Plot Title Position",
+            "Bottom"
+          ]
         ]
       },
+      "note": "Everything else stays at the Web defaults: Track Preset Tuckin, Separate Strands on, Legend position Left, Record Size Mode Auto, Min Radius Ratio 0.55, Column Gap Ratio 0.1, and Row Gap Ratio 0.05.",
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Titles and Record Labels\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Plot Title']",
+          "value": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Plot Title Position']",
+          "value": "bottom"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
-          "title": "Plot title and bottom position",
-          "body": "Enter the plot title, then open Plot Title Position and choose Bottom.",
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-bottom-title.webp",
             "alt": "Compact Plot Title controls with the Vibrio title field and Position menu open with Bottom highlighted.",
             "caption": "Enter the plot title from the table and choose the highlighted Bottom option."
           },
@@ -250,10 +520,16 @@
             "openSelect": {
               "selector": "select[aria-label='Plot Title Position']",
               "selectedLabel": "Bottom",
-              "options": ["None (Default)", "Top", "Bottom"],
+              "options": [
+                "None (Default)",
+                "Top",
+                "Bottom"
+              ],
               "label": "Plot Title Position"
             },
-            "openDetails": ["Titles & Record Labels"],
+            "openDetails": [
+              "Titles & Record Labels"
+            ],
             "actions": [
               {
                 "type": "waitForFunction",
@@ -261,23 +537,18 @@
               }
             ]
           }
-        }
-      ]
-    },
-    {
-      "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The preview should show chromosome 1 and chromosome 2 above plasmids pVNTG1 through pVNTG4, with GC content and GC skew rings inside each record.",
-      "operations": [
+        },
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
-            "alt": "Generated Vibrio multi-record preview with two chromosomes and four plasmids.",
-            "caption": "The generated preview uses automatic radius scaling for two chromosomes and four plasmids."
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-02-multirecord-preview.webp",
+            "alt": "Finished Vibrio multi-record figure: two chromosomes above four plasmids in the orchid palette, a left legend, and the italic species title at the bottom.",
+            "caption": "The finished figure: two chromosomes above four plasmids, with the plot title at the bottom."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "replayThrough": 6,
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -285,33 +556,53 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); const positions = (Array.isArray(app?.adv?.multi_record_positions) ? app.adv.multi_record_positions : []).map((entry) => `${entry.selector}@${entry.row}`).join(','); if (!svg || positions !== '#1@1,#2@1,#3@2,#4@2,#5@2,#6@2' || !content.includes('Vibrio nigripulchritudo') || !content.includes('pVNTG1') || !content.includes('pVNTG4') || app?.form?.legend !== 'left') throw new Error('Restored Vibrio multi-record SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-vnig-multirecord-final', 'true');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-vnig-preview', 'true');"
               },
               {
                 "type": "wait",
                 "ms": 100
               }
             ],
-            "selector": "svg[data-capture-vnig-multirecord-final='true']",
+            "selector": "svg[data-capture-vnig-preview='true']",
             "cropPadding": 12,
             "assertAppState": {
               "mode": "circular",
               "form.multi_record_canvas": true,
               "form.legend": "left",
+              "form.track_type": "tuckin",
               "adv.multi_record_size_mode": "auto",
+              "adv.multi_record_positions": [
+                {
+                  "selector": "#1",
+                  "row": 1
+                },
+                {
+                  "selector": "#2",
+                  "row": 1
+                },
+                {
+                  "selector": "#3",
+                  "row": 2
+                },
+                {
+                  "selector": "#4",
+                  "row": 2
+                },
+                {
+                  "selector": "#5",
+                  "row": 2
+                },
+                {
+                  "selector": "#6",
+                  "row": 2
+                }
+              ],
+              "selectedPalette": "orchid",
+              "form.plot_title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome",
+              "adv.plot_title_position": "bottom",
               "adv.multi_record_min_radius_ratio": 0.55,
               "adv.multi_record_column_gap_ratio": 0.1,
-              "adv.multi_record_row_gap_ratio": 0.05,
-              "adv.multi_record_positions": [
-                {"selector": "#1", "row": 1},
-                {"selector": "#2", "row": 1},
-                {"selector": "#3", "row": 2},
-                {"selector": "#4", "row": 2},
-                {"selector": "#5", "row": 2},
-                {"selector": "#6", "row": 2}
-              ],
-              "form.plot_title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome",
-              "adv.plot_title_position": "bottom"
+              "adv.multi_record_row_gap_ratio": 0.05
             },
             "visibleText": [
               "Vibrio nigripulchritudo",
@@ -332,7 +623,7 @@
       "operations": [
         {
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-07-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
             "caption": "The popup header gives the selected chromosome CDS location, and the Details tab its length and protein ID; the Qualifiers and Sequence tabs hold the rest."
           },
@@ -369,7 +660,10 @@
                 "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='f61c7abf7']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 732, Math.round(rect.right + 32)); app.clickedFeaturePos.y = 260; }"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='f61c7abf7']", ".feature-popup"],
+            "clipSelectors": [
+              "[data-gbdraw-feature-id='f61c7abf7']",
+              ".feature-popup"
+            ],
             "cropPadding": {
               "top": 24,
               "right": 24,
@@ -386,19 +680,19 @@
   "troubleshooting": [
     {
       "title": "Only one record is shown",
-      "body": "Check that Multi-Record Canvas is enabled. Without that option, circular mode can render records separately instead of placing them in one canvas."
+      "body": "Check that Multi-Record Canvas is on (the default). Without it, Circular mode draws each record as a separate figure."
+    },
+    {
+      "title": "pVNTG1 is still in the first row",
+      "body": "Check that Record Order puts record #3 in row 2, then click Generate Diagram again."
     },
     {
       "title": "The plasmids are too small",
       "body": "Raise Min Radius Ratio, or switch Record Size Mode if you need less proportional scaling between chromosomes and plasmids."
     },
     {
-      "title": "The rows differ from the Gallery figure",
-      "body": "Check Record Order #1@1, #2@1, #3@2, #4@2, #5@2, and #6@2, plus Column Gap Ratio 0.1 and Row Gap Ratio 0.05."
-    },
-    {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check the GBFF input, Track Preset Tuckin, orchid palette, Separate Strands, Legend position Left, Plot Title Position Bottom, Record Size Mode Auto, and Min Radius Ratio 0.55."
+      "body": "Check the GBFF input, Record Order (#1@1, #2@1, #3@2, #4@2, #5@2, #6@2), the orchid palette, and Plot Title Position Bottom. The other settings are the Web defaults."
     }
   ],
   "related": [

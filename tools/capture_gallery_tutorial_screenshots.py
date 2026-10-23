@@ -693,6 +693,12 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
             "() => { const app = window.__GBDRAW_APP__; return Boolean(app) && !app.processing && !app.labelReflowProcessing; }",
             timeout=DEFAULT_GENERATE_TIMEOUT_MS,
         )
+        # History can stay busy for many seconds after that (OV-1700); every replay starts
+        # with a mode-button click, so wait until the mode buttons are enabled.
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('.app-mode-button')].every((button) => !button.disabled)",
+            timeout=DEFAULT_GENERATE_TIMEOUT_MS,
+        )
     elif action_type == "generate":
         generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))
     elif action_type == "upload":
