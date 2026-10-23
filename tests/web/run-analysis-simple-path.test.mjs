@@ -2501,7 +2501,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(uploadBytesSent, uploadFile.size);
 
     // A new file inserted before the committed one: the next request names it record-1 and the committed file
-    // record-2, so each is staged under its new id once and the render sends neither again.
+    // record-2. The new file is staged once; the committed file's bytes stay held under their content token, so
+    // its new id sends nothing, and the render sends neither again.
     const insertedFile = new AuditFile([
       'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
     ], 'inserted.gb', { lastModified: 9 });
@@ -2522,7 +2523,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta')
       .map(({ payload }) => [payload.recordSource.resourceId, payload.stagedResources.map(({ resourceId }) => resourceId)]), [
       ['record-1-genbank', ['record-1-genbank']],
-      ['record-2-genbank', ['record-2-genbank']],
+      ['record-2-genbank', []],
       ['record-2-genbank', []],
       ['record-2-genbank', []]
     ]);
@@ -2535,7 +2536,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .flatMap(({ payload }) => payload?.stagedResources ?? [])
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
       .reduce((total, { bytes }) => total + bytes.byteLength, 0);
-    assert.equal(recordBytesSent, insertedFile.size + uploadFile.size);
+    assert.equal(recordBytesSent, insertedFile.size);
     state.linearSeqs.splice(2);
 
     // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
