@@ -389,7 +389,10 @@ def _rotate(rec: Recorder) -> None:
                 "Rotate record using this feature; the sequence and its coordinates stay the same")
     _rotate_to(rec, ROTATE_GENES[0], repeat=False)
     frame = _rotation_frame(rec)
-    expect(rec.page.locator(PREVIEW_REGION)).to_contain_text("5,904")   # COX1 at the top; the center text says so
+    # A rotated record's center text gives its length like an unrotated one, not the display range "[5,904..16,569]".
+    preview = rec.page.locator(PREVIEW_REGION)
+    expect(preview).to_contain_text("16,569 bp")
+    expect(preview).not_to_contain_text("[5,904")
     _show_version(rec, frame, ROTATE_MARKS[0], 2.0)
     for gene, mark in zip(ROTATE_GENES[1:], ROTATE_MARKS[1:], strict=True):
         _rotate_to(rec, gene, repeat=True)
