@@ -306,12 +306,13 @@ def _color_rules(rec: Recorder, rules: tuple[tuple[str, str, str, str, str], ...
     regex = rec.page.locator("input[data-new-specific-rule-pattern]")
     rule_box = rec.page.locator("div:has(> div > input[data-new-specific-rule-pattern])")
     for index, (feature, qualifier_name, pattern, color, legend) in enumerate(rules):
+        if index == 1:
+            # The other rules repeat the first, scrolling included.
+            rec.fast_forward(factor=SKIM)
         with _skimmed(rec):
             rec.reveal(rule_box, anchor=0.45)
         rec.mark(f"rule-{index + 1}")
         rec.focus(rule_box, zoom=2.2, duration=0.6)
-        if index == 1:
-            rec.fast_forward(factor=3.0)
         rec.choose(_label(rec, "New color rule feature type"), feature)
         qualifier = _label(rec, "Qualifier name", within=rule_box)
         if qualifier.input_value() != qualifier_name:
@@ -324,8 +325,9 @@ def _color_rules(rec: Recorder, rules: tuple[tuple[str, str, str, str, str], ...
         # would be validated without this one.
         rec.page.wait_for_function(
             "(count) => (window.__GBDRAW_APP__?.manualSpecificRules || []).length === count", arg=index + 1)
-    rec.normal_speed()
     rec.hold(0.5)
+    if len(rules) > 1:
+        rec.normal_speed()
 
 
 def _feature_types(rec: Recorder, *, remove: tuple[str, ...] = (), add: tuple[str, ...] = ()) -> None:

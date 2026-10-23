@@ -491,14 +491,15 @@ class Recorder:
                 self.fast_forward(factor=4.0)
             self.page.keyboard.type(char)
             self.page.wait_for_timeout(delay * 1000)
-        if skimmed:
-            self.normal_speed()
         if in_svg:
             if field.evaluate("node => node.value") != text:
                 raise AssertionError(f"Typing did not set {field} to {text!r}")
         else:
             expect(field).to_have_value(text)
         self.hold(0.25)
+        # The skim runs on through the pause, so a skimmed next step joins it without a blink of the badge.
+        if skimmed:
+            self.normal_speed()
 
     def reveal(self, locator: Locator, *, anchor: float = 0.38) -> None:
         """Wheel-scroll the settings column until ``locator`` is comfortably visible."""

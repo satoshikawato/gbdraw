@@ -684,3 +684,18 @@ def test_every_intro_note_breaks_only_after_a_clause(caption_types) -> None:
             composer.type, composer.layout = caption_types[story.language], layout
             lines = composer._note_lines(lang(story.intro[1]))
             assert ''.join(lines).replace(' ', '') == lang(story.intro[1]).replace(' ', '')
+
+
+def test_typing_keeps_its_skim_through_the_pause_after_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    typed: list[str] = []
+    page = _StubPage(1920, 1080)
+    page.keyboard = SimpleNamespace(type=typed.append, press=lambda _: None)
+    field = SimpleNamespace(evaluate=lambda script: True if 'activeElement' in script else ''.join(typed))
+    rec = Recorder(page, tmp_path)
+    monkeypatch.setattr(rec, 'click', lambda *args, **kwargs: None)
+    holds: list[float] = []
+    monkeypatch.setattr(rec, 'hold', lambda seconds: (holds.append(seconds), rec.event('hold')))
+    rec.type(field, 'BGC0000708', in_svg=True, skim_after=3)
+    kinds = [event['kind'] for event in rec.events]
+    # A badge gap of the closing pause would blink between this skim and the next step's.
+    assert kinds == ['speed_start', 'hold', 'speed_end'] and holds == [0.25]
