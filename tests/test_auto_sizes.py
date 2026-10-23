@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from functools import reduce
 from operator import getitem
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -22,6 +24,7 @@ from gbdraw.auto_sizes import (
     linear_tick_interval,
     scalar_axis_tick_font_size,
     sliding_window,
+    tick_and_window_tiers,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRenderProfile
@@ -32,6 +35,11 @@ from gbdraw.layout.circular_depth_axis import depth_axis_tick_font_size_px
 from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from gbdraw.mode_profiles import DiagramMode, mode_profiles_payload
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
+
+
+VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "auto_size_vectors.json").read_text(encoding="utf-8")
+)
 
 
 @pytest.fixture(scope="module")
@@ -400,3 +408,18 @@ def test_auto_values_list_only_the_settings_drawn_in_the_mode(cfg: GbdrawConfig)
     assert "labels.font_size" not in linear
     assert "objects.axis.circular.stroke_width" not in linear
     assert "objects.axis.linear.stroke_width" not in circular
+
+
+@pytest.mark.parametrize("case", VECTORS["autoHints"], ids=lambda case: f"{case['mode']}-{case['length']}")
+def test_auto_hint_vectors_equal_python_tiers(cfg: GbdrawConfig, case: dict[str, Any]) -> None:
+    length = case["length"]
+    interval = circular_tick_intervals(length)[0] if case["mode"] == "circular" else linear_tick_interval(length)
+    assert interval == case["scaleInterval"]
+    assert sliding_window(length, cfg) == (case["window"], case["step"])
+
+
+def test_payload_tiers_are_the_python_tiers(cfg: GbdrawConfig) -> None:
+    sizes = mode_profiles_payload()["autoSizes"]
+    assert isinstance(sizes, dict)
+    for key, value in tick_and_window_tiers(cfg).items():
+        assert sizes[key] == value

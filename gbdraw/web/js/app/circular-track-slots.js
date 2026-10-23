@@ -72,7 +72,8 @@ import {
   CIRCULAR_TRACK_RENDERERS as SUPPORTED_RENDERERS,
   syncSlotPlacementFromSide,
   syncSlotsFromAxisIndex,
-  tickLabelLayoutFromSides
+  tickLabelLayoutFromSides,
+  normalizeGapText
 } from '../services/circular-track-slot-model.js';
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { OverlaySlotReference, TrackSlotRow } from '../services/track-slot-validation.js' */
@@ -1800,6 +1801,19 @@ export const createCircularTrackSlotEditor = ({
     if (slot[field] !== scalar) slot[field] = scalar;
   };
 
+  /**
+   * The gap fields' writer (on commit, so a half-typed `1.` is not rewritten).
+   * @param {CircularTrackSlot} slot
+   * @param {'inner_gap_px' | 'outer_gap_px'} field
+   * @param {unknown} text
+   */
+  const updateCircularTrackSlotGap = (slot, field, text) => {
+    const drawing = state.drawingOfMode('circular');
+    if (!['inner_gap_px', 'outer_gap_px'].includes(field) || !drawing.adv.circular_track_slots.includes(slot)) return;
+    const normalized = normalizeGapText(typeof text === 'string' ? text.trim() : text, field);
+    if (slot[field] !== normalized) slot[field] = /** @type {string | null} */ (normalized);
+  };
+
   /** @param {CircularTrackSlot | null | undefined} slot @param {string} field */
   const circularSlotManualValue = (slot, field) => {
     if (!slot) return '';
@@ -1979,6 +1993,7 @@ export const createCircularTrackSlotEditor = ({
     canMoveCircularTrackSlotInside,
     canMoveCircularTrackSlotToAxis,
     updateCircularTrackSlotMeasure,
+    updateCircularTrackSlotGap,
     circularTrackSlotIssue,
     circularTrackGlobalIssues,
     circularAnnotationAnchorOptions,

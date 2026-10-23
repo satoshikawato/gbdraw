@@ -7154,6 +7154,7 @@ export const createAppSetup = () => {
     circularTrackSlotOptionsSummary: circularTrackSlotEditor.circularTrackSlotOptionsSummary,
     circularDrawingDinucleotide: circularTrackSlotEditor.circularDrawingDinucleotide,
     updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
+    updateCircularTrackSlotGap: circularTrackSlotEditor.updateCircularTrackSlotGap,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,

@@ -188,10 +188,11 @@ const normalizeSkewColorParams = (params) => {
 };
 
 /**
+ * The one text of a Circular slot gap: `1px` and `1` are both `1`; an invalid draft stays as typed.
  * @param {unknown} value
  * @param {string} field
  */
-const normalizeGapText = (value, field) => {
+export const normalizeGapText = (value, field) => {
   try {
     const numeric = parseOptionalPixel(value, `Circular track slot ${field}`, { allowZero: true });
     return numeric === null ? null : String(numeric);
