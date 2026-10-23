@@ -18,9 +18,10 @@ write-up of a release.
     input files, and returning to Linear no longer reads every File card again
     (#1293).
   - **Align** and the feature-edit helpers reuse the inputs the last Generate
-    parsed: the Align helper takes about 0.5-2 s instead of 6-12 s on the
-    Gallery comparison Sessions, and it builds two layouts instead of three.
-    Comparison tables and font subsets are read once (#1294, #1297, #1298).
+    parsed: on the hepatoplasmataceae Gallery Session the Align helper takes
+    about 0.5 s instead of about 10 s, and it builds two layouts instead of
+    three. Comparison tables are read once, and font subsets are made once per
+    set of characters (#1294, #1297, #1298).
   - A blastp threshold change filters the kept hits again instead of parsing
     every raw protein table, and the protein manifest and raw tables are
     checked once; a file with several File cards is parsed once (#1295).

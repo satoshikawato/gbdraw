@@ -2,8 +2,8 @@
 import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
-import { getSessionResourceSource, takeFileBytesForTransfer } from './file-content-cache.js';
-import { getResourcePayloadOwner } from './resource-payload-owner.js';
+import { takeFileBytesForTransfer } from './file-content-cache.js';
+import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -87,19 +87,6 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
 };
 
 /**
- * The bytes a File, a Session resource view or a descriptor stands for: every
- * view of one Session resource stands for its source descriptor (the Linear
- * cards of one file each hold a view, and the descriptor names one of them as
- * its owner), anything else for its payload owner. `session-request.js`
- * `addFile` keys one resource per file the same way.
- * @param {object} value
- */
-const payloadIdentityOf = (value) => {
-  const owner = getResourcePayloadOwner(value);
-  return /** @type {{ descriptor?: object } | null} */ (getSessionResourceSource(owner))?.descriptor || owner;
-};
-
-/**
  * The id of the resource of `resources` whose bytes `file` stands for (the
  * File the user chose, or a Session resource view), of this kind, or null. A
  * request that names it stages the bytes the Worker holds under that id
@@ -111,11 +98,11 @@ const payloadIdentityOf = (value) => {
  */
 export const resourceIdOwnedBy = (resources, file, kind) => {
   if (!resources || !file) return null;
-  const identity = payloadIdentityOf(file);
+  const identity = getResourcePayloadIdentity(file);
   return Object.keys(resources).find((resourceId) => {
     const descriptor = resources[resourceId];
     return typeof descriptor === 'object' && descriptor !== null
-      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && payloadIdentityOf(descriptor) === identity;
+      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadIdentity(descriptor) === identity;
   }) ?? null;
 };
 
