@@ -1,77 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'services'));
-await mkdir(join(tempDir, 'utils'));
-await writeFile(
-  join(tempDir, 'services', 'feature-utils.js'),
-  await readFile('gbdraw/web/js/services/feature-utils.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'feature-sequence-fasta.js'),
-  await readFile('gbdraw/web/js/services/feature-sequence-fasta.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'utils', 'i18n.js'),
-  await readFile('gbdraw/web/js/utils/i18n.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'utils', 'color-utils.js'),
-  await readFile('gbdraw/web/js/utils/color-utils.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'utils', 'named-colors.js'),
-  await readFile('gbdraw/web/js/utils/named-colors.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'genbank-header.js'),
-  await readFile('gbdraw/web/js/services/genbank-header.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'conservation-series.js'),
-  await readFile('gbdraw/web/js/services/conservation-series.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'match-sequences.js'),
-  await readFile('gbdraw/web/js/services/match-sequences.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'record-source-coordinates.js'),
-  await readFile('gbdraw/web/js/services/record-source-coordinates.js', 'utf8'),
-  'utf8'
-);
-// match-sequences.js reads the region rule of record-options.js.
-for (const name of ['record-options.js', 'record-draw-selection.js']) {
-  await writeFile(join(tempDir, 'services', name), await readFile(`gbdraw/web/js/services/${name}`, 'utf8'), 'utf8');
-}
-for (const name of ['optional-positive-number.js', 'error-normalization.js', 'download-names.js']) {
-  await writeFile(
-    join(tempDir, 'utils', name),
-    await readFile(`gbdraw/web/js/utils/${name}`, 'utf8'),
-    'utf8'
-  );
-}
-await writeFile(
-  join(tempDir, 'services', 'file-content-cache.js'),
-  'export const readFileText = (file) => file.text();\n',
-  'utf8'
-);
-
-const {
+import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
   buildMatchSequenceBundle,
@@ -79,13 +8,13 @@ const {
   extractMatchedSpan,
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
-} = await import(pathToFileURL(join(tempDir, 'services', 'match-sequences.js')));
-const { readRecordSourceSpan, recordSourceInterval } = await import(
-  pathToFileURL(join(tempDir, 'services', 'record-source-coordinates.js'))
-);
+} from '../../gbdraw/web/js/services/match-sequences.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../../gbdraw/web/js/services/record-source-coordinates.js';
 
-const textFile = (value) => ({ text: async () => value });
-const namedTextFile = (name, value) => ({ name, text: async () => value });
+// The restore reads files through the shared browser sequence reader (`readParsedSequenceRecords`), which reads a
+// File's bytes once per File object.
+const textFile = (value) => new File([value], 'input.txt');
+const namedTextFile = (name, value) => new File([value], name);
 
 const analyzeCircularHomologyCoverage = ({
   comparisonSource,
@@ -644,4 +573,60 @@ test('uses BLAST identity rather than stale source indexes for upload companions
       { recordId: 'comparison_a', sequence: 'AAAACCCC', sourceIndex: 1 }
     ]
   );
+});
+
+// OV-1680: a restored Linear card selects its record among every record the Python reader reads. A GenBank
+// record without a sequence (a CON record) keeps its place, so `#2` names the record the drawing drew.
+test('a restored record selector counts a record without a sequence (OV-1680)', async () => {
+  const record = (name, division, body) => [
+    `LOCUS       ${name}                       8 bp    DNA     linear   ${division} 01-JAN-1980`,
+    'DEFINITION  x.', `ACCESSION   ${name}`, `VERSION     ${name}`, 'FEATURES             Location/Qualifiers',
+    body, '//'
+  ].join('\n');
+  const gb = textFile([
+    record('BBB', 'CON', 'CONTIG      join(AAA:1..8)'),
+    record('DUP', 'UNK', 'ORIGIN\n        1 aaaaaaaa'),
+    record('DUP', 'UNK', 'ORIGIN\n        1 cccccccc')
+  ].join('\n') + '\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb, region_record_id: '#2' }, { gb, region_record_id: '#1' }]
+  });
+  // Python: `#2` is the first DUP; `#1` is BBB, which has no sequence to register.
+  assert.deepEqual(sources.map(({ key, recordId, sequence }) => ({ key, recordId, sequence })), [
+    { key: 'linear:record:0', recordId: 'DUP', sequence: 'AAAAAAAA' }
+  ]);
+});
+
+// OV-1681: a restored GFF3 card's `#N` counts the records the GFF3 names, as the drawing's loader does.
+test('a restored GFF3 record selector counts the records the GFF3 names (OV-1681)', async () => {
+  const gff = namedTextFile('named.gff',
+    '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\nG2\t.\tCDS\t1\t9\t.\t+\t0\tID=c2\n');
+  const fasta = namedTextFile('extra.fasta', '>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff', linearSeqs: [{ gff, fasta, region_record_id: '#2' }]
+  });
+  assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'G2', sequence: 'ATGGGGTAA' }
+  ]);
+});
+
+// OV-1681: the automatic record of a restored GFF3 card is the first record the GFF3 names, and a card without
+// both files keeps its selector, so the other cards keep their sources.
+test('a restored GFF3 automatic record is the first record the GFF3 names (OV-1681)', async () => {
+  const gff = namedTextFile('g1-only.gff', '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n');
+  const fasta = namedTextFile('x-first.fasta', '>X\nCCCCCCCCC\n>G1\nATGAAATAA\n');
+  const automatic = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff', linearSeqs: [{ gff, fasta, region_record_id: '' }]
+  });
+  assert.deepEqual(automatic.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'G1', sequence: 'ATGAAATAA' }
+  ]);
+  const missingGff = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff',
+    linearSeqs: [{ gff, fasta, region_record_id: 'G1' }, { gff: null, fasta, region_record_id: '#1' }]
+  });
+  assert.deepEqual(missingGff.map(({ key, recordId }) => ({ key, recordId })), [
+    { key: 'linear:record:0', recordId: 'G1' },
+    { key: 'linear:record:1', recordId: 'X' }
+  ]);
 });

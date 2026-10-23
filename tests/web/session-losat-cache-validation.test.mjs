@@ -16,9 +16,9 @@ globalThis.window = {
 };
 globalThis.document = {};
 installFakeSvgDom();
-let restoredPrimaryTextReads = 0;
+let restoredPrimaryReads = 0;
 let restoredPrimaryArrayBufferReads = 0;
-const restoredTextReadsByName = new Map();
+const restoredReadsByName = new Map();
 const resourceReencodesByName = new Map();
 globalThis.__GBDRAW_TEST_HOOKS__ = {
   onStructuralMetric({ name, resourceName }) {
@@ -28,11 +28,13 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
         (resourceReencodesByName.get(resourceName) || 0) + 1
       );
     }
-    if (name !== 'resourceTextReadCount') return;
-    restoredPrimaryTextReads += 1;
-    restoredTextReadsByName.set(
+    // A restore reads a Session resource's bytes once (`readParsedSequenceRecords`); reading its text reads the
+    // bytes first, so the byte read counts every content read.
+    if (name !== 'resourceByteReadCount') return;
+    restoredPrimaryReads += 1;
+    restoredReadsByName.set(
       resourceName,
-      (restoredTextReadsByName.get(resourceName) || 0) + 1
+      (restoredReadsByName.get(resourceName) || 0) + 1
     );
   }
 };
@@ -44,10 +46,10 @@ globalThis.File = class File extends Blob {
   }
 
   async text() {
-    restoredPrimaryTextReads += 1;
-    restoredTextReadsByName.set(
+    restoredPrimaryReads += 1;
+    restoredReadsByName.set(
       this.name,
-      (restoredTextReadsByName.get(this.name) || 0) + 1
+      (restoredReadsByName.get(this.name) || 0) + 1
     );
     return super.text();
   }
@@ -562,7 +564,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
 
 test('current session recovers files only when a sequence consumer is missing', async () => {
   alerts.length = 0;
-  restoredPrimaryTextReads = 0;
+  restoredPrimaryReads = 0;
   restoredPrimaryArrayBufferReads = 0;
   const genbank = `LOCUS       CATALOG                     8 bp    DNA     linear   UNK 01-JAN-1980
 ACCESSION   CATALOG
@@ -719,7 +721,7 @@ ORIGIN
 
   assert.equal(result.status, 'ok');
   assert.equal(state.linearSeqs[0].gb.name, 'catalog-primary.gbk');
-  assert.equal(restoredPrimaryTextReads, 0);
+  assert.equal(restoredPrimaryReads, 0);
   assert.equal(restoredPrimaryArrayBufferReads, 0);
   assert.deepEqual(state.matchSequenceRegistry.values(), [{
     ...sequenceSource,
@@ -754,7 +756,7 @@ ORIGIN
   sparsePayload.editorState.featureCatalog.items[0].recordKeys.push(
     'second-record'
   );
-  restoredPrimaryTextReads = 0;
+  restoredPrimaryReads = 0;
   restoredPrimaryArrayBufferReads = 0;
   const sparseResult = await importSession({
     target: {
@@ -764,7 +766,7 @@ ORIGIN
   });
 
   assert.equal(sparseResult.status, 'ok');
-  assert.equal(restoredPrimaryTextReads, 0);
+  assert.equal(restoredPrimaryReads, 0);
   assert.equal(restoredPrimaryArrayBufferReads, 0);
   assert.deepEqual(
     state.matchSequenceRegistry.values().map((source) => source.recordId),
@@ -784,7 +786,7 @@ ORIGIN
     sstart: 1,
     send: 4
   });
-  restoredPrimaryTextReads = 0;
+  restoredPrimaryReads = 0;
   const missingResult = await importSession({
     target: {
       files: [new Blob([JSON.stringify(missingPayload)], { type: 'application/json' })],
@@ -793,7 +795,7 @@ ORIGIN
   });
 
   assert.equal(missingResult.status, 'ok');
-  assert.equal(restoredPrimaryTextReads, 2);
+  assert.equal(restoredPrimaryReads, 2);
   assert.deepEqual(
     state.matchSequenceRegistry.values().map((source) => source.recordId),
     ['CATALOG.1', 'SECOND.1']
@@ -801,14 +803,14 @@ ORIGIN
 });
 
 test('current Circular sessions recover only supplied comparison FASTA sources', async () => {
-  restoredTextReadsByName.clear();
+  restoredReadsByName.clear();
   const optionalResult = await importSessionPayload(
     circularSequenceCoverageSession()
   );
 
   assert.equal(optionalResult.status, 'ok');
-  assert.equal(restoredTextReadsByName.get('reference.gbk') || 0, 0);
-  assert.equal(restoredTextReadsByName.get('comparison.fna') || 0, 0);
+  assert.equal(restoredReadsByName.get('reference.gbk') || 0, 0);
+  assert.equal(restoredReadsByName.get('comparison.fna') || 0, 0);
   assert.equal(
     state.matchSequenceRegistry.resolve('', 'REFERENCE.1', {
       origin: 'circular-reference'
@@ -823,14 +825,14 @@ test('current Circular sessions recover only supplied comparison FASTA sources',
     null
   );
 
-  restoredTextReadsByName.clear();
+  restoredReadsByName.clear();
   const recoverableResult = await importSessionPayload(
     circularSequenceCoverageSession({ includeComparisonFasta: true })
   );
 
   assert.equal(recoverableResult.status, 'ok');
-  assert.equal(restoredTextReadsByName.get('reference.gbk'), 1);
-  assert.equal(restoredTextReadsByName.get('comparison.fna'), 1);
+  assert.equal(restoredReadsByName.get('reference.gbk'), 1);
+  assert.equal(restoredReadsByName.get('comparison.fna'), 1);
   assert.equal(
     state.matchSequenceRegistry.resolve('', 'comparison', {
       origin: 'homology-comparison',
@@ -839,14 +841,14 @@ test('current Circular sessions recover only supplied comparison FASTA sources',
     'AAAACCCC'
   );
 
-  restoredTextReadsByName.clear();
+  restoredReadsByName.clear();
   const catalogResult = await importSessionPayload(
     circularSequenceCoverageSession({ includeCatalogComparison: true })
   );
 
   assert.equal(catalogResult.status, 'ok');
-  assert.equal(restoredTextReadsByName.get('reference.gbk') || 0, 0);
-  assert.equal(restoredTextReadsByName.get('comparison.fna') || 0, 0);
+  assert.equal(restoredReadsByName.get('reference.gbk') || 0, 0);
+  assert.equal(restoredReadsByName.get('comparison.fna') || 0, 0);
   assert.equal(
     state.matchSequenceRegistry.resolve('', 'comparison', {
       origin: 'homology-comparison',

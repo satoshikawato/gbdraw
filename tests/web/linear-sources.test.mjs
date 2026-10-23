@@ -31,6 +31,8 @@ import {
 } from '../../gbdraw/web/js/services/session-resource-backing.js';
 
 const hashText = async (value) => createHash('sha256').update(value).digest('hex');
+/** The entry digest owner of run-analysis.js (`getSeqHash`): `hashText` of the entry's FASTA. */
+const digestOf = (getEntry) => async (index) => hashText((await getEntry(index)).fasta);
 
 const sourceRecord = (uid, gb) => ({ uid, gb, gff: null, fasta: null });
 const sourceA = { name: 'a.gb' };
@@ -209,7 +211,7 @@ const sequences = Array.from({ length: 8 }, (_, index) => ({
 assert.deepEqual(groupLinearSourceRecords(sequences).map((source) => source.records.length), [6, 2]);
 const specs = sequences.flatMap((_, queryIndex) => sequences.map((_, subjectIndex) => ({ queryIndex, subjectIndex })));
 const planFor = (records = sequences, jobs = specs, getEntry = async () => ({ fasta: '>duplicate\nACGT\n' })) => prepareLosatSourceBatches({
-  sequences: records, specs: jobs, getEntry, buildArgs: () => ['--task', 'blastn'], hashText, protein: false
+  sequences: records, specs: jobs, getEntry, getDigest: digestOf(getEntry), buildArgs: () => ['--task', 'blastn'], hashText, protein: false
 });
 // PD-OI-018 revision 4 (D-19): sources stay batched between files; a record
 // searches itself only when that self comparison is requested, and a
@@ -263,6 +265,7 @@ assert.deepEqual(replay.batches.map((batch) => batch.searchContext).sort(), plan
 
 const codePlan = await prepareLosatSourceBatches({
   sequences, specs: adjacentSpecs, getEntry: async () => ({ fasta: '>duplicate\nACGT\n' }),
+  getDigest: async () => hashText('>duplicate\nACGT\n'),
   buildArgs: (query) => ['--query-gencode', query === 0 ? '4' : '11', '--db-gencode', '11'],
   hashText, protein: false
 });
@@ -272,6 +275,7 @@ assert.deepEqual(codePlan.batches.map((batch) => batch.query.indexes.length).sor
 const noSelf = await prepareLosatSourceBatches({
   sequences, specs: specs.filter(({ queryIndex, subjectIndex }) => queryIndex !== subjectIndex),
   getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
+  getDigest: async (index) => hashText(`>protein-${index}\nMKK\n`),
   buildArgs: () => ['--max-target-seqs', '5'], hashText, protein: true
 });
 for (const batch of noSelf.batches) {
@@ -280,6 +284,33 @@ for (const batch of noSelf.batches) {
 }
 assert.equal(noSelf.batches.length, 2 + 8);
 assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 56);
+
+// OV-1598: a single-record side searches its entry's FASTA as it is, so its digest is the entry's own (read from
+// `getDigest`, the owner run-analysis.js holds per File) and is not computed again. A side whose text differs from
+// its entry (renamed records, an added line end) hashes its own text.
+test('a single-record LOSAT side reads its entry digest instead of hashing the FASTA again', async () => {
+  const fileA = { name: 'a.gbk' };
+  const cards = ['a0', 'a1', 'b0'].map((uid) => ({ uid, gb: uid === 'b0' ? { name: 'b.gbk' } : fileA, gff: null, fasta: null }));
+  const fastaFor = (index) => (index === 2 ? '>b0\nACGT' : `>${cards[index].uid}\nACGT\n`);
+  const hashed = [];
+  const digests = [];
+  const plan = await prepareLosatSourceBatches({
+    sequences: cards,
+    specs: [{ queryIndex: 0, subjectIndex: 0 }, { queryIndex: 0, subjectIndex: 2 }, { queryIndex: 2, subjectIndex: 0 }],
+    getEntry: async (index) => ({ fasta: fastaFor(index) }),
+    getDigest: async (index) => { digests.push(index); return hashText(fastaFor(index)); },
+    buildArgs: () => ['--task', 'blastn'],
+    hashText: async (text) => { hashed.push(text); return hashText(text); },
+    protein: false
+  });
+  assert.deepEqual(digests, [0], 'only the record whose side text is its entry text reads the entry digest');
+  assert.ok(!hashed.includes(fastaFor(0)), 'the entry FASTA is not hashed again');
+  assert.ok(hashed.includes('>b0\nACGT\n'), 'a side with an added line end hashes its own text');
+  const self = plan.batches.find((batch) => batch.scope === 'self');
+  assert.equal(self.query.hash, await hashText(fastaFor(0)));
+  const multi = plan.batches.find((batch) => batch.subject.indexes.length > 1);
+  assert.equal(multi.subject.hash, await hashText(multi.subject.fasta), 'a two-record side hashes its joined FASTA');
+});
 
 // Record selection D-07: an OFF record is never a query, and its source's
 // database keeps it, so turning a record ON or OFF changes no other E-value.
@@ -300,7 +331,7 @@ test('the LOSAT plan over the drawn records keeps OFF records in their source da
   const getEntry = async (index) => ({ fasta: `>${search.sequences[index].uid}\nACGT\n` });
   const uids = (indexes) => indexes.map((index) => search.sequences[index].uid).sort();
   const planned = await prepareLosatSourceBatches({
-    ...search, specs: drawnSpecs, getEntry, buildArgs: () => ['--task', 'blastn'], hashText, protein: false
+    ...search, specs: drawnSpecs, getEntry, getDigest: digestOf(getEntry), buildArgs: () => ['--task', 'blastn'], hashText, protein: false
   });
   const between = planned.batches.find((batch) => batch.scope === 'between-sources');
   assert.deepEqual(uids(between.query.indexes), ['a0', 'a2'], 'an OFF record is not a query');
@@ -315,6 +346,7 @@ test('the LOSAT plan over the drawn records keeps OFF records in their source da
     ...allOn,
     specs: [{ queryIndex: 0, subjectIndex: 3 }, { queryIndex: 2, subjectIndex: 3 }],
     getEntry: async (index) => ({ fasta: `>${allOn.sequences[index].uid}\nACGT\n` }),
+    getDigest: async (index) => hashText(`>${allOn.sequences[index].uid}\nACGT\n`),
     buildArgs: () => ['--task', 'blastn'], hashText, protein: false
   });
   const allOnBetween = allOnPlan.batches.find((batch) => batch.scope === 'between-sources');
@@ -331,6 +363,7 @@ test('one-file records never search themselves without a request', async () => {
     })),
     specs: [{ queryIndex: 0, subjectIndex: 1 }],
     getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
+    getDigest: async (index) => hashText(`>protein-${index}\nMKK\n`),
     buildArgs: () => ['--max-target-seqs', '1'],
     hashText,
     protein: true
@@ -390,7 +423,7 @@ test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
     const specs = vector.specs.map(([queryIndex, subjectIndex]) => ({ queryIndex, subjectIndex }));
     const plan = await prepareLosatSourceBatches({
       sequences: records, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
-      buildArgs, hashText, protein: false
+      getDigest: async (index) => hashText(vector.records[index].fasta), buildArgs, hashText, protein: false
     });
     assert.equal(planLosatSourceJobs({ sequences: records, specs, buildArgs }).jobs.length, plan.batches.length);
     assert.deepEqual(plan.batches.map((batch) => ({
@@ -456,7 +489,7 @@ test('shared LOSATP specs and job plan vectors', async () => {
     assert.deepEqual(specs.map((spec) => [spec.queryIndex, spec.subjectIndex]), vector.specs, vector.name);
     const plan = await prepareLosatSourceBatches({
       sequences, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
-      buildArgs: () => vector.args, hashText, protein: true
+      getDigest: async (index) => hashText(vector.records[index].fasta), buildArgs: () => vector.args, hashText, protein: true
     });
     assert.deepEqual(plan.batches.map((batch) => ({
       scope: batch.scope,

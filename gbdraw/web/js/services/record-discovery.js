@@ -3,14 +3,13 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
 } from './diagram-generation.js';
-import { scanGenBankHeader } from './genbank-header.js';
+import { genbankHeaderIds, scanGenBankHeader } from './genbank-header.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
   getSessionResourceSource,
-  readFileBytes,
-  readFileText
+  readFileBytes
 } from './file-content-cache.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
@@ -351,11 +350,11 @@ export const browserReaderText = (bytes) => (
   startsWithUtf8ByteOrderMark(bytes) ? null : bytesToText(bytes)
 );
 
-// The text the no-Worker fast path reads, or null to decline to the Worker.
-// A Session resource is a file Python already read for its Result.
+// The text the no-Worker fast path reads, or null to decline to the Worker. A
+// Session resource view reads its bytes like a File, with the same rule (OV-1599).
 /** @param {FileLike | null | undefined} file @returns {Promise<string | null>} */
 const readFastPathText = async (file) => {
-  if (getSessionResourceSource(file)) return readFileText(file);
+  if (getSessionResourceSource(file)) return browserReaderText(await readFileBytes(file));
   if (typeof file?.text !== 'function') return null;
   if (typeof file.arrayBuffer !== 'function') return file.text();
   return browserReaderText(await readFileBytes(file));
@@ -424,6 +423,81 @@ export const readOncePerFile = (files, key, read, limit = Infinity) => {
   reads.set(key, started);
   started.catch(() => { if (reads.get(key) === started) reads.delete(key); });
   return started;
+};
+
+/**
+ * A record of a sequence file, in file order, as the browser sequence readers (LOSAT, the restored match
+ * sequences) parse it. `sequence` is null for a GenBank record without one (a CON record): it keeps its place,
+ * so `#N` and the automatic first record name the records Python reads, and only the Python reader reports its
+ * sequence. `aliases` are the names a match may give the record: its ID, then the GenBank VERSION, ACCESSION and
+ * LOCUS names or the whole FASTA header.
+ * @typedef {{ id: string, aliases: readonly string[], sequence: string | null }} ParsedSequenceRecord
+ */
+/** @param {unknown} text @returns {ParsedSequenceRecord[]} */
+const parseFastaRecordsFast = (text) => {
+  /** @type {ParsedSequenceRecord[]} */
+  const records = [];
+  let current = /** @type {{ id: string, header: string, parts: string[] } | null} */ (null);
+  /** @param {{ id: string, header: string, parts: string[] }} entry */
+  const push = ({ id, header, parts }) => records.push({
+    id, aliases: [...new Set([id, header].filter(Boolean))], sequence: parts.join('').toUpperCase()
+  });
+  String(text || '').split(/\r?\n/).forEach((line) => {
+    if (line.startsWith('>')) {
+      if (current) push(current);
+      const header = line.slice(1).trim();
+      current = { id: header.split(/\s+/)[0] || `record_${records.length + 1}`, header, parts: [] };
+      return;
+    }
+    if (current && line.trim()) current.parts.push(line.replace(/\s+/g, ''));
+  });
+  if (current) push(current);
+  return records;
+};
+/** @param {unknown} text @returns {ParsedSequenceRecord[]} */
+const parseGenbankRecordsFast = (text) => {
+  /** @type {ParsedSequenceRecord[]} */
+  const records = [];
+  String(text || '').split(/^\/\/\s*$/m).forEach((chunk) => {
+    const header = genbankHeaderIds(chunk);
+    if (!header) return;
+    const { recordId, version, accession, locus } = header;
+    const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
+    const sequence = originMatch ? originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase() : '';
+    records.push({
+      id: recordId,
+      aliases: [...new Set([recordId, version, accession, locus].filter(Boolean))],
+      sequence: sequence || null
+    });
+  });
+  return records;
+};
+/**
+ * @param {string} text
+ * @param {string} fmt `genbank` or `fasta`.
+ * @returns {ParsedSequenceRecord[]}
+ */
+export const parseSequenceRecordsFast = (text, fmt) => (
+  fmt === 'genbank' ? parseGenbankRecordsFast(text) : parseFastaRecordsFast(text)
+);
+/**
+ * A file's records, parsed once per File and format, frozen, or null when only the Python reader reads the
+ * file (`browserReaderText`); `parsed` says whether this call read the file.
+ * @param {FileLike} file
+ * @param {string} fmt `genbank` or `fasta`.
+ * @returns {Promise<{ records: readonly ParsedSequenceRecord[] | null, parsed: boolean }>}
+ */
+export const readParsedSequenceRecords = async (file, fmt) => {
+  let parsed = false;
+  const records = await readOncePerFile([file], `sequence-records:${fmt}`, async () => {
+    parsed = true;
+    // Decoded from the bytes Generate already read: a Session resource view would keep a text read beside them.
+    const text = browserReaderText(await readFileBytes(file));
+    return text === null ? null : Object.freeze(parseSequenceRecordsFast(text, fmt).map((record) => Object.freeze({
+      ...record, aliases: Object.freeze(record.aliases)
+    })));
+  });
+  return { records, parsed };
 };
 
 // Each caller of a record list gets its own copy of the records.
@@ -522,4 +596,19 @@ export const discoverGffFastaRecords = async ({
     );
     return normalizeSequenceRecords(response.result);
   }));
+};
+
+/**
+ * The selector a FASTA reader of a GFF3 and FASTA pair reads for a record selector. load_gff_fasta reads only the
+ * records the GFF3 names, in FASTA order, while a FASTA reader reads every entry. So the automatic record (an empty
+ * selector) and `#N` become the record ID the record list gives them (OV-1681). A record ID, a `#N` the list does
+ * not hold, or a card without both files keeps its selector.
+ * @param {{ gffFile: FileLike | null | undefined, fastaFile: FileLike | null | undefined, selector: string }} options
+ * @returns {Promise<string>}
+ */
+export const gffFastaReaderSelector = async ({ gffFile, fastaFile, selector }) => {
+  if ((selector && !selector.startsWith('#')) || !gffFile || !fastaFile) return selector;
+  const records = await discoverGffFastaRecords({ gffFile, fastaFile });
+  const record = selector ? records.find((entry) => entry.selector === selector) : records[0];
+  return record?.recordId ?? selector;
 };
