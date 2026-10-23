@@ -17,8 +17,8 @@
       "sha256": "a8dfb2d59929611be83ee22ffb8adc832563633fad66d00e11b30c7554c0c4e8"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1342896,
-      "sha256": "4e5cc7f455bf4691532e0820899db942a8118ac5d25285beb7720b604ca72f6f"
+      "bytes": 1342943,
+      "sha256": "3d33c13b863c7ef9d13ee10008deaafe14149b175dee88b8c8f36508b0dad785"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 494934,
@@ -45,8 +45,8 @@
       "sha256": "7bcd5cfddb7785ce4a7614a55ff9243a960b8b62b409485355979668e61d9d2a"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
-      "bytes": 7549877,
-      "sha256": "be62ffab365ce057b51922de230f8bc96aa4d8e2397d119f69f71555c49aba6e"
+      "bytes": 7549941,
+      "sha256": "793c7cfdf0039ab2aa50e1adc8975f755c7f80ffbe5a12f862c8fc61fc69fe3a"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
       "bytes": 1455273,
@@ -57,8 +57,8 @@
       "sha256": "d689522cfc8f2892afc625379031c2920c2a6ed9892c7cb9dd24c4809c4c006b"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3041983,
-      "sha256": "fdcabff11870c294837e74b5de7d7604be9d40d00cafbc255042c89065d4ffed"
+      "bytes": 3042030,
+      "sha256": "3708083ad8b8220f963e65b40498594e82c214aeb0789d879e1e422e0ebcfdb8"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 325995,
@@ -85,8 +85,8 @@
       "sha256": "5d4ddb99805923cdbd2faf21fb1098f20d68d22eefce37865ef54c31b9e94257"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6264584,
-      "sha256": "3b4f3a837d2db234e14e7307e577f9b0e7c047c324a04a0eebf17a919575d624"
+      "bytes": 6264598,
+      "sha256": "972f07ff6c76279be1f1d550df34474d757d58e863f3f7ea70a68daa23d53186"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
       "bytes": 1650011,
@@ -97,8 +97,8 @@
       "sha256": "c1feba9e352007d361fa4255b8cda5c63ee87a0a8d320a63494a8664a3c434a5"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 258719,
-      "sha256": "e14428e90a2a55d9b7ceed60f0addd9bd5b99a165c47543986edc4571305e475"
+      "bytes": 258766,
+      "sha256": "b8fa7447f4125c6191229b7513cdf61fb87462867cab7351907f7703b346bd6a"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 135169,
@@ -125,8 +125,8 @@
       "sha256": "316a8c6b20aac725c125e00d2e6b7913026e6caf2bd66b98b0dacd11e889eba6"
     },
     "gallery/sources/majanivirus_orthogroup.svg": {
-      "bytes": 1895477,
-      "sha256": "88aee15e90053852d1ade67552e9d8c48cc1d8a499869178233f825a65c16a3b"
+      "bytes": 1895541,
+      "sha256": "b10cb2e3e142d435d0e5d5793c81907cd7a27e8bfe838b759a951aa792b77e15"
     },
     "gallery/sources/tobacco-chloroplast.svg": {
       "bytes": 281065,
@@ -137,8 +137,8 @@
       "sha256": "f22743caed6093e8bb63cbf6e0f6910be1b2756cc68d5981ed94e34e61a5e853"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 18966,
-      "sha256": "84409b3c60f32e7a72ea72471d12d97430acffcd1657e5660292a3afbfbcad5d"
+      "bytes": 19690,
+      "sha256": "955d0ee968cca58e4f274dbdb51bc51db3f8d7d86dceca3d9a79ce63c1a4479e"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22298,
@@ -165,8 +165,8 @@
       "sha256": "2044d7982937fa729d03117354173ad9883c5dc37f08ebdde1c1fdd46bf0ff13"
     },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
-      "bytes": 15786,
-      "sha256": "fee59db7aa2d5c00dd1eb4740091f38e0677bee9bb0cbd71d9950897a5ac4962"
+      "bytes": 15824,
+      "sha256": "c06aee1cf56a280bcffc26f579fb90fb91004ca174c68e1b3cc0bf211dba0989"
     },
     "gallery/thumbnails/tobacco-chloroplast.webp": {
       "bytes": 20864,

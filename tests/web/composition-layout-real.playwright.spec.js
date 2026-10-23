@@ -802,3 +802,38 @@ test('real Circular render without a legend serializes diagram/title drags and R
   expect(reset.metadata.legendReflow).toBeNull();
   expect(externalRequests).toEqual([]);
 });
+
+// OV-1605 (R3): a row rename that widens an Upper Left Legend makes the
+// planner grow the canvas above the record, onto the top title's side. The
+// live replan keeps the title outside the Legend, and Generate draws the same
+// composition.
+test('real Circular render keeps a top title outside an Upper Left Legend a renamed row moves above the record', async ({ page, baseURL }) => {
+  test.setTimeout(600000);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
+  await openApp(page);
+  await renderRealDiagram(page, 'circular', readFileSync(genbankPath, 'utf8'), { legendSide: 'upper_left' });
+  const { renamed: live } = await loadAndRenameLegendEntry(page);
+  expectValidComposition(live, { legendSide: 'upper_left' });
+  const overlaps = (first, second) => (
+    first.x < second.x + second.width && second.x < first.x + first.width &&
+    first.y < second.y + second.height && second.y < first.y + first.height
+  );
+  const { primary, legend, title } = live.automaticBounds;
+  expect(legend.y + legend.height, 'the Legend grew the canvas above the record').toBeLessThanOrEqual(primary.y);
+  expect(overlaps(title, legend), 'the live title clears the Legend').toBe(false);
+  expect(title.y + title.height).toBeLessThanOrEqual(legend.y);
+
+  const outcome = await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis());
+  expect(outcome).toEqual({ status: 'ok' });
+  const generated = await inspectLiveComposition(page);
+  expectValidComposition(generated, { legendSide: 'upper_left' });
+  expectRenamedEntry(generated);
+  for (const role of ['legend', 'title']) {
+    generated.metadata[role].automaticTranslation.forEach((value, index) => {
+      expect(value, `${role} translation ${index}: live equals Generate`)
+        .toBeCloseTo(live.metadata[role].automaticTranslation[index], 6);
+    });
+  }
+  expect(overlaps(generated.automaticBounds.title, generated.automaticBounds.legend)).toBe(false);
+  expect(externalRequests).toEqual([]);
+});

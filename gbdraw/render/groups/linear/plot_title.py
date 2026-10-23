@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from gbdraw.svg.elements import Group, TSpan, Text
 
-from ....core.text import calculate_bbox_dimensions, parse_mixed_content_text
+from ....core.text import measure_mixed_text_line, parse_mixed_content_text
 from ....layout.spatial import Aabb
 from ....render.group_content import GroupContent
 
@@ -20,8 +20,13 @@ def plot_title_content(
     """The ``plot_title_content`` stage: one centered, mixed-style title line."""
 
     parts = parse_mixed_content_text(str(title or "").strip())
-    plain = "".join(str(part.get("text") or "") for part in parts)
-    width, height = calculate_bbox_dimensions(plain if plain else " ", font_family, float(font_size), dpi)
+    styled = [
+        (str(part_text), "italic" if part.get("italic") else "normal")
+        for part in parts
+        if (part_text := part.get("text"))
+    ]
+    # The painted box of the drawn tspans, as Circular titles measure theirs (OV-1608).
+    width, height = measure_mixed_text_line(styled or [(" ", "normal")], font_family, float(font_size), dpi)
     text = Text(
         "",
         insert=(0, 0),

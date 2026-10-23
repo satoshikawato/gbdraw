@@ -3385,6 +3385,7 @@ def test_overlay_collision_bounds_come_from_composition_plan(
         ),
         primary_bounds=Aabb(100.0, 200.0, 500.0, 600.0),
         placement=circular_assemble_module.LegendPlacement(placement),
+        record_obstacles=(Aabb(250.0, 350.0, 350.0, 450.0),),
     )
 
     assert bounds == expected
@@ -3865,3 +3866,83 @@ def test_cyclic_order_is_stable_once_kept() -> None:
     circular_labels_module._keep_cyclic_order(wrapped, 0.05)
     assert circular_labels_module._keep_cyclic_order(wrapped, 0.05) is False
     assert wrapped[-1] <= wrapped[0] + 360.0 - 0.05 + 1e-9
+
+
+def _at_skew_recipe_label_text(tmp_path: Path, legend: str, *extra: str) -> list[tuple[str, ...]]:
+    """The AT skew Gallery recipe's feature label text, in the labels' own (record-centred) coordinates."""
+    import xml.etree.ElementTree as ET
+
+    import gbdraw.circular as circular_cli_module
+
+    inputs = Path("tests/test_inputs")
+    gallery = Path("gbdraw/web/gallery/files")
+    output = tmp_path / f"atskew_{legend}"
+    circular_cli_module.circular_main(
+        [
+            "--gbk", str(inputs / "HmmtDNA.gbk"), "--species", "<i>Homo sapiens</i>",
+            "-k", "CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region", "-p", "ajisai", "--window", "500", "--step", "50",
+            "--definition_font_size", "28", "--label_font_size", "20", "--track_type", "middle", "--labels",
+            "--qualifier_priority", str(gallery / "HmmtDNA_qualifier_priority.tsv"),
+            "--circular_track_axis_index", "0",
+            "--circular_track_slot", "features:features@lane_direction=split",
+            "--circular_track_slot", "gc_content:dinucleotide_content@w=0.1",
+            "--circular_track_slot", "gc_skew:dinucleotide_skew@w=0.1",
+            "--circular_track_slot",
+            "a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew",
+            "--circular_track_slot", "ticks:ticks@tick_label_layout=label_in_tick_out",
+            "-l", legend, *extra, "-f", "svg", "-o", str(output),
+        ]
+    )
+    root = ET.parse(f"{output}.svg").getroot()
+    group = root.find(".//{http://www.w3.org/2000/svg}g[@id='label_text']")
+    assert group is not None
+    return [
+        (str(element.text), *(element.attrib.get(name, "") for name in ("x", "y", "transform")))
+        for element in group.iter("{http://www.w3.org/2000/svg}text")
+    ]
+
+
+@pytest.mark.circular
+def test_corner_legend_that_grows_the_canvas_does_not_move_labels(tmp_path: Path) -> None:
+    """OV-1609: the corner the label pass clears is the one the final plan can take.
+
+    Upper Right does not fit beside the AT skew recipe's circle, so the Legend
+    grows the canvas; the labels stay where Legend Right leaves them.
+    """
+    assert _at_skew_recipe_label_text(tmp_path, "upper_right") == _at_skew_recipe_label_text(tmp_path, "right")
+
+
+@pytest.mark.circular
+def test_corner_legend_that_fits_beside_the_circle_still_moves_labels(tmp_path: Path) -> None:
+    """The Legend takes the corner the label pass freed for it (C-MT-upper_left)."""
+    import json
+    import xml.etree.ElementTree as ET
+
+    import gbdraw.circular as circular_cli_module
+
+    def render(legend: str) -> tuple[list[tuple[str, ...]], dict]:
+        output = tmp_path / f"mt_{legend}"
+        circular_cli_module.circular_main(
+            [
+                "--gbk", "tests/test_inputs/HmmtDNA.gbk", "--separate_strands", "--track_type", "middle",
+                "--labels", "out", "--species", "<i>Homo sapiens</i>", "-l", legend,
+                "-f", "svg", "-o", str(output),
+            ]
+        )
+        root = ET.parse(f"{output}.svg").getroot()
+        group = root.find(".//{http://www.w3.org/2000/svg}g[@id='label_text']")
+        assert group is not None
+        labels = [
+            (str(element.text), *(element.attrib.get(name, "") for name in ("x", "y")))
+            for element in group.iter("{http://www.w3.org/2000/svg}text")
+        ]
+        return labels, json.loads(root.attrib["data-gbdraw-composition"])
+
+    corner_labels, corner = render("upper_left")
+    side_labels, _ = render("right")
+    assert corner_labels != side_labels
+    primary = corner["primary"]["finalBounds"]
+    legend = corner["legend"]
+    legend_x = legend["localBounds"]["x"] + legend["automaticTranslation"][0]
+    legend_y = legend["localBounds"]["y"] + legend["automaticTranslation"][1]
+    assert (legend_x, legend_y) == pytest.approx((primary["x"], primary["y"]))
