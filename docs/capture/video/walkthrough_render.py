@@ -16,10 +16,11 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass, replace
+from html.parser import HTMLParser
 from pathlib import Path
 
 from fontTools.ttLib import TTCollection, TTFont
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -622,6 +623,376 @@ def _white_logo(width: int) -> Image.Image:
     white.putalpha(alpha)
     height = round(logo.height * width / logo.width)
     return white.resize((width, height), Image.Resampling.LANCZOS)
+
+
+# -- title-card logo curl ----------------------------------------------------
+# The intro card draws the logo's ring in one stroke, as the app's loader does.
+# The geometry and the draw-phase easing are read from the app's own markup at
+# render time; nothing of it is copied here.
+
+INDEX_HTML = REPO_ROOT / "gbdraw/web/index.html"
+CURL_SECONDS = 0.6
+_CURL_SUPERSAMPLE = 3
+_PATH_TOKENS = re.compile(r"[A-Za-z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+Point = tuple[float, float]
+
+
+def _arc(start: Point, rx: float, ry: float, rotation: float, large: bool, sweep: bool, end: Point) -> list[Point]:
+    """Points along an SVG elliptical arc (endpoint parameterization, SVG 1.1 F.6.5)."""
+
+    if not rx or not ry:
+        return [end]
+    phi = math.radians(rotation)
+    cos, sin = math.cos(phi), math.sin(phi)
+    dx, dy = (start[0] - end[0]) / 2, (start[1] - end[1]) / 2
+    x1, y1 = cos * dx + sin * dy, -sin * dx + cos * dy
+    rx, ry = abs(rx), abs(ry)
+    scale = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry)
+    if scale > 1:
+        rx, ry = rx * math.sqrt(scale), ry * math.sqrt(scale)
+    numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1
+    coefficient = math.sqrt(max(0.0, numerator / (rx * rx * y1 * y1 + ry * ry * x1 * x1)))
+    if large == sweep:
+        coefficient = -coefficient
+    cx1, cy1 = coefficient * rx * y1 / ry, -coefficient * ry * x1 / rx
+    cx = cos * cx1 - sin * cy1 + (start[0] + end[0]) / 2
+    cy = sin * cx1 + cos * cy1 + (start[1] + end[1]) / 2
+    theta = math.atan2((y1 - cy1) / ry, (x1 - cx1) / rx)
+    delta = math.atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx) - theta
+    if sweep and delta < 0:
+        delta += 2 * math.pi
+    elif not sweep and delta > 0:
+        delta -= 2 * math.pi
+    count = max(2, math.ceil(abs(delta) / math.radians(1.5)))
+    points = []
+    for step in range(1, count):
+        angle = theta + delta * step / count
+        x, y = rx * math.cos(angle), ry * math.sin(angle)
+        points.append((cos * x - sin * y + cx, sin * x + cos * y + cy))
+    return points + [end]
+
+
+def _path_points(d: str) -> list[list[Point]]:
+    """Flatten an SVG path's subpaths (M L H V C A Z, absolute or relative) to points."""
+
+    tokens = _PATH_TOKENS.findall(d)
+    subpaths: list[list[Point]] = []
+    current = start = (0.0, 0.0)
+    command, index = "", 0
+
+    def numbers(count: int) -> list[float]:
+        nonlocal index
+        values = [float(token) for token in tokens[index:index + count]]
+        if len(values) != count or any(token.isalpha() for token in tokens[index:index + count]):
+            raise ValueError(f"Path command {command} lacks numbers: {d[:60]}")
+        index += count
+        return values
+
+    while index < len(tokens):
+        if tokens[index].isalpha():
+            command = tokens[index]
+            index += 1
+        elif not command:
+            raise ValueError(f"Path does not start with a command: {d[:60]}")
+        relative = command.islower()
+        origin = current if relative else (0.0, 0.0)
+        kind = command.upper()
+        if kind == "Z":
+            subpaths[-1].append(start)
+            current = start
+            command = ""
+            continue
+        if kind == "M":
+            x, y = numbers(2)
+            current = start = (origin[0] + x, origin[1] + y)
+            subpaths.append([current])
+            command = "l" if relative else "L"
+            continue
+        if not subpaths:
+            raise ValueError(f"Path draws before its first move: {d[:60]}")
+        if kind == "L":
+            x, y = numbers(2)
+            points = [(origin[0] + x, origin[1] + y)]
+        elif kind == "H":
+            (x,) = numbers(1)
+            points = [(origin[0] + x, current[1])]
+        elif kind == "V":
+            (y,) = numbers(1)
+            points = [(current[0], origin[1] + y)]
+        elif kind == "C":
+            values = numbers(6)
+            p1, p2, p3 = [(origin[0] + values[i], origin[1] + values[i + 1]) for i in (0, 2, 4)]
+            p0 = current
+            points = []
+            for step in range(1, 49):
+                t = step / 48
+                a, b, c, e = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3
+                points.append((a * p0[0] + b * p1[0] + c * p2[0] + e * p3[0],
+                               a * p0[1] + b * p1[1] + c * p2[1] + e * p3[1]))
+        elif kind == "A":
+            rx, ry, rotation, large, sweep, x, y = numbers(7)
+            points = _arc(current, rx, ry, rotation, bool(large), bool(sweep), (origin[0] + x, origin[1] + y))
+        else:
+            raise ValueError(f"Unsupported path command {command}: {d[:60]}")
+        subpaths[-1].extend(points)
+        current = points[-1]
+    if not subpaths:
+        raise ValueError("Empty path")
+    return subpaths
+
+
+def _matrix(transform: str | None) -> tuple[float, ...]:
+    if not transform:
+        return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    match = re.fullmatch(r"\s*matrix\(([^)]*)\)\s*", transform)
+    values = [float(value) for value in re.split(r"[\s,]+", match.group(1).strip())] if match else []
+    if len(values) != 6:
+        raise ValueError(f"Unsupported transform {transform!r}")
+    return tuple(values)
+
+
+class _TemplateParser(HTMLParser):
+    """Collect the loader template's viewBox, pens (per mask), and masked logo paths."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.view_box: str | None = None
+        self.pens: dict[str, dict] = {}
+        self.shapes: dict[str, list[dict]] = {}
+        self._mask: str | None = None
+        self._group: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        if tag == "svg":
+            self.view_box = values.get("viewbox")
+        elif tag == "mask":
+            self._mask = values.get(":id")
+        elif tag == "g":
+            match = re.search(r"\$\{([\w.]+)\}", values.get(":mask") or "")
+            self._group = match.group(1) if match else None
+        elif tag == "path" and self._mask:
+            self.pens[self._mask] = values
+        elif tag == "path" and self._group:
+            self.shapes.setdefault(self._group, []).append(values)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "mask":
+            self._mask = None
+        elif tag == "g":
+            self._group = None
+
+
+def _cubic_bezier(x1: float, y1: float, x2: float, y2: float):
+    """A CSS ``cubic-bezier()`` timing function."""
+
+    def axis(a: float, b: float, u: float) -> float:
+        return 3 * a * u * (1 - u) ** 2 + 3 * b * u * u * (1 - u) + u ** 3
+
+    def timing(x: float) -> float:
+        if x <= 0 or x >= 1:
+            return min(1.0, max(0.0, x))
+        low, high = 0.0, 1.0
+        for _ in range(48):
+            middle = (low + high) / 2
+            low, high = (middle, high) if axis(x1, x2, middle) < x else (low, middle)
+        return axis(y1, y2, (low + high) / 2)
+
+    return timing
+
+
+@dataclass(frozen=True)
+class LoaderPen:
+    """One mask pen of the loader and the logo part it reveals, in the template's user units."""
+
+    points: tuple[Point, ...]
+    distances: tuple[float, ...]   # running length along ``points``
+    path_length: float              # the pen's ``pathLength``: the stroke units of its dash interval
+    offset: float                   # where the pen starts on the combined stroke, in those units
+    shapes: tuple[tuple[Point, ...], ...]
+
+    def drawn(self, stroke: float) -> list[Point]:
+        """The pen's points up to ``stroke`` units of the combined stroke."""
+
+        length = min(self.path_length, max(0.0, stroke - self.offset)) * self.distances[-1] / self.path_length
+        if length <= 0:
+            return []
+        cut = bisect.bisect_left(self.distances, length)
+        points = list(self.points[:cut])
+        if cut < len(self.points):
+            (x0, y0), (x1, y1) = self.points[cut - 1], self.points[cut]
+            span = self.distances[cut] - self.distances[cut - 1]
+            share = (length - self.distances[cut - 1]) / span if span else 1.0
+            points.append((x0 + (x1 - x0) * share, y0 + (y1 - y0) * share))
+        return points
+
+
+@dataclass(frozen=True)
+class LoaderMark:
+    """The app loader's one-stroke logo, parsed from ``#gbdraw-loader-template``."""
+
+    view_box: tuple[float, float, float, float]
+    pens: tuple[LoaderPen, ...]
+    width: float                    # the pens' stroke width
+    total: float                    # the combined stroke's length in stroke units
+    easing: tuple[float, float, float, float]
+
+    def drawn(self, seconds: float) -> float:
+        """Share of the stroke drawn ``seconds`` into the intro card."""
+
+        return _cubic_bezier(*self.easing)(min(1.0, max(0.0, seconds / CURL_SECONDS)))
+
+    def bounds(self) -> tuple[float, float, float, float]:
+        points = [point for pen in self.pens for shape in pen.shapes for point in shape]
+        xs, ys = [x for x, _ in points], [y for _, y in points]
+        return min(xs), min(ys), max(xs), max(ys)
+
+
+def loader_mark(html: str | None = None) -> LoaderMark:
+    """Parse the loader's pens, logo paths, stroke units, and draw easing from the app's index.html."""
+
+    if html is None:
+        return _app_loader_mark()
+    template = re.search(r'<script type="text/x-template" id="gbdraw-loader-template">(.*?)</script>', html, re.S)
+    easing = re.search(r"@keyframes gbdraw-loader-stroke\s*\{\s*0%\s*\{[^}]*?"
+                       r"animation-timing-function:\s*cubic-bezier\(([^)]*)\)", html)
+    width = re.search(r"\.gbdraw-loader-pen\s*\{[^}]*?stroke-width:\s*([\d.]+)", html)
+    if not (template and easing and width):
+        raise ValueError("index.html lacks the loader template, its draw easing, or its pen width")
+    parser = _TemplateParser()
+    parser.feed(template.group(1))
+    view_box = [float(value) for value in (parser.view_box or "").split()]
+    if len(view_box) != 4 or not parser.pens or set(parser.pens) != set(parser.shapes):
+        raise ValueError("The loader template's viewBox, masks, or masked paths do not parse")
+    pens = []
+    for key, pen in parser.pens.items():
+        name = next((part for part in (pen.get("class") or "").split() if re.fullmatch(r"gbdraw-loader-pen-\w+", part)),
+                    None)
+        rule = name and re.search(re.escape("." + name) + r"\s*\{\s*--gbdraw-loader-a:\s*clamp\(0,\s*"
+                                  r"var\(--gbdraw-loader-from\)(?:\s*-\s*([\d.]+))?,\s*([\d.]+)\)", html)
+        if not rule or not pen.get("pathlength") or not pen.get("d"):
+            raise ValueError(f"The loader pen {key} has no class rule, pathLength, or path")
+        path_length = float(pen["pathlength"])
+        if abs(float(rule.group(2)) - path_length) > 1e-6:
+            raise ValueError(f"The loader pen {name} clamps to {rule.group(2)}, not its pathLength {path_length}")
+        points = tuple(point for subpath in _path_points(pen["d"]) for point in subpath)
+        distances = [0.0]
+        for (x0, y0), (x1, y1) in zip(points, points[1:]):
+            distances.append(distances[-1] + math.hypot(x1 - x0, y1 - y0))
+        shapes = []
+        for shape in parser.shapes[key]:
+            a, b, c, d, e, f = _matrix(shape.get("transform"))
+            shapes += [tuple((a * x + c * y + e, b * x + d * y + f) for x, y in subpath)
+                       for subpath in _path_points(shape.get("d") or "")]
+        pens.append(LoaderPen(points, tuple(distances), path_length, float(rule.group(1) or 0), tuple(shapes)))
+    pens.sort(key=lambda pen: pen.offset)
+    curve = tuple(float(value) for value in easing.group(1).split(","))
+    if len(curve) != 4:
+        raise ValueError(f"Unreadable loader easing cubic-bezier({easing.group(1)})")
+    mark = LoaderMark(tuple(view_box), tuple(pens), float(width.group(1)),
+                      max(pen.offset + pen.path_length for pen in pens), curve)
+    left, top, right, bottom = mark.bounds()
+    x, y, w, h = mark.view_box
+    if left < x or top < y or right > x + w or bottom > y + h:
+        raise ValueError("The loader's logo paths leave its viewBox")
+    return mark
+
+
+@functools.lru_cache(maxsize=1)
+def _app_loader_mark() -> LoaderMark:
+    return loader_mark(INDEX_HTML.read_text(encoding="utf-8"))
+
+
+@functools.lru_cache(maxsize=1)
+def _logo_placement() -> tuple[int, float, float, float]:
+    """Where the loader's mark sits on the title logo image.
+
+    Returns the logo's first empty column after the mark (the mark/word split),
+    and the scale and offset from loader user units to logo pixels, fitted to
+    the mark's bounding box on the image.
+    """
+
+    # Half coverage is the edge of a shape, so the antialiased rim does not widen the fit.
+    alpha = Image.open(LOGO).getchannel("A").point(lambda value: 255 if value >= 128 else 0)
+    columns = list(alpha.resize((alpha.width, 1), Image.Resampling.BOX).getdata())
+    first = next(x for x, value in enumerate(columns) if value)
+    end = next((x for x in range(first, len(columns)) if not columns[x]), None)
+    if end is None:
+        raise ValueError(f"{LOGO.name} has no gap between its mark and its word")
+    word = next(x for x in range(end, len(columns)) if columns[x])
+    box = alpha.crop((first, 0, end, alpha.height)).getbbox()
+    left, top, right, bottom = _app_loader_mark().bounds()
+    sx, sy = (end - first) / (right - left), (box[3] - box[1]) / (bottom - top)
+    if abs(sx / sy - 1) > 0.02:
+        raise ValueError(f"The loader's mark does not have the shape of the mark on {LOGO.name}")
+    scale = (sx + sy) / 2
+    return (end + word) // 2, scale, (first + end) / 2 - scale * (left + right) / 2, \
+        (box[1] + box[3]) / 2 - scale * (top + bottom) / 2
+
+
+def _stroke_outline(points: list[Point], half: float) -> list[Point]:
+    """The outline of a butt-capped stroke along a smooth polyline, as one polygon without seams."""
+
+    left, right = [], []
+    for index, (x, y) in enumerate(points):
+        (x0, y0), (x1, y1) = points[max(0, index - 1)], points[min(len(points) - 1, index + 1)]
+        length = math.hypot(x1 - x0, y1 - y0) or 1.0
+        nx, ny = -(y1 - y0) / length * half, (x1 - x0) / length * half
+        left.append((x + nx, y + ny))
+        right.append((x - nx, y - ny))
+    return left + right[::-1]
+
+
+class LogoCurl:
+    """The white title logo at one width, split into its word and a mark drawn as the loader draws it."""
+
+    def __init__(self, width: int) -> None:
+        self.loader = _app_loader_mark()
+        logo = _white_logo(width)
+        self.size = logo.size
+        split, self._scale, self._dx, self._dy = _logo_placement()
+        self._factor = width / Image.open(LOGO).width
+        self.split = round(split * self._factor)
+        word = logo.getchannel("A")
+        word.paste(0, (0, 0, self.split, logo.height))
+        self.word = logo.copy()
+        self.word.putalpha(word)
+        self._marks: dict[float, Image.Image] = {}
+
+    def _point(self, point: Point) -> Point:
+        k = self._factor * _CURL_SUPERSAMPLE
+        return (point[0] * self._scale + self._dx) * k, (point[1] * self._scale + self._dy) * k
+
+    def mark(self, share: float) -> Image.Image:
+        """The mark with ``share`` of its stroke drawn, on the logo's frame."""
+
+        share = round(min(1.0, max(0.0, share)), 4)
+        if share in self._marks:
+            return self._marks[share]
+        big = (self.size[0] * _CURL_SUPERSAMPLE, self.size[1] * _CURL_SUPERSAMPLE)
+        alpha = Image.new("L", big, 0)
+        stroke = self.loader.width * self._scale * self._factor * _CURL_SUPERSAMPLE
+        for pen in self.loader.pens:
+            drawn = pen.drawn(share * self.loader.total)
+            if len(drawn) < 2:
+                continue
+            reveal = Image.new("L", big, 0)
+            ImageDraw.Draw(reveal).polygon(_stroke_outline([self._point(point) for point in drawn], stroke / 2),
+                                           fill=255)
+            fill = Image.new("L", big, 0)
+            for shape in pen.shapes:
+                ImageDraw.Draw(fill).polygon([self._point(point) for point in shape], fill=255)
+            alpha = ImageChops.lighter(alpha, ImageChops.multiply(reveal, fill))
+        layer = Image.new("RGBA", self.size, (255, 255, 255, 0))
+        layer.putalpha(alpha.resize(self.size, Image.Resampling.BOX))
+        if share in (0.0, 1.0):
+            self._marks[share] = layer
+        return layer
+
+
+@functools.lru_cache(maxsize=4)
+def logo_curl(width: int) -> LogoCurl:
+    return LogoCurl(width)
 
 
 class Overlay:
@@ -1300,19 +1671,22 @@ class Composer:
         if self.layout.portrait:
             return self._portrait_intro(canvas, t, self.lang(title), self.lang(note))
         middle = self.layout.size[0] / 2
-        logo = _white_logo(820)
-        p = _ease(t / 0.9)
-        scaled = logo.resize((round(logo.width * (0.96 + 0.04 * p)), round(logo.height * (0.96 + 0.04 * p))),
-                             Image.Resampling.LANCZOS)
-        canvas.alpha_composite(_fade(scaled, p), (round(middle - scaled.width / 2),
-                                                  300 - (scaled.height - logo.height) // 2))
+        self._intro_logo(canvas, 820, middle, 300, t)
         # A long title wraps onto more lines instead of running off the frame.
         y = 580
         for line in self._wrapped(self.lang(title), 600, 46, self.layout.size[0] - 320):
-            self._text(canvas, line, 600, 46, INK, _ease((t - 0.5) / 0.6), (middle, y), center=True)
+            self._text(canvas, line, 600, 46, INK, _ease((t - 0.6) / 0.6), (middle, y), center=True)
             y += 60
         self._text(canvas, self.lang(note), 400, 28, MUTED, _ease((t - 0.9) / 0.6), (middle, y - 60 + 76), center=True)
         return canvas.convert("RGB")
+
+    def _intro_logo(self, canvas: Image.Image, width: int, middle: float, top: int, t: float) -> None:
+        """The title logo: its ring drawn in one stroke as the app's loader draws it, then its word."""
+
+        curl = logo_curl(width)
+        origin = (round(middle - width / 2), top)
+        canvas.alpha_composite(curl.mark(curl.loader.drawn(t)), origin)
+        canvas.alpha_composite(_fade(curl.word, _ease((t - 0.45) / 0.45)), origin)
 
     def _wrapped(self, text: str, weight: int, size: int, width: float) -> list[str]:
         """Wrap ``text`` to ``width`` in even lines, keeping its ``<i>`` runs on each line they reach."""
@@ -1361,14 +1735,10 @@ class Composer:
         title_step, note_step = round(title_size * 1.3), round(note_size * 1.5)
         height = logo.height + 110 + title_step * len(title_lines) + 30 + note_step * len(note_lines)
         y = card[1] + (card[3] - height) / 2
-        p = _ease(t / 0.9)
-        scaled = logo.resize((round(logo.width * (0.96 + 0.04 * p)), round(logo.height * (0.96 + 0.04 * p))),
-                             Image.Resampling.LANCZOS)
-        canvas.alpha_composite(_fade(scaled, p), (round(middle - scaled.width / 2),
-                                                  round(y) - (scaled.height - logo.height) // 2))
+        self._intro_logo(canvas, logo.width, middle, round(y), t)
         y += logo.height + 110
         for line in title_lines:
-            self._text(canvas, line, 600, title_size, INK, _ease((t - 0.5) / 0.6), (middle, y), center=True)
+            self._text(canvas, line, 600, title_size, INK, _ease((t - 0.6) / 0.6), (middle, y), center=True)
             y += title_step
         y += 30
         for line in note_lines:
