@@ -1373,8 +1373,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       recordKey: 'record-1'
     }]
   });
-  const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
-  const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
+  const firstCoalescedDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
+  const secondCoalescedDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   assert.equal(firstCoalescedDiscovery, secondCoalescedDiscovery);
   await Promise.resolve();
   releaseCoalescedDiscovery();
@@ -1397,10 +1397,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   });
   const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
   installShownDrawing('linear');
-  await runner.refreshCircularRecordOrder();
-  await runner.refreshCircularRecordOrder({ automatic: true });
+  await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   installShownDrawing('circular');
-  await runner.refreshCircularRecordOrder({ automatic: true });
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   assert.deepEqual(structuredClone({
     records: state.circularRecordList.value,
     positions: state.activeDrawing().adv.multi_record_positions,
@@ -1417,18 +1417,18 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   // even if replacement/removal happens while Circular is inactive.
   installShownDrawing('linear');
   state.files.c_gb = bound(new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb'));
-  await runner.refreshCircularRecordOrder();
+  await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   installShownDrawing('circular');
-  await runner.refreshCircularRecordOrder({ automatic: true });
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   installShownDrawing('linear');
   state.files.c_gb = bound(null);
-  await runner.refreshCircularRecordOrder();
+  await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   installShownDrawing('circular');
-  await runner.refreshCircularRecordOrder({ automatic: true });
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   assert.deepEqual(state.circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
@@ -1496,7 +1496,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       error: { name: 'Error', message: 'injected restored-file reparse failure' }
     });
   }));
-  const staleDiscovery = runner.refreshCircularRecordOrder();
+  const staleDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   await Promise.resolve();
   const discoveryStateBeforeRollback = {
     records: structuredClone(state.circularRecordList.value),
@@ -1504,7 +1504,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     discovery: { ...state.circularRecordDiscovery }
   };
   state.semanticFileWatchersSuppressed.value = true;
-  await runner.refreshCircularRecordOrder({ suppress: true });
+  await runner.refreshCircularRecordOrder({ suppress: true }, state.activeDrawing());
   releaseStaleDiscovery();
   await staleDiscovery;
   assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);

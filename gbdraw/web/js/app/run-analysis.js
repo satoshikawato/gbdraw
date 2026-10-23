@@ -2121,14 +2121,17 @@ export const createRunAnalysis = ({
     );
     return buildLosatFilename(drawing, leftLabel, rightLabel);
   };
-  // LOSAT pairs are the Linear comparisons: their names follow the Linear drawing.
+  // LOSAT pairs are the Linear comparisons: the three pair handlers act for
+  // the drawing their caller (the panel binding) gives, and do nothing for a
+  // Circular one (D-15-89).
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {{ recordId?: string } | null} [queryEntry]
    * @param {{ recordId?: string } | null} [subjectEntry]
    */
-  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
-    const drawing = state.drawingOfMode('linear');
+  const getLosatPairDefaultName = (drawing, edgeKey, queryEntry = null, subjectEntry = null) => {
+    if (drawing.mode !== 'linear') return '';
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
@@ -2211,11 +2214,12 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {unknown} customName
    */
-  const downloadLosatPair = async (edgeKey, customName) => {
-    const drawing = state.drawingOfMode('linear');
+  const downloadLosatPair = async (drawing, edgeKey, customName) => {
+    if (drawing.mode !== 'linear') return;
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
@@ -2243,13 +2247,14 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {unknown} customName
    */
-  const setLosatPairFilename = (edgeKey, customName) => {
-    const drawing = state.drawingOfMode('linear');
+  const setLosatPairFilename = (drawing, edgeKey, customName) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    if (drawing.mode !== 'linear') return;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
     const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
@@ -2472,13 +2477,13 @@ export const createRunAnalysis = ({
   /**
    * The owner of the Circular record refresh: it reads the drawing its caller
    * gives (Generate: the drawing it pinned) and shares a read still running
-   * for the same drawing and inputs. Callers without a drawing (the File card,
-   * the watcher, the record editor) read the Circular drawing until they pass
-   * the shown one.
-   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
-   * @param {DrawingState} [drawing]
+   * for the same drawing and inputs. The File card, the watcher, and the
+   * record editor give the shown drawing (app-setup's binding, D-15-89).
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean } | undefined} options
+   * @param {DrawingState} drawing
    */
-  const refreshCircularRecordOrder = (options = {}, drawing = state.drawingOfMode('circular')) => {
+  const refreshCircularRecordOrder = (options, drawing) => {
+    options = options || {};
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const inputType = cInputType.value;

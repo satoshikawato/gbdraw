@@ -3485,14 +3485,14 @@ export const createAppSetup = () => {
     holdAutomaticRerender,
     requestLiveSettingApply,
     discardLiveSettingRequests,
-    refreshCircularRecordOrder,
+    refreshCircularRecordOrder: refreshRecordOrderOfDrawing,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
-    downloadLosatPair,
-    setLosatPairFilename,
+    downloadLosatPair: downloadLosatPairOfDrawing,
+    setLosatPairFilename: setLosatPairFilenameOfDrawing,
     clearLosatCache,
-    getLosatPairDefaultName,
+    getLosatPairDefaultName: losatPairDefaultNameOfDrawing,
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
@@ -3559,6 +3559,17 @@ export const createAppSetup = () => {
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
+  // D-15-89: the panel actions (the template, `window.__GBDRAW_APP__`, the
+  // record editor, and the file watcher) act for the shown drawing; this
+  // binding resolves it once per action and the runner reads the one it is given.
+  /** @param {{ suppress?: boolean, automatic?: boolean } | undefined} [options] */
+  const refreshCircularRecordOrder = (options) => refreshRecordOrderOfDrawing(options, state.activeDrawing());
+  /** @param {string} edgeKey @param {unknown} customName */
+  const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
+  /** @param {string} edgeKey @param {unknown} customName */
+  const setLosatPairFilename = (edgeKey, customName) => setLosatPairFilenameOfDrawing(state.activeDrawing(), edgeKey, customName);
+  /** @param {string} edgeKey */
+  const getLosatPairDefaultName = (edgeKey) => losatPairDefaultNameOfDrawing(state.activeDrawing(), edgeKey);
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
   // preset), and their Undo and Redo that change live setting rows of the
   // shown drawing ask the automatic rerender to apply them (the router passes
