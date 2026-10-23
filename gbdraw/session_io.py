@@ -100,12 +100,17 @@ ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 48 a Session without a Web draft (CLI, Python API) holds each
 # table only as its file card's file: the Web reads every row as that file's.
 FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
+# From version 49 a Session lists its drawings in ``drawings``
+# (gbdraw.session_drawings owns the layout). Python reads it; the Web reads
+# it from the flip on (tools/generate_web_contracts.py).
+DRAWINGS_SESSION_MIN_VERSION = 49
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
+     DRAWINGS_SESSION_MIN_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -117,7 +122,8 @@ CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
     44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, 47: CURRENT_FEATURE_CATALOG_SCHEMA,
-    CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+    FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+    DRAWINGS_SESSION_MIN_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
 # The fields of a record display draft row (Session 41+), the two that Session
 # 44 added, and the fields of its anchor intent.
@@ -141,6 +147,18 @@ OTHER_MODE_RESULT_UI_FIELDS = keys_of(SessionOtherModeUi)
 OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
 OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
 OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
+# Web file binding slots (``webFiles.bindings``, schema 2): the five file
+# cards, which every drawing binds, and the slots of each diagram mode's inputs.
+WEB_BINDING_CARD_SLOTS = frozenset({"d_color", "t_color", "blacklist", "whitelist", "qualifier_priority"})
+WEB_BINDING_MODE_SLOTS: Mapping[str, frozenset[str]] = {
+    "circular": frozenset({
+        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
+        "c_conservation_blasts_source", "c_conservation_fastas", "c_conservation_sequence_sources",
+    }),
+    "linear": frozenset({"linearSeqs", "linearComparisons"}),
+}
+# The slot that holds a mode's main input; schema 2 bindings always hold it.
+WEB_BINDING_INPUT_SLOT: Mapping[str, str] = {"circular": "c_gb", "linear": "linearSeqs"}
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -650,13 +668,25 @@ def validate_session(session: Mapping[str, Any]) -> None:
     version = session.get("version")
     if not isinstance(version, int):
         raise ValidationError("Session version is required and must be an integer.")
-    if version > CURRENT_SESSION_VERSION:
+    if version > max(SUPPORTED_SESSION_VERSIONS):
         raise ValidationError(
             f"Session version {version} is newer than this gbdraw supports "
             f"({CURRENT_SESSION_VERSION})."
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
+    if version >= DRAWINGS_SESSION_MIN_VERSION:
+        from .session_drawings import checked_drawing_views
+
+        for view in checked_drawing_views(session):
+            _validate_document_body(view, version)
+        return
+    _validate_document_body(session, version)
+
+
+def _validate_document_body(session: Mapping[str, Any], version: int) -> None:
+    """Validate a Session 27-48, or one Session 49 drawing seen as one."""
+
     if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise ValidationError(
             f"Session version {version} cannot contain otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID
@@ -665,7 +695,9 @@ def validate_session(session: Mapping[str, Any]) -> None:
         render_request = session.get("renderRequest")
         resources = session.get("resources")
         settings_only = is_settings_only_session(session)
-        if not settings_only:
+        # A Session 49 drawing not generated yet has no request and no Results.
+        undrawn = version >= DRAWINGS_SESSION_MIN_VERSION and render_request is None
+        if not settings_only and not undrawn:
             if not isinstance(render_request, Mapping):
                 raise ValidationError(
                     f"Session version {version} requires a canonical renderRequest object."
@@ -716,7 +748,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, 46, 47, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, 46, 47, FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -772,9 +804,23 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, 46, 47, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    version = session.get("version")
+    if current and version not in (41, 42, 44, 46, 47, FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
+                                   DRAWINGS_SESSION_MIN_VERSION):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, 46, 47, or {CURRENT_SESSION_VERSION} and c_gb."
+            "Web binding schema 2 requires session 41, 42, 44, 46, 47, "
+            f"{FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION} or {DRAWINGS_SESSION_MIN_VERSION}.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
+    # A Session 49 drawing (its one-drawing view names its mode in ``ui.mode``)
+    # binds its own mode's inputs; Sessions 41-48 bind both modes' and c_gb.
+    mode = session["ui"]["mode"] if version == DRAWINGS_SESSION_MIN_VERSION else "circular"
+    other_slots = frozenset().union(*(slots for key, slots in WEB_BINDING_MODE_SLOTS.items() if key != mode))
+    if current and (WEB_BINDING_INPUT_SLOT[mode] not in bindings
+                    or (version == DRAWINGS_SESSION_MIN_VERSION and other_slots & set(bindings))):
+        raise ValidationError(
+            f"Web binding schema 2 requires {WEB_BINDING_INPUT_SLOT[mode]}"
+            + (" and no other mode's input." if version == DRAWINGS_SESSION_MIN_VERSION else ".")
         )
     resources = session.get("resources", {})
 
@@ -833,14 +879,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         else:
             leaf(binding)
 
-    slots = {
-        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
-        "c_conservation_fastas", "c_conservation_sequence_sources", "d_color",
-        "t_color", "blacklist", "whitelist", "qualifier_priority",
-    }
-    if current and set(bindings) - slots - {
-        "schema", "c_conservation_blasts_source", "linearSeqs", "linearComparisons",
-    }:
+    # Every slot that holds one file binding or a list of them.
+    slots = (WEB_BINDING_MODE_SLOTS["circular"] | WEB_BINDING_CARD_SLOTS) - {"c_conservation_blasts_source"}
+    if current and set(bindings) - {"schema"} - WEB_BINDING_CARD_SLOTS - frozenset().union(*WEB_BINDING_MODE_SLOTS.values()):
         raise ValidationError("Unknown Web binding inventory field.")
     for slot in slots:
         value(bindings.get(slot), slot == "c_gb")

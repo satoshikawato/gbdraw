@@ -18,6 +18,7 @@ from gbdraw.io.cli_tables import (
     _RECORDS_COLUMNS,
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION, SUPPORTED_SESSION_VERSIONS
+from tools.generate_web_contracts import web_session_versions
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -87,7 +88,8 @@ def test_session_reference_matches_current_implementation_constants() -> None:
 
     assert f"session version {CURRENT_SESSION_VERSION}" in source
     assert f"`renderRequest` schema {CANONICAL_REQUEST_SCHEMA}" in source
-    assert SUPPORTED_SESSION_VERSIONS == frozenset(
+    # The documentation lists the versions the Web reads (Session 49 from the flip on, D-15-81).
+    assert web_session_versions(SUPPORTED_SESSION_VERSIONS) == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48}
     )
     assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9})

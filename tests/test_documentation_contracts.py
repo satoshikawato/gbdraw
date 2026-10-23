@@ -7,6 +7,7 @@ import pytest
 
 from gbdraw import __version__
 from gbdraw.session_io import CURRENT_SESSION_VERSION, SUPPORTED_SESSION_VERSIONS
+from tools.generate_web_contracts import web_session_versions
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -60,7 +61,8 @@ def test_session_compatibility_table_matches_implementation() -> None:
     assert session_row is not None
     assert request_row is not None
     assert int(session_row.group(1)) == CURRENT_SESSION_VERSION
-    assert _parse_documented_versions(session_row.group(2)) == SUPPORTED_SESSION_VERSIONS
+    # The documentation lists the versions the Web reads (Session 49 from the flip on, D-15-81).
+    assert _parse_documented_versions(session_row.group(2)) == web_session_versions(SUPPORTED_SESSION_VERSIONS)
     assert int(request_row.group(1)) == CANONICAL_REQUEST_SCHEMA
     assert (
         _parse_documented_versions(request_row.group(2))

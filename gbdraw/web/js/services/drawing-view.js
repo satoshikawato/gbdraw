@@ -83,6 +83,22 @@
 export const drawingIdOfMode = (mode) => /** @type {DrawingId} */ (mode);
 
 /**
+ * The ID a new drawing of `mode` gets beside `takenIds`: the mode when free,
+ * else `<mode>-<n>` with the smallest free n >= 2 (B2-D4). Python's
+ * `gbdraw.session_drawings.allocate_drawing_id` takes the same rule; both read
+ * the `ids` vectors of `tests/fixtures/sessions/drawings-vectors.json`.
+ * @param {ModeProfileName} mode
+ * @param {Iterable<string>} takenIds
+ * @returns {DrawingId}
+ */
+export const allocateDrawingId = (mode, takenIds) => {
+  const taken = new Set(takenIds);
+  let id = String(mode);
+  for (let number = 2; taken.has(id); number += 1) id = `${mode}-${number}`;
+  return /** @type {DrawingId} */ (id);
+};
+
+/**
  * The input type a drawing's slots read: the app-level ref of its mode. A
  * History restore of one drawing writes only this one (OIC-030).
  * @param {DrawingIdentity} drawing

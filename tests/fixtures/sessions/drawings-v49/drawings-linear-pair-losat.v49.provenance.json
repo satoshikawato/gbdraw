@@ -1,0 +1,25 @@
+{
+  "purpose": "Positive fixture of the Session 49 drawings layout (DESIGN §1, D-15-79, D-15-83)",
+  "source": "tests/fixtures/sessions/q-frame-main-web-losatn.v42.gbdraw-session.json.gz",
+  "edits": "Session 42 upgraded to 48; its Linear drawing written twice, as linear (keeps its one LOSATN entry) and linear-2 (active, no LOSAT entry: it runs LOSAT again on Generate)",
+  "writer": "gbdraw.session_drawings.write_session_drawings(version=49), resources no drawing names left out",
+  "writerCommit": "the commit that adds this file, on 102283614ccfad399253dbdd0b0446c01c899682 (branch wip/drawings-b2a)",
+  "script": "/home/kawato/gbdraw-baselines/multi-drawing-project-20261007/b2/write_v49_fixtures.py",
+  "command": "PYTHONPATH=$PWD python /home/kawato/gbdraw-baselines/multi-drawing-project-20261007/b2/write_v49_fixtures.py (from the repository root)",
+  "drawings": [
+    {
+      "id": "linear",
+      "name": "Linear",
+      "mode": "linear"
+    },
+    {
+      "id": "linear-2",
+      "name": "Linear 2",
+      "mode": "linear"
+    }
+  ],
+  "activeDrawingId": "linear-2",
+  "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
+  "decompressedSha256": "0bc456011fef307f1e9df03af53aa07453b5b3b03d3b83ad0d6797566071aa44",
+  "sessionVersion": 49
+}
