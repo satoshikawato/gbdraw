@@ -67,7 +67,7 @@ compressed with `gzip -n -9`. Its decompressed SHA-256 is
 `cli-linear-protein.v30.gbdraw-session.json.gz` (see its `.provenance.json`) with
 `gbdraw linear --session ... -o replay -f svg` before the LOSATP option rename. The
 rename must not change it. SHA-256:
-`0ae2dedeb8dbb426dc1dc5fa8d66d5c9c0a3b1945deca39eb7a71db5a4560b1b`.
+`68dc33b5c065bc0340ab379726998f6f5b5fc7baee914bfae5f2d06d1c5d150c`.
 
 `conservation-fasta.v39.gbdraw-session.json.gz` is a version 39 Circular CLI
 session written by first-parent `main` commit
