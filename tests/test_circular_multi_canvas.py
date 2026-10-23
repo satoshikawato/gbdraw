@@ -3987,6 +3987,56 @@ def test_overlay_obstacles_do_not_depend_on_the_legend_position(record_count: in
         assert local_obstacles(position) == corner, position
 
 
+_LONG_PLOT_TITLE = "Escherichia coli O157:H7 str. Sakai chromosome and plasmids"
+
+
+def _boxes_overlap(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    return (
+        first[0] < second[2] and second[0] < first[2]
+        and first[1] < second[3] and second[1] < first[3]
+    )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("grid", [False, True], ids=["single", "grid-3"])
+@pytest.mark.parametrize(
+    ("corner", "title_position"),
+    [("upper_left", "top"), ("lower_right", "bottom")],
+)
+def test_title_clears_a_corner_legend_grown_onto_its_side(
+    corner: str, title_position: str, grid: bool
+) -> None:
+    """A corner Legend that the planner moved above or below the records keeps the title outside it (OV-1605)."""
+    names = ("NC_001416.gb", "NC_005856.1.gb", "NC_005859.1.gb") if grid else ("NC_001416.gb",)
+    records = [next(SeqIO.parse(Path("tests/test_inputs") / name, "genbank")) for name in names]
+    options: dict[str, Any] = {
+        "cfg": apply_config_overrides(None, {}),
+        "legend": corner,
+        "plot_title": _LONG_PLOT_TITLE,
+        "plot_title_position": title_position,
+    }
+    canvas = (
+        assemble_circular_diagram_from_records(
+            records, multi_record_positions=["#1@1", "#2@2", "#3@3"], **options
+        )
+        if grid
+        else diagram_api_module.assemble_circular_diagram_from_record(records[0], **options)
+    )
+    metadata = _composition_metadata(ET.fromstring(canvas.tostring()))
+    primary = _composition_item_bounds(metadata, "primary")
+    legend = _composition_item_bounds(metadata, "legend")
+    title = _composition_item_bounds(metadata, "title")
+
+    # The planner grew the canvas on the title's side for the Legend.
+    assert legend[3] <= primary[1] if title_position == "top" else primary[3] <= legend[1]
+    assert not _boxes_overlap(title, legend), f"title {title} overlaps the Legend {legend}"
+    gap = legend[1] - title[3] if title_position == "top" else title[1] - legend[3]
+    assert gap == pytest.approx(DEFAULT_COMPOSITION_SPACING.stack_gap_px)
+
+
 @pytest.mark.circular
 def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
     record = SeqRecord(Seq("A" * 1600), id="legend_layout_top")

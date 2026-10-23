@@ -1043,32 +1043,34 @@ const placeOverlayLegend = (primary, legend, side, obstacles, spacing, policy) =
  * @param {string} side
  * @param {CompositionSpacingPx} spacing
  * @param {WorkingPlacement | null} legend
- * @param {string} legendSide
  * @returns {WorkingPlacement}
  */
-const placeTitle = (primary, title, side, spacing, legend, legendSide) => {
+const placeTitle = (primary, title, side, spacing, legend) => {
   const centerX = 0.5 * (primary.minX + primary.maxX);
   const centerY = 0.5 * (primary.minY + primary.maxY);
   if (side === 'center') {
     return alignMin('title', title, centerX - (0.5 * boxWidth(title)), centerY - (0.5 * boxHeight(title)));
   }
-  const sameSide = Boolean(legend) && (
-    (side === 'top' && legendSide === 'top') || (side === 'bottom' && legendSide === 'bottom')
-  );
+  const titleMinX = centerX - (0.5 * boxWidth(title));
   let result;
   if (side === 'top') {
-    const targetMaxY = sameSide && legend ? legend.bounds.minY - spacing.stackGapPx : primary.minY - spacing.titleGapPx;
-    result = alignMin('title', title, centerX - (0.5 * boxWidth(title)), targetMaxY - boxHeight(title));
+    result = alignMin('title', title, titleMinX, primary.minY - spacing.titleGapPx - boxHeight(title));
   } else if (side === 'bottom') {
-    const targetMinY = sameSide && legend ? legend.bounds.maxY + spacing.stackGapPx : primary.maxY + spacing.titleGapPx;
-    result = alignMin('title', title, centerX - (0.5 * boxWidth(title)), targetMinY);
+    result = alignMin('title', title, titleMinX, primary.maxY + spacing.titleGapPx);
   } else {
     throw new Error(`Unsupported title placement ${JSON.stringify(side)}.`);
   }
-  if (legend && (legendSide === 'left' || legendSide === 'right') && boxesIntersect(result.bounds, legend.bounds)) {
-    result = side === 'top'
-      ? alignMin('title', title, centerX - (0.5 * boxWidth(title)), legend.bounds.minY - spacing.stackGapPx - boxHeight(title))
-      : alignMin('title', title, centerX - (0.5 * boxWidth(title)), legend.bounds.maxY + spacing.stackGapPx);
+  // Python's _place_title: a Legend the title meets, whatever its placement,
+  // stays nearest the primary and the title takes the outer lane.
+  if (legend && boxesIntersect(result.bounds, legend.bounds)) {
+    result = alignMin(
+      'title',
+      title,
+      titleMinX,
+      side === 'top'
+        ? legend.bounds.minY - spacing.stackGapPx - boxHeight(title)
+        : legend.bounds.maxY + spacing.stackGapPx
+    );
   }
   return result;
 };
@@ -1129,7 +1131,7 @@ export const planLegendComposition = ({
     working.push(legendPlacement);
   }
   if (title && !isEmptyBox(title) && titleSide !== 'none') {
-    working.push(placeTitle(working[0].bounds, title, titleSide, spacing, legendPlacement, legendSide));
+    working.push(placeTitle(working[0].bounds, title, titleSide, spacing, legendPlacement));
   }
   const padded = expandedBox(unionBoxes(working.map((placement) => placement.bounds)), spacing.edgePaddingPx);
   const outerDx = -padded.minX;

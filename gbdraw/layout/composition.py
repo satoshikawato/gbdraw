@@ -607,7 +607,6 @@ def _place_title(
     placement: TitlePlacement,
     spacing: CompositionSpacing,
     legend: _WorkingPlacement | None,
-    legend_placement: LegendPlacement,
 ) -> _WorkingPlacement:
     title_bounds = title.local_bounds
     primary_center_x = 0.5 * (primary.min_x + primary.max_x)
@@ -619,58 +618,35 @@ def _place_title(
             center_y=primary_center_y,
         )
 
-    same_side = (
-        legend is not None
-        and (
-            (placement is TitlePlacement.TOP and legend_placement is LegendPlacement.TOP)
-            or (
-                placement is TitlePlacement.BOTTOM
-                and legend_placement is LegendPlacement.BOTTOM
-            )
-        )
-    )
+    title_min_x = primary_center_x - (0.5 * title_bounds.width)
     if placement is TitlePlacement.TOP:
-        target_max_y = (
-            legend.bounds.min_y - spacing.stack_gap_px
-            if same_side and legend is not None
-            else primary.min_y - spacing.title_gap_px
-        )
         result = _align_min(
             title,
-            min_x=primary_center_x - (0.5 * title_bounds.width),
-            min_y=target_max_y - title_bounds.height,
+            min_x=title_min_x,
+            min_y=primary.min_y - spacing.title_gap_px - title_bounds.height,
         )
     elif placement is TitlePlacement.BOTTOM:
-        target_min_y = (
-            legend.bounds.max_y + spacing.stack_gap_px
-            if same_side and legend is not None
-            else primary.max_y + spacing.title_gap_px
-        )
         result = _align_min(
             title,
-            min_x=primary_center_x - (0.5 * title_bounds.width),
-            min_y=target_min_y,
+            min_x=title_min_x,
+            min_y=primary.max_y + spacing.title_gap_px,
         )
     else:
         raise ValueError(f"unsupported title placement: {placement.value}")
 
-    if (
-        legend is not None
-        and legend_placement in {LegendPlacement.LEFT, LegendPlacement.RIGHT}
-        and result.bounds.intersects(legend.bounds)
-    ):
-        if placement is TitlePlacement.TOP:
-            result = _align_min(
-                title,
-                min_x=primary_center_x - (0.5 * title_bounds.width),
-                min_y=legend.bounds.min_y - spacing.stack_gap_px - title_bounds.height,
-            )
-        else:
-            result = _align_min(
-                title,
-                min_x=primary_center_x - (0.5 * title_bounds.width),
-                min_y=legend.bounds.max_y + spacing.stack_gap_px,
-            )
+    # Whatever its placement (a docked Legend on the title's side or beside a
+    # long title, or a corner Legend that grew the canvas), a Legend the title
+    # meets stays nearest the primary and the title takes the outer lane.
+    if legend is not None and result.bounds.intersects(legend.bounds):
+        result = _align_min(
+            title,
+            min_x=title_min_x,
+            min_y=(
+                legend.bounds.min_y - spacing.stack_gap_px - title_bounds.height
+                if placement is TitlePlacement.TOP
+                else legend.bounds.max_y + spacing.stack_gap_px
+            ),
+        )
     return result
 
 
@@ -723,7 +699,6 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
             title_placement,
             request.spacing,
             legend,
-            legend_placement,
         )
         working.append(title)
 
