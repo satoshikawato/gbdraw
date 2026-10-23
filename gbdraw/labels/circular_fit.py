@@ -119,6 +119,9 @@ _OUTER_LEVER_REASON = "Does not move inner, embedded, or radial labels"
 
 CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
 CircularLabelFitProbe: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFit]
+# Whether a record's definition text clears every track at a definition font size (D-12), from the tracks laid out
+# before the labels are placed: a hint that the full assembly verifies.
+CircularDefinitionFitProbe: TypeAlias = Callable[[float], bool]
 
 
 @dataclass(frozen=True)
@@ -148,6 +151,7 @@ class CircularLabelLayout:
     region_font_size: float = 0.0
     # The centre definition's font, when its text reaches into a track's band (``circular_definition``).
     definition_font_size: float = 0.0
+    definition_probe: CircularDefinitionFitProbe | None = field(default=None, compare=False, repr=False)
 
     @property
     def fit(self) -> LabelFit:
@@ -516,20 +520,38 @@ class CircularLabelFitSearch:
     def _definition_font_scan(self) -> LabelFitRow:
         """The largest smaller definition font at which the definition text clears every track (D-12).
 
-        Each step down is one full assembly: the reserve and the tracks inside follow the font, so fit need not be
-        monotone. Only a drawn figure offers this row.
+        The reserve and the tracks inside follow the font, so fit need not be monotone: the records' probes
+        (the tracks before the labels are placed) take the first step down at which every record clears, and the
+        full assembly verifies it, stepping down until it fits. Only a drawn figure offers this row.
         """
 
-        for value in _font_grid(self._definition_font_size):
-            values: dict[str, LabelFitValue] = {DEFINITION_FONT_PATH: value}
-            row = verified_row(
-                "smaller_definition_font",
-                values,
-                self._verify("smaller_definition_font", values),
-                offer_notice=False,
+        grid = _font_grid(self._definition_font_size)
+        probes = [
+            layout.definition_probe for layout in self.layouts if "circular_definition" in layout.failing_kinds
+        ]
+        start = 0
+        if all(probe is not None for probe in probes):
+
+            def clears(value: float) -> bool:
+                self._check_deadline()
+                return all(probe(value) for probe in probes if probe is not None)
+
+            start = next((index for index, value in enumerate(grid) if clears(value)), len(grid))
+
+        def verified(index: int) -> LabelFitRow | None:
+            values: dict[str, LabelFitValue] = {DEFINITION_FONT_PATH: grid[index]}
+            return verified_row(
+                "smaller_definition_font", values, self._verify("smaller_definition_font", values), offer_notice=False
             )
-            if row is not None:
-                return row
+
+        for index in range(start, len(grid)):
+            row = verified(index)
+            if row is None:
+                continue
+            # The labels may widen the circle after the probe, so a milder step may fit too.
+            while index > 0 and (milder := verified(index - 1)) is not None:
+                index, row = index - 1, milder
+            return row
         return LabelFitRow(
             "smaller_definition_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
         )
@@ -724,6 +746,7 @@ def check_circular_label_fit(
 
 __all__ = [
     "ROW_KINDS",
+    "CircularDefinitionFitProbe",
     "CircularLabelFitProbe",
     "CircularLabelFitSearch",
     "CircularLabelFitVerifier",

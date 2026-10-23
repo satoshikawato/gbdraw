@@ -7,6 +7,7 @@ a smaller definition font (``--definition_font_size``), checked by drawing the w
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import warnings
 from collections.abc import Mapping
@@ -206,3 +207,27 @@ def test_python_warns_with_the_report_and_a_figure_without_the_overlap_does_not(
         warnings.simplefilter("error", LabelLeadersCrossWarning)
         drawing = build_circular_diagram(record, options=CircularDiagramOptions(config=cfg))
     assert label_fit_report(drawing) is None
+
+
+def test_the_probe_picks_the_first_step_to_verify_and_a_milder_verified_step_wins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The probe (tracks before the labels) says 15.5 pt; the full figure fits from 16.5 pt, which is offered."""
+
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
+    probed: list[float] = []
+
+    def probe(value: float) -> bool:
+        probed.append(value)
+        return value <= 15.5
+
+    layout = dataclasses.replace(_definition_layout(), definition_probe=probe)
+    verify, calls = _verifier(16.5)
+
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify)
+
+    assert checked is not None
+    assert checked[0].rows[0].values == {DEFINITION_FONT_PATH: 16.5}
+    assert probed == [17.5, 17.0, 16.5, 16.0, 15.5]
+    assert [call[DEFINITION_FONT_PATH] for call in calls] == [15.5, 16.0, 16.5, 17.0]

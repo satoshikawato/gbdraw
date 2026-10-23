@@ -71,10 +71,10 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_fit import CircularLabelFitProbe, CircularLabelLayout
+from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
 from ...labels.circular_types import CircularLabel, CircularLabelCandidate, CircularLabelCandidateCache
-from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
+from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
@@ -2030,6 +2030,7 @@ def _record_label_layout(
     region_labels: Sequence[CircularAnnotationLabel] = (),
     region_track_overlaps: int = 0,
     definition_track_overlaps: int = 0,
+    definition_probe: CircularDefinitionFitProbe | None = None,
 ) -> CircularLabelLayout | None:
     """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
 
@@ -2096,6 +2097,7 @@ def _record_label_layout(
         probe=probe,
         region_font_size=max((label.font_size for label in region_labels), default=0.0),
         definition_font_size=float(cfg.objects.definition.circular.font_size) if definition_track_overlaps else 0.0,
+        definition_probe=definition_probe if definition_track_overlaps else None,
     )
 
 
@@ -2628,12 +2630,14 @@ def add_record_on_circular_canvas(
         record_length=len(gb_record.seq),
         font_family=str(cfg.objects.text.font_family),
     )
-    radial_layout, definition_reserved_radius_px, species_line_count = (
-        _resolve_radial_layout_fitting_definition(
+    # The tracks around the definition, and the definition text as drawn, for a config: the figure's own, or a
+    # smaller definition font that the definition row probes (D-12).
+    def place_around_definition(layout_cfg: GbdrawConfig) -> tuple[CircularRadialLayout, float | None, int]:
+        return _resolve_radial_layout_fitting_definition(
             lambda reserved_radius_px: resolve_circular_radial_layout(
                 total_length=len(gb_record.seq),
                 geometry=canvas_config.geometry(),
-                cfg=cfg,
+                cfg=layout_cfg,
                 slots=layout_slots,
                 feature_dict=layout_feature_dict,
                 definition_reserved_radius_px=reserved_radius_px,
@@ -2646,7 +2650,7 @@ def add_record_on_circular_canvas(
             ),
             gb_record=gb_record,
             geometry=canvas_config.geometry(),
-            cfg=cfg,
+            cfg=layout_cfg,
             species=species,
             strain=strain,
             plot_title=plot_title,
@@ -2655,7 +2659,36 @@ def add_record_on_circular_canvas(
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,
         )
-    )
+
+    def centre_definition_text(text_cfg: GbdrawConfig, line_count: int) -> tuple[Aabb, ...]:
+        if str(definition_position) != "center" or str(definition_profile) == "shared_common":
+            return ()
+        return _centre_definition_text(
+            DefinitionGroup(
+                gb_record,
+                canvas_config.geometry(),
+                style=CircularDefinitionStyle.of(text_cfg, definition_profile),
+                species=species,
+                strain=strain,
+                plot_title=plot_title,
+                record_index=int(annotation_record_index),
+                record_count=int(definition_record_count),
+                species_line_count=line_count,
+                record_presentation=record_presentation,
+            )
+        )
+
+    def definition_clears_tracks(font_size: float) -> bool:
+        """A hint for the definition row: the tracks and the text at ``font_size`` before the labels are placed."""
+
+        probe_cfg = with_config_overrides(cfg, {DEFINITION_FONT_PATH: font_size})
+        try:
+            layout, _, line_count = place_around_definition(probe_cfg)
+        except ValidationError:
+            return False
+        return _definition_lines_on_tracks(layout, centre_definition_text(probe_cfg, line_count)) == 0
+
+    radial_layout, definition_reserved_radius_px, species_line_count = place_around_definition(cfg)
     if radial_layout.features is not None:
         resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
         feature_track_ratio_factor_override = (
@@ -2667,24 +2700,7 @@ def add_record_on_circular_canvas(
     precalculated_labels: list[CircularLabel] | None = None
     # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title); D-12: the
     # text over a track.
-    definition_text: tuple[Aabb, ...] = (
-        _centre_definition_text(
-            DefinitionGroup(
-                gb_record,
-                canvas_config.geometry(),
-                style=CircularDefinitionStyle.of(canvas_config.profile.config, definition_profile),
-                species=species,
-                strain=strain,
-                plot_title=plot_title,
-                record_index=int(annotation_record_index),
-                record_count=int(definition_record_count),
-                species_line_count=species_line_count,
-                record_presentation=record_presentation,
-            )
-        )
-        if str(definition_position) == "center" and str(definition_profile) != "shared_common"
-        else ()
-    )
+    definition_text = centre_definition_text(cfg, species_line_count)
     radial_refused = False
     label_state: _CircularLabelState | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
@@ -2970,6 +2986,7 @@ def add_record_on_circular_canvas(
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
         definition_track_overlaps=_definition_lines_on_tracks(radial_layout, definition_text),
+        definition_probe=definition_clears_tracks,
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
