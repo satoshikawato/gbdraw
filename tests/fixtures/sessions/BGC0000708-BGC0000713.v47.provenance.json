@@ -48,12 +48,12 @@
   "requestSchema": 9,
   "replay": {
     "svg": "BGC0000708-BGC0000713.v47.replay.svg",
-    "code": "771235bee with the Linear row gap between above_feature labels and the definition gap from the scalar axis labels of fix/linear-label-row-gaps",
+    "code": "fix/layout-collision-audit, from the commit that added the title-wide gradient Legend block and the painted plot title box (771235bee before)",
     "command": "python -c 'from gbdraw.cli import main; main()' linear --session BGC0000708-BGC0000713.v47.gbdraw-session.json.gz -o BGC0000708-BGC0000713.v47.replay -f svg",
-    "sha256": "e14428e90a2a55d9b7ceed60f0addd9bd5b99a165c47543986edc4571305e475",
+    "sha256": "b8fa7447f4125c6191229b7513cdf61fb87462867cab7351907f7703b346bd6a",
     "mainReplaySha256": "0243daa566ac01c917e73662c16d3c23c21152c3929655bef2aa410c6a6a2f9f",
     "mainReplayEqualsBaseReplay": false,
-    "differenceFromMainReplay": "record row offsets and one feature label (Linear label packing), then 24 white label boxes and one wider leader (label boxes; the label text is unchanged), then float last bits (one owner of the Linear record placement), then one turned above_feature label (livO) 0.38 px further from its axis and the rows below it (the row gap between above_feature labels); the comparison bands are the same",
+    "differenceFromMainReplay": "record row offsets and one feature label (Linear label packing), then 24 white label boxes and one wider leader (label boxes; the label text is unchanged), then float last bits (one owner of the Linear record placement), then one turned above_feature label (livO) 0.38 px further from its axis and the rows below it (the row gap between above_feature labels), then the Legend block of the \"Pairwise match identity\" gradient as wide as its title with the bar centred under it, the Legend 7 px further left and 14 px wider, and the plot title box as wide as its painted text, 10 px shorter, which moves the canvas height and the title up; the comparison bands are the same",
     "storedResultEqualsMainReplay": true
   },
   "reversedRecordItemsInV": {

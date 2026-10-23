@@ -316,7 +316,8 @@ replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
 `e8b460772` drew (equal to `main`'s replay); the BGC replay was redrawn after the
 Linear label packing changed its record rows and again after the label boxes
 added white boxes to its turned labels, whose text is unchanged, once more for float last bits when one
-owner placed the Linear records, and when `above_feature` labels kept their row gap
+owner placed the Linear records, when `above_feature` labels kept their row gap, and when the
+gradient Legend block took its title's width and the plot title its painted width
 (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
