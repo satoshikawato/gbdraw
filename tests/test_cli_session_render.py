@@ -855,3 +855,100 @@ def test_a_cli_resave_that_promotes_the_last_candidate_drops_the_legacy_evidence
     ]
     assert _resaved_legacy_artifacts(tmp_path, monkeypatch, session, "promoted") == ([], 0)
 
+
+
+# Session 49: several drawings of one mode (DESIGN §8 row B2a, B3 / OV-139).
+DRAWINGS_V49 = SESSION_FIXTURES / "drawings-v49"
+
+
+def _linear_pair() -> Path:
+    """Drawings ``linear`` (one LOSATN entry) and ``linear-2``, the same request."""
+
+    return DRAWINGS_V49 / "drawings-linear-pair-losat.v49.gbdraw-session.json.gz"
+
+
+def _circular_pair(tmp_path: Path) -> Path:
+    """Drawings ``circular`` and ``circular-2``, each with the committed render
+    of ``drawings-circular-only.v49``, written by the Session 49 writer."""
+
+    from gbdraw.session_drawings import write_session_drawings
+
+    only = load_session_document(DRAWINGS_V49 / "drawings-circular-only.v49.gbdraw-session.json.gz")
+    view = dict(session_drawing_artifacts(only, "circular").fields)
+    path = tmp_path / "circular-pair.v49.gbdraw-session.json"
+    write_session_json(path, write_session_drawings([view, view], version=49))
+    return path
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_a_mode_command_renders_one_of_several_drawings_of_its_mode(
+    mode: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from tests.utils.svg_compare import compare_svgs
+
+    session = _linear_pair() if mode == "linear" else _circular_pair(tmp_path)
+    main = linear_main if mode == "linear" else circular_main
+    name = "Linear" if mode == "linear" else "Circular"
+
+    # Without --drawing the command names every drawing of its mode.
+    with pytest.raises(
+        ValidationError,
+        match=rf"2 {mode} drawings; select one: {mode} \({mode}, '{name}'\), "
+        rf"{mode}-2 \({mode}, '{name} 2'\)\.$",
+    ):
+        main(["--session", str(session), "-o", str(tmp_path / "none"), "-f", "svg"])
+    assert _svgs(tmp_path) == []
+
+    render_main(["--session", str(session), "--list_drawings"])
+    assert capsys.readouterr().out.splitlines() == [
+        f"{mode}\t{mode}\t{name}\tyes",
+        f"{mode}-2\t{mode}\t{name} 2\tyes",
+    ]
+
+    main(["--session", str(session), "--drawing", f"{mode}-2", "-o", str(tmp_path / "second"), "-f", "svg"])
+    assert _svgs(tmp_path) == ["second.svg"]
+    # The CLI draws the drawing as the Python API does.
+    with materialize_session(load_session_document(session), output_directory=tmp_path / "python") as materialized:
+        from gbdraw.api import render_session
+
+        python = render_session(materialized, drawing=f"{mode}-2")
+    python_svg = next(path for path in python.output_paths if path.suffix == ".svg")
+    result = compare_svgs(tmp_path / "second.svg", python_svg)
+    assert result.equal, result.message
+
+
+def _losat_entries(document: Any) -> dict[str, list[str]]:
+    return {
+        drawing["id"]: [entry["key"] for entry in drawing.get("losatCache", {}).get("entries", [])]
+        for drawing in document.to_dict()["drawings"]
+    }
+
+
+def test_a_resave_keeps_the_losat_entries_of_every_drawing(tmp_path: Path) -> None:
+    """B3 / OV-139: each drawing keeps the LOSAT entries it carries, rendered or not."""
+
+    data = json.loads(gzip.decompress(_linear_pair().read_bytes()))
+    linear, second = data["drawings"]
+    (entry,) = linear["losatCache"]["entries"]
+    # linear-2 holds an entry of its own that linear does not hold.
+    own = {**entry, "key": "f" * len(entry["key"]), "text": entry["text"].replace("1847", "1846")}
+    second["losatCache"] = {"entries": [own]}
+    session = tmp_path / "pair.v49.gbdraw-session.json"
+    write_session_json(session, data)
+    expected = {"linear": [entry["key"]], "linear-2": [own["key"]]}
+    assert _losat_entries(load_session_document(session)) == expected
+
+    for selected in ("linear", "linear-2"):
+        output = tmp_path / f"{selected}.gbdraw-session.json"
+        linear_main(
+            ["--session", str(session), "--drawing", selected, "-o", str(tmp_path / selected),
+             "-f", "svg", "--session_output", str(output)]
+        )
+        resaved = load_session_document(output)
+        assert resaved.version == 49
+        assert _losat_entries(resaved) == expected, selected
+
+    render_main(["--session", str(session), "-o", str(tmp_path / "all"), "-f", "svg", "--save_session"])
+    assert _losat_entries(load_session_document(tmp_path / "all.gbdraw-session.json")) == expected
