@@ -825,6 +825,24 @@ def test_typing_keeps_its_skim_through_the_pause_after_it(tmp_path: Path, monkey
     assert kinds == ['speed_start', 'hold', 'speed_end'] and holds == [0.25]
 
 
+def test_a_click_aims_where_a_moving_target_settles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from video import walkthrough
+    # A smooth scroll lags the wheel on a busy page: the button still moves up while the pointer travels to it.
+    boxes = iter([{'x': 100, 'y': 900, 'width': 80, 'height': 30}, {'x': 100, 'y': 700, 'width': 80, 'height': 30},
+                  {'x': 100, 'y': 640, 'width': 80, 'height': 30}])
+    settled = {'x': 100, 'y': 640, 'width': 80, 'height': 30}
+    button = SimpleNamespace(bounding_box=lambda: next(boxes, settled))
+    page = _StubPage(1920, 1080)
+    page.mouse.down = page.mouse.up = lambda: None
+    expect = type('Expect', (), {'to_be_visible': lambda _: None})()
+    monkeypatch.setattr(walkthrough, 'expect', lambda _: expect)
+    rec = Recorder(page, tmp_path)
+    monkeypatch.setattr(rec, 'hold', lambda seconds: None)
+    rec.click(button)
+    down = next(event for event in rec.events if event['kind'] == 'down')
+    assert (down['x'], down['y']) == rec._stage(140, 655)
+
+
 def test_a_figure_hold_never_cuts_the_preview_bars_at_an_edge() -> None:
     from video.tutorials import _clear_edges
     figure = {'x': 500, 'y': 300, 'width': 1300, 'height': 500}
