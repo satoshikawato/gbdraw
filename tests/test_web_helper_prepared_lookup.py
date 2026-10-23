@@ -67,7 +67,7 @@ class _Stage:
         self.identities: dict[str, dict[str, object]] = {}
         self.cache_paths: dict[str, Path] = {}
         for index, (resource_id, source_path) in enumerate(sorted(resources.items()), start=1):
-            token = f"render-resource-{index}"
+            token = f"{index:064x}"  # a content token: 64 hex digits
             target = self.cache_directory / f"{token}.bin"
             if isinstance(source_path, bytes):
                 target.write_bytes(source_path)
@@ -410,7 +410,7 @@ def test_a_changed_comparison_table_token_is_read_again(tmp_path: Path, monkeypa
     reads = _count_table_reads(monkeypatch)
     stage.render(cache, encoded.payload)
     table_id = next(item.resource_id for item in encoded.resources if item.source_path and item.source_path.name == "pair.tsv")
-    stage.identities[table_id] = {**stage.identities[table_id], "cacheToken": "render-resource-99"}
+    stage.identities[table_id] = {**stage.identities[table_id], "cacheToken": f"{99:064x}"}
     stage.render(cache, encoded.payload)
     assert len(reads) == 2
 

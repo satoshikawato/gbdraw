@@ -10,6 +10,10 @@ import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
+import { drawingStore } from './helpers/drawing-state.mjs';
+import {
+  PALETTE_SLICE, clearQueuedPalette, queuePalette, replaceDefaultColors, restoreArtifactQueuedPalette, selectPalette, setDefaultColors
+} from '../../gbdraw/web/js/services/drawing/palette.js';
 
 const ref = (value) => ({ value });
 const PALETTES = {
@@ -23,17 +27,20 @@ const editedColors = () => ({
   ...paletteOf('default'), CDS: '#abc', tRNA: '#333333', rRNA: null, misc_feature: '#444444', gc_content: 'none'
 });
 
+// A drawing's palette slice, with its handle under `slices`.
+const drawingOf = (members) => {
+  const { handle, view } = PALETTE_SLICE.create(members);
+  return { ...view, fileImports: {}, slices: { palette: handle } };
+};
+
 const setup = ({ colors = editedColors(), instant = true } = {}) => {
-  const drawing = {
-    selectedPalette: ref('default'), currentColors: ref(colors), pendingPaletteName: ref(''), pendingPaletteColors: ref({}),
-    fileImports: {}
-  };
+  const drawing = drawingOf({ currentColors: ref(colors) });
   const paletteColorsDialog = {
     show: false, kind: 'switch', fromPalette: '', toPalette: '', droppedPalette: '', count: 0, keysText: ''
   };
   const state = {
     paletteDefinitions: ref(PALETTES), paletteInstantPreviewEnabled: ref(instant), appliedPaletteName: ref('default'),
-    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, paletteColorsDialog
+    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, ...drawingStore(drawing, drawing), paletteColorsDialog
   };
   /** Whether the dialog was open at each History capture. */
   const openAtCapture = [];
@@ -47,7 +54,9 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
   });
   // app-setup.js wires the dialog's choices the same way.
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
-  const manager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
+  const manager = createResultsManager({
+    state, closeAfterDialogChoice: dialogChoice.closeAfterChoice, writeArtifactValues: () => { throw new Error('no hidden drawing'); }
+  });
   const choose = dialogChoice.withHistory(
     () => 'Change setting', manager.handlePaletteColorsChoice, manager.cancelPaletteColorsDialog
   );
@@ -132,6 +141,25 @@ test('a queued switch (Instant Preview off) keeps the applied palette and queues
   assert.equal(JSON.stringify(state.appliedPaletteColors.value), applied);
 });
 
+// D-15-46 (M3): turning Instant Preview on applies the queued palette in the
+// toggle's own transition, not in a watcher; turning it off queues nothing.
+test('turning Instant Preview on applies the queued palette; turning it off keeps the applied one', async () => {
+  const { drawing, state, manager, choose } = setup({ instant: false });
+  manager.selectPalette('forest');
+  await choose('keep');
+  const colors = { ...drawing.currentColors.value };
+  manager.setPaletteInstantPreview(true);
+  assert.equal(state.paletteInstantPreviewEnabled.value, true);
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.deepEqual(drawing.pendingPaletteColors.value, {});
+  assert.equal(state.appliedPaletteName.value, 'forest');
+  assert.deepEqual(state.appliedPaletteColors.value, colors);
+  manager.setPaletteInstantPreview(false);
+  assert.equal(state.paletteInstantPreviewEnabled.value, false);
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.equal(state.appliedPaletteName.value, 'forest');
+});
+
 // Q5 A (Owner 2026-10-09): switching back to the applied palette while
 // another is queued asks like any switch when user colors exist; the queue then
 // clears and the colors apply live.
@@ -198,6 +226,21 @@ test('the dialog names three keys and counts the rest', () => {
   manager.selectPalette('forest');
   assert.equal(paletteColorsDialog.count, 5);
   assert.equal(paletteColorsDialog.keysText, 'CDS, tRNA, rRNA, and 2 more');
+});
+
+// A field edit in the Default colors list sets the color in the table it
+// edits: the table stays the same object, so the list's grouping (which reads
+// the table's keys) never moves the edited row to the other grid. A new key or
+// a whole-table change gives a new table, which the grouping follows.
+test('a Default colors field edit keeps the table object; a new key replaces it', () => {
+  const { drawing, manager } = setup();
+  const table = drawing.currentColors.value;
+  manager.editDefaultColor('tRNA', 'none');
+  assert.equal(drawing.currentColors.value, table);
+  assert.equal(drawing.currentColors.value.tRNA, 'none');
+  manager.editDefaultColor('tmRNA', '#010203');
+  assert.notEqual(drawing.currentColors.value, table);
+  assert.equal(drawing.currentColors.value.tmRNA, '#010203');
 });
 
 test('setDefaultColor writes the default color and applies it to the Result', () => {
@@ -365,17 +408,58 @@ test('a palette change leaves a Legend row that a rule draws', async () => {
 // the table lookup must read own keys only, so the drawing falls back to `default`.
 test('a palette named like an inherited member falls back to the default palette', () => {
   for (const name of ['constructor', '__proto__', 'toString']) {
-    const circular = {
-      selectedPalette: ref(name), currentColors: ref({}), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
-    };
-    const linear = {
-      selectedPalette: ref('default'), currentColors: ref({}), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
-    };
+    const circular = drawingOf({ selectedPalette: ref(name) });
+    const linear = drawingOf();
     const state = {
       paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
-      drawings: { circular, linear }, activeDrawing: () => circular
+      ...drawingStore(circular, linear), activeDrawing: () => circular
     };
     assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
     assert.equal(circular.selectedPalette.value, 'default', name);
   }
+});
+
+// An artifact owner set holds its queued palette colors by reference, and a
+// History restore gives the drawing that object (`restoreArtifactQueuedPalette`).
+// Every palette writer replaces the colors object, so none writes the owner
+// set's: a write into the frozen object would throw.
+test('a queued palette restored by reference is never written through', () => {
+  const owned = Object.freeze({ CDS: '#123456' });
+  const drawing = drawingOf({});
+  restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned);
+  assert.equal(drawing.pendingPaletteColors.value, owned);
+  const writers = [
+    () => queuePalette(drawing.slices.palette, 'default', { CDS: '#000000' }),
+    () => restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned),
+    () => clearQueuedPalette(drawing.slices.palette),
+    () => restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned),
+    () => selectPalette(drawing.slices.palette, 'forest', { CDS: '#111111' }),
+    () => setDefaultColors(drawing.slices.palette, { tRNA: '#222222' }),
+    () => replaceDefaultColors(drawing.slices.palette, { CDS: '#333333' }),
+    () => PALETTE_SLICE.install(drawing.slices.palette, { pendingPaletteColors: { CDS: '#444444' } }),
+    () => restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned),
+    () => PALETTE_SLICE.reset(drawing.slices.palette)
+  ];
+  writers.forEach((write) => write());
+  assert.deepEqual(owned, { CDS: '#123456' });
+  assert.notEqual(drawing.pendingPaletteColors.value, owned);
+});
+
+// M3.12: a Default colors edit syncs the palette draft itself (no watcher
+// writes a drawing): live, it applies at once; with a queued palette, it joins
+// the queue and the applied palette stays.
+test('a Default colors edit applies live, or joins the queued palette, without a watcher', async () => {
+  const live = setup({ instant: true });
+  live.manager.editDefaultColor('tRNA', '#565656');
+  assert.equal(live.drawing.currentColors.value.tRNA, '#565656');
+  assert.equal(live.state.appliedPaletteColors.value.tRNA, '#565656');
+
+  const queued = setup({ instant: false });
+  queued.manager.selectPalette('forest');
+  await queued.choose('keep');
+  const applied = JSON.stringify(queued.state.appliedPaletteColors.value);
+  queued.manager.editDefaultColor('tRNA', '#676767');
+  assert.equal(queued.drawing.pendingPaletteName.value, 'forest');
+  assert.equal(queued.drawing.pendingPaletteColors.value.tRNA, '#676767');
+  assert.equal(JSON.stringify(queued.state.appliedPaletteColors.value), applied);
 });

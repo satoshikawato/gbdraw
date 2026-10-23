@@ -23,6 +23,7 @@ for (const mode of ['circular', 'linear']) {
     const text = 'MODE_RETAINED_LABEL';
     try {
       await generate(page);
+      const generated = await snapshot(page);
       await rename(page, text);
       const edited = await snapshot(page);
       expect(Object.values(edited.labels)).toContain(text);
@@ -40,14 +41,21 @@ for (const mode of ['circular', 'linear']) {
         expect.soft(returned.result).toContain(text);
       };
       await check('returned');
+      // PD-OI-090: a drawing switch is no History step. Undo walks this
+      // drawing's last step (the label edit) and Redo brings it back; the
+      // drawing stays shown.
       for (const action of ['Undo', 'Redo']) {
-        for (const expectedMode of [temporary, mode]) {
-          await page.getByRole('button', { name: action, exact: true }).click();
-          await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(expectedMode);
-          expect.soft(labelIntent(await snapshot(page)))
-            .toEqual(expectedMode === mode ? labelIntent(edited) : noLabelIntent);
+        await page.getByRole('button', { name: action, exact: true }).click();
+        await expect.poll(() => page.evaluate((undone) => {
+          const history = window.__GBDRAW_HISTORY__;
+          return !history.restoring.value && !history.traversalPending() && history.canRedo() === undone;
+        }, action === 'Undo')).toBe(true);
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
+        if (action === 'Undo') {
+          expect.soft(labelIntent(await snapshot(page))).toEqual(labelIntent(generated));
+        } else {
+          await check(action);
         }
-        await check(action);
       }
       const file = testInfo.outputPath('roundtrip.gbdraw-session.json.gz');
       await download(page, 'Save Session', file);

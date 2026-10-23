@@ -1,5 +1,9 @@
 // @ts-check
 import { downloadSafeName } from '../utils/download-names.js';
+import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
+/** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
+import { paintOf, setFeatureStroke } from './drawing/paint.js';
+/** @import { PaintSlice } from './drawing/paint.js' */
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
 // card's `uid`, or a Circular record's source selector `#N` (1-based position
@@ -263,13 +267,14 @@ export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DE
  * @property {string} displaySource The `sourceUid` of its record display drafts.
  * @property {string | null} displaySelector Circular: its `#N`; Linear: null (every draft of the card).
  *
- * The edits of one drawing, mutated in place by `removeRecordEdits`.
+ * The edits of one drawing, which `removeRecordEdits` removes: its per-feature
+ * edits and Feature placements through their slice (`drawing.slices.featureEdits`).
  * @typedef {object} RecordEditData
- * @property {Record<string, { recordKey?: unknown }>} [featureOverrides]
- * @property {Record<string, { recordKey?: unknown }>} [featurePlacementOverrides]
- * @property {Record<string, unknown>} [featureStrokeOverrides] Keyed `<recordKey>\0…`.
- * @property {{ annotations: { target?: { kind?: string, recordKey?: unknown },
- *   metadata?: Record<string, unknown> | null }[] }[]} [annotationSets]
+ * @property {FeatureEditsSlice} [featureEdits]
+ * @property {PaintSlice} [paint] Its paint (`drawing.slices.paint`): the feature strokes, keyed `<recordKey>\0…`.
+ * @property {readonly { readonly annotations: readonly { readonly target?: { readonly kind?: string, readonly recordKey?: unknown },
+ *   readonly metadata?: Readonly<Record<string, unknown>> | null }[] }[]} [annotationSets]
+ * @property {(annotation: object) => void} [removeAnnotation] Removes an annotation of `annotationSets` (the writer of their slice).
  * @property {{ sourceUid?: unknown, selector?: unknown }[]} [recordDisplayDrafts]
  * @property {{ queryUid?: unknown, subjectUid?: unknown }[]} [comparisonEdges] Linear edges, by card uid.
  * @property {string} annotationBindingField The annotation metadata field of a record binding.
@@ -322,23 +327,31 @@ const recordEditMatcher = (owners) => {
  */
 const forEachRecordEdit = (owners, data, visit) => {
   const match = recordEditMatcher(owners);
-  /** @param {Record<string, { recordKey?: unknown }> | undefined} rows */
-  const rowsOf = (rows) => Object.entries(rows || {}).forEach(([draftKey, row]) => {
-    const key = match.ofRequestKey(row?.recordKey);
-    if (key !== undefined) visit(key, () => { delete /** @type {Record<string, unknown>} */ (rows)[draftKey]; });
+  /**
+   * @param {Readonly<Record<string, { readonly recordKey: string }>>} rows
+   * @param {(draftKey: string) => void} remove
+   */
+  const rowsOf = (rows, remove) => Object.entries(rows).forEach(([draftKey, row]) => {
+    const key = match.ofRequestKey(row.recordKey);
+    if (key !== undefined) visit(key, () => remove(draftKey));
   });
-  rowsOf(data.featureOverrides);
-  rowsOf(data.featurePlacementOverrides);
-  Object.keys(data.featureStrokeOverrides || {}).forEach((strokeKey) => {
+  const { featureEdits } = data;
+  if (featureEdits) {
+    const { featureOverrides, featurePlacementOverrides } = featureEditsOf(featureEdits);
+    rowsOf(featureOverrides, (draftKey) => setFeatureOverrideRow(featureEdits, draftKey, null));
+    rowsOf(featurePlacementOverrides, (draftKey) => setFeaturePlacementRow(featureEdits, draftKey, null));
+  }
+  const { paint } = data;
+  Object.keys(paint ? paintOf(paint).featureStrokeOverrides : {}).forEach((strokeKey) => {
     const key = strokeKey.includes('\0') ? match.ofRequestKey(strokeKey.split('\0')[0]) : undefined;
-    if (key !== undefined) visit(key, () => { delete /** @type {Record<string, unknown>} */ (data.featureStrokeOverrides)[strokeKey]; });
+    if (paint && key !== undefined) visit(key, () => setFeatureStroke(paint, strokeKey, null));
   });
   (data.annotationSets || []).forEach((set) => {
     [...set.annotations].forEach((item) => {
       const key = item?.target?.kind === 'featureIdentity'
         ? match.ofRequestKey(item.target.recordKey)
         : match.ofBinding(item?.metadata?.[data.annotationBindingField]);
-      if (key !== undefined) visit(key, () => { set.annotations.splice(set.annotations.indexOf(item), 1); });
+      if (key !== undefined) visit(key, () => data.removeAnnotation?.(item));
     });
   });
   /**

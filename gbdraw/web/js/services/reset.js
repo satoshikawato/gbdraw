@@ -1,22 +1,22 @@
 // @ts-check
 import {
-  createDefaultAdv,
-  createDefaultCircularConservation,
   createDefaultEditorDraftState,
-  createDefaultForm,
-  createDefaultLabelFilterState,
-  createDefaultLosat,
   createDefaultPaletteDraftState,
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
-/** @import { DrawingState, LegendCaption, LegendEntry, state as AppState } from '../state.js' */
-/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
-import { replaceBulkLabelEdits } from './label-override-table.js';
-import { createDefaultLayoutPreferences } from './layout-preferences.js';
+/** @import { DrawingState, state as AppState } from '../state.js' */
+import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
+import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
+import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
+import { LABEL_TABLES_SLICE } from './drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
+import { resetPaintEdits } from './drawing/paint.js';
+import { SETTINGS_SLICE } from './drawing/settings.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
-import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
 // Every caller passes plain data (defaults, palette colors, JSON-like rows), so
 // the copy has the shape of the value.
@@ -46,21 +46,6 @@ const replaceReactiveObject = (target, source) => {
   });
 };
 
-/**
- * @param {unknown[]} target
- * @param {readonly unknown[]} [source]
- */
-const replaceReactiveArray = (target, source = []) => {
-  target.splice(0, target.length, ...source.map((entry) => clonePlain(entry)));
-};
-
-/** @param {Record<string, unknown>} target */
-const clearReactiveObject = (target) => {
-  Object.keys(target).forEach((key) => {
-    delete target[key];
-  });
-};
-
 /** @param {Pick<typeof AppState, 'paletteDefinitions'>} state */
 const defaultPaletteColors = (state) => {
   const definitions = state.paletteDefinitions?.value || {};
@@ -78,43 +63,24 @@ const resetPaletteState = (state, drawing) => {
   const defaults = createDefaultPaletteDraftState();
   const colors = defaultPaletteColors(state);
 
-  drawing.selectedPalette.value = defaults.selectedPalette;
+  // The default palette, with its colors.
+  PALETTE_SLICE.install(drawing.slices.palette, { ...createDefaultPaletteData(), currentColors: colors });
   state.paletteInstantPreviewEnabled.value = defaults.paletteInstantPreviewEnabled;
-  drawing.currentColors.value = colors;
   state.appliedPaletteName.value = defaults.appliedPaletteName;
   state.appliedPaletteColors.value = { ...colors };
-  drawing.pendingPaletteName.value = defaults.pendingPaletteName;
-  drawing.pendingPaletteColors.value = defaults.pendingPaletteColors;
 };
 
-/**
- * @param {typeof AppState} state
- * @param {DrawingState} drawing
- */
-const resetLayoutPreferenceState = (state, drawing) => {
-  const defaults = createDefaultLayoutPreferences();
-  Object.assign(drawing.layoutPreferences.circular.single, defaults.circular.single);
-  Object.assign(drawing.layoutPreferences.circular.multi, defaults.circular.multi);
-  Object.assign(drawing.layoutPreferences.linear, defaults.linear);
-  state.suppressCircularMultiRecordDefaults.value = false;
-};
 
 /**
  * @param {typeof AppState} state
  * @param {DrawingState} drawing
  */
 const resetRuleDraftState = (state, drawing) => {
-  const labelDefaults = createDefaultLabelFilterState();
   const editorDefaults = createDefaultEditorDraftState();
-  drawing.filterMode.value = labelDefaults.filterMode;
-  drawing.manualBlacklist.value = labelDefaults.manualBlacklist;
-  replaceReactiveArray(drawing.manualWhitelist, labelDefaults.manualWhitelist);
-  replaceReactiveArray(drawing.manualSpecificRules);
+  COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
   replaceReactiveObject(state.newSpecRule, createDefaultSpecificRule());
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
-  replaceReactiveArray(drawing.manualPriorityRules);
-  clearReactiveObject(drawing.fileImports);
   replaceReactiveObject(state.newPriorityRule, createDefaultPriorityRule());
   state.newColorFeat.value = editorDefaults.newColorFeat;
   state.newColorVal.value = editorDefaults.newColorVal;
@@ -127,27 +93,11 @@ const resetRuleDraftState = (state, drawing) => {
  */
 const resetEditorDraftState = (state, drawing) => {
   const editorDefaults = createDefaultEditorDraftState();
-  clearReactiveObject(drawing.featureColorOverrides);
-  replaceReactiveArray(drawing.featureVisibilityManualRules);
-  clearReactiveObject(drawing.featureOverrides);
-  clearReactiveObject(drawing.featureStrokeOverrides);
-  clearReactiveObject(drawing.legendColorOverrides);
-  clearReactiveObject(drawing.legendStrokeOverrides);
-  drawing.deletedLegendEntries.value = [];
-  drawing.dormantLegendEntries.value = [];
+  VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
   // R15-14: every renamed row, a feature row's or a track row's, returns to
   // the caption Python draws, its key.
-  drawing.legendEntries.value = drawing.legendEntries.value.map((/** @type {LegendEntry} */ entry) => {
-    const drawn = /** @type {LegendCaption} */ (/** @type {string} */ (entry.originalCaption));
-    return entry.caption === drawn ? entry : { ...entry, caption: drawn };
-  });
-  drawing.addedLegendCaptions.value = new Set();
-  drawing.fileLegendCaptions.value = new Set();
+  resetPaintEdits(drawing.slices.paint);
 
-  // The saved label table of a loaded Session goes with the bulk label edits,
-  // also when the bulk map is already empty (R15-21).
-  replaceBulkLabelEdits(drawing, {});
-  drawing.canonicalLabelOverrideRows.value = [];
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
@@ -159,27 +109,6 @@ const resetEditorDraftState = (state, drawing) => {
   state.clickedLabel.value = null;
 
   state.selectedOrthogroupAlignmentFeature.value = '';
-  clearReactiveObject(drawing.orthogroupNameOverrides);
-  clearReactiveObject(drawing.orthogroupDescriptionOverrides);
-  clearReactiveObject(drawing.orthogroupDormantOverrides);
-};
-
-/** @param {DrawingState} drawing */
-const resetLinearComparisonPlan = (drawing) => {
-  const plan = drawing.linearComparisonPlan;
-  if (!plan || typeof plan !== 'object') return;
-  const retainedEdges = (Array.isArray(plan.edges) ? plan.edges : [])
-    .filter((/** @type {LinearComparisonEdge} */ edge) => Boolean(edge?.file) || String(edge?.losatFilename || '').trim())
-    .map((/** @type {LinearComparisonEdge} */ edge) => ({
-      ...edge,
-      included: false,
-      fileActive: false,
-      losatFilenameActive: false
-    }));
-  plan.mode = 'none';
-  plan.defaultSource = 'losat';
-  if (!Array.isArray(plan.edges)) plan.edges = [];
-  plan.edges.splice(0, plan.edges.length, ...retainedEdges);
 };
 
 // Reset Settings returns both drawings to their own mode's defaults
@@ -204,22 +133,16 @@ export const resetSettings = (state) => {
   clearSettingTableFiles(state.files);
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
-  /** @type {[string, DrawingState][]} */ (Object.entries(state.drawings)).forEach(([mode, drawing]) => {
-    replaceReactiveObject(drawing.form, createDefaultForm());
-    drawing.linearRecordLayoutEnabled.value = WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
-    replaceReactiveObject(drawing.adv, createDefaultAdv(mode));
-    drawing.linearTypographyLinked.value = true;
-    replaceReactiveObject(drawing.losat, createDefaultLosat());
-    replaceReactiveObject(drawing.circularConservation, createDefaultCircularConservation());
-    clearReactiveObject(drawing.unmanagedConfigOverrides);
-    replaceReactiveArray(drawing.annotationSets);
-    replaceReactiveArray(drawing.recordDisplayDrafts);
-    Object.keys(drawing.featurePlacementOverrides).forEach((key) => delete drawing.featurePlacementOverrides[key]);
+  state.drawingList().forEach((drawing) => {
+    SETTINGS_SLICE.reset(drawing.slices.settings);
+    ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
+    FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);
+    // The label tables (the bulk label edits, a loaded Session's saved label
+    // table, and the filters) and the Similarity group names, the dormant
+    // ones included, return to a new drawing's (R15-21).
+    LABEL_TABLES_SLICE.reset(drawing.slices.labelTables);
+    GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     state.selectedAnnotation.value = null;
-    resetLinearComparisonPlan(drawing);
-    drawing.losatProgram.value = 'blastn';
-
-    resetLayoutPreferenceState(state, drawing);
     resetPaletteState(state, drawing);
     resetRuleDraftState(state, drawing);
     resetEditorDraftState(state, drawing);

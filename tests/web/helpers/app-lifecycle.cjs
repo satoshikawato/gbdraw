@@ -516,7 +516,7 @@ const snapshotUserOwnedState = (page, { mode = null } = {}) => page.evaluate(asy
   const { state } = await import('/gbdraw/web/js/state.js');
   const config = await import('/gbdraw/web/js/services/config.js');
   const drawingMode = requestedMode || state.mode.value;
-  const drawing = state.drawings[drawingMode];
+  const drawing = state.drawingOf(drawingMode);
   const editor = config.buildEditorStateData(drawing);
   delete editor.featureCatalog;
   const features = config.buildFeatureStateData(drawing);
@@ -662,9 +662,10 @@ const readWarmBaseline = async (page) => ({
     const { state } = await import('/gbdraw/web/js/state.js');
     const config = await import('/gbdraw/web/js/services/config.js');
     return JSON.parse(JSON.stringify({
+      shownDrawing: state.activeDrawing().id,
       drawings: Object.fromEntries(['circular', 'linear'].map((mode) => [mode, {
-        config: config.buildConfigData(state.drawings[mode]),
-        ui: config.buildUiStateData(state.drawings[mode], { includePreviewNavigation: false })
+        config: config.buildConfigData(state.drawingOf(mode)),
+        ui: config.buildUiStateData(state.drawingOf(mode), { includePreviewNavigation: false })
       }])),
       // The test-owned lists an init script starts (`__AUDIT_LIFECYCLE__`).
       testLists: Object.fromEntries(Object.keys(window)
@@ -681,12 +682,23 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
   await page.evaluate(() => document.activeElement?.blur?.());
   await settleLive(page, { timeout: WARM_RESTORE_TIMEOUT_MS });
   // History takes back the inputs, Results and edits its steps recorded.
-  for (let undone = 0; undone < WARM_RESTORE_MAX_UNDO; undone += 1) {
-    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-    if (steps === 0) break;
-    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  // Each drawing has its own History and a drawing switch is no step
+  // (PD-OI-090), so the restore walks each drawing's History, the drawing
+  // shown at boot last, which stays shown.
+  const drawingIds = await page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state
+    .drawingList().map((drawing) => drawing.id));
+  const shownAtBoot = restorePoint.shownDrawing;
+  for (const drawingId of [...drawingIds.filter((id) => id !== shownAtBoot), shownAtBoot]) {
+    const switched = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
+    if (switched && switched.status !== 'ok') return [`the restore could not show the drawing ${drawingId}`];
     await settleLive(page);
-    if (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) >= steps) break;
+    for (let undone = 0; undone < WARM_RESTORE_MAX_UNDO; undone += 1) {
+      const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+      if (steps === 0) break;
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settleLive(page);
+      if (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) >= steps) break;
+    }
   }
   // What a case set outside History: Linear sources set through their setter,
   // drafts and settings (Reset Settings), and the settings of both drawings as
@@ -703,11 +715,11 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
     }
     await app.resetSettings();
     for (const [mode, { config: settings }] of Object.entries(drawings)) {
-      config.applyCapturedConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
+      config.applyCapturedConfigData(state.drawingOf(mode), settings, { resolveTrackPlacements: false });
     }
     await window.Vue.nextTick();
     for (const [mode, { ui }] of Object.entries(drawings)) {
-      config.applyUiStateData(state.drawings[mode], ui, { restorePreviewNavigation: false });
+      config.applyUiStateData(state.drawingOf(mode), ui, { restorePreviewNavigation: false });
     }
   }, restorePoint.drawings);
   await settleLive(page);

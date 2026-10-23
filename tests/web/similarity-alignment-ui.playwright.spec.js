@@ -2591,7 +2591,7 @@ test('the docked review takes the popup, the Editor and the view, and gives them
 
   // A Session saved during the review holds the view from before it.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = await import('./js/services/config.js');
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await exportSession('saved during review');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const { zoom, canvasPan } = JSON.parse(text).ui;
@@ -2780,7 +2780,7 @@ test('a Session loaded under an open review keeps its own view and Editor when t
   await expect(page.locator('[data-similarity-alignment-canvas]')).toHaveCount(0);
   // A Session saved now holds the loaded view, not the view from before the review.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = await import('./js/services/config.js');
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await exportSession('saved after load');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const { zoom, canvasPan } = JSON.parse(text).ui;
@@ -2892,7 +2892,7 @@ test('the figure is fitted again whenever the room of the Result changes while R
   // No fit is a History step, and a Session saved now holds the view from before the review.
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen);
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = await import('./js/services/config.js');
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await exportSession('saved after a fit to the room');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const { zoom, canvasPan } = JSON.parse(text).ui;
@@ -3128,7 +3128,7 @@ test('Apply of a review draws a live color changed before the review', async ({ 
 test('a Session loaded while the other mode is shown under a review keeps its own view', async ({ page }) => {
   test.setTimeout(600000);
   const { dialog } = await openReviewOverOwnView(page);
-  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
   const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
   session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
@@ -3151,7 +3151,7 @@ test('a mode switch and back under an open review leaves the view the review giv
   const { before, dialog } = await openReviewOverOwnView(page);
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
   for (const target of ['circular', 'linear']) {
-    await page.evaluate((next) => window.__GBDRAW_APP__.setDiagramMode(next), target);
+    await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), target);
     await expect.poll(shownMode).toBe(target);
   }
   await expect(dialog).toBeVisible();
@@ -3179,7 +3179,7 @@ test('a Linear review ended in Circular gives the Linear view back to no other f
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   const { before, dialog } = await openReviewOverOwnView(page);
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
-  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
   await expect.poll(shownMode).toBe('circular');
   // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
   // its panel has no Result area to dock in), and Escape ends it there.

@@ -72,7 +72,7 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-test('incremental color edits survive mode history, dirty draft, and fresh Save/Load/export', async ({ browser }, testInfo) => {
+test('incremental color edits survive a drawing round trip, dirty draft, and fresh Save/Load/export', async ({ browser }, testInfo) => {
   test.setTimeout(360000);
   const page = await load(browser);
   let fresh;
@@ -90,12 +90,8 @@ test('incremental color edits survive mode history, dirty draft, and fresh Save/
     expect(undone.colors).not.toEqual(edited.colors);
     await switchMode(page, 'linear');
     await switchMode(page, 'circular');
+    // PD-OI-090: the round trip records no step and Undo never switches the drawing.
     await agree(page, undone, testInfo, 'after-edit-undo');
-    for (const mode of ['linear', 'circular']) {
-      await page.getByRole('button', { name: 'Undo', exact: true }).click();
-      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
-    }
-    await agree(page, undone, testInfo, 'after-mode-undo');
     // Reload the two-edit checkpoint; Generate must not be needed to restore it.
     fresh = await load(browser, savedBefore);
     await agree(fresh, edited, testInfo, 'saved-before-loaded');

@@ -1,8 +1,14 @@
 // @ts-check
 /** @import { PaletteColorsDialog } from '../state.js' */
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
+import {
+  clearQueuedPalette, editDefaultColor as editDefaultColorField, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette,
+  setDefaultColors
+} from '../services/drawing/palette.js';
+/** @import { PaletteDrawing } from '../services/drawing/palette.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 import { listText, t } from '../utils/i18n.js';
-import { withImportedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
+import { importedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
 /** @import { FileImports } from '../services/file-imports.js' */
 
 // The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
@@ -20,28 +26,27 @@ const describeKeys = (keys) => {
  * @property {{ value: string }} appliedPaletteName
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {() => ResultsManagerDrawing} activeDrawing The shown mode's drawing.
+ * @property {() => readonly ResultsManagerDrawing[]} drawingList Every drawing, in creation order.
  * @property {() => any} [sessionOperationAvailability] The busy outcome of a Session operation, if any.
  * @property {PaletteColorsDialog} paletteColorsDialog
  */
 
 /**
- * The palette members of a drawing (`DrawingState` of state.js).
- * @typedef {object} ResultsManagerDrawing
- * @property {{ value: string }} selectedPalette
- * @property {{ value: Record<string, string> }} currentColors
- * @property {{ value: string }} pendingPaletteName
- * @property {{ value: Record<string, string> }} pendingPaletteColors
- * @property {FileImports} fileImports What the Default colors file set (OV-1280).
+ * The palette of a drawing (`DrawingState` of state.js), and what its Default
+ * colors file set (`fileImports`, OV-1280; a setting its owners write).
+ * @typedef {PaletteDrawing & { readonly id: DrawingId, readonly fileImports: FileImports }} ResultsManagerDrawing
  */
 
 /**
  * @param {{
  *   state: ResultsManagerState,
- *   closeAfterDialogChoice?: (close: () => unknown) => void
+ *   closeAfterDialogChoice?: (close: () => unknown) => void,
+ *   writeArtifactValues: (drawingId: DrawingId, values: { appliedPaletteName: string, appliedPaletteColors: Record<string, string> }) => void
  * }} options `closeAfterDialogChoice` runs the palette dialog's close at once,
- *   or once the History step of its choice in flight ends (D-12, OIC-028).
+ *   or once the History step of its choice in flight ends (D-12, OIC-028). `writeArtifactValues` writes
+ *   the applied palette of a drawing that is not shown into the artifact it keeps (OV-1160).
  */
-export const createResultsManager = ({ state, closeAfterDialogChoice = (close) => { close(); } }) => {
+export const createResultsManager = ({ state, closeAfterDialogChoice = (close) => { close(); }, writeArtifactValues }) => {
   const {
     paletteDefinitions,
     paletteInstantPreviewEnabled,
@@ -98,18 +103,36 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {Record<string, string>} [colors]
    */
   const setPendingPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {
-    drawing.pendingPaletteName.value = String(paletteName || drawing.selectedPalette.value || '');
-    drawing.pendingPaletteColors.value = cloneColors(colors);
+    queuePalette(drawing.slices.palette, String(paletteName || drawing.selectedPalette.value || ''), colors);
   };
   /** @param {ResultsManagerDrawing} drawing */
-  const clearPendingPaletteDraft = (drawing) => {
-    drawing.pendingPaletteName.value = '';
-    drawing.pendingPaletteColors.value = {};
-  };
+  const clearPendingPaletteDraft = (drawing) => clearQueuedPalette(drawing.slices.palette);
   const applyPaletteDraftToPreview = () => {
     const drawing = state.activeDrawing();
     setAppliedPaletteState(drawing, drawing.selectedPalette.value, drawing.currentColors.value);
     clearPendingPaletteDraft(drawing);
+  };
+  // The Instant Preview toggle's transition (D-15-46): turned on, it applies
+  // every drawing's queued palette (OV-1160, Owner R15-23 Q-DR-5 A), the
+  // shown drawing's to the displayed Result and another drawing's to the
+  // artifact it keeps, so that drawing shows it when it is shown again.
+  /** @param {boolean} enabled */
+  const setPaletteInstantPreview = (enabled) => {
+    paletteInstantPreviewEnabled.value = Boolean(enabled);
+    if (!enabled) return;
+    const shown = state.activeDrawing();
+    state.drawingList().forEach((drawing) => {
+      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
+      if (drawing === shown) {
+        applyPaletteDraftToPreview();
+        return;
+      }
+      writeArtifactValues(drawing.id, {
+        appliedPaletteName: String(drawing.selectedPalette.value || 'default'),
+        appliedPaletteColors: cloneColors(drawing.currentColors.value)
+      });
+      clearPendingPaletteDraft(drawing);
+    });
   };
   const syncPaletteDraftState = () => {
     const drawing = state.activeDrawing();
@@ -165,8 +188,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     }
     const colors = getPaletteBaseColors(paletteName);
     if (choice === 'keep') rows.forEach(([key, color]) => { colors[key] = color; });
-    drawing.selectedPalette.value = paletteName;
-    drawing.currentColors.value = colors;
+    selectDrawingPalette(drawing.slices.palette, paletteName, colors);
     // A switch that drops the user colors drops the file's with them (OV-1280).
     if (choice !== 'keep') delete drawing.fileImports.d_color;
     // The applied palette queues nothing: switching back to it while another
@@ -192,7 +214,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
 
   /** @param {ResultsManagerDrawing} drawing */
   const resetColors = (drawing) => {
-    drawing.currentColors.value = getPaletteBaseColors(paletteNameOf(drawing));
+    replaceDefaultColors(drawing.slices.palette, getPaletteBaseColors(paletteNameOf(drawing)));
     delete drawing.fileImports.d_color;
     syncPaletteDraftState();
   };
@@ -227,6 +249,17 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     return undefined;
   };
 
+  // A default color edit; in the shown drawing it applies live, or joins the
+  // queued palette.
+  /**
+   * @param {ResultsManagerDrawing} drawing
+   * @param {Record<string, string>} colors
+   */
+  const editDefaultColors = (drawing, colors) => {
+    setDefaultColors(drawing.slices.palette, colors);
+    if (drawing === state.activeDrawing()) syncPaletteDraftState();
+  };
+
   // D-15: the popup's "Apply to all" on a palette row sets the type's default
   // color, as an edit in the Default colors list does. While a palette is
   // queued, the shown Result takes the color now too: a user color wins over
@@ -237,14 +270,23 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {string} color
    */
   const setDefaultColor = (drawing, key, color) => {
-    drawing.currentColors.value = { ...drawing.currentColors.value, [key]: color };
+    editDefaultColors(drawing, { [key]: color });
     if (drawing !== state.activeDrawing()) return;
-    syncPaletteDraftState();
     if (String(drawing.pendingPaletteName.value || '').trim() !== '') {
       appliedPaletteColors.value = { ...appliedPaletteColors.value, [key]: color };
     }
   };
 
+  /**
+   * A field edit in the Default colors list; its row keeps its grid.
+   * @param {string} key
+   * @param {string} color
+   */
+  const editDefaultColor = (key, color) => {
+    const drawing = state.activeDrawing();
+    editDefaultColorField(drawing.slices.palette, key, color);
+    syncPaletteDraftState();
+  };
   // OV-1280 (D-19): a Default colors file's colors over the drawing's, and
   // their Remove: each type takes back its user color, else the palette's.
   /**
@@ -252,18 +294,19 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {Record<string, string>} colors
    */
   const importDefaultColors = (drawing, colors) => {
-    const imported = withImportedDefaultColors(drawing.currentColors.value, colors, (type) => readUserDefaultColor(drawing, type));
-    drawing.currentColors.value = imported.colors;
-    drawing.fileImports.d_color = imported.imported;
+    const imported = importedDefaultColors(colors, (type) => readUserDefaultColor(drawing, type));
+    editDefaultColors(drawing, colors);
+    drawing.fileImports.d_color = imported;
   };
   /** @param {ResultsManagerDrawing} drawing */
   const removeImportedDefaultColors = (drawing) => {
     const imported = drawing.fileImports.d_color;
     if (!imported) return;
-    drawing.currentColors.value = withoutImportedDefaultColors(
+    replaceDefaultColors(drawing.slices.palette, withoutImportedDefaultColors(
       drawing.currentColors.value, imported, getPaletteBaseColors(paletteNameOf(drawing))
-    );
+    ));
     delete drawing.fileImports.d_color;
+    if (drawing === state.activeDrawing()) syncPaletteDraftState();
   };
 
   return {
@@ -277,7 +320,9 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     readUserDefaultColor,
     userDefaultColorRows,
     setDefaultColor,
-    applyPaletteDraftToPreview,
+    editDefaultColor,
+    editDefaultColors,
+    setPaletteInstantPreview,
     syncPaletteDraftState
   };
 };

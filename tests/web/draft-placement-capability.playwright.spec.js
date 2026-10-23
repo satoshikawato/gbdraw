@@ -172,7 +172,7 @@ const placementState = (page, key) => page.evaluate(async (overrideKey) => {
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-  return { row: state.drawings.circular.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { row: state.drawingOf('circular').featurePlacementOverrides[overrideKey]?.placement?.side || null,
     committed: getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement.side || 'main'),
     pending: app.recordDisplayControls.hasPendingChanges.value,
     popup: feature ? app.featurePlacementActions.valueFor(feature) : null };

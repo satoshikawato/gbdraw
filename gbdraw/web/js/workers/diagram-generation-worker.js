@@ -3,11 +3,13 @@ import { sha256Hex } from '../services/byte-utils.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
+  DIAGRAM_HELPER_STAGING_OPERATIONS,
+  STAGED_RESOURCE_PAYLOAD_KEYS,
   readFeatureCatalogRevision,
   readHeldSegments,
   readSvgDocumentParts
 } from '../services/diagram-worker-protocol.js';
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
@@ -41,7 +43,10 @@ const sendAuxiliaryResult = async (type, requestId, result) => {
 const RENDER_RESOURCE_CACHE = '/gbdraw-web-render-resource-cache';
 const RENDER_WORKSPACE_MARKER = '.gbdraw-worker-render-workspace';
 const RENDER_RESOURCE_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-const RENDER_RESOURCE_TOKEN_RE = /^render-resource-[1-9][0-9]*$/;
+// A resource's token is the sha256 hex of its bytes (services/file-content-cache.js).
+const RENDER_RESOURCE_TOKEN_RE = /^[0-9a-f]{64}$/;
+// The resources the Worker holds, by token: the current request's and those
+// the page's drawings have committed (`retainedResourceTokens`).
 const cachedRenderResources = new Map();
 
 export const buildPreparedResourceIdentityMap = (resourceManifest) => {
@@ -65,6 +70,20 @@ export const buildPreparedResourceIdentityMap = (resourceManifest) => {
     identities[resourceId] = { cacheToken, size };
   });
   return identities;
+};
+
+/**
+ * What Python's prepared input cache keeps besides this request's inputs
+ * (A4b): the inputs of each drawing's last request, while the resources they
+ * name are requested or retained. No drawing: only this request's.
+ */
+export const buildPreparedInputRetention = (drawingId, retainedResourceTokens) => {
+  if (drawingId === null || drawingId === undefined) return null;
+  // A drawing ID has the form of a resource ID.
+  if (typeof drawingId !== 'string' || !RENDER_RESOURCE_ID_RE.test(drawingId)) {
+    throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-drawing' });
+  }
+  return { drawing: drawingId, resourceTokens: [...(retainedResourceTokens ?? [])] };
 };
 
 const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
@@ -497,11 +516,17 @@ const ensureRenderResourceCache = (pyodide) => {
   }
 };
 
+/**
+ * Link the manifest's resources into the request workspace, writing the staged
+ * bytes into the cache first; then release every cached resource that neither
+ * the manifest nor `retainedResourceTokens` names when `prune` is set (a render).
+ */
 const stageRenderResources = async (
   pyodide,
   workspace,
   resourceManifest,
   stagedResources,
+  retainedResourceTokens,
   testLifecycleEnabled,
   requestId,
   prune
@@ -509,23 +534,25 @@ const stageRenderResources = async (
   if (!Array.isArray(resourceManifest) || !Array.isArray(stagedResources)) {
     throw new TypeError('Diagram generation requires a staged resource manifest.');
   }
+  const retained = retainedResourceTokens === undefined ? [] : retainedResourceTokens;
+  if (!Array.isArray(retained) || !retained.every((token) => RENDER_RESOURCE_TOKEN_RE.test(String(token)))) {
+    throw new TypeError('Invalid retained render resource tokens.');
+  }
   ensureRenderResourceCache(pyodide);
-  const stagedById = new Map();
+  const stagedByToken = new Map();
   stagedResources.forEach((entry) => {
-    const resourceId = String(entry?.resourceId || '').trim();
-    if (!RENDER_RESOURCE_ID_RE.test(resourceId) || stagedById.has(resourceId)) {
-      throw new TypeError(`Invalid or duplicate staged render resource '${resourceId}'.`);
-    }
-    if (!RENDER_RESOURCE_TOKEN_RE.test(String(entry?.cacheToken || ''))) {
-      throw new TypeError(`Invalid cache token for staged render resource '${resourceId}'.`);
+    const cacheToken = String(entry?.cacheToken || '');
+    if (!RENDER_RESOURCE_TOKEN_RE.test(cacheToken) || stagedByToken.has(cacheToken)) {
+      throw new TypeError(`Invalid or duplicate cache token for staged render resource '${String(entry?.resourceId || '')}'.`);
     }
     if (!(entry?.bytes instanceof ArrayBuffer)) {
-      throw new TypeError(`Staged render resource '${resourceId}' requires an ArrayBuffer.`);
+      throw new TypeError(`Staged render resource '${String(entry?.resourceId || '')}' requires an ArrayBuffer.`);
     }
-    stagedById.set(resourceId, entry);
+    stagedByToken.set(cacheToken, entry);
   });
 
   const manifestIds = new Set();
+  const manifestTokens = new Set();
   const resourcePaths = {};
   const resourcesDirectory = `${workspace}/resources`;
   pyodide.FS.mkdir(workspace);
@@ -546,19 +573,17 @@ const stageRenderResources = async (
       throw new TypeError(`Invalid byte size for render resource '${resourceId}'.`);
     }
     manifestIds.add(resourceId);
-    let cached = cachedRenderResources.get(resourceId);
-    const staged = stagedById.get(resourceId);
+    manifestTokens.add(cacheToken);
+    let cached = cachedRenderResources.get(cacheToken);
+    const staged = stagedByToken.get(cacheToken);
     if (staged) {
-      if (staged.cacheToken !== cacheToken || staged.bytes.byteLength !== size) {
+      if (staged.bytes.byteLength !== size) {
         throw new TypeError(`Staged render resource '${resourceId}' does not match its manifest.`);
       }
       emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-start', {
         resourceId,
         bytes: size
       });
-      if (cached && pyodide.FS.analyzePath(cached.path).exists) {
-        pyodide.FS.unlink(cached.path);
-      }
       const cachePath = `${RENDER_RESOURCE_CACHE}/${cacheToken}.bin`;
       if (pyodide.FS.analyzePath(cachePath).exists) pyodide.FS.unlink(cachePath);
       if (typeof pyodide.FS.createDataFile !== 'function') {
@@ -572,10 +597,10 @@ const stageRenderResources = async (
         true,
         true
       );
-      cached = { cacheToken, path: cachePath, size };
-      cachedRenderResources.set(resourceId, cached);
+      cached = { path: cachePath, size };
+      cachedRenderResources.set(cacheToken, cached);
       staged.bytes = null;
-      stagedById.delete(resourceId);
+      stagedByToken.delete(cacheToken);
       emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-end', {
         resourceId,
         bytes: size
@@ -583,7 +608,6 @@ const stageRenderResources = async (
     }
     if (
       !cached
-      || cached.cacheToken !== cacheToken
       || cached.size !== size
       || !pyodide.FS.analyzePath(cached.path).exists
     ) {
@@ -596,15 +620,15 @@ const stageRenderResources = async (
     pyodide.FS.symlink(cached.path, requestPath);
     resourcePaths[resourceId] = requestPath;
   }
-  stagedById.forEach((_entry, resourceId) => {
-    if (!manifestIds.has(resourceId)) {
-      throw new TypeError(`Unexpected staged render resource '${resourceId}'.`);
-    }
-  });
-  cachedRenderResources.forEach((cached, resourceId) => {
-    if (!prune || manifestIds.has(resourceId)) return;
+  const [unexpected] = stagedByToken.values();
+  if (unexpected) {
+    throw new TypeError(`Unexpected staged render resource '${String(unexpected.resourceId || '')}'.`);
+  }
+  const kept = new Set([...manifestTokens, ...retained]);
+  cachedRenderResources.forEach((cached, cacheToken) => {
+    if (!prune || kept.has(cacheToken)) return;
     if (pyodide.FS.analyzePath(cached.path).exists) pyodide.FS.unlink(cached.path);
-    cachedRenderResources.delete(resourceId);
+    cachedRenderResources.delete(cacheToken);
   });
   stagedResources.splice(0);
   return resourcePaths;
@@ -614,10 +638,10 @@ const stageRenderResources = async (
 // Only a render prunes the resources its manifest does not name: a helper reads
 // the cache and leaves it to the next Generate (Worker cache rules, OV-1590).
 const prepareCanonicalResources = (
-  pyodide, workspace, { resourceManifest, stagedResources },
+  pyodide, workspace, { resourceManifest, stagedResources, retainedResourceTokens },
   { testLifecycleEnabled = false, requestId = 0, prune = false } = {}
 ) => stageRenderResources(
-  pyodide, workspace, resourceManifest, stagedResources, testLifecycleEnabled, requestId, prune
+  pyodide, workspace, resourceManifest, stagedResources, retainedResourceTokens, testLifecycleEnabled, requestId, prune
 );
 
 // The staged paths of a canonical record source: `{ kind: 'genbank', resourceId }`
@@ -667,7 +691,7 @@ const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
-    keys: ['request', 'projection', 'resourceManifest', 'stagedResources'],
+    keys: ['request', 'projection'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => {
       let resourcePaths = {};
@@ -689,7 +713,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   // Load Feature Edits TSV: Python reads the table against the records of the
   // committed request, staged as Generate stages them (design Q4 6.4, R4).
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: {
-    keys: ['files', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    keys: ['files', 'canonicalRequest'],
     fileRoles: ['featureOverrides'],
     run: async (pyodide, payload, paths, operation, workspace) => callJsonHelper(
       pyodide, 'read_feature_override_table_json', [
@@ -794,9 +818,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'recordIndex',
       'recordInstanceKey',
       'featureOverrides',
-      'recordSource',
-      'resourceManifest',
-      'stagedResources'
+      'recordSource'
     ],
     fileRoles: ['source', 'fasta', 'visibility'],
     // A record of the drawing is staged under its resource ids, so Python reads
@@ -964,7 +986,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   // in the drawn frame: Python returns their bytes in the search frame by
   // stored resource ID (OV-1145), from the drawing's request and its staged files.
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: {
-    keys: ['version', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    keys: ['version', 'canonicalRequest'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'stored_protein_results_to_search_frame_json', [
@@ -1019,26 +1041,32 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   }
 });
 
+/**
+ * The payload keys a helper accepts: its own, and the staged resource keys of a
+ * helper the page stages resources for. `null`: no such helper.
+ * @param {string} operation
+ * @returns {string[] | null}
+ */
+export const helperPayloadKeys = (operation) => {
+  if (!Object.hasOwn(HELPER_OPERATION_SPECS, operation)) return null;
+  const spec = HELPER_OPERATION_SPECS[/** @type {keyof typeof HELPER_OPERATION_SPECS} */ (operation)];
+  return [...spec.keys, ...(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(operation) ? STAGED_RESOURCE_PAYLOAD_KEYS : [])];
+};
+
 const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
   if (!runtime?.pyodide) {
     throw serializeError({ code: 'WORKER_INIT', operation, stage: 'initialization' });
   }
   const normalizedOperation = String(operation || '').trim();
-  const spec = Object.prototype.hasOwnProperty.call(
-    HELPER_OPERATION_SPECS,
-    normalizedOperation
-  )
-    ? HELPER_OPERATION_SPECS[normalizedOperation]
-    : null;
-  if (!spec) {
+  const allowedKeys = helperPayloadKeys(normalizedOperation);
+  const spec = allowedKeys ? HELPER_OPERATION_SPECS[normalizedOperation] : null;
+  if (!spec || !allowedKeys) {
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' });
   }
   let failureStage = 'request-validation';
   try {
     const normalizedPayload = requirePayloadObject(payload, normalizedOperation);
-    assertAllowedPayloadKeys(normalizedPayload, normalizedOperation, [
-      ...spec.keys
-    ]);
+    assertAllowedPayloadKeys(normalizedPayload, normalizedOperation, allowedKeys);
     failureStage = 'resource-staging';
     return await withRequestWorkspace(
       runtime.pyodide,
@@ -1067,6 +1095,8 @@ const runGeneration = async ({
   request,
   resourceManifest,
   stagedResources,
+  retainedResourceTokens,
+  drawingId = null,
   fontIdentities = [],
   heldFeatureCatalogRevision = null,
   heldSegments: heldSegmentsInput = null,
@@ -1122,7 +1152,7 @@ const runGeneration = async ({
     );
     self.postMessage({ type: 'progress', requestId, stage: 'preparing-resources' });
     const resourcePaths = await prepareCanonicalResources(
-      pyodide, workspace, { resourceManifest, stagedResources },
+      pyodide, workspace, { resourceManifest, stagedResources, retainedResourceTokens },
       { testLifecycleEnabled, requestId, prune: true }
     );
     emitTestLifecycle(
@@ -1144,6 +1174,9 @@ const runGeneration = async ({
     const preparedResourceIdentitiesJson = JSON.stringify(
       buildPreparedResourceIdentityMap(resourceManifest)
     );
+    const preparedInputRetentionJson = JSON.stringify(
+      buildPreparedInputRetention(drawingId, retainedResourceTokens)
+    );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
       characters: resourcePathsJson.length,
       preparedIdentityCharacters: preparedResourceIdentitiesJson.length
@@ -1164,7 +1197,8 @@ const runGeneration = async ({
       testLifecycleEnabled,
       preparedResourceIdentitiesJson,
       held?.revision ?? null,
-      JSON.stringify(heldSegments.map(({ revision }) => revision))
+      JSON.stringify(heldSegments.map(({ revision }) => revision)),
+      preparedInputRetentionJson
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });

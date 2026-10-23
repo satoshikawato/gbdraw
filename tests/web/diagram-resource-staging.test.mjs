@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 
 const metrics = [];
 const lifecycle = [];
@@ -110,6 +111,78 @@ test('unacknowledged preparation, replacement, and reset never publish stale own
   transport.reset();
   assert.equal(beforeReset.commit(), false, 'reset invalidates outstanding preparations');
   assert.equal((await prepare('B')).stagedResources.length, 1);
+});
+
+const genbankRequest = (...resourceIds) => ({
+  records: resourceIds.map((resourceId) => ({ source: { kind: 'genbank', resourceId } }))
+});
+const sha256Hex = (text) => createHash('sha256').update(text).digest('hex');
+const stagedTokens = (prepared) => prepared.stagedResources.map(({ cacheToken }) => cacheToken);
+
+// A4 (IN-A): the Worker keeps the resources of every drawing's committed request, named by the sha256 of their bytes.
+test('alternating drawings reuse the resources every drawing committed', async () => {
+  const committed = [];
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
+  const circular = { request: genbankRequest('circular-genbank'), resources: { 'circular-genbank': descriptor('CIRCULAR') } };
+  const linear = {
+    request: genbankRequest('linear-a', 'linear-b'),
+    resources: { 'linear-a': descriptor('LINEAR A'), 'linear-b': descriptor('LINEAR B') }
+  };
+
+  const first = await transport.prepare(circular);
+  assert.deepEqual(stagedTokens(first), [sha256Hex('CIRCULAR')]);
+  assert.equal(first.commit(), true);
+  committed.push(circular);
+
+  const second = await transport.prepare(linear);
+  assert.deepEqual(stagedTokens(second), [sha256Hex('LINEAR A'), sha256Hex('LINEAR B')]);
+  assert.deepEqual(second.retainedResourceTokens, [sha256Hex('CIRCULAR')], 'the Circular drawing keeps its resource');
+  assert.equal(second.commit(), true);
+  committed.push(linear);
+
+  const third = await transport.prepare(circular);
+  assert.deepEqual(third.stagedResources, [], 'Circular again transfers nothing');
+  assert.deepEqual(third.resourceManifest.map(({ cacheToken }) => cacheToken), [sha256Hex('CIRCULAR')]);
+  assert.deepEqual([...third.retainedResourceTokens].sort(), [sha256Hex('LINEAR A'), sha256Hex('LINEAR B')].sort());
+  assert.equal(third.commit(), true);
+
+  const fourth = await transport.prepare(linear);
+  assert.deepEqual(fourth.stagedResources, [], 'Linear again transfers nothing');
+});
+
+test('equal bytes under two resource IDs share one token and one transfer', async () => {
+  const transport = createDiagramResourceTransport();
+  const text = 'LOCUS same\nORIGIN\n//\n';
+  const fileBacked = setResourcePayloadOwner(
+    descriptor(text, 'copy.gb'),
+    { arrayBuffer: async () => Buffer.from(text).buffer }
+  );
+  const prepared = await transport.prepare({
+    request: genbankRequest('first-copy', 'second-copy'),
+    resources: { 'first-copy': descriptor(text), 'second-copy': fileBacked }
+  });
+  assert.deepEqual(
+    prepared.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
+    [['first-copy', sha256Hex(text)], ['second-copy', sha256Hex(text)]]
+  );
+  assert.deepEqual(stagedTokens(prepared), [sha256Hex(text)]);
+});
+
+test('a resource no committed drawing names is released', async () => {
+  const committed = [];
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
+  const circular = { request: genbankRequest('circular-genbank'), resources: { 'circular-genbank': descriptor('OLD CIRCULAR') } };
+  const linear = { request: genbankRequest('linear-genbank'), resources: { 'linear-genbank': descriptor('LINEAR') } };
+  (await transport.prepare(circular)).commit();
+  committed.push(circular);
+  (await transport.prepare(linear)).commit();
+  committed.push(linear);
+  // The Circular drawing now commits other bytes: nothing names the old ones.
+  committed[0] = { request: circular.request, resources: { 'circular-genbank': descriptor('NEW CIRCULAR') } };
+  const next = await transport.prepare(linear);
+  assert.deepEqual(next.retainedResourceTokens, [], 'the old Circular bytes are not retained');
+  assert.equal(next.commit(), true);
+  assert.deepEqual(stagedTokens(await transport.prepare(circular)), [sha256Hex('OLD CIRCULAR')]);
 });
 
 test('staging decodes base64 with the one shared decoder (OV-1560)', async () => {

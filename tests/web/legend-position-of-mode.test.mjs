@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -20,8 +21,9 @@ globalThis.window = {
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const { state, createDefaultForm } = await import('../../gbdraw/web/js/state.js');
 const layout = await import('../../gbdraw/web/js/services/layout-preferences.js');
+const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const { LEGEND_POSITIONS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
-const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
+const { applyUiStateData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 
@@ -138,14 +140,14 @@ test('a legacy legend field outside its mode does not count as a stored layout o
 });
 
 test('a drawing never holds a position outside its mode: the Position control and a loaded slot', () => {
-  const linear = state.drawings.linear;
+  const linear = modeDrawing(state, 'linear');
   linear.form.legend = 'top';
   linear.form.legend = 'Upper_Left';
   assert.equal(linear.form.legend, 'bottom');
   assert.equal(linear.layoutPreferences.linear.legend, 'bottom');
-  layout.replaceLayoutPreferences(linear.layoutPreferences, { linear: { legend: 'Upper_Left' } });
+  SETTINGS_SLICE.install(linear.slices.settings, { layoutPreferences: layout.normalizeLayoutPreferences({ linear: { legend: 'Upper_Left' } }) });
   assert.equal(linear.form.legend, 'bottom');
-  const circular = state.drawings.circular;
+  const circular = modeDrawing(state, 'circular');
   circular.form.multi_record_canvas = false;
   circular.form.legend = ' Lower_Left ';
   assert.equal(circular.form.legend, 'lower_left');
@@ -156,7 +158,7 @@ test('a drawing never holds a position outside its mode: the Position control an
 test('a stored generated position outside its mode reads as the side an unset one had', () => {
   const read = (generatedMode, generatedLegendPosition) => {
     state.generatedLegendPosition.value = 'right';
-    applyUiStateData(state.drawings[generatedMode], { generatedMode, generatedLegendPosition });
+    applyUiStateData(modeDrawing(state, generatedMode), { generatedMode, generatedLegendPosition });
     return state.generatedLegendPosition.value;
   };
   assert.equal(read('linear', 'Upper_Left'), 'bottom');
@@ -186,8 +188,8 @@ const genbank = () => ({
   lastModified: 0, data: btoa(genbankText)
 });
 // The request of `mode` from `drawing` (default: that mode's drawing), as Generate builds it.
-const requestLegend = (mode, drawing = state.drawings[mode]) => {
-  state.mode.value = mode;
+const requestLegend = (mode, drawing = modeDrawing(state, mode)) => {
+  installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.circularRecordList.value = [];
@@ -211,16 +213,16 @@ const requestLegend = (mode, drawing = state.drawings[mode]) => {
 };
 // A drawing whose `form.legend` is a plain value, as a test or a tool may pass one.
 const plainDrawing = (mode, legend) => ({
-  ...state.drawings[mode], form: { ...createDefaultForm(), ...state.drawings[mode].form, legend }
+  ...modeDrawing(state, mode), form: { ...createDefaultForm(), ...modeDrawing(state, mode).form, legend }
 });
 
 test('the request writer writes a position of the request\'s mode for every drawing', () => {
   for (const [mode, fallback] of [['linear', 'bottom'], ['circular', 'left']]) {
-    state.drawings[mode].form.multi_record_canvas = false;
+    modeDrawing(state, mode).form.multi_record_canvas = false;
     // A slot written without the owner, as a Session Load wrote it before OV-652.
     const slot = mode === 'linear'
-      ? state.drawings.linear.layoutPreferences.linear
-      : state.drawings.circular.layoutPreferences.circular.single;
+      ? modeDrawing(state, 'linear').layoutPreferences.linear
+      : modeDrawing(state, 'circular').layoutPreferences.circular.single;
     slot.legend = ' banana ';
     assert.equal(requestLegend(mode), fallback, `${mode}: a slot outside the set`);
     slot.legend = 'top';

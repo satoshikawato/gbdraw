@@ -53,6 +53,21 @@ class PreparedResourceIdentity:
 
 
 @dataclass(frozen=True)
+class PreparedInputRetention:
+    """The drawings whose prepared inputs one Web render keeps (A4b).
+
+    ``drawing`` names the drawing the request renders. ``resource_tokens`` are
+    the content tokens of the resources that the page's drawings have committed
+    besides this request's (the Worker's retain set). The cache keeps each
+    drawing's decoded, parsed and resolved inputs of its last committed request
+    while every resource they name is requested or retained.
+    """
+
+    drawing: str
+    resource_tokens: frozenset[str]
+
+
+@dataclass(frozen=True)
 class _PreparedCacheEntry:
     value: Any
     resource_identities: frozenset[PreparedResourceIdentity]
@@ -118,6 +133,7 @@ class _PreparedCacheTransaction:
     # that takes a record built (or ran uncacheable). Only then does the commit
     # check every used owner in full.
     record_touched: bool = False
+    retention: PreparedInputRetention | None = None
     # A helper's lookup (``transaction(read_only=True)``): entries are read,
     # never published, pruned, evicted or reordered; misses build for the call.
     read_only: bool = False
@@ -553,9 +569,12 @@ class PreparedBiologicalInputCache:
     nothing. A build that failed leaves no entry. The Generate after a failed
     one (the Label fit choice, for example) parses no source again.
 
-    A successful transaction is the one-project bound: it discards entries that
-    the request did not use. A changed semantic key rebuilds its dependent layer;
-    a changed or removed resource identity evicts every entry that refers to it.
+    A successful transaction discards the entries that the request did not use,
+    except, with a ``PreparedInputRetention``, the decoded, parsed and resolved
+    entries that another drawing's last committed request used (A4b); render
+    stages keep only the last successful render's. A changed semantic key
+    rebuilds its dependent layer; a resource identity that is neither requested
+    nor retained evicts every entry that refers to it.
     The retained-byte diagnostic estimates what each entry holds without
     serializing it: sequence lengths, feature and qualifier counts of records;
     the columns, string cells and text of a comparison frame; the text of a
@@ -596,6 +615,8 @@ class PreparedBiologicalInputCache:
         # random source there is no epoch and no build is named (D-38 OQ-5).
         self._build_ids = itertools.count(1)
         self._epoch = _new_cache_epoch()
+        # A4b: by drawing, the input-layer keys its last committed request used.
+        self._drawing_inputs: dict[str, dict[str, frozenset[Hashable]]] = {}
         # The retained bytes of every entry, kept as entries are published
         # and removed (OV-1583).
         self._retained_total = 0
@@ -623,9 +644,20 @@ class PreparedBiologicalInputCache:
         if self._held_identities <= transaction.active_identities:
             return
         held: set[PreparedResourceIdentity] = set()
+        retention = transaction.retention
+        held_tokens = (
+            frozenset()
+            if retention is None
+            else retention.resource_tokens
+            | {identity.cache_token for identity in transaction.active_identities}
+        )
         for layer, entries in self._layers.items():
             for key, entry in tuple(entries.items()):
-                if entry.resource_identities <= transaction.active_identities:
+                if all(
+                    identity in transaction.active_identities
+                    or identity.cache_token in held_tokens
+                    for identity in entry.resource_identities
+                ):
                     held.update(entry.resource_identities)
                 else:
                     self._evict(layer, key, transaction)
@@ -645,6 +677,7 @@ class PreparedBiologicalInputCache:
         *,
         resource_paths: Mapping[str | Path, PreparedResourceIdentity],
         diagnostics: MutableMapping[str, Any] | None,
+        retention: PreparedInputRetention | None = None,
         read_only: bool = False,
         publish_inputs: bool = False,
     ) -> Iterator[None]:
@@ -675,6 +708,7 @@ class PreparedBiologicalInputCache:
                     for font in registered_fonts()
                 )
             ),
+            retention=retention,
         )
         if diagnostics is not None:
             metrics = diagnostics.setdefault("metrics", {})
@@ -919,6 +953,17 @@ class PreparedBiologicalInputCache:
 
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
         self._verify_used_owners(transaction)
+        retention = transaction.retention
+        # A4b: the other drawings' inputs stay; this drawing's become this request's.
+        other_drawings = (
+            []
+            if retention is None
+            else [
+                inputs
+                for drawing, inputs in self._drawing_inputs.items()
+                if drawing != retention.drawing
+            ]
+        )
         replacements: dict[str, tuple[OrderedDict[Hashable, _PreparedCacheEntry], int]] = {}
         retained_total = 0
         held: set[PreparedResourceIdentity] = set()
@@ -926,6 +971,14 @@ class PreparedBiologicalInputCache:
             current = self._layers[layer]
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
             kept = 0
+            # Read by no request here, so checked when one reads it (D-05).
+            for inputs in other_drawings:
+                for key in inputs.get(layer, ()):
+                    if key in current and key not in retained and key not in transaction.used[layer]:
+                        retained[key] = current[key]
+                        retained_total += current[key].retained_bytes
+                        held.update(current[key].resource_identities)
+                        kept += 1
             for key, entry in self._used_entries(layer, transaction):
                 retained[key] = entry
                 retained_total += entry.retained_bytes
@@ -943,6 +996,26 @@ class PreparedBiologicalInputCache:
                     evicted,
                 )
             self._layers[layer] = replacement
+        if retention is None:
+            self._drawing_inputs = {}
+        else:
+            drawing_inputs = dict(self._drawing_inputs)
+            drawing_inputs[retention.drawing] = {
+                layer: frozenset(transaction.used[layer])
+                for layer in self._layers
+                if layer != _RENDER_STAGE_LAYER
+            }
+            # Only keys still stored: an evicted entry leaves its drawing's set.
+            stored = {
+                drawing: {
+                    layer: frozenset(key for key in keys if key in self._layers[layer])
+                    for layer, keys in inputs.items()
+                }
+                for drawing, inputs in drawing_inputs.items()
+            }
+            self._drawing_inputs = {
+                drawing: inputs for drawing, inputs in stored.items() if any(inputs.values())
+            }
         self._retained_total = retained_total
         self._held_identities = frozenset(held)
         self._set_retained_metric(transaction)

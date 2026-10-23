@@ -47,7 +47,7 @@ def test_cli_reference_names_the_default_label_blacklist_keywords_of_their_owner
     from gbdraw.config.toml import load_config_toml
 
     reference = " ".join(REFERENCE.read_text(encoding="utf-8").split())
-    web = re.search(r"manualBlacklist: '([^']*)'", (ROOT / "gbdraw/web/js/state.js").read_text(encoding="utf-8"))
+    web = re.search(r"manualBlacklist: '([^']*)'", (ROOT / "gbdraw/web/js/services/drawing/label-tables.js").read_text(encoding="utf-8"))
     assert web and f"starts as `{web.group(1)}`" in reference
     keywords = load_config_toml("gbdraw.data", "config.toml")["labels"]["filtering"]["blacklist_keywords"]
     assert [keyword.strip() for keyword in web.group(1).split(",")] == keywords

@@ -9,6 +9,8 @@ import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -24,10 +26,12 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
@@ -138,8 +142,8 @@ test('E1a: a retired name and an older option value are read as their current na
   session.config.adv.depth_tick_interval = 7;
   session.config.form.linear_track_layout = 'spreadout';
   assert.deepEqual(await load(session), []);
-  assert.equal(state.drawings.linear.adv.depth_large_tick_interval, 7);
-  assert.equal(state.drawings.linear.form.linear_track_layout, 'above');
+  assert.equal(modeDrawing(state, 'linear').adv.depth_large_tick_interval, 7);
+  assert.equal(modeDrawing(state, 'linear').form.linear_track_layout, 'above');
 });
 
 // TB32: the keys of a Session 27-39 draft no gbdraw writer wrote.
@@ -159,7 +163,7 @@ test('E1a: a retired name stored with its current name gives way to it', async (
   session.config.adv.depth_large_tick_interval = 9;
   session.config.adv.depth_tick_interval = 7;
   assert.deepEqual(await load(session), []);
-  assert.equal(state.drawings.linear.adv.depth_large_tick_interval, 9);
+  assert.equal(modeDrawing(state, 'linear').adv.depth_large_tick_interval, 9);
 });
 
 // The configuration-file path (E-OD04): the same rows at the file's own places.
@@ -173,7 +177,7 @@ test('E1a: a configuration file lists what its drawing cannot read, and saves', 
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [5] }
   });
   config.adv = { ...config.adv, zzz: 1, arrow_shaft_width_ratio: 2 };
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.deepEqual((await load(config)).sort(), [
     'setting-entries-dropped recordsOff',
     'setting-replaced adv.arrow_shaft_width_ratio',
@@ -191,6 +195,6 @@ test('E1a: a configuration file lists what its drawing cannot read, and saves', 
 test('a configuration file lists a track slot value it cannot use (OV-788)', async () => {
   const config = structuredClone(BASES.v46().modes.linear.config);
   config.adv.linear_track_slots[0].height = -7.5;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.deepEqual(await load(config), ['setting-replaced adv.linear_track_slots[0].height']);
 });

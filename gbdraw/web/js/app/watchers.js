@@ -5,6 +5,7 @@
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   importPriorityRows,
+  isCardRow,
   markedRows,
   parseBlacklistWords,
   parseColorTable,
@@ -15,13 +16,12 @@ import {
   withoutImportedBlacklistWords,
   withoutImportedRows
 } from '../services/file-imports.js';
-import {
-  legendPositionOrDefault,
-  normalizeCircularPlotTitlePosition,
-  resolveCircularLayoutPreference
-} from '../services/layout-preferences.js';
+import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
+import {
+  replacePriorityRules, replaceWhitelistRules, setBlacklistText
+} from '../services/drawing/label-tables.js';
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FileImportCard } from '../services/file-imports.js' */
 
@@ -108,13 +108,12 @@ export const createAuxiliaryFileImports = (reactive) => {
  *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>,
  *   removeImportedSpecificRules: (drawing: DrawingState) => Promise<unknown>
  * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV and its Remove.
- * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
- *   The Legend layout owner's canvas padding and drag affordances.
+ * @property {{ refreshDiagramDragAffordances: () => void }} legendLayout
+ *   The Legend layout owner's drag affordances.
  * @property {{
- *   applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void,
  *   importDefaultColors: (drawing: DrawingState, colors: Record<string, string>) => void,
  *   removeImportedDefaultColors: (drawing: DrawingState) => void
- * }} resultsManager The Results owner's palette draft projections and the Default colors file's colors.
+ * }} resultsManager The Results owner's Default colors file's colors and their Remove (OV-1280).
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
  * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
  * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
@@ -163,7 +162,6 @@ export const setupWatchers = ({
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
     svgContainer,
-    suppressCircularMultiRecordDefaults,
     selectedFeatureRecordIdx,
     featurePanelTab,
     labelSearch,
@@ -174,7 +172,6 @@ export const setupWatchers = ({
     clickedPairwiseMatch,
     clickedLabel,
     files,
-    paletteInstantPreviewEnabled,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
@@ -189,64 +186,7 @@ export const setupWatchers = ({
   const { refreshLegendDragAffordances } = legendActions;
 
   const { syncLabelEditor } = featureActions;
-  const {
-    applyCanvasPadding,
-    refreshDiagramDragAffordances
-  } = legendLayout;
-  const {
-    applyPaletteDraftToPreview,
-    syncPaletteDraftState
-  } = resultsManager;
-
-  /** @param {unknown} value */
-  const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
-
-  /** @param {DrawingState} drawing */
-  const hasStoredCircularMultiRecordLayout = (drawing) =>
-    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.legend) ||
-    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.plotTitlePosition);
-
-  /** @param {DrawingState} drawing */
-  const applyCircularMultiRecordSmartDefaults = (drawing) => {
-    const singleLayout = resolveCircularLayoutPreference(drawing.layoutPreferences, false);
-    drawing.layoutPreferences.circular.multi.legend =
-      singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
-    drawing.layoutPreferences.circular.multi.plotTitlePosition =
-      singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
-  };
-
-  // Each drawing's watchers watch that drawing, so a mode switch, which
-  // changes neither drawing, fires none of them (R10); an edit of the drawing
-  // that is not shown (a Load, a History restore) touches no shown Result.
-  /** @type {DrawingState[]} */
-  const drawingsOfModes = [state.drawings.circular, state.drawings.linear];
-  drawingsOfModes.forEach((drawing) => watch(
-    () => drawing.currentColors.value,
-    () => {
-      if (drawing === state.activeDrawing()) syncPaletteDraftState();
-    },
-    { deep: true }
-  ));
-
-  watch(
-    () => paletteInstantPreviewEnabled.value,
-    (enabled) => {
-      const drawing = state.activeDrawing();
-      if (!enabled) return;
-      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
-      applyPaletteDraftToPreview();
-    }
-  );
-
-  drawingsOfModes.forEach((drawing) => watch(
-    () => drawing.canvasPadding,
-    () => {
-      if (drawing !== state.activeDrawing()) return;
-      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
-      applyCanvasPadding();
-    },
-    { deep: true }
-  ));
+  const { refreshDiagramDragAffordances } = legendLayout;
 
   watch(
     () => layoutRepositionMode.value,
@@ -255,31 +195,6 @@ export const setupWatchers = ({
         refreshLegendDragAffordances();
         refreshDiagramDragAffordances();
       });
-    }
-  );
-
-  watch(
-    () => state.drawings.circular.form.multi_record_canvas,
-    (enabled, previousEnabled) => {
-      const drawing = state.drawings.circular;
-      if (mode.value !== 'circular') return;
-      if (enabled === previousEnabled) return;
-
-      if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
-        if (suppressCircularMultiRecordDefaults.value) {
-          drawing.layoutPreferences.circular.multi.legend =
-            legendPositionOrDefault(drawing.form.legend, 'circular');
-          drawing.layoutPreferences.circular.multi.plotTitlePosition =
-            normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
-        } else {
-          applyCircularMultiRecordSmartDefaults(drawing);
-        }
-      }
-
-      if (suppressCircularMultiRecordDefaults.value) {
-        suppressCircularMultiRecordDefaults.value = false;
-      }
-
     }
   );
 
@@ -381,46 +296,99 @@ export const setupWatchers = ({
   };
   /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
-  /** @type {Map<string, FileLike | null | undefined>} */
-  const restoredFileSelections = new Map();
   /**
-   * Applies the text of an auxiliary file to its drawing; false rejects the file.
+   * Applies the text of an auxiliary file to the drawing it was chosen in;
+   * false rejects the file.
    * @callback FileImportApply
+   * @param {DrawingState} drawing
    * @param {string} text
    * @param {() => boolean} isCurrent
    * @returns {unknown}
    */
   /**
-   * @param {string} key The `files` member the watcher follows.
-   * @param {FileImportApply} apply
-   * @param {FileLike | null | undefined} file
-   * @param {FileLike | null | undefined} previousFile
-   * @returns {Promise<boolean> | undefined}
+   * A parsed table, as its slice writer takes it; a parse error rejects the file.
+   * @template T
+   * @param {(text: string) => T} parse
+   * @param {(drawing: DrawingState, table: T) => void} write
+   * @returns {FileImportApply}
    */
-  const applyFileImport = (key, apply, file, previousFile) => {
-    const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
-    restoredFileSelections.delete(key);
-    if (restored || semanticFileWatchersSuppressed.value) return;
-    if (!file) return previousFile ? startFileRemoval(/** @type {FileImportCard} */ (key), previousFile) : undefined;
-    return startFileImport(key, apply, file, previousFile);
+  const tableImport = (parse, write) => (drawing, text) => {
+    try {
+      write(drawing, parse(text));
+    } catch (e) {
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
+    }
   };
   // OV-1280 (D-19): Remove on a card, and a file that replaces the card's
-  // file, take back what the card's file put into each drawing.
-  const drawingsOf = () => /** @type {DrawingState[]} */ ([state.drawings.circular, state.drawings.linear]);
+  // file, take back what the card's file put into each drawing, through that
+  // drawing's slices; `fileImports` is a setting its owners write.
   /** @type {Record<Exclude<FileImportCard, 't_color'>, (drawing: DrawingState) => void>} */
   const removeImport = {
     d_color: (drawing) => resultsManager.removeImportedDefaultColors(drawing),
     blacklist: (drawing) => {
       const imported = drawing.fileImports.blacklist;
       if (!imported) return;
-      drawing.manualBlacklist.value = withoutImportedBlacklistWords(drawing.manualBlacklist.value, imported);
+      setBlacklistText(drawing.slices.labelTables, withoutImportedBlacklistWords(drawing.manualBlacklist.value, imported));
       delete drawing.fileImports.blacklist;
     },
     whitelist: (drawing) => {
-      const rows = withoutImportedRows(drawing.manualWhitelist, 'whitelist');
-      if (rows.length < drawing.manualWhitelist.length) drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...rows);
+      if (!drawing.manualWhitelist.some((rule) => isCardRow(rule, 'whitelist'))) return;
+      replaceWhitelistRules(drawing.slices.labelTables, withoutImportedRows(drawing.manualWhitelist, 'whitelist'));
     },
-    qualifier_priority: (drawing) => removeImportedPriorityRows(drawing.manualPriorityRules)
+    qualifier_priority: (drawing) => {
+      if (!drawing.manualPriorityRules.some((rule) => isCardRow(rule, 'qualifier_priority'))) return;
+      const rows = cloneJsonData([...drawing.manualPriorityRules]);
+      removeImportedPriorityRows(rows);
+      replacePriorityRules(drawing.slices.labelTables, rows);
+    }
+  };
+  /** @type {Record<string, FileImportApply>} */
+  const AUXILIARY_TABLE_IMPORTS = {
+    d_color: tableImport(parseColorTable, (drawing, { colors }) => {
+      state.drawingList().forEach(removeImport.d_color);
+      resultsManager.importDefaultColors(drawing, colors);
+    }),
+    t_color: async (drawing, text, isCurrent) => {
+      try {
+        const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
+        if (importedCount === false) return false;
+        // The import replaced the rows the earlier file added to its drawing.
+        if (!await removeFileImport('t_color', state.drawingList().filter((/** @type {DrawingState} */ other) => other !== drawing))) return false;
+      } catch (e) {
+        if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
+        return false;
+      }
+    },
+    qualifier_priority: tableImport(parsePriorityRules, (drawing, { rules }) => {
+      state.drawingList().forEach(removeImport.qualifier_priority);
+      const rows = cloneJsonData([...drawing.manualPriorityRules]);
+      importPriorityRows(rows, rules);
+      replacePriorityRules(drawing.slices.labelTables, rows);
+    }),
+    whitelist: tableImport(parseWhitelistRules, (drawing, { rules }) => {
+      state.drawingList().forEach(removeImport.whitelist);
+      replaceWhitelistRules(drawing.slices.labelTables, [...drawing.manualWhitelist, ...markedRows(rules, 'whitelist')]);
+    }),
+    blacklist: tableImport(parseBlacklistWords, (drawing, { words }) => {
+      state.drawingList().forEach(removeImport.blacklist);
+      const { text, imported } = withImportedBlacklistWords(drawing.manualBlacklist.value, words);
+      setBlacklistText(drawing.slices.labelTables, text);
+      if (imported) drawing.fileImports.blacklist = imported;
+    })
+  };
+  /**
+   * Reads `file` and applies it to the drawing shown now; a rejected file
+   * gives the input its previous file back.
+   * @param {string} key The `files` member of the auxiliary table.
+   * @param {FileLike | null | undefined} file
+   * @param {FileLike | null | undefined} previousFile
+   * @returns {Promise<boolean> | undefined}
+   */
+  const applyFileImport = (key, file, previousFile) => {
+    if (semanticFileWatchersSuppressed.value) return;
+    if (!file) return previousFile ? startFileRemoval(/** @type {FileImportCard} */ (key), previousFile) : undefined;
+    return startFileImport(key, file, previousFile);
   };
   /**
    * @param {FileImportCard} key
@@ -450,16 +418,13 @@ export const setupWatchers = ({
   const startFileRemoval = (key, file) => {
     const pending = fileImportApplications.then(async () => {
       try {
-        if (await removeFileImport(key, drawingsOf())) return true;
+        if (await removeFileImport(key, [...state.drawingList()])) return true;
       } catch (e) {
         // A refused removal (the rule matching failed, a Legend row conflict)
         // is reported as the import's would be (REVIEW-1 N1).
         errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       }
-      if (files[key] === null) {
-        restoredFileSelections.set(key, file);
-        files[key] = file;
-      }
+      if (files[key] === null) files[key] = file;
       return false;
     });
     fileImportApplications = pending.catch(() => {});
@@ -468,12 +433,13 @@ export const setupWatchers = ({
   };
   /**
    * @param {string} key
-   * @param {FileImportApply} apply
    * @param {FileLike} file
    * @param {FileLike | null | undefined} previousFile
    * @returns {Promise<boolean>}
    */
-  const startFileImport = (key, apply, file, previousFile) => {
+  const startFileImport = (key, file, previousFile) => {
+    const drawing = state.activeDrawing();
+    const apply = AUXILIARY_TABLE_IMPORTS[key];
     // OV-1205, OV-1206: the import is current while its file stays selected.
     // The Specific rules owner (`runSpecificRuleWrite`) prepares and retries
     // the rules on the inputs current when it runs; one it gives up on comes
@@ -487,25 +453,20 @@ export const setupWatchers = ({
     const retainFailure = (inputsBound = key === 't_color') => {
       auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
-          if (files[key] !== file) {
-            // The watcher skips this selection; the retry starts its import.
-            restoredFileSelections.set(key, file);
-            files[key] = file;
-          }
-          return startFileImport(key, apply, file, previousFile);
+          files[key] = file;
+          return startFileImport(key, file, previousFile);
         } };
     };
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
         if (!isCurrent()) return false;
-        if (await apply(text, isCurrent) === false && isCurrent()) {
+        if (await apply(drawing, text, isCurrent) === false && isCurrent()) {
           const gaveUp = key === 't_color' && errorLog.value === previousError;
           if (gaveUp) {
             errorLog.value = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {},
               { operation: 'evaluateRules', stage: 'rule-validation' }));
           }
-          restoredFileSelections.set(key, previousFile);
           files[key] = previousFile;
           if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
@@ -520,7 +481,6 @@ export const setupWatchers = ({
     }).catch((error) => {
       if (isCurrent() && errorLog.value === previousError) {
         errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
-        restoredFileSelections.set(key, previousFile);
         files[key] = previousFile;
         retainFailure();
       }
@@ -529,81 +489,20 @@ export const setupWatchers = ({
     trackAuxiliaryFileImport(file, pending);
     return pending;
   };
+  // The file input of an auxiliary table (Default colors, Specific rules,
+  // Priority, Whitelist, Blacklist): it stores the file and imports it into
+  // the shown drawing. The `file-uploader` owns its History step and waits
+  // for the import (`waitForAuxiliaryFileImport`, R11). A Load or a History
+  // restore sets `files` without importing.
   /**
    * @param {string} key
-   * @param {FileImportApply} apply
+   * @param {FileLike | null | undefined} file
    */
-  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
-
-  watchFileImport('d_color', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { colors, count } = parseColorTable(text);
-      drawingsOf().forEach(removeImport.d_color);
-      resultsManager.importDefaultColors(drawing, colors);
-      console.log(`Loaded ${count} colors from file.`);
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('t_color', async (text, isCurrent) => {
-    const drawing = state.activeDrawing();
-    try {
-      const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
-      if (importedCount === false) return false;
-      // The import replaced the rows the earlier file added to its drawing.
-      if (!await removeFileImport('t_color', drawingsOf().filter((other) => other !== drawing))) return false;
-      console.log(`Loaded ${importedCount} rules from file.`);
-    } catch (e) {
-      if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('qualifier_priority', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { rules, count } = parsePriorityRules(text);
-      drawingsOf().forEach(removeImport.qualifier_priority);
-      importPriorityRows(drawing.manualPriorityRules, rules);
-      console.log(`Loaded ${count} priority rules.`);
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('whitelist', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { rules, count } = parseWhitelistRules(text);
-      drawingsOf().forEach(removeImport.whitelist);
-      drawing.manualWhitelist.push(...markedRows(rules, 'whitelist'));
-      console.log(`Loaded ${count} whitelist rules.`);
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('blacklist', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { words, count } = parseBlacklistWords(text);
-      drawingsOf().forEach(removeImport.blacklist);
-      const { text: blacklist, imported } = withImportedBlacklistWords(drawing.manualBlacklist.value, words);
-      drawing.manualBlacklist.value = blacklist;
-      if (imported) {
-        drawing.fileImports.blacklist = imported;
-        console.log(`Loaded ${count} blacklist words.`);
-      }
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
+  const importAuxiliaryTable = (key, file) => {
+    const previousFile = files[key];
+    files[key] = file;
+    return applyFileImport(key, file, previousFile);
+  };
 
   watch(
     () => isFeatureDrawerMounted.value,
@@ -671,5 +570,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
+  return { importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
 };

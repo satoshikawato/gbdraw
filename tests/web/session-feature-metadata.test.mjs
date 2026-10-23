@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-session-feature-metadata-'));
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
 await mkdir(join(tempDir, 'contracts'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
@@ -23,7 +25,8 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
 await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
 // feature-metadata-extraction.js reads the Linear Region fields through record-options.js.
-for (const name of ['services/record-options.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+for (const name of ['services/record-options.js', 'services/record-draw-selection.js', 'utils/download-names.js',
+  'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js']) {
   await copyModule(`gbdraw/web/js/${name}`, name);
 }
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
@@ -86,7 +89,7 @@ await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-san
 await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
 // The Legend naming rule and the key mirror of the color rules, which the Legend reader and the admission import.
-for (const name of ['services/legend-row-names.js', 'services/specific-color-rules.js', 'services/file-imports.js',
+for (const name of ['services/legend-row-names.js', 'services/specific-color-rules.js', 'services/file-imports.js', 'services/card-row-marks.js',
   'services/rule-matchers.js', 'utils/color-utils.js', 'utils/i18n.js', 'utils/named-colors.js', 'utils/tsv-cell.js']) {
   await copyModule(`gbdraw/web/js/${name}`, name);
 }

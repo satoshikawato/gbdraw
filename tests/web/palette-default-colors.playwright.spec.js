@@ -15,9 +15,8 @@ const USER_CDS = '#123456';
 const openWithUserColor = async (page) => {
   await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
   await evaluateWithRetainedPromise(page, async (color) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
     await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
-      state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: color };
+      window.__GBDRAW_APP__.editDefaultColor('CDS', color);
       await window.Vue.nextTick();
     });
   }, USER_CDS);
@@ -221,6 +220,46 @@ test('while a palette is queued, Apply to all shows its color now and switching 
   await expectLiveEqualsGenerate(page, { label: 'switch back to the applied palette, keeping the CDS color' });
 });
 
+// REVIEW-1 L4 (OV-1160): turning Instant Preview on while the other drawing is
+// shown applies the hidden drawing's queued palette in its slot; when that
+// drawing is shown again, its Result is drawn with the applied palette.
+test('a palette queued in the hidden drawing is drawn once Instant Preview is on and it is shown', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(async () => {
+    (await import('/gbdraw/web/js/state.js')).state.paletteInstantPreviewEnabled.value = false;
+  });
+  const colors = page.locator('summary[aria-label="Colors"]');
+  if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
+  const select = page.getByRole('combobox', { name: 'Palette', exact: true });
+  const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
+    name !== window.__GBDRAW_APP__.selectedPalette
+  )));
+  await select.selectOption(next);
+  await expect(select).toHaveValue(next);
+  const queuedCds = await page.evaluate(() => String(window.__GBDRAW_APP__.pendingPaletteColors.CDS || '').toLowerCase());
+  expect(queuedCds).not.toBe('');
+  // The fills of the CDS features in the mounted Result.
+  const cdsFills = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const ids = new Set(app.extractedFeatures.filter((feature) => feature.type === 'CDS').map((feature) => feature.svg_id));
+    return [...new Set([...app.svgContainer.querySelectorAll('path[data-gbdraw-feature-part="block"]')]
+      .filter((element) => ids.has(element.getAttribute('data-gbdraw-feature-id')))
+      .map((element) => String(element.getAttribute('fill') || '').toLowerCase()))];
+  });
+  expect(await cdsFills()).not.toContain(queuedCds);
+
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setPaletteInstantPreview(true));
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
+  await settleLive(page);
+  await expect.poll(cdsFills).toContain(queuedCds);
+  expect(await page.evaluate(() => ({
+    pending: window.__GBDRAW_APP__.pendingPaletteName,
+    applied: String(window.__GBDRAW_APP__.appliedPaletteColors.CDS || '').toLowerCase()
+  }))).toEqual({ pending: '', applied: queuedCds });
+});
+
 // OV-282 (D-26): a palette row's color is read from one function, never from
 // the color the row recorded at the last Generate. After a Default colors
 // edit, a Default colors Reset and a palette switch (Instant Preview), "Use
@@ -257,9 +296,8 @@ test('a palette row offers and keeps the color it shows after palette edits', as
   await expectShown(original, 'Generate');
 
   await evaluateWithRetainedPromise(page, async (color) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
     await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
-      state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: color };
+      window.__GBDRAW_APP__.editDefaultColor('CDS', color);
       await window.Vue.nextTick();
     });
   }, USER_CDS);

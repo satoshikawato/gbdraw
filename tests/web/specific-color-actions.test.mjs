@@ -16,6 +16,9 @@ import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
@@ -28,14 +31,14 @@ const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); }
  *   `createHistory`: the History manager the rule owner commits through (a recorder of its steps by default);
  *   the other options go to the rule owner (`askChoice`).
  */
-const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...options } = {}) => {
+const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = null, ...options } = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
       { type: 'CDS', svg_id: 'b', qualifiers: { gene: ['b'] } }
     ] },
     featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
-    svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
+    svgResultIdentity: { value:'before' }, addedLegendCaptions: { value:new Set() },
     legendEntries: { value:[] }, files: {t_color:null}, legendColorOverrides: {},
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false },
     editableLabels: { value: [] }, manualPriorityRules: [],
@@ -50,7 +53,9 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
     [...watchers].filter(entry => entry.source === state.labelReflowProcessing).forEach(entry => entry.callback(busy));
   };
   const transactions = [], transactionScopes = [];
-  const preparation = createRulePreparation({state: withDrawings(state), evaluate});
+  // `linear`: a second drawing; `state.mode.value` picks the shown one.
+  const view = linear ? withModeDrawings(Object.assign(state, { mode: { value: 'circular' } }), { circular: state, linear }) : withDrawings(state);
+  const preparation = createRulePreparation({state: view, evaluate});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let lastRekeyed = null;
@@ -67,7 +72,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
     }
   };
   const history = createHistory?.(state);
-  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: withDrawings(state), rulePreparation:preparation,
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: view, rulePreparation:preparation,
     runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
     runUndoable: history?.runUndoable || transact('intent'),
     prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents,rekeyed}) => {
@@ -120,7 +125,6 @@ test('rule action admits full canonical rules and legend in one transaction afte
   // A caption written in two colors stays as written (PD-OI-042 scenario revision 2).
   assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared','Shared']);
   assert.equal(s.state.manualSpecificRules[0].fromFile,true);
-  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared']);
   assert.equal(s.transactions.length,1);
   assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared','Shared']}],
     'the legend rows apply after the rule transition, inside its History step (R13)');
@@ -141,7 +145,7 @@ for (const outcome of ['stale','error']) {
     await s.actions.commitSpecificRules(() => rules);
     s.state.addedLegendCaptions.value.add('Independent manual legend');
     const before=JSON.stringify(s.state.manualSpecificRules), result=s.state.results.value;
-    const captions=[...s.state.fileLegendCaptions.value], count=s.transactions.length;
+    const count=s.transactions.length;
     let replacements=0;
     s.setLegendPreparation(async()=>{
       if(outcome==='error') throw new Error('measurement failed');
@@ -153,7 +157,6 @@ for (const outcome of ['stale','error']) {
     else assert.equal(await s.actions.commitSpecificRules(() => candidate),false);
     assert.equal(JSON.stringify(s.state.manualSpecificRules),before);
     assert.equal(s.state.results.value,result);
-    assert.deepEqual([...s.state.fileLegendCaptions.value],captions);
     assert.equal(s.transactions.length,count);
   });
 }
@@ -490,7 +493,7 @@ test('a rule commit owns no type row of the displayed Result for a feature it do
   const hidden = { type: 'CDS', svg_id: 'a2', fill_color: '#54bcf8', qualifiers: { locus_tag: ['A2'] }, record_key: 'A', biological_feature_id: 'a2' };
   s.state.extractedFeatures.value = [a1, hidden, fl2];
   s.state.results.value = [{ name: 'A', content: 'a' }, { name: 'B', content: 'b' }];
-  setFeatureVisibilityOverride(s.state.featureOverrides, hidden, 'off');
+  setFeatureVisibilityOverride(editsOf(s.state.featureOverrides), hidden, 'off');
   Object.assign(s.state, {
     displayedResultMetadata: () => ({ renderedFeatureIdentities: { renderedIds: new Set(['a1', 'a2']) } }),
     originalLegendOrder: { value: ['CDS'] }, svgContainer: mounted([['CDS', '#54bcf8']])
@@ -800,7 +803,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     featureCatalog: { value: catalog }, generatedMode: { value: 'circular' }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
-    svgResultIdentity: { value: 'result' }, fileLegendCaptions: { value: new Set() }, addedLegendCaptions: { value: new Set() },
+    svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
     extractedFeatures: { value: [] }
   };
@@ -1193,6 +1196,34 @@ test('saved rules and an imported color table are read without the color IDs of 
   assert.deepEqual(prepareSpecificColorImport(text).nextRules.map((rule) => rule.cap), ['Complex IV', 'Complex IV', 'Complex I [#ffe700]']);
 });
 
+// OV-1100 (R15-19 B, OIC-030): a rule commit writes the drawing it was made
+// in, also when the shown drawing changes while its rules are matched, and the
+// owner reports the write as pending until it ends, so a switch waits for it.
+test('a rule commit writes its own drawing and is pending until it ends', async () => {
+  const linear = {
+    manualSpecificRules: [], featureColorOverrides: { b: { color: '#abcdef', caption: 'Linear fill' } },
+    featureOverrides: {}, addedLegendCaptions: { value: new Set() }, legendEntries: { value: [] },
+    legendColorOverrides: {}, newSpecRule: { feat: 'CDS', qual: 'gene', val: 'a', color: '#000000', cap: '' }
+  };
+  const s = setup(evaluatePythonRules, { linear });
+  let release, started;
+  const ready = new Promise(resolve => { started = resolve; });
+  s.setLegendPreparation(() => new Promise(resolve => { release = resolve; started(); }));
+  assert.equal(s.actions.ruleWritePending(), false);
+  const pending = s.actions.commitSpecificRules(() => [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#112233', cap: 'B' }]);
+  await ready;
+  assert.equal(s.actions.ruleWritePending(), true, 'a switch waits for the rule being matched');
+  s.state.mode.value = 'linear';
+  s.setLegendPreparation(async () => {});
+  release();
+  await pending;
+  assert.equal(s.actions.ruleWritePending(), false);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['B'], 'the Circular rules');
+  assert.equal(s.state.featureColorOverrides.b?.color, '#112233', 'the Circular fill');
+  assert.deepEqual(linear.manualSpecificRules, []);
+  assert.deepEqual(linear.featureColorOverrides, { b: { color: '#abcdef', caption: 'Linear fill' } }, 'the Linear fill is kept');
+});
+
 // REVIEW-3 R3-B1 (OV-1280): Remove on the Specific rules card while another
 // mode is shown finishes that drawing's change at once, in the Remove's own
 // step: its rules and its Legend records (rows, added captions, Legend colors,
@@ -1236,7 +1267,6 @@ test('a Specific rules removal in a drawing not shown takes back its Legend rows
   // What Save Session writes for the drawing now.
   assert.deepEqual(s.state.manualSpecificRules, [hand]);
   assert.deepEqual(legend(), removedLegend);
-  assert.deepEqual([...s.state.fileLegendCaptions.value], []);
   assert.equal(s.rerenders(), 0, 'nothing is drawn while it is not shown');
 
   // The shown path allocates the same keys: its re-keyed row and its rows.

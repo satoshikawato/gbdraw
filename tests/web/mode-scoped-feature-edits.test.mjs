@@ -24,6 +24,7 @@ import {
   requestFeaturePlacements,
   updateFeatureOverride
 } from '../../gbdraw/web/js/services/feature-placement.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 
 const MODES = ['circular', 'linear'];
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
@@ -40,9 +41,10 @@ const drawingDrafts = (mode) => {
   const featureOverrides = {};
   const featurePlacementOverrides = {};
   const bulkLabelText = {};
+  const edits = FEATURE_EDITS_SLICE.create({ featureOverrides }).handle;
   recordKeys.forEach((recordKey) => ['f1', 'f2', 'f3'].forEach((id, index) => {
     const item = feature(mode, recordKey, id);
-    updateFeatureOverride(featureOverrides, item, [
+    updateFeatureOverride(edits, item, [
       { featureVisibility: 'off' }, { labelVisibility: 'on', labelText: `${mode} text` }, { labelSourceText: 'source' }
     ][index]);
     const row = { recordKey, biologicalFeatureId: id, placement: index === 0
@@ -52,6 +54,10 @@ const drawingDrafts = (mode) => {
   }));
   return { featureOverrides, featurePlacementOverrides, bulkLabelText };
 };
+// A drawing's feature-edits slice over its draft maps, so a writer writes them.
+const editsOf = ({ featureOverrides, featurePlacementOverrides }) => (
+  FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle
+);
 const drawings = () => ({ circular: drawingDrafts('circular'), linear: drawingDrafts('linear') });
 
 test('each drawing reaches only the requests of its own mode (both draft maps)', () => {
@@ -97,13 +103,13 @@ test('notices, the source-replacing reconcile, and Remove unmatched touch only t
     }));
     const drafts = drawings();
     const otherBefore = structuredClone(drafts[other]);
-    assert.equal(countUnresolvedFeatureEdits({ ...drafts[mode], notices }), 2 * recordKeys.length);
-    assert.equal(removeUnresolvedFeatureEdits({ ...drafts[mode], notices }), 2 * recordKeys.length);
+    assert.equal(countUnresolvedFeatureEdits({ featureEdits: editsOf(drafts[mode]), notices }), 2 * recordKeys.length);
+    assert.equal(removeUnresolvedFeatureEdits({ featureEdits: editsOf(drafts[mode]), notices }), 2 * recordKeys.length);
     assert.deepEqual(drafts[other], otherBefore);
 
     const pruned = drawings();
     const removed = pruneUnmatchedFeatureOverrides({
-      ...pruned[mode], notices, replacedRecordKeys: recordKeys,
+      featureEdits: editsOf(pruned[mode]), notices, replacedRecordKeys: recordKeys,
       previousRecords: [...records, { recordKey: 'dropped' }], currentRecords: records, biologicalFeatures: []
     });
     // The unresolved placements and visibility edits, and the source texts of
@@ -117,7 +123,7 @@ test('notices, the source-replacing reconcile, and Remove unmatched touch only t
 test('Load Feature Edits TSV replaces the edits of its drawing only', () => {
   const drafts = drawings();
   const circularBefore = structuredClone(drafts.circular.featureOverrides);
-  replaceFeatureEdits(drafts.linear.featureOverrides, [{
+  replaceFeatureEdits(editsOf(drafts.linear), [{
     recordKey: 'record-1', biologicalFeatureId: 'f9', featureVisibility: 'on', labelVisibility: null, labelText: null
   }], records);
   assert.deepEqual(drafts.circular.featureOverrides, circularBefore);

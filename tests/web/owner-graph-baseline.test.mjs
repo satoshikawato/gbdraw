@@ -27,7 +27,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-previewTransformInteraction': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureRecordRotation<-featureRecordRotationAction': 1,
-  'owner-graph.injection-edge.v1|app/app-setup.js|history<-historyFileStore': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|historySnapshots<-historyFileStore': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-ruleActions': 1,

@@ -509,7 +509,7 @@ test('OV-1387: the Record Size Mode option Linear is its own key; the diagram mo
   const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
   const select = html.slice(html.indexOf('v-model="adv.multi_record_size_mode"'));
   assert.match(select.slice(0, select.indexOf('</select>')), /<option value="linear">\{\{ tx\('size scaling', 'Linear'\) \}\}<\/option>/);
-  assert.match(html, /@click="setDiagramMode\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
+  assert.match(html, /@click="selectDrawing\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
 });
 
 test('OV-1465: the Circular record selector has its own key; the topology checkbox keeps Circular record', () => {

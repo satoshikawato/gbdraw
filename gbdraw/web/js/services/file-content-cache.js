@@ -27,8 +27,17 @@ export {
 
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
+/**
+ * The sha256 hex of a resource's bytes: the Worker's cache key for them, so
+ * equal bytes share one token whatever resource IDs name them.
+ * @typedef {string & { readonly __brand: 'ResourceContentToken' }} ResourceContentToken
+ */
+
 /** @type {WeakMap<object, Promise<Uint8Array>>} */
 const fileByteCache = new WeakMap();
+// A File's bytes never change, so its token outlives the release of its bytes.
+/** @type {WeakMap<object, Promise<ResourceContentToken>>} */
+const fileContentTokenCache = new WeakMap();
 /**
  * The descriptor each File was encoded or loaded as, keyed by that File. A
  * File never changes its bytes, so the File object is the key.
@@ -97,6 +106,29 @@ export const readFileText = async (file) => {
   // A function member is a File's or Blob's (Session JSON holds none), whose `text()` resolves to a string.
   if (typeof view?.text === 'function') return /** @type {{ text: () => Promise<string> }} */ (file).text();
   throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
+};
+
+/**
+ * @param {Uint8Array | ArrayBuffer} bytes
+ * @returns {Promise<ResourceContentToken>}
+ */
+export const resourceContentToken = async (bytes) => /** @type {ResourceContentToken} */ (await sha256Hex(bytes));
+
+/**
+ * The content token of a File or Session resource view, hashed once per object.
+ * @param {FileLike} file
+ * @returns {Promise<ResourceContentToken>}
+ */
+export const readFileContentToken = (file) => {
+  let pending = fileContentTokenCache.get(file);
+  if (!pending) {
+    pending = readFileBytes(file).then(resourceContentToken);
+    fileContentTokenCache.set(file, pending);
+    pending.catch(() => {
+      if (fileContentTokenCache.get(file) === pending) fileContentTokenCache.delete(file);
+    });
+  }
+  return pending;
 };
 
 /** @param {unknown} file */
