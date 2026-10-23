@@ -2667,8 +2667,8 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
   assert.deepEqual(cases.map(({ name }) => name), Object.keys(webStates));
 
   const queryFile = new AuditFile([query], 'ring-query.fasta');
+  installShownDrawing('circular');
   const drawing = state.activeDrawing();
-  state.mode.value = 'circular';
   drawing.form.prefix = 'ring-subject';
   drawing.form.show_depth = false;
   drawing.adv.circular_track_slots_enabled = false;
@@ -2690,6 +2690,7 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
     state,
     recordDisplayRows: { value: [] },
     serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
