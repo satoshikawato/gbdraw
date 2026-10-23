@@ -1845,6 +1845,11 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           return;
         }
+        // A pan is not a click: Chrome sends the click of a drag to the svg,
+        // the element that holds both the press and the release, so a press
+        // that moved opens, selects, and clears nothing, whatever lies under
+        // the release.
+        if (!isClickAtPress(handlerState.pressPoint, e)) return;
         const selectableFeatureEl = featureSelection?.getSelectableFeatureTarget?.(e, svg) || null;
         const modifierSelection = Boolean(e.ctrlKey || e.metaKey);
         if (modifierSelection || e.shiftKey) {
@@ -1933,12 +1938,11 @@ export const createFeatureSvgActions = ({
       // beside the click, inside the Result's canvas and clear of the clicked
       // item, as a click on a Legend row shows its popup: it takes the place of
       // an open popup, and a feature selection stays. Nothing opens while
-      // Layout edit is on (a press drags there), while a review holds the
-      // popups, or when the press moved: a pan of the figure ends in a click
-      // on the element it began on.
+      // Layout edit is on (a press drags there) or while a review holds the
+      // popups; `handleClick` has already dropped a press that moved.
       /** @param {MouseEvent} e */
       const openDrawnElementSettings = (e) => {
-        if (state.layoutRepositionMode?.value || previewPopupsHeld() || !isClickAtPress(handlerState.pressPoint, e)) return false;
+        if (state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
         const section = drawnElementSection(e.target);
         const canvas = /** @type {Element | null} */ (state.canvasContainerRef?.value);
         if (!section || !canvas) return false;
