@@ -32,6 +32,8 @@ same one-drawing view that a Session 46-48 drawing gives
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
+from importlib import resources
 from types import MappingProxyType
 import json
 from typing import Any, Literal, Mapping, Sequence, TypedDict, cast
@@ -875,19 +877,91 @@ class ModeScopedSourceFacts(TypedDict):
     proteinResultsInDrawnFrame: bool
 
 
-# Each mode's default draft, shaped as a Session 46-48 mode slice
-# (``modes[mode]``), for rule d of the move to drawings. The Web owns these
-# defaults; Python has no copy of them yet (OV-1658).
-ModeSliceDefaults = Mapping[DrawingMode, Mapping[str, object]]
+class _ModeSliceDefaultRow(TypedDict):
+    domain: str
+    path: str
+
+
+class ModeSliceDefault(_ModeSliceDefaultRow, total=False):
+    """One registry row's default in one mode; no ``value`` when Save leaves the row out at its default."""
+
+    value: object
+
+
+class UnarrangedEntries(TypedDict):
+    """A list that arranges nothing: each entry holds exactly ``entryKeys``, ``positionKey`` its 1-based position."""
+
+    entryKeys: list[str]
+    positionKey: str
+
+
+class ModeSliceNormalizeRule(TypedDict):
+    """A row field the Web fills with run-time identities: a reader empties it when it arranges nothing."""
+
+    domain: str
+    path: str
+    field: str
+    emptyWhenUnarranged: UnarrangedEntries
+    reason: str
+
+
+class ModeSliceDefaults(TypedDict):
+    """``gbdraw/data/mode-slice-defaults.json``: each mode's default settings for rule d of the move to drawings.
+
+    The Web owns these defaults (a new drawing of ``createDrawingState``);
+    ``tools/generate_mode_slice_defaults.mjs`` writes them and checks them
+    with ``--check``, so Python reads the Web's generated defaults.
+    """
+
+    schema: int
+    description: str
+    registryRevision: int
+    normalize: list[ModeSliceNormalizeRule]
+    defaults: dict[DrawingMode, list[ModeSliceDefault]]
+
 
 _ABSENT = object()
+
+
+@cache
+def _mode_slice_defaults() -> ModeSliceDefaults:
+    text = resources.files("gbdraw.data").joinpath("mode-slice-defaults.json").read_text(encoding="utf-8")
+    return cast(ModeSliceDefaults, json.loads(text))
+
+
+def _normalized(row: ModeScopedSetting, value: object) -> object:
+    """``value`` without the run-time identities the packaged rules name for ``row``."""
+
+    for rule in _mode_slice_defaults()["normalize"]:
+        if (rule["domain"], rule["path"]) != (row.domain, row.path) or not isinstance(value, Mapping):
+            continue
+        entries = value.get(rule["field"])
+        shape = rule["emptyWhenUnarranged"]
+        keys = sorted(shape["entryKeys"])
+        if isinstance(entries, list) and all(
+            isinstance(entry, Mapping)
+            and sorted(entry) == keys
+            and not isinstance(entry[shape["positionKey"]], bool)
+            and entry[shape["positionKey"]] == position
+            for position, entry in enumerate(entries, start=1)
+        ):
+            value = {**value, rule["field"]: []}
+    return value
+
+
+def _default_value(mode: DrawingMode, row: ModeScopedSetting) -> object:
+    for default in _mode_slice_defaults()["defaults"][mode]:
+        if (default["domain"], default["path"]) == (row.domain, row.path):
+            return default.get("value", _ABSENT)
+    return _ABSENT
 
 
 def _row_value(mode_slice: Mapping[str, object], row: ModeScopedSetting) -> object:
     holder: object = mode_slice
     for part in row.domain.split("."):
         holder = holder.get(part, _ABSENT) if isinstance(holder, Mapping) else _ABSENT
-    return holder.get(row.path, _ABSENT) if isinstance(holder, Mapping) else _ABSENT
+    value = holder.get(row.path, _ABSENT) if isinstance(holder, Mapping) else _ABSENT
+    return value if value is _ABSENT else _normalized(row, value)
 
 
 def _canonical(value: object) -> str:
@@ -911,11 +985,12 @@ def _used_by_settings(
     slices: Mapping[str, object],
     mode: DrawingMode,
     other: DrawingMode,
-    slice_defaults: ModeSliceDefaults | None,
 ) -> bool:
     """Rule d: a registry row of ``mode``'s slice that differs from ``mode``'s
-    default and, unless the row is ``mode``'s alone, from ``other``'s value
-    (entry by entry for a keyed row). An absent row is the default."""
+    default (the Web's, :func:`_mode_slice_defaults`) and, unless the row is
+    ``mode``'s alone, from ``other``'s value (entry by entry for a keyed row).
+    An absent row is the default. Both values are compared without the
+    run-time identities of the packaged ``normalize`` rules."""
 
     own = _mapping(slices.get(mode))
     shown = _mapping(slices.get(other))
@@ -925,13 +1000,7 @@ def _used_by_settings(
         value = _row_value(own, row)
         if value is _ABSENT:
             continue
-        if slice_defaults is None:
-            raise ValidationError(
-                f"Deciding whether the {mode} settings of a Session were used needs each mode's "
-                "default settings (OV-1658).",
-                diagnostic=_LAYOUT_INVALID,
-            )
-        default = _row_value(_mapping(slice_defaults.get(mode)), row)
+        default = _default_value(mode, row)
         if default is not _ABSENT and _canonical(value) == _canonical(default):
             continue
         if row.modes == mode:
@@ -971,8 +1040,6 @@ def _undrawn_view(data: Mapping[str, Any], mode: DrawingMode) -> dict[str, Any]:
 
 def drawings_document_from_mode_scoped(
     data: Mapping[str, object],
-    *,
-    slice_defaults: ModeSliceDefaults | None = None,
 ) -> tuple[GbdrawSession49, ModeScopedSourceFacts]:
     """The Session 49 of a validated Session 46-48, and what only the source says.
 
@@ -982,8 +1049,8 @@ def drawings_document_from_mode_scoped(
     comes first and is the active one; the other mode's drawing is made only
     when it is used: it has a Result, a non-null input binding of its mode,
     or a registry row that differs from its default and from the shown
-    mode's value (``slice_defaults``; without them a document that needs
-    this rule is refused). Each drawing keeps its own mode's slice, input
+    mode's value (:func:`_used_by_settings`, with the Web's packaged
+    defaults). Each drawing keeps its own mode's slice, input
     bindings, request metadata and the file cards' bindings, and a copy of
     the LOSAT artifacts (:func:`_drawing_of_view`); the IDs and names are the
     modes'. A Session 46 gets its Legend edits keyed by row key first
@@ -1013,7 +1080,7 @@ def drawings_document_from_mode_scoped(
     if other in committed:
         views.append(committed[other])
     elif _binds_input(_mapping(_mapping(source.get("webFiles")).get("bindings")), other) or (
-        other in slices and _used_by_settings(slices, other, shown, slice_defaults)
+        other in slices and _used_by_settings(slices, other, shown)
     ):
         views.append(_undrawn_view(source, other))
     modes = [_view_mode(view) for view in views]
@@ -1045,7 +1112,6 @@ __all__ = [
     "allocate_drawing_id",
     "allocate_session_drawing",
     "ModeScopedSourceFacts",
-    "ModeSliceDefaults",
     "checked_drawing_views",
     "drawing_draft_config",
     "drawings_document_from_mode_scoped",

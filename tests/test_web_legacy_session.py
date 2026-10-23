@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import copy
 import gzip
 import json
 from pathlib import Path
 
 import pytest
 
-import gbdraw.session as session_module
 from gbdraw.session import load_session_document, materialize_session, render_session
 from gbdraw.session_io import DRAWINGS_SESSION_MIN_VERSION, SessionDraftMigration
 from gbdraw.session_migration import session_draft_migration_repairs
@@ -67,18 +65,7 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
         ("conservation-fasta.v39.gbdraw-session.json.gz", "circular"),
     ],
 )
-def test_stored_results_session_49_cannot_hold_travel_beside_the_document(
-    name: str, mode: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Stand-in for B2a-1d (OV-1658): these files keep both mode slices, and deciding whether the other
-    # mode's was used needs each mode's defaults. With each slice as its own default, only the used
-    # drawings are made.
-    move = session_module.drawings_document_from_mode_scoped
-
-    def with_own_slices_as_defaults(data, *, slice_defaults=None):
-        return move(data, slice_defaults=slice_defaults or copy.deepcopy(dict(data["modes"])))
-
-    monkeypatch.setattr(session_module, "drawings_document_from_mode_scoped", with_own_slices_as_defaults)
+def test_stored_results_session_49_cannot_hold_travel_beside_the_document(name: str, mode: str) -> None:
     source = json.loads(_text(name))
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
     assert set(payload) == {"document", "storedResults", "warnings"}, payload.get("error")

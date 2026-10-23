@@ -42,7 +42,6 @@ from gbdraw.session_io import (
 )
 from gbdraw.session_drawings import (
     DrawingMode,
-    ModeSliceDefaults,
     SessionDrawingArtifacts,
     SessionDrawingParts,
     active_session_drawing,
@@ -1377,19 +1376,15 @@ def upgrade_session_document(
     upgrade = _upgrade_to_current(load_session_document(document), temporary_directory)
     if version < DRAWINGS_SESSION_MIN_VERSION or upgrade.document.version >= DRAWINGS_SESSION_MIN_VERSION:
         return upgrade
-    drawings = _drawings_of_current(upgrade.document.to_dict(), slice_defaults=None)
+    drawings = _drawings_of_current(upgrade.document.to_dict())
     return SessionUpgrade(SessionDocument(cast(Mapping[str, Any], drawings)), upgrade.warnings)
 
 
-def _drawings_of_current(
-    data: Mapping[str, Any],
-    *,
-    slice_defaults: ModeSliceDefaults | None,
-) -> GbdrawSession49:
+def _drawings_of_current(data: Mapping[str, Any]) -> GbdrawSession49:
     """A current (46-48) document's data moved to drawings; a refusal is a :class:`SessionConversionError`."""
 
     try:
-        drawings, _source_facts = drawings_document_from_mode_scoped(data, slice_defaults=slice_defaults)
+        drawings, _source_facts = drawings_document_from_mode_scoped(data)
     except SessionError:
         raise
     except ValidationError as exc:
@@ -1400,7 +1395,6 @@ def _drawings_of_current(
 def drawings_document_from_legacy(
     data: SessionDocument | Mapping[str, Any],
     *,
-    slice_defaults: ModeSliceDefaults | None = None,
     temporary_directory: str | Path | None = None,
 ) -> tuple[GbdrawSession49, StoredResults, tuple[DraftMigrationRepair, ...]]:
     """A Session 27-44 as a Session 49, as Web Load reads it, with its stored Results and Load repairs.
@@ -1409,8 +1403,8 @@ def drawings_document_from_legacy(
     split, feature edits, annotation targets, hash rules, placements, legacy
     Linear comparison drafts, the sources of a Session 31-39 read again, and
     the request adaptation with its comparison and protein frames), then the
-    move of :func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`
-    with ``slice_defaults``. Unlike the CLI re-save, no stored Result is
+    move of :func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`.
+    Unlike the CLI re-save, no stored Result is
     dropped: the Results of a Session 40-44 stay in the document with their
     catalog, and those a Session 49 cannot hold (27-30 have no request,
     31-39 no feature catalog) are returned beside it, by the ID of their
@@ -1439,7 +1433,7 @@ def drawings_document_from_legacy(
             loaded, temporary_directory, stored_results=stored_results, repairs=repairs,
         ).document.to_dict()
     )
-    drawings = _drawings_of_current(current, slice_defaults=slice_defaults)
+    drawings = _drawings_of_current(current)
     drawing_ids = {drawing["id"] for drawing in drawings["drawings"]}
     if not stored_results.keys() <= drawing_ids:
         raise SessionConversionError(
