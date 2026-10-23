@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 CAPTURE_ROOT = Path(__file__).resolve().parents[1] / 'docs' / 'capture'
 sys.path.insert(0, str(CAPTURE_ROOT))
@@ -126,30 +127,60 @@ def test_clips_with_one_label_read_as_one_highlight() -> None:
     assert cues[0][1] == cues[1][0] == pytest.approx(1.0, abs=0.1)   # one cue for both clips, no gap before the next
 
 
-def test_a_clip_with_a_frame_keeps_the_drawing_in_one_still_view() -> None:
+def test_a_clip_with_a_frame_keeps_the_logged_rects_in_one_still_view() -> None:
     figure = {'x': 789.0, 'y': 500.0, 'width': 786.0, 'height': 254.0}
-    clips = (Clip('a', -0.5, 'a', 0.0, 'Same', 'a'), Clip('b', -0.5, 'b', 0.0, 'Same', 'a'), Clip('c', -0.5, 'c', 0.0))
-    recording = SimpleNamespace(marks={'a': 5.0, 'b': 9.0, 'c': 12.0}, figures={'a': figure},
+    button = {'x': 1520.0, 'y': 570.0, 'width': 340.0, 'height': 34.0}
+    clips = (Clip('a', -0.5, 'a', 0.0, 'Same', ('a', 'b')), Clip('b', -0.5, 'b', 0.0, 'Same', ('a', 'b')),
+             Clip('c', -0.5, 'c', 0.0))
+    recording = SimpleNamespace(marks={'a': 5.0, 'b': 9.0, 'c': 12.0}, rects={'a': [figure], 'b': [figure, button]},
                                 timemap=TimeMap.build([], 0.0, 20.0))
     framed, also_framed, plain = walkthrough_render._clip_pieces(recording, clips, 1.0, 1.0, 0)
-    assert framed.figure == also_framed.figure == figure and plain.figure is None
-    with pytest.raises(ValueError, match='no figure'):
-        walkthrough_render._clip_pieces(SimpleNamespace(marks=recording.marks, figures={}, timemap=recording.timemap),
+    union = {'x': 789.0, 'y': 500.0, 'width': 1071.0, 'height': 254.0}
+    assert framed.view == also_framed.view == union and plain.view is None
+    with pytest.raises(ValueError, match='no rect'):
+        walkthrough_render._clip_pieces(SimpleNamespace(marks=recording.marks, rects={}, timemap=recording.timemap),
                                         clips[:1], 1.0, 1.0, 0)
-    # The still view shows the whole rect, centered, whatever the camera did there; the portrait inset follows.
+    # The still view keeps the whole union centered, even where it asks for more height than the page has.
     camera = Camera([], TimeMap.build([], 0.0, 5.0), (1920, 1080), PORTRAIT)
-    (cx, cy, height), (corner, alpha) = camera.fixed(figure)
+    (cx, cy, height), (corner, alpha) = camera.fixed(union)
     width = height * PORTRAIT.aspect
-    assert cx - width / 2 <= figure['x'] and figure['x'] + figure['width'] <= cx + width / 2
-    assert cy - height / 2 <= figure['y'] and figure['y'] + figure['height'] <= cy + height / 2
+    assert (cx, cy) == pytest.approx((789 + 1071 / 2, 627.0)) and height > 1080
+    assert cx - width / 2 <= union['x'] and union['x'] + union['width'] <= cx + width / 2
     assert (corner is None) == (alpha == 0.0)
 
 
-def test_a_mark_logs_the_figure_it_can_frame(tmp_path: Path) -> None:
+def test_every_align_cut_is_at_the_previews_fit_zoom() -> None:
+    # The align step presses the preview's Fit before its first demo and after every align, so the drawing keeps one
+    # size from gene to gene; the generic zoom-out fit (which narrows the figure for the tall window) is not used there.
+    tree = ast.parse((CAPTURE_ROOT / 'video' / 'promo.py').read_text(encoding='utf-8'))
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+
+    def calls(name: str) -> list[str]:
+        return [getattr(node.func, 'id', '') for node in ast.walk(functions[name]) if isinstance(node, ast.Call)]
+
+    assert 'Fit to preview' in ast.unparse(functions['_fit_to_window'])
+    assert '_fit_to_window' in calls('_align') and '_fit_to_window' in calls('_align_to')
+    assert '_fit' not in calls('_align_to')
+
+
+def test_the_edges_a_still_view_reaches_past_are_extended() -> None:
+    frame = Image.new('RGB', (40, 20), (10, 20, 30))
+    same, box = walkthrough_render._extended(frame, (0, 0, 40, 20))
+    assert same is frame and box == (0, 0, 40, 20)
+    image, box = walkthrough_render._extended(frame, (-5, -4, 40, 26))
+    assert image.size == (45, 30) and box == (0, 0, 45, 30)
+    assert image.getpixel((0, 0)) == image.getpixel((44, 29)) == (10, 20, 30)
+
+
+def test_a_mark_logs_the_rects_it_can_frame(tmp_path: Path) -> None:
     rec = Recorder(_StubPage(1920, 1080), tmp_path)
     rec._origin = 0.0
+    button = SimpleNamespace(bounding_box=lambda: {'x': 5.0, 'y': 6.0, 'width': 7.0, 'height': 8.0})
     rec.mark('hl-x')
-    assert rec.events[-1] == {'t': rec.events[-1]['t'], 'kind': 'mark', 'name': 'hl-x', 'figure': None}
+    rec.mark('hl-y', target=button)
+    (first, second) = [event for event in rec.events if event['kind'] == 'mark']
+    assert (first['figure'], first['target']) == (None, None)
+    assert second['target'] == {'x': 5.0, 'y': 6.0, 'width': 7.0, 'height': 8.0}
 
 
 def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> None:
@@ -174,8 +205,8 @@ def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> N
     assert len(set(groups)) == len(groups) >= 3 and len(promo.ALIGN_GENES) == len(promo.ALIGN_MARKS)
     assert all(clip.first == clip.last and clip.after == 0.0 for clip in clips)
     assert [-clip.before for clip in clips] == [0.4, 0.6] * len(promo.ALIGN_MARKS)
-    # Every cut frames the whole drawing at one scale, from the figure logged on the first result's mark.
-    assert {clip.frame for clip in clips} == {promo.ALIGN_MARKS[0]}
+    # Every cut keeps the drawing and the Align button in one still view, from the rects logged on the click marks.
+    assert {clip.frame for clip in clips} == {promo.ALIGN_CLICK_MARKS}
     indexes = [opening.index(clip) for clip in clips]
     assert indexes == list(range(indexes[0], indexes[0] + len(clips)))
     # The language highlight shows the pane before, the menu pick, and the pane after; the opening stays short.

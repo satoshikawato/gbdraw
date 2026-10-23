@@ -149,6 +149,18 @@ def _fit(rec: Recorder) -> None:
     _fit_preview(rec, skim=0.8)
 
 
+def _fit_to_window(rec: Recorder) -> None:
+    """Press the preview's Fit, skimmed: the figure fills the preview at one zoom (a new result starts at 100 %).
+
+    The align step keeps every cut at this zoom, so the drawing does not change size from one gene to the next.
+    """
+
+    with _skimmed(rec, target=0.8):
+        rec.camera(rec.page.locator(PREVIEW_REGION).bounding_box(), duration=0.5)
+        rec.click(_button(rec, "Fit to preview"), pause=0.35)
+        rec.page.wait_for_timeout(400)
+
+
 _IDLE = """
 () => new Promise((done) => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(done)), 500))
 """
@@ -518,7 +530,7 @@ def _align_to(rec: Recorder, gene: str, group_id: str, click_mark: str, *, repea
         rec.move_to(*_center(align.bounding_box()))
     # The popup with the pointer on Align…; an opening clip ends at this mark.
     rec.hold(0.7 if repeat else 1.2)
-    rec.mark(click_mark)
+    rec.mark(click_mark, target=align)
     before = _content(rec)
     rec.click(align, pause=0.2)
     with _skimmed(rec, target=0.8):
@@ -526,7 +538,7 @@ def _align_to(rec: Recorder, gene: str, group_id: str, click_mark: str, *, repea
         rec.hold(0.3)
         if popup.is_visible():
             _close_feature(rec)
-        _fit(rec)
+        _fit_to_window(rec)
 
 
 def _align(rec: Recorder) -> None:
@@ -537,6 +549,7 @@ def _align(rec: Recorder) -> None:
     # The header's Load example; the empty preview's button left with the first example.
     _load_example(rec, _button(rec, "Load example").first, BGC_EXAMPLE, "linear", repeat=True)
     _reset_alignment(rec)
+    _fit_to_window(rec)
     _frame_figure(rec)
     rec.hold(1.0)
     for index, ((gene, group_id), click_mark, mark) in enumerate(zip(ALIGN_GENES, ALIGN_CLICK_MARKS, ALIGN_MARKS,

@@ -53,6 +53,7 @@ MUTED = (148, 170, 196)
 ACCENT = (59, 130, 246)
 PORTRAIT_MAX_ZOOM = 2.6
 PORTRAIT_PAD = 1.2  # portrait: margin around a framed target
+FRAME_PAD = 1.08    # a clip's still view: margin around the rects it keeps whole
 PORTRAIT_ZOOM_SLACK = 1.35  # portrait: a zoomed tall target shows at most this much more height
 PROGRESS_GAP = 22  # portrait: step bar distance below the window
 INSET_MARGIN = 18  # overview inset: distance from the window's edges
@@ -173,9 +174,11 @@ class Clip:
     """A cut of the recording from ``before`` s around mark ``first`` to ``after`` s around mark ``last``.
 
     Offsets are on the walkthrough timeline. A clip with a ``label`` shows it
-    as its caption instead of the step's. A clip with a ``frame`` keeps one
-    fixed framing of the drawing, the ``figure`` rect that the recording logged
-    on the mark of that name, instead of the recording's camera moves.
+    as its caption instead of the step's. A clip with ``frame`` marks keeps one
+    still view instead of the recording's camera moves: it shows whole the union
+    of the ``figure`` and ``target`` rects that the recording logged on those
+    marks, centered, even where that asks for more than the page's height (the
+    page's edges are then extended).
     """
 
     first: str
@@ -183,7 +186,7 @@ class Clip:
     last: str
     after: float
     label: str = ""
-    frame: str = ""
+    frame: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -238,6 +241,9 @@ def _tutorial(example_id: str, *, vertical: bool = False, language: str = "en") 
 # The 0.14.0 promotion: one tall take in Simplified Chinese, without a sound track
 # (``video.promo`` records it).
 PROMO_ID = "promo-zh-0140-vertical"
+# The marks whose logged rects (the drawing; the Align button) every align cut keeps in one still view.
+ALIGN_FRAME = ("hl-align-click-1", "hl-align-click-2", "hl-align-click-3")
+
 PROMO_STORY = Story(
     ("gbdraw 0.14.0: what is new", "Microbial and organelle genome maps · now with a Simplified Chinese interface"),
     (("walkthrough", replace(PORTRAIT, audio=False), "gbdraw-0.14.0-vertical"),), "zh-Hans",
@@ -252,7 +258,7 @@ PROMO_STORY = Story(
              Clip("hl-font", -1.0, "hl-font", 0.0, "Chinese text in the figure"),
              *(Clip(f"hl-rotate-{n}", -0.5, f"hl-rotate-{n}", 0.0, "Start at any base") for n in range(1, 5)),
              *(Clip(f"hl-lane-{n}", -0.5, f"hl-lane-{n}", 0.0, "Features on lanes you choose") for n in range(1, 5)),
-             *(Clip(mark, before, mark, 0.0, "Similarity-group alignment", "hl-align-1") for n in range(1, 4)
+             *(Clip(mark, before, mark, 0.0, "Similarity-group alignment", ALIGN_FRAME) for n in range(1, 4)
                for mark, before in ((f"hl-align-click-{n}", -0.4), (f"hl-align-{n}", -0.6)))))
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
@@ -572,13 +578,19 @@ class Camera:
         return self._clamp(*self._at(index, output), self._stage_at(output))
 
     def fixed(self, rect: dict) -> tuple[tuple[float, float, float], tuple[str | None, float]]:
-        """The still view that shows the whole ``rect`` of the page, and its inset (corner, opacity)."""
+        """The still view that keeps the whole ``rect`` centered, and its inset (corner, opacity).
 
-        zoom = min(self.viewport[0] / rect["width"], self.viewport[1] / rect["height"]) / PORTRAIT_PAD
-        event = {"cx": rect["x"] + rect["width"] / 2, "cy": rect["y"] + rect["height"] / 2, "zoom": zoom,
-                 "rect": rect, "portrait": rect, "subject": None}
-        state, corner = self._target(event, self._stages[0])
-        return state, (corner, 1.0 if corner else 0.0)
+        It is not clamped to the page: a rect wider than the window shows at the page's height asks the view for
+        more height than the page has, and the composer extends the page's edges.
+        """
+
+        height = max(rect["width"] * FRAME_PAD / self.aspect, rect["height"] * FRAME_PAD)
+        view = (rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2, height)
+        if not self.layout.inset:
+            return view, (None, 0.0)
+        # The first corner that leaves the rect clear; both covering it keeps the default corner.
+        corner = next((c for c in INSET_CORNERS if not self._covered(view, c, rect)), INSET_CORNERS[0])
+        return view, (corner, 1.0)
 
     def inset_at(self, output: float) -> tuple[str | None, float]:
         """The inset's corner at ``output`` and its opacity: it fades out and back in when the corner changes."""
@@ -1356,7 +1368,8 @@ class Recording:
         self.popovers = [(out(e["t"]), out(e["t"] + e["duration"]), e)
                          for e in self.events if e["kind"] in ("menu", "swatch")]
         self.marks = {e["name"]: out(e["t"]) for e in self.events if e["kind"] == "mark"}
-        self.figures = {e["name"]: e["figure"] for e in self.events if e["kind"] == "mark" and e.get("figure")}
+        self.rects = {e["name"]: [e[key] for key in ("figure", "target") if e.get(key)]
+                      for e in self.events if e["kind"] == "mark"}
         self.steps = sorted({step for _, (step, _, _) in self.captions if step is not None})
         self._decoded: tuple[int, Image.Image] | None = None
 
@@ -1400,7 +1413,7 @@ class Piece:
     fade: int = 0             # frames of cross-dissolve from the previous piece
     caption: tuple | None = None   # recording pieces: a fixed caption instead of the recording's
     caption_held: bool = False     # the fixed caption is already on screen from the piece before: no new fade-in
-    figure: dict | None = None     # recording pieces: the drawing's stage rect, framed still instead of the camera moves
+    view: dict | None = None       # recording pieces: a stage rect shown whole in one still view, not the camera moves
 
     @property
     def start(self) -> float:
@@ -1453,6 +1466,27 @@ CUT_FADE = 7
 CHAPTER_FADE = round(FADE_SECONDS * FPS)
 
 
+def _extended(frame: Image.Image, box: tuple[float, float, float, float]
+              ) -> tuple[Image.Image, tuple[float, float, float, float]]:
+    """``frame`` with each edge that ``box`` reaches past extended in that edge's color, and ``box`` in the new image."""
+
+    left, top = max(0, math.ceil(-box[0])), max(0, math.ceil(-box[1]))
+    right, bottom = max(0, math.ceil(box[2] - frame.width)), max(0, math.ceil(box[3] - frame.height))
+    if not (left or top or right or bottom):
+        return frame, box
+    canvas = Image.new("RGB", (frame.width + left + right, frame.height + top + bottom))
+    canvas.paste(frame.getpixel((frame.width // 2, 0)), (0, 0, canvas.width, top + 1))
+    canvas.paste(frame.getpixel((frame.width // 2, frame.height - 1)), (0, top + frame.height, canvas.width, canvas.height))
+    canvas.paste(frame, (left, top))
+    return canvas, (box[0] + left, box[1] + top, box[2] + left, box[3] + top)
+
+
+def _union(rects: list[dict]) -> dict:
+    left, top = min(r["x"] for r in rects), min(r["y"] for r in rects)
+    right, bottom = max(r["x"] + r["width"] for r in rects), max(r["y"] + r["height"] for r in rects)
+    return {"x": left, "y": top, "width": right - left, "height": bottom - top}
+
+
 def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wait_speed: float,
                  first_fade: int) -> list[Piece]:
     """One recording piece per clip, cut at the recording's marks; later clips dissolve in quickly.
@@ -1467,8 +1501,9 @@ def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wa
         missing = {clip.first, clip.last} - set(recording.marks)
         if missing:
             raise ValueError(f"Recording lacks marks {sorted(missing)}")
-        if clip.frame and clip.frame not in recording.figures:
-            raise ValueError(f"Recording logged no figure on mark {clip.frame!r}")
+        rects = [rect for name in clip.frame for rect in recording.rects.get(name, ())]
+        if clip.frame and not rects:
+            raise ValueError(f"Recording logged no rect on marks {clip.frame!r}")
         start = recording.marks[clip.first] + clip.before
         stop = recording.marks[clip.last] + clip.after
         if stop <= start:
@@ -1477,7 +1512,7 @@ def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wa
         pieces.append(Piece("recording", len(moments), moments=moments, speed=speed,
                             fade=first_fade if index == 0 else 0 if held else CUT_FADE,
                             caption=(None, clip.label, "") if clip.label else None, caption_held=held,
-                            figure=recording.figures[clip.frame] if clip.frame else None))
+                            view=_union(rects) if rects else None))
     return pieces
 
 
@@ -1556,8 +1591,8 @@ class Composer:
         left, top = cx - vw / 2, cy - vh / 2
         s = rec.scale
         width, height = self.layout.card[2], self.layout.card[3]
-        screen = frame.resize((width, height), Image.Resampling.BICUBIC,
-                              box=(left * s, top * s, (left + vw) * s, (top + vh) * s))
+        frame, box = _extended(frame, (left * s, top * s, (left + vw) * s, (top + vh) * s))
+        screen = frame.resize((width, height), Image.Resampling.BICUBIC, box=box)
         scale = width / vw
 
         def to_screen(x: float, y: float) -> tuple[float, float]:
@@ -1694,7 +1729,7 @@ class Composer:
         rec = self.recording
         moment = piece.moment(local)
         extras = []
-        view, inset = self.camera.fixed(piece.figure) if piece.figure else (self.camera.at(moment),
+        view, inset = self.camera.fixed(piece.view) if piece.view else (self.camera.at(moment),
                                                                            self.camera.inset_at(moment))
         for start, (text, icon) in rec.toasts:
             age = moment - start

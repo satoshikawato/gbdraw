@@ -331,14 +331,16 @@ class Recorder:
     def toast(self, text: str, icon: str) -> None:
         self.event("toast", text=text, icon=icon)
 
-    def mark(self, name: str) -> None:
+    def mark(self, name: str, target: Locator | None = None) -> None:
         """Name a moment so edits can cut the recording by meaning, not by time.
 
-        The event also logs ``figure``, the preview figure's stage rect then (None before the first result), so
-        an edit can frame the whole drawing still at that moment (``Clip.frame``).
+        The event also logs the stage rects an edit can keep whole in one still view (``Clip.frame``):
+        ``figure``, the preview figure then (None before the first result), and ``target``, the bounds of
+        ``target`` when given.
         """
 
-        self.event("mark", name=name, figure=self.figure())
+        box = target.bounding_box() if target else None
+        self.event("mark", name=name, figure=self.figure(), target=box and self._stage_rect(box))
 
     def fast_forward(self, *, factor: float | None = None, target: float | None = None) -> None:
         """Start a fast-forward; one started inside another plays at the outer one's speed."""
