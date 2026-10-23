@@ -598,7 +598,11 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
                 raise ValidationError(
                     f"Staged Web render resource {resource_id!r} is outside its workspace."
                 )
-            validated_paths[resource_id] = path
+            # The request reads the file the Worker keeps for this resource's
+            # token, not the workspace link to it: a cached value that names
+            # its source then names a file that lives as long as its key does
+            # (OV-1581), and the workspace is removed below.
+            validated_paths[resource_id] = resolved
         validated_identities = _validate_prepared_resource_identities(
             _resource_identities,
             resource_paths=validated_paths,

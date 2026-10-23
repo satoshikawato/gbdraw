@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import secrets
+import sys
 
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -484,8 +485,31 @@ def _owner_mutation_detail(before: Hashable, after: Hashable) -> str:
     return "record provenance"
 
 
-def _retained_bytes(value: Any) -> int:
+# The smallest str object: each object cell of a frame points to one beside its characters.
+_STR_OBJECT_BYTES = sys.getsizeof("")
+
+
+def _retained_bytes(value: object, source_bytes: int) -> int:
+    """Estimate the bytes ``value`` holds without walking its rows.
+
+    ``source_bytes`` is the size of the resources it was built from: the text
+    in a decoded frame's cells, and the estimate of a decoded value of another
+    kind (an orthogroup or collinearity result).
+    """
+
+    if isinstance(value, DataFrame):
+        object_cells = len(value) * sum(1 for dtype in value.dtypes if dtype.kind == "O")
+        return (
+            int(value.memory_usage(index=True, deep=False).sum())
+            + object_cells * _STR_OBJECT_BYTES
+            + source_bytes
+        )
+    if isinstance(value, str):
+        return len(value)
     records = _records_from_value(value)
+    if isinstance(value, tuple) and records is None:
+        # A nucleotide edge holds its text beside its frame.
+        return sum(_retained_bytes(item, source_bytes) for item in value)
     if records is not None:
         total = 0
         for record in records:
@@ -505,7 +529,7 @@ def _retained_bytes(value: Any) -> int:
                                for key, values in entry.qualifiers)
                          for entry in catalog)
         return total
-    return 0
+    return source_bytes
 
 
 class PreparedBiologicalInputCache:
@@ -521,10 +545,13 @@ class PreparedBiologicalInputCache:
     A successful transaction is the one-project bound: it discards entries that
     the request did not use. A changed semantic key rebuilds its dependent layer;
     a changed or removed resource identity evicts every entry that refers to it.
-    The retained-byte diagnostic estimates source bytes, sequence lengths,
-    feature counts and qualifier counts without serializing them; render-stage
-    results are not counted. Worker termination releases the cache with the Python
-    runtime.
+    The retained-byte diagnostic estimates what each entry holds without
+    serializing it: sequence lengths, feature and qualifier counts of records;
+    the columns, string cells and text of a comparison frame; the text of a
+    nucleotide edge; the source size of another decoded value. Render-stage
+    results are not counted. The total is kept as entries are published and
+    removed, so no transaction walks the entries it does not use. Worker
+    termination releases the cache with the Python runtime.
 
     Ownership guard (D-05): a reused entry is checked by structure when it is
     read and in full, every feature, when the transaction commits, so a change
@@ -555,6 +582,12 @@ class PreparedBiologicalInputCache:
         # random source there is no epoch and no build is named (D-38 OQ-5).
         self._build_ids = itertools.count(1)
         self._epoch = _new_cache_epoch()
+        # The retained bytes of every entry, kept as entries are published
+        # and removed (OV-1583).
+        self._retained_total = 0
+        # Every resource identity an entry names (a superset after an
+        # eviction): a manifest that holds them all removes no entry.
+        self._held_identities: frozenset[PreparedResourceIdentity] = frozenset()
 
     def _evict(
         self,
@@ -562,32 +595,33 @@ class PreparedBiologicalInputCache:
         key: Hashable,
         transaction: _PreparedCacheTransaction,
     ) -> None:
-        if self._layers[layer].pop(key, None) is not None:
+        entry = self._layers[layer].pop(key, None)
+        if entry is not None:
+            self._retained_total -= entry.retained_bytes
             _record_metric(transaction, "preparedInputCacheEvictionCount")
 
     def _synchronize_resources(
         self,
         transaction: _PreparedCacheTransaction,
     ) -> None:
+        if self._held_identities <= transaction.active_identities:
+            return
+        held: set[PreparedResourceIdentity] = set()
         for layer, entries in self._layers.items():
             for key, entry in tuple(entries.items()):
-                if not entry.resource_identities.issubset(
-                    transaction.active_identities
-                ):
+                if entry.resource_identities <= transaction.active_identities:
+                    held.update(entry.resource_identities)
+                else:
                     self._evict(layer, key, transaction)
+        self._held_identities = frozenset(held)
 
     def _set_retained_metric(
         self,
         transaction: _PreparedCacheTransaction,
     ) -> None:
-        retained = sum(
-            entry.retained_bytes
-            for entries in self._layers.values()
-            for entry in entries.values()
-        )
         if transaction.diagnostics is not None:
             metrics = transaction.diagnostics.setdefault("metrics", {})
-            metrics["preparedInputCacheRetainedBytes"] = int(retained)
+            metrics["preparedInputCacheRetainedBytes"] = self._retained_total
 
     @contextmanager
     def transaction(
@@ -733,9 +767,8 @@ class PreparedBiologicalInputCache:
             resource_identities=resource_identities,
             owner_stamp=_owner_stamp(value, walk_features=True),
             structure_stamp=_owner_stamp(value, walk_features=False),
-            retained_bytes=(
-                _retained_bytes(value)
-                + sum(identity.size for identity in resource_identities)
+            retained_bytes=_retained_bytes(
+                value, sum(identity.size for identity in resource_identities)
             ),
         )
         transaction.pending[layer][key] = entry
@@ -834,12 +867,16 @@ class PreparedBiologicalInputCache:
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
         self._verify_used_owners(transaction)
         replacements: dict[str, tuple[OrderedDict[Hashable, _PreparedCacheEntry], int]] = {}
+        retained_total = 0
+        held: set[PreparedResourceIdentity] = set()
         for layer in self._layers:
             current = self._layers[layer]
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
             kept = 0
             for key, entry in self._used_entries(layer, transaction):
                 retained[key] = entry
+                retained_total += entry.retained_bytes
+                held.update(entry.resource_identities)
                 # A pending key is a new entry, not one kept from the layer.
                 if key in current:
                     kept += 1
@@ -853,6 +890,8 @@ class PreparedBiologicalInputCache:
                     evicted,
                 )
             self._layers[layer] = replacement
+        self._retained_total = retained_total
+        self._held_identities = frozenset(held)
         self._set_retained_metric(transaction)
 
 
