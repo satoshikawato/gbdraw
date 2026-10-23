@@ -154,7 +154,8 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
 });
 
-// D-12 (OV-1606): AP027131 at the Web defaults draws its bold first definition line into the GC skew ring.
+// D-12, D-18 (OV-1606): AP027131 at the Web defaults (separate strands) touches the GC skew area with its bold
+// first definition line.
 // The figure is drawn; the notice offers the smaller definition font, and Apply writes Record Labels >
 // Default font size and Generates a figure without the notice.
 test('the definition text over a track: the notice offers a smaller definition font, and Apply draws without it', async ({ page }) => {
@@ -180,7 +181,7 @@ test('the definition text over a track: the notice offers a smaller definition f
   const row = dialog.locator('[data-label-fit-row="smaller_definition_font"]');
   await expect(row).toHaveAttribute('data-label-fit-status', 'found', { timeout: 300000 });
   expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font']);
-  await expect(row).toContainText('Default font size 17.5 pt');
+  await expect(row).toContainText('Default font size 17 pt');
   await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
 
   const undo = await undoCount(page);
@@ -194,7 +195,7 @@ test('the definition text over a track: the notice offers a smaller definition f
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
   await expect(notice).toHaveCount(0);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(17.5);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(17);
   // The row's setting is one step; the Generate that follows is its own.
   expect(await undoCount(page)).toBe(undo + 2);
   await pageShots(page, 'definition-fixed-page');
