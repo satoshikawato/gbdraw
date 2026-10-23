@@ -104,7 +104,6 @@ test('every detector exposes the evidence contract and a stable id list', () => 
     'owner-graph.injection-edge.v1',
     'owner-graph.forward-closure.v1',
     'owner-graph.forward-closure.v2',
-    'owner-graph.state-backdoor.v1',
     'owner-graph.whole-object-port.v1',
     'projection.call-shape.v1',
     'heavy-derived.trigger-site.v1',
@@ -271,19 +270,6 @@ test('v2 forward closures keep every v1 subject and add nothing when the owner i
     .replace("  blocksEditor = () => Boolean(alignmentActions.dialogOpen);\n  refreshCanvas = () => { alignmentActions.refresh(); };\n", '');
   const result = WEB_OWNER_GRAPH_DETECTORS['owner-graph.forward-closure.v2'].detect(new Map([['gbdraw/web/js/app/app-setup.js', early]]), REGISTRY);
   assert.deepEqual(result.subjects, []);
-});
-
-test('state backdoors are functions or owner members assigned into state outside the state module', () => {
-  const result = WEB_OWNER_GRAPH_DETECTORS['owner-graph.state-backdoor.v1'].detect(SOURCES, REGISTRY);
-  assert.deepEqual(result.subjects, [
-    'app/app-setup.js|committedDiagramOptions',
-    'app/app-setup.js|recordDisplayRows'
-  ]);
-  assert.deepEqual(result.observedAssignments, [
-    { path: 'app/app-setup.js', name: 'committedDiagramOptions', line: 22, kind: 'function' },
-    { path: 'app/app-setup.js', name: 'recordDisplayRows', line: 21, kind: 'owner-member' }
-  ]);
-  // `= null`, a string literal, and state.js's own assignments are not backdoors.
 });
 
 test('whole-object ports are owner objects taken by factories outside the roots', () => {
@@ -553,7 +539,6 @@ test('detectWebOwnerGraph runs every detector and summarizeWebOwnerGraph counts 
   assert.deepEqual(summarizeWebOwnerGraph(results), {
     injectionEdges: 4,
     forwardClosures: 2,
-    stateBackdoors: 2,
     wholeObjectPorts: 3,
     projectionShapes: { 'legend-order': 2, 'feature-visibility': 1 },
     triggerSites: 2,

@@ -8009,16 +8009,13 @@ test('the owner-graph report lists base and head counts and new subjects without
     commit('baseline composition');
     const unchanged = execute();
     assert.equal(unchanged.status, 0, unchanged.output);
-    assert.match(unchanged.output, /## Owner graph \(report\)\n\n- Registry: tools\/web-owner-graph\.json from the trusted base\n- injectionEdges: 1 -> 1\n- forwardClosures: 0 -> 0\n- stateBackdoors: 0 -> 0\n- wholeObjectPorts: 1 -> 1/);
+    assert.match(unchanged.output, /## Owner graph \(report\)\n\n- Registry: tools\/web-owner-graph\.json from the trusted base\n- injectionEdges: 1 -> 1\n- forwardClosures: 0 -> 0\n- wholeObjectPorts: 1 -> 1/);
     write('gbdraw/web/js/app/wiring.js', withClosure);
-    write('gbdraw/web/js/app/legend-owner.js', "export const createLegendOwner = ({ state, store }) => { state.legendRows = () => []; return { state, store }; };\n");
     const result = execute();
     assert.equal(result.status, 0, result.output);
     assert.match(result.output, /Gate: \*\*PASS\*\*/);
     assert.match(result.output, /- forwardClosures: 0 -> 1\n/);
-    assert.match(result.output, /- stateBackdoors: 0 -> 1\n/);
     assert.match(result.output, /- owner-graph\.forward-closure\.v1: NEW app\/wiring\.js\|store\.buildLegendEntryOwners->legendOwner\.captureLegendEntryOwners/);
-    assert.match(result.output, /- owner-graph\.state-backdoor\.v1: NEW app\/legend-owner\.js\|legendRows/);
     assert.doesNotMatch(result.output, /Blocking violations\n\n- .*owner-graph/);
   });
 });

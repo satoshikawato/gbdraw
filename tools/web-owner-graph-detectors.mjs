@@ -321,31 +321,6 @@ const detectForwardClosuresV1 = (sources, registry) => {
   });
 };
 
-// `state.<name> = <function | owner member>` outside the state module.
-const detectStateBackdoorsV1 = (sources, registryInput) => {
-  const registry = resolveRegistry(registryInput);
-  const observed = [];
-  for (const [path, source] of sourceEntries(sources)) {
-    if (path === registry.stateModule) continue;
-    const code = maskJavaScript(source);
-    const pattern = /(?:^|[;{}\n])[ \t]*state\.(\w+)\s*=(?!=)\s*([^\n;]*)/g;
-    for (const match of code.matchAll(pattern)) {
-      const name = match[1];
-      const rhs = match[2].trim();
-      const isFunction = /^(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>/.test(rhs) || /^(?:async\s+)?function\b/.test(rhs);
-      const isOwnerMember = /^\w+(?:\.\w+)+$/.test(rhs) && !/^(?:state|window|document|globalThis)\./.test(rhs);
-      if (!isFunction && !isOwnerMember) continue;
-      const index = match.index + match[0].indexOf('state.');
-      observed.push({ path, name, line: lineNumberAt(source, index), kind: isFunction ? 'function' : 'owner-member', subject: `${path}|${name}` });
-    }
-  }
-  const sorted = observed.sort((left, right) => left.subject.localeCompare(right.subject) || left.line - right.line);
-  return Object.freeze({
-    observedAssignments: Object.freeze(sorted.map(({ path, name, line, kind }) => Object.freeze({ path, name, line, kind }))),
-    subjects: Object.freeze(unique(sorted.map(({ subject }) => subject)))
-  });
-};
-
 // Exported factories outside the composition roots whose destructured
 // parameters receive whole owner objects.
 const detectWholeObjectPortsV1 = (sources, registryInput) => {
@@ -1298,11 +1273,6 @@ export const WEB_OWNER_GRAPH_DETECTORS = Object.freeze({
     encodeSubject: (record) => `${normalizeModulePath(record.path)}|${record.consumer}->${record.provider}${record.method ? `.${record.method}` : ''}`,
     detect: detectForwardClosuresV2
   }),
-  'owner-graph.state-backdoor.v1': Object.freeze({
-    subjectCategory: 'state-backdoor',
-    encodeSubject: (record) => `${normalizeModulePath(record.path)}|${record.name}`,
-    detect: detectStateBackdoorsV1
-  }),
   'owner-graph.whole-object-port.v1': Object.freeze({
     subjectCategory: 'whole-object-port',
     encodeSubject: (record) => `${normalizeModulePath(record.path)}|${record.factory}|${record.parameter}`,
@@ -1346,7 +1316,6 @@ export const detectWebOwnerGraph = (sources, registry = null) => Object.freeze(
 export const summarizeWebOwnerGraph = (results) => Object.freeze({
   injectionEdges: results['owner-graph.injection-edge.v1'].subjects.length,
   forwardClosures: results['owner-graph.forward-closure.v1'].subjects.length,
-  stateBackdoors: results['owner-graph.state-backdoor.v1'].subjects.length,
   wholeObjectPorts: results['owner-graph.whole-object-port.v1'].subjects.length,
   projectionShapes: Object.freeze({ ...results['projection.call-shape.v1'].shapesByDomain }),
   triggerSites: results['heavy-derived.trigger-site.v1'].siteCount,
