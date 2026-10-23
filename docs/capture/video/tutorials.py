@@ -439,6 +439,9 @@ def _svg_tab(rec: Recorder, popup: Locator, name: str, *, seconds: float) -> Non
 def _svg_close(rec: Recorder, popup: Locator) -> None:
     rec.click(popup.get_by_role("button", name="x", exact=True), pause=0.3)
     expect(popup).to_be_hidden()
+    # The close button sits over the drawing; leave it so no hover tooltip
+    # from an unrelated ribbon or feature closes the take.
+    rec.move_to(60, VIEWPORT[1] - 40)
     rec.camera(duration=0.9)
     rec.hold(0.4)
 
@@ -867,6 +870,11 @@ def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = ""
         raise AssertionError("No preview figure to show")
     zoom = min(VIEWPORT[0] / figure["width"], VIEWPORT[1] / figure["height"]) / 1.08
     rec.camera(figure, zoom=max(1.0, min(zoom, 2.2)), duration=1.0)
+    bottom = figure["y"] + figure["height"]
+    if figure["x"] <= rec.x <= figure["x"] + figure["width"] and figure["y"] <= rec.y <= bottom:
+        # A pointer resting on the legend or a label opens the preview's
+        # "Turn on Layout edit" hint over the figure being shown.
+        rec.move_to(rec.x - rec.origin[0], bottom - rec.origin[1] + 10)
     rec.hold(seconds)
 
 
