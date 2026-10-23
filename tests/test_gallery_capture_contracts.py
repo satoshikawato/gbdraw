@@ -130,6 +130,24 @@ LAYOUT_RESULT_CAPTURES = {
         },
         "visible_text": {"Vibrio parahaemolyticus", "Vibrio alginolyticus", "Collinear", "Inverted"},
     },
+    "hepatoplasmataceae_collinear": {
+        "src": "./media/hepatoplasmataceae_collinear/manual-07-03-collinear-overview.webp",
+        "selector": "svg[data-capture-tutorial-overview='true']",
+        "viewport": {"width": 1900, "height": 1000},
+        "state": {
+            "mode": "linear",
+            "linearSeqs.length": 5,
+            "form.legend": "right",
+            "form.show_gc": True,
+            "form.show_skew": True,
+            "form.scale_style": "ruler",
+            "form.align_center": True,
+            "selectedPalette": "ajisai",
+            "losat.blastp.mode": "collinear",
+            "losat.blastp.collinearColorMode": "orientation_identity",
+        },
+        "visible_text": {"Tyloplasma litorale", "AP027078.1", "NZ_CP006932.1", "Collinear", "Inverted"},
+    },
     "HmmtDNA_ATskew": {
         "src": "./media/HmmtDNA_ATskew/manual-09-02-atskew-preview.webp",
         "selector": "svg[data-capture-hmmt-preview='true']",
@@ -178,7 +196,7 @@ LOSATP_MODE_CAPTURES = {
         "state": "orthogroup",
     },
     "hepatoplasmataceae_collinear": {
-        "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
+        "src": "./media/hepatoplasmataceae_collinear/manual-05-02-collinear-reduction.webp",
         "selected": "Collinear blocks",
         "state": "collinear",
     },
@@ -439,9 +457,20 @@ def test_vibrio_previews_replay_each_generate_step() -> None:
         assert "(D-07)" in scripts
 
 
-PROGRESSIVE_CIRCULAR_TUTORIALS = {
+PROGRESSIVE_TUTORIALS = {
     # Generate steps, the preview selector, and the replay selectors the finished figure needs
     # beyond the Web defaults (OV-1695, OV-1699: Multi-Record Canvas off).
+    "hepatoplasmataceae_collinear": {
+        "generate_steps": [4, 5, 6, 7],
+        "selector": "svg[data-capture-tutorial-overview='true']",
+        # LOSAT settings set before the first run, so one LOSAT run serves every later Generate.
+        "required_selectors": {
+            "button[aria-label='Run LOSAT for all adjacent pairs']",
+            "input[aria-label='LOSATP Max target seqs']",
+            "input[aria-label='Build similarity groups with within-record searches']",
+            "input[aria-label='Lock Definition Column']",
+        },
+    },
     "Vnig_TUMSAT-TG-2018": {
         "generate_steps": [3, 4, 5, 6],
         "selector": "svg[data-capture-vnig-preview='true']",
@@ -465,11 +494,11 @@ PROGRESSIVE_CIRCULAR_TUTORIALS = {
 }
 
 
-@pytest.mark.parametrize("example_id", PROGRESSIVE_CIRCULAR_TUTORIALS)
+@pytest.mark.parametrize("example_id", PROGRESSIVE_TUTORIALS)
 def test_progressive_tutorials_capture_each_generate_by_replay(example_id: str) -> None:
     """Each Generate step shows its own preview, replayed from the Web defaults (TV-D18)."""
 
-    expected = PROGRESSIVE_CIRCULAR_TUTORIALS[example_id]
+    expected = PROGRESSIVE_TUTORIALS[example_id]
     sample = load_ready_examples(example_id)[0]
     tutorial = _load_tutorial(sample)
     steps = tutorial["manualSteps"]
@@ -500,8 +529,8 @@ def test_progressive_tutorials_capture_each_generate_by_replay(example_id: str) 
     downloads = {entry["targetName"] for entry in tutorial["downloads"]}
     for action in replayed:
         if action["type"] == "upload":
-            assert action["path"].startswith("gallery/files/")
-            assert Path(action["path"]).name in downloads
+            # A file the Gallery serves (gallery/files or the pinned tutorial-data copies), named as a reader downloads it.
+            assert capture_tool.resolve_upload_file(action).name in downloads
 
 
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)

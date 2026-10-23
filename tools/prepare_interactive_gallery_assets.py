@@ -173,6 +173,16 @@ BGC_COMMAND = (
     "gbdraw linear --losat losatp --losatp_mode similarity_groups "
     "--similarity_alignment_feature CAF33315.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
+    "--record_label '<i>Streptomyces lividus</i> CBS 844.73' "
+    "--record_label '<i>Streptomyces fradiae</i> ATCC 10745' "
+    "--record_label '<i>Streptomyces fradiae</i> MCIMB 8233' "
+    "--record_label '<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455' "
+    "--record_label '<i>Streptomyces ribosidificus</i> ATCC 21294' "
+    "--record_subtitle 'Lividomycin biosynthetic gene cluster' "
+    "--record_subtitle 'Neomycin biosynthetic gene cluster' "
+    "--record_subtitle 'Neomycin biosynthetic gene cluster' "
+    "--record_subtitle 'Paromomycin biosynthetic gene cluster' "
+    "--record_subtitle 'Ribostamycin biosynthetic gene' "
     "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
     "--reverse_complement 0 --reverse_complement 1 "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
@@ -191,6 +201,21 @@ BGC_COMMAND = (
     "--definition_line_style 'accession:size=20,color=#7b7c7d' "
     "--definition_line_style 'length:size=20,color=#7b7c7d' "
     "-l bottom -o BGC0000708-BGC0000713"
+)
+
+# A Web-saved Session (fresh upload, then the tutorial's steps): the record name lines are the names the Web
+# infers from each file's organism and strain; the CLI draws them only from --record_label (OV-1698).
+HEPATOPLASMATACEAE_COLLINEAR_COMMAND = (
+    "gbdraw linear --losat_threads 32 --losat losatp --losatp_mode collinear -f interactive_svg "
+    "--gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb "
+    "--record_label '<i>Ca.</i> Tyloplasma litorale Fukuoka2020' "
+    "--record_label '<i>Ca.</i> Hepatoplasma vulgare Av-JP' "
+    "--record_label '<i>Ca.</i> Hepatoplasma scabrum Ps-JP' "
+    "--record_label '<i>Ca.</i> Hepatoplasma crinochetorum Tokyo2021' "
+    "--record_label '<i>Ca.</i> Hepatoplasma crinochetorum Av' "
+    "--align_center --separate_strands --pairwise_match_style curve --scale_style ruler "
+    "--gc --skew --palette ajisai --collinear_color_mode orientation_identity "
+    "-o hepatoplasmataceae_collinear"
 )
 
 MAJANIVIRUS_COMMAND = (
@@ -365,6 +390,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=60,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
+        command=HEPATOPLASMATACEAE_COLLINEAR_COMMAND,
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
@@ -527,10 +553,7 @@ def _session_command(session: dict[str, Any]) -> str:
 
 def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
     command = example.command or _session_command(session)
-    command = command.replace("interactive-svg", "interactive_svg")
-    if example.id == "hepatoplasmataceae_collinear":
-        command = command.replace("--losat_threads 32 --losat losatp --losatp_mode collinear --losat_threads 32", "--losat_threads 32 --losat losatp --losatp_mode collinear")
-    return command
+    return command.replace("interactive-svg", "interactive_svg")
 
 
 def _session_feature_sources(session: dict[str, Any]) -> list[str]:

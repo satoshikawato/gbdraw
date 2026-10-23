@@ -2,7 +2,7 @@
   "id": "hepatoplasmataceae_collinear",
   "version": 1,
   "title": "Show where neighboring Hepatoplasmataceae genomes keep the same gene order",
-  "summary": "Run LOSATP in the browser and combine compatible protein-match anchors into collinear blocks across five Hepatoplasmataceae genomes.",
+  "summary": "Compare gene order across five Hepatoplasmataceae genomes. Start from the Web defaults, run LOSATP collinear blocks in the browser once, then color the blocks by identity and finish the layout, generating after each change.",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP collinear blocks",
   "downloads": [
@@ -46,6 +46,12 @@
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
+      "replay": [
+        {
+          "type": "click",
+          "selector": "role=button[name='Linear's]"
+        }
+      ],
       "operations": [
         {
           "media": {
@@ -57,80 +63,339 @@
       ]
     },
     {
-      "title": "Upload the five GenBank files",
-      "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks match the published example.",
-      "table": {
-        "columns": ["Order", "GenBank file"],
-        "rows": [
-          ["1", "AP027078.gb"],
-          ["2", "AP027131.gb"],
-          ["3", "AP027133.gb"],
-          ["4", "AP027132.gb"],
-          ["5", "NZ_CP006932.gb"]
-        ]
-      },
+      "title": "Add the first genome",
+      "body": "Download the five GenBank files listed under Files. In File 1, click the GenBank / DDBJ File box and choose AP027078.gb. Leave Organism / strain and Subtitle / title empty: the app reads the organism and isolate or strain from the file and draws them as the record's name line.",
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-1'])\").open = true"
+        },
+        {
+          "type": "upload",
+          "selector": "[role='button']:has(> input[data-testid='linear-genbank-1'])",
+          "path": "tutorial-data/hepatoplasmataceae-five/AP027078.gb"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[0]; return Boolean(s?.gb && s.inferred_definition); }"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-upload-row-context.webp",
-            "alt": "AP027078.gb File card with its Organism / strain and Subtitle / title fields, and Record options open to the region controls.",
-            "caption": "Upload AP027078.gb, open Record options if region settings are needed, and repeat the remaining files in table order."
+            "alt": "AP027078.gb in the File 1 card, with empty Organism / strain and Subtitle / title fields, and Record options open to the region controls.",
+            "caption": "Choose AP027078.gb in File 1 and leave Organism / strain and Subtitle / title empty."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1000},
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'hepatoplasmataceae-record-row'; fileCard.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector(`[data-linear-record-card=\"${app.linearSeqs[0].uid}\"]`); const options = row?.querySelector(`[data-linear-record-options=\"${app.linearSeqs[0].uid}\"]`); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'hepatoplasmataceae-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hepatoplasmataceae-record-row']",
-            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
+            "cropPadding": {
+              "top": 0,
+              "right": 14,
+              "bottom": 14,
+              "left": 14
+            },
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
               "linearSeqs.0.gb.name": "AP027078.gb",
-              "linearSeqs.4.gb.name": "NZ_CP006932.gb"
+              "linearSeqs.4.gb.name": "NZ_CP006932.gb",
+              "linearSeqs.0.definition": "",
+              "linearSeqs.0.inferred_definition": "<i>Ca.</i> Tyloplasma litorale Fukuoka2020"
             },
-            "visibleText": ["AP027078.gb", "Record options", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"]
+            "visibleText": [
+              "AP027078.gb",
+              "Record options",
+              "Organism / strain (optional)",
+              "Subtitle / title (optional)",
+              "Region (optional)"
+            ],
+            "replayThrough": 2
           }
         }
       ]
     },
     {
-      "title": "Use browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Performance.",
+      "title": "Add the other four genomes",
+      "body": "Click Add sequence, then choose the next file in the new File card. Add the files one at a time in the table order: LOSAT compares neighboring rows, so the order decides which genomes are compared.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Order",
+          "GenBank file"
+        ],
         "rows": [
-          ["Execution", "Auto"],
-          ["Total threads", "Safe"],
-          ["Parallel runs", "Auto"],
-          ["Threads per run", "Auto unless you need to reproduce a fixed thread count"]
+          [
+            "2",
+            "AP027131.gb"
+          ],
+          [
+            "3",
+            "AP027133.gb"
+          ],
+          [
+            "4",
+            "AP027132.gb"
+          ],
+          [
+            "5",
+            "NZ_CP006932.gb"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-2'])\").open = true"
+        },
+        {
+          "type": "upload",
+          "selector": "[role='button']:has(> input[data-testid='linear-genbank-2'])",
+          "path": "tutorial-data/hepatoplasmataceae-five/AP027131.gb"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[1]; return Boolean(s?.gb && s.inferred_definition); }"
+        },
+        {
+          "type": "evaluate",
+          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-3'])\").open = true"
+        },
+        {
+          "type": "upload",
+          "selector": "[role='button']:has(> input[data-testid='linear-genbank-3'])",
+          "path": "tutorial-data/depth-1kb/AP027133.gb"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[2]; return Boolean(s?.gb && s.inferred_definition); }"
+        },
+        {
+          "type": "evaluate",
+          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-4'])\").open = true"
+        },
+        {
+          "type": "upload",
+          "selector": "[role='button']:has(> input[data-testid='linear-genbank-4'])",
+          "path": "tutorial-data/hepatoplasmataceae-five/AP027132.gb"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[3]; return Boolean(s?.gb && s.inferred_definition); }"
+        },
+        {
+          "type": "evaluate",
+          "script": "document.querySelector(\"details.linear-file-fold:has(input[data-testid='linear-genbank-5'])\").open = true"
+        },
+        {
+          "type": "upload",
+          "selector": "[role='button']:has(> input[data-testid='linear-genbank-5'])",
+          "path": "tutorial-data/hepatoplasmataceae-five/NZ_CP006932.gb"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => { const s = window.__GBDRAW_APP__?.linearSeqs?.[4]; return Boolean(s?.gb && s.inferred_definition); }"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
+            "src": "./media/hepatoplasmataceae_collinear/manual-03-01-add-sequence.webp",
+            "alt": "The File 5 card with NZ_CP006932.gb, above the Add sequence button.",
+            "caption": "Click Add sequence, then choose the next file in the new File card; File 5 holds NZ_CP006932.gb."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "replayThrough": 3,
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const cards = [...document.querySelectorAll('[data-linear-source-card]')]; const add = document.querySelector('button[data-linear-file-add]'); const last = cards[cards.length - 1]; if (cards.length !== 5 || !add || !last) throw new Error('Five Linear File cards and Add sequence were not found.'); last.dataset.capture = 'hep-last-file-card'; add.dataset.capture = 'hep-add-sequence'; add.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='hep-last-file-card']",
+              "[data-capture='hep-add-sequence']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "linearSeqs.4.gb.name": "NZ_CP006932.gb",
+              "linearSeqs.4.definition": ""
+            },
+            "visibleText": [
+              "NZ_CP006932.gb",
+              "Add sequence"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate with the defaults",
+      "body": "Click Generate Diagram. Each genome is one row of CDS arrows on two strands, with the legend at the bottom. The name line left of each row, such as <i>Ca.</i> Tyloplasma litorale Fukuoka2020, comes from the organism and isolate or strain in the file. No comparison is drawn yet.",
+      "replay": [
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-04-01-default-preview.webp",
+            "alt": "Five Hepatoplasmataceae genomes as rows of CDS arrows with the Web defaults: organism name lines on the left, no comparison, and the legend at the bottom.",
+            "caption": "Web defaults: five rows of CDS arrows with their name lines, no comparison yet."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "replayThrough": 4,
+            "viewport": {
+              "width": 1900,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.legend": "bottom",
+              "form.separate_strands": true,
+              "form.linear_track_layout": "middle",
+              "form.show_gc": false,
+              "form.show_skew": false,
+              "selectedPalette": "default"
+            },
+            "visibleText": [
+              "Tyloplasma litorale",
+              "AP027078.1",
+              "NZ_CP006932.1"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Find collinear blocks with LOSATP",
+      "body": "In Comparison, click Run LOSAT. Open Comparison Settings, press LOSATP under LOSAT Mode, and set LOSATP mode to Collinear blocks. Clear Max target seqs (Collinear blocks fills in 5) and select Build similarity groups with within-record searches. Click Generate Diagram. Collinear blocks join protein matches that keep the same local order between neighboring rows: blue for the same orientation, red for inverted.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Comparison",
+            "Run LOSAT"
+          ],
+          [
+            "LOSAT Mode",
+            "LOSATP"
+          ],
+          [
+            "LOSATP mode",
+            "Collinear blocks"
+          ],
+          [
+            "Max target seqs",
+            "Blank (Unbounded)"
+          ],
+          [
+            "Build similarity groups with within-record searches",
+            "On"
+          ]
+        ]
+      },
+      "note": "Change these settings before the first Generate: LOSAT runs once with them, and later Generates reuse its results. The first run searches 13 protein pairs in the browser (each neighboring pair in both directions, and each genome against itself) and can take several minutes. Performance in Comparison Settings stays at Auto execution, Safe total threads, and Auto threads per run.",
+      "replay": [
+        {
+          "type": "click",
+          "selector": "button[aria-label='Run LOSAT for all adjacent pairs']"
+        },
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Comparison Settings\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "click",
+          "selector": "[data-linear-comparison-losat-mode-option='blastp']"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='LOSATP mode']",
+          "value": "collinear"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='LOSATP Max target seqs']",
+          "value": ""
+        },
+        {
+          "type": "check",
+          "selector": "input[aria-label='Build similarity groups with within-record searches']"
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-05-01-open-pairwise.webp",
             "alt": "Comparison card with Run LOSAT pressed, closed Settings, and Selected pairs 4.",
             "caption": "Choose Run LOSAT for all four adjacent comparisons; the pressed command confirms it."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "actions": [
               {
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
-              {"type": "wait", "ms": 300},
-              {"type": "evaluate", "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"}
+              {
+                "type": "wait",
+                "ms": 300
+              },
+              {
+                "type": "evaluate",
+                "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"
+              }
             ],
             "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
@@ -142,22 +407,109 @@
               "losatProgram": "blastp",
               "losat.blastp.mode": "collinear"
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs (4)"]
+            "visibleText": [
+              "Comparison",
+              "Run LOSAT",
+              "Settings",
+              "Selected pairs (4)"
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-05-02-collinear-reduction.webp",
+            "alt": "Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Collinear blocks highlighted.",
+            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Collinear blocks option."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 68,
+              "right": 12,
+              "bottom": 20,
+              "left": 140
+            },
+            "clipSelectors": [
+              "[data-linear-comparison-losat-mode]"
+            ],
+            "openSelect": {
+              "selectedLabel": "Collinear blocks",
+              "options": [
+                "Similarity groups",
+                "Collinear blocks",
+                "Pairwise matches"
+              ],
+              "label": "LOSATP mode",
+              "hideFollowingSiblings": true
+            },
+            "openDetails": [
+              "Settings"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
+              },
+              {
+                "type": "wait",
+                "ms": 300
+              }
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear"
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='blastn']",
+                "pressed": false
+              },
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='blastp']",
+                "pressed": true
+              },
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='tblastx']",
+                "pressed": false
+              },
+              {
+                "label": "LOSATP mode",
+                "value": "Collinear blocks"
+              }
+            ],
+            "visibleText": [
+              "LOSAT Mode"
+            ]
           }
         },
         {
           "dataDependent": true,
           "title": "Performance",
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-03-02-runtime-reproducibility.webp",
+            "src": "./media/hepatoplasmataceae_collinear/manual-05-03-runtime-reproducibility.webp",
             "alt": "Performance controls showing Auto execution, Safe total threads, and automatic run allocation.",
             "caption": "Open Comparison › Settings to review the execution and thread allocation used by browser LOSAT."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Settings"],
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
@@ -182,104 +534,117 @@
               "losatExecution.totalThreadBudget": "safe",
               "losatExecution.threadsPerJob": "auto"
             },
-            "visibleText": ["Performance", "Parallel runs"],
+            "visibleText": [
+              "Performance",
+              "Parallel runs"
+            ],
             "visibleControls": [
-              {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
-              {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
-              {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT threads per run']", "value": "auto"}
+              {
+                "selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT execution']",
+                "value": "auto"
+              },
+              {
+                "selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT total threads']",
+                "value": "safe"
+              },
+              {
+                "selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT threads per run']",
+                "value": "auto"
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-05-04-collinear-preview.webp",
+            "alt": "Five Hepatoplasmataceae genomes joined by collinear blocks between neighboring rows: blue for the same orientation, red for inverted.",
+            "caption": "Collinear blocks between neighboring rows, colored by orientation only (blue same strand, red inverted)."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "replayThrough": 5,
+            "viewport": {
+              "width": 1900,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); if (!content.includes('data-collinearity-block-id')) throw new Error('No collinear blocks in the preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.legend": "bottom",
+              "form.separate_strands": true,
+              "form.linear_track_layout": "middle",
+              "form.show_gc": false,
+              "form.show_skew": false,
+              "selectedPalette": "default",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearInferOrthogroups": true,
+              "losat.blastp.collinearColorMode": "orientation"
+            },
+            "visibleText": [
+              "Tyloplasma litorale",
+              "AP027078.1",
+              "NZ_CP006932.1"
             ]
           }
         }
       ]
     },
     {
-      "title": "Build collinear blocks",
-      "body": "Open Comparison Settings, set LOSAT Mode to LOSATP and LOSATP mode to Collinear blocks, then use Orientation + identity for Color mode. Diagonal drift and Merge conflicts are under Advanced comparison and layout.",
+      "title": "Color the blocks by identity",
+      "body": "In Comparison Settings, set Collinear color mode to Orientation + identity and click Generate Diagram. Generate reuses the LOSAT results, so only the drawing changes: darker blocks have higher protein identity.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["LOSAT Mode", "LOSATP"],
-          ["LOSATP mode", "Collinear blocks"],
-          ["Max target seqs", "Blank (Unbounded)"],
-          ["Build similarity groups with within-record searches", "On"],
-          ["Max unit gap", "0"],
-          ["Min block genes", "1"],
-          ["Color mode", "Orientation + identity"],
-          ["Search between", "Adjacent pairs"],
-          ["Diagonal drift", "0"],
-          ["Merge conflicts", "1"],
-          ["Bitscore", "50"],
-          ["E-value", "1e-2"],
-          ["Min identity (%)", "0"],
-          ["Min length", "0"]
+          [
+            "Collinear color mode",
+            "Orientation + identity"
+          ]
         ]
       },
-      "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into collinear blocks.",
+      "replay": [
+        {
+          "type": "select",
+          "selector": "select[aria-label='Collinear color mode']",
+          "value": "orientation_identity"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
-          "title": "LOSATP collinear controls",
-          "body": "Set LOSAT Mode to LOSATP, then open LOSATP mode in Settings and choose Collinear blocks.",
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
-            "alt": "Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Collinear blocks highlighted.",
-            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Collinear blocks option."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 68,
-              "right": 12,
-              "bottom": 20,
-              "left": 140
-            },
-            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
-            "openSelect": {
-              "selectedLabel": "Collinear blocks",
-              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
-              "label": "LOSATP mode",
-              "hideFollowingSiblings": true
-            },
-            "openDetails": ["Settings"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
-              },
-              {"type": "wait", "ms": 300}
-            ],
-            "assertAppState": {
-              "mode": "linear",
-              "linearComparisonPlan.mode": "adjacent",
-              "linearComparisonPlan.defaultSource": "losat",
-              "losatProgram": "blastp",
-              "losat.blastp.mode": "collinear"
-            },
-            "visibleControls": [
-              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
-              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
-              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
-              {"label": "LOSATP mode", "value": "Collinear blocks"}
-            ],
-            "visibleText": ["LOSAT Mode"]
-          }
-        },
-        {
-          "dataDependent": true,
-          "title": "Collinear color mode",
-          "body": "Open Color mode and choose Orientation + identity.",
-          "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-04-02-orientation-identity.webp",
+            "src": "./media/hepatoplasmataceae_collinear/manual-06-01-orientation-identity.webp",
             "alt": "Comparison Settings with the Color mode menu open and Orientation + identity highlighted.",
             "caption": "Open Color mode in Settings and choose the highlighted Orientation + identity option."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "crop": "openSelect",
             "cropPadding": {
               "top": 24,
@@ -289,10 +654,16 @@
             },
             "openSelect": {
               "selectedLabel": "Orientation + identity",
-              "options": ["Average identity", "Orientation", "Orientation + identity"],
+              "options": [
+                "Average identity",
+                "Orientation",
+                "Orientation + identity"
+              ],
               "label": "Color mode"
             },
-            "openDetails": ["Settings"],
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
@@ -306,87 +677,161 @@
               "losat.blastp.collinearColorMode": "orientation_identity"
             },
             "visibleControls": [
-              {"label": "Color mode", "value": "Orientation + identity"}
+              {
+                "label": "Color mode",
+                "value": "Orientation + identity"
+              }
             ]
           }
         },
         {
           "dataDependent": true,
-          "title": "Advanced collinear controls",
-          "body": "Open Advanced comparison and layout to set Diagonal drift and Merge conflicts.",
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-04-03-advanced-collinear.webp",
-            "alt": "Advanced collinear search controls showing Diagonal drift 0 and Merge conflicts 1.",
-            "caption": "Use Advanced collinear search for the diagonal drift and merge conflict limits."
+            "src": "./media/hepatoplasmataceae_collinear/manual-06-02-identity-preview.webp",
+            "alt": "Five Hepatoplasmataceae genomes with collinear blocks shaded by protein identity, blue for the same orientation and red for inverted, and gradient legend entries.",
+            "caption": "Orientation + identity: darker blocks have higher identity."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "replayThrough": 6,
+            "viewport": {
+              "width": 1900,
+              "height": 1000
+            },
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearMaxDiagonalDrift = 0; app.losat.blastp.collinearMaxConflictsInMergeGap = 1; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); if (!content.includes('data-collinearity-block-id')) throw new Error('No collinear blocks in the preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
               },
               {
-                "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Advanced collinear search'))"
-              },
-              {
-                "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Advanced collinear search')); if (!section) throw new Error('Advanced collinear search was not found.'); section.dataset.capture = 'hep-advanced-collinear'; section.scrollIntoView({ block: 'center' });"
+                "type": "wait",
+                "ms": 100
               }
             ],
-            "selector": "[data-capture='hep-advanced-collinear']",
-            "cropPadding": 14,
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
             "assertAppState": {
               "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.legend": "bottom",
+              "form.separate_strands": true,
+              "form.linear_track_layout": "middle",
+              "form.show_gc": false,
+              "form.show_skew": false,
+              "selectedPalette": "default",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
               "losat.blastp.mode": "collinear",
-              "losat.blastp.collinearMaxDiagonalDrift": 0,
-              "losat.blastp.collinearMaxConflictsInMergeGap": 1
+              "losat.blastp.collinearInferOrthogroups": true,
+              "losat.blastp.collinearColorMode": "orientation_identity"
             },
-            "visibleText": ["Advanced collinear search"],
-            "visibleControls": [
-              {"label": "Diagonal drift", "value": 0},
-              {"label": "Merge conflicts", "value": 1}
+            "visibleText": [
+              "Tyloplasma litorale",
+              "AP027078.1",
+              "NZ_CP006932.1",
+              "Collinear",
+              "Inverted"
             ]
           }
         }
       ]
     },
     {
-      "title": "Set the diagram layout",
-      "body": "Use the ajisai palette, the Features on axis track layout, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
+      "title": "Finish the layout",
+      "body": "Open Layout and select Align to Center, Show GC Content, and Show GC Skew. In Axis & Scale, set Scale Style to Ruler (Ticks). In Colors, choose the ajisai palette. In Legend settings, set Legend position to Right, and clear Lock Definition Column. Click Generate Diagram to get the Gallery figure.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Track Layout", "Features on axis"],
-          ["Align to Center", "On"],
-          ["Separate Strands", "On"],
-          ["Show Coordinate Scale", "On"],
-          ["Scale Style", "Ruler (Ticks)"],
-          ["Show GC Content", "On"],
-          ["Show GC Skew", "On"],
-          ["Palette", "ajisai"],
-          ["Legend position", "Right"],
-          ["Lock Definition Column", "Off"]
+          [
+            "Align to Center",
+            "On"
+          ],
+          [
+            "Show GC Content",
+            "On"
+          ],
+          [
+            "Show GC Skew",
+            "On"
+          ],
+          [
+            "Scale Style",
+            "Ruler (Ticks)"
+          ],
+          [
+            "Palette",
+            "ajisai"
+          ],
+          [
+            "Legend position",
+            "Right"
+          ],
+          [
+            "Lock Definition Column",
+            "Off"
+          ]
         ]
       },
+      "note": "Everything else stays at the Web defaults: Track Layout Features on axis, Separate Strands on, Show Coordinate Scale on, and the collinear search values (Max unit gap 0, Min block genes 1, Diagonal drift 0, Merge conflicts 1, Search between Adjacent pairs, Bitscore 50, E-value 1e-2, Min identity 0, Min length 0).",
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Layout\", \"Axis & Scale\", \"Colors\", \"Legend settings\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "check",
+          "selector": "input[aria-describedby='help-linear-align-to-center']"
+        },
+        {
+          "type": "check",
+          "selector": "xpath=//label[.//span[normalize-space()=\"Show GC Content\"]]//input[@type=\"checkbox\"]"
+        },
+        {
+          "type": "check",
+          "selector": "xpath=//label[.//span[normalize-space()=\"Show GC Skew\"]]//input[@type=\"checkbox\"]"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Linear scale style']",
+          "value": "ruler"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Palette']",
+          "value": "ajisai"
+        },
+        {
+          "type": "select",
+          "selector": "#legend-position",
+          "value": "right"
+        },
+        {
+          "type": "uncheck",
+          "selector": "input[aria-label='Lock Definition Column']"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
-          "title": "Scale style selector",
-          "body": "Open Scale Style and choose Ruler.",
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-05-01-layout-gc-skew-ruler.webp",
+            "src": "./media/hepatoplasmataceae_collinear/manual-07-01-layout-gc-skew-ruler.webp",
             "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
             "caption": "Leave Show Coordinate Scale selected and choose Ruler (Ticks) for Scale Style."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1000},
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
             "actions": [
               {
                 "type": "evaluate",
@@ -402,11 +847,16 @@
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
-              "options": ["Bar (Simple)", "Ruler (Ticks)"],
+              "options": [
+                "Bar (Simple)",
+                "Ruler (Ticks)"
+              ],
               "label": "Scale Style",
               "selector": "select[aria-label='Linear scale style']"
             },
-            "openDetails": ["Axis & Scale"],
+            "openDetails": [
+              "Axis & Scale"
+            ],
             "assertAppState": {
               "mode": "linear",
               "form.show_scale": true,
@@ -426,48 +876,57 @@
         },
         {
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-05-02-layout-overview.webp",
-            "alt": "Layout card with the Features on axis track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
-            "caption": "Set Track Layout to Features on axis and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+            "src": "./media/hepatoplasmataceae_collinear/manual-07-02-layout-overview.webp",
+            "alt": "Layout card with the default Features on axis track layout and Separate Strands, and Align to Center, Show GC Content, and Show GC Skew selected.",
+            "caption": "Select Align to Center, Show GC Content, and Show GC Skew; Track Layout and Separate Strands stay at their defaults."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1000},
-            "openDetails": ["Layout"],
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "openDetails": [
+              "Layout"
+            ],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.children?.[0]; const options = content?.children?.[1]; if (!app || !summary || !track || !options) throw new Error('Layout controls are unavailable.'); const matches = app.form?.linear_track_layout === 'middle' && app.form?.align_center === true && app.form?.separate_strands === true && app.form?.show_gc === true && app.form?.show_skew === true && app.adv?.pairwise_match_style === 'curve' && String(app.selectedPalette || '') === 'ajisai'; if (!matches) throw new Error('Restored layout settings do not match the tutorial.'); summary.setAttribute('data-capture-tutorial-layout-summary', 'true'); track.setAttribute('data-capture-tutorial-layout-track', 'true'); options.setAttribute('data-capture-tutorial-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
               }
             ],
-            "clipSelectors": ["[data-capture-tutorial-layout-summary='true']", "[data-capture-tutorial-layout-track='true']", "[data-capture-tutorial-layout-options='true']"],
+            "clipSelectors": [
+              "[data-capture-tutorial-layout-summary='true']",
+              "[data-capture-tutorial-layout-track='true']",
+              "[data-capture-tutorial-layout-options='true']"
+            ],
             "cropPadding": 12
           }
-        }
-      ]
-    },
-    {
-      "title": "Generate and inspect the diagram",
-      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show orientation-colored collinear blocks between adjacent records.",
-      "operations": [
+        },
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-06-01-collinear-overview.webp",
-            "alt": "Completed five-genome Hepatoplasmataceae diagram with red and blue collinear blocks, GC content and skew tracks, a ruler, record metadata, and a right legend.",
-            "caption": "The completed figure shows orientation-colored collinear blocks, both GC tracks, the ruler, record metadata, and the right legend."
+            "src": "./media/hepatoplasmataceae_collinear/manual-07-03-collinear-overview.webp",
+            "alt": "Completed five-genome Hepatoplasmataceae diagram with identity-shaded red and blue collinear blocks, GC content and skew tracks, a ruler, organism name lines, and a right legend.",
+            "caption": "The finished figure: centered rows with GC content, GC skew, a ruler, and the legend on the right."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1900, "height": 1000},
+            "viewport": {
+              "width": 1900,
+              "height": 1000
+            },
             "actions": [
               {
                 "type": "evaluate",
                 "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('block_0024') || !content.includes('data-collinearity-block-id') || app?.form?.legend !== 'right') throw new Error('Restored collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
               },
-              {"type": "wait", "ms": 100}
+              {
+                "type": "wait",
+                "ms": 100
+              }
             ],
             "selector": "svg[data-capture-tutorial-overview='true']",
             "cropPadding": 12,
@@ -475,17 +934,29 @@
               "mode": "linear",
               "linearSeqs.length": 5,
               "form.legend": "right",
+              "form.separate_strands": true,
+              "form.linear_track_layout": "middle",
               "form.show_gc": true,
               "form.show_skew": true,
-              "form.scale_style": "ruler"
+              "selectedPalette": "ajisai",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearInferOrthogroups": true,
+              "losat.blastp.collinearColorMode": "orientation_identity",
+              "form.scale_style": "ruler",
+              "form.align_center": true,
+              "form.keep_definition_left_aligned": false
             },
             "visibleText": [
+              "Tyloplasma litorale",
               "AP027078.1",
               "NZ_CP006932.1",
               "GC content",
               "Collinear",
               "Inverted"
-            ]
+            ],
+            "replayThrough": 7
           }
         }
       ]
@@ -496,7 +967,7 @@
       "operations": [
         {
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
+            "src": "./media/hepatoplasmataceae_collinear/manual-08-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
             "caption": "The highlighted block ribbon remains visible beside its compact summary: both record intervals, same orientation, 44% identity, and 15 gene pairs."
           },
@@ -533,14 +1004,22 @@
                 "type": "evaluate",
                 "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match1']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['collinearity block', 'block_0024', 'ap027078.1', 'ap027131.1', 'plus', '15']) { if (!text.includes(expected)) throw new Error(`Collinear popup is missing: ${expected}`); } if (!popup || !rect) throw new Error('Collinear target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 600, rect.top - 80)); }"
               },
-              {"type": "wait", "ms": 250},
+              {
+                "type": "wait",
+                "ms": 250
+              },
               {
                 "type": "evaluate",
                 "script": "const popup = document.querySelector('.pairwise-match-popup'); const summary = popup?.querySelector('[data-collinear-summary]'); const pairs = popup?.querySelector('[data-collinear-gene-pairs]'); if (!popup || !summary || !pairs) throw new Error('Compact collinear summary not found.'); popup.children[0]?.setAttribute('data-capture', 'collinear-popup-header'); summary.setAttribute('data-capture', 'collinear-summary'); pairs.setAttribute('data-capture', 'collinear-gene-pairs'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match1']",
-            "clipSelectors": ["[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='collinear-popup-header']", "[data-capture='collinear-summary']", "[data-capture='collinear-gene-pairs']"],
+            "clipSelectors": [
+              "[data-gbdraw-pairwise-match-id='comparison1_match1']",
+              "[data-capture='collinear-popup-header']",
+              "[data-capture='collinear-summary']",
+              "[data-capture='collinear-gene-pairs']"
+            ],
             "cropPadding": {
               "top": 16,
               "right": 24,
@@ -593,14 +1072,21 @@
                 "type": "evaluate",
                 "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 185; }"
               },
-              {"type": "wait", "ms": 250},
+              {
+                "type": "wait",
+                "ms": 250
+              },
               {
                 "type": "evaluate",
                 "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1,513 (+)', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const details = popup?.querySelector('[data-feature-popup-details]'); if (!details) throw new Error('DnaA detail list not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); details.setAttribute('data-capture', 'dnaa-popup-details'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-stable-feature-id='fe826bac7']",
-            "clipSelectors": ["[data-capture='dnaa-popup-header']", "[data-capture='dnaa-popup-tabs']", "[data-capture='dnaa-popup-details']"],
+            "clipSelectors": [
+              "[data-capture='dnaa-popup-header']",
+              "[data-capture='dnaa-popup-tabs']",
+              "[data-capture='dnaa-popup-details']"
+            ],
             "cropPadding": {
               "top": 18,
               "right": 180,
@@ -650,7 +1136,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input order, LOSAT Mode LOSATP, LOSATP mode Collinear blocks, Color mode, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+      "body": "Check the input order, the LOSAT settings of step 5 (set before the first Generate), Collinear color mode Orientation + identity, and the layout settings of step 7. Leave Organism / strain empty in each File card so the name lines come from the files."
     }
   ],
   "related": [

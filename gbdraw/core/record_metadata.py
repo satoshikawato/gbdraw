@@ -325,7 +325,11 @@ _NON_ORGANISM_NAMES = frozenset(
 
 
 def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
-    """Format organism and strain into publication-style HTML (e.g. <i>Genus species</i> strain)."""
+    """Format organism and strain into publication-style HTML.
+
+    ``<i>Genus species</i> strain``; a Candidatus taxon is
+    ``<i>Ca.</i> Genus species strain``.
+    """
     organism = str(metadata.organism or "").strip()
     strain = str(metadata.strain or "").strip()
 
@@ -339,15 +343,18 @@ def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
         return strain
 
     words = clean_org.split()
-    cand_prefix = "Candidatus " if candidatus else ""
+    # A Candidatus name is set upright after an italic "Ca." (OV-1720); any
+    # other genus or binomial is italic.
+    italic = (lambda name: name) if candidatus else (lambda name: f"<i>{name}</i>")
+    cand_prefix = "<i>Ca.</i> " if candidatus else ""
     if len(words) >= 2:
-        binom = f"<i>{' '.join(words[:2])}</i>"
+        binom = italic(" ".join(words[:2]))
         rest = " ".join(words[2:])
         if strain and strain.lower() not in rest.lower():
             rest = f"{rest} {strain}".strip()
         return f"{cand_prefix}{binom} {rest}".strip()
     if words:
-        base = f"{cand_prefix}<i>{words[0]}</i>"
+        base = f"{cand_prefix}{italic(words[0])}"
         return f"{base} {strain}".strip() if strain else base
     return strain
 

@@ -830,7 +830,9 @@ const EXACT_BASELINES = {
       blockId: 'block_0024',
       orthogroupIds: 'og_34;og_35;og_36;og_37;og_38;og_39;og_40;og_41;og_42;og_43;og_44;og_45;og_46;og_47;og_48'
     },
-    digest: '6bcc7390b4602122c56454375e266b39ca110e35979534995577dc2991743aee',
+    // The Gallery Session uploads the pinned NZ_CP006932.1 revision (tutorial-data), whose WP_025208444.1 product
+    // is "GGDEF domain-containing protein"; the earlier Session's copy read "DHH family phosphoesterase".
+    digest: '9cc7b51bcafa7ef0aea841508ed9695714899ba689a1a528334224e8ecd3cf08',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'collinear' },
       { id: 'Identity', label: 'Identity', value: '43.9684414414' },

@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Gallery: like the other Gallery tutorials, hepatoplasmataceae_collinear now generates after each step
+  (defaults, LOSATP collinear blocks, identity colors, layout), and its
+  figure and Session now come from a fresh upload, so they show the organism
+  name lines a reader's own upload shows. The card commands of this example and
+  of BGC0000708-BGC0000713 declare those names with `--record_label` (and
+  `--record_subtitle`), since the CLI draws record names only from them.
+- Web app: a record name inferred from a *Candidatus* organism now reads
+  `<i>Ca.</i> Tyloplasma litorale Fukuoka2020`: the abbreviation in italics
+  and the name upright, as nomenclature requires. It read `Candidatus
+  <i>Tyloplasma litorale</i> Fukuoka2020` (OV-1720).
+
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 
 - Patch release of 0.14.0. Session files are unchanged (Session version 48).
