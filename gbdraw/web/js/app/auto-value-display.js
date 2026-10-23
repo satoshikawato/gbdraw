@@ -8,6 +8,7 @@ import {
 } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
 import { t } from '../utils/i18n.js';
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 const DEFAULTS = Object.freeze({
   circular: {
@@ -63,22 +64,13 @@ const DEFAULTS = Object.freeze({
   }
 });
 
+// The length tiers of the Auto sliding window and scale ticks are Python's
+// (gbdraw/auto_sizes.py), carried by the generated mode-profile data.
+const { slidingWindow, circularTicks, linearTicks } = MODE_PROFILE_DATA.autoSizes;
+// One object per tier: `sharedLengthValue` compares the values of the drawn records by identity.
 const SLIDING_WINDOW_PRESETS = Object.freeze([
-  { maxExclusive: 1_000_000, window: 1000, step: 100 },
-  { maxExclusive: 10_000_000, window: 10_000, step: 1000 },
-  { maxExclusive: Infinity, window: 100_000, step: 10_000 }
-]);
-
-const LINEAR_TICK_THRESHOLDS = Object.freeze([
-  [2000, 100],
-  [20_000, 1000],
-  [50_000, 5000],
-  [150_000, 10_000],
-  [250_000, 50_000],
-  [1_000_000, 100_000],
-  [2_000_000, 200_000],
-  [5_000_000, 500_000],
-  [Infinity, 1_000_000]
+  ...slidingWindow.tiers.map(([maxExclusive, window, step]) => Object.freeze({ maxExclusive, window, step })),
+  Object.freeze({ maxExclusive: Infinity, window: slidingWindow.above[0], step: slidingWindow.above[1] })
 ]);
 
 /** @param {unknown} value */
@@ -243,31 +235,37 @@ const sharedLengthValue = (state, valueForLength) => {
   return values.size === 1 ? [...values][0] : null;
 };
 
+/**
+ * The row of `tiers` whose bound the length is under (`atMost` also accepts the bound).
+ * @template {number[]} Row
+ * @param {unknown} length
+ * @param {readonly Row[]} tiers
+ * @param {boolean} [inclusive]
+ * @returns {Row | null}
+ */
+const tierRow = (length, tiers, inclusive = false) => {
+  const numeric = Number(length);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return tiers.find(([bound]) => (inclusive ? numeric <= bound : numeric < bound)) || null;
+};
+
 /** @param {unknown} length */
 const slidingWindowForLength = (length) => {
   const numeric = Number(length);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return SLIDING_WINDOW_PRESETS.find((entry) => numeric < entry.maxExclusive) || SLIDING_WINDOW_PRESETS[2];
+  return SLIDING_WINDOW_PRESETS.find((entry) => numeric < entry.maxExclusive) || null;
 };
 
 /** @param {unknown} length */
 const autoLinearTickInterval = (length) => {
-  const numeric = Number(length);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  const match = LINEAR_TICK_THRESHOLDS.find(([threshold]) => numeric < threshold);
-  return match ? match[1] : 1_000_000;
+  const row = tierRow(length, linearTicks.tiers);
+  return row ? row[1] : (Number(length) > 0 ? linearTicks.above : null);
 };
 
 /** @param {unknown} length */
 const autoCircularTickInterval = (length) => {
-  const numeric = Number(length);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  if (numeric <= 30_000) return 1000;
-  if (numeric <= 50_000) return 5000;
-  if (numeric <= 150_000) return 10_000;
-  if (numeric <= 1_000_000) return 50_000;
-  if (numeric <= 10_000_000) return 500_000;
-  return 1_000_000;
+  const row = tierRow(length, circularTicks.tiers, true);
+  return row ? row[1] : (Number(length) > 0 ? circularTicks.above[0] : null);
 };
 
 /**

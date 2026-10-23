@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `82`
+- Contract revision: `83`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2883,6 +2883,43 @@ Status: active Product authority
   - This change is Contract-only: the Contract is the only changed path, and
     the Review is `REQUIRED`. The runtime that implements it follows in
     DRAWINGS-B (B2d), which cites this authority on its base.
+- Revision 83 change: `PD-OI-052` gains scenario revision `2`
+  (concern `web.composition-decoration-continuity`; the outcome
+  `A2 / CARRY-DELTAS-AND-GROW-CANVAS`). It comes from five replies of the
+  Product Decision Owner `satoshikawato` of `2026-10-23` in the Claude Code
+  session of the layout collision audit, given to questions the session
+  asked because the choices are the Product Decision Owner's. Each reply is
+  quoted as written.
+  - Reply 1. The session asked whether a legend or title the user moved may
+    leave the canvas after a position change (A keep, as documented; B drop
+    the item's manual offset on a position change; C keep the offset but
+    clamp it inside the canvas). The Owner replied:
+    「キャンバスを適宜拡張などするのが好ましい。」
+  - Reply 2. After the session said the merge waits for the answers to the
+    next two questions, the Owner wrote: 「質問して」
+  - Reply 3. The session asked whether `PD-OI-052` may be revised with the
+    draft receipt (`A2 / CARRY-DELTAS-AND-GROW-CANVAS`, shown in full),
+    because scenario revision `1` accepts clipping and says to adjust with
+    padding or Reset instead of an automatic clamp. The Owner selected
+    「承認 (Recommended)」.
+  - Reply 4. The session asked whether the Linear scale also grows the canvas
+    when moved. The Owner selected 「A 記録して広げる (Recommended)」, whose
+    option read: 「scale の大きさを composition metadata に記録し、凡例・題と同じように広げる。新しい metadata 項目なので、Q4 の Must preserve に「composition metadata に Linear scale の大きさを加えることだけ認める」を足す。参照図の再生成が必要で、別の PR にする。」
+  - Receipt approval: the session showed the receipt recorded in `PD-OI-052`
+    in full with its SHA-256 and the note that the only change from the
+    draft of Reply 3 is the Reply 4 sentence appended to Must preserve. The
+    Owner selected 「承認します」. It approves the text as recorded.
+  - The receipt and JSON in `PD-OI-052` reproduce the confirmed fields
+    without translation or additional terms. The scenario revision `1`
+    receipt and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-052` scenario revision `2`
+    `789e12651883910b67d2cbd9aa6837167d38b59ee24343db6bea0aa69850f160`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that grow the canvas for a moved legend or plot title
+    are in the same pull request, and the Review is `REQUIRED`. The remaining
+    dependent runtime, the Linear scale bounds in composition metadata,
+    follows in a later pull request.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -5085,9 +5122,9 @@ Decision date: 2026-09-27
 ### PD-OI-052: Matched decoration deltas across regeneration
 
 - Concern key: `web.composition-decoration-continuity`
-- Scenario revision: `1`
+- Scenario revision: `2`
 - Status: `ACCEPTED`
-- Selected outcome: `A / CARRY-MATCHED-DECORATION-DELTAS`
+- Selected outcome: `A2 / CARRY-DELTAS-AND-GROW-CANVAS`
 - Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate
 - Discoverability/accessibility / immediate feedback: 通常は自動継承。対応不能の理由・対象・Reset/修正を keyboard/touch から到達可能に表示
 - Canonical state update: Result SVG を差分の正本とし、transaction-local snapshot を candidate に適用。UI refs は同期値。latent/global map なし
@@ -5100,7 +5137,7 @@ Decision date: 2026-09-27
 - Cache/provenance: 既存 validated identity/digest 使用。raw search/cache key に delta を追加しない。candidate と保存Resultを一致
 - Performance: 非ゼロ対象のみ。候補の既存parse/serialize共用、batch旧SVGは必要分のみ、zero fast path維持
 - Compatibility: writer/readerを維持。照合できない保存図は明示回復
-- Decision source: the complete Choice A outcome and nine-field receipt in
+- Decision source (scenario revision `1`): the complete Choice A outcome and nine-field receipt in
   [DECISION_01_COMPOSITION_CONTINUITY.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_01_COMPOSITION_CONTINUITY.md)
   at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
   `satoshikawato` explicitly approved all three independent recommended A
@@ -5110,11 +5147,19 @@ Decision date: 2026-09-27
   does not supersede another decision. Dependent runtime requires this
   authority merged into its base; this amendment contains no runtime or
   runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `c7668d708ac6cd90b4373df0a685e418f21be7e653e99cbe899b82fba25e5e7d`.
+- Decision source (scenario revision `2`): the Owner replies quoted verbatim
+  in the Revision 83 entry above. The scenario revision `2` receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `789e12651883910b67d2cbd9aa6837167d38b59ee24343db6bea0aa69850f160`.
 - Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-013`, `OIC-014`. These existing obligations and the
   complete selected outcome are jointly required; their citation does not
   claim completed dependent-runtime checks.
+
+Scenario revision `1` receipt, approved by `satoshikawato` on `2026-09-26`:
 
 ```text
 PRODUCT_DECISION
@@ -5140,6 +5185,35 @@ Decision date: 2026-09-26
   "acceptedResidualRisk": "新automatic配置に同じdeltaを加えるので絶対位置は変わり、clipping/overlapが残りうる。自動clampせずpadding/Resetで調整する。対応不能は候補公開前に止まり、明示Reset/設定修正が必要。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
+}
+```
+
+Scenario revision `2` receipt, approved by `satoshikawato` on `2026-10-23`:
+
+```text
+PRODUCT_DECISION
+Concern: web.composition-decoration-continuity
+Scenario revision: 2
+Choice: A2 / CARRY-DELTAS-AND-GROW-CANVAS
+Rationale: 手動で動かした legend/title/Linear scale がキャンバスの外に出て切れたり見えなくなったりしないようにする（Owner 2026-10-23「キャンバスを適宜拡張などするのが好ましい。」）。
+Must preserve: revision 1 の Must preserve のすべて。手動のずれは保つ。自動のキャンバス内に収まるドラッグではキャンバスを変えない。キャンバスは自動のキャンバスより小さくしない。canvas padding は 1 回だけ加える。Reset Layout で自動のキャンバスに戻る。通常の load と保存 Result の表示では Result を変えない。composition metadata に Linear scale の大きさを加えることだけ認める。
+May retire: 手動で動かした項目が自動のキャンバスの外にはみ出して切れる動作だけ。
+Accepted residual risk: 動かした項目と図の内容の重なりは残りうる（自動では避けない）。キャンバスが広がると出力画像も大きくなる。
+Owner: satoshikawato
+Decision date: 2026-10-23
+```
+
+```json
+{
+  "concern": "web.composition-decoration-continuity",
+  "scenarioRevision": 2,
+  "choice": "A2 / CARRY-DELTAS-AND-GROW-CANVAS",
+  "rationale": "手動で動かした legend/title/Linear scale がキャンバスの外に出て切れたり見えなくなったりしないようにする（Owner 2026-10-23「キャンバスを適宜拡張などするのが好ましい。」）。",
+  "mustPreserve": "revision 1 の Must preserve のすべて。手動のずれは保つ。自動のキャンバス内に収まるドラッグではキャンバスを変えない。キャンバスは自動のキャンバスより小さくしない。canvas padding は 1 回だけ加える。Reset Layout で自動のキャンバスに戻る。通常の load と保存 Result の表示では Result を変えない。composition metadata に Linear scale の大きさを加えることだけ認める。",
+  "mayRetire": "手動で動かした項目が自動のキャンバスの外にはみ出して切れる動作だけ。",
+  "acceptedResidualRisk": "動かした項目と図の内容の重なりは残りうる（自動では避けない）。キャンバスが広がると出力画像も大きくなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-23"
 }
 ```
 

@@ -1,6 +1,7 @@
 // @ts-check
 import { parseTransform, releasePressedTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
 import {
+  applyCanvasToSvg,
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
@@ -515,7 +516,12 @@ export const createDiagramDragActions = ({
     if (completedDragMode === 'record') {
       similarityAlignmentLifecycle?.afterRecordDrag?.({ moved });
     }
-    if (moved) commitActiveResultEdit?.('diagram-drag');
+    if (moved) {
+      // The drop places a moved plot title: the canvas grows to hold it (Owner, 2026-10-23).
+      const svg = svgContainer.value?.querySelector?.('svg') || null;
+      if (svg) applyCanvasToSvg(svg, state.activeDrawing().canvasPadding);
+      commitActiveResultEdit?.('diagram-drag');
+    }
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
     if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);

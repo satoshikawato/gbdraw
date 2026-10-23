@@ -24,9 +24,11 @@
 // equal to the handle's, such as a helper's `paint` parameter) is a write of
 // the function that calls it, except the slice readers that `SLICE_READERS`
 // lists by name (tests/web/helpers/drawing-state.mjs; the M6 table proves
-// each changes neither drawing) and the calls `READERS` lists. A handle held
-// under another name is not seen (the slices' own guard, tests/web/drawing-slices.test.mjs, covers
-// their members).
+// each changes neither drawing) and the calls `READERS` lists. A call of a
+// slice writer the module imports is a write of its caller too, whatever
+// handle or alias it receives (the slice-writer import guard); a slice writer
+// handed on as a value is not seen (the slices' own guard,
+// tests/web/drawing-slices.test.mjs, covers their members).
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -70,6 +72,12 @@ const PAINT_ROUTES = new Set([
   // Sort and Move of Legend rows (`showLegendStructure`); Sort's step is the
   // History input adapter's button step, Move's `history.runUndoable`.
   'order',
+  // A Legend rename of a row without rules or features (`renameLegendRow`):
+  // the row keeps its key and takes the name, in the step the Legend name
+  // input or the popup's rename action holds open, shown through
+  // `showEditorIntent`. It writes through a handle held under another name,
+  // which the slice-writer import guard sees.
+  'rename',
   // Another owner's edit retires the paint edits of what it removed, in that
   // edit's step: track data that no longer names a caption (OV-87), and Delete
   // settings of OFF records, which no Result draws.
@@ -96,6 +104,7 @@ export const PAINT_INTENT_WRITERS = {
     applyStrokeToLegendEntry: 'scope',
     clearFeatureStrokeOverride: 'edit',
     clearLegendRenameDialog: 'redisplay',
+    renameLegendRow: 'rename',
     // Also the stroke scope choice (`applyStrokeToSelectedFeatures`).
     recordFeatureStrokeOverride: 'edit',
     renameLegendEntry: 'redisplay',
@@ -199,6 +208,31 @@ const namedFunctions = (code) => [...code.matchAll(
 const enclosingFunction = (functions, index) => functions
   .filter(([, start, end]) => start <= index && index < end).at(-1)?.[0] || '';
 
+// The slice-writer import guard: the calls of the writers a module imports
+// from the slice modules of `handles` (`import { … } from '…/drawing/<slice>.js'`,
+// single or double quotes, on one line or several, or `import * as p from …`),
+// whatever handle or alias they receive. A writer is an imported function that
+// `SLICE_READERS` does not list, or a method of an imported slice object other
+// than the listed `capture` and `create`, which makes a new slice; through a
+// namespace import, a function `p.name(` that `SLICE_READERS` does not list. A
+// slice writer handed on as a value (passed or stored, not called), reached
+// through another module's re-export, or called as `p.SLICE.method(` on a
+// namespace is not seen.
+const sliceModuleOf = (handle) => `${handle.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}.js`;
+const importedSliceWriterCalls = (source, code, handles) => {
+  const files = new Set(handles.map(sliceModuleOf));
+  return [...source.matchAll(/\bimport\s*(?:\{([^}]*)\}|\*\s*as\s+([\w$]+))\s*from\s*(['"])([^'"]*\/drawing\/([\w-]+\.js))\3/g)]
+    .filter(({ index, 5: file }) => files.has(file) && code.startsWith('import', index))
+    .flatMap(({ 1: names, 2: namespace }) => namespace ? [{ exported: '', local: namespace }]
+      : names.split(',').map((name) => name.trim()).filter(Boolean).map((name) => {
+        const [, exported, local = exported] = name.match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/);
+        return { exported, local };
+      }))
+    .flatMap(({ exported, local }) => [...code.matchAll(new RegExp(`(?<![\\w$.])${local}\\b(?:\\s*\\.\\s*([\\w$]+))?\\s*\\(`, 'g'))]
+      .filter(({ 1: method }) => method !== 'create' && !SLICE_READERS.includes(exported && method ? `${exported}.${method}` : exported || method))
+      .map(({ index }) => index));
+};
+
 // The writer sites of `names` in one module as `function:line`: a write
 // through a name (a mutating method, an assignment to it, an element, or a
 // member, a `delete`), or a call that receives it. A name assigned without a
@@ -215,7 +249,7 @@ export const writerSites = (source, names, refs = []) => {
     .filter(([, slice]) => slice.members.some((member) => names.includes(member))).map(([handle]) => handle);
   const sliceCalls = sliceHandleCalls(code, handles)
     .filter(({ callee }) => !READERS.has(callee) && !SLICE_READERS.includes(callee)).map(({ index }) => at(index));
-  return [...sliceCalls, ...[...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
+  const nameSites = [...sliceCalls, ...[...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
     const start = match.index;
     const before = code.slice(0, start);
     const ref = refs.includes(match[0]);
@@ -231,6 +265,9 @@ export const writerSites = (source, names, refs = []) => {
     if (!writes) return [];
     return [at(start)];
   })];
+  // A call the handle scan already reports is reported once.
+  const importedCalls = importedSliceWriterCalls(source, code, handles).map(at).filter((site) => !sliceCalls.includes(site));
+  return [...nameSites, ...new Set(importedCalls)];
 };
 
 export const ruleWriters = (source) => writerSites(source, [NAME]);
@@ -384,6 +421,33 @@ test('the writer guard flags a direct edit and leaves reads alone', () => {
     '  return [paintOf(paint), PAINT_SLICE.capture(paint), captureLegendPaint(drawing.slices.paint)];',
     '};'
   ].join('\n')), ['clear:2', 'clear:3']);
+  // The slice-writer import guard: a call of an imported slice writer writes,
+  // whatever handle or alias it receives; `capture`, a listed reader, and
+  // `create` do not.
+  assert.deepEqual(paintWriters([
+    "import { PAINT_SLICE, paintOf, renameListedLegendRow as rename } from '../../services/drawing/paint.js';",
+    'const renameRow = (drawing, row) => {',
+    '  const held = drawing.slices.paint;',
+    '  rename(held, row, {});',
+    '  return [paintOf(held), PAINT_SLICE.capture(held), PAINT_SLICE.create()];',
+    '};',
+    'const restoreRows = (held, rows) => {',
+    '  PAINT_SLICE.install(held, rows);',
+    '};'
+  ].join('\n')).sort(), ['renameRow:4', 'restoreRows:8']);
+  // Double quotes, a multi-line list, and a namespace import are seen too.
+  assert.deepEqual(paintWriters([
+    'import {',
+    '  paintOf,',
+    '  renameListedLegendRow',
+    '} from "../../services/drawing/paint.js";',
+    "import * as paint from '../../services/drawing/paint.js';",
+    'const renameRow = (held, row) => {',
+    '  renameListedLegendRow(held, row, {});',
+    '  paint.renameListedLegendRow(held, row, {});',
+    '  return paintOf(held);',
+    '};'
+  ].join('\n')).sort(), ['renameRow:7', 'renameRow:8']);
   assert.match(ruleWriterProblems({ 'js/app/new-import.js': ['importRules:9'] }).join('\n'),
     /js\/app\/new-import\.js: importRules:9 writes featureVisibilityManualRules/);
   assert.match(ruleWriterProblems({}).join('\n'), /editFeatureVisibilityRules no longer writes/);

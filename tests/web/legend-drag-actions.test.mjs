@@ -109,7 +109,10 @@ const dragFixture = () => {
   const svg = new AttributeNode({
     attributes: {
       [COMPOSITION_SCHEMA_ATTRIBUTE]: '1',
-      [COMPOSITION_METADATA_ATTRIBUTE]: JSON.stringify(metadata)
+      [COMPOSITION_METADATA_ATTRIBUTE]: JSON.stringify(metadata),
+      viewBox: '0 0 400 200',
+      width: '400px',
+      height: '200px'
     }
   });
   svg.selectorCalls = 0;
@@ -131,7 +134,8 @@ const dragFixture = () => {
     legendCurrentOffset: { x: 0, y: 0 },
     layoutRepositionMode: ref(true),
     zoom: ref(1),
-    skipCaptureBaseConfig: ref(false)
+    skipCaptureBaseConfig: ref(false),
+    activeDrawing: () => ({ canvasPadding: null })
   };
   return { legend, state, svg };
 };

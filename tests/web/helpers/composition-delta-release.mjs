@@ -16,7 +16,9 @@ mock.module(compositionUrl, {
       const changed = JSON.stringify(svg.deltas) !== JSON.stringify(deltas);
       svg.deltas = JSON.parse(JSON.stringify(deltas));
       return { changed, binding: null };
-    }
+    },
+    // The stand-ins carry no canvas, so fitting one changes nothing.
+    applyCanvasToSvg: () => false
   }
 });
 const { createLegendLayout } = await import(at('../../../gbdraw/web/js/app/legend-layout.js'));
@@ -27,7 +29,8 @@ const svgs = { R1: { deltas: unmoved }, R2: { deltas: unmoved } };
 const state = {
   results: { value: [{ id: 'R1' }] },
   svgContainer: { value: { querySelector: () => svgs.R1 } },
-  sessionOperationAvailability: () => null
+  sessionOperationAvailability: () => null,
+  activeDrawing: () => ({ canvasPadding: null })
 };
 let mounted = true;
 const restored = [];

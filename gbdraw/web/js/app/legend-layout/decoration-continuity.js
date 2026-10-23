@@ -1,6 +1,6 @@
 // @ts-check
 import {
-  applyCanvasPaddingToSvg,
+  applyCanvasToSvg,
   applyCompositionUserDeltas,
   bindCompositionMetadata,
   compositionUserDeltas,
@@ -117,9 +117,10 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
     if (!Object.values(deltas).some(nonzero)) return null;
     return { deltas, identity: projectRecordIdentity(canonical, catalog?.items?.[index]?.recordKeys), index };
   }).filter(Boolean));
-  const pad = padding ? (/** @type {Element} */ svg) => { applyCanvasPaddingToSvg(svg, padding); } : null;
+  // The canvas holds each moved decoration and then the padding (Owner, 2026-10-23).
+  const fit = (/** @type {Element} */ svg) => { applyCanvasToSvg(svg, padding); };
   if (!snapshots.length) {
-    return pad ? /** @type {DecorationTransformPlan} */ ((_candidate, admission) => admission.catalog.items.map(() => pad)) : null;
+    return padding ? /** @type {DecorationTransformPlan} */ ((_candidate, admission) => admission.catalog.items.map(() => fit)) : null;
   }
   const oldIdentities = (catalog?.items || []).map(item => projectRecordIdentity(canonical, item.recordKeys));
   return /** @type {DecorationTransformPlan} */ ((candidate, admission) => {
@@ -164,10 +165,9 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
           }
         }
         applyCompositionUserDeltas(svg, deltas);
+        fit(svg);
       };
     }
-    return pad ? transforms.map((transform) => (transform
-      ? (svg, context) => { transform(svg, context); pad(svg); }
-      : pad)) : transforms;
+    return padding ? transforms.map((transform) => transform || fit) : transforms;
   });
 };

@@ -750,3 +750,32 @@ test('nonfinite numeric action writes are rejected before History; finite, Auto,
   expect(failed.request).toEqual(baseline.request);
   expect(failed.resultHashes).toEqual(baseline.resultHashes);
 });
+
+test('OV-1656: a gap typed as 1px is stored, saved, and shown as 1 after a fresh Load', async ({ page, browser }, testInfo) => {
+  await openPanel(page);
+  const gap = (target, field = 'Inner gap') => target.getByRole('textbox', { name: `Circular track slot gc_content ${field}`, exact: true });
+  const openGaps = target => target.evaluate(() => { document.querySelector('[data-track-slot-more="gc_content"]').open = true; });
+  await openGaps(page);
+  await gap(page).fill('1px');
+  await gap(page).press('Tab');
+  await expect(gap(page)).toHaveValue('1');
+  expect(await scalar(page, 'gc_content', 'inner_gap_px')).toBe('1');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  const download = await downloadPromise;
+  const path = testInfo.outputPath('gap.gbdraw-session.json.gz');
+  await download.saveAs(path);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
+  const saved = JSON.parse(gunzipSync(readFileSync(path)));
+  expect(saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').inner_gap_px).toBe('1');
+  const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
+  try {
+    await prepare(fresh);
+    await load(fresh, path);
+    await openPanel(fresh);
+    await openGaps(fresh);
+    await expect(gap(fresh)).toHaveValue('1');
+  } finally {
+    await fresh.close();
+  }
+});
