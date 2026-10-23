@@ -1096,6 +1096,33 @@ def _load_source_records(
     )
 
 
+class _NotPrepared(Exception):
+    """A parsed-source lookup that found no entry: it builds nothing."""
+
+
+def prepared_parsed_source(source: RecordInputSource) -> ParsedRecordInputs | None:
+    """The records a Generate parsed from this staged Web source, or ``None``.
+
+    A Worker helper inside ``prepared_input_lookup`` reads the entry the last
+    Generate stored under the same resource identities. On a miss it gets
+    ``None`` and keeps its own reader, so its result and its errors are the
+    ones it has without the cache. The records are shared: a reader must not
+    change them (the lookup checks their owner stamps).
+    """
+
+    cache_spec = _prepared_source_cache_spec(source)
+    if cache_spec is None:
+        return None
+
+    def not_prepared() -> ParsedRecordInputs:
+        raise _NotPrepared
+
+    try:
+        return cast(ParsedRecordInputs, get_or_build_parsed_source(*cache_spec, not_prepared))
+    except _NotPrepared:
+        return None
+
+
 def _prepared_source_cache_spec(
     source: RecordInputSource,
 ) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
@@ -1825,6 +1852,7 @@ __all__ = [
     "ResolvedRecordProvenance",
     "depth_track_inputs_from_cli",
     "parse_cli_bool",
+    "prepared_parsed_source",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",

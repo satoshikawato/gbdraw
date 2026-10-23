@@ -13,6 +13,8 @@ from gbdraw.web_support.request_render import (
     prepared_input_lookup,
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
+from gbdraw.api import GenBankInputSource
+from gbdraw.api.record_planning import prepared_parsed_source
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
@@ -507,12 +509,19 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
     selector = parse_record_selector(_normalize_web_record_selector(record_selector))
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
     if fmt == "genbank":
-        records = list(SeqIO.parse(path, "genbank"))
-        if not records:
+        # The records the last Generate parsed from this staged file (OV-1555),
+        # shared and read only; otherwise this reader's own parse.
+        prepared = prepared_parsed_source(GenBankInputSource(path))
+        source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
+        if not source_records:
             raise ValueError("No records found")
-        records = select_record(records, selector) if selector is not None else [records[0]]
+        records = select_record(source_records, selector) if selector is not None else [source_records[0]]
         if source_feature_catalogs is not None:
-            source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
+            if prepared is None:
+                source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
+            else:
+                catalogs = {id(record): catalog for record, catalog in zip(prepared.records, prepared.source_feature_catalogs)}
+                source_feature_catalogs.extend(catalogs[id(record)] for record in records)
     elif fmt == "gff":
         if not fasta_path:
             raise ValueError("GFF3 protein extraction requires a FASTA path.")
@@ -1770,17 +1779,22 @@ def compute_label_fit_row_json(row_token, kind):
     return json.dumps({"row": _WEB_LABEL_FIT_SEARCHES.row(str(row_token), str(kind))}, ensure_ascii=False)
 
 
-def _with_prepared_input_lookup(helper, paths_argument):
-    """A helper that plans the request the Worker staged for it reads the inputs
+def _with_prepared_input_lookup(helper, paths_argument=None):
+    """A helper that reads the resources the Worker staged for it reads the inputs
     the last Generate prepared (read-only: nothing is published, pruned or
     evicted). The Worker passes the identities of the helper's resource
     manifest after the helper's own arguments; paths_argument is the place
-    of its resource paths among them."""
+    of its resource paths among them, or None when the Worker passes them
+    just before the identities, outside the helper's arguments."""
     def run(*arguments):
         *helper_arguments, identities_json = arguments
+        if paths_argument is None:
+            *helper_arguments, paths_json = helper_arguments
+        else:
+            paths_json = helper_arguments[paths_argument]
         with prepared_input_lookup(
             _WEB_PREPARED_INPUT_CACHE,
-            resource_paths=json.loads(str(helper_arguments[paths_argument])),
+            resource_paths=json.loads(str(paths_json)),
             resource_identities=json.loads(str(identities_json)),
         ):
             return helper(*helper_arguments)
@@ -1797,7 +1811,7 @@ _WEB_JSON_HELPERS = {
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
-    "extract_cds_protein_fasta": (extract_cds_protein_fasta, "extractCdsProteinFasta"),
+    "extract_cds_protein_fasta": (_with_prepared_input_lookup(extract_cds_protein_fasta), "extractCdsProteinFasta"),
     "build_protein_losat_cache_keys_json": (build_protein_losat_cache_keys_json, "buildProteinLosatCacheKeys"),
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),

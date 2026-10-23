@@ -12,6 +12,22 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app: work repeated on unchanged inputs was removed (redundant-work audit).
+  - **Generate Diagram** encodes a newly added file in milliseconds instead of
+    about 0.5 s per 12 MB, **Save Session** no longer re-reads or re-hashes the
+    input files, and returning to Linear no longer reads every File card again
+    (#1293).
+  - **Align** and the feature-edit helpers reuse the inputs the last Generate
+    parsed: the Align helper takes about 0.5-2 s instead of 6-12 s on the
+    Gallery comparison Sessions, and it builds two layouts instead of three.
+    Comparison tables and font subsets are read once (#1294, #1297, #1298).
+  - A blastp threshold change filters the kept hits again instead of parsing
+    every raw protein table, and the protein manifest and raw tables are
+    checked once; a file with several File cards is parsed once (#1295).
+  - Generate no longer stages tables that nothing reads, and the blastp protein
+    extraction reads the GenBank records the Worker already holds instead of
+    receiving and parsing the file again (#1296, #1299).
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.

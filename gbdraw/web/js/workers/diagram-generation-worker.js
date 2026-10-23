@@ -507,7 +507,8 @@ const stageRenderResources = async (
   resourceManifest,
   stagedResources,
   testLifecycleEnabled,
-  requestId
+  requestId,
+  prune
 ) => {
   if (!Array.isArray(resourceManifest) || !Array.isArray(stagedResources)) {
     throw new TypeError('Diagram generation requires a staged resource manifest.');
@@ -605,7 +606,7 @@ const stageRenderResources = async (
     }
   });
   cachedRenderResources.forEach((cached, resourceId) => {
-    if (manifestIds.has(resourceId)) return;
+    if (!prune || manifestIds.has(resourceId)) return;
     if (pyodide.FS.analyzePath(cached.path).exists) pyodide.FS.unlink(cached.path);
     cachedRenderResources.delete(resourceId);
   });
@@ -614,12 +615,26 @@ const stageRenderResources = async (
 };
 
 // Rendering and source-bound helpers enter the same canonical staging boundary.
+// Only a render prunes the resources its manifest does not name: a helper reads
+// the cache and leaves it to the next Generate (Worker cache rules, OV-1590).
 const prepareCanonicalResources = (
   pyodide, workspace, { resourceManifest, stagedResources },
-  { testLifecycleEnabled = false, requestId = 0 } = {}
+  { testLifecycleEnabled = false, requestId = 0, prune = false } = {}
 ) => stageRenderResources(
-  pyodide, workspace, resourceManifest, stagedResources, testLifecycleEnabled, requestId
+  pyodide, workspace, resourceManifest, stagedResources, testLifecycleEnabled, requestId, prune
 );
+
+// The staged paths of a canonical record source: `{ kind: 'genbank', resourceId }`
+// or `{ kind: 'gffFasta', gffResourceId, fastaResourceId }`.
+const stagedRecordSourcePaths = (recordSource, resourcePaths, operation) => {
+  const ids = recordSource?.kind === 'genbank' ? [recordSource.resourceId]
+    : recordSource?.kind === 'gffFasta' ? [recordSource.gffResourceId, recordSource.fastaResourceId] : [];
+  const paths = ids.map((id) => (typeof id === 'string' && Object.hasOwn(resourcePaths, id) ? resourcePaths[id] : null));
+  if (!paths.length || paths.some((path) => !path)) {
+    throw new TypeError(`Diagram helper '${operation}' requires a staged record source.`);
+  }
+  return { source: paths[0], fasta: paths[1] ?? null };
+};
 
 const requireHelperFile = (paths, role, operation) => {
   const path = paths.get(role);
@@ -773,17 +788,27 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'reverseFlag',
       'recordIndex',
       'recordInstanceKey',
-      'featureOverrides'
+      'featureOverrides',
+      'recordSource',
+      'resourceManifest',
+      'stagedResources'
     ],
     fileRoles: ['source', 'fasta', 'visibility'],
-    run: (pyodide, payload, paths, operation) => {
+    // A record of the drawing is staged under its resource ids, so Python reads
+    // the records the last Generate parsed (OV-1555); another file comes in `files`.
+    run: async (pyodide, payload, paths, operation, workspace) => {
       const format = String(payload.format || 'genbank').trim().toLowerCase();
-      const fastaPath = paths.get('fasta') || null;
+      const staged = payload.recordSource === undefined
+        ? null
+        : await prepareCanonicalResources(pyodide, `${workspace}/request`, payload);
+      const { source, fasta: fastaPath } = staged
+        ? stagedRecordSourcePaths(payload.recordSource, staged, operation)
+        : { source: requireHelperFile(paths, 'source', operation), fasta: paths.get('fasta') || null };
       if (format === 'gff' && !fastaPath) {
         throw new TypeError(`Diagram helper '${operation}' requires the 'fasta' file for GFF3.`);
       }
       return callJsonHelper(pyodide, 'extract_cds_protein_fasta', [
-        requireHelperFile(paths, 'source', operation),
+        source,
         format,
         fastaPath,
         payload.regionSpec ?? null,
@@ -793,7 +818,9 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.recordInstanceKey ?? null,
         paths.get('visibility') || null,
         // This record's canonical featureOverrides rows (design Q4, 3.3).
-        payload.featureOverrides == null ? null : JSON.stringify(payload.featureOverrides)
+        payload.featureOverrides == null ? null : JSON.stringify(payload.featureOverrides),
+        jsonArgument(staged, {}),
+        jsonArgument(staged && buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]);
     }
   },
@@ -1091,7 +1118,7 @@ const runGeneration = async ({
     self.postMessage({ type: 'progress', requestId, stage: 'preparing-resources' });
     const resourcePaths = await prepareCanonicalResources(
       pyodide, workspace, { resourceManifest, stagedResources },
-      { testLifecycleEnabled, requestId }
+      { testLifecycleEnabled, requestId, prune: true }
     );
     emitTestLifecycle(
       testLifecycleEnabled,
