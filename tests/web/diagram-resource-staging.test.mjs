@@ -140,3 +140,28 @@ test('staging decodes base64 with the one shared decoder (OV-1560)', async () =>
     /Canonical resource bad contains invalid base64 data\./
   );
 });
+
+test('two Linear cards that read one Session resource both find its committed resource id (OV-1555)', async () => {
+  const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const { adoptCurrentSessionResources, createSessionResourceFileView, sessionResourceSource } = await import(
+    '../../gbdraw/web/js/services/session-resource-backing.js'
+  );
+  const table = adoptCurrentSessionResources({ 'record-1-genbank': descriptor('LOCUS two\nORIGIN\n//\n') });
+  const firstCard = createSessionResourceFileView(table, 'record-1-genbank');
+  const secondCard = createSessionResourceFileView(table, 'record-1-genbank');
+  // A Save serializes each card's view to the one source descriptor, and the last card names its owner;
+  // the request keeps one resource for both cards (`session-request.js` `addFile`).
+  const source = sessionResourceSource(firstCard).descriptor;
+  setResourcePayloadOwner(source, firstCard);
+  setResourcePayloadOwner(source, secondCard);
+  const committed = {
+    'record-1-genbank': setResourcePayloadOwner({ ...source }, secondCard)
+  };
+  assert.equal(resourceIdOwnedBy(committed, firstCard, 'genbank'), 'record-1-genbank');
+  assert.equal(resourceIdOwnedBy(committed, secondCard, 'genbank'), 'record-1-genbank');
+  assert.equal(resourceIdOwnedBy(committed, firstCard, 'fasta'), null);
+  const uploaded = { name: 'new.gb', size: 3 };
+  assert.equal(resourceIdOwnedBy(committed, uploaded, 'genbank'), null);
+  const uploadedResources = { 'record-2-genbank': setResourcePayloadOwner(descriptor('LOCUS new'), uploaded) };
+  assert.equal(resourceIdOwnedBy(uploadedResources, uploaded, 'genbank'), 'record-2-genbank');
+});
