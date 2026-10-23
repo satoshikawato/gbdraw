@@ -658,8 +658,9 @@ class _PreviewPage(_StubPage):
                 'width': width * svg['width'], 'height': height * svg['height']}
 
     def locator(self, _: str) -> object:
-        # No preview search bar: the figure holds keep their framing.
-        return SimpleNamespace(count=lambda: 0)
+        # No preview search bar or controls: the figure holds keep their framing.
+        none = SimpleNamespace(count=lambda: 0)
+        return SimpleNamespace(first=none)
 
     def get_by_role(self, _: str, *, name: str, exact: bool) -> object:
         box = self.BUTTONS[name]
@@ -807,20 +808,29 @@ def test_typing_keeps_its_skim_through_the_pause_after_it(tmp_path: Path, monkey
     assert kinds == ['speed_start', 'hold', 'speed_end'] and holds == [0.25]
 
 
-def test_a_figure_hold_never_cuts_the_search_bar_at_the_top_edge() -> None:
-    from video.tutorials import _clear_edge
+def test_a_figure_hold_never_cuts_the_preview_bars_at_an_edge() -> None:
+    from video.tutorials import _clear_edges
     figure = {'x': 500, 'y': 300, 'width': 1300, 'height': 500}
     height = 800                                   # the view's top edge at y = 150
     cut = {'x': 1200, 'y': 130, 'width': 500, 'height': 40}
-    shift = _clear_edge(figure, height, cut)
+    shift = _clear_edges(figure, height, [cut])
     top = figure['y'] + figure['height'] / 2 - height / 2 + shift
     # Moved down until the bar is out of view, with the whole figure still in view.
     assert top >= cut['y'] + cut['height'] and top <= figure['y']
     assert top + height >= figure['y'] + figure['height']
     # A figure that fills the view below the bar shows the bar whole instead.
     tall = {**figure, 'y': 160, 'height': 760}
-    shift = _clear_edge(tall, height, cut)
+    shift = _clear_edges(tall, height, [cut])
     top = tall['y'] + tall['height'] / 2 - height / 2 + shift
     assert shift < 0 and top <= cut['y'] and top + height >= tall['y'] + tall['height']
     # A bar already whole in view or out of view, or no bar, moves nothing.
-    assert _clear_edge(figure, height, {**cut, 'y': 160}) == 0 == _clear_edge(figure, height, None)
+    assert _clear_edges(figure, height, [{**cut, 'y': 160}]) == 0 == _clear_edges(figure, height, [])
+    # The bottom controls cut by the bottom edge (the Vibrio finished figure): the view moves up until they are out
+    # of view, and the search bar near the top stays whole.
+    wide = {'x': 220, 'y': 400, 'width': 1480, 'height': 200}     # the view spans y 100-900
+    search = {'x': 1050, 'y': 110, 'width': 690, 'height': 40}
+    controls = {'x': 540, 'y': 880, 'width': 840, 'height': 40}
+    shift = _clear_edges(wide, height, [search, controls])
+    top = wide['y'] + wide['height'] / 2 - height / 2 + shift
+    assert top + height <= controls['y'] and top <= search['y']
+    assert top <= wide['y'] and top + height >= wide['y'] + wide['height']

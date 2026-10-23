@@ -959,31 +959,38 @@ def _frame_figure(rec: Recorder) -> dict:
     if figure is None:
         raise AssertionError("No preview figure to show")
     zoom = max(1.0, min(min(VIEWPORT[0] / figure["width"], VIEWPORT[1] / figure["height"]) / 1.08, 2.2))
-    search = rec.page.locator(".preview-feature-search")
-    bar = search.bounding_box() if search.count() and search.first.is_visible() else None
-    shift = _clear_edge(figure, VIEWPORT[1] / zoom, bar and rec._stage_rect(bar)) if not rec.portrait else 0.0
+    shift = 0.0
+    if not rec.portrait:
+        # The search bar over the preview's top and the controls under its bottom.
+        bars = [rec.page.locator(selector).first for selector in (".preview-feature-search", ".preview-controls")]
+        shift = _clear_edges(figure, VIEWPORT[1] / zoom,
+                             [rec._stage_rect(bar.bounding_box()) for bar in bars if bar.count() and bar.is_visible()])
     rec.camera({**figure, "y": figure["y"] + shift}, zoom=zoom, duration=1.0)
     return figure
 
 
-def _clear_edge(figure: dict, height: float, bar: dict | None, *, margin: float = 6) -> float:
-    """How far to move a view of ``height`` centered on ``figure`` so the top edge does not cut ``bar`` in half.
+def _clear_edges(figure: dict, height: float, bars: list[dict], *, margin: float = 6) -> float:
+    """How far to move a view of ``height`` centered on ``figure`` so neither edge cuts one of ``bars`` in half.
 
-    The view keeps its zoom and the whole figure: it moves down until the
-    bar is out of view, or else up until the bar is whole in view; with
-    room for neither it stays.
+    The view keeps its zoom and the whole figure, and each bar ends whole in
+    view or out of view. The smallest move wins; of two equal moves, the one
+    that leaves fewer bars in view. With no such move the view stays.
     """
 
     top = figure["y"] + figure["height"] / 2 - height / 2
-    if not bar or not bar["y"] < top < bar["y"] + bar["height"]:
-        return 0.0
-    room_above, room_below = figure["y"] - top, top + height - (figure["y"] + figure["height"])
-    down, up = bar["y"] + bar["height"] + margin - top, top - (bar["y"] - margin)
-    if down <= room_above:
-        return down
-    if up <= room_below:
-        return -up
-    return 0.0
+
+    def fits(shift: float) -> bool:
+        view = top + shift, top + shift + height
+        return (view[0] <= figure["y"] and view[1] >= figure["y"] + figure["height"]
+                and not any(bar["y"] < edge < bar["y"] + bar["height"] for bar in bars for edge in view))
+
+    def shown(shift: float) -> int:
+        return sum(bar["y"] < top + shift + height and top + shift < bar["y"] + bar["height"] for bar in bars)
+
+    # Either edge just past either side of a bar.
+    moves = {0.0} | {bar["y"] + offset - top - edge for bar in bars
+                     for offset in (-margin, bar["height"] + margin) for edge in (0.0, height)}
+    return min((move for move in moves if fits(move)), key=lambda move: (abs(move), shown(move)), default=0.0)
 
 
 def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4,
