@@ -128,3 +128,23 @@ test('adopted-resource decoding preserves atob behavior on older engines', async
     globalThis.atob = originalAtob;
   }
 });
+
+// OV-1566: `sha256Hex` is the one SHA-256-to-hex owner of the Web modules; the
+// font identity, the Worker's artifact and font identities, and the Pyodide
+// snapshot key call it instead of hex-encoding their own digests.
+test('sha256Hex is the only Web module that hex-encodes a SHA-256 digest', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const webRoot = join(process.cwd(), 'gbdraw/web/js');
+  const files = (await readdir(webRoot, { recursive: true })).filter((path) => path.endsWith('.js'));
+  const digesting = [];
+  for (const path of files) {
+    if ((await readFile(join(webRoot, path), 'utf8')).includes('subtle.digest(')) digesting.push(path);
+  }
+  assert.deepEqual(digesting.sort(), ['services/byte-utils.js']);
+  const { createHash } = await import('node:crypto');
+  const bytes = Uint8Array.from({ length: 300 }, (_, index) => index % 256);
+  const expected = createHash('sha256').update(bytes.subarray(7, 200)).digest('hex');
+  // A view of part of a buffer digests its own bytes, as the Worker's font and artifact readers pass them.
+  assert.equal(await codec.sha256Hex(bytes.subarray(7, 200)), expected);
+  assert.equal(await codec.sha256Hex(bytes.slice(7, 200).buffer), expected);
+});

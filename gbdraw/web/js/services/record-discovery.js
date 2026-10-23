@@ -341,17 +341,24 @@ const startsWithUtf8ByteOrderMark = (bytes) => (
   bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
 );
 
+// The text the browser readers (the record lists here, the LOSAT FASTA in
+// run-analysis.js) read from a file's bytes, or null to decline to the Python
+// reader. Biopython and BCBio read a leading UTF-8 byte order mark as content
+// (Biopython then skips the first record) while the browser's text decoder
+// drops it, so bytes that start with one decline.
+/** @param {Uint8Array} bytes @returns {string | null} */
+export const browserReaderText = (bytes) => (
+  startsWithUtf8ByteOrderMark(bytes) ? null : bytesToText(bytes)
+);
+
 // The text the no-Worker fast path reads, or null to decline to the Worker.
-// Biopython and BCBio read a leading UTF-8 byte order mark as content while the
-// browser's text decoder drops it, so an upload that starts with one declines.
 // A Session resource is a file Python already read for its Result.
 /** @param {FileLike | null | undefined} file @returns {Promise<string | null>} */
 const readFastPathText = async (file) => {
   if (getSessionResourceSource(file)) return readFileText(file);
   if (typeof file?.text !== 'function') return null;
   if (typeof file.arrayBuffer !== 'function') return file.text();
-  const bytes = await readFileBytes(file);
-  return startsWithUtf8ByteOrderMark(bytes) ? null : bytesToText(bytes);
+  return browserReaderText(await readFileBytes(file));
 };
 
 // The fast path returns exactly the records the loader reads, or declines.

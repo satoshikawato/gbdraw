@@ -489,6 +489,30 @@ test('LOSAT FASTA extraction reports a region beyond the record as a region fail
   assert.equal((await extract('2-1')).fasta, '>TINY.1\nGT\n');
 });
 
+// A GenBank record without a sequence (a CON record: CONTIG, no ORIGIN) is a
+// record of the file for the record list and for Python's SeqIO.parse, so the
+// LOSAT reader counts it too: `#2` names that record, whose FASTA only the
+// Python reader can report (it reports UndefinedSequenceError), and `#3` names
+// the third record, not a fourth.
+test('a GenBank record without a sequence keeps its place in the LOSAT records', async () => {
+  const record = (id, body) => [
+    `LOCUS       ${id}                       8 bp    DNA     linear   UNK 01-JAN-1980`,
+    `ACCESSION   ${id}`, 'FEATURES             Location/Qualifiers', ...body, '//'
+  ].join('\n');
+  const withSequence = (id, bases) => record(id, ['ORIGIN', `        1 ${bases}`]);
+  const contigOnly = (id) => record(id, [`CONTIG      join(${id}0:1..8)`]);
+  const extract = (text, recordSelector) => extractLosatFastaFast({ text, fmt: 'genbank', regionSpec: null, recordSelector });
+  const middle = [withSequence('AAA', 'acgtacgt'), contigOnly('BBB'), withSequence('CCC', 'ttttgggg')].join('\n') + '\n';
+  assert.equal((await extract(middle, '')).recordId, 'AAA');
+  await assert.rejects(extract(middle, '#2'), /no sequence/);
+  await assert.rejects(extract(middle, 'BBB'), /no sequence/);
+  assert.equal((await extract(middle, '#3')).fasta, '>CCC\nTTTTGGGG\n');
+  // The automatic record is the first record, as the drawing reads it.
+  const first = [contigOnly('BBB'), withSequence('AAA', 'acgtacgt')].join('\n') + '\n';
+  await assert.rejects(extract(first, ''), /no sequence/);
+  assert.equal((await extract(first, '#2')).recordId, 'AAA');
+});
+
 // OV-436: two chromosomes of one File were named "Vibrio parahaemolyticus" and
 // "NC_004605.1" because only the first drew a Definition.
 test('every record of a File is named by the File definition plus its accession', () => {
