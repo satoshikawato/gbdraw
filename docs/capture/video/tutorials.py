@@ -958,9 +958,32 @@ def _frame_figure(rec: Recorder) -> dict:
     figure = rec.figure()
     if figure is None:
         raise AssertionError("No preview figure to show")
-    zoom = min(VIEWPORT[0] / figure["width"], VIEWPORT[1] / figure["height"]) / 1.08
-    rec.camera(figure, zoom=max(1.0, min(zoom, 2.2)), duration=1.0)
+    zoom = max(1.0, min(min(VIEWPORT[0] / figure["width"], VIEWPORT[1] / figure["height"]) / 1.08, 2.2))
+    search = rec.page.locator(".preview-feature-search")
+    bar = search.bounding_box() if search.count() and search.first.is_visible() else None
+    shift = _clear_edge(figure, VIEWPORT[1] / zoom, bar and rec._stage_rect(bar)) if not rec.portrait else 0.0
+    rec.camera({**figure, "y": figure["y"] + shift}, zoom=zoom, duration=1.0)
     return figure
+
+
+def _clear_edge(figure: dict, height: float, bar: dict | None, *, margin: float = 6) -> float:
+    """How far to move a view of ``height`` centered on ``figure`` so the top edge does not cut ``bar`` in half.
+
+    The view keeps its zoom and the whole figure: it moves down until the
+    bar is out of view, or else up until the bar is whole in view; with
+    room for neither it stays.
+    """
+
+    top = figure["y"] + figure["height"] / 2 - height / 2
+    if not bar or not bar["y"] < top < bar["y"] + bar["height"]:
+        return 0.0
+    room_above, room_below = figure["y"] - top, top + height - (figure["y"] + figure["height"])
+    down, up = bar["y"] + bar["height"] + margin - top, top - (bar["y"] - margin)
+    if down <= room_above:
+        return down
+    if up <= room_below:
+        return -up
+    return 0.0
 
 
 def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4,
