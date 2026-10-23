@@ -1424,8 +1424,9 @@ def full_edit(recording: Recording, finale_frames: int) -> Edit:
     opening = _clip_pieces(recording, recording.story.opening, 1.0, 1.0, 0)
     pieces = [
         *opening,
+        # After an opening the title card cuts in quickly, so its logo curl is not drawn under the dissolve.
         Piece("intro", round((OPENING_INTRO_SECONDS if opening else INTRO_SECONDS) * FPS),
-              fade=CHAPTER_FADE if opening else 0),
+              fade=CUT_FADE if opening else 0),
         Piece("recording", math.ceil(recording.duration * FPS),
               moments=tuple(n / FPS for n in range(math.ceil(recording.duration * FPS))), fade=CHAPTER_FADE),
     ]

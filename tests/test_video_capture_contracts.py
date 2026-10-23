@@ -61,7 +61,7 @@ def test_an_opening_plays_labeled_clips_before_a_short_title_card() -> None:
     assert first.caption == (None, 'First', '') and second.caption == (None, 'Second', '')
     assert first.moments[0] == pytest.approx(4.0) and abs(first.frames - 1.0 * FPS) <= 1
     assert second.moments[0] == pytest.approx(10.5) and abs(second.frames - 2.0 * FPS) <= 1
-    assert pieces[2].frames == round(OPENING_INTRO_SECONDS * FPS)
+    assert pieces[2].frames == round(OPENING_INTRO_SECONDS * FPS) and pieces[2].fade == walkthrough_render.CUT_FADE
     assert pieces[3].caption is None and pieces[3].frames == 20 * FPS
     # A story without an opening keeps its title card first and at full length.
     recording.story = dataclasses.replace(story, opening=())
