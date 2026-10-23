@@ -1321,6 +1321,23 @@ def _normalize_plot_title(plot_title: str | None) -> str:
     return str(plot_title or "").strip()
 
 
+def _circular_record_definition_profile(
+    *,
+    record_count: int,
+    show_plot_title: bool,
+    keep_full_definition_with_plot_title: bool,
+) -> Literal["full", "record_summary"]:
+    """The center definition a record draws: the full one, or the record summary.
+
+    A shown plot title replaces the species lines unless the full definition is
+    kept; without a title only a single record draws the full definition.
+    """
+
+    if show_plot_title:
+        return "full" if keep_full_definition_with_plot_title else "record_summary"
+    return "full" if record_count == 1 else "record_summary"
+
+
 def _apply_circular_plot_title_font_size_override(
     *,
     cfg: GbdrawConfig,
@@ -2466,6 +2483,7 @@ def assemble_circular_diagram_from_record(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
+    _layout_definition_profile: Literal["full", "record_summary", "shared_common"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
@@ -2575,12 +2593,11 @@ def assemble_circular_diagram_from_record(
     )
     if _definition_profile == "full":
         show_plot_title = normalized_plot_title_position != "none"
-        if show_plot_title and keep_full_definition_with_plot_title:
-            effective_definition_profile = "full"
-        elif show_plot_title:
-            effective_definition_profile = "record_summary"
-        else:
-            effective_definition_profile = "full"
+        effective_definition_profile = _circular_record_definition_profile(
+            record_count=1,
+            show_plot_title=show_plot_title,
+            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+        )
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
     circular_track_axis_index = _validate_circular_track_axis_index(
@@ -2838,6 +2855,10 @@ def assemble_circular_diagram_from_record(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
+        # The radial layout reserves the definition drawn without the plot title (OV-1710).
+        layout_definition_profile=(
+            _definition_profile if _layout_definition_profile is None else _layout_definition_profile
+        ),
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
         title_content=title_content,
@@ -3070,11 +3091,16 @@ def assemble_circular_diagram_from_records(
     )
     cfg = replace(cfg, canvas=canvas_cfg)
     show_plot_title = normalized_plot_title_position != "none"
-    record_definition_profile: Literal["full", "record_summary"] = "record_summary"
-    if len(records) == 1 and not show_plot_title:
-        record_definition_profile = "full"
-    elif show_plot_title and keep_full_definition_with_plot_title:
-        record_definition_profile = "full"
+    record_definition_profile = _circular_record_definition_profile(
+        record_count=len(records),
+        show_plot_title=show_plot_title,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+    )
+    layout_definition_profile = _circular_record_definition_profile(
+        record_count=len(records),
+        show_plot_title=False,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+    )
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
         cfg,
@@ -3223,6 +3249,7 @@ def assemble_circular_diagram_from_records(
             identity=identity,
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
+            _layout_definition_profile=layout_definition_profile,
             _precomputed_depth_tracks=(
                 record_depth_track_data[record_index]
                 if record_depth_track_data is not None

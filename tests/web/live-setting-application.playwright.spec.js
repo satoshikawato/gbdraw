@@ -13,6 +13,7 @@ const { open, addColorRule, addVisibilityRule } = require('./helpers/live-genera
 const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
 const HEPA = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz';
 const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
+const HMMT_AT_SKEW = 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json';
 const LEGEND_FONT = 'input[aria-label="Legend font size"]';
 const PLOT_TITLE = 'input[aria-label="Plot Title"]';
 const LEGEND_FONT_OVERRIDE = 'objects.legends.font_size.short';
@@ -176,6 +177,35 @@ test('lambda: a Plot Title change redraws the Linear Result and equals a Generat
     expect(after.generationKey).toBe(before.generationKey);
     expect(after.plotTitle).toBe('G1 live title');
     await expectLiveEqualsGenerate(page, { label: 'Linear Plot Title' });
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-1710: a Circular Plot Title changes only the center text. It replaces the
+// species lines with the record summary; the inside slots keep their radii, live
+// and on Generate.
+test('HmmtDNA AT skew: a Circular Plot Title keeps the inside slots and equals a Generate from the same draft', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, HMMT_AT_SKEW);
+  const slotRadii = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.trackSlotResolvedGeometry.value.records[0].slots.map((slot) => [slot.slotId, slot.radiusFactor, slot.widthPx]);
+  });
+  try {
+    await generateNow(page);
+    const before = await slotRadii();
+    const position = page.locator('select[aria-label="Plot Title Position"]');
+    for (const details of await position.locator('xpath=ancestor::details').all()) {
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+    }
+    await position.selectOption('top');
+    await commitValue(page, PLOT_TITLE, 'OV-1710 live title');
+    await expect.poll(async () => (await facts(page)).content?.includes('OV-1710 live title'), { timeout: APPLY_TIMEOUT }).toBe(true);
+    await settleLive(page);
+    await expectLiveEqualsGenerate(page, { label: 'Circular Plot Title' });
+    // The Generate's resolved geometry; the live Result equals that Generate.
+    expect(await slotRadii()).toEqual(before);
   } finally {
     await page.context().close();
   }
