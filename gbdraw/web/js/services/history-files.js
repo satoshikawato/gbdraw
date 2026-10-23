@@ -1,6 +1,7 @@
 // @ts-check
 /** A File, or any object the History keeps as one. */
 /** @typedef {{ name: string, size: number, type?: string, lastModified?: number }} HistoryFile */
+/** What `registerFile` accepts: a File, a Session resource view, or anything else (which is not registered). @typedef {{ name?: string, size?: number, type?: string, lastModified?: number } | null | undefined} InputFileCandidate */
 /**
  * A file binding: the frozen name of one stored file (`InputFileStore.registerFile`).
  * It is not a `Blob`; its bytes are `InputFileStore.fileOf(ref)`.
@@ -21,6 +22,13 @@ const isFileLike = (value) =>
   typeof /** @type {{ size?: unknown }} */ (value).size === 'number' &&
   // A ref names a stored file; it is never stored as one.
   !Object.hasOwn(/** @type {object} */ (value), 'fileId');
+
+/**
+ * @param {unknown} value
+ * @returns {value is InputFileRef}
+ */
+export const isInputFileRef = (value) => Boolean(value) && typeof value === 'object'
+  && typeof /** @type {{ fileId?: unknown }} */ (value).fileId === 'string';
 
 /**
  * @param {unknown} value
@@ -51,7 +59,7 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
  */
 /**
  * @typedef {object} InputFileStore
- * @property {(file: HistoryFile | null | undefined) => InputFileRef | null} registerFile
+ * @property {(file: InputFileCandidate) => InputFileRef | null} registerFile
  * @property {(ref: InputFileRef | null | undefined) => HistoryFile | null} fileOf
  * @property {(value: HistoryFileValue) => HistoryFileDescriptorValue} describeValue
  * @property {(value: HistoryDescriptorTree) => HistoryFileValue} restoreValue
@@ -71,10 +79,12 @@ export const createHistoryFileStore = () => {
 
   /**
    * The one frozen ref of a file, registering the file on its first call.
-   * @param {HistoryFile | null | undefined} file
+   * @param {InputFileCandidate} file
    * @returns {InputFileRef | null}
    */
   const registerFile = (file) => {
+    // A ref of this store stays bound; a ref it has released names nothing.
+    if (isInputFileRef(file)) return files.get(file.fileId)?.ref || null;
     if (!isFileLike(file)) return null;
     const existingId = idsByFile.get(file);
     const existing = existingId ? files.get(existingId) : undefined;

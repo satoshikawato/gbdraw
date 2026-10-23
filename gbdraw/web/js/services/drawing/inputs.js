@@ -6,7 +6,8 @@
 // file through one owner. The bound IDs keep their files stored: the store
 // releases a file only when no History step and no binding names it.
 
-/** @import { HistoryFile, InputFileRef, InputFileStore } from '../history-files.js' */
+/** @import { HistoryFile, InputFileCandidate, InputFileRef, InputFileStore } from '../history-files.js' */
+import { isInputFileRef } from '../history-files.js';
 
 /**
  * The bindings that name stored files: the input fields, the Linear record
@@ -17,12 +18,74 @@
  * @property {() => readonly { readonly linearComparisonPlan?: { readonly edges?: readonly { readonly file?: unknown }[] } | null }[]} drawingList
  */
 
+
 /**
- * @param {unknown} value
- * @returns {value is InputFileRef}
+ * A comparison file a Linear diagram uploaded for one edge, by ref.
+ * @typedef {{ file?: InputFileRef | null }} InputComparisonFile
  */
-export const isInputFileRef = (value) => Boolean(value) && typeof value === 'object'
-  && typeof /** @type {{ fileId?: unknown }} */ (value).fileId === 'string';
+
+/**
+ * The input file fields of the project (`state.files`): each names its stored
+ * files by `InputFileRef` of `state.inputFiles`.
+ * @typedef {object} InputFiles
+ * @property {InputFileRef | null} c_gb
+ * @property {InputFileRef | null} c_gff
+ * @property {InputFileRef | null} c_fasta
+ * @property {InputFileRef | (InputFileRef | null)[] | (InputFileRef | null)[][] | null} c_depth one record's series, or a record-major matrix
+ * @property {InputFileRef[]} c_conservation_blasts
+ * @property {string | null} c_conservation_blasts_source a flag (`'losat-cache'`), not a file
+ * @property {InputFileRef[]} c_conservation_fastas
+ * @property {(InputFileRef | null)[]} c_conservation_sequence_sources
+ * @property {InputComparisonFile[]} linearCanonicalComparisons
+ * @property {InputFileRef | null} d_color
+ * @property {InputFileRef | null} t_color
+ * @property {InputFileRef | null} blacklist
+ * @property {InputFileRef | null} whitelist
+ * @property {InputFileRef | null} qualifier_priority
+ */
+
+/** The `InputFiles` fields that hold one ref or null. @typedef {'c_gb' | 'c_gff' | 'c_fasta' | 'd_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} InputFileSlot */
+
+/**
+ * Bind a file to one input field: the store registers it and the field holds
+ * its ref. This is the one writer of a single-file field.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputFiles} files
+ * @param {InputFileSlot} slot
+ * @param {InputFileCandidate} file
+ * @returns {InputFileRef | null}
+ */
+export const bindInputFile = (store, files, slot, file) => {
+  const ref = store.registerFile(file);
+  files[slot] = ref;
+  return ref;
+};
+
+/** The `InputFiles` fields that hold a list of refs. @typedef {'c_conservation_blasts' | 'c_conservation_fastas'} InputFileListSlot */
+
+/**
+ * Bind the files of one list field; a place that holds no file is dropped.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputFiles} files
+ * @param {InputFileListSlot} slot
+ * @param {InputFileCandidate | readonly InputFileCandidate[]} list
+ * @returns {InputFileRef[]}
+ */
+export const bindInputFileList = (store, files, slot, list) => {
+  const refs = registerInputFiles(store, list).filter((ref) => ref !== null);
+  files[slot] = refs;
+  return refs;
+};
+
+/**
+ * The refs of a file or a list of files, each place kept (null for no file).
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputFileCandidate | readonly InputFileCandidate[]} list
+ * @returns {(InputFileRef | null)[]}
+ */
+export const registerInputFiles = (store, list) => (
+  (Array.isArray(list) ? list : (list ? [list] : [])).map((file) => store.registerFile(file))
+);
 
 // The fields of `files` that bind input files; the other members are flags
 // (`c_conservation_blasts_source`) or generated data.
