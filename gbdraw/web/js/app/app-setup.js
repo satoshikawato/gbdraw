@@ -598,10 +598,19 @@ export const createAppSetup = () => {
     refreshCanvas: () => {},
     editorDisabledReason: () => ''
   };
-  const linearTypographyDrawing = state.drawingOfMode('linear');
+  /**
+   * The shown drawing when it is of `drawingMode`, else null: a mode panel's
+   * handler does nothing for another mode's drawing. Resolved at each call,
+   * never cached.
+   * @param {DiagramMode} drawingMode
+   * @returns {DrawingState | null}
+   */
+  const shownDrawingOfMode = (drawingMode) => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === drawingMode ? drawing : null;
+  };
   const linearTypography = createLinearTypographyController({
-    adv: linearTypographyDrawing.adv,
-    linked: linearTypographyDrawing.linearTypographyLinked,
+    shownDrawing: () => shownDrawingOfMode('linear'),
     mutationAvailability: sessionOperationAvailability
   });
 
@@ -749,7 +758,8 @@ export const createAppSetup = () => {
   };
 
   const syncLinearRecordLayout = ({ preserveLosatCacheInfo = false } = {}) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return false;
     const next = reconcileLinearRecordLayout(linearSeqs, drawing.linearRecordRows);
     const rowsUnchanged = next.length === drawing.linearRecordRows.length && next.every((entry, index) => (
       entry.uid === drawing.linearRecordRows[index]?.uid && entry.row === drawing.linearRecordRows[index]?.row
@@ -763,7 +773,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} uid @param {unknown} row */
   const setLinearRecordRow = (uid, row) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
@@ -775,7 +786,8 @@ export const createAppSetup = () => {
   };
   /** @param {boolean} enabled */
   const setLinearRecordLayoutEnabled = (enabled) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const nextEnabled = Boolean(enabled);
@@ -787,7 +799,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} uid @param {number} direction */
   const moveLinearRecordWithinRow = (uid, direction) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = moveLinearRecordInRow(linearSeqs, drawing.linearRecordRows, uid, direction);
@@ -819,11 +832,14 @@ export const createAppSetup = () => {
     const { intentKey } = linearComparisonUi.value;
     return intentKey === 'custom' ? 'selected' : intentKey;
   });
-  const canRunLinearLosat = computed(() => state.drawingOfMode('linear').drawnLinearSeqs.value.filter((sequence) => (
-    lInputType.value === 'gff'
-      ? sequence.gff && sequence.fasta
-      : sequence.gb
-  )).length >= 2);
+  const canRunLinearLosat = computed(() => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing !== null && drawing.drawnLinearSeqs.value.filter((sequence) => (
+      lInputType.value === 'gff'
+        ? sequence.gff && sequence.fasta
+        : sequence.gb
+    )).length >= 2;
+  });
 
   /** @type {{ readonly value: LinearSourceGroup[] }} */
   const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
@@ -914,7 +930,7 @@ export const createAppSetup = () => {
     await nextTick();
     return details;
   };
-  watch([mode, () => state.drawingOfMode('linear').hasActiveLinearLosatIntent.value], (/** @type {[DiagramMode, boolean]} */ [activeMode, activeLosat]) => {
+  watch([mode, () => state.activeDrawing().hasActiveLinearLosatIntent.value], (/** @type {[DiagramMode, boolean]} */ [activeMode, activeLosat]) => {
     if (activeMode === 'linear' && activeLosat) openLinearComparisonDisclosure('settings');
   }, { flush: 'post' });
 
