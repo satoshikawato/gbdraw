@@ -451,10 +451,10 @@ const RING_TABLE_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation
  * converts each ring's whole-file LOSAT rows once per raw search and frame: the conversion is kept on the reference
  * File (or GFF3 and FASTA pair), whose bytes never change, under the ring's raw cache key (which names immutable
  * search output) and the records' selector, crop and orientation. Each ring keeps its last frame only, and a failed
- * conversion is not kept.
+ * conversion is not kept, nor one of a ring without current search output (`cacheKey` null).
  * @param {readonly [FileLike] | readonly [FileLike, FileLike]} referenceFiles The Files the request's records read.
  * @param {{ renderRequest: unknown, records: readonly unknown[], resources: GenerationPayload['resources'] }} request
- * @param {readonly { resourceId: string, cacheKey: string }[]} rings
+ * @param {readonly { resourceId: string, cacheKey: string | null }[]} rings
  * @returns {Promise<Map<string, ConvertedResource>>}
  */
 const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, records, resources }, rings) => {
@@ -472,14 +472,17 @@ const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, re
       RING_TABLE_CONVERSION
     ))
   );
-  const tables = rings.map(({ resourceId, cacheKey }, index) => readOncePerFile(
-    referenceFiles, `ring-search-frame-${index}:${cacheKey}\n${frameKey}`, async () => {
+  const tables = rings.map(({ resourceId, cacheKey }, index) => {
+    const convert = async () => {
       missing.push(resourceId);
       const table = (await conversion).get(resourceId);
       if (!table) throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
       return Object.freeze(table);
-    }, 1
-  ));
+    };
+    return cacheKey === null
+      ? convert()
+      : readOncePerFile(referenceFiles, `ring-search-frame-${index}:${cacheKey}\n${frameKey}`, convert, 1);
+  });
   startConversion(missing);
   const converted = await Promise.all(tables);
   return new Map(rings.map(({ resourceId }, index) => [resourceId, converted[index]]));
@@ -2814,8 +2817,9 @@ export const createRunAnalysis = ({
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
       /**
-       * Each ring LOSAT search, in ring order: its raw cache key and the Source recipe's generated BLAST table.
-       * @type {{ cacheKey: string, path: string, name: string, slot: string }[]}
+       * Each ring LOSAT search, in ring order: its raw cache key (null without current search output) and the
+       * Source recipe's generated BLAST table.
+       * @type {{ cacheKey: string | null, path: string, name: string, slot: string }[]}
        */
       const circularRingSearches = [];
       /** @type {Map<string, GeneratedCliFile>} */
@@ -3273,12 +3277,13 @@ export const createRunAnalysis = ({
             const resolved = [];
             for (const pair of losatPairs) {
               const cached = cacheMap.get(pair.cacheKey);
-              const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
+              const current = isCurrentRawLosatCacheEntry(cached);
+              const blastText = current ? cached.text : '';
               const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
               // Its name is the Source recipe's name for this ring's generated BLAST table, recorded once the
               // request holds the table in the search frame.
               circularRingSearches.push({
-                cacheKey: pair.cacheKey,
+                cacheKey: current ? pair.cacheKey : null,
                 path: blastPath,
                 name: pair.filename,
                 slot: `generatedFiles.circular_conservation_blasts[${pair.sourceIndex}]`
