@@ -47,7 +47,7 @@
           "path": "tests/web/feature-visibility-rule-writers.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+          "retireWhen": "never: the slices alone write their members (R15); this guard names which callers call a slice writer, by route"
         },
         {
           "path": "tests/web/mode-scoped-feature-edits.playwright.spec.js",
@@ -79,6 +79,11 @@
           "path": "tests/web/feature-visibility-rule-writers.test.mjs",
           "symbol": "PAINT_INTENT_WRITERS",
           "kind": "writer-map"
+        },
+        {
+          "path": "tests/web/helpers/drawing-state.mjs",
+          "symbol": "SLICE_READERS",
+          "kind": "set"
         }
       ]
     },
@@ -90,19 +95,19 @@
           "path": "tests/web/contracts/live-generate-parity-allowed.json",
           "rootCause": "P1",
           "job": "playwright-functional",
-          "retireWhen": "edit-unify removes the second projection (multi-drawing M4)"
+          "retireWhen": "never: the walk reads it"
         },
         {
           "path": "tests/web/feature-color-actions.test.mjs",
           "rootCause": "P1",
           "job": "web-contracts-pr",
-          "retireWhen": "edit-unify removes the second projection (multi-drawing M4)"
+          "retireWhen": "never: it pins that each color action shows its edit through the one port showEditorIntent"
         },
         {
           "path": "tests/web/feature-visibility-actions.test.mjs",
           "rootCause": "P1",
           "job": "web-contracts-pr",
-          "retireWhen": "edit-unify removes the second projection (multi-drawing M4)"
+          "retireWhen": "never: it pins that each visibility action shows its edit through the one port showEditorIntent"
         },
         {
           "path": "tests/web/gui-audit-20260930-editor.playwright.spec.js",
@@ -111,22 +116,40 @@
           "retireWhen": "never"
         },
         {
+          "path": "tests/web/helpers/live-random-walk.mjs",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/helpers/live-work-allowlist.mjs",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
           "path": "tests/web/live-generate-parity-legend.playwright.spec.js",
           "rootCause": "P1",
           "job": "playwright-functional",
-          "retireWhen": "a seeded random walk in the pull-request shards replaces the case matrix after edit-unify (multi-drawing M4)"
+          "retireWhen": "never: named regression cases whose setups the pull-request walk does not build"
         },
         {
           "path": "tests/web/live-generate-parity-track-data.playwright.spec.js",
           "rootCause": "P1",
           "job": "playwright-functional",
-          "retireWhen": "a seeded random walk in the pull-request shards replaces the case matrix after edit-unify (multi-drawing M4)"
+          "retireWhen": "never: named regression cases whose setups the pull-request walk does not build"
         },
         {
           "path": "tests/web/live-generate-parity.playwright.spec.js",
           "rootCause": "P1",
           "job": "playwright-functional",
-          "retireWhen": "a seeded random walk in the pull-request shards replaces the case matrix after edit-unify (multi-drawing M4)"
+          "retireWhen": "never: it holds the work guard and named regression cases; a matrix case leaves when the pull-request walk draws its kind in the states it pinned, which the walk spec asserts"
+        },
+        {
+          "path": "tests/web/live-generate-random-walk.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "never"
         }
       ],
       "allowlists": [
@@ -327,7 +350,7 @@
           "path": "tests/web/feature-visibility-rule-writers.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
-          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+          "retireWhen": "never: the slices alone write their members (R15); this guard names which callers call a slice writer, by route"
         },
         {
           "path": "tests/web/track-layout-transition.playwright.spec.js",
@@ -407,6 +430,12 @@
           "retireWhen": "never"
         },
         {
+          "path": "tests/web/history-per-drawing.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
           "path": "tests/web/history.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
@@ -469,16 +498,28 @@
       "heading": "R13: Owner layering and ports",
       "guards": [
         {
+          "path": "tests/web/drawing-context.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/drawing-slices.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
           "path": "tests/web/owner-graph-baseline.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
-          "retireWhen": "never: the layer, forward-closure, heavy-derived, identity-from-display, injection-edge, and whole-object-port detectors stay; M3 retires only the state-backdoor detector, and the projection call-shape count retires with the pull-request random walk (M4)"
+          "retireWhen": "never: the layer, forward-closure, heavy-derived, identity-from-display, injection-edge, and whole-object-port detectors stay; the state-backdoor detector left it when state was frozen; the projection call-shape count stays (the pull-request random walk compares live with Generate and never sees how a projection is called)"
         },
         {
           "path": "tests/web/owner-graph-detectors.test.mjs",
           "rootCause": "P10",
           "job": "web-contracts-pr",
-          "retireWhen": "never: it tests the detectors that stay; the cases of a retired detector leave with its code (checker-only pull request)"
+          "retireWhen": "never: it tests the detectors; the state-backdoor cases leave with their code in the checker-only pull request that deletes it"
         },
         {
           "path": "tests/web/owner-graph-replay.test.mjs",
@@ -568,13 +609,25 @@
           "path": "tests/web/drawing-context.test.mjs",
           "rootCause": "P2",
           "job": "web-contracts-pr",
-          "retireWhen": "never: its state key classes and drawing-resolution checks stay; M3 moves the drawing member list into the slices"
+          "retireWhen": "never: its state key classes and drawing-resolution checks stay; the drawing members come from the slices"
+        },
+        {
+          "path": "tests/web/drawing-of-mode-cap.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "the Session format holds a list of drawings and no module resolves a drawing by its mode (multi-drawing B)"
+        },
+        {
+          "path": "tests/web/drawing-slices.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
         },
         {
           "path": "tests/web/helpers/drawing-state.mjs",
           "rootCause": "P2",
           "job": "web-contracts-pr",
-          "retireWhen": "never: the state key classes stay; after M3 it reads the drawing members from the slices"
+          "retireWhen": "never: the state key classes stay, and it reads the drawing members from the slices"
         },
         {
           "path": "tests/web/mode-scoped-session.test.mjs",
@@ -601,7 +654,18 @@
           "retireWhen": "never"
         }
       ],
-      "allowlists": []
+      "allowlists": [
+        {
+          "path": "tests/web/drawing-of-mode-cap.test.mjs",
+          "symbol": "DRAWING_OF_MODE_CAP",
+          "kind": "count"
+        },
+        {
+          "path": "tests/web/drawing-of-mode-cap.test.mjs",
+          "symbol": "ID_BY_MODE_OWNERS",
+          "kind": "set"
+        }
+      ]
     },
     {
       "id": "CW",

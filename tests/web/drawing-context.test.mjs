@@ -66,6 +66,13 @@ test('every state key and drawing member is in exactly one class', () => {
   }
 });
 
+// R13: `state` is frozen, so no module adds or replaces a member at run time;
+// tsc (R14, tests/web/typed-boundaries.test.mjs) refuses such a write in a
+// module, since the frozen object's type is read-only.
+test('state is frozen: no module adds or replaces a state member', () => {
+  assert.ok(Object.isFrozen(state));
+});
+
 test('only the drawings hold the drawing keys, one drawing per mode', () => {
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');

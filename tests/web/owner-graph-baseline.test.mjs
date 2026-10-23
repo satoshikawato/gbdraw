@@ -7,12 +7,14 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 // R13 baseline (gbdraw/web/CLAUDE.md "Owner layering and ports"). The
 // detectors in tools/web-owner-graph-detectors.mjs observe the coupling
 // channels the import graph does not: owner objects injected at composition,
-// closures bound to owners created later, functions assigned into state,
-// factories that take whole owner objects, heavy derived trigger sites,
-// identities read from display values, and the call shapes of each projection
-// domain outside its owner.
+// closures bound to owners created later, factories that take whole owner
+// objects, heavy derived trigger sites, identities read from display values,
+// and the call shapes of each projection domain outside its owner.
+// `state` is frozen (tests/web/drawing-context.test.mjs), so no detector counts
+// functions assigned into it; that detector's code leaves in a checker-only
+// pull request.
 //
-// The two literals are registered design-rule allowlists
+// The literal is a registered design-rule allowlist
 // (tools/web-design-rule-guards.json, R13, kind `count-map`): an observed
 // count may not exceed its entry, and adding or raising an entry is an
 // authority-only change. Each entry is `detector|subject` with its count (1
@@ -86,7 +88,6 @@ const PROJECTION_SHAPE_BASELINE = {
 const SUBJECT_DETECTORS = [
   'owner-graph.injection-edge.v1',
   'owner-graph.forward-closure.v2',
-  'owner-graph.state-backdoor.v1',
   'owner-graph.whole-object-port.v1',
   'owner-graph.identity-from-display.v1'
 ];

@@ -34,11 +34,12 @@ export const DRAWING_SLICES = Object.freeze({
 // not list), so a call of one is no write of its caller (R2,
 // tests/web/feature-visibility-rule-writers.test.mjs). Any other call that
 // receives a handle writes.
+// A registered design-rule allowlist (tools/web-design-rule-guards.json, R2,
+// kind `set`): a new entry is an authority-only change.
 export const SLICE_READERS = Object.freeze([
-  ...Object.keys({
-    CANVAS_SLICE, GROUP_NAMES_SLICE, ANNOTATION_SETS_SLICE, VISIBILITY_RULES_SLICE, COLOR_RULES_SLICE, PALETTE_SLICE,
-    LABEL_TABLES_SLICE, FEATURE_EDITS_SLICE, PAINT_SLICE, SETTINGS_SLICE
-  }).map((slice) => `${slice}.capture`),
+  'CANVAS_SLICE.capture', 'GROUP_NAMES_SLICE.capture', 'ANNOTATION_SETS_SLICE.capture', 'VISIBILITY_RULES_SLICE.capture',
+  'COLOR_RULES_SLICE.capture', 'PALETTE_SLICE.capture', 'LABEL_TABLES_SLICE.capture', 'FEATURE_EDITS_SLICE.capture',
+  'PAINT_SLICE.capture', 'SETTINGS_SLICE.capture',
   'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
   'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
