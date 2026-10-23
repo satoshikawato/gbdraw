@@ -465,3 +465,40 @@ def test_build_all_refuses_used_directories_before_building(tmp_path: Path) -> N
     with pytest.raises(FileExistsError, match='tobacco-chloroplast'):
         build_video.build_all(['tobacco-chloroplast'], tmp_path / 'out', collect=collect)
     assert not (tmp_path / 'out').exists()
+
+
+def test_title_card_curl_reads_the_loader_geometry_from_the_app() -> None:
+    mark = walkthrough_render.loader_mark()
+    first, second = mark.pens
+    # Pen A starts the stroke; pen B starts before pen A ends, as in the app's loader.
+    assert first.offset == 0 and 0 < second.offset < first.path_length
+    assert mark.total == pytest.approx(second.offset + second.path_length)
+    assert mark.drawn(0) == 0 and mark.drawn(walkthrough_render.CURL_SECONDS) == 1
+    assert 0 < mark.drawn(walkthrough_render.CURL_SECONDS / 2) < 1
+    index = walkthrough_render.INDEX_HTML.read_text(encoding='utf-8')
+    with pytest.raises(ValueError):
+        walkthrough_render.loader_mark(index.replace('id="gbdraw-loader-template"', 'id="moved"'))
+    with pytest.raises(ValueError):
+        walkthrough_render.loader_mark(index.replace('animation-timing-function: cubic-bezier', 'timing: cubic-bezier'))
+
+
+@pytest.mark.parametrize('width', [820, 760])
+def test_the_finished_curl_is_the_static_logo_mark(width: int) -> None:
+    curl = walkthrough_render.logo_curl(width)
+    logo = walkthrough_render._white_logo(width)
+    split = curl.split
+    static = logo.getchannel('A').crop((0, 0, split, logo.height))
+    drawn = curl.mark(1.0).getchannel('A')
+    assert drawn.size == logo.size and drawn.crop((split, 0, logo.width, logo.height)).getbbox() is None
+    drawn = drawn.crop((0, 0, split, logo.height))
+    # Only the antialiased rim may differ: under 4% of the mark's coverage at the intro widths.
+    difference = sum(abs(a - b) for a, b in zip(static.getdata(), drawn.getdata()))
+    assert difference < 0.04 * sum(static.getdata())
+    # The word keeps everything right of the mark, and nothing of the mark.
+    word = curl.word.getchannel('A')
+    assert word.crop((0, 0, split, logo.height)).getbbox() is None
+    assert list(word.crop((split, 0, logo.width, logo.height)).getdata()) == \
+        list(logo.getchannel('A').crop((split, 0, logo.width, logo.height)).getdata())
+    assert curl.mark(0.0).getchannel('A').getbbox() is None
+    half = sum(curl.mark(0.5).getchannel('A').getdata())
+    assert 0.2 * sum(drawn.getdata()) < half < 0.8 * sum(drawn.getdata())
