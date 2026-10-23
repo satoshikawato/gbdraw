@@ -173,7 +173,9 @@ class Clip:
     """A cut of the recording from ``before`` s around mark ``first`` to ``after`` s around mark ``last``.
 
     Offsets are on the walkthrough timeline. A clip with a ``label`` shows it
-    as its caption instead of the step's.
+    as its caption instead of the step's. A clip with a ``frame`` keeps one
+    fixed framing of the drawing, the ``figure`` rect that the recording logged
+    on the mark of that name, instead of the recording's camera moves.
     """
 
     first: str
@@ -181,6 +183,7 @@ class Clip:
     last: str
     after: float
     label: str = ""
+    frame: str = ""
 
 
 @dataclass(frozen=True)
@@ -249,7 +252,7 @@ PROMO_STORY = Story(
              Clip("hl-font", -1.0, "hl-font", 0.0, "Chinese text in the figure"),
              *(Clip(f"hl-rotate-{n}", -0.5, f"hl-rotate-{n}", 0.0, "Start at any base") for n in range(1, 5)),
              *(Clip(f"hl-lane-{n}", -0.5, f"hl-lane-{n}", 0.0, "Features on lanes you choose") for n in range(1, 5)),
-             *(Clip(mark, before, mark, 0.0, "Similarity-group alignment") for n in range(1, 4)
+             *(Clip(mark, before, mark, 0.0, "Similarity-group alignment", "hl-align-1") for n in range(1, 4)
                for mark, before in ((f"hl-align-click-{n}", -0.4), (f"hl-align-{n}", -0.6)))))
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
@@ -567,6 +570,15 @@ class Camera:
         if index < 0:
             return self._clamp(self.viewport[0] / 2, self.viewport[1] / 2, self.max_h)
         return self._clamp(*self._at(index, output), self._stage_at(output))
+
+    def fixed(self, rect: dict) -> tuple[tuple[float, float, float], tuple[str | None, float]]:
+        """The still view that shows the whole ``rect`` of the page, and its inset (corner, opacity)."""
+
+        zoom = min(self.viewport[0] / rect["width"], self.viewport[1] / rect["height"]) / PORTRAIT_PAD
+        event = {"cx": rect["x"] + rect["width"] / 2, "cy": rect["y"] + rect["height"] / 2, "zoom": zoom,
+                 "rect": rect, "portrait": rect, "subject": None}
+        state, corner = self._target(event, self._stages[0])
+        return state, (corner, 1.0 if corner else 0.0)
 
     def inset_at(self, output: float) -> tuple[str | None, float]:
         """The inset's corner at ``output`` and its opacity: it fades out and back in when the corner changes."""
@@ -1344,6 +1356,7 @@ class Recording:
         self.popovers = [(out(e["t"]), out(e["t"] + e["duration"]), e)
                          for e in self.events if e["kind"] in ("menu", "swatch")]
         self.marks = {e["name"]: out(e["t"]) for e in self.events if e["kind"] == "mark"}
+        self.figures = {e["name"]: e["figure"] for e in self.events if e["kind"] == "mark" and e.get("figure")}
         self.steps = sorted({step for _, (step, _, _) in self.captions if step is not None})
         self._decoded: tuple[int, Image.Image] | None = None
 
@@ -1387,6 +1400,7 @@ class Piece:
     fade: int = 0             # frames of cross-dissolve from the previous piece
     caption: tuple | None = None   # recording pieces: a fixed caption instead of the recording's
     caption_held: bool = False     # the fixed caption is already on screen from the piece before: no new fade-in
+    figure: dict | None = None     # recording pieces: the drawing's stage rect, framed still instead of the camera moves
 
     @property
     def start(self) -> float:
@@ -1453,6 +1467,8 @@ def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wa
         missing = {clip.first, clip.last} - set(recording.marks)
         if missing:
             raise ValueError(f"Recording lacks marks {sorted(missing)}")
+        if clip.frame and clip.frame not in recording.figures:
+            raise ValueError(f"Recording logged no figure on mark {clip.frame!r}")
         start = recording.marks[clip.first] + clip.before
         stop = recording.marks[clip.last] + clip.after
         if stop <= start:
@@ -1460,7 +1476,8 @@ def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wa
         moments = _moments(recording.timemap, start, stop, speed, wait_speed)
         pieces.append(Piece("recording", len(moments), moments=moments, speed=speed,
                             fade=first_fade if index == 0 else 0 if held else CUT_FADE,
-                            caption=(None, clip.label, "") if clip.label else None, caption_held=held))
+                            caption=(None, clip.label, "") if clip.label else None, caption_held=held,
+                            figure=recording.figures[clip.frame] if clip.frame else None))
     return pieces
 
 
@@ -1530,7 +1547,8 @@ class Composer:
                 self.overlay.caption(step if edit.numbered else None, lang(title), lang(subtitle))
 
     # recording ------------------------------------------------------------
-    def _screen(self, moment: float, view: tuple[float, float, float]) -> Image.Image:
+    def _screen(self, moment: float, view: tuple[float, float, float], inset: tuple[str | None, float]
+                ) -> Image.Image:
         rec = self.recording
         frame = rec.source_frame(moment)
         cx, cy, vh = view
@@ -1545,7 +1563,7 @@ class Composer:
         def to_screen(x: float, y: float) -> tuple[float, float]:
             return (x - left) * scale, (y - top) * scale
 
-        self._inset(screen, moment, view)
+        self._inset(screen, moment, view, inset)
         draw = ImageDraw.Draw(screen, "RGBA")
         for start, stop, event in rec.popovers:
             if start <= moment < stop + 0.15:
@@ -1587,10 +1605,11 @@ class Composer:
                                  border.resize(outer, Image.Resampling.LANCZOS), pad)
         return self._static[key]
 
-    def _inset(self, screen: Image.Image, moment: float, view: tuple[float, float, float]) -> None:
+    def _inset(self, screen: Image.Image, moment: float, view: tuple[float, float, float],
+               inset: tuple[str | None, float]) -> None:
         """Draw the whole stage, small, with the part the window shows marked."""
 
-        corner, alpha = self.camera.inset_at(moment)
+        corner, alpha = inset
         if corner is None or alpha <= 0:
             return
         rec = self.recording
@@ -1675,7 +1694,8 @@ class Composer:
         rec = self.recording
         moment = piece.moment(local)
         extras = []
-        inset = self.camera.inset_at(moment)
+        view, inset = self.camera.fixed(piece.figure) if piece.figure else (self.camera.at(moment),
+                                                                           self.camera.inset_at(moment))
         for start, (text, icon) in rec.toasts:
             age = moment - start
             if 0 <= age < 2.8:
@@ -1692,7 +1712,7 @@ class Composer:
             caption, caption_in, previous = piece.caption, 1.0 if piece.caption_held else local / FPS / 0.35, None
         else:
             caption, caption_in, previous = rec.caption_at(moment, piece.start)
-        return self._compose_card(self._screen(moment, self.camera.at(moment)), caption, caption_in, previous,
+        return self._compose_card(self._screen(moment, view, inset), caption, caption_in, previous,
                                   extras, edit)
 
     def _finale_frame(self, piece: Piece, local: int, edit: Edit) -> Image.Image:

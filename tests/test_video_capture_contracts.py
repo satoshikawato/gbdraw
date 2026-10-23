@@ -126,6 +126,32 @@ def test_clips_with_one_label_read_as_one_highlight() -> None:
     assert cues[0][1] == cues[1][0] == pytest.approx(1.0, abs=0.1)   # one cue for both clips, no gap before the next
 
 
+def test_a_clip_with_a_frame_keeps_the_drawing_in_one_still_view() -> None:
+    figure = {'x': 789.0, 'y': 500.0, 'width': 786.0, 'height': 254.0}
+    clips = (Clip('a', -0.5, 'a', 0.0, 'Same', 'a'), Clip('b', -0.5, 'b', 0.0, 'Same', 'a'), Clip('c', -0.5, 'c', 0.0))
+    recording = SimpleNamespace(marks={'a': 5.0, 'b': 9.0, 'c': 12.0}, figures={'a': figure},
+                                timemap=TimeMap.build([], 0.0, 20.0))
+    framed, also_framed, plain = walkthrough_render._clip_pieces(recording, clips, 1.0, 1.0, 0)
+    assert framed.figure == also_framed.figure == figure and plain.figure is None
+    with pytest.raises(ValueError, match='no figure'):
+        walkthrough_render._clip_pieces(SimpleNamespace(marks=recording.marks, figures={}, timemap=recording.timemap),
+                                        clips[:1], 1.0, 1.0, 0)
+    # The still view shows the whole rect, centered, whatever the camera did there; the portrait inset follows.
+    camera = Camera([], TimeMap.build([], 0.0, 5.0), (1920, 1080), PORTRAIT)
+    (cx, cy, height), (corner, alpha) = camera.fixed(figure)
+    width = height * PORTRAIT.aspect
+    assert cx - width / 2 <= figure['x'] and figure['x'] + figure['width'] <= cx + width / 2
+    assert cy - height / 2 <= figure['y'] and figure['y'] + figure['height'] <= cy + height / 2
+    assert (corner is None) == (alpha == 0.0)
+
+
+def test_a_mark_logs_the_figure_it_can_frame(tmp_path: Path) -> None:
+    rec = Recorder(_StubPage(1920, 1080), tmp_path)
+    rec._origin = 0.0
+    rec.mark('hl-x')
+    assert rec.events[-1] == {'t': rec.events[-1]['t'], 'kind': 'mark', 'name': 'hl-x', 'figure': None}
+
+
 def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> None:
     from video import promo
 
@@ -148,6 +174,8 @@ def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> N
     assert len(set(groups)) == len(groups) >= 3 and len(promo.ALIGN_GENES) == len(promo.ALIGN_MARKS)
     assert all(clip.first == clip.last and clip.after == 0.0 for clip in clips)
     assert [-clip.before for clip in clips] == [0.4, 0.6] * len(promo.ALIGN_MARKS)
+    # Every cut frames the whole drawing at one scale, from the figure logged on the first result's mark.
+    assert {clip.frame for clip in clips} == {promo.ALIGN_MARKS[0]}
     indexes = [opening.index(clip) for clip in clips]
     assert indexes == list(range(indexes[0], indexes[0] + len(clips)))
     # The language highlight shows the pane before, the menu pick, and the pane after; the opening stays short.

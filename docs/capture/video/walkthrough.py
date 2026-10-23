@@ -332,9 +332,13 @@ class Recorder:
         self.event("toast", text=text, icon=icon)
 
     def mark(self, name: str) -> None:
-        """Name a moment so edits can cut the recording by meaning, not by time."""
+        """Name a moment so edits can cut the recording by meaning, not by time.
 
-        self.event("mark", name=name)
+        The event also logs ``figure``, the preview figure's stage rect then (None before the first result), so
+        an edit can frame the whole drawing still at that moment (``Clip.frame``).
+        """
+
+        self.event("mark", name=name, figure=self.figure())
 
     def fast_forward(self, *, factor: float | None = None, target: float | None = None) -> None:
         """Start a fast-forward; one started inside another plays at the outer one's speed."""
