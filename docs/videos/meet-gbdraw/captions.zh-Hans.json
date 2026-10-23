@@ -340,7 +340,7 @@
     "11 interface languages": "共 11 种界面语言",
     "Including Simplified and Traditional Chinese": "含简体中文与繁體中文",
     "Load an example": "加载示例",
-    "The human mitochondrial genome opens as a finished map": "人类线粒体基因组，打开即是完整图谱",
+    "The human mitochondrial genome with AT skew opens as a finished map": "人类线粒体基因组与AT偏斜，打开即是完整图谱",
     "Any font for the figure text": "图中文字可用任意字体",
     "Load a font file; the plot title can be in Chinese too": "加载字体文件，图表标题也能写中文",
     "Start a circular record at any base": "环状记录可从任意碱基开始",
@@ -353,7 +353,12 @@
     "Click a gene, choose Align…, and the clusters line up in one step": "点击基因，选择“对齐…”，基因簇一键对齐",
     "Save a Session and continue any time": "保存会话，随时继续",
     "Run info gives the command line that redraws the figure": "“运行信息”给出重现图谱的命令行",
-    "Command line: pip install gbdraw": "命令行：pip install gbdraw"
+    "Command line: pip install gbdraw": "命令行：pip install gbdraw",
+    "Simplified Chinese interface": "简体中文界面",
+    "Chinese text in the figure": "图中也能写中文",
+    "Start at any base": "任意碱基为起点",
+    "Features on lanes you choose": "特征放到子轨道",
+    "Similarity-group alignment": "相似性组对齐"
   },
   "patterns": [
     {
