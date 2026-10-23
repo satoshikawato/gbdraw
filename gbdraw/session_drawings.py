@@ -33,7 +33,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, Sequence, cast
+import json
+from typing import Any, Literal, Mapping, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import (
@@ -49,15 +50,23 @@ from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
+    FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
+    MODE_SCOPED_SESSION_MIN_VERSION,
     OTHER_MODE_RESULT_EDITOR_FIELDS,
     OTHER_MODE_RESULT_FIELDS,
     OTHER_MODE_RESULT_LEGEND_FIELDS,
     OTHER_MODE_RESULT_UI_FIELDS,
     WEB_BINDING_CARD_SLOTS,
+    ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     WEB_BINDING_MODE_SLOTS,
+    session_legend_edits_by_row_key,
     session_mode,
 )
-from gbdraw.web_support.mode_scoped_settings import SLICE_CONTAINERS
+from gbdraw.web_support.mode_scoped_settings import (
+    MODE_SCOPED_SETTINGS,
+    SLICE_CONTAINERS,
+    ModeScopedSetting,
+)
 
 DrawingMode = Literal["circular", "linear"]
 DRAWING_NAMES: Mapping[str, str] = MappingProxyType(
@@ -694,12 +703,15 @@ def _drawings_document(
     names: Sequence[str],
     active: int,
     project_views: Sequence[Mapping[str, Any]],
+    drop_unreferenced: bool = False,
 ) -> dict[str, Any]:
     """The Session 49 document of ``views``, one one-drawing view per drawing.
 
     ``project_views`` give the project fields: the first gives them, and the
     others may repeat but not change them. Each drawing keeps the LOSAT
     entries its own view carries, so an entry two drawings use is in both.
+    A resource that no drawing names is refused, or left out with
+    ``drop_unreferenced``.
     """
 
     if not views or len(ids) != len(views) or len(names) != len(views):
@@ -723,7 +735,9 @@ def _drawings_document(
             )
     drawings = [_drawing_of_view(view, drawing_id, name) for view, drawing_id, name in zip(views, ids, names)]
     unreferenced = _unreferenced_resources(project, drawings)
-    if unreferenced:
+    if unreferenced and drop_unreferenced:
+        project["resources"] = _without(_mapping(project["resources"]), frozenset(unreferenced))
+    elif unreferenced:
         raise ValidationError(
             "No drawing names the resources " + ", ".join(unreferenced) + "; leave them out of the Session.",
             diagnostic=_LAYOUT_INVALID,
@@ -847,6 +861,178 @@ def replace_session_drawings(
     )
 
 
+class ModeScopedSourceFacts(TypedDict):
+    """What a Session 46-48 held that its Session 49 cannot say.
+
+    These are the only facts that carry a source version past
+    :func:`drawings_document_from_mode_scoped`: ``cardRowsAreFileRows`` (a
+    Session 48 without a Web draft: the file cards' rows are file rows), and
+    ``proteinResultsInDrawnFrame`` (a Session 46 or 47: stored protein
+    comparison results are in the drawn frame of their records).
+    """
+
+    cardRowsAreFileRows: bool
+    proteinResultsInDrawnFrame: bool
+
+
+# Each mode's default draft, shaped as a Session 46-48 mode slice
+# (``modes[mode]``), for rule d of the move to drawings. The Web owns these
+# defaults; Python has no copy of them yet (OV-1658).
+ModeSliceDefaults = Mapping[DrawingMode, Mapping[str, object]]
+
+_ABSENT = object()
+
+
+def _row_value(mode_slice: Mapping[str, object], row: ModeScopedSetting) -> object:
+    holder: object = mode_slice
+    for part in row.domain.split("."):
+        holder = holder.get(part, _ABSENT) if isinstance(holder, Mapping) else _ABSENT
+    return holder.get(row.path, _ABSENT) if isinstance(holder, Mapping) else _ABSENT
+
+
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _keyed_entries(value: object, key: str) -> dict[str, str]:
+    """A keyed-row value's entries, canonical, by entry key (registry ``key``)."""
+
+    if isinstance(value, Mapping):
+        return {str(entry_key): _canonical(entry) for entry_key, entry in value.items()}
+    fields = key[len("JSON["):-1].split(",") if key.startswith("JSON[") else [key]
+    entries: dict[str, str] = {}
+    for entry in value if isinstance(value, list) else ():
+        identity = [entry.get(field) for field in fields] if isinstance(entry, Mapping) else [entry]
+        entries[_canonical(identity)] = _canonical(entry)
+    return entries
+
+
+def _used_by_settings(
+    slices: Mapping[str, object],
+    mode: DrawingMode,
+    other: DrawingMode,
+    slice_defaults: ModeSliceDefaults | None,
+) -> bool:
+    """Rule d: a registry row of ``mode``'s slice that differs from ``mode``'s
+    default and, unless the row is ``mode``'s alone, from ``other``'s value
+    (entry by entry for a keyed row). An absent row is the default."""
+
+    own = _mapping(slices.get(mode))
+    shown = _mapping(slices.get(other))
+    for row in MODE_SCOPED_SETTINGS:
+        if row.modes not in ("both", mode):
+            continue
+        value = _row_value(own, row)
+        if value is _ABSENT:
+            continue
+        if slice_defaults is None:
+            raise ValidationError(
+                f"Deciding whether the {mode} settings of a Session were used needs each mode's "
+                "default settings (OV-1658).",
+                diagnostic=_LAYOUT_INVALID,
+            )
+        default = _row_value(_mapping(slice_defaults.get(mode)), row)
+        if default is not _ABSENT and _canonical(value) == _canonical(default):
+            continue
+        if row.modes == mode:
+            return True
+        shown_value = _row_value(shown, row)
+        if shown_value is _ABSENT:
+            return True
+        if row.key is None:
+            if _canonical(value) != _canonical(shown_value):
+                return True
+            continue
+        shown_entries = _keyed_entries(shown_value, row.key)
+        if any(shown_entries.get(entry_key) != entry for entry_key, entry in _keyed_entries(value, row.key).items()):
+            return True
+    return False
+
+
+def _binds_input(bindings: Mapping[str, object], mode: DrawingMode) -> bool:
+    """Rule c: a binding of ``mode``'s input slots names a file (a Depth file
+    alone counts; an empty ``linearSeqs`` row does not)."""
+
+    from gbdraw.session_resources import canonical_resource_ids
+
+    return any(canonical_resource_ids(bindings.get(slot)) for slot in WEB_BINDING_MODE_SLOTS[mode])
+
+
+def _undrawn_view(data: Mapping[str, Any], mode: DrawingMode) -> dict[str, Any]:
+    """The one-drawing view of ``mode`` in a Session 46-48 that holds no Result of it."""
+
+    view = _shared(data)
+    view["renderRequest"] = None
+    view["results"] = []
+    view["editorState"] = {**view["editorState"], "featureCatalog": None}
+    view["ui"] = {**view["ui"], "mode": mode}
+    return view
+
+
+def drawings_document_from_mode_scoped(
+    data: Mapping[str, object],
+    *,
+    slice_defaults: ModeSliceDefaults | None = None,
+) -> tuple[GbdrawSession49, ModeScopedSourceFacts]:
+    """The Session 49 of a validated Session 46-48, and what only the source says.
+
+    The rules of the Product Contract (PD-OI-090, the move of an earlier
+    Session) as the design lists them: each mode's committed set goes to its
+    mode's drawing (:func:`read_session_drawings`); the drawing of ``ui.mode``
+    comes first and is the active one; the other mode's drawing is made only
+    when it is used: it has a Result, a non-null input binding of its mode,
+    or a registry row that differs from its default and from the shown
+    mode's value (``slice_defaults``; without them a document that needs
+    this rule is refused). Each drawing keeps its own mode's slice, input
+    bindings, request metadata and the file cards' bindings, and a copy of
+    the LOSAT artifacts (:func:`_drawing_of_view`); the IDs and names are the
+    modes'. A Session 46 gets its Legend edits keyed by row key first
+    (:func:`gbdraw.session_io.session_legend_edits_by_row_key`). Resources no
+    drawing names are left out. The Web's ``upgradeModeScopedSession`` is the
+    twin; ``tests/fixtures/sessions/drawings-vectors.json`` pins both.
+    """
+
+    version = data.get("version")
+    if not isinstance(version, int) or not MODE_SCOPED_SESSION_MIN_VERSION <= version < DRAWINGS_SESSION_MIN_VERSION:
+        raise ValidationError(
+            f"Only a Session {MODE_SCOPED_SESSION_MIN_VERSION}-{CURRENT_SESSION_VERSION} moves to drawings; "
+            f"this one is {version!r}.",
+            diagnostic=_LAYOUT_INVALID,
+        )
+    source: Mapping[str, Any] = data
+    if version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
+        source, _outcomes = session_legend_edits_by_row_key(data)
+    committed = {drawing.mode: dict(drawing.artifacts.fields) for drawing in read_session_drawings(source)}
+    if not committed:
+        raise ValidationError("The Session names no drawing to move.", diagnostic=_LAYOUT_INVALID)
+    shown_mode = _mapping(source.get("ui")).get("mode")
+    shown = cast(DrawingMode, shown_mode) if shown_mode in DRAWING_NAMES else next(iter(committed))
+    other: DrawingMode = "linear" if shown == "circular" else "circular"
+    slices = _mapping(source.get("modes"))
+    views = [committed.get(shown) or _undrawn_view(source, shown)]
+    if other in committed:
+        views.append(committed[other])
+    elif _binds_input(_mapping(_mapping(source.get("webFiles")).get("bindings")), other) or (
+        other in slices and _used_by_settings(slices, other, shown, slice_defaults)
+    ):
+        views.append(_undrawn_view(source, other))
+    modes = [_view_mode(view) for view in views]
+    document = _drawings_document(
+        views,
+        ids=modes,
+        names=[DRAWING_NAMES[mode] for mode in modes],
+        active=0,
+        project_views=views,
+        drop_unreferenced=True,
+    )
+    has_draft = any(isinstance(_mapping(value).get("config"), Mapping) for value in slices.values())
+    facts: ModeScopedSourceFacts = {
+        "cardRowsAreFileRows": version >= FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION and not has_draft,
+        "proteinResultsInDrawnFrame": version < FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
+    }
+    return cast(GbdrawSession49, document), facts
+
+
 __all__ = [
     "DRAWING_NAMES",
     "PROJECT_FIELDS",
@@ -858,8 +1044,11 @@ __all__ = [
     "active_session_drawing",
     "allocate_drawing_id",
     "allocate_session_drawing",
+    "ModeScopedSourceFacts",
+    "ModeSliceDefaults",
     "checked_drawing_views",
     "drawing_draft_config",
+    "drawings_document_from_mode_scoped",
     "read_session_drawings",
     "replace_session_drawings",
     "write_session_drawings",

@@ -46,6 +46,7 @@ from gbdraw.session_drawings import (
     SessionDrawingParts,
     active_session_drawing,
     allocate_session_drawing,
+    drawings_document_from_mode_scoped,
     read_session_drawings,
     replace_session_drawings,
     write_session_drawings,
@@ -1291,8 +1292,13 @@ def upgrade_session_document(
     document: SessionDocument | Mapping[str, Any] | str | Path,
     *,
     temporary_directory: str | Path | None = None,
+    version: int = CURRENT_SESSION_VERSION,
 ) -> SessionUpgrade:
-    """Return a Session in the current version without rendering it.
+    """Return a Session in the current version, or in ``version`` 49, without rendering it.
+
+    With ``version=49`` the Session is upgraded to the current version as
+    below and then moved to drawings
+    (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`).
 
     A current document, or a Session 49, is returned unchanged. A Session 46 or 47 keeps its
     drawings; a Session 46 gets its Legend color and stroke edits keyed by
@@ -1316,7 +1322,27 @@ def upgrade_session_document(
     27-30 have no canonical request and raise :class:`SessionVersionError`.
     """
 
-    loaded = load_session_document(document)
+    if version not in (CURRENT_SESSION_VERSION, DRAWINGS_SESSION_MIN_VERSION):
+        raise SessionVersionError(
+            f"A Session upgrades to version {CURRENT_SESSION_VERSION} or "
+            f"{DRAWINGS_SESSION_MIN_VERSION}, not {version}."
+        )
+    upgrade = _upgrade_to_current(load_session_document(document), temporary_directory)
+    if version < DRAWINGS_SESSION_MIN_VERSION or upgrade.document.version >= DRAWINGS_SESSION_MIN_VERSION:
+        return upgrade
+    try:
+        drawings, _source_facts = drawings_document_from_mode_scoped(upgrade.document.to_dict())
+    except SessionError:
+        raise
+    except ValidationError as exc:
+        raise SessionConversionError(str(exc)) from exc
+    return SessionUpgrade(SessionDocument(cast(Mapping[str, Any], drawings)), upgrade.warnings)
+
+
+def _upgrade_to_current(
+    loaded: SessionDocument,
+    temporary_directory: str | Path | None,
+) -> SessionUpgrade:
     # A Session 49 is newer than the current version until the flip.
     if loaded.version >= CURRENT_SESSION_VERSION:
         return SessionUpgrade(loaded)
