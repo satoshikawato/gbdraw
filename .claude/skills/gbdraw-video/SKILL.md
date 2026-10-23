@@ -1,6 +1,6 @@
 ---
 name: gbdraw-video
-description: Plan, record, edit, and check gbdraw videos - tutorial takes, feature promotions, landscape and portrait (phone) cuts, and localized takes - by the Owner's video rules - example choice, opening highlights, fast-forward of redundant scenes, progressive tutorials, framing, captions, and the checks before delivery. Use before planning or recording any gbdraw video, when changing a recording journey or the renderer, and when reviewing a finished take.
+description: Plan, record, edit, and check gbdraw videos - tutorial takes, feature promotions, landscape and portrait (phone) cuts, and localized takes - by the Owner's video rules - example choice, opening highlights, fast-forward of redundant scenes, progressive tutorials, framing, captions, reproducible takes with a review script, and the checks before delivery. Use before planning or recording any gbdraw video, when changing a recording journey or the renderer, and when reviewing a finished take.
 ---
 
 # gbdraw videos
@@ -12,10 +12,13 @@ branches, which are not pushed. Find the newest one with
 `git branch --list 'video/*' --sort=-committerdate`. A video never changes the
 app: a bug found while recording gets an OV ID and a normal PR to `dev`.
 
+How to record a take that can be repeated, review it with
+`scripts/review_take.py`, and deliver it: [RECORDING.md](RECORDING.md).
+
 ## Before recording
 
 - **Purpose and kind.** A tutorial teaches one Gallery tutorial step by step. A
-  promotion shows a release's features in about 70-100 s. Decide which one you
+  promotion shows a release's features in about 70-120 s. Decide which one you
   are making and who watches it before you write a journey.
 - **Build.** Record the released app: the newest release tag, which is what
   users install and what gbdraw.app serves. Do not record `dev`.
@@ -25,16 +28,23 @@ app: a bug found while recording gets an OV ID and a normal PR to `dev`.
   (Owner 2026-10-23). Keep the example's labels, Legend, colors, and tracks, and
   change only the setting being shown (AGENTS.md "Showcase Figure Quality").
 - **Language.** A localized take switches the app with the header **Language**
-  menu on camera before the first step. Captions name controls exactly as that
-  locale's catalog names them. Never call a translation reviewed.
+  menu on camera before the first step. Show the change on the settings pane:
+  the pane in English, the menu pick, then the same pane in the target
+  language, at one framing (Owner 2026-10-23). Captions name controls exactly
+  as that locale's catalog names them. Never call a translation reviewed.
 
 ## Structure
 
 1. **Highlights first (Owner 2026-10-23).** Open with the strongest results
-   before the title card. A promotion opens with a 5-8 s montage of the
-   features' results, one short label per clip. A tutorial opens with its
-   finished figure for 2-3 s. Cut the highlights from the same recording; they
-   need no second recording.
+   before the title card. A promotion opens with a montage of the features'
+   results, one short label per highlight, in about 5-10 s. A tutorial opens
+   with its finished figure for 2-3 s. Cut the highlights from the same
+   recording; they need no second recording.
+   - **Show a change as it happens (Owner 2026-10-23).** A highlight of a
+     setting that changes the figure, such as the start position or lanes, is
+     a sequence of at least four versions, each with a different gene. Show
+     them at one framing, about 0.5 s each, with hard cuts under one label.
+     The change must be obvious at phone size.
 2. A short title card (about 2 s).
 3. The steps, numbered as in the tutorial or the caption sheet.
 4. An outro over the final figure, with where to get gbdraw.
@@ -90,8 +100,8 @@ Keep these at normal speed:
 
 ## Checks before delivery
 
-- Extract a frame sheet with one frame per caption and per highlight clip,
-  plus evenly spaced frames. Look at it, and at the key moments at full size.
+- Run `scripts/review_take.py` (RECORDING.md, "Review a take"). Look at its
+  cue sheet and opening sheet, and at the key moments at full size.
 - Check each item:
   - every intermediate result is readable;
   - nothing is cut off;
