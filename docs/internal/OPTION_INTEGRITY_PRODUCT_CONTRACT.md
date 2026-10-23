@@ -2807,7 +2807,8 @@ Status: active Product authority
   `A / PROJECT-WITH-DRAWINGS` is kept), and `OIC-030` is amended to match.
   They come from four replies of the Product Decision Owner `satoshikawato`
   of `2026-10-23` (campaign `multi-drawing-project-20261007`, `OWNER-DECISIONS`
-  R16-2 to R16-5), given to questions asked after the Owner invited questions.
+  R16-2 to R16-5), given to questions the session asked because the choices
+  are the Product Decision Owner's.
   Each question is quoted with its options, and each reply as written. The
   parenthesized text after an option is that option's description.
   - PQ-1 (R16-2): 「PQ-1（DRAWINGS-B）: drawing の追加・複製・削除を Undo/Redo したとき、どの drawing を表示しますか？ 表示中の drawing を削除したときも同じ方式です。」
