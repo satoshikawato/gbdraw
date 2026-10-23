@@ -2,6 +2,7 @@
 /** @import { LegendFontFaceTable } from '../utils/legend-font-metrics.generated.js' */
 /** @import { RegisteredLegendFace } from './legend-layout.js' */
 /** @import { FontFamilyList, FontFamilyName, GenericFontFamily } from './font-families.js' */
+import { sha256Hex } from './byte-utils.js';
 import { comparableFamilyName, parseFontFamilyList } from './font-families.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -63,10 +64,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  */
 
 /** @param {ArrayBuffer} bytes @returns {Promise<FontIdentity>} */
-export const fontIdentityOf = async (bytes) => {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
-  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
-};
+export const fontIdentityOf = (bytes) => sha256Hex(bytes);
 
 /** @param {unknown} value @returns {value is RegisteredFontFacts} */
 const isFontFacts = (value) => {
