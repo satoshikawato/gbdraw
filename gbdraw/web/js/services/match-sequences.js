@@ -5,8 +5,11 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
-import { readFileText } from './file-content-cache.js';
-import { gffFastaReaderSelector, parseSequenceRecordsFast, readParsedSequenceRecords } from './record-discovery.js';
+import {
+  gffFastaReaderSelector,
+  readAllSequenceRecords,
+  readComparisonSequenceRecords
+} from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
 import { t } from '../utils/i18n.js';
 
@@ -1099,9 +1102,9 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 };
 
 /**
- * A file's records as the browser sequence reader parses them, once per File (OV-1680). A file that reader
- * leaves to Python (one that starts with a UTF-8 byte order mark) is parsed from its decoded text, as before:
- * no Python reader serves this restore.
+ * A Linear record file's or the Circular reference's records as the CLI loader reads them, once per File (OV-1680):
+ * the browser reader's, or the Worker's for a file that reader declines (one that starts with a UTF-8 byte order
+ * mark), so `#N` and the first record name the records the drawing reads (OV-1599).
  * @param {FileLike | null | undefined} file
  * @param {unknown} inputType
  * @returns {Promise<InputSequenceRecord[]>}
@@ -1109,9 +1112,25 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 const readInputSequenceRecords = async (file, inputType) => {
   if (!file) return [];
   const fmt = text(inputType).toLowerCase() === 'gb' ? 'genbank' : 'fasta';
-  const { records } = await readParsedSequenceRecords(file, fmt);
-  return (records ?? parseSequenceRecordsFast(await readFileText(file), fmt))
+  return (await readAllSequenceRecords(file, fmt))
     .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
+};
+
+/**
+ * A comparison genome's records as the ring search read them (`readComparisonSequenceRecords`, once per File): the
+ * browser's for a FASTA file it reads exactly, the comparison reader's for the others. A file that cannot be read
+ * gives no sources, and the other sources stay.
+ * @param {FileLike | null} file null for a comparison file that was never supplied.
+ * @returns {Promise<InputSequenceRecord[]>}
+ */
+const readComparisonRecords = async (file) => {
+  if (!file) return [];
+  try {
+    return (await readComparisonSequenceRecords(file))
+      .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
+  } catch {
+    return [];
+  }
 };
 
 /**
@@ -1184,10 +1203,7 @@ export const buildRestoredMatchSequenceSources = async ({
     circularConservation
   });
   for (const { sourceIndex: displayIndex, file } of comparisonSourceAvailability) {
-    const records = await readInputSequenceRecords(
-      file,
-      'fasta'
-    );
+    const records = await readComparisonRecords(file);
     records.forEach((record) => {
       if (!record.sequence) return;
       sources.push({

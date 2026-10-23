@@ -1100,14 +1100,21 @@ class _NotPrepared(Exception):
     """A parsed-source lookup that found no entry: it builds nothing."""
 
 
-def prepared_parsed_source(source: RecordInputSource) -> ParsedRecordInputs | None:
-    """The records a Generate parsed from this staged Web source, or ``None``.
+def prepared_parsed_source(
+    source: RecordInputSource,
+    load: Callable[[RecordInputSource], ParsedRecordInputs],
+) -> ParsedRecordInputs | None:
+    """The records a Generate parses from this staged Web source, or ``None``.
 
-    A Worker helper inside ``prepared_input_lookup`` reads the entry the last
-    Generate stored under the same resource identities. On a miss it gets
-    ``None`` and keeps its own reader, so its result and its errors are the
-    ones it has without the cache. The records are shared: a reader must not
-    change them (the lookup checks their owner stamps).
+    A Worker helper inside ``prepared_input_lookup`` reads the entry stored
+    under the same resource identities. On a miss it parses with ``load``, the
+    render's own source load (``request_render.load_render_source_records``,
+    which the caller passes): the protein extraction's lookup publishes that
+    entry for the next Generate (OV-1595), any other lookup keeps it for the
+    call. It gets ``None`` for a source the Worker did not stage, or when that
+    load fails: it then keeps its own reader, so its errors are the ones it
+    has without the cache. The records are shared: a reader must not change
+    them (the lookup checks their owner stamps).
     """
 
     cache_spec = _prepared_source_cache_spec(source)
@@ -1120,6 +1127,10 @@ def prepared_parsed_source(source: RecordInputSource) -> ParsedRecordInputs | No
     try:
         return cast(ParsedRecordInputs, get_or_build_parsed_source(*cache_spec, not_prepared))
     except _NotPrepared:
+        pass
+    try:
+        return load(source)
+    except Exception:
         return None
 
 

@@ -45,6 +45,7 @@ import {
   bindCanonicalTypedResource,
   isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
+  linearRecordSourceResources,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
@@ -141,6 +142,7 @@ import {
   discoveryErrorIsFinal,
   gffFastaReaderSelector,
   parseSequenceRecordsFast,
+  readAllSequenceRecords,
   readComparisonSequence,
   readComparisonSequenceDigest,
   readOncePerFile,
@@ -172,10 +174,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
-import {
-  cloneFileBytesForTransfer,
-  readFileText
-} from '../services/file-content-cache.js';
+import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 import {
   admitFeatureCatalog
 } from '../services/feature-catalog.js';
@@ -1057,14 +1056,15 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 /**
- * The source of a Linear record as the committed request names it, with its resources, when the committed
- * request draws these files (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
- * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources.
+ * The source of a Linear record as a request names it, with its resources, when the request draws these files
+ * (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources, or
+ *   those the next Generate's request names (`linearRecordSourceResources`).
  * @param {FileLike} sourceFile
  * @param {FileLike | null} fastaFile
  * @returns {{ recordSource: CanonicalRecordSource, resources: NonNullable<GenerationPayload['resources']> } | null}
  */
-const committedRecordSource = (resources, sourceFile, fastaFile) => {
+const requestRecordSource = (resources, sourceFile, fastaFile) => {
   if (!resources) return null;
   /** @type {CanonicalRecordSource | null} */
   let recordSource = null;
@@ -1106,18 +1106,18 @@ const losatSeqEntryFromRecord = (record, regionSpec) => {
 export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
-/** @param {{ file?: any, text?: string | null, fmt: string }} options */
-const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
-  const sourceText = typeof text === 'string' ? text : await readFileText(file);
+/**
+ * The LOSAT FASTA of every record of the Circular reference: the subject database of the conservation rings, the
+ * records the CLI loader reads (OV-1599). A record without a sequence is left out.
+ * @param {FileLike} file
+ * @param {string} fmt
+ */
+const readAllLosatFasta = async (file, fmt) => {
   /** @type {LosatSequence[]} */
-  const records = parseSequenceRecordsFast(sourceText, fmt)
+  const records = (await readAllSequenceRecords(file, fmt))
     .flatMap(({ id, sequence }) => (sequence === null ? [] : [{ id, sequence }]));
   if (!records.length) throw new Error('No records found for circular conservation reference.');
-  return {
-    fasta: records.map((record) => buildFastaText(record)).join(''),
-    recordIds: records.map((record) => record.id),
-    canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
-  };
+  return records.map((record) => buildFastaText(record)).join('');
 };
 /**
  * @param {FileLike | FileLike[] | null | undefined} sourceFiles
@@ -3092,7 +3092,7 @@ export const createRunAnalysis = ({
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
             const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
               [subjectFile], `ring-subject:${subjectFmt}`, async () => {
-                const fasta = (await extractAllLosatFastaFast({ file: subjectFile, fmt: subjectFmt })).fasta;
+                const fasta = await readAllLosatFasta(/** @type {FileLike} */ (subjectFile), subjectFmt);
                 return Object.freeze({ fasta, hash: await hashText(fasta) });
               }
             );
@@ -3584,6 +3584,13 @@ export const createRunAnalysis = ({
 
         /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
+        /** @type {Readonly<Record<string, unknown>> | null | undefined} */
+        let nextResources;
+        // The record sources this Generate's request will name, read once (OV-1595).
+        const nextRecordResources = () => {
+          if (nextResources === undefined) nextResources = linearRecordSourceResources(linearSeqs, lInputType.value);
+          return nextResources;
+        };
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
@@ -3653,10 +3660,15 @@ export const createRunAnalysis = ({
           if (useProteinBlastp) {
             entry = await readOncePerFile(readFiles, `protein-fasta:${persistentCacheKey}`, async () => {
               extracted = true;
-              // A source of the committed drawing is staged under its resource ids: the Worker holds its bytes
-              // and the records the last Generate parsed (OV-1555). Another file is sent.
-              const committed = committedRecordSource(
-                typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null,
+              // A source is staged under the resource ids this Generate's request names, so it crosses once and
+              // is parsed once for every card and the render (OV-1595); when the request repeats the last one, the
+              // Worker already holds its bytes and the records the last Generate parsed (OV-1555). Only when the
+              // request cannot be named (a card lacks a file) are the committed drawing's ids used. Another file
+              // (of a record turned off only) is sent.
+              const committed = requestRecordSource(
+                nextRecordResources() ?? (
+                  typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
+                ),
                 /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null
               );
               /** @type {{ role: string, bytes: ArrayBuffer }[]} */

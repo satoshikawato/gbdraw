@@ -145,14 +145,17 @@ export const createDiagramResourceTransport = () => {
     for (const resourceId of referencedIds) {
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
-      const payloadIdentity = typeof descriptor.data === 'string'
-        ? descriptor.data
-        : owner;
+      // The Worker holds these bytes when the object they stand for (the File, the
+      // Session resource, as `addFile` keys them) or their base64 text is the same:
+      // a helper stages a File before the Generate that encodes it (OV-1595).
+      const payloadIdentity = getResourcePayloadIdentity(descriptor);
+      const payloadText = typeof descriptor.data === 'string' ? descriptor.data : null;
       const previous = previousCachedResources.get(resourceId);
       const cacheHit = Boolean(
         previous
-        && previous.payloadIdentity === payloadIdentity
         && previous.size === descriptor.size
+        && (previous.payloadIdentity === payloadIdentity
+          || (payloadText !== null && previous.payloadText === payloadText))
       );
       const cacheToken = cacheHit
         ? previous.cacheToken
@@ -170,6 +173,7 @@ export const createDiagramResourceTransport = () => {
       nextCachedResources.set(resourceId, {
         cacheToken,
         payloadIdentity,
+        payloadText,
         size: descriptor.size
       });
       if (cacheHit) {

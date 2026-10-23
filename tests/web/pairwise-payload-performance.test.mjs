@@ -52,8 +52,8 @@ for (const relativePath of modulePaths) {
 await writeFile(join(tempRoot, 'gbdraw/web/js/services/record-discovery.js'), [
   "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };",
   'export const gffFastaReaderSelector = unused;',
-  'export const parseSequenceRecordsFast = unused;',
-  'export const readParsedSequenceRecords = unused;',
+  'export const readAllSequenceRecords = unused;',
+  'export const readComparisonSequenceRecords = unused;',
   ''
 ].join('\n'), 'utf8');
 

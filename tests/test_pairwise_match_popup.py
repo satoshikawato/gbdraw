@@ -104,8 +104,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     (tmp_path / "record-discovery.mjs").write_text(
         "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };\n"
         "export const gffFastaReaderSelector = unused;\n"
-        "export const parseSequenceRecordsFast = unused;\n"
-        "export const readParsedSequenceRecords = unused;\n",
+        "export const readAllSequenceRecords = unused;\n"
+        "export const readComparisonSequenceRecords = unused;\n",
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
