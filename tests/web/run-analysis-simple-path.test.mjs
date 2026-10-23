@@ -2347,9 +2347,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.match(thirteenWatches[1].timing, /FASTA cache hits=14, .*JS FASTA=0, Worker FASTA=0/);
     assert.equal(thirteenWatches[1].fastaDigests, 0);
     // OV-1594: the held LOSAT FASTA of a record is frozen, and its SHA-256 is its own read beside it, so the
-    // Generates read the entries without writing to them. A record's FASTA is digested once for its entry,
-    // whatever its card count (the 14th card reads REC1's digest), and once as the query side of its search
-    // (`prepareLosatSourceBatches`; the 14th card is a query of none).
+    // Generates read the entries without writing to them. A record's FASTA is digested once, whatever its card
+    // count (the 14th card reads REC1's digest); its single-record query side reads that same digest (OV-1598).
     const heldLosatFasta = (id) => readOncePerFile([thirteenFile], `losat-fasta:${JSON.stringify({
       fmt: 'genbank', regionSpec: null, recordSelector: id, reverseFlag: '0'
     })}`, () => Promise.reject(new Error(`no held LOSAT FASTA for ${id}`)));
@@ -2357,7 +2356,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       const entry = await heldLosatFasta(id);
       assert.ok(Object.isFrozen(entry), id);
       assert.deepEqual(Object.keys(entry).sort(), ['canonicalLength', 'fasta', 'recordId'], id);
-      assert.equal(thirteenWatches[0].digestsByText.get(entry.fasta), 2, id);
+      assert.equal(thirteenWatches[0].digestsByText.get(entry.fasta), 1, id);
     }
 
     // OV-1555, OV-1590: after a Generate, the blastp extraction of two of its records sends no
@@ -2466,6 +2465,25 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     }
     workerHelperResponses.splice(0);
     state.activeDrawing().losatProgram.value = 'blastn';
+
+    // OV-1681: in GFF3 input `#N` counts the records the GFF3 names (Python's load_gff_fasta), not every FASTA
+    // entry, so the LOSAT FASTA of `#1` and `#2` is the drawn G1 and G2, not the entry X the GFF3 does not name.
+    const namedGff = new AuditFile([
+      '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\nG2\t.\tCDS\t1\t9\t.\t+\t0\tID=c2\n'
+    ], 'named.gff');
+    const extraFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n'], 'extra.fasta');
+    state.linearSeqs.forEach((seq, index) => Object.assign(seq, {
+      gff: namedGff, fasta: extraFasta, region_record_id: `#${index + 1}`
+    }));
+    let searched = [];
+    globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      searched = [...options.sequences.values()];
+      return jobs.map((job) => ({ cacheKey: job.cacheKey, text: '' }));
+    };
+    const namedResult = result('gff-named.svg', 'gff-named');
+    workerResponses.push(response(namedResult, validCatalog(namedResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
     state.lInputType.value = 'gb';
   } finally {
     state.similarityAlignmentPlan.value = null;

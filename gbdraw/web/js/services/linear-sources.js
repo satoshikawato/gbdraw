@@ -450,13 +450,15 @@ let lastPreparedLosatSides = new Map();
  * @param {{
  *   sequences: readonly S[], specs: readonly Spec[],
  *   getEntry: (index: number) => Promise<{ fasta: string }>,
+ *   getDigest: (index: number) => Promise<string>,
  *   buildArgs: (queryIndex: number, subjectIndex: number) => readonly unknown[],
  *   hashText: (text: string) => Promise<string>, protein?: boolean, drawnCount?: number
- * }} options
+ * }} options `getDigest(index)` is `hashText` of `getEntry(index).fasta`, read from its owner: a single-record side
+ *   whose FASTA is its entry's text takes that digest instead of hashing the text again (OV-1598).
  * @returns {Promise<{ batches: LosatSourceBatch<Spec>[], bySpec: Map<Spec, LosatSourceBatch<Spec>> }>}
  */
 export const prepareLosatSourceBatches = async ({
-  sequences, specs, getEntry, buildArgs, hashText, protein, drawnCount = sequences.length
+  sequences, specs, getEntry, getDigest, buildArgs, hashText, protein, drawnCount = sequences.length
 }) => {
   const plan = planLosatSourceJobs({ sequences, specs, buildArgs, drawnCount });
   /** @type {Map<string, LosatSourceSide>} */
@@ -493,7 +495,8 @@ export const prepareLosatSourceBatches = async ({
         parts.push(fasta.endsWith('\n') ? fasta : `${fasta}\n`);
       }
       const fasta = parts.join('');
-      prepared = { entries, hashText, fasta, hash: await hashText(fasta), ids: [...renamed.values()] };
+      const hash = entries.length === 1 && fasta === entries[0].fasta ? await getDigest(ordered[0]) : await hashText(fasta);
+      prepared = { entries, hashText, fasta, hash, ids: [...renamed.values()] };
     }
     preparedSides.set(preparedKey, prepared);
     const side = {

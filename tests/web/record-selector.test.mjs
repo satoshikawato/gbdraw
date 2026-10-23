@@ -426,4 +426,32 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
   assert.equal(gffReads, 2);
 }
 
+// OV-1599: a Session resource view reads its bytes with the rule every browser reader applies. One that starts
+// with a UTF-8 byte order mark goes to the Python reader, which reads the mark as content and skips the first
+// record; the browser's text decoder would drop the mark and list that record.
+{
+  const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
+    pathToFileURL(join(sourceRoot, '..', 'services', 'session-resource-backing.js'))
+  );
+  const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('>F1\nAAAA\n>F2\nCCCC\n')]);
+  const table = adoptCurrentSessionResources({
+    'bom-fasta': {
+      kind: 'fasta', name: 'bom.fa', type: 'text/plain', size: bytes.byteLength, lastModified: 7,
+      encoding: 'base64', data: Buffer.from(bytes).toString('base64')
+    }
+  });
+  const view = createSessionResourceFileView(table, 'bom-fasta');
+  const formats = [];
+  const records = await discoverSequenceRecords({
+    file: view,
+    format: 'fasta',
+    runHelperOperation: async (_operation, payload) => {
+      formats.push(payload.format);
+      return { result: { records: [{ selector: '#1', record_id: 'F2', record_length: 4 }] } };
+    }
+  });
+  assert.deepEqual(formats, ['fasta'], 'the Session resource goes to the Python reader');
+  assert.deepEqual(records.map(({ recordId }) => recordId), ['F2']);
+}
+
 console.log('record selector tests passed');
