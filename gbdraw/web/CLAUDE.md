@@ -645,15 +645,16 @@ or Reset Settings).
   own and the project's.
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
-  with it where they are still as it left them. A project step is an operation
-  on the drawing list (adding, duplicating, renaming, moving, or deleting a
-  drawing), Reset all drawings (until the Reset dialog offers Reset this drawing, Reset
-  Settings resets all drawings), until each drawing binds its own auxiliary file cards a
-  card's import, Remove, and Retry (R10), once a genome input file can be replaced
-  for every drawing that uses it (R16-5) that replacement, or
-  a step that changes only Session-level values (the Session title, Auto
-  Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
-  Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
+  with it where they are still as it left them. A project step is one of:
+  an operation on the drawing list (adding, duplicating, renaming, moving, or
+  deleting a drawing); Reset all drawings (until the Reset dialog offers Reset
+  this drawing, Reset Settings resets all drawings); until each drawing binds
+  its own auxiliary file cards, a card's import, Remove, and Retry (R10); once
+  a genome input file can be replaced for every drawing that uses it, that
+  replacement (PD-OI-090); or a step that changes only Session-level values
+  (the Session title, Auto Reflow, PNG DPI, Instant Preview, the LOSAT
+  execution and threads, the Feature panel tab, and the drafts; R15-23
+  Q-DR-8). Such a step records only
   the Session-level changes made since it opened. A Session-level change made
   outside any step marks nothing unsaved and rides with the next step; the
   drawing switch's own transient reset is no change. Each operation is one step. Reset
