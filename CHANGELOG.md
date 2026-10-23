@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
+
+- Patch release of 0.14.0. Session files are unchanged (Session version 48).
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.1.md). Publication
+  dates are recorded in
+  [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 - Gallery: the HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018
   tutorials start from the Web defaults and generate after each change, with a
   preview of every stage; each now lists every setting the Gallery figure needs
@@ -93,6 +99,40 @@ write-up of a release.
   `16,569 bp`, in Circular and Linear; it showed the wrapped source spans, for
   example `[3,307..16,569], [1..3,306] bp` (OV-1694). Rulers and ticks keep
   their source coordinates.
+- Changed: the web app keeps one Undo/Redo History per drawing, plus a project
+  stream (#1313).
+  - A mode switch (Circular or Linear) shows the other drawing, writes
+    nothing, and records no step. Undo and Redo walk the shown drawing's steps.
+  - Reset settings, and edits to the Session title, Auto Reflow, PNG DPI,
+    Instant Preview, the LOSAT execution, or the input drafts, are project
+    steps that either drawing can undo. Reset settings is one step: one Undo
+    restores both drawings.
+  - Each drawing keeps 30 Undo steps and the project stream keeps 30 more,
+    under one shared memory budget (0.14.0 kept 30 in all).
+  - Instant Preview **On** applies every drawing's queued palette in one step.
+  - A drawing switch waits while a color rule table edit is being matched
+    (OV-1100).
+  - In **Canvas padding**, an empty or partial entry keeps the side until you
+    leave the field, then becomes 0.
+  - The five auxiliary file cards (Priority File, Whitelist File, Blacklist
+    File, Default colors file, Specific rules file) behave as in 0.14.0:
+    **Remove** takes the file's rows out of both drawings and one Undo brings
+    them back. Such a change is a project step.
+  - Switching between Circular and Linear no longer re-sends or re-parses the
+    inputs: on the `vibrio-harveyi-group-collinear` Gallery Session the bytes
+    sent to the Worker over four Generates fall by 42 %.
+- Fixed: with the drawing change above (#1313), a Legend offset that nothing
+  names is released with its Result (OV-110), a reflow lands in its own
+  Result's drawing (OV-111), and OV-1162 to OV-1165, OV-1169, and OV-1201.
+- Fixed: the compact Result Preview layout and the width of **Reset zoom**
+  apply in every UI language; they applied only in English (OV-1535, #1290).
+- Fixed: the Run info tab, the feature popup's label note, the Label Not Shown
+  dialog, and the Choose records dialog show the UI language in the nine other
+  locales (#1312). The Run info text that Generate builds stays English.
+- Fixed: panning the Result from blank space and releasing over a feature or a
+  pairwise match no longer opens that popup (OV-1537, #1308).
+- Documentation: the Vibrio harveyi group collinear tutorial says that the
+  Linear ruler keeps each record's own coordinates (#1303).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
