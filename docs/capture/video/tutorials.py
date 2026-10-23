@@ -10,6 +10,7 @@ lands; the final settings are the tutorial's own.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -894,12 +895,13 @@ def _frame_figure(rec: Recorder) -> dict:
 
 
 def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4,
-                 detail: str | None = None) -> None:
+                 detail: Callable[[Recorder], list[dict]] | None = None) -> None:
     """Name what the new preview shows while the camera holds the whole figure.
 
-    ``detail`` selects part of the drawing, such as one column of records; a
-    figure too wide to read whole is then held on that part at a zoom where
-    its labels read, and the camera returns to the whole figure.
+    ``detail`` returns parts of a figure too small to read whole (page CSS
+    px rects, such as one column of records or the two halves of the
+    drawing): the camera then holds each part about 3 s at a zoom where it
+    reads, and returns to the whole figure. Both layouts frame the same parts.
     """
 
     rec.caption(step, title, subtitle)
@@ -911,14 +913,37 @@ def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = ""
         rec.move_to(rec.x - rec.origin[0], bottom - rec.origin[1] + 10)
     rec.hold(seconds)
     if detail:
-        box = rec.page.evaluate(_DETAIL, detail)
-        if not box:
-            raise AssertionError(f"No preview element matches {detail!r}")
-        zoom = min(VIEWPORT[0] / box["width"], VIEWPORT[1] / box["height"]) / 1.08
-        rec.camera(box, zoom=max(1.0, min(zoom, 3.0)), duration=1.0)
-        rec.hold(3.0)
+        boxes = detail(rec)
+        for box in boxes:
+            zoom = min(VIEWPORT[0] / box["width"], VIEWPORT[1] / box["height"]) / 1.08
+            rec.camera(box, zoom=max(1.0, min(zoom, 3.0)), duration=1.0)
+            # Each move eases for 1 s, so the part then stays still about 3 s.
+            rec.hold(4.0 if len(boxes) == 1 else 3.4)
         _frame_figure(rec)
-        rec.hold(0.8)
+        rec.hold(1.6)
+
+
+def _preview_part(selector: str) -> Callable[[Recorder], list[dict]]:
+    """A ``detail`` of the preview drawing's elements that match ``selector``."""
+
+    def part(rec: Recorder) -> list[dict]:
+        box = rec.page.evaluate(_DETAIL, selector)
+        if not box:
+            raise AssertionError(f"No preview element matches {selector!r}")
+        return [box]
+    return part
+
+
+def _figure_halves(rec: Recorder) -> list[dict]:
+    """A ``detail`` of the figure's left and right halves, overlapping a little."""
+
+    figure = rec.figure()
+    if figure is None:
+        raise AssertionError("No preview figure to show")
+    x, y = figure["x"] - rec.origin[0], figure["y"] - rec.origin[1]
+    width = figure["width"] * 0.55
+    return [{"x": x, "y": y, "width": width, "height": figure["height"]},
+            {"x": x + figure["width"] - width, "y": y, "width": width, "height": figure["height"]}]
 
 
 def _linear_file(rec: Recorder, index: int, source: Path) -> Locator:
@@ -1065,7 +1090,7 @@ def _bgc_align(rec: Recorder) -> None:
     _close_feature(rec)
     expect(popup).to_be_hidden()
     _fit_preview(rec)
-    _show_figure(rec, 7, "The og_6 genes line up", "One column across the five clusters")
+    _show_figure(rec, 7, "The og_6 genes line up", "One column across the five clusters", detail=_bgc_detail(rec))
 
 
 def _bgc_finish(rec: Recorder) -> None:
@@ -1117,6 +1142,12 @@ def _bgc_finish(rec: Recorder) -> None:
     rec.normal_speed()
 
 
+def _bgc_detail(rec: Recorder) -> Callable[[Recorder], list[dict]] | None:
+    """The tall window shows the five fitted rows too small to read, so it pans over their halves."""
+
+    return _figure_halves if rec.portrait else None
+
+
 def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:
     _verify(*BGC_FILES)
     page = rec.page
@@ -1142,7 +1173,8 @@ def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:
 
     rec.caption(4, "Generate with the defaults", "The first run starts Python in the browser")
     _generate(rec, target=1.8, look=0.6)
-    _show_figure(rec, 4, "Five clusters, one row each", "Nothing shows yet which genes they share")
+    _show_figure(rec, 4, "Five clusters, one row each", "Nothing shows yet which genes they share",
+                 detail=_bgc_detail(rec))
 
     rec.caption(5, "Link the clusters with LOSATP", "Comparison › Run LOSAT, then Settings")
     settings = _losat_settings(rec)
@@ -1154,14 +1186,15 @@ def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:
     _generate(rec, target=3.0, look=0.6, stages=True)
     if page.evaluate("() => (window.__GBDRAW_APP__?.orthogroups || []).length") != 23:
         raise AssertionError("Expected 23 similarity groups")
-    _show_figure(rec, 5, "Ribbons link similar proteins", "The X: BGC0000713 runs the other way")
+    _show_figure(rec, 5, "Ribbons link similar proteins", "The X: BGC0000713 runs the other way",
+                 detail=_bgc_detail(rec))
 
     rec.caption(6, "Reverse-complement File 5", "BGC0000713 › Record options › Reverse complement")
     rec.open_section(_summary(rec, "Record options for sequence {n}", {"n": 5}))
     _check(rec, _label(rec, "Reverse complement for sequence {n}", {"n": 5}))
     rec.caption(6, "LOSAT results are reused", "Generate redraws without a new search")
     _generate(rec, target=None, look=0.6, stages=True)
-    _show_figure(rec, 6, "The X is gone", "All five clusters now run the same way")
+    _show_figure(rec, 6, "The X is gone", "All five clusters now run the same way", detail=_bgc_detail(rec))
 
     _bgc_align(rec)
 
@@ -1175,7 +1208,7 @@ def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:
     rec.caption(8, "Add four SPECIFIC RULES", "gene_kind: core, additional, transport, regulatory")
     _color_rules(rec, BGC_RULES)
     _generate(rec, look=0.6)
-    _show_figure(rec, 8, "Red core genes stand out", "against the blue ribbons")
+    _show_figure(rec, 8, "Red core genes stand out", "against the blue ribbons", detail=_bgc_detail(rec))
 
     rec.caption(9, "Label the first cluster", "Labels › Show Labels: First Record Only")
     rec.open_section(_summary(rec, "Labels"))
@@ -1186,12 +1219,12 @@ def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:
     _pick(rec, _label(rec, "Label Placement"), "above_feature")
     _field(rec, _label(rec, "Label Rotation"), "45")
     _generate(rec, look=0.6)
-    _show_figure(rec, 9, "Gene names on the first row", "The other rows stay uncrowded")
+    _show_figure(rec, 9, "Gene names on the first row", "The other rows stay uncrowded", detail=_bgc_detail(rec))
 
     _bgc_finish(rec)
     rec.caption(10, "Generate the finished figure", "It keeps og_6 and reuses the LOSAT results")
     _generate(rec, target=None, look=0.6, stages=True)
-    _show_figure(rec, 10, "The finished figure", "", seconds=4.0)
+    _show_figure(rec, 10, "The finished figure", "", seconds=4.0, detail=_bgc_detail(rec))
 
     rec.caption(11, "Inspect a similarity ribbon", "og_18: 6 genes in 5 records, and its members")
     ribbon = _hit(rec, '[data-match-kind="orthogroup"][data-orthogroup-id="og_18"]')
@@ -1575,7 +1608,7 @@ VIBRIO_INITIATORS = (("gene", "dnaA", ("NC_004603.1", "NC_022349.1")),
                      ("product", "RctB", ("NC_004605.1", "NC_022359.1")))
 # Chromosome I of both rows with their species labels: the part of the wide
 # figure the detail holds frame, so its labels and blocks read.
-VIBRIO_CHROMOSOME_I = '[data-record-column="0"], [data-gbdraw-role="record-definition-row"]'
+VIBRIO_CHROMOSOME_I = _preview_part('[data-record-column="0"], [data-gbdraw-role="record-definition-row"]')
 VIBRIO_SHAPES = ("CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region")
 VIBRIO_GALLERY = REPO_ROOT / "gbdraw/web/gallery/sources/vibrio-harveyi-group-collinear.svg"
 _LEFTMOST = """
