@@ -50,12 +50,12 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 - A Circular corner legend that cannot sit beside the circle no longer moves
   feature labels.
 
-- A Circular figure keeps its inside rows (GC content, skews, ticks) packed
-  below the features when its center definition becomes smaller, for example
-  after adding only a plot title. In 0.14.0 the rows could jump to the preset's
-  lanes when the figure had an inside row the preset lacks, such as a second
-  skew, and the tick labels overlapped. The preset's lanes are now used only
-  while every enabled inside row belongs to the preset's own stack.
+- Adding a plot title to a single-record Circular figure no longer moves the GC
+  content, GC skew, and tick rings. The layout reserves the center definition
+  the figure draws without the title, so the figure keeps its untitled layout
+  and the tick labels no longer run together. In 0.14.0 the shorter definition
+  let the rings jump to the preset's lanes. Figures without a plot title are
+  unchanged.
 - A record drawn from another start (`--display_start_coordinate`, a records
   table start, or **Rotate record using this feature**) shows its length in the
   definition, for example `16,569 bp`, in Circular and Linear. It showed the
@@ -80,6 +80,15 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   lands in its own Result's drawing.
 - The Vibrio harveyi group collinear tutorial says that the Linear ruler keeps
   each record's own coordinates.
+
+## Added
+
+- gbdraw warns when the center definition text of a Circular record touches
+  what an inner track draws (GC content or GC skew, a feature block, or the
+  axis circle), and offers a smaller definition font that fits. The command line
+  prints a `WARNING:` with the fitting `--definition_font_size` and exits 0;
+  Python raises `LabelLeadersCrossWarning`; the web app's label-fit notice
+  offers it under **Choose a fix**. The figure is drawn exactly as before.
 
 ## Faster web app
 

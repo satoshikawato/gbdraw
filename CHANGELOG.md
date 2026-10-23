@@ -99,13 +99,17 @@ write-up of a release.
   `16,569 bp`, in Circular and Linear; it showed the wrapped source spans, for
   example `[3,307..16,569], [1..3,306] bp` (OV-1694). Rulers and ticks keep
   their source coordinates.
-- Fixed: a Circular figure whose center definition is smaller than before (for
-  example after adding only a plot title) keeps its inside rows packed below the
-  features, as in 0.13.0. In 0.14.0 it moved GC content, skews, and ticks to the
-  preset's lanes whenever the figure had an inside row the preset lacks (for
-  example a second skew), so tick labels overlapped. The preset's lanes are used
-  only while every enabled inside row belongs to the preset's own stack
-  (OV-1710, #1329).
+- Fixed: adding a plot title to a single-record Circular figure no longer moves
+  the GC content, GC skew, and tick rings. The layout reserves the center
+  definition the figure draws without the title, so the figure keeps its
+  untitled layout and the tick labels no longer run together. In 0.14.0 the
+  shorter definition let the rings jump to the preset's lanes. Figures without
+  a plot title are unchanged (OV-1710, #1329).
+- Added: when the center definition text of a Circular record touches what an
+  inner track draws (GC content or GC skew, a feature block, or the axis
+  circle), gbdraw warns through the label-fit warning and offers a smaller
+  `--definition_font_size` that fits; the web app's label-fit notice offers it
+  under **Choose a fix**. The figure is drawn as before (OV-1606, #1328).
 - Fixed: in the web app, a legend or plot title that you moved stays inside the
   canvas: the canvas grows to hold it with the usual 16 px edge margin, and
   **Reset Layout** returns the automatic canvas (OV-1631, OV-1642, #1319).
