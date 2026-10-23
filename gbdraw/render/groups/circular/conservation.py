@@ -6,6 +6,8 @@ from gbdraw.svg.elements import Group, Path
 
 from ....analysis.conservation import ConservationTrack, conservation_track_gradient_colors
 from ....config.models import GbdrawConfig
+from ....layout.circular import RadialBand
+from ....layout.circular_ink import CircularInk, CircularInkRing
 from ....render.drawers.circular.conservation import (
     ConservationDrawer,
     _safe_id_fragment,
@@ -13,6 +15,48 @@ from ....render.drawers.circular.conservation import (
 from ....svg.circular_conservation import generate_full_annulus_path_desc
 from ....svg.ids import stable_svg_id
 from ....layout.record_coordinates import RecordDisplayTransform
+
+
+def _conservation_drawer(cfg: GbdrawConfig, track_color: str | None, min_identity: float) -> ConservationDrawer:
+    conservation_cfg = cfg.objects.conservation
+    min_color, max_color = conservation_track_gradient_colors(
+        track_color,
+        default_min_color=conservation_cfg.min_color,
+        default_max_color=conservation_cfg.max_color,
+    )
+    return ConservationDrawer(
+        min_identity=min_identity,
+        min_color=min_color,
+        max_color=max_color,
+        fill_opacity=conservation_cfg.fill_opacity,
+        stroke_color=conservation_cfg.stroke_color,
+        stroke_width=conservation_cfg.stroke_width,
+    )
+
+
+def conservation_ring_ink(
+    track: ConservationTrack,
+    *,
+    total_length: int,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    min_identity: float,
+    cfg: GbdrawConfig,
+    record_transform: RecordDisplayTransform | None = None,
+) -> tuple[CircularInk, ...]:
+    """What ``ConservationGroup`` paints with the same arguments: the background ring when it shows, else the
+    hits."""
+
+    if bool(cfg.objects.conservation.show_background):
+        return (CircularInkRing(RadialBand(float(inner_radius_px), float(outer_radius_px))),)
+    drawer = _conservation_drawer(cfg, str(track.track_color) if track.track_color else None, float(min_identity))
+    return drawer.ink(
+        track.hits,
+        total_length=int(total_length),
+        inner_radius_px=inner_radius_px,
+        outer_radius_px=outer_radius_px,
+        record_transform=record_transform,
+    )
 
 
 class ConservationGroup:
@@ -84,20 +128,7 @@ class ConservationGroup:
 
     def _add_elements(self) -> None:
         self._add_background()
-        conservation_cfg = self.cfg.objects.conservation
-        min_color, max_color = conservation_track_gradient_colors(
-            self.track_color,
-            default_min_color=conservation_cfg.min_color,
-            default_max_color=conservation_cfg.max_color,
-        )
-        drawer = ConservationDrawer(
-            min_identity=self.min_identity,
-            min_color=min_color,
-            max_color=max_color,
-            fill_opacity=conservation_cfg.fill_opacity,
-            stroke_color=conservation_cfg.stroke_color,
-            stroke_width=conservation_cfg.stroke_width,
-        )
+        drawer = _conservation_drawer(self.cfg, self.track_color, self.min_identity)
         drawer.draw_hits(
             self.group,
             self.hits,
@@ -112,4 +143,4 @@ class ConservationGroup:
         return self.group
 
 
-__all__ = ["ConservationGroup"]
+__all__ = ["ConservationGroup", "conservation_ring_ink"]

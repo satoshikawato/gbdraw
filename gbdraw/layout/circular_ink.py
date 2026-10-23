@@ -1,7 +1,8 @@
 """What a Circular track paints, as radial spans along the circle, and whether a box meets it.
 
 A track's owner describes its paint: a ring between two radii over an arc (a feature block, the axis circle, a
-band), or the area between a circle and a line drawn through samples (GC content, GC skew). ``box_meets_ink``
+conservation hit, an annotation band), the area between a circle and a line drawn through samples (GC content, GC
+skew, depth), or a convex polygon (a tick mark, an axis tick label, an annotation label). ``box_meets_ink``
 casts rays from the centre through a box and asks whether any ray meets the box and the paint at the same radius.
 The centre definition text warns only when one of its line boxes meets a track's paint (D-18).
 """
@@ -98,7 +99,74 @@ class CircularInkProfile:
         return self.turns
 
 
-CircularInk: TypeAlias = CircularInkRing | CircularInkProfile
+@dataclass(frozen=True, eq=False)
+class CircularInkPolygon:
+    """Paint inside a convex polygon, in coordinates around the circle centre (y down, as drawn)."""
+
+    points: tuple[tuple[float, float], ...]
+
+    @classmethod
+    def segment(cls, start: tuple[float, float], end: tuple[float, float], half_width: float) -> CircularInkPolygon:
+        """A straight stroke from ``start`` to ``end`` with butt caps, ``half_width`` to each side."""
+
+        (x1, y1), (x2, y2) = start, end
+        length = math.hypot(x2 - x1, y2 - y1)
+        if length <= 0.0:
+            nx, ny = half_width, 0.0
+        else:
+            nx, ny = -(y2 - y1) / length * half_width, (x2 - x1) / length * half_width
+        return cls(((x1 + nx, y1 + ny), (x2 + nx, y2 + ny), (x2 - nx, y2 - ny), (x1 - nx, y1 - ny)))
+
+    @classmethod
+    def box(cls, box: Aabb) -> CircularInkPolygon:
+        return cls(((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)))
+
+    def spans(self, turns: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        angles = 2.0 * math.pi * turns - 0.5 * math.pi
+        dx, dy = np.cos(angles), np.sin(angles)
+        points = np.asarray(self.points, dtype=float)
+        centroid = points.mean(axis=0)
+        entry = np.zeros(turns.shape)
+        exit_ = np.full(turns.shape, np.inf)
+        for index in range(len(points)):
+            p0, p1 = points[index], points[(index + 1) % len(points)]
+            normal = np.array([p1[1] - p0[1], p0[0] - p1[0]])
+            if float(np.dot(normal, centroid - p0)) > 0.0:
+                normal = -normal
+            # Inside: normal . (t * d - p0) <= 0, so t * (normal . d) <= normal . p0.
+            along = normal[0] * dx + normal[1] * dy
+            limit = float(np.dot(normal, p0))
+            safe = np.where(np.abs(along) < 1e-12, 1.0, along)
+            bound = limit / safe
+            exit_ = np.where(along > 1e-12, np.minimum(exit_, bound), exit_)
+            entry = np.where(along < -1e-12, np.maximum(entry, bound), entry)
+            outside = (np.abs(along) <= 1e-12) & (limit < 0.0)
+            exit_ = np.where(outside, -np.inf, exit_)
+        missed = exit_ < entry
+        return np.where(missed, np.inf, entry), np.where(missed, -np.inf, exit_)
+
+    @property
+    def nearest_px(self) -> float:
+        edges = list(zip(self.points, (*self.points[1:], self.points[0])))
+        sides = {math.copysign(1.0, x1 * y2 - x2 * y1) for (x1, y1), (x2, y2) in edges}
+        return 0.0 if len(sides) == 1 else min(_segment_distance(p0, p1) for p0, p1 in edges)
+
+    def ray_turns(self) -> NDArray[np.float64]:
+        points = np.asarray(self.points, dtype=float)
+        return _turns_of(np.arctan2(points[:, 1], points[:, 0]))
+
+
+CircularInk: TypeAlias = CircularInkRing | CircularInkProfile | CircularInkPolygon
+
+
+def _segment_distance(start: tuple[float, float], end: tuple[float, float]) -> float:
+    """How near the centre the segment from ``start`` to ``end`` comes."""
+
+    (x1, y1), (x2, y2) = start, end
+    dx, dy = x2 - x1, y2 - y1
+    length = dx * dx + dy * dy
+    t = 0.0 if length <= 0.0 else min(1.0, max(0.0, -(x1 * dx + y1 * dy) / length))
+    return math.hypot(x1 + t * dx, y1 + t * dy)
 
 
 def stroke_pad_px(color: str, width: float) -> float:
@@ -185,4 +253,11 @@ def box_meets_ink(box: Aabb, inks: Sequence[CircularInk], *, threshold_px: float
     return False
 
 
-__all__ = ["CircularInk", "CircularInkProfile", "CircularInkRing", "box_meets_ink", "stroke_pad_px"]
+__all__ = [
+    "CircularInk",
+    "CircularInkPolygon",
+    "CircularInkProfile",
+    "CircularInkRing",
+    "box_meets_ink",
+    "stroke_pad_px",
+]

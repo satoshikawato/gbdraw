@@ -9,6 +9,8 @@ from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
 from ....core.color import interpolate_color
+from ....layout.circular import RadialBand
+from ....layout.circular_ink import CircularInk, CircularInkRing, stroke_pad_px
 from ....svg.circular_conservation import generate_annular_hsp_path_desc
 from ....layout.record_coordinates import RecordDisplayTransform, SourceInterval
 
@@ -35,6 +37,23 @@ def _row_text(row: object, name: str) -> str:
     except AttributeError:
         return ""
     return str(value)
+
+
+def _projected(record_transform: RecordDisplayTransform | None) -> bool:
+    return record_transform is not None and record_transform.start_coordinate is not None
+
+
+def _hit_parts(
+    row: object, total_length: int, record_transform: RecordDisplayTransform | None
+) -> tuple[tuple[float, float, bool], ...]:
+    """The display spans one hit is drawn as, each with whether it is drawn as the whole ring."""
+
+    spans: tuple[tuple[float, float], ...] = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
+    if record_transform is not None and _projected(record_transform):
+        spans = tuple((part.display_start, part.display_end) for part in
+                      record_transform.project_interval(SourceInterval(int(spans[0][0]), int(spans[0][1]))))
+        return tuple((start, end, end - start == total_length) for start, end in spans)
+    return tuple((start, end, bool(getattr(row, "full_reference", False))) for start, end in spans)
 
 
 class ConservationDrawer:
@@ -124,18 +143,15 @@ class ConservationDrawer:
                 "data-orientation": _row_text(row, "orientation"),
                 "data-reference-record-id": _row_text(row, "reference_record_id"),
             }
-            projected = record_transform is not None and record_transform.start_coordinate is not None
-            spans: tuple[tuple[float, float], ...] = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
-            if projected and record_transform is not None:
+            projected = _projected(record_transform)
+            if projected:
                 metadata[f"data-{_row_text(row, 'reference_side')}-record-index"] = record_index
-                spans = tuple((part.display_start, part.display_end) for part in
-                              record_transform.project_interval(SourceInterval(int(spans[0][0]), int(spans[0][1]))))
-            for index, (start, end) in enumerate(spans):
+            for index, (start, end, full_reference) in enumerate(_hit_parts(row, total_length, record_transform)):
                 path = Path(
                     d=generate_annular_hsp_path_desc(
                         draw_start=start, draw_end=end, total_length=int(total_length),
                         inner_radius_px=float(inner_radius_px), outer_radius_px=float(outer_radius_px),
-                        full_reference=(end - start == total_length if projected else bool(getattr(row, "full_reference", False))),
+                        full_reference=full_reference,
                     ),
                     fill=self._fill_color(identity), fill_opacity=self.fill_opacity,
                     stroke=self.stroke_color, stroke_width=self.stroke_width,
@@ -147,6 +163,30 @@ class ConservationDrawer:
                     path.attribs["data-gbdraw-match-fragment"] = str(index)
                 group.add(path)
         return group
+
+    def ink(
+        self,
+        hits: DataFrame,
+        *,
+        total_length: int,
+        inner_radius_px: float,
+        outer_radius_px: float,
+        record_transform: RecordDisplayTransform | None = None,
+    ) -> tuple[CircularInk, ...]:
+        """What ``draw_hits`` paints with the same arguments: each hit's sector, with half its stroke."""
+
+        if hits.empty or total_length <= 0:
+            return ()
+        pad = stroke_pad_px(self.stroke_color, self.stroke_width)
+        band = RadialBand(float(inner_radius_px) - pad, float(outer_radius_px) + pad)
+        inks: list[CircularInk] = []
+        for row in hits.itertuples(index=False):
+            for start, end, full_reference in _hit_parts(row, total_length, record_transform):
+                if full_reference:
+                    return (CircularInkRing(band),)
+                low, high = (max(0.0, min(float(total_length), value)) for value in (start, end))
+                inks.append(CircularInkRing(band, low / total_length, high / total_length))
+        return tuple(inks)
 
 
 __all__ = ["ConservationDrawer", "_safe_id_fragment"]

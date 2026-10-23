@@ -366,3 +366,185 @@ def test_a_box_in_a_track_band_meets_only_its_paint() -> None:
     arc = CircularInkRing(RadialBand(100.0, 110.0), start_turn=0.25, end_turn=0.75)
     assert not box_meets_ink(box(105.0), [arc], threshold_px=0.5)
     assert box_meets_ink(Aabb(-2.0, 0.0, 2.0, 105.0), [arc], threshold_px=0.5)
+
+
+# --- Every track kind is judged by its paint (D-18; PD-OI-097 scenario revision 17, Must preserve) ---------------
+
+HMMTDNA = TEST_INPUTS / "HmmtDNA.gbk"
+
+
+def _drawn_track_ink(monkeypatch: pytest.MonkeyPatch, draw) -> tuple[object, tuple[object, ...]]:
+    """Draw a figure and return the radial layout and the paint the definition check read for its record."""
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    captured: list[tuple[object, tuple[object, ...]]] = []
+    original = assemble_module._record_track_ink
+
+    def capture(layout, **kwargs):
+        inks = original(layout, **kwargs)
+        captured.append((layout, inks))
+        return inks
+
+    monkeypatch.setattr(assemble_module, "_record_track_ink", capture)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LabelLeadersCrossWarning)
+        draw()
+    assert captured, "the definition check did not run"
+    return captured[-1]
+
+
+def _slot(layout, renderer: str):
+    return next(slot for slot in layout.slots if str(slot.renderer) == renderer)
+
+
+def _lines_at(inks, radius: float, turn: float) -> int:
+    """How many lines a small definition box at ``radius`` and display ``turn`` counts against the paint."""
+
+    import math
+
+    from gbdraw.diagrams.circular.assemble import _definition_lines_on_tracks
+    from gbdraw.layout.spatial import Aabb
+
+    angle = 2.0 * math.pi * turn - 0.5 * math.pi
+    x, y = radius * math.cos(angle), radius * math.sin(angle)
+    return _definition_lines_on_tracks(inks, [Aabb(x - 0.75, y - 0.75, x + 0.75, y + 0.75)])
+
+
+def _assemble(**kwargs):
+    from gbdraw.api.diagram import assemble_circular_diagram_from_record
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.modify import modify_config_dict
+    from gbdraw.config.toml import load_config_toml
+
+    overrides = kwargs.pop("overrides", {})
+    record = SeqIO.read(str(HMMTDNA), "genbank")
+    cfg = GbdrawConfig.from_dict(modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), overrides))
+    return lambda: assemble_circular_diagram_from_record(record, cfg=cfg, legend="none", **kwargs)
+
+
+@pytest.mark.circular
+def test_a_depth_track_counts_its_area_and_axis_not_its_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pandas as pd
+
+    record = SeqIO.read(str(HMMTDNA), "genbank")
+    length = len(record.seq)
+    positions = list(range(1, length + 1, 10))
+    depth = pd.DataFrame(
+        {"reference_name": record.id, "position": positions, "depth": [80 if p <= length // 4 else 0 for p in positions]}
+    )
+    layout, inks = _drawn_track_ink(
+        monkeypatch,
+        _assemble(
+            depth_table=depth, depth_window=100, depth_step=100,
+            circular_track_slots=["features:features", "depth:depth"], circular_track_axis_index=1,
+        ),
+    )
+    slot = _slot(layout, "depth")
+    band, drawn = slot.own_reserved_band_px, slot.draw_band_px
+    middle = 0.5 * (drawn.inner_px + drawn.outer_px)
+    # Where there is no coverage the area is bare: inside the band, off the paint.
+    assert _lines_at(inks, middle, 0.6) == 0
+    # The room the band keeps inward for the axis tick labels holds no paint away from the axis.
+    assert band.inner_px < drawn.inner_px - 1.5
+    assert _lines_at(inks, 0.5 * (band.inner_px + drawn.inner_px) - 0.2, 0.6) == 0
+    # The covered quarter and the baseline circle are paint.
+    assert _lines_at(inks, middle, 0.1) == 1
+    assert _lines_at(inks, drawn.inner_px, 0.6) == 1
+
+
+@pytest.mark.circular
+def test_a_conservation_ring_counts_its_hits_and_its_background(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pandas as pd
+
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+    record = SeqIO.read(str(HMMTDNA), "genbank")
+    hit = ("query1", record.id, 90.0, 4000, 0, 0, 1, 4000, 1, 4000, 1e-20, 100.0)
+    slots = ["features:features", "conservation_1:sequence_conservation@source_index=0"]
+
+    def ring(show_background: bool):
+        return _drawn_track_ink(
+            monkeypatch,
+            _assemble(
+                overrides={"objects.conservation.show_background": show_background},
+                conservation_dataframes=[pd.DataFrame([hit], columns=COMPARISON_COLUMNS)],
+                conservation_reference="subject",
+                circular_track_slots=slots, circular_track_axis_index=1,
+            ),
+        )
+
+    layout, inks = ring(False)
+    drawn = _slot(layout, "sequence_conservation").draw_band_px
+    middle = 0.5 * (drawn.inner_px + drawn.outer_px)
+    assert _lines_at(inks, middle, 0.6) == 0
+    assert _lines_at(inks, middle, 0.1) == 1
+    layout, inks = ring(True)
+    assert _lines_at(inks, middle, 0.6) == 1
+
+
+@pytest.mark.circular
+def test_an_annotation_track_counts_its_marks_not_its_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation, RegionAnnotationStyle
+
+    record = SeqIO.read(str(HMMTDNA), "genbank")
+    length = len(record.seq)
+    region = RegionAnnotation(
+        "block", CoordinateSpan(None, 1, length // 4), mark="band", style=RegionAnnotationStyle(fill="#cccccc")
+    )
+    layout, inks = _drawn_track_ink(
+        monkeypatch,
+        _assemble(
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+            circular_track_slots=["features:features", "regions:annotations@side=inside,set_id=regions,w=20px"],
+            circular_track_axis_index=1,
+        ),
+    )
+    drawn = _slot(layout, "annotations").draw_band_px
+    middle = 0.5 * (drawn.inner_px + drawn.outer_px)
+    assert _lines_at(inks, middle, 0.6) == 0
+    assert _lines_at(inks, middle, 0.1) == 1
+
+
+@pytest.mark.circular
+def test_a_tick_track_counts_its_marks_and_labels_not_its_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.svg.circular_ticks import get_circular_tick_intervals
+
+    record = SeqIO.read(str(HMMTDNA), "genbank")
+    length = len(record.seq)
+    layout, inks = _drawn_track_ink(
+        monkeypatch,
+        _assemble(circular_track_slots=["features:features", "ticks:ticks"], circular_track_axis_index=1),
+    )
+    tick_layout = _slot(layout, "ticks").payload
+    large, _ = get_circular_tick_intervals(length)
+    marks = 0.5 * (tick_layout.tick_band_px.inner_px + tick_layout.tick_band_px.outer_px)
+    # Between two ticks there is neither a mark nor a label.
+    assert _lines_at(inks, marks, 1.5 * large / length) == 0
+    assert tick_layout.label_band_px is not None
+    labels = 0.5 * (tick_layout.label_band_px.inner_px + tick_layout.label_band_px.outer_px)
+    assert _lines_at(inks, labels, 1.5 * large / length) == 0
+    # A mark and a label are paint.
+    assert _lines_at(inks, marks, large / length) == 1
+    assert _lines_at(inks, labels, large / length) == 1
+
+
+@pytest.mark.circular
+def test_the_row_keeps_a_set_interval_equal_to_the_one_the_font_derives() -> None:
+    """Review of 1f079028: an interval set in ``config_overrides`` (as the Web field sends it) to the value the
+    font derives (20 at 18 pt) is the user's and is kept while the row is checked, so the row fits when drawn
+    again with that interval."""
+
+    from gbdraw.api.diagram import build_circular_diagram, label_fit_row
+    from gbdraw.api.options import CircularDiagramOptions
+
+    record = SeqIO.read(str(AP027131), "genbank")
+    interval = {"objects.definition.circular.interval": 20}
+    with pytest.warns(LabelLeadersCrossWarning):
+        drawing = build_circular_diagram(record, options=CircularDiagramOptions(config_overrides=interval))
+    row = label_fit_row(drawing, "smaller_definition_font")
+    assert row is not None and row.status == "found"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        build_circular_diagram(record, options=CircularDiagramOptions(config_overrides={**interval, **row.values}))

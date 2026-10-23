@@ -10,7 +10,10 @@ from ....layout.circular_depth_axis import (
     DEPTH_AXIS_SMALL_TICK_SIZE_PX,
     DEPTH_AXIS_STROKE_WIDTH_PX,
     DEPTH_AXIS_TICK_SIZE_PX,
+    SCALAR_AXIS_LABEL_GAP_PX,
+    ScalarAxisTick,
     depth_axis_tick_font_size_px,
+    scalar_axis_ink,
 )
 from ....layout.scalar_axis import (
     format_percent_tick,
@@ -22,6 +25,7 @@ from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInk
 from ....svg.circular_tracks import (
     circular_gc_content_line,
     generate_circular_gc_content_path_desc,
+    circular_scalar_area_line,
     generate_circular_scalar_area_path_desc,
 )
 
@@ -117,6 +121,36 @@ class GcContentDrawer:
         group.add(border_group)
         return group
 
+    def _percent_axis_ticks(self, baseline_radius: float, track_width: float) -> list[ScalarAxisTick]:
+        """The percent axis ticks as drawn: small ticks first, then large ticks with their labels."""
+
+        large_tick_values = scalar_axis_tick_values(
+            self.min_percent,
+            self.max_percent,
+            show_ticks=self.show_ticks,
+            large_tick_interval=self.large_tick_interval,
+        )
+
+        def tick_radius(tick_value: float) -> float:
+            normalized = scaled_scalar_fraction(tick_value, self.min_percent, self.max_percent)
+            return baseline_radius + (float(track_width) * normalized)
+
+        ticks = [
+            ScalarAxisTick(tick_radius(value), self.axis_small_tick_size, None)
+            for value in scalar_axis_small_tick_values(
+                self.min_percent,
+                self.max_percent,
+                show_ticks=self.show_ticks,
+                small_tick_interval=self.small_tick_interval,
+                large_tick_values=large_tick_values,
+            )
+        ]
+        ticks.extend(
+            ScalarAxisTick(tick_radius(value), self.axis_tick_size, format_percent_tick(value))
+            for value in large_tick_values
+        )
+        return ticks
+
     def _add_percent_axis(
         self,
         group: Group,
@@ -149,50 +183,26 @@ class GcContentDrawer:
         )
 
         font_size = self._tick_font_size(track_width)
-        large_tick_values = scalar_axis_tick_values(
-            self.min_percent,
-            self.max_percent,
-            show_ticks=self.show_ticks,
-            large_tick_interval=self.large_tick_interval,
-        )
-        for tick_value in scalar_axis_small_tick_values(
-            self.min_percent,
-            self.max_percent,
-            show_ticks=self.show_ticks,
-            small_tick_interval=self.small_tick_interval,
-            large_tick_values=large_tick_values,
-        ):
-            normalized = scaled_scalar_fraction(tick_value, self.min_percent, self.max_percent)
-            tick_radius = baseline_radius + (float(track_width) * normalized)
+        for tick in self._percent_axis_ticks(baseline_radius, track_width):
             axis_group.add(
                 Line(
-                    start=(0, -tick_radius),
-                    end=(self.axis_small_tick_size, -tick_radius),
+                    start=(0, -tick.radius_px),
+                    end=(tick.length_px, -tick.radius_px),
                     stroke=self.axis_stroke,
                     stroke_width=self.axis_stroke_width,
                 )
             )
-        for tick_value in large_tick_values:
-            normalized = scaled_scalar_fraction(tick_value, self.min_percent, self.max_percent)
-            tick_radius = baseline_radius + (float(track_width) * normalized)
-            axis_group.add(
-                Line(
-                    start=(0, -tick_radius),
-                    end=(self.axis_tick_size, -tick_radius),
-                    stroke=self.axis_stroke,
-                    stroke_width=self.axis_stroke_width,
+            if tick.label is not None:
+                axis_group.add(
+                    Text(
+                        tick.label,
+                        insert=(tick.length_px + SCALAR_AXIS_LABEL_GAP_PX, -tick.radius_px),
+                        fill=self.axis_stroke,
+                        font_size=font_size,
+                        text_anchor="start",
+                        dominant_baseline="central",
+                    )
                 )
-            )
-            axis_group.add(
-                Text(
-                    format_percent_tick(tick_value),
-                    insert=(self.axis_tick_size + 1.5, -tick_radius),
-                    fill=self.axis_stroke,
-                    font_size=font_size,
-                    text_anchor="start",
-                    dominant_baseline="central",
-                )
-            )
 
         group.add(axis_group)
         return group
@@ -206,23 +216,54 @@ class GcContentDrawer:
         norm_factor: float,
         dinucleotide: str,
         record_transform: RecordDisplayTransform | None = None,
+        *,
+        font_family: str,
     ) -> tuple[CircularInk, ...]:
-        """What ``draw`` paints with the same arguments: the percent ring, or the area between the baseline circle
-        and the content line, with half the stroke."""
+        """What ``draw`` paints with the same arguments: the area between the baseline circle and the content line
+        with half its stroke; in percent mode the area, the background ring when it shows, the border circles and
+        the axis (``font_family`` is the family the axis labels inherit)."""
 
-        if self.mode == "percent":
-            baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
-            pad = 0.5 * max(self.percent_border_width, 0.0)
-            return (CircularInkRing(RadialBand(baseline_radius - pad, outer_radius + pad)),)
-        line = circular_gc_content_line(
-            radius, record_len, gc_df, track_width, norm_factor, dinucleotide, record_transform
-        )
-        if line is None:
-            return ()
-        base = float(radius) * float(norm_factor)
         pad = stroke_pad_px(self.gc_path_stroke_color, self.gc_path_stroke_width)
-        area = CircularInkProfile.between(*line, record_length=record_len, base_px=base, pad_px=pad)
-        return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
+        if self.mode != "percent":
+            line = circular_gc_content_line(
+                radius, record_len, gc_df, track_width, norm_factor, dinucleotide, record_transform
+            )
+            if line is None:
+                return ()
+            base = float(radius) * float(norm_factor)
+            area = CircularInkProfile.between(*line, record_length=record_len, base_px=base, pad_px=pad)
+            return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
+        plot_df = gc_content_percent_df(
+            gc_df, dinucleotide=dinucleotide, min_percent=self.min_percent, max_percent=self.max_percent
+        )
+        scalar_line = circular_scalar_area_line(
+            radius, record_len, plot_df, track_width, norm_factor,
+            close_at_record_len=True, record_transform=record_transform,
+        )
+        if scalar_line is None:
+            return ()
+        positions, outer_radii, baseline_radius = scalar_line
+        inks: list[CircularInk] = [
+            CircularInkProfile.between(positions, outer_radii, record_length=record_len, base_px=baseline_radius,
+                                       pad_px=pad)
+        ]
+        outer_radius = baseline_radius + float(track_width)
+        if stroke_pad_px(self.percent_background_color, track_width) > 0 and self.percent_background_opacity > 0:
+            inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius)))
+        if self.percent_border_width > 0:
+            half = 0.5 * self.percent_border_width
+            inks.extend(CircularInkRing(RadialBand(edge - half, edge + half)) for edge in (baseline_radius, outer_radius))
+        if self.show_axis:
+            inks.extend(
+                scalar_axis_ink(
+                    baseline_radius,
+                    outer_radius,
+                    self._percent_axis_ticks(baseline_radius, track_width),
+                    font_size=self._tick_font_size(track_width),
+                    font_family=font_family,
+                )
+            )
+        return tuple(inks)
 
     def draw(
         self,
