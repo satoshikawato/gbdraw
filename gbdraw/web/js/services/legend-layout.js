@@ -423,6 +423,18 @@ const halfStrokeWidth = (row) => {
  */
 
 /**
+ * Python's `single_gradient_block_x`: a one-gradient block is as wide as its
+ * centred title, with the bar centred under it (OV-1261, OV-1640).
+ * @param {number} barWidth
+ * @param {number} titleWidth
+ * @returns {{ width: number, barX: number }}
+ */
+const singleGradientBlockX = (barWidth, titleWidth) => {
+  const width = Math.max(barWidth, titleWidth);
+  return { width, barX: (width - barWidth) / 2.0 };
+};
+
+/**
  * @param {readonly LegendLayoutRow[]} rows
  * @param {(caption: string) => { width: number, height: number }} measure
  * @param {number} rect
@@ -453,14 +465,16 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
     };
   }
   const row = gradients[0];
-  const barY = measure(row.name).height + (rect / 2.0);
+  const title = measure(row.name);
+  const { width, barX } = singleGradientBlockX(barWidth, title.width);
+  const barY = title.height + (rect / 2.0);
   const scaleLabelY = barY + (rect / 2.0) + 2.0;
   const scaleLabelHeight = Math.max(measure(minLabelText).height, measure('100%').height);
   return {
     compact: false,
-    entries: [{ key: row.key, row, titleX: barWidth / 2.0, titleY: 0.0, barX: 0.0, barY }],
-    width: barWidth, height: scaleLabelY + scaleLabelHeight, barWidth,
-    minLabelText, minLabelX: 0.0, maxLabelX: barWidth, scaleLabelY
+    entries: [{ key: row.key, row, titleX: width / 2.0, titleY: 0.0, barX, barY }],
+    width, height: scaleLabelY + scaleLabelHeight, barWidth,
+    minLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
   };
 };
 
@@ -687,9 +701,7 @@ const circularGradientLayout = (gradients, measure, rect) => {
   const scaleLabelY = barY + (rect / 2) + 2;
   const labelHeight = measure('100%').height;
   const height = scaleLabelY + labelHeight + (rowHeight * SINGLE_GRADIENT_TRAILING_GAP_RATIO);
-  // A title wider than the bar centers the bar under it, so the block starts at x=0 (OV-1261).
-  const width = Math.max(barWidth, title.width);
-  const barX = (width - barWidth) / 2.0;
+  const { width, barX } = singleGradientBlockX(barWidth, title.width);
   return {
     compact: false,
     width,
@@ -732,8 +744,11 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
   const gradient = circularGradientLayout(gradients, measure, rect);
   let pairwiseLegendWidth = 0.0;
   if (gradients.length > 0) {
-    pairwiseLegendWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
-    if (gradients.length > 1) pairwiseLegendWidth += Math.max(...gradients.map((entry) => entry.textWidth)) + xMargin;
+    const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
+    // One gradient reserves its block, title included (OV-1611).
+    pairwiseLegendWidth = gradients.length > 1
+      ? barWidth + (Math.max(...gradients.map((entry) => entry.textWidth)) + xMargin)
+      : singleGradientBlockX(barWidth, gradients[0].textWidth).width;
   }
   const base = { pairwiseLegendWidth, lineMargin, xMargin, gradient };
 
@@ -795,7 +810,8 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
     let height = featureHeight;
     if (gradient) {
       gradientY = Math.max(0.0, (featureHeight - gradient.height) / 2.0);
-      gradientX = Math.max(featureWidth + xMargin, width - gradient.width);
+      // Without feature rows the gradient block is the whole Legend (OV-1612).
+      gradientX = Math.max(solids.length ? featureWidth + xMargin : 0.0, width - gradient.width);
       const contentBottom = Math.max(
         entries.length ? Math.max(...entries.map((entry) => entry.rectY)) + rect / 2.0 : 0.0,
         gradientY + gradient.height
