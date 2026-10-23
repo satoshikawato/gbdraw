@@ -332,7 +332,28 @@
     "within chromosome I or within chromosome II": "位于染色体 I 内或染色体 II 内",
     "Few blocks cross over": "很少有区块交叉",
     "from one species' chromosome I to the other's II": "从一个物种的染色体 I 连到另一物种的染色体 II",
-    "Each chromosome begins at its initiator": "每条染色体都从其复制起始因子基因开始"
+    "Each chromosome begins at its initiator": "每条染色体都从其复制起始因子基因开始",
+    "gbdraw 0.14.0: what is new": "gbdraw 0.14.0 新功能",
+    "Microbial and organelle genome maps · now with a Simplified Chinese interface": "微生物与细胞器基因组图谱 · 现已支持简体中文界面",
+    "The interface in Simplified Chinese": "界面切换为简体中文",
+    "The Language menu in the header switches at once, without reloading": "页眉“语言”菜单，即时切换，无需重新加载",
+    "11 interface languages": "共 11 种界面语言",
+    "Including Simplified and Traditional Chinese": "含简体中文与繁體中文",
+    "Load an example": "加载示例",
+    "The human mitochondrial genome opens as a finished map": "人类线粒体基因组，打开即是完整图谱",
+    "Any font for the figure text": "图中文字可用任意字体",
+    "Load a font file; the plot title can be in Chinese too": "加载字体文件，图表标题也能写中文",
+    "Start a circular record at any base": "环状记录可从任意碱基开始",
+    "Rotate record using this feature; the sequence and its coordinates stay the same": "以此特征为基准旋转记录，序列与坐标不变",
+    "Put a feature on the lane you choose": "把特征放到指定子轨道",
+    "Its label and leader line move with it": "标签和引线随特征一起移动",
+    "Generate shows each stage as it runs": "生成过程逐步显示",
+    "Preparing, rendering: progress at a glance": "准备、渲染，进度一目了然",
+    "Align records by a similarity group": "按相似性组对齐多条记录",
+    "Click a gene, choose Align…, and the clusters line up in one step": "点击基因，选择“对齐…”，基因簇一键对齐",
+    "Save a Session and continue any time": "保存会话，随时继续",
+    "Run info gives the command line that redraws the figure": "“运行信息”给出重现图谱的命令行",
+    "Command line: pip install gbdraw": "命令行：pip install gbdraw"
   },
   "patterns": [
     {
@@ -340,7 +361,7 @@
       "replace": "已下载 {file}（{size}）"
     },
     {
-      "match": "^(?P<file>[\\w.-]+\\.(?:gbk?|gbff|tsv|svg))$",
+      "match": "^(?P<file>[\\w.-]+\\.(?:gbk?|gbff|tsv|svg|otf))$",
       "replace": "{file}"
     }
   ]

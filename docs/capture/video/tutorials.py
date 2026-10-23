@@ -122,12 +122,13 @@ def _select_mode(rec: Recorder, name: str) -> None:
     expect(button).to_have_attribute("aria-pressed", "true")
 
 
-def _fit_preview(rec: Recorder, *, margin: float = 24) -> None:
+def _fit_preview(rec: Recorder, *, margin: float = 24, skim: float | None = None) -> None:
     """Zoom out with the preview's own control until the figure fits above its buttons, then center it.
 
     A portrait take also narrows the figure until the tall window can show all
     of it. It frames the canvas meanwhile and skims the repeated clicks under
-    the fast-forward badge, so the new figure is not seen cut off.
+    the fast-forward badge, so the new figure is not seen cut off: at 3x, or
+    in about ``skim`` seconds when given.
     """
 
     page = rec.page
@@ -141,7 +142,7 @@ def _fit_preview(rec: Recorder, *, margin: float = 24) -> None:
             break
         if rec.portrait and not skimming:
             rec.camera(canvas, duration=0.5)
-            rec.fast_forward(factor=3.0)
+            rec.fast_forward(factor=None if skim else 3.0, target=skim)
             skimming = True
         rec.click(zoom_out, pause=0.35)
     else:
