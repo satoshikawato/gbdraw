@@ -1082,8 +1082,12 @@ export const createHistorySnapshotService = ({
   };
 
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
-  const captureGeneratedArtifactOwnerSet = () => {
-    const drawing = displayedArtifactDrawing();
+  /**
+   * With the color rules and queued palette of `drawing`: the drawing whose
+   * Generate or History step captures them, given by the caller.
+   * @param {D} drawing
+   */
+  const captureGeneratedArtifactOwnerSet = (drawing) => {
     const results = toRaw(getGeneratedArtifactRef(state.results, []));
     const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
@@ -1160,13 +1164,16 @@ export const createHistorySnapshotService = ({
   const installGeneratedArtifactOwnerSet = (
     /** @type {Partial<GeneratedArtifactOwnerSet> | null | undefined} */
     ownerSet,
-    /** @type {{ selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }} */
-    { selectedResultIndex = 0, installResults = null } = {}
+    /**
+     * `drawing` receives the owner set's color rules and queued palette: the
+     * drawing whose Generate commits it or whose History handle restores it.
+     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }}
+     */
+    { drawing, selectedResultIndex = 0, installResults = null }
   ) => {
     if (!ownerSet || typeof ownerSet !== 'object') {
       throw new Error('A generated artifact owner set is required.');
     }
-    const drawing = drawingOfGeneratedMode(ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
     const replacesShownResults = toRaw(results)
       !== toRaw(getGeneratedArtifactRef(state.results, []));
@@ -1324,7 +1331,7 @@ export const createHistorySnapshotService = ({
     const committedResults = Array.isArray(results)
       ? results
       : getGeneratedArtifactRef(state.results, []);
-    const ownerReferences = captureGeneratedArtifactOwnerSet();
+    const ownerReferences = captureGeneratedArtifactOwnerSet(displayedArtifactDrawing());
     currentGeneratedArtifactIdentity = Object.freeze({
       schema: 1,
       algorithm: 'SHA-256',
@@ -1435,7 +1442,7 @@ export const createHistorySnapshotService = ({
     recordStructuralMetric('generatedArtifactFullSignatureCount', 0);
     recordStructuralMetric('generatedArtifactHeavyTraversalCount', 0);
     recordStructuralMetric('generatedArtifactMutableIntentSnapshotCount', 1);
-    const ownerSet = captureGeneratedArtifactOwnerSet();
+    const ownerSet = captureGeneratedArtifactOwnerSet(drawing);
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: true })
       : buildFallbackUiStateData(state, drawing);
@@ -1580,6 +1587,7 @@ export const createHistorySnapshotService = ({
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       installGeneratedArtifactOwnerSet(handle.ownerSet, {
+        drawing,
         selectedResultIndex: ui.selectedResultIndex
       });
       applyFeatureIntentData(state, drawing, mutableIntent.features || {});

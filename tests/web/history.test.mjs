@@ -2080,13 +2080,13 @@ const createLayoutPreferences = () => ({
     // A reused Generate's commit: new Results with the shown groups array.
     const clears = copyFeedbackClears;
     const reusedGenerate = { ...handleA.ownerSet, results: [{ ...resultA }] };
-    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate, { drawing: state.activeDrawing() });
     assert.equal(state.orthogroups.value, groupsA);
     assert.equal(copyFeedbackClears, clears + 1);
     // Installing the shown owner set again (a rollback before activation): no clear.
-    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate, { drawing: state.activeDrawing() });
     assert.equal(copyFeedbackClears, clears + 1);
-    snapshots.installGeneratedArtifactOwnerSet(handleA.ownerSet);
+    snapshots.installGeneratedArtifactOwnerSet(handleA.ownerSet, { drawing: state.activeDrawing() });
     assert.equal(copyFeedbackClears, clears + 2);
     assert.equal(state.results.value, handleA.ownerSet.results);
   }
@@ -2121,7 +2121,7 @@ const createLayoutPreferences = () => ({
   state.zoom.value = 1;
   state.canvasPan.x = 0;
 
-  const originalOwnerSet = snapshots.captureGeneratedArtifactOwnerSet();
+  const originalOwnerSet = snapshots.captureGeneratedArtifactOwnerSet(state.activeDrawing());
   const poisonResult = { name: 'poison.svg' };
   Object.defineProperty(poisonResult, 'content', {
     get() { throw new Error('Result content must not be read during capture.'); }
@@ -2194,6 +2194,7 @@ const createLayoutPreferences = () => ({
   );
   let installedResults = null;
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
+    drawing: state.activeDrawing(),
     installResults: (nextResults) => {
       installedResults = nextResults;
       state.results.value = nextResults;
@@ -2321,6 +2322,7 @@ const createLayoutPreferences = () => ({
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   const installAuthorityOwnersB = () => {
     snapshots.installGeneratedArtifactOwnerSet(handleB.ownerSet, {
+      drawing: state.activeDrawing(),
       selectedResultIndex: handleB.mutableIntent.ui.selectedResultIndex
     });
     snapshots.setGeneratedArtifactIdentity({
@@ -3665,4 +3667,29 @@ for (const previousSuppressed of [false, true]) {
   await redoing;
   assert.equal(router.traversalPending(), false);
   console.log('history router traversal pending tests passed');
+}
+
+// A Generate handle restores its owner set into the drawing that owns the
+// handle (`handle.drawingId`), not into a drawing named by the owner set's
+// `generatedMode`: a handle without that key keeps its drawing.
+{
+  const drawingFixture = (id) => ({
+    id, mode: id, manualSpecificRules: [], pendingPaletteName: ref(''), pendingPaletteColors: ref({})
+  });
+  const circular = drawingFixture('circular');
+  const linear = drawingFixture('linear');
+  const state = withModeDrawings({
+    mode: ref('linear'), results: ref([]), generatedMode: ref(null), semanticFileWatchersSuppressed: ref(false),
+    files: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
+  }, { circular, linear });
+  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), nextTick: async () => {} });
+  const rule = { feat: 'CDS', qual: 'product', val: 'kept', color: '#123456', cap: 'Kept' };
+  linear.manualSpecificRules.push(rule);
+  const handle = snapshots.captureGeneratedArtifactHandle(state.drawingOf('linear'));
+  assert.equal(handle.ownerSet.generatedMode, null);
+  assert.deepEqual(handle.ownerSet.specificRules, [rule], 'the handle holds the rules of its drawing');
+  linear.manualSpecificRules.splice(0);
+  await snapshots.restoreGeneratedArtifactHandle(handle);
+  assert.deepEqual([linear.manualSpecificRules, circular.manualSpecificRules], [[rule], []]);
+  console.log('history owner set drawing tests passed');
 }
