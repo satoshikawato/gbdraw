@@ -14,7 +14,7 @@ from gbdraw.api.record_planning import (
     ResolvedRecordCollection, _source_details, project_similarity_alignment_anchor_fact,
     similarity_alignment_evidence_edges,
 )
-from gbdraw.api.request_render import plan_linear_request
+from gbdraw.api.request_render import plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
@@ -356,11 +356,15 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
         orientations = {key: _boolean(value, f"projection.orientations.{key}")
                         for key, value in orientations.items()}
     after = plan_linear_request(_oriented_request(request, orientations))
-    # Without orientations (the stale-target repair) the requested records
-    # are the flipped ones: one plan serves both (OV-1585).
-    flipped = (after if orientations == flipped_orientations
-               else plan_linear_request(_oriented_request(request, flipped_orientations)))
-    return raw, before, before_collection, after, flipped, request.options.orthogroups, request
+    # The flipped records serve only anchor facts, so they are resolved, not
+    # planned; without orientations (the stale-target repair) they are the
+    # requested ones (OV-1585).
+    flipped_collection = (
+        ResolvedRecordCollection(after.records, after.provenance)
+        if orientations == flipped_orientations
+        else resolve_request_records(_oriented_request(request, flipped_orientations))
+    )
+    return raw, before, before_collection, after, flipped_collection, request.options.orthogroups, request
 
 
 def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str, bool]) -> LinearDiagramRequest:
@@ -378,10 +382,9 @@ def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str
 
 
 def _serialize_projection(context, candidates, raw_request):
-    raw, before, collection, after, flipped, _orthogroups, request = context
+    raw, before, collection, after, flipped_collection, _orthogroups, request = context
     before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
     after_placements = getattr(after.build().drawing, "_gbdraw_alignment_placements")
-    flipped_collection = ResolvedRecordCollection(flipped.records, flipped.provenance)
     # The content of each source this call staged, hashed once per file. Not
     # ``provenance.source_paths``: records the Worker's cache supplied name the
     # files of the Generate that parsed them.

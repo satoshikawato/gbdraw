@@ -13,8 +13,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.prepared import PreparedBiologicalInputCache, PreparedResourceIdentity
+from gbdraw.exceptions import ValidationError
 from gbdraw.comparisons.losat_jobs import losat_source_ids
 from gbdraw.session_request_codec import encode_canonical_request
 from tests.test_web_helper_prepared_lookup import (
@@ -48,6 +53,74 @@ def _resource(tmp_path: Path) -> tuple[Path, PreparedResourceIdentity]:
 
 def _all_entries_bytes(cache: PreparedBiologicalInputCache) -> int:
     return sum(entry.retained_bytes for entries in cache._layers.values() for entry in entries.values())
+
+
+def _assert_bookkeeping_matches_a_recount(cache: PreparedBiologicalInputCache) -> None:
+    """The running total equals a full recount; the held set covers every entry."""
+
+    assert cache._retained_total == _all_entries_bytes(cache)
+    named = {identity for entries in cache._layers.values() for entry in entries.values()
+             for identity in entry.resource_identities}
+    assert named <= cache._held_identities
+
+
+class _Failure(Exception):
+    pass
+
+
+def test_a_write_that_fails_after_an_eviction_keeps_the_running_total(tmp_path: Path) -> None:
+    """A failed write transaction does not commit, so its evictions keep the total without a recount."""
+
+    first, second = tmp_path / "first.bin", tmp_path / "second.bin"
+    first.write_bytes(b"x" * 64)
+    second.write_bytes(b"y" * 32)
+    kept = PreparedResourceIdentity("resource-1", "render-resource-1", 64)
+    replaced = PreparedResourceIdentity("resource-2", "render-resource-2", 32)
+    cache = PreparedBiologicalInputCache()
+    with cache.transaction(resource_paths={first: kept, second: replaced}, diagnostics=None):
+        cache.get_or_build("decoded", ("kept",), frozenset({kept}), object)
+        cache.get_or_build("decoded", ("replaced",), frozenset({replaced}), object)
+        cache.get_or_build("decoded", ("both",), frozenset({kept, replaced}), object)
+    _assert_bookkeeping_matches_a_recount(cache)
+
+    # The second resource gets a new token; the transaction then fails.
+    renewed = PreparedResourceIdentity("resource-2", "render-resource-3", 32)
+    diagnostics: dict[str, dict[str, int]] = {"metrics": {}}
+    with pytest.raises(_Failure):
+        with cache.transaction(resource_paths={first: kept, second: renewed}, diagnostics=diagnostics):
+            raise _Failure()
+    # The entries that name the old token were evicted when the transaction began.
+    assert list(cache._layers["decoded"]) == [("kept",)]
+    assert diagnostics["metrics"]["preparedInputCacheEvictionCount"] == 2
+    _assert_bookkeeping_matches_a_recount(cache)
+    assert diagnostics["metrics"]["preparedInputCacheRetainedBytes"] == _all_entries_bytes(cache) > 0
+
+
+def test_a_lookup_that_evicts_a_mutated_entry_keeps_the_running_total(tmp_path: Path) -> None:
+    """A read-only helper lookup never commits; its owner eviction keeps the total."""
+
+    path, identity = _resource(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    def records() -> tuple[SeqRecord, ...]:
+        return (SeqRecord(Seq("ACGT" * 10), id="record", features=[
+            SeqFeature(FeatureLocation(0, 9), type="CDS", qualifiers={"product": ["p"]}),
+        ]),)
+
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        cached = cache.get_or_build("parsed", ("mutated",), frozenset({identity}), records)
+        cache.get_or_build("decoded", ("kept",), frozenset({identity}), object)
+    _assert_bookkeeping_matches_a_recount(cache)
+
+    cached[0].features.append(SeqFeature(FeatureLocation(0, 1), type="misc_feature"))
+    diagnostics: dict[str, dict[str, int]] = {"metrics": {}}
+    with pytest.raises(ValidationError, match="ownership was mutated"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics, read_only=True):
+            cache.get_or_build("parsed", ("mutated",), frozenset({identity}), records)
+    assert not cache._layers["parsed"]
+    assert diagnostics["metrics"]["preparedInputCacheEvictionCount"] == 1
+    _assert_bookkeeping_matches_a_recount(cache)
+    assert diagnostics["metrics"]["preparedInputCacheRetainedBytes"] == _all_entries_bytes(cache) > 0
 
 
 def test_a_transaction_does_not_walk_the_entries_it_does_not_use(tmp_path: Path) -> None:
