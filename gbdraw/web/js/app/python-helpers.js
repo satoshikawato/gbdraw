@@ -509,8 +509,8 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
     selector = parse_record_selector(_normalize_web_record_selector(record_selector))
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
     if fmt == "genbank":
-        # The records the last Generate parsed from this staged file (OV-1555),
-        # shared and read only; otherwise this reader's own parse.
+        # The records a Generate parses from this staged file (OV-1555, OV-1595),
+        # shared and read only; for a file sent as is, this reader's own parse.
         prepared = prepared_parsed_source(GenBankInputSource(path))
         source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
         if not source_records:
@@ -1721,6 +1721,30 @@ def list_gff_fasta_records(gff_path, fasta_path):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
+def read_all_sequence_records(path, fmt):
+    """Every record of a sequence file, in file order, as the CLI loader reads it: load_gbks, or the
+    FASTA reader of parse_gff_fasta. The page reads it when its own reader declines the file (a UTF-8
+    byte order mark, OV-1599). A record without a sequence (a CON record) has none."""
+    try:
+        from gbdraw.io.genome import _read_fasta_records, load_gbks
+        if fmt not in {"genbank", "fasta"}:
+            raise ValueError(f"Unsupported format: {fmt}")
+        records = load_gbks([path]) if fmt == "genbank" else _read_fasta_records(path)
+        payload = []
+        for record in records:
+            names = (
+                [record.id, *(record.annotations.get("accessions") or [])[:1], record.name]
+                if fmt == "genbank" else [record.id, record.description]
+            )
+            payload.append({
+                "id": str(record.id),
+                "aliases": list(dict.fromkeys(str(name) for name in names if name)),
+                "sequence": str(record.seq).upper() if getattr(record.seq, "defined", True) else None,
+            })
+        return json.dumps({"records": payload})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='readAllSequenceRecords', stage="helper")})
+
 def register_web_fonts_json(fonts_json="[]"):
     """Register font files written into the Worker's file system (custom fonts, PR-2).
 
@@ -1779,10 +1803,11 @@ def compute_label_fit_row_json(row_token, kind):
     return json.dumps({"row": _WEB_LABEL_FIT_SEARCHES.row(str(row_token), str(kind))}, ensure_ascii=False)
 
 
-def _with_prepared_input_lookup(helper, paths_argument=None):
+def _with_prepared_input_lookup(helper, paths_argument=None, publish_inputs=False):
     """A helper that reads the resources the Worker staged for it reads the inputs
     the last Generate prepared (read-only: nothing is published, pruned or
-    evicted). The Worker passes the identities of the helper's resource
+    evicted, except, with publish_inputs, the decoded and parsed inputs it built
+    for them). The Worker passes the identities of the helper's resource
     manifest after the helper's own arguments; paths_argument is the place
     of its resource paths among them, or None when the Worker passes them
     just before the identities, outside the helper's arguments."""
@@ -1796,6 +1821,7 @@ def _with_prepared_input_lookup(helper, paths_argument=None):
             _WEB_PREPARED_INPUT_CACHE,
             resource_paths=json.loads(str(paths_json)),
             resource_identities=json.loads(str(identities_json)),
+            publish_inputs=publish_inputs,
         ):
             return helper(*helper_arguments)
     return run
@@ -1811,7 +1837,10 @@ _WEB_JSON_HELPERS = {
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
-    "extract_cds_protein_fasta": (_with_prepared_input_lookup(extract_cds_protein_fasta), "extractCdsProteinFasta"),
+    # The page stages a new upload under the id the next Generate names: the parse is kept for it (OV-1595).
+    "extract_cds_protein_fasta": (
+        _with_prepared_input_lookup(extract_cds_protein_fasta, publish_inputs=True), "extractCdsProteinFasta"
+    ),
     "build_protein_losat_cache_keys_json": (build_protein_losat_cache_keys_json, "buildProteinLosatCacheKeys"),
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
@@ -1823,6 +1852,7 @@ _WEB_JSON_HELPERS = {
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
+    "read_all_sequence_records": (read_all_sequence_records, "readAllSequenceRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
     "read_feature_override_table_json": (
         _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"

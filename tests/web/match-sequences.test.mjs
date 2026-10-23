@@ -630,3 +630,49 @@ test('a restored GFF3 automatic record is the first record the GFF3 names (OV-16
     { key: 'linear:record:1', recordId: 'X' }
   ]);
 });
+
+// OV-1599: a file that starts with a UTF-8 byte order mark is read by the Worker's all-records reader (Biopython
+// skips its first record), so a restored `#1` names the record the drawing reads, not the one the browser's text
+// decoder would read.
+test('a restored byte-order-mark file names the records the Python loader reads (OV-1599)', async () => {
+  const { disposeDiagramGenerationWorker } = await import('../../gbdraw/web/js/services/diagram-generation.js');
+  const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import('../../gbdraw/web/js/services/runtime-capabilities.js');
+  const helperCalls = [];
+  class RecordsWorker {
+    constructor() { this.listeners = new Set(); }
+    addEventListener(type, listener) { if (type === 'message') this.listeners.add(listener); }
+    removeEventListener(type, listener) { this.listeners.delete(listener); }
+    emit(data) { this.listeners.forEach((listener) => listener({ data })); }
+    terminate() {}
+    postMessage(message) {
+      if (message.type === 'init') {
+        queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true,
+          capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
+      } else if (message.type === 'helper') {
+        helperCalls.push([message.operation, message.payload.format]);
+        queueMicrotask(() => this.emit({ type: 'helper', requestId: message.requestId, ok: true,
+          result: { records: [{ id: 'BOM2', aliases: ['BOM2'], sequence: 'CCCCGGGG' }] } }));
+      }
+    }
+  }
+  const previous = { Worker: globalThis.Worker, location: globalThis.location };
+  globalThis.Worker = RecordsWorker;
+  // The Worker client resolves its runtime assets against the page location.
+  globalThis.location = { href: 'https://example.test/gbdraw/web/' };
+  try {
+    const gb = new File([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id, index) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['aaaaaaaa', 'cccccccc'][index]}`, '//'
+    ].join('\n')).join('\n') + '\n'], 'bom.gb');
+    const sources = await buildRestoredMatchSequenceSources({
+      mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb, region_record_id: '#1' }]
+    });
+    assert.deepEqual(helperCalls, [['readAllSequenceRecords', 'genbank']]);
+    assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+      { recordId: 'BOM2', sequence: 'CCCCGGGG' }
+    ]);
+  } finally {
+    disposeDiagramGenerationWorker();
+    globalThis.Worker = previous.Worker;
+    globalThis.location = previous.location;
+  }
+});

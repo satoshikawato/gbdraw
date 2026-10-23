@@ -1792,6 +1792,35 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       firstConservation.conservationLabels
     );
 
+    // OV-1599: a reference that starts with a UTF-8 byte order mark. The browser reader declines it, and the
+    // subject database of the rings is the records the Python loader reads (Biopython skips the first record
+    // of such a file), not the records the browser's text decoder would read.
+    const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
+    ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
+    state.files.c_gb = bomReference;
+    const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
+    // The record list of the new reference, then the subject database.
+    workerHelperResponses.push(
+      { ok: true, result: { records: [{ selector: '#1', record_id: 'BOMB', record_length: 8 }] } },
+      { ok: true, result: { records: [{ id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }] } }
+    );
+    const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
+    workerResponses.push(response(bomReferenceResult, validCatalog(bomReferenceResult.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeBomReference)
+        .map(({ operation, payload }) => [operation, payload.format, payload.files.map(({ role }) => role)]),
+      [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']]]
+    );
+    assert.equal(workerHelperResponses.length, 0);
+    assert.ok(capturedSequences.includes('>BOMB\nCCCCGGGG\n'), JSON.stringify(capturedSequences));
+    assert.ok(!capturedSequences.some((fasta) => fasta.includes('BOMA')), JSON.stringify(capturedSequences));
+    // The new subject searched once; the Linear section below counts its own searches.
+    assert.equal(losatCalls, 1);
+    losatCalls = 0;
+    state.files.c_gb = referenceView;
+
     const invalidFile = Object.freeze({
       name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
     });
@@ -2404,6 +2433,65 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerResponses.push(response(afterProteins, validCatalog(afterProteins.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual(workerMessages.findLast(({ type }) => type === 'run').payload.stagedResources, []);
+
+    // OV-1595: the first blastp Generate after an upload sends the new file once. Its first extraction stages
+    // it under the id the request names (record-1-genbank), so the other cards and the Generate that follows
+    // send nothing, and Python parses it once for all of them.
+    const uploadFile = new AuditFile([['UP1', 'UP2', 'UP3'].map((id) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
+    ].join('\n')).join('\n') + '\n'], 'upload.gb', { lastModified: 7 });
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
+      uid: `upload-${index + 1}`, gb: uploadFile, gff: null, fasta: null, depth: null, blast: null,
+      losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
+      region_start: null, region_end: null, region_reverse: false
+    })));
+    const uploadPlan = (losatProgram) => resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram, blastpMode: 'pairwise'
+    });
+    state.activeDrawing().losatProgram.value = 'blastp';
+    const messagesBeforeUpload = workerMessages.length;
+    ['UP1', 'UP2', 'UP3'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${recordId}_p1\nMK\n`, record_id: recordId, record_length: 8, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-${recordId}`, record_analysis_id: recordId, record_instance_key: recordId,
+      runtime_binding_hash: `rt-${recordId}`, display_binding_hash: `dp-${recordId}`, identity_manifest: null
+    } }));
+    assert.equal((await runner.runAnalysis(uploadPlan('blastp'))).status, 'error');
+    const uploadExtractions = workerMessages.slice(messagesBeforeUpload)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta');
+    assert.equal(uploadExtractions.length, 3);
+    const uploadToken = uploadExtractions[0].payload.resourceManifest?.[0]?.cacheToken;
+    assert.notEqual(uploadToken, drawnToken);
+    assert.deepEqual(uploadExtractions.map(({ payload }) => [
+      payload.recordSource,
+      (payload.files || []).map(({ role }) => role).filter((role) => role !== 'visibility'),
+      (payload.resourceManifest ?? []).map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
+      (payload.stagedResources ?? []).map(({ resourceId }) => resourceId)
+    ]), [0, 1, 2].map((index) => [
+      { kind: 'genbank', resourceId: 'record-1-genbank' },
+      [],
+      [['record-1-genbank', uploadToken]],
+      index === 0 ? ['record-1-genbank'] : []
+    ]));
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    const uploadResult = result('upload.svg', 'upload');
+    workerResponses.push(response(uploadResult, validCatalog(uploadResult.name)));
+    assert.deepEqual(await runner.runAnalysis(uploadPlan('blastn')), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const uploadRun = workerMessages.findLast(({ type }) => type === 'run').payload;
+    assert.equal(
+      uploadRun.resourceManifest.find(({ resourceId }) => resourceId === 'record-1-genbank').cacheToken,
+      uploadToken
+    );
+    // Only the comparison table of the new third pair is new to the Worker.
+    assert.deepEqual(uploadRun.stagedResources.map(({ resourceId }) => resourceId)
+      .filter((resourceId) => resourceId.startsWith('record-')), []);
+    const uploadBytesSent = workerMessages.slice(messagesBeforeUpload)
+      .flatMap(({ payload }) => payload?.stagedResources ?? [])
+      .filter(({ resourceId }) => resourceId.startsWith('record-'))
+      .reduce((total, { bytes }) => total + bytes.byteLength, 0);
+    assert.equal(uploadBytesSent, uploadFile.size);
+    state.linearSeqs.splice(2);
 
     // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
     // skips the first record), so the record list leaves the file to the Python reader, and the LOSAT FASTA

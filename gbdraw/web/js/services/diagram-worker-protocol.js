@@ -15,6 +15,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
+  READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',

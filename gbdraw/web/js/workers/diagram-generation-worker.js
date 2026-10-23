@@ -775,6 +775,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // Every record of a file as the CLI loader reads it, when the browser reader declines it (OV-1599).
+  [DIAGRAM_HELPER_OPERATIONS.READ_ALL_SEQUENCE_RECORDS]: {
+    keys: ['files', 'format'],
+    fileRoles: ['source'],
+    run: (pyodide, payload, paths, operation) => callJsonHelper(pyodide, 'read_all_sequence_records', [
+      requireHelperFile(paths, 'source', operation),
+      String(payload.format || 'genbank').trim().toLowerCase()
+    ])
+  },
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: {
     keys: [
       'files',

@@ -5,8 +5,7 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
-import { readFileText } from './file-content-cache.js';
-import { gffFastaReaderSelector, parseSequenceRecordsFast, readParsedSequenceRecords } from './record-discovery.js';
+import { gffFastaReaderSelector, readAllSequenceRecords } from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
 import { t } from '../utils/i18n.js';
 
@@ -1099,9 +1098,9 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 };
 
 /**
- * A file's records as the browser sequence reader parses them, once per File (OV-1680). A file that reader
- * leaves to Python (one that starts with a UTF-8 byte order mark) is parsed from its decoded text, as before:
- * no Python reader serves this restore.
+ * A file's records as the CLI loader reads them, once per File (OV-1680): the browser reader's, or the Worker's
+ * for a file that reader declines (one that starts with a UTF-8 byte order mark), so `#N` and the first record
+ * name the records the drawing reads (OV-1599).
  * @param {FileLike | null | undefined} file
  * @param {unknown} inputType
  * @returns {Promise<InputSequenceRecord[]>}
@@ -1109,8 +1108,7 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 const readInputSequenceRecords = async (file, inputType) => {
   if (!file) return [];
   const fmt = text(inputType).toLowerCase() === 'gb' ? 'genbank' : 'fasta';
-  const { records } = await readParsedSequenceRecords(file, fmt);
-  return (records ?? parseSequenceRecordsFast(await readFileText(file), fmt))
+  return (await readAllSequenceRecords(file, fmt))
     .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
 };
 

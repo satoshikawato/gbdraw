@@ -652,6 +652,7 @@ def prepared_input_lookup(
     *,
     resource_paths: Mapping[str, str | Path],
     resource_identities: Mapping[str, Mapping[str, object]],
+    publish_inputs: bool = False,
 ) -> Iterator[None]:
     """Let a Worker helper read the inputs the last Generate prepared.
 
@@ -660,6 +661,9 @@ def prepared_input_lookup(
     of its manifest, validated as a render's are. Lookups under them hit what
     a Generate stored; a miss parses once for the whole call and is not kept;
     nothing is published, pruned or evicted (``transaction(read_only=True)``).
+    With ``publish_inputs`` (the blastp protein extraction) the decoded
+    resources and parsed sources it built are published for the next Generate,
+    which names the same resources (OV-1595); nothing else is.
     """
 
     _require_resource_map(resource_paths)
@@ -672,6 +676,7 @@ def prepared_input_lookup(
         resource_paths={paths[resource_id]: identity for resource_id, identity in identities.items()},
         diagnostics=None,
         read_only=True,
+        publish_inputs=publish_inputs,
     ):
         yield
 
