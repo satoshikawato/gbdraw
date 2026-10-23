@@ -222,7 +222,7 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   // Progressive steps: Generate with the defaults, then LOSATP once, identity colors, and the layout (TV-D20).
   await expect(page.getByText('Generate with the defaults')).toBeVisible();
   await expect(page.getByText('Find collinear blocks with LOSATP')).toBeVisible();
-  await expect(page.getByText('Color the blocks by identity')).toBeVisible();
+  await expect(page.getByText('Color the blocks by identity', { exact: true })).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('heading', { name: 'Quick reproduce' })).toHaveCount(0);
   const mediaImages = tutorialPanel.getByRole('img');
