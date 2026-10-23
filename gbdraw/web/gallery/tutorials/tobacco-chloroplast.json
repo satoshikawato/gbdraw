@@ -410,7 +410,7 @@
     },
     {
       "title": "Color the gene groups",
-      "body": "Everything is drawn in one color. Open Colors, click Choose Specific rules file, and choose chloroplast_specific_table.tsv, which colors chloroplast gene groups such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase and names them in the legend. Click Generate Diagram.",
+      "body": "The preview colors features by type: every CDS is the same blue, with tRNA, rRNA, and repeat_region in their own default colors. Open Colors, click Choose Specific rules file, and choose chloroplast_specific_table.tsv, which gives each chloroplast gene group, such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase, its own color and legend entry. Click Generate Diagram.",
       "table": {
         "columns": [
           "Setting",

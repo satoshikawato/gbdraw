@@ -389,7 +389,7 @@
     },
     {
       "title": "Tidy the layout",
-      "body": "The Gallery figure draws this one-record genome without the Multi-Record Canvas and with all features in one lane. Open Layout and clear Multi-Record Canvas and Separate Strands. Under Dinucleotide content/skew, set Window to 500 and Step to 50 for smoother GC rings. Click Generate Diagram.",
+      "body": "The Gallery figure draws this one-record genome without the Multi-Record Canvas and with all features in one lane. Open Layout and clear Multi-Record Canvas and Separate Strands. Under Dinucleotide content/skew, set Window to 500 and Step to 50 (the default for a genome under 1 Mb is 1000 and 100), so the GC rings show finer local changes along the genome. Click Generate Diagram.",
       "table": {
         "columns": [
           "Setting",
@@ -494,8 +494,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-06-03-layout-preview.webp",
-            "alt": "Human mitochondrial preview with all features in one lane and smoother GC content and GC skew rings.",
-            "caption": "All features in one lane, and smoother GC rings."
+            "alt": "Human mitochondrial preview with all features in one lane and finer GC content and GC skew rings that show local variation.",
+            "caption": "All features in one lane, and finer GC rings."
           },
           "capture": {
             "source": "webapp",
