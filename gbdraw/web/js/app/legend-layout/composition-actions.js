@@ -1020,6 +1020,14 @@ const movedDecorationBounds = (binding) => {
   if (!binding || binding.metadata.legacyNormalized) return [];
   const { metadata } = binding;
   const edge = metadata.spacing.edgePaddingPx;
+  const scale = binding.primary.targets.find((element) => element.id === LENGTH_BAR_ID);
+  // A diagram drag moves the scale with the records, and a moved diagram does
+  // not grow the canvas: the scale counts as moved only by its offset from the
+  // diagram's (another primary group's) leading translate.
+  const diagram = binding.primary.targets.find((element) => element !== scale);
+  const diagramTranslate = diagram
+    ? targetLeadingTranslate(diagram, 'primary')
+    : { x: metadata.primary.automaticTranslation[0], y: metadata.primary.automaticTranslation[1] };
   /** @type {Array<{ role: CompositionRole, side: string, target: { automaticTranslation: number[], localBounds: CompositionBounds } | null, element: SVGGraphicsElement | undefined }>} */
   const items = [
     { role: 'legend', side: metadata.legendSide, target: metadata.legend, element: binding.legend.targets[0] },
@@ -1027,11 +1035,10 @@ const movedDecorationBounds = (binding) => {
     {
       role: 'primary',
       side: 'shown',
-      // The scale is a primary group: it shares the primary automatic translate.
       target: metadata.lengthBar
-        ? { automaticTranslation: metadata.primary.automaticTranslation, localBounds: metadata.lengthBar.localBounds }
+        ? { automaticTranslation: [diagramTranslate.x, diagramTranslate.y], localBounds: metadata.lengthBar.localBounds }
         : null,
-      element: binding.primary.targets.find((element) => element.id === LENGTH_BAR_ID)
+      element: scale
     }
   ];
   return items.flatMap(({ role, side, target, element }) => {

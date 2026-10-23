@@ -365,3 +365,21 @@ test('showing a stored Result with a moved scale changes nothing; a Legend side 
   assert.ok(SCALE_BOUNDS.x + lx - 16 >= vx && SCALE_BOUNDS.y + ly + SCALE_BOUNDS.height + 16 <= vy + vh + 1e-9
     && SCALE_BOUNDS.x + lx + SCALE_BOUNDS.width + 16 <= vx + vw + 1e-9, root(edited).viewBox);
 });
+
+// A whole-diagram drag moves the scale with the records: the scale has not
+// moved relative to the diagram, so the canvas does not grow (as for any
+// diagram drag). A scale moved on its own still counts after a diagram drag.
+test('a diagram drag that carries the Linear scale grows nothing; the scale\'s own offset still counts', () => {
+  for (const dy of [40, -60]) {
+    const svg = resultSvg({ scale: true });
+    const before = rootMarkup(svg);
+    applyCompositionUserDeltas(svg, { primary: [[0, dy], [0, dy]], legend: [0, 0], title: [0, 0] });
+    assert.equal(applyCanvasToSvg(svg, {}), false, `diagram dragged by ${dy}`);
+    assert.equal(rootMarkup(svg), before);
+  }
+  const svg = resultSvg({ scale: true });
+  // The scale moved down 40 on its own, then the diagram down 40: box y 186..196.
+  applyCompositionUserDeltas(svg, { primary: [[0, 40], [0, 80]], legend: [0, 0], title: [0, 0] });
+  assert.equal(applyCanvasToSvg(svg, {}), true);
+  assert.equal(root(svg).viewBox, '0 0 186 212');
+});
