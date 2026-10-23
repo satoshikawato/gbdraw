@@ -1039,16 +1039,20 @@ def _read_closely(rec: Recorder, part: dict, *, margin: float = 16) -> None:
 
     cx, cy, _ = PORTRAIT.portrait_view(VIEWPORT, stop(now, stops[0]), "bottom")
     _pan_preview(rec, canvas["x"] + canvas["width"] / 2 - cx, canvas["y"] + canvas["height"] / 2 - cy)
+    # The pointer waits on the zoom buttons, below the view and off the drawing.
+    rec.move_to(*_center(zoom_in.bounding_box()))
     rec.normal_speed()
     moved = located()
     first = stop(moved, moved["x"] + stops[0] - now["x"])
     rec.event("detail", zoom=round(zoom + clicks / 10, 1), clicks=clicks, stops=len(stops),
               cap_px=round(label * _CAP_HEIGHT * PORTRAIT.card[3] / PORTRAIT.portrait_view(VIEWPORT, first, "bottom")[2], 1))
     rec.camera(first, duration=1.0, portrait=first)
-    # The move eases for 1 s, so the part then stays still about 3 s.
-    rec.hold(4.0)
+    # The move eases for 1 s, so the part then stays still about 3 s (the
+    # pointer's way to the next pan's start, beside the view, adds to it).
+    rec.hold(4.0 if len(stops) == 1 else 3.0)
     if len(stops) > 1:
-        _pan_preview(rec, stops[0] - stops[1], 0, duration=1.8)
+        _pan_preview(rec, stops[0] - stops[1], 0, duration=1.2)
+        rec.move_to(*_center(zoom_in.bounding_box()))
         rec.hold(3.0)
     _fit_preview(rec)
 

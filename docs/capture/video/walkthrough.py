@@ -353,12 +353,18 @@ class Recorder:
         # A small perpendicular bow keeps the path from looking mechanical.
         bow = min(60.0, distance * 0.12)
         nx, ny = -(y - sy) / distance, (x - sx) / distance
+        begin = time.monotonic()
         for index in range(1, steps + 1):
-            p = _ease(index / steps)
+            # Each step costs time on a busy machine; skip ahead so the move
+            # still takes about ``duration`` (a slow drag would pan slowly).
+            share = min(1.0, max(index / steps, (time.monotonic() - begin) / duration))
+            p = _ease(share)
             arc = 4 * p * (1 - p) * bow
             px, py = sx + (x - sx) * p + nx * arc, sy + (y - sy) * p + ny * arc
             self.page.mouse.move(px - self.origin[0], py - self.origin[1])
             self.event("move", x=round(px, 1), y=round(py, 1))
+            if share >= 1.0:
+                break
             self.page.wait_for_timeout(duration * 1000 / steps)
         self.x, self.y = x, y
 
