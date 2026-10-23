@@ -385,6 +385,8 @@ def _lane_to(rec: Recorder, gene: str, *, repeat: bool) -> None:
     """
 
     page = rec.page
+    if repeat:
+        rec.caption(5, "Put a feature on the lane you choose", "Its label and leader line move with it")
     with _skimmed(rec, target=REPEAT_SECONDS) if repeat else nullcontext():
         with _skimmed(rec):
             popup = _open_feature(rec, _feature_point(rec, "(item) => item.gene === arg", gene), "Edit")
