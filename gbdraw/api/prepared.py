@@ -74,6 +74,9 @@ class _PreparedCacheEntry:
 _RENDER_STAGE_LAYER = "render_stage"
 _RENDER_STAGE_STAMP = ("render-stage",)
 _LAYERS = ("decoded", "parsed", "resolved", _RENDER_STAGE_LAYER)
+# The input layers: their values are functions of the validated resource bytes
+# alone, so a write transaction keeps them also when its render fails (OV-1575).
+_INPUT_LAYERS = ("decoded", "parsed")
 
 
 class _NoIdentity:
@@ -540,7 +543,12 @@ class PreparedBiologicalInputCache:
     Values are decoded resources, parsed source records, one resolved record
     collection, and the render-stage results used by the current request,
     including batch items.
-    Publication waits until SVG generation and catalog construction succeed.
+    Resolved records and render-stage results are published only when SVG
+    generation and catalog construction succeed. Decoded resources and parsed
+    sources are functions of the resource bytes, so a write transaction that
+    fails publishes the ones it built, unless it changed them; it prunes
+    nothing. A build that failed leaves no entry. The Generate after a failed
+    one (the Label fit choice, for example) parses no source again.
 
     A successful transaction is the one-project bound: it discards entries that
     the request did not use. A changed semantic key rebuilds its dependent layer;
@@ -671,6 +679,8 @@ class PreparedBiologicalInputCache:
             else:
                 self._commit(transaction)
         except BaseException:
+            if not read_only:
+                self._publish_inputs(transaction)
             self._previous_transaction_failed = True
             raise
         else:
@@ -863,6 +873,30 @@ class PreparedBiologicalInputCache:
                     transaction,
                     walk_features=walk_features,
                 )
+
+    def _publish_inputs(self, transaction: _PreparedCacheTransaction) -> None:
+        """Publish the decoded and parsed inputs a failed write transaction built.
+
+        An entry whose value the request changed is not kept (checked in full,
+        as a commit checks). Nothing is pruned: a failed request is not the
+        one-project bound.
+        """
+
+        for layer in _INPUT_LAYERS:
+            current = self._layers[layer]
+            for key, entry in transaction.pending[layer].items():
+                try:
+                    self._verify_owner(layer, key, entry, transaction, walk_features=True)
+                except Exception:
+                    # Changed, or its stamp cannot be built: the request's own
+                    # error stays the one it raises.
+                    continue
+                previous = current.pop(key, None)
+                self._retained_total += entry.retained_bytes - (
+                    previous.retained_bytes if previous is not None else 0
+                )
+                current[key] = entry
+                self._held_identities |= entry.resource_identities
 
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
         self._verify_used_owners(transaction)

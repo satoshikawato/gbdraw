@@ -42,7 +42,8 @@ from gbdraw.annotations import (
     CoordinateSpan,
     RegionAnnotation,
 )
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.labels.fit import SEPARATE_FEATURES_PATH
 import gbdraw.api.prepared as prepared_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.api.request_render import normalize_request_records, plan_request
@@ -916,9 +917,25 @@ def test_identity_validation_rejects_paths_and_size_mismatches(tmp_path: Path) -
     assert not workspace.exists()
 
 
-def test_failed_fill_is_not_published_and_prior_entry_survives(
+def _assert_running_total_matches_a_recount(cache: PreparedBiologicalInputCache) -> None:
+    assert cache._retained_total == sum(
+        entry.retained_bytes for entries in cache._layers.values() for entry in entries.values()
+    )
+    assert {
+        identity
+        for entries in cache._layers.values()
+        for entry in entries.values()
+        for identity in entry.resource_identities
+    } <= cache._held_identities
+
+
+def test_a_failed_render_publishes_its_input_layers_but_no_failed_build_or_render_stage(
     tmp_path: Path,
 ) -> None:
+    # OV-1575 (Owner D-07 B): decoded and parsed inputs are functions of the
+    # resource bytes, so a render that fails late keeps them; a build that
+    # failed is never kept, and resolved records and render stages publish
+    # only with a successful render. Entries committed before survive.
     path = tmp_path / "resource.bin"
     path.write_bytes(b"resource")
     identity = PreparedResourceIdentity(
@@ -936,27 +953,158 @@ def test_failed_fill_is_not_published_and_prior_entry_survives(
             lambda: original,
         ) is original
 
-    with pytest.raises(RuntimeError, match="fill failed"):
+    parsed = (_record("parsed-in-the-failed-render"),)
+    decoded = {"decoded": "in the failed render"}
+    with pytest.raises(RuntimeError, match="render failed"):
         with cache.transaction(resource_paths={path: identity}, diagnostics=None):
             assert get_or_build_parsed_source(
                 ("source", identity),
                 identities,
                 lambda: pytest.fail("the committed source should be reused"),
             ) is original
-            get_or_build_parsed_source(
-                ("replacement", identity),
-                identities,
-                lambda: (_ for _ in ()).throw(RuntimeError("fill failed")),
-            )
+            assert get_or_build_parsed_source(
+                ("parsed", identity), identities, lambda: parsed
+            ) is parsed
+            assert get_or_build_decoded_resource(
+                path, ("decoded",), lambda: decoded
+            ) is decoded
+            with pytest.raises(RuntimeError, match="fill failed"):
+                get_or_build_parsed_source(
+                    ("replacement", identity),
+                    identities,
+                    lambda: (_ for _ in ()).throw(RuntimeError("fill failed")),
+                )
+            cache.get_or_build("resolved", ("resolved", identity), identities, object)
+            _read_in_a_record_stage(parsed[0], "failed-render")
+            raise RuntimeError("render failed")
+    assert set(cache._layers["parsed"]) == {("source", identity), ("parsed", identity)}
+    assert set(cache._layers["decoded"]) == {(identity, ("decoded",))}
+    assert not cache._layers["resolved"]
+    assert not cache._layers["render_stage"]
+    _assert_running_total_matches_a_recount(cache)
 
     diagnostics: dict[str, object] = {"metrics": {}}
+    rebuilt = (_record("rebuilt"),)
     with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
         assert get_or_build_parsed_source(
             ("source", identity),
             identities,
             lambda: pytest.fail("the prior committed source was poisoned"),
         ) is original
-    assert _metrics(diagnostics)["parsedSourceCacheHitCount"] == 1
+        assert get_or_build_parsed_source(
+            ("parsed", identity),
+            identities,
+            lambda: pytest.fail("the source parsed by the failed render was parsed again"),
+        ) is parsed
+        assert get_or_build_decoded_resource(
+            path,
+            ("decoded",),
+            lambda: pytest.fail("the resource decoded by the failed render was decoded again"),
+        ) is decoded
+        assert get_or_build_parsed_source(
+            ("replacement", identity), identities, lambda: rebuilt
+        ) is rebuilt
+        cache.get_or_build("resolved", ("resolved", identity), identities, object)
+        _read_in_a_record_stage(parsed[0], "failed-render")
+    metrics = _metrics(diagnostics)
+    assert metrics["parsedSourceCacheHitCount"] == 2
+    assert metrics["parsedSourceParseCount"] == 1
+    assert metrics["decodedResourceCacheHitCount"] == 1
+    assert metrics["resolvedRecordBuildCount"] == 1
+    assert metrics["renderStageBuildCount"] == 1
+    assert metrics.get("renderStageHitCount", 0) == 0
+    assert metrics["preparedInputCacheRetainedBytes"] == cache._retained_total
+    _assert_running_total_matches_a_recount(cache)
+
+
+def test_a_failed_render_does_not_keep_an_input_it_changed(tmp_path: Path) -> None:
+    # A value changed while the render ran is not a function of its bytes any
+    # more: the next request parses it again instead of failing on it.
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity("record-1", "render-resource-1", 8)
+    cache = PreparedBiologicalInputCache()
+    changed = (_record("changed"),)
+    with pytest.raises(RuntimeError, match="render failed"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(("source", identity), frozenset({identity}), lambda: changed)
+            _replace_first_feature(changed)
+            raise RuntimeError("render failed")
+    assert not cache._layers["parsed"]
+    _assert_running_total_matches_a_recount(cache)
+
+    rebuilt = (_record("rebuilt"),)
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        assert get_or_build_parsed_source(
+            ("source", identity), frozenset({identity}), lambda: rebuilt
+        ) is rebuilt
+
+
+def _label_fit_document(source: Path, overrides: dict[str, object]) -> dict[str, object]:
+    return build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source), record_key="record-1"),),
+            options=CircularDiagramOptions(
+                config_overrides={"labels.circular.scope": "outer", **overrides}
+            ),
+            output=RenderOutputRequest(output_prefix="label-fit", formats=("svg",)),
+        )
+    ).to_dict()
+
+
+def test_the_generate_after_a_label_fit_failure_parses_no_source_again(
+    tmp_path: Path,
+) -> None:
+    # OV-1575: SARS-CoV-2 with outer labels at defaults stops with the Label
+    # fit dialog after its source was parsed; the Generate with the chosen
+    # setting reuses that parse and builds every render stage itself.
+    source = tmp_path / "SARS-CoV-2.gbk"
+    source.write_bytes(
+        (Path(__file__).parent / "test_inputs" / "SARS-CoV-2.gbk").read_bytes()
+    )
+    cache = PreparedBiologicalInputCache()
+    with pytest.raises(LabelsDoNotFitError):
+        _render(tmp_path, cache, _label_fit_document(source, {}), request_id=1)
+    kept = {layer: len(entries) for layer, entries in cache._layers.items()}
+    _assert_running_total_matches_a_recount(cache)
+
+    retry, diagnostics = _render(
+        tmp_path,
+        cache,
+        _label_fit_document(source, {SEPARATE_FEATURES_PATH: True}),
+        request_id=2,
+    )
+    assert retry["results"]
+    metrics = _metrics(diagnostics)
+    assert metrics["parsedSourceParseCount"] == 0
+    assert kept == {"decoded": 0, "parsed": 1, "resolved": 0, "render_stage": 0}
+    assert metrics["parsedSourceCacheHitCount"] == 1
+    assert metrics["resolvedRecordBuildCount"] == 1
+    # No render stage was kept, so each one is built here (a hit is a stage
+    # this Generate built and called again).
+    assert metrics["renderStageBuild:interactive_context"] == 1
+    assert metrics["preparedInputCacheRetainedBytes"] == cache._retained_total
+    _assert_running_total_matches_a_recount(cache)
+
+
+def test_a_source_that_fails_to_parse_keeps_nothing_and_parses_again(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("parse-failure"),))
+    document = _document(source)
+    resources = document["resources"]
+    assert isinstance(resources, dict)
+    for entry in resources.values():
+        assert isinstance(entry, dict)
+        entry["data"] = base64.b64encode(b"LOCUS broken\nORIGIN\n  this is not a record\n").decode()
+    cache = PreparedBiologicalInputCache()
+    for request_id in (1, 2):
+        with pytest.raises(ValidationError, match="No valid GenBank records"):
+            _render(tmp_path, cache, document, request_id=request_id)
+        assert not cache._layers["parsed"]
+        assert not cache._layers["resolved"]
+        _assert_running_total_matches_a_recount(cache)
 
 
 def test_mutation_guard_rejects_changed_cached_owners(tmp_path: Path) -> None:
