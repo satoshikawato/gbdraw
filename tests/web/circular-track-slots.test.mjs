@@ -259,7 +259,7 @@ test('managed Depth insertion preserves the existing Axis sides', () => {
   const state = createState({ showDepth: true });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.changeCircularDepthSources(() => {
+  editor.changeCircularDepthSources(state, () => {
     state.files.c_depth = [depthFile('depth.tsv')];
   });
 
@@ -289,7 +289,7 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.changeCircularDepthSources(() => {
+  editor.changeCircularDepthSources(state, () => {
     state.files.c_depth = [depthFile('depth-a.tsv'), depthFile('depth-b.tsv')];
   });
 
@@ -309,7 +309,7 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
 });
 
 test('managed Depth removal rebases the Axis only when the row is before it', () => {
-  const removeSource = (state) => createCircularTrackSlotEditor({ state: withDrawings(state) }).changeCircularDepthSources(() => {
+  const removeSource = (state) => createCircularTrackSlotEditor({ state: withDrawings(state) }).changeCircularDepthSources(state, () => {
     state.files.c_depth = [];
   });
   const beforeState = createState({
@@ -346,7 +346,7 @@ test('managed Conservation insertion preserves the existing Axis sides', () => {
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.syncCircularConservationSlots();
+  editor.syncCircularConservationSlots(state);
 
   const managed = state.adv.circular_track_slots.find(
     (slot) => slot.renderer === 'sequence_conservation'
@@ -372,7 +372,7 @@ test('managed Conservation insertion stays after an on-Axis Tick', () => {
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.syncCircularConservationSlots();
+  editor.syncCircularConservationSlots(state);
 
   const managed = state.adv.circular_track_slots.find(
     (slot) => slot.renderer === 'sequence_conservation'
@@ -397,7 +397,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     slots: [conservationSlot('outside'), featureSlot(), spacerSlot(), gcSlot()],
     axisIndex: 3
   });
-  createCircularTrackSlotEditor({ state: withDrawings(beforeState) }).syncCircularConservationSlots();
+  createCircularTrackSlotEditor({ state: withDrawings(beforeState) }).syncCircularConservationSlots(beforeState);
   assert.equal(beforeState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(beforeState), {
     features: 'outside',
@@ -409,7 +409,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     slots: [featureSlot(), spacerSlot(), gcSlot(), conservationSlot()],
     axisIndex: 2
   });
-  createCircularTrackSlotEditor({ state: withDrawings(afterState) }).syncCircularConservationSlots();
+  createCircularTrackSlotEditor({ state: withDrawings(afterState) }).syncCircularConservationSlots(afterState);
   assert.equal(afterState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(afterState), {
     features: 'outside',

@@ -92,11 +92,11 @@ const MODES = {
         circularRecordList: { value: [] }
       };
       const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-      editor.normalizeCircularTrackSlots();
+      editor.normalizeCircularTrackSlots(state);
       return {
         state,
         slots: () => state.adv.circular_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(() => {
+        change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(state, () => {
           state.files.c_depth = sourceRow(nextSourced, nextWidth);
         }),
         issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
@@ -129,7 +129,7 @@ const MODES = {
       return {
         state,
         slots: () => state.adv.linear_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeLinearDepthSources(() => {
+        change: (nextSourced, nextWidth) => editor.changeLinearDepthSources(state, () => {
           // PD-OI-025: clearing a source keeps the logical series width.
           state.linearSeqs[0].depth = sourceRow(nextSourced, nextWidth);
         }),

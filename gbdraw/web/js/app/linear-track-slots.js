@@ -913,11 +913,8 @@ export const createLinearTrackSlotEditor = ({
   // The only entry for Depth source changes: run the change, then reconcile.
   // The Linear drawing's Show Depth goes off with its last Depth
   // source; the other mode's drawing is not touched (OV-82, OV-101).
-  // app-setup.js calls this from handlers that hold their drawing; it keeps
-  // the mode lookup until B2d passes that drawing in.
-  /** @param {() => unknown} mutate */
-  const changeLinearDepthSources = (mutate) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {() => unknown} mutate */
+  const changeLinearDepthSources = (drawing, mutate) => {
     const previousSourced = linearSourcedDepthTrackIndexesForState(state);
     mutate();
     reconcileLinearDepthSlots(drawing, previousSourced);

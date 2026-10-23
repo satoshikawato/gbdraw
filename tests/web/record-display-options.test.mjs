@@ -478,8 +478,8 @@ test('alignment intent changes only its target direction and preserves pending d
   model.controls.setStart(rows[0],25);model.controls.setStart(rows[1],40);
   const pending=structuredClone(model.state.recordDisplayDrafts);
   const directions=[{recordKey:'record-1',reverseComplement:true}];
-  const checkpoint=model.controls.captureAlignmentOrientationIntent(directions);
-  model.controls.commitAlignmentOrientations(directions);
+  const checkpoint=model.controls.captureAlignmentOrientationIntent(model.state, directions);
+  model.controls.commitAlignmentOrientations(model.state, directions);
   assert.equal(model.state.linearSeqs[0].region_reverse,true);
   assert.equal(model.state.linearSeqs[1].region_reverse,false);
   assert.equal(model.state.recordDisplayDrafts.length,pending.length);
@@ -489,7 +489,7 @@ test('alignment intent changes only its target direction and preserves pending d
   // A later normal Reverse checkbox remains effective, with no forced override.
   model.state.linearSeqs[0].region_reverse=false;
   assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
-  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
   assert.deepEqual(model.state.recordDisplayDrafts,pending);
 });
 
@@ -511,11 +511,11 @@ test('an alignment checkpoint restores the Linear drafts and leaves the Circular
   model.state.recordDisplayDrafts[0].reverseComplementOverride = true;
   const pending = structuredClone(model.state.recordDisplayDrafts);
   const directions = [{ recordKey: 'record-1', reverseComplement: true }];
-  const checkpoint = model.controls.captureAlignmentOrientationIntent(directions);
-  model.controls.commitAlignmentOrientations(directions);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, directions);
+  model.controls.commitAlignmentOrientations(model.state, directions);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
-  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, false);
   assert.deepEqual({ linear: model.state.recordDisplayDrafts, circular: circular.recordDisplayDrafts },
     { linear: pending, circular: circularBefore });
@@ -527,17 +527,17 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
   model.state.linearSeqs[0].region_reverse = true;
   const target = {recordKey:'record-1', reverseComplement:true};
   assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
-  const checkpoint = model.controls.captureAlignmentOrientationIntent([target]);
-  model.controls.commitAlignmentOrientations([target]);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, [target]);
+  model.controls.commitAlignmentOrientations(model.state, [target]);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   assert.equal(model.state.linearSeqs[1].region_reverse, false);
   // Artifact rollback restores its canonical direction first; the same owner
   // then restores the pre-operation pending input, without needing discovery.
   model.state.linearSeqs[0].region_reverse = false;
-  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   model.state.linearSeqs[0].gb = model.state.inputFiles.registerFile(new File(['replacement'], 'replacement.gb'));
-  assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
+  assert.throws(() => model.controls.captureAlignmentOrientationIntent(model.state, [target]), /source binding changed/);
 });
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
@@ -601,11 +601,11 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
     runUndoable: (_label, fn) => fn(), getCommittedRequest: () => committed.renderRequest, getCommittedSession: () => committed });
   const directions = [{ recordKey: 'record-1', reverseComplement: true }];
-  const checkpoint = controls.captureAlignmentOrientationIntent(directions);
+  const checkpoint = controls.captureAlignmentOrientationIntent(state, directions);
   assert.equal(state.recordDisplayDrafts[0].selector, '#2', 'the capture settled the draft onto its row');
-  controls.commitAlignmentOrientations(directions);
+  controls.commitAlignmentOrientations(state, directions);
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, null);
-  controls.restoreAlignmentOrientationIntent(checkpoint);
+  controls.restoreAlignmentOrientationIntent(state, checkpoint);
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, true, 'the row override comes back');
   assert.equal(state.linearSeqs[0].region_reverse, false);
 });

@@ -2768,7 +2768,7 @@ export const createAppSetup = () => {
     const previousFile = circularDepthRepresentatives()[idx] || null;
     // A new file can rename an auto-labeled series, so the label follows in the same retirement.
     retireLegendStylesOfUnnamedCaptions(() => {
-      circularTrackSlotEditor.changeCircularDepthSources(() => {
+      circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {
         rows.forEach((row) => {
           row[idx] = ref;
         });
@@ -2795,7 +2795,7 @@ export const createAppSetup = () => {
     ensureDepthTrackConfigCount(drawing, logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
     retireLegendStylesOfUnnamedCaptions(() => {
-      linearTrackSlotEditor.changeLinearDepthSources(() => {
+      linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
         targets.forEach((seq) => {
           const slots = depthFileSlotsFromValue(seq.depth);
           if (ref) {
@@ -2893,7 +2893,7 @@ export const createAppSetup = () => {
       );
       if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
-      circularTrackSlotEditor.normalizeCircularTrackSlots();
+      circularTrackSlotEditor.normalizeCircularTrackSlots(drawing);
     });
   };
   /** @param {number} index */
@@ -3053,7 +3053,7 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const refreshCircularConservationSlots = (drawing) => {
     if (drawing.adv.circular_track_slots_enabled === true) {
-      circularTrackSlotEditor.syncCircularConservationSlots();
+      circularTrackSlotEditor.syncCircularConservationSlots(drawing);
     }
   };
   const circularConservationSeriesRows = computed(() => {
@@ -5024,10 +5024,15 @@ export const createAppSetup = () => {
     projectCommittedAlignment: /** @type {any} */ (projectCommittedSimilarityAlignment),
     // R13: the root runs the candidate with the record display's orientation
     // checkpoint; the alignment owner holds neither owner.
-    runRecordAlignment: ({ orientations, ...run }) => runCommittedCanonicalCandidate({ ...run,
-      captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(orientations),
-      restoreIntentCheckpoint: (/** @type {AlignmentOrientationCheckpoint[]} */ checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
-      commitIntent: () => recordDisplayControls.commitAlignmentOrientations(orientations) }),
+    // The Linear drawing is pinned here, before the run's first await.
+    runRecordAlignment: ({ orientations, ...run }) => {
+      const drawing = shownDrawingOfMode('linear');
+      if (!drawing) throw new Error('Record alignment runs from the Linear drawing.');
+      return runCommittedCanonicalCandidate({ ...run,
+        captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(drawing, orientations),
+        restoreIntentCheckpoint: (/** @type {AlignmentOrientationCheckpoint[]} */ checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(drawing, checkpoint),
+        commitIntent: () => recordDisplayControls.commitAlignmentOrientations(drawing, orientations) });
+    },
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
@@ -6457,7 +6462,7 @@ export const createAppSetup = () => {
       });
     }
     // Removing a File can remove the last source of a Depth series.
-    retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(() => {
+    retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
       changeRecordSources(() => linearSeqs.splice(0, linearSeqs.length, ...next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
@@ -7110,8 +7115,14 @@ export const createAppSetup = () => {
     removeCircularConservationSource,
     // The ring controls' transitions: the source radio, and a ring row's name
     // or color.
-    changeCircularConservationSource: () => reconcileCircularConservation(state.drawingOfMode('circular')),
-    refreshCircularConservationSlots: () => refreshCircularConservationSlots(state.drawingOfMode('circular')),
+    changeCircularConservationSource: () => {
+      const drawing = shownDrawingOfMode('circular');
+      if (drawing) reconcileCircularConservation(drawing);
+    },
+    refreshCircularConservationSlots: () => {
+      const drawing = shownDrawingOfMode('circular');
+      if (drawing) refreshCircularConservationSlots(drawing);
+    },
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,
