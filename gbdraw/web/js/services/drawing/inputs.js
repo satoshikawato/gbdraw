@@ -9,17 +9,135 @@
 /** @import { InputFileCandidate, InputFileRef, InputFileStore } from '../history-files.js' */
 /** @import { RequestCanonicalComparison } from '../session-request.js' */
 /** @import { LinearComparisonEdge, LinearComparisonPlan } from '../linear-comparisons.js' */
-/** @import { LinearSeq } from '../../state.js' */
 /** @import { DepthFileSlots } from '../depth-track-state.js' */
+/** @import { CircularRecordDiscovery } from '../record-discovery.js' */
+/** @import { SliceHandle } from './slice-handle.js' */
 import { isInputFileRef } from '../history-files.js';
+import { reactive, ref } from '../../utils/reactivity.js';
+import { createSliceHandle, sliceMembers } from './slice-handle.js';
+
+// The Linear record rows (`LinearSeq`): one owner builds and normalizes them.
+let linearSeqUidCounter = 0;
+
+const generateLinearSeqUid = () => {
+  linearSeqUidCounter += 1;
+  if (globalThis.crypto?.randomUUID) {
+    return `linear-seq-${globalThis.crypto.randomUUID()}`;
+  }
+  return `linear-seq-${Date.now()}-${linearSeqUidCounter}`;
+};
+
+/** @param {unknown} value */
+const normalizeLinearSeqNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
 
 /**
- * The bindings that name stored files: the input fields, the Linear record
- * rows, and each drawing's uploaded comparison files.
+ * One linear record slot as `createLinearSeq` builds it. The file fields hold
+ * `InputFileRef`s of `state.inputFiles`, or null.
+ * @typedef {object} LinearSeq
+ * @property {string} uid
+ * @property {InputFileRef | null} gb
+ * @property {InputFileRef | null} gff
+ * @property {InputFileRef | null} fasta
+ * @property {DepthFileSlots<InputFileRef>} depth one file, or a list indexed by series
+ * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
+ * @property {string} definition
+ * @property {string} record_subtitle
+ * @property {string} file_definition
+ * @property {string} file_subtitle
+ * @property {string} inferred_definition
+ * @property {string} region_record_id
+ * @property {unknown} region_start a draft: `createLinearSeq` and the crop control write a number or null,
+ *   a Session load stores the saved value as it is; the request projection validates it (R7)
+ * @property {unknown} region_end a draft, as `region_start`
+ * @property {boolean} region_reverse
+ */
+
+/**
+ * @param {Partial<LinearSeq> | Record<string, unknown> | null} [overrides] a slot,
+ *   or unvalidated data (a session, an import) that is normalized here
+ * @returns {LinearSeq}
+ */
+export const createLinearSeq = (overrides = {}) => {
+  const source = /** @type {Partial<LinearSeq>} */ (
+    overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {}
+  );
+  const rawUid = String(source.uid ?? '').trim();
+  const rawLosatGencode = Number(source.losat_gencode);
+  return {
+    uid: rawUid || generateLinearSeqUid(),
+    gb: source.gb ?? null,
+    gff: source.gff ?? null,
+    fasta: source.fasta ?? null,
+    depth: source.depth ?? null,
+    losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
+    definition: String(source.definition ?? ''),
+    record_subtitle: String(source.record_subtitle ?? ''),
+    file_definition: String(source.file_definition ?? ''),
+    file_subtitle: String(source.file_subtitle ?? ''),
+    inferred_definition: String(source.inferred_definition ?? ''),
+    region_record_id: String(source.region_record_id ?? ''),
+    region_start: normalizeLinearSeqNumber(source.region_start),
+    region_end: normalizeLinearSeqNumber(source.region_end),
+    region_reverse: Boolean(source.region_reverse)
+  };
+};
+
+/**
+ * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
+ *   slots, or unvalidated data (a session, an import), as `createLinearSeq` takes them
+ * @returns {LinearSeq[]}
+ */
+export const normalizeLinearSeqList = (items) => {
+  const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
+  const seenUids = new Set();
+  const normalized = baseItems.map((item) => {
+    const next = createLinearSeq(item);
+    if (!next.uid || seenUids.has(next.uid)) {
+      next.uid = generateLinearSeqUid();
+    }
+    seenUids.add(next.uid);
+    return next;
+  });
+  return normalized;
+};
+
+/** @param {LinearSeq | null | undefined} seq */
+const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
+
+/**
+ * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
+ * @returns {LinearSeq[]}
+ */
+export const collapseEmptyLinearSeqList = (items) => {
+  const previous = normalizeLinearSeqList(items);
+  if (previous.length <= 1) return previous;
+  const collapsed = previous.filter((seq) => hasLinearSeqPrimaryInput(seq));
+  if (collapsed.length === previous.length) return previous;
+  return normalizeLinearSeqList(collapsed);
+};
+
+
+/**
+ * A drawing's bindings, as the retention walk reads them: its uploaded
+ * comparison files and, from the inputs slice, its input fields and record
+ * rows. The slice is not on every drawing until its join, so those two may be
+ * missing; the join makes them required.
+ * @typedef {object} BoundDrawingInputs
+ * @property {{ readonly edges?: readonly { readonly file?: unknown }[] } | null} [linearComparisonPlan]
+ * @property {Readonly<Record<string, unknown>>} [files]
+ * @property {readonly Readonly<Record<string, unknown>>[]} [linearSeqs]
+ */
+/**
+ * The bindings that name stored files: the project's input fields and Linear
+ * record rows, and every drawing's bindings.
  * @typedef {object} InputBindings
  * @property {Readonly<Record<string, unknown>>} files
  * @property {readonly Readonly<Record<string, unknown>>[]} linearSeqs
- * @property {() => readonly { readonly linearComparisonPlan?: { readonly edges?: readonly { readonly file?: unknown }[] } | null }[]} drawingList
+ * @property {() => readonly BoundDrawingInputs[]} drawingList
  */
 
 
@@ -34,9 +152,9 @@ import { isInputFileRef } from '../history-files.js';
  */
 
 /**
- * The input file fields of the project (`state.files`): each names its stored
- * files by `InputFileRef` of `state.inputFiles`.
- * @typedef {object} InputFiles
+ * The input file fields of a drawing (its inputs slice's `files`): each names
+ * its stored files by `InputFileRef` of `state.inputFiles`.
+ * @typedef {object} DrawingInputFiles
  * @property {InputFileRef | null} c_gb
  * @property {InputFileRef | null} c_gff
  * @property {InputFileRef | null} c_fasta
@@ -46,12 +164,19 @@ import { isInputFileRef } from '../history-files.js';
  * @property {(InputFileRef | null)[]} c_conservation_fastas
  * @property {(InputFileRef | null)[]} c_conservation_sequence_sources
  * @property {BoundCanonicalComparison[]} linearCanonicalComparisons
+ */
+/**
+ * The five card files (Default colors, Specific rules, Blacklist, Whitelist,
+ * Priority): project fields until the card steps move them into the drawing
+ * (D-15-91 S-2 A).
+ * @typedef {object} CardInputFiles
  * @property {InputFileRef | null} d_color
  * @property {InputFileRef | null} t_color
  * @property {InputFileRef | null} blacklist
  * @property {InputFileRef | null} whitelist
  * @property {InputFileRef | null} qualifier_priority
  */
+/** The project's input fields (`state.files`) until the inputs slice is joined. @typedef {DrawingInputFiles & CardInputFiles} InputFiles */
 
 /** The `InputFiles` fields that hold one ref or null. @typedef {'c_gb' | 'c_gff' | 'c_fasta' | 'd_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} InputFileSlot */
 
@@ -120,12 +245,19 @@ export const boundInputFileIds = (bindings) => {
     }
     if (isInputFileRef(value)) fileIds.add(value.fileId);
   };
-  const files = bindings.files;
-  BOUND_FILE_KEYS.forEach((key) => add(files[key]));
-  (Array.isArray(files.linearCanonicalComparisons) ? files.linearCanonicalComparisons : [])
-    .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
-  bindings.linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
+  /**
+   * @param {Readonly<Record<string, unknown>>} files
+   * @param {readonly Readonly<Record<string, unknown>>[]} linearSeqs
+   */
+  const addInputs = (files, linearSeqs) => {
+    BOUND_FILE_KEYS.forEach((key) => add(files[key]));
+    (Array.isArray(files.linearCanonicalComparisons) ? files.linearCanonicalComparisons : [])
+      .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
+    linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
+  };
+  addInputs(bindings.files, bindings.linearSeqs);
   bindings.drawingList().forEach((drawing) => {
+    addInputs(drawing.files ?? {}, drawing.linearSeqs ?? []);
     (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add(edge.file));
   });
   return fileIds;
@@ -241,3 +373,278 @@ export const bindLoadedInputs = (store, loaded) => {
     }
   };
 };
+
+// The inputs slice of a drawing (DESIGN §2): its input fields (`files`, the
+// five card files excepted, D-15-91 S-2 A), its Linear record rows
+// (`linearSeqs`), its input type, and its Circular record catalog. A drawing
+// shows them under their member names; its file fields and rows are written
+// only through the writers below, which take the slice's handle
+// (`drawing.slices.inputs`); the input type and the record catalog stay
+// written by their controls and discovery, as settings are.
+
+/** @typedef {'gb' | 'gff'} InputType */
+/** One Circular record as discovery lists it. @typedef {Readonly<Record<string, unknown>>} CircularRecordEntry */
+/**
+ * What `capture` returns and `install` writes.
+ * @typedef {object} InputsData
+ * @property {DrawingInputFiles} files
+ * @property {LinearSeq[]} linearSeqs
+ * @property {InputType} inputType
+ * @property {CircularRecordEntry[]} circularRecordList
+ * @property {CircularRecordDiscovery} circularRecordDiscovery
+ */
+/**
+ * The members as a drawing holds them.
+ * @typedef {object} InputsMembers
+ * @property {DrawingInputFiles} files
+ * @property {LinearSeq[]} linearSeqs
+ * @property {import('../../utils/reactivity.js').Ref<InputType>} inputType
+ * @property {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} circularRecordList
+ * @property {CircularRecordDiscovery} circularRecordDiscovery
+ */
+/** @typedef {Readonly<InputsMembers>} InputsView */
+/** @typedef {SliceHandle<'inputs'>} InputsSlice The handle a writer takes. */
+
+/** @returns {DrawingInputFiles} */
+const emptyDrawingInputFiles = () => ({
+  c_gb: null, c_gff: null, c_fasta: null, c_depth: null,
+  c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: [],
+  c_conservation_sequence_sources: [], linearCanonicalComparisons: []
+});
+const DRAWING_FILE_KEYS = /** @type {(keyof DrawingInputFiles)[]} */ (Object.keys(emptyDrawingInputFiles()));
+
+/** @returns {CircularRecordDiscovery} */
+const idleRecordDiscovery = () => ({
+  status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: []
+});
+
+// An inputs handle exists only through `create`, which gives it these members.
+/** @param {InputsSlice} slice */
+const membersOf = (slice) => /** @type {InputsMembers} */ (sliceMembers(slice, 'inputs'));
+
+/**
+ * A copy of a bound value: lists copied at every depth (a Depth matrix), refs
+ * by reference (they are frozen).
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+const copyBound = (value) => /** @type {T} */ (Array.isArray(value) ? value.map(copyBound) : value);
+
+/** @param {DrawingInputFiles} files @returns {DrawingInputFiles} */
+const copyFiles = (files) => ({
+  ...files,
+  c_depth: copyBound(files.c_depth),
+  c_conservation_blasts: [...files.c_conservation_blasts],
+  c_conservation_fastas: [...files.c_conservation_fastas],
+  c_conservation_sequence_sources: [...files.c_conservation_sequence_sources],
+  linearCanonicalComparisons: files.linearCanonicalComparisons.map((comparison) => ({ ...comparison }))
+});
+/** @param {LinearSeq} seq @returns {LinearSeq} */
+const copyRow = (seq) => ({ ...seq, depth: copyBound(seq.depth) });
+
+/**
+ * A new slice, or one over a drawing's existing members (a test fixture).
+ * @param {Partial<InputsMembers>} [members]
+ * @returns {{ handle: InputsSlice, view: InputsView }}
+ */
+const create = (members = {}) => {
+  /** @type {InputsMembers} */
+  const data = {
+    files: members.files ?? /** @type {DrawingInputFiles} */ (reactive(emptyDrawingInputFiles())),
+    linearSeqs: members.linearSeqs ?? /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([]))),
+    inputType: members.inputType ?? /** @type {import('../../utils/reactivity.js').Ref<InputType>} */ (ref('gb')),
+    circularRecordList: members.circularRecordList
+      ?? /** @type {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} */ (ref([])),
+    circularRecordDiscovery: members.circularRecordDiscovery
+      ?? /** @type {CircularRecordDiscovery} */ (reactive(idleRecordDiscovery()))
+  };
+  return { handle: createSliceHandle('inputs', data), view: Object.freeze({ ...data }) };
+};
+
+/**
+ * @param {InputsSlice} slice
+ * @returns {InputsData}
+ */
+const capture = (slice) => {
+  const members = membersOf(slice);
+  return {
+    files: copyFiles(members.files),
+    linearSeqs: members.linearSeqs.map(copyRow),
+    inputType: members.inputType.value,
+    circularRecordList: members.circularRecordList.value.map((entry) => ({ ...entry })),
+    circularRecordDiscovery: {
+      ...members.circularRecordDiscovery,
+      canonicalRecordIdentities: members.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
+    }
+  };
+};
+
+// Writes each member `data` holds; a member it leaves out stays. The rows are
+// installed as given: their builders (Load, a History step) normalize them.
+/**
+ * @param {InputsSlice} slice
+ * @param {Partial<InputsData>} data
+ */
+const install = (slice, data) => {
+  const members = membersOf(slice);
+  if (data.files) {
+    const files = copyFiles({ ...emptyDrawingInputFiles(), ...data.files });
+    DRAWING_FILE_KEYS.forEach((key) => { /** @type {Record<string, unknown>} */ (members.files)[key] = files[key]; });
+  }
+  if (data.linearSeqs) members.linearSeqs.splice(0, members.linearSeqs.length, ...data.linearSeqs.map(copyRow));
+  if (data.inputType) members.inputType.value = data.inputType;
+  if (data.circularRecordList) members.circularRecordList.value = data.circularRecordList.map((entry) => ({ ...entry }));
+  if (data.circularRecordDiscovery) {
+    Object.assign(members.circularRecordDiscovery, idleRecordDiscovery(), data.circularRecordDiscovery, {
+      canonicalRecordIdentities: data.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
+    });
+  }
+};
+
+// Reset keeps every input binding, the chosen records, and the Depth
+// assignment (PD-OI-070). The card files it removes (D-15-78) are project
+// fields until the card steps bring them here (D-15-91 S-2 A), so a reset
+// changes nothing in this slice yet.
+/** @param {InputsSlice} _slice */
+const reset = (_slice) => {};
+
+/**
+ * Bind a file to one of the drawing's single-file fields.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {'c_gb' | 'c_gff' | 'c_fasta'} slot
+ * @param {InputFileCandidate} file
+ * @returns {InputFileRef | null}
+ */
+export const bindDrawingInputFile = (store, slice, slot, file) => {
+  const ref = store.registerFile(file);
+  membersOf(slice).files[slot] = ref;
+  return ref;
+};
+
+/**
+ * Bind the files of one of the drawing's list fields; a place without a file
+ * is dropped.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {InputFileListSlot} slot
+ * @param {InputFileCandidate | readonly InputFileCandidate[]} list
+ * @returns {InputFileRef[]}
+ */
+export const bindDrawingInputFileList = (store, slice, slot, list) => {
+  const refs = registerInputFiles(store, list).filter((entry) => entry !== null);
+  membersOf(slice).files[slot] = refs;
+  return refs;
+};
+
+/**
+ * Bind the drawing's Depth matrix (each place kept) or its conservation
+ * sequence sources (each place kept, null for none).
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {'c_depth' | 'c_conservation_sequence_sources'} slot
+ * @param {LoadedFileValue} value
+ */
+export const bindDrawingInputFileTree = (store, slice, slot, value) => {
+  const bound = value === null || value === undefined ? (slot === 'c_depth' ? null : []) : registerInputFileTree(store, value);
+  /** @type {Record<string, unknown>} */ (membersOf(slice).files)[slot] = bound;
+};
+
+/**
+ * Whether the drawing's conservation BLAST files were derived from the LOSAT
+ * cache (`'losat-cache'`) or uploaded (null).
+ * @param {InputsSlice} slice
+ * @param {'losat-cache' | null} source
+ */
+export const setConservationBlastsSource = (slice, source) => {
+  membersOf(slice).files.c_conservation_blasts_source = source;
+};
+
+/**
+ * The Linear comparisons the drawing committed, a resource-backed entry's
+ * file by ref.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {readonly (Omit<BoundCanonicalComparison, 'file'> & { file?: unknown })[]} comparisons
+ */
+export const bindDrawingCanonicalComparisons = (store, slice, comparisons) => {
+  membersOf(slice).files.linearCanonicalComparisons = bindCanonicalComparisons(store, comparisons);
+};
+
+/**
+ * The drawing's row of one uid; an unknown uid is refused.
+ * @param {InputsSlice} slice
+ * @param {string} uid
+ */
+const rowIndexOf = (slice, uid) => {
+  const index = membersOf(slice).linearSeqs.findIndex((seq) => seq.uid === uid);
+  if (index < 0) throw new Error(`Unknown Linear record row ${uid}`);
+  return index;
+};
+
+/**
+ * Bind a file to one field of a Linear record row, found by its uid.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {string} uid
+ * @param {'gb' | 'gff' | 'fasta' | 'depth'} key
+ * @param {LoadedFileValue | null} file
+ */
+export const bindLinearSeqFile = (store, slice, uid, key, file) => {
+  const row = membersOf(slice).linearSeqs[rowIndexOf(slice, uid)];
+  if (key === 'depth') row.depth = /** @type {DepthFileSlots<InputFileRef>} */ (file === null ? null : registerInputFileTree(store, file));
+  else row[key] = store.registerFile(/** @type {InputFileCandidate} */ (file));
+};
+
+/**
+ * Add a row (built by `createLinearSeq`) at `index`, or at the end.
+ * @param {InputsSlice} slice
+ * @param {LinearSeq} row
+ * @param {number} [index]
+ */
+export const addLinearSeq = (slice, row, index) => {
+  const rows = membersOf(slice).linearSeqs;
+  if (rows.some((seq) => seq.uid === row.uid)) throw new Error(`Linear record row ${row.uid} exists`);
+  rows.splice(index === undefined ? rows.length : index, 0, row);
+};
+
+/**
+ * Remove the row of one uid; the last row is replaced by an empty one, so a
+ * drawing always holds a row.
+ * @param {InputsSlice} slice
+ * @param {string} uid
+ */
+export const removeLinearSeq = (slice, uid) => {
+  const rows = membersOf(slice).linearSeqs;
+  rows.splice(rowIndexOf(slice, uid), 1);
+  if (rows.length === 0) rows.push(createLinearSeq());
+};
+
+/**
+ * Move the row of one uid to `index`.
+ * @param {InputsSlice} slice
+ * @param {string} uid
+ * @param {number} index
+ */
+export const moveLinearSeq = (slice, uid, index) => {
+  const rows = membersOf(slice).linearSeqs;
+  const [row] = rows.splice(rowIndexOf(slice, uid), 1);
+  rows.splice(Math.max(0, Math.min(index, rows.length)), 0, row);
+};
+
+/**
+ * Replace the drawing's rows by a list a transition built (normalized by
+ * `normalizeLinearSeqList`).
+ * @param {InputsSlice} slice
+ * @param {readonly LinearSeq[]} rows
+ */
+export const replaceLinearSeqs = (slice, rows) => {
+  const members = membersOf(slice);
+  members.linearSeqs.splice(0, members.linearSeqs.length, ...rows);
+};
+
+export const INPUTS_SLICE = Object.freeze({
+  members: Object.freeze(['files', 'linearSeqs', 'inputType', 'circularRecordList', 'circularRecordDiscovery']),
+  create, capture, install, reset
+});

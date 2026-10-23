@@ -16,6 +16,7 @@ import { LABEL_TABLES_SLICE } from '../../../gbdraw/web/js/services/drawing/labe
 import { FEATURE_EDITS_SLICE } from '../../../gbdraw/web/js/services/drawing/feature-edits.js';
 import { PAINT_SLICE } from '../../../gbdraw/web/js/services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../../../gbdraw/web/js/services/drawing/settings.js';
+import { INPUTS_SLICE } from '../../../gbdraw/web/js/services/drawing/inputs.js';
 
 // The slices of a drawing (gbdraw/web/js/services/drawing/), by the name of
 // their handle in `drawing.slices`: the editor slices, which alone write their
@@ -26,6 +27,12 @@ export const DRAWING_SLICES = Object.freeze({
   groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE, featureEdits: FEATURE_EDITS_SLICE, paint: PAINT_SLICE,
   settings: SETTINGS_SLICE
 });
+
+// The slices built but not yet joined: no drawing holds their handle or
+// members (tests/web/drawing-slices.test.mjs checks it). The inputs slice
+// joins in its own step (multi-drawing B, DESIGN §2), which moves it into
+// `DRAWING_SLICES` and empties this list.
+export const UNJOINED_DRAWING_SLICES = Object.freeze({ inputs: INPUTS_SLICE });
 
 // The calls of a slice module that only read or build a value: each slice's
 // `capture`, under the name its module exports the slice by, and the exports

@@ -104,7 +104,6 @@ const EXPLICIT_ANY_BASELINE = {
   'services/session-resources.js': 4,
   'services/specific-color-rules.js': 1,
   'services/svg-result-ingestion.js': 3,
-  'state.js': 1,
   'utils/error-normalization.js': 4
 };
 

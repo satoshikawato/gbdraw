@@ -50,7 +50,7 @@ import {
   createFeatureRecordRotationAction,
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
-import { state, sessionOperationAvailability, createLinearSeq, normalizeLinearSeqList } from '../state.js';
+import { state, sessionOperationAvailability } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -100,6 +100,8 @@ import { createHistoryRouter } from '../services/history.js';
 import {
   bindInputFile,
   bindInputFileList,
+  createLinearSeq,
+  normalizeLinearSeqList,
   registerInputFiles,
   retainHistoryAndBoundFiles
 } from '../services/drawing/inputs.js';

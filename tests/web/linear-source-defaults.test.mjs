@@ -26,7 +26,8 @@ const {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } = await import('../../gbdraw/web/js/services/linear-sources.js');
-const { createLinearSeq, state } = await import('../../gbdraw/web/js/state.js');
+const { state } = await import('../../gbdraw/web/js/state.js');
+const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 // A record card names its File by the store's ref, as the app's writers bind it.
 const fileRef = (name) => state.inputFiles.registerFile(new File(['LOCUS'], name));
 
