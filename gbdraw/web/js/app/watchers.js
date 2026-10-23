@@ -22,8 +22,8 @@ import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js
 import {
   replacePriorityRules, replaceWhitelistRules, setBlacklistText
 } from '../services/drawing/label-tables.js';
-/** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FileImportCard } from '../services/file-imports.js' */
+/** @import { InputFileCandidate, InputFileRef, InputFileStore } from '../services/history-files.js' */
 
 /**
  * @typedef {object} RecordDiscoveryWatcherOptions
@@ -54,18 +54,20 @@ export const runRecordDiscoveryWatcher = async ({
  * track them; Save and Load read whether one is pending, and Generate waits
  * for them. The composition root creates it before all of them.
  * @typedef {object} AuxiliaryFileImports
- * @property {(file: FileLike, pending: Promise<boolean>) => void} track Holds `file`'s import until it settles.
- * @property {(file: FileLike) => Promise<boolean> | undefined} wait The import of `file`, or its removal (OV-1280), while it applies.
+ * @property {(file: InputFileRef, pending: Promise<boolean>) => void} track Holds the import of the card's bound file until it settles.
+ * @property {(file: InputFileCandidate) => Promise<boolean> | undefined} wait The import of `file` (the File the card's
+ *   input chose, or the ref it removed), or its removal (OV-1280), while it applies.
  * @property {() => boolean} isPending
  * @property {() => Promise<void>} settle Waits until no import is pending, including one that starts meanwhile.
  */
 
 /**
  * @param {<T extends object>(target: T) => T} reactive Vue `reactive`, so the readers' computeds follow the imports.
+ * @param {Pick<InputFileStore, 'registerFile'>} store The input file store; an import is held by its file's ref.
  * @returns {AuxiliaryFileImports}
  */
-export const createAuxiliaryFileImports = (reactive) => {
-  /** @type {Map<FileLike, Promise<boolean>>} */
+export const createAuxiliaryFileImports = (reactive, store) => {
+  /** @type {Map<InputFileRef, Promise<boolean>>} */
   const pending = reactive(new Map());
   return {
     track: (file, promise) => {
@@ -74,7 +76,10 @@ export const createAuxiliaryFileImports = (reactive) => {
         if (pending.get(file) === promise) pending.delete(file);
       });
     },
-    wait: (file) => pending.get(file),
+    wait: (file) => {
+      const ref = store.registerFile(file);
+      return ref ? pending.get(ref) : undefined;
+    },
     isPending: () => pending.size > 0,
     settle: async () => {
       while (pending.size > 0) await Promise.allSettled([...pending.values()]);
@@ -381,8 +386,8 @@ export const setupWatchers = ({
    * Reads `file` and applies it to the drawing shown now; a rejected file
    * gives the input its previous file back.
    * @param {string} key The `files` member of the auxiliary table.
-   * @param {FileLike | null | undefined} file
-   * @param {FileLike | null | undefined} previousFile
+   * @param {InputFileRef | null} file
+   * @param {InputFileRef | null} previousFile
    * @returns {Promise<boolean> | undefined}
    */
   const applyFileImport = (key, file, previousFile) => {
@@ -412,7 +417,7 @@ export const setupWatchers = ({
    * The removal waits for the imports still applying, as they wait for each
    * other; a removal that cannot apply brings the card back.
    * @param {FileImportCard} key
-   * @param {FileLike} file The removed file.
+   * @param {InputFileRef} file The removed file.
    * @returns {Promise<boolean>}
    */
   const startFileRemoval = (key, file) => {
@@ -433,8 +438,8 @@ export const setupWatchers = ({
   };
   /**
    * @param {string} key
-   * @param {FileLike} file
-   * @param {FileLike | null | undefined} previousFile
+   * @param {InputFileRef} file
+   * @param {InputFileRef | null} previousFile
    * @returns {Promise<boolean>}
    */
   const startFileImport = (key, file, previousFile) => {
@@ -457,7 +462,8 @@ export const setupWatchers = ({
           return startFileImport(key, file, previousFile);
         } };
     };
-    const pending = readFileText(file).then((text) => {
+    // The card names its file by ref; the bytes are the store's.
+    const pending = readFileText(state.inputFiles.fileOf(file)).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
         if (!isCurrent()) return false;
@@ -493,15 +499,16 @@ export const setupWatchers = ({
   // Priority, Whitelist, Blacklist): it stores the file and imports it into
   // the shown drawing. The `file-uploader` owns its History step and waits
   // for the import (`waitForAuxiliaryFileImport`, R11). A Load or a History
-  // restore sets `files` without importing.
+  // restore sets `files` without importing. The card holds the file's ref.
   /**
    * @param {string} key
-   * @param {FileLike | null | undefined} file
+   * @param {InputFileCandidate} file
    */
   const importAuxiliaryTable = (key, file) => {
     const previousFile = files[key];
-    files[key] = file;
-    return applyFileImport(key, file, previousFile);
+    const ref = state.inputFiles.registerFile(file);
+    files[key] = ref;
+    return applyFileImport(key, ref, previousFile);
   };
 
   watch(

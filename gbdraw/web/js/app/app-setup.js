@@ -3047,7 +3047,7 @@ export const createAppSetup = () => {
   };
   // The auxiliary file imports still applying: the watchers add them, Save and
   // Load read them, and Generate waits for them (OV-1193).
-  const auxiliaryFileImports = createAuxiliaryFileImports(reactive);
+  const auxiliaryFileImports = createAuxiliaryFileImports(reactive, state.inputFiles);
   /** @param {Event & { target: HTMLInputElement }} event */
   const addCircularConservationComparisonFile = (event) => {
     const drawing = state.drawingOfMode('circular');

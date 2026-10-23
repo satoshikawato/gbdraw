@@ -16,6 +16,7 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-resources-'));
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
+const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { buildSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resources.js'))
 );
@@ -135,7 +136,10 @@ const committed = {
   }
 };
 
+// The table cards name their files by ref of the input file store.
+const inputFiles = createHistoryFileStore();
 const state = {
+  inputFiles,
   files: {
     c_gb: activeFile,
     c_gff: sameMetadataDifferentA,
@@ -145,11 +149,11 @@ const state = {
     c_conservation_blasts_source: 'losat-cache',
     c_conservation_fastas: [makeFile('>subject\nATGC\n', 'subject.fa')],
     c_conservation_sequence_sources: [makeFile('>source\nATGC\n', 'source.fa')],
-    d_color: activeFile,
-    t_color: makeFile('CDS\t#ffffff\n', 'specific.tsv'),
-    blacklist: makeFile('hypothetical', 'blacklist.txt'),
-    whitelist: makeFile('CDS\tgene\tfoo\n', 'whitelist.tsv'),
-    qualifier_priority: makeFile('CDS\tgene\n', 'priority.tsv'),
+    d_color: inputFiles.registerFile(activeFile),
+    t_color: inputFiles.registerFile(makeFile('CDS\t#ffffff\n', 'specific.tsv')),
+    blacklist: inputFiles.registerFile(makeFile('hypothetical', 'blacklist.txt')),
+    whitelist: inputFiles.registerFile(makeFile('CDS\tgene\tfoo\n', 'whitelist.tsv')),
+    qualifier_priority: inputFiles.registerFile(makeFile('CDS\tgene\n', 'priority.tsv')),
     linearCanonicalComparisons: [{
       kind: 'collinearityResult',
       encoding: 'canonicalJson',

@@ -5,6 +5,8 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { boundInputFileIds } from './drawing/inputs.js';
+import { isInputFileRef } from './history-files.js';
+import { FILE_IMPORT_CARDS } from './file-imports.js';
 /** @import { InputBindings } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { inputTypeKeyOf } from './drawing-view.js';
@@ -734,7 +736,6 @@ const applyFallbackResultsData = (state, results = []) => {
 // those rows, so Undo restores them together, B23), or Linear's records and
 // comparison files. The five table files stay shared until each drawing binds
 // its own; every drawing's intent holds them.
-const SHARED_TABLE_FILE_KEYS = Object.freeze(['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
@@ -742,7 +743,7 @@ const SHARED_TABLE_FILE_KEYS = Object.freeze(['d_color', 't_color', 'blacklist',
  * @returns {FilesData}
  */
 const buildIntentFilesData = (state, drawing, fileStore) => {
-  const shared = Object.fromEntries(SHARED_TABLE_FILE_KEYS.map((key) => [key, fileStore.describeValue(state.files?.[key])]));
+  const shared = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, fileStore.describeValue(state.files?.[key])]));
   if (drawing.mode !== 'linear') {
     return {
       c_gb: fileStore.describeValue(state.files?.c_gb),
@@ -830,8 +831,10 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
   state.matchSequenceRegistry?.reset?.();
   /** @param {unknown} value */
   const restore = (value) => fileStore.restoreValue(value);
-  SHARED_TABLE_FILE_KEYS.forEach((key) => {
-    state.files[key] = restore(filesData?.[/** @type {keyof FilesData} */ (key)]);
+  // A table card holds its file's ref: the step's ref, kept bound by History.
+  FILE_IMPORT_CARDS.forEach((key) => {
+    const value = filesData?.[/** @type {keyof FilesData} */ (key)];
+    state.files[key] = isInputFileRef(value) ? fileStore.registerFile(value) : null;
   });
   if (drawing.mode !== 'linear') {
     state.files.c_gb = restore(filesData?.c_gb);

@@ -8,6 +8,7 @@ import { buildSessionResources } from '../../gbdraw/web/js/services/session-reso
 import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { projectSettingsOnlySession } from '../../gbdraw/web/js/services/session-request.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
+import { createHistoryFileStore } from '../../gbdraw/web/js/services/history-files.js';
 import { unreadFieldRepairs } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 
@@ -31,7 +32,10 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   const file = Object.assign(new Blob([bytes], { type: 'text/tab-separated-values' }), {
     name: 'priority.tsv', lastModified: 123456
   });
-  const resources = await buildSessionResources({ files: { qualifier_priority: file }, linearSeqs: [] }, null);
+  // The card names its file by ref of the input file store.
+  const inputFiles = createHistoryFileStore();
+  const resources = await buildSessionResources(
+    { inputFiles, files: { qualifier_priority: inputFiles.registerFile(file) }, linearSeqs: [] }, null);
   const document = { ...structuredClone(settings), ...resources };
   assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
   const projected = projectSettingsOnlySession(document, adoptCurrentSessionResources(document.resources));
@@ -40,7 +44,9 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   assert.equal(restored.name, file.name);
   assert.equal(restored.type, file.type);
   assert.equal(restored.lastModified, file.lastModified);
-  const again = await buildSessionResources({ files: projected.files, linearSeqs: [] }, null);
+  // Load binds the loaded file to the card by ref.
+  const again = await buildSessionResources(
+    { inputFiles, files: { qualifier_priority: inputFiles.registerFile(restored) }, linearSeqs: [] }, null);
   assert.deepEqual(again, resources);
 });
 

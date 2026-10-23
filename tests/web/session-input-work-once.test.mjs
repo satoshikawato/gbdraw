@@ -86,7 +86,9 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
   await serializeActiveRenderFiles('circular', { files: { c_gb: other }, linearSeqs: [] }, modeDrawing(state, 'circular'));
   metrics.length = 0;
-  const saved = await buildSessionResources({ files: { c_gb: file, d_color: other }, linearSeqs: [] }, committed, modeDrawing(state, 'circular'));
+  const saved = await buildSessionResources({
+    inputFiles: state.inputFiles, files: { c_gb: file, d_color: state.inputFiles.registerFile(other) }, linearSeqs: []
+  }, committed, modeDrawing(state, 'circular'));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
   assert.notEqual(otherId, 'src');
   assert.deepEqual(saved.resources[otherId], {

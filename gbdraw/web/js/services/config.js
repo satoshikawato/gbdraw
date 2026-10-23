@@ -16,6 +16,8 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { FILE_IMPORT_CARDS } from './file-imports.js';
+import { bindInputFile } from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
@@ -318,6 +320,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId } from './drawing-view.js' */
+/** @import { InputFileCandidate } from './history-files.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -4443,6 +4446,11 @@ const restoreLiveFileState = (drawing, snapshot) => {
   state.matchSequenceRegistry?.reset?.();
   Object.keys(state.files).forEach((key) => {
     state.files[key] = snapshot.files[key] ?? null;
+  });
+  // A table card names its file by ref: a loaded file is registered here, a
+  // rolled-back ref stays bound.
+  FILE_IMPORT_CARDS.forEach((key) => {
+    bindInputFile(state.inputFiles, state.files, key, /** @type {InputFileCandidate} */ (snapshot.files[key]));
   });
   state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
   Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);

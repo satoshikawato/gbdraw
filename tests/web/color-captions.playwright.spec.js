@@ -132,7 +132,7 @@ for(const width of [1440,390]) {
       expect(tsv).toContain('\tPrimary complex\n');
       expect(tsv).toContain('\t#445566\tColor group\n');
       expect(tsv).not.toContain(' [#');
-      expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');return readFileText(window.__GBDRAW_APP__.files.t_color);})).toBe(source.text);
+      expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');const {state}=await import('./js/state.js');return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color));})).toBe(source.text);
       expect(final.fileName).toBe('multicolor.tsv');
       const sessionPath=testInfo.outputPath('canonical.gbdraw-session.json.gz');
       await download(page,'Save Session',sessionPath);

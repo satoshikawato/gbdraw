@@ -22,6 +22,7 @@ import {
 /** @import { EncodedFilePayload } from './file-content-cache.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 /**
  * What the allocator reads of a resource's source: a Session resource
@@ -470,6 +471,10 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   };
 
   const files = state?.files || {};
+  /** @type {Pick<InputFileStore, 'fileOf'>} */
+  const inputFiles = state.inputFiles;
+  /** @param {InputFileRef | null | undefined} ref A table card's binding. */
+  const boundFile = (ref) => (ref ? inputFiles.fileOf(ref) : null);
   const linearSeqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
   const linearComparisons = Array.isArray(drawing?.linearComparisonPlan?.edges)
     ? drawing.linearComparisonPlan.edges
@@ -488,11 +493,12 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     c_conservation_sequence_sources: await bindFileValue(
       files.c_conservation_sequence_sources
     ),
-    d_color: await bindFile(files.d_color),
-    t_color: await bindFile(files.t_color),
-    blacklist: await bindFile(files.blacklist),
-    whitelist: await bindFile(files.whitelist),
-    qualifier_priority: await bindFile(files.qualifier_priority),
+    // The table cards name their files by ref (`state.inputFiles`).
+    d_color: await bindFile(boundFile(files.d_color)),
+    t_color: await bindFile(boundFile(files.t_color)),
+    blacklist: await bindFile(boundFile(files.blacklist)),
+    whitelist: await bindFile(boundFile(files.whitelist)),
+    qualifier_priority: await bindFile(boundFile(files.qualifier_priority)),
     linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => ({
       uid: String(sequence?.uid || ''),
       gb: await bindFile(sequence?.gb),
