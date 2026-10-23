@@ -146,6 +146,8 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
  * @property {(drawing: DrawingIdentity, values: Readonly<Record<string, unknown>>) => void} writeValues
  *   Writes slot values of a drawing that is not shown (History and the Instant Preview toggle;
  *   OV-1168, OV-1195); with no slot, into the drawing's empty slot.
+ * @property {(drawingId: DrawingId) => void} deleteSlot A removed drawing's slot goes with it
+ *   (`removeDrawing` in state.js).
  */
 
 /** @returns {ArtifactSlotStore} */
@@ -177,6 +179,7 @@ export const createArtifactSlotStore = () => {
       slots.clear();
       snapshot.forEach(keep);
     },
+    deleteSlot: (drawingId) => { slots.delete(drawingId); },
     writeValues: (drawing, values) => keep(withArtifactSlotValues(slots.get(drawing.id) ?? null, drawing, values))
   };
 };

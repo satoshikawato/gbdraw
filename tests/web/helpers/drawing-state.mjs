@@ -133,8 +133,12 @@ export const TRANSIENT_KEYS = Object.freeze([
   'filteredEditableLabels', 'ruleMatchingPending'
 ]);
 
-// The drawing store itself.
-export const STORE_KEYS = Object.freeze(['drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing']);
+// The drawing store itself: the drawings by ID, their tab order and names
+// (`drawingTabs`), and the store writers.
+export const STORE_KEYS = Object.freeze([
+  'drawingTabs', 'drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing',
+  'replaceDrawings', 'addDrawing', 'removeDrawing', 'moveDrawing', 'renameDrawing'
+]);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
 export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(

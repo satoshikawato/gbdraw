@@ -49,6 +49,7 @@ import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
 import { drawingIdOfMode } from './services/drawing-view.js';
+import { diagnosticError } from './utils/error-normalization.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -1002,7 +1003,7 @@ const settingsDefaults = (drawingMode) => () => ({
  * @param {DrawingId} id
  * @param {DiagramMode} drawingMode
  */
-const createDrawingState = (id, drawingMode) => {
+export const createDrawingState = (id, drawingMode) => {
   const defaults = settingsDefaults(drawingMode);
   const initial = defaults();
   const form = reactive(initial.form);
@@ -1125,13 +1126,28 @@ const createDrawingState = (id, drawingMode) => {
 const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
 /**
- * Every drawing by ID, in creation order (circular, then linear). Not reactive
- * itself; no writer adds or removes a drawing in A.
- * @type {ReadonlyMap<DrawingId, DrawingState>}
+ * A drawing tab: the drawing's ID and its name, in tab order.
+ * @typedef {Readonly<{ id: DrawingId, name: string }>} DrawingTab
+ */
+/**
+ * Every drawing by ID. Not reactive itself (a reactive Map would unwrap the
+ * members' refs); `drawingTabs` holds the order and names, and only the store
+ * writers below change either.
+ * @type {Map<DrawingId, DrawingState>}
  */
 const drawings = new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d]));
-/** @returns {readonly DrawingState[]} Every drawing, in creation order. */
-const drawingList = () => [...drawings.values()];
+/** @param {DrawingState} drawing @returns {string} */
+const defaultDrawingName = (drawing) => (drawing.mode === 'linear' ? 'Linear' : 'Circular');
+/** @param {readonly DrawingTab[]} tabs @returns {readonly DrawingTab[]} */
+const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.freeze({ id, name: String(name) })));
+/**
+ * The tab order and names: a frozen list, replaced on each write, so a reader
+ * of `drawingList()` reacts to it.
+ * @type {import('./utils/reactivity.js').Ref<readonly DrawingTab[]>}
+ */
+const drawingTabs = typedRef(freezeTabs([...drawings.values()].map((d) => ({ id: d.id, name: defaultDrawingName(d) }))));
+/** @returns {readonly DrawingState[]} Every drawing, in tab order. */
+const drawingList = () => drawingTabs.value.map((tab) => drawingOf(tab.id));
 /**
  * The one lookup invariant: a drawing ID names a drawing.
  * @param {DrawingId} id
@@ -1141,6 +1157,83 @@ const drawingOf = (id) => {
   const drawing = drawings.get(id);
   if (!drawing) throw new Error(`Unknown drawing: ${id}`);
   return drawing;
+};
+/**
+ * A refused store write.
+ * @param {string} operation @param {string} reason @param {Record<string, unknown>} context
+ */
+const drawingStoreError = (operation, reason, context) => diagnosticError(
+  'INPUT_INVALID', { field: 'drawing', reason, ...context }, { stage: 'drawing-store', operation }
+);
+/** @param {string} operation @param {DrawingId} id */
+const requireDrawingTab = (operation, id) => {
+  const index = drawingTabs.value.findIndex((tab) => tab.id === id);
+  if (index < 0) throw drawingStoreError(operation, 'UNKNOWN_DRAWING', { drawingId: id });
+  return index;
+};
+/** @param {number} index @param {number} length */
+const clampTabIndex = (index, length) => Math.max(0, Math.min(length, Math.trunc(Number(index) || 0)));
+/**
+ * Load and a new Session: the drawings and their tabs replace the store. The
+ * caller installs the shown drawing next (`installShownDrawing`).
+ * @param {readonly DrawingState[]} list @param {readonly DrawingTab[]} tabs
+ */
+const replaceDrawings = (list, tabs) => {
+  const byId = new Map();
+  for (const drawing of list) {
+    if (byId.has(drawing.id)) throw drawingStoreError('replaceDrawings', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
+    byId.set(drawing.id, drawing);
+  }
+  const tabIds = new Set();
+  for (const tab of tabs) {
+    if (tabIds.has(tab.id)) throw drawingStoreError('replaceDrawings', 'DUPLICATE_DRAWING', { drawingId: tab.id });
+    if (!byId.has(tab.id)) throw drawingStoreError('replaceDrawings', 'UNKNOWN_DRAWING', { drawingId: tab.id });
+    tabIds.add(tab.id);
+  }
+  const untabbed = [...byId.keys()].find((id) => !tabIds.has(id));
+  if (untabbed !== undefined || byId.size === 0) {
+    throw drawingStoreError('replaceDrawings', 'UNKNOWN_DRAWING', { drawingId: untabbed ?? '' });
+  }
+  drawings.clear();
+  byId.forEach((drawing, id) => drawings.set(id, drawing));
+  drawingTabs.value = freezeTabs(tabs);
+};
+/** @param {DrawingState} drawing @param {string} name @param {number} index */
+const addDrawing = (drawing, name, index) => {
+  if (drawings.has(drawing.id)) throw drawingStoreError('addDrawing', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
+  drawings.set(drawing.id, drawing);
+  const tabs = [...drawingTabs.value];
+  tabs.splice(clampTabIndex(index, tabs.length), 0, { id: drawing.id, name });
+  drawingTabs.value = freezeTabs(tabs);
+};
+/**
+ * Removes a drawing that is not shown and not the last one (the caller
+ * switches first through `installShownDrawing`), with its artifact slot.
+ * @param {DrawingId} id
+ * @param {Pick<import('./services/artifact-slot.js').ArtifactSlotStore, 'deleteSlot'>} slots
+ */
+const removeDrawing = (id, slots) => {
+  const index = requireDrawingTab('removeDrawing', id);
+  if (drawingTabs.value.length <= 1) throw drawingStoreError('removeDrawing', 'LAST_DRAWING', { drawingId: id });
+  if (id === activeDrawingId.value) throw drawingStoreError('removeDrawing', 'SHOWN_DRAWING', { drawingId: id });
+  const tabs = [...drawingTabs.value];
+  tabs.splice(index, 1);
+  drawings.delete(id);
+  slots.deleteSlot(id);
+  drawingTabs.value = freezeTabs(tabs);
+};
+/** @param {DrawingId} id @param {number} index */
+const moveDrawing = (id, index) => {
+  const from = requireDrawingTab('moveDrawing', id);
+  const tabs = [...drawingTabs.value];
+  const [tab] = tabs.splice(from, 1);
+  tabs.splice(clampTabIndex(index, tabs.length), 0, tab);
+  drawingTabs.value = freezeTabs(tabs);
+};
+/** @param {DrawingId} id @param {string} name */
+const renameDrawing = (id, name) => {
+  const index = requireDrawingTab('renameDrawing', id);
+  drawingTabs.value = freezeTabs(drawingTabs.value.map((tab, i) => (i === index ? { id, name } : tab)));
 };
 /**
  * The drawing of a diagram mode: until a project holds several drawings of one
@@ -1192,8 +1285,14 @@ export const state = Object.freeze({
   canvasContainerRef,
   activeDrawingId,
   mode,
+  drawingTabs,
   drawingList,
   drawingOf,
+  replaceDrawings,
+  addDrawing,
+  removeDrawing,
+  moveDrawing,
+  renameDrawing,
   drawingOfMode,
   activeDrawing,
   cInputType,
