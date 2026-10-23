@@ -45,6 +45,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
+ * @property {import('./feature-editor/rule-actions.js').MoveLegendRecordsPort} moveLegendRecords
+ *   The Legend owner's move of a drawing's Legend records (a drawing not shown: the Specific rules file card's Remove).
  * @property {FeatureSelectionPort | null} [featureSelection]
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
@@ -68,7 +70,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
- * @property {WriteLegendRowColorPort} [writeLegendRowColor]
+ * @property {WriteLegendRowColorPort} writeLegendRowColor
  * @property {ShownLegendNamePort} [shownLegendName]
  * @property {AskChoice} askChoice The root's choice dialog.
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
@@ -94,6 +96,7 @@ export const createFeatureEditor = ({
   isCurrentFeature,
   nextTick,
   prepareFileLegendEntries,
+  moveLegendRecords,
   featureSelection = null,
   commitActiveResultEdit = null,
   showEditorIntent,
@@ -125,7 +128,7 @@ export const createFeatureEditor = ({
   // created before it call them through this object only.
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
-    state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
+    state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
     ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
     revealSetting
   });
@@ -234,6 +237,7 @@ export const createFeatureEditor = ({
     commitSpecificRules: ruleActions.commitSpecificRules,
     ruleWritePending: ruleActions.ruleWritePending,
     importSpecificRules: ruleActions.importSpecificRules,
+    removeImportedSpecificRules: ruleActions.removeImportedSpecificRules,
     followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
@@ -244,7 +248,6 @@ export const createFeatureEditor = ({
     setSpecificRuleField: ruleActions.setSpecificRuleField,
     getFeatureColor: ruleActions.getFeatureColor,
     getFeatureColorValue: ruleActions.getFeatureColorValue,
-    canEditFeatureColor: ruleActions.canEditFeatureColor,
     addFeatureVisibilityRule: visibilityActions.addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv: visibilityActions.downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
@@ -281,6 +284,9 @@ export const createFeatureEditor = ({
     applyColorToSelectedFeatures: colorActions.applyColorToSelectedFeatures,
     applyStrokeToSelectedFeatures: colorActions.applyStrokeToSelectedFeatures,
     setFeatureColor: colorActions.setFeatureColor,
+    legendRowDefaultColorType: colorActions.legendRowDefaultColorType,
+    preparedLegendRowDefaultColorType: colorActions.preparedLegendRowDefaultColorType,
+    setTypeDefaultColor: colorActions.setTypeDefaultColor,
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,

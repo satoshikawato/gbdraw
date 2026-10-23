@@ -106,7 +106,7 @@ test('label search includes live edits and shows no match status before a search
   await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.labelReflowProcessing && !window.__GBDRAW_APP__.processing);
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('label');
+  await page.getByRole('combobox', { name: 'Field to search', exact: true }).selectOption('label');
   await search.fill('AUDIT_RENAMED_FEATURE');
   await search.press('Enter');
   await expect(status).toHaveText('1 of 1 match');
@@ -124,7 +124,7 @@ test('similarity group names and descriptions survive temporary mode changes', a
   await drawer.locator('textarea:visible').fill('AUDIT_DESCRIPTION');
   await drawer.locator('textarea:visible').press('Tab');
   await page.locator('.drawer-toggle').click();
-  await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('orthogroup');
+  await page.getByRole('combobox', { name: 'Field to search', exact: true }).selectOption('orthogroup');
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   for (const query of ['AUDIT_GROUP', 'AUDIT_DESCRIPTION']) {
     await search.fill(query);
@@ -336,13 +336,30 @@ test('a label TSV that matches no label keeps the label edits and records no Und
   }, tsv);
   const edited = await importTsv('*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n');
   expect(edited).toMatchObject({ bulk: { 'tRNA-Phe': 'MyLabel' }, undoLabel: 'Load label edits' });
-  await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row. Applied to 1 label.');
   expect(await importTsv('*\t*\tproduct\t^no such product$\tZZ\n')).toEqual(edited);
-  await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Not applied; the existing label edits were kept.');
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row. Not applied; the existing label edits were kept.');
   await expect(notice.locator('li')).toHaveText(['No row matched a label of the diagram.']);
   const replaced = await importTsv('*\t*\tlabel\t^tRNA-Val$\tOther\n');
   expect(replaced).toEqual({ bulk: { 'tRNA-Val': 'Other' }, undoCount: edited.undoCount + 1, undoLabel: 'Load label edits' });
-  await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row. Applied to 1 label.');
+});
+
+// D-06: Reset Label Edits removes the edits a label TSV loaded, and the
+// notice that reported them ends with them.
+test('Reset Label Edits ends the notice of the label TSV it removes', async ({ page }) => {
+  test.setTimeout(180000);
+  await session(page);
+  const notice = page.locator('[data-app-notice]');
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const text = '*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n';
+    await app.loadLabelOverrideTable({ target: { files: [new File([text], 'labels.tsv')], value: 'labels.tsv' } });
+  });
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row. Applied to 1 label.');
+  await page.evaluate(() => window.__GBDRAW_APP__.resetAllLabelTextOverrides());
+  await expect.poll(() => page.evaluate(() => ({ ...window.__GBDRAW_APP__.labelTextBulkOverrides }))).toEqual({});
+  await expect(notice).toHaveCount(0);
 });
 
 // OV-460: an edit made while Load Label TSV is still loading applies at once

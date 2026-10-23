@@ -8,8 +8,11 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  * that this module reads.
  * @typedef {'circular' | 'linear'} ModeProfileName
  * @typedef {{ integer: boolean, maximum: number | null, minimum: number, reason: string }} ComparisonDomain
+ * @typedef {'none' | 'under'} LabelLine
+ * @typedef {'none' | 'halo' | 'box'} LabelProtection
  * @typedef {{
  *   comparison: { alignmentLength: number, bitscore: number, evalue: number, identity: number },
+ *   labelStyle: { line: LabelLine, protection: LabelProtection },
  *   linearAxisColor: string | null,
  *   linearRulerAxisColor: string | null,
  *   tracks: { gc: boolean, skew: boolean }
@@ -18,6 +21,7 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  *   comparisonDomains: Record<string, ComparisonDomain>,
  *   defaultFontFamily: string,
  *   featureTypes: string[],
+ *   labelStyleChoices: { line: LabelLine[], protection: LabelProtection[] },
  *   modes: Record<ModeProfileName, ModeProfile>,
  *   version: number
  * }} ModeProfileData
@@ -78,6 +82,19 @@ export const PACKAGED_FONT_FAMILY = /** @type {ModeProfileData} */ (MODE_PROFILE
 
 /** @param {unknown} mode */
 export const modeProfile = (mode) => /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).modes[normalizeMode(mode)];
+
+/** The values of `labels.<mode>.line` and `.protection`. */
+export const LABEL_STYLE_CHOICES = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).labelStyleChoices;
+
+// The packaged feature label style of a mode (`labels.<mode>.line` and `.protection`), as `adv` fields.
+/**
+ * @param {unknown} mode
+ * @returns {{ label_line: LabelLine, label_protection: LabelProtection }}
+ */
+export const labelStyleForMode = (mode) => {
+  const { line, protection } = modeProfile(mode).labelStyle;
+  return { label_line: line, label_protection: protection };
+};
 
 /** @param {unknown} mode */
 export const trackDefaultsForMode = (mode) => {

@@ -355,6 +355,11 @@ def _inherited_params_for_slot(
         inherited.pop("lane_direction", None)
     if "dinucleotide" in explicit and "nt" not in explicit:
         inherited.pop("nt", None)
+    # An explicit side sets the lane it implies (inside, outside, or split for
+    # overlay), so the preset's lane never conflicts with it (OV-1326).
+    if slot.side is not None and not {"lane_direction", "lanes"} & explicit.keys():
+        inherited.pop("lane_direction", None)
+        inherited.pop("lanes", None)
 
     inherited.update(explicit)
     return inherited

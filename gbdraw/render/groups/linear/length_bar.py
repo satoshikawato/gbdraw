@@ -67,7 +67,7 @@ class LengthBarGroup:
 
     def __init__(
         self,
-        alignment_width: float,
+        longest_record_width: float,
         longest_genome: int,
         length_param: SizeClass,
         group_id="length_bar",
@@ -79,6 +79,9 @@ class LengthBarGroup:
     ) -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
+
+        ``longest_record_width`` is the drawn width of a record ``longest_genome`` bp long (its
+        placement's ``sequence_width``): the scale maps bp to px as that record does.
         """
         # --- 1. Load all settings from the 'scale' section of the config ---
         scale_config = scale
@@ -98,11 +101,11 @@ class LengthBarGroup:
         self.dpi = dpi
         # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
-        self.alignment_width: float = alignment_width
+        self.longest_record_width: float = longest_record_width
         self.ruler_width: float = (
             max(0.0, float(ruler_width))
             if ruler_width is not None
-            else self.alignment_width
+            else self.longest_record_width
         )
         self.group_id: str = group_id
 
@@ -179,7 +182,7 @@ class LengthBarGroup:
         for index, position in enumerate(tick_positions):
             x_pos = min(
                 self.ruler_width,
-                (position / self.longest_genome) * self.alignment_width,
+                (position / self.longest_genome) * self.longest_record_width,
             )
 
             # Draw label
@@ -246,11 +249,11 @@ class LengthBarGroup:
         )
 
     def _ruler_length_bp(self) -> int:
-        if self.alignment_width <= 0 or self.longest_genome <= 0:
+        if self.longest_record_width <= 0 or self.longest_genome <= 0:
             return 0
         return max(
             1,
-            int(math.ceil(self.ruler_width * (self.longest_genome / self.alignment_width))),
+            int(math.ceil(self.ruler_width * (self.longest_genome / self.longest_record_width))),
         )
 
     def define_ticks_by_length_for_bar(self) -> None:
@@ -269,10 +272,10 @@ class LengthBarGroup:
     def config_bar_geometry(self) -> None:
         """Configures the geometry (length and position) for the 'bar' style."""
         if self.longest_genome > 0:
-            self.bar_length = self.alignment_width * (self.tick / self.longest_genome)
+            self.bar_length = self.longest_record_width * (self.tick / self.longest_genome)
         else:
             self.bar_length = 0
-        self.end_x = self.alignment_width
+        self.end_x = self.longest_record_width
         self.start_x = self.end_x - self.bar_length
         self.start_y = 0
         self.end_y = 0

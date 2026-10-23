@@ -1,0 +1,20 @@
+{
+  "sourceCommit": "150d26706064e7ca20eef4d3553ea266b51b79f6",
+  "history": "first-parent main",
+  "writer": "gbdraw/linear.py --session_output (CLI sidecar), run from `git archive 150d26706 gbdraw` on PYTHONPATH",
+  "command": "PYTHONPATH=<git archive 150d26706 gbdraw> python -P -m gbdraw.cli linear --records_table tests/fixtures/cli_session_cross_surface/records_linear.tsv --show_labels all --label_blacklist tests/fixtures/cli_session_cross_surface/blacklist.txt -o cli-linear-blacklist-file -f svg --session_output cli-linear-blacklist-file.v47.gbdraw-session.json",
+  "workingDirectory": "repository root (input paths stay relative in cliInvocation)",
+  "case": "linear_blacklist_file in tests/fixtures/cli_session_cross_surface/cases.json",
+  "inputs": {
+    "tests/fixtures/cli_session_cross_surface/records_linear.tsv": "a42c54b01466a6cf0b53306d98cba2c96da5b8e1068ed803d2fa330c3a5dc274",
+    "tests/fixtures/cli_session_cross_surface/blacklist.txt": "795b45465363544180d1d0da0a7f4fd1321bcaa540f847a5cbfc85d9c7d78d3d",
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f",
+    "tests/test_inputs/NC_001416.gb": "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7"
+  },
+  "sha256": "3ecacf9436bccc7f6d71c5c4e5953dea4db2f78fdf49d9b3267df4e76407f2f4",
+  "compression": "gzip -n -9",
+  "sessionVersion": 47,
+  "requestSchema": 9,
+  "config": "absent (the writer stores no top-level `config` from Session 42)",
+  "bindsBlacklistFile": "cliInvocation.fileBindings holds slot `files.blacklist` for --label_blacklist (argIndex 5); Session 48 stopped writing it (D-29, D-30)"
+}

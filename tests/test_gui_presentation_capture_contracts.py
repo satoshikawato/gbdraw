@@ -9,6 +9,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
+from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
 
@@ -183,7 +184,7 @@ def test_presentation_capture_has_semantic_svg_guards() -> None:
 
 
 def test_presentation_accessibility_labels_are_public_ui_contracts() -> None:
-    source = INDEX_PATH.read_text(encoding="utf-8")
+    source = read_english_index(INDEX_PATH)
     for label in (
         'summary aria-label="Colors"',
         'aria-label="Palette"',
@@ -191,11 +192,11 @@ def test_presentation_accessibility_labels_are_public_ui_contracts() -> None:
         'aria-label="Arrow head length ratio"',
         'aria-label="Arrow shaft width ratio"',
         'aria-label="Add feature visibility rule"',
-        "`Visibility rule ${i + 1} record ID`",
-        "`Visibility rule ${i + 1} feature type`",
-        "`Visibility rule ${i + 1} qualifier`",
-        "`Visibility rule ${i + 1} action`",
-        "`Visibility rule ${i + 1} value regex`",
+        "t('Visibility rule {n} record ID', { n: i + 1 })",
+        "t('Visibility rule {n} feature type', { n: i + 1 })",
+        "t('Visibility rule {n} qualifier', { n: i + 1 })",
+        "t('Visibility rule {n} action', { n: i + 1 })",
+        "t('Visibility rule {n} value regex', { n: i + 1 })",
         'aria-label="Block Stroke Width"',
         'aria-label="Line Stroke Width"',
     ):

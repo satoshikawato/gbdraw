@@ -17,10 +17,12 @@ import {
 } from '../contracts/schema.generated.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
+import { storesDrawnFrameProteinResults } from './main-session-comparison-frame.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
+import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
 const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
@@ -304,15 +306,39 @@ const rebuildIntent = async (session, owners) => {
   }
   // A CLI-written request compares without its resolved configuration;
   // defaults it leaves unstated compare as absent in the equivalence (OV-398).
+  // Its track slots compare as Load reads them (OV-1299).
   /** @param {CanonicalRenderRequest} request */
   const comparable = (request) => {
     if (!cliConfig) return request;
     const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)
       .filter(([key]) => key !== 'config' && key !== 'configOverrides'));
-    return { ...request, diagramOptions };
+    return { ...request, diagramOptions: { ...diagramOptions,
+      tracks: tracksAsLoaded(diagramOptions.tracks, projection.mode, drawing.form.track_type) } };
   };
   return { config, features, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
     expectedResources: session.resources, actualRequest: comparable(rebuilt.renderRequest), actualResources: rebuilt.resources }) };
+};
+/**
+ * A CLI request's track slots as Web Load reads them (OV-1299): a slot spec's
+ * annotation params are text ("0", "false"), which Load reads as the editor
+ * writes them, and an Axis index the command did not state is the one the
+ * Web infers from the slots.
+ * @param {unknown} tracks
+ * @param {string} mode
+ * @param {unknown} trackType
+ */
+const tracksAsLoaded = (tracks, mode, trackType) => {
+  const slotsKey = `${mode}TrackSlots`, axisKey = `${mode}TrackAxisIndex`;
+  const slots = isObject(tracks) ? tracks[slotsKey] : null;
+  if (!isObject(tracks) || !Array.isArray(slots) || slots.length === 0) return tracks;
+  const read = slots.map((slot, index) => {
+    if (!isObject(slot) || slot.renderer !== 'annotations' || !isObject(slot.params)) return slot;
+    const params = { ...slot.params };
+    normalizeAnnotationSlotParams(params, `${slotsKey}[${index}].params`);
+    return { ...slot, params: canonicalAnnotationParams(params) };
+  });
+  const axis = tracks[axisKey] ?? validateCustomTrackPlan({ mode, slots: read, axisIndex: null, trackType }).emittedAxisIndex;
+  return { ...tracks, [slotsKey]: read, [axisKey]: axis };
 };
 /**
  * @param {PublicationSession} prepared
@@ -400,8 +426,14 @@ export const createGallerySessionPublication = (owners) => {
   /** @param {PublicationSession} session */
   const admit = (session) => {
     const version = Number(session?.version);
-    if (version === CURRENT_VERSION || version === MODE_SCOPED_SESSION_VERSION) {
-      // A Session 46 differs only in the keys of its Legend edits.
+    // Only Python converts the protein results these Sessions stored in the drawn frame (OV-1145).
+    if (storesDrawnFrameProteinResults(session)) {
+      throw new Error(`Gallery publication cannot convert the protein results that Session ${version} stored for a `
+        + 'reverse-complemented record; load it in the app and save it again, or refresh it with '
+        + 'tools/refresh_gallery_sessions.py.');
+    }
+    if (version >= MODE_SCOPED_SESSION_VERSION && version <= CURRENT_VERSION) {
+      // A Session 46 differs only in the keys of its Legend edits, 47 in its protein result frame.
       const current = version === CURRENT_VERSION
         ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
       validateCurrentFields(current);
@@ -411,7 +443,7 @@ export const createGallerySessionPublication = (owners) => {
     // draft until `prepare` splits it into the Session's mode slice.
     if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(session, owners.readRequest) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}; received ${String(session?.version)}.`);
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}-${CURRENT_VERSION - 1}; received ${String(session?.version)}.`);
     /** @type {LoadRepair[]} */
     const repairs = [];
     const promoted = owners.promoteSession(session, { repairs });

@@ -1,10 +1,11 @@
 // @ts-check
+import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
 import {
   readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
 } from './file-content-cache.js';
-import { getResourcePayloadOwner } from './resource-payload-owner.js';
+import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -26,34 +27,22 @@ import {
  *   A descriptor as the depth codec reads it; base64 `data` is a string, which never matches the codec's `schema`.
  */
 
-const BASE64_CHUNK_CHARACTERS = 1024 * 1024;
-
+// The base64 text of a resource is decoded by the one decoder a Session
+// resource backing also uses: native chunks that yield to paint where the
+// engine has them. `prepare` checks the decoded size against the descriptor.
 /**
  * @param {unknown} encoded
- * @param {number} declaredSize
  * @param {string} resourceId
+ * @returns {Promise<ArrayBuffer>}
  */
-const decodeBase64ForTransfer = (encoded, declaredSize, resourceId) => {
-  const source = String(encoded || '');
-  if (source.length % 4 !== 0 || /\s/.test(source)) {
-    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`);
+const decodeBase64ForTransfer = async (encoded, resourceId) => {
+  try {
+    const bytes = await base64ToBytesInTasks(/** @type {string | null | undefined} */ (encoded));
+    // The decoder writes into a buffer of exactly the decoded length.
+    return /** @type {ArrayBuffer} */ (bytes.buffer);
+  } catch (error) {
+    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
-  const bytes = new Uint8Array(declaredSize);
-  let byteOffset = 0;
-  for (let offset = 0; offset < source.length; offset += BASE64_CHUNK_CHARACTERS) {
-    const chunk = atob(source.slice(offset, offset + BASE64_CHUNK_CHARACTERS));
-    if (byteOffset + chunk.length > bytes.byteLength) {
-      throw new Error(`Canonical resource ${resourceId} exceeds its declared byte size.`);
-    }
-    for (let index = 0; index < chunk.length; index += 1) {
-      bytes[byteOffset + index] = chunk.charCodeAt(index);
-    }
-    byteOffset += chunk.length;
-  }
-  if (byteOffset !== declaredSize) {
-    throw new Error(`Canonical resource ${resourceId} byte size does not match its descriptor.`);
-  }
-  return bytes.buffer;
 };
 
 /**
@@ -95,9 +84,29 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
     return bytes.buffer;
   }
   recordStructuralMetric('base64DecodeCount', 1, { resourceId });
-  const buffer = decodeBase64ForTransfer(descriptor.data, descriptor.size, resourceId);
+  const buffer = await decodeBase64ForTransfer(descriptor.data, resourceId);
   recordStructuralMetric('decodedByteCount', buffer.byteLength, { resourceId });
   return buffer;
+};
+
+/**
+ * The id of the resource of `resources` whose bytes `file` stands for (the
+ * File the user chose, or a Session resource view), of this kind, or null. A
+ * request that names it stages the bytes the Worker holds under that id
+ * (OV-1555).
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {object | null | undefined} file
+ * @param {string} kind
+ * @returns {string | null}
+ */
+export const resourceIdOwnedBy = (resources, file, kind) => {
+  if (!resources || !file) return null;
+  const identity = getResourcePayloadIdentity(file);
+  return Object.keys(resources).find((resourceId) => {
+    const descriptor = resources[resourceId];
+    return typeof descriptor === 'object' && descriptor !== null
+      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadIdentity(descriptor) === identity;
+  }) ?? null;
 };
 
 /**
@@ -130,10 +139,13 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
   // The token of each payload identity seen whose bytes the Worker holds.
   /** @type {Map<string | ResourcePayloadOwner, ResourceContentToken>} */
   let knownTokens = new Map();
+  // A new Worker holds nothing: a helper staging prepared before the reset records nothing.
+  let workerEpoch = 0;
 
   const reset = () => {
     heldTokens = new Set();
     knownTokens = new Map();
+    workerEpoch += 1;
   };
 
   // The held tokens a drawing's committed request names. Only tokens already
@@ -152,12 +164,23 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
     return retained;
   };
 
-  /** @param {{ request?: unknown, resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null }} [payload] */
-  const prepare = async ({ request, resources } = {}) => {
+  // A render stages what its request names, and the Worker then holds only that.
+  // A helper (`retain`) stages the resources it reads, and the Worker keeps the
+  // rest for the next Generate (OV-1590), so the held tokens keep them too.
+  /**
+   * @param {{
+   *   request?: unknown,
+   *   resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null,
+   *   retain?: boolean
+   * }} [payload]
+   */
+  const prepare = async ({ request, resources, retain = false } = {}) => {
     const previousHeldTokens = heldTokens;
+    const preparedEpoch = workerEpoch;
     const retained = committedHeldTokens();
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
+    /** @type {{ resourceId: string, cacheToken: ResourceContentToken, bytes: ArrayBuffer }[]} */
     const stagedResources = [];
     /** @type {Set<ResourceContentToken>} */
     const manifestTokens = new Set();
@@ -230,6 +253,11 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       // The held tokens the Worker keeps besides this request's: it releases the rest.
       retainedResourceTokens: [...retained].filter((token) => !manifestTokens.has(token)),
       commit() {
+        if (retain) {
+          if (workerEpoch !== preparedEpoch) return false;
+          heldTokens = new Set([...heldTokens, ...stagedResources.map(({ cacheToken }) => cacheToken)]);
+          return true;
+        }
         // A reset or another acknowledged request supersedes this preparation.
         if (heldTokens !== previousHeldTokens) return false;
         heldTokens = new Set([...manifestTokens, ...retained]);

@@ -43,6 +43,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempRoot, 'utils', 'i18n.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'i18n.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempRoot, 'utils', 'vue-raw.js'),
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'vue-raw.js'), 'utf8'),
   'utf8'

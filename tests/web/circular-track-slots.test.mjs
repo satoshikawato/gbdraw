@@ -182,6 +182,15 @@ test('the track preview estimates the records it is given', () => {
   assert.equal(featureWidthNote([]), '≈ 18.5 px (estimate)', 'long while no length is known');
 });
 
+// OV-1409: the global issue list keys each issue by its code, not its shown text.
+test('the global issues keep their codes', () => {
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(createState({ axisIndex: 9 })) });
+  assert.deepEqual(editor.circularTrackGlobalIssues().map((issue) => [issue.code, issue.parts]), [
+    ['axis_out_of_range', [{ text: 'The Axis boundary must be an integer from 0 to {max}.', params: { max: 3 } }]]
+  ]);
+  assert.deepEqual(createCircularTrackSlotEditor({ state: withDrawings(createState()) }).circularTrackGlobalIssues(), []);
+});
+
 // OV-487: Python draws a content or skew slot without a dinucleotide with the
 // drawing's, so the closed disclosure names that one, not GC.
 test('the slot options summary names the dinucleotide the slot is drawn with', () => {
@@ -196,14 +205,16 @@ test('the slot options summary names the dinucleotide the slot is drawn with', (
 });
 
 // The default tracks draw the drawing's dinucleotide, so the preset summary
-// names it too.
+// names it too. The tracks are a list (`listText`) of translated names.
 test('the preset summary names the default tracks by the dinucleotide of the drawing', () => {
   const state = createState();
   state.form.suppress_skew = false;
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-  assert.match(editor.circularTrackPresetSummary().detail, /GC content, GC skew inside$/);
+  assert.match(editor.circularTrackPresetSummary().detail, /GC content and GC skew inside$/);
   state.adv.nt = ' at ';
-  assert.match(editor.circularTrackPresetSummary().detail, /AT content, AT skew inside$/);
+  assert.match(editor.circularTrackPresetSummary().detail, /AT content and AT skew inside$/);
+  state.form.show_depth = true;
+  assert.match(editor.circularTrackPresetSummary().detail, /Depth, AT content, and AT skew inside$/);
 });
 
 test('Circular placement actions preserve the Axis boundary and radial sides', () => {
@@ -533,4 +544,83 @@ test('a renderer named like an inherited member keeps its own name as the label'
   }
   assert.equal(editor.circularTrackRendererLabel('depth'), 'Depth');
   assert.equal(editor.circularTrackSlotDisplayLabel(spacerSlot()), 'Spacer');
+});
+
+const annotationSlot = (side = 'inside') => ({
+  id: 'annotations',
+  renderer: 'annotations',
+  enabled: true,
+  side,
+  z: 0,
+  params: { set_id: 'plastome_regions' }
+});
+
+// OV-1263 (audit G5b-03): the default stack with an Annotations row added at
+// its end and set to Overlay, every other row inside the Axis. Outside axis
+// moves that row across the Axis (before, the select snapped back to Inside);
+// the other rows keep their sides, and Inside axis brings the row back. The
+// flip of the other rows came from Generate's Axis index; the Playwright case
+// in track-layout-transition.playwright.spec.js pins it.
+test('an Annotations row placement moves only that row across the Axis (OV-1263)', () => {
+  const inside = (slot) => ({ ...slot, side: 'inside' });
+  const state = createState({
+    slots: [
+      inside({ ...featureSlot(), params: { lane_direction: 'inside' } }),
+      inside(tickSlot()),
+      inside(gcSlot()),
+      { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'inside', z: 0, params: {} },
+      { ...annotationSlot('overlay'), params: { set_id: 'plastome_regions', to_slot: 'gc_skew' } }
+    ],
+    axisIndex: 0
+  });
+  state.annotationSets = [{ id: 'plastome_regions' }];
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const others = () => state.adv.circular_track_slots
+    .filter((slot) => slot.id !== 'annotations').map((slot) => [slot.id, slot.side, slot.params.lane_direction]);
+  const before = others();
+  const row = state.adv.circular_track_slots[4];
+
+  editor.updateCircularTrackSlotPlacement(row, 'outside');
+  assert.deepEqual(others(), before);
+  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'annotations').side, 'outside');
+
+  editor.updateCircularTrackSlotPlacement(row, 'inside');
+  assert.deepEqual(others(), before);
+  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'annotations').side, 'inside');
+
+  // A refused change (a Session operation runs) writes nothing.
+  const settled = structuredClone(state.adv.circular_track_slots);
+  const settledAxis = state.adv.circular_track_slots_axis_index;
+  state.sessionOperationAvailability = () => 'busy';
+  assert.equal(editor.updateCircularTrackSlotPlacement(row, 'outside'), 'busy');
+  assert.deepEqual(state.adv.circular_track_slots, settled);
+  assert.equal(state.adv.circular_track_slots_axis_index, settledAxis);
+});
+
+// OV-1254: the disabled Add track names the missing Region annotation set,
+// not a Features-row conflict that Circular does not have.
+test('Add track names the missing source of the chosen renderer (OV-1254)', () => {
+  const state = createState();
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  assert.equal(editor.circularTrackAddBlockReason('annotations'), 'Import or add a Region annotation set in Region Annotations first');
+  assert.equal(editor.circularTrackAddBlockReason('depth'), 'Load a Depth TSV first');
+  assert.equal(editor.circularTrackAddBlockReason('spacer'), '');
+  assert.equal(editor.canAddCircularTrackRenderer('annotations'), false);
+  state.annotationSets = [{ id: 'plastome_regions' }];
+  assert.equal(editor.circularTrackAddBlockReason('annotations'), '');
+  assert.equal(editor.canAddCircularTrackRenderer('annotations'), true);
+});
+
+// D-51: the slot editor shows each row issue as one sentence in the UI language.
+test('Circular editor shows a row issue in the UI language (D-51)', async () => {
+  const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  const state = createState({ slots: [featureSlot(), { ...spacerSlot(), id: '' }, gcSlot()] });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  assert.equal(editor.circularTrackSlotIssue(state.adv.circular_track_slots[1], 1), 'This row needs a non-empty ID.');
+  await setUiLocale('ja');
+  try {
+    assert.equal(editor.circularTrackSlotIssue(state.adv.circular_track_slots[1], 1), 'この行には空でないIDが必要です。');
+  } finally {
+    await setUiLocale('en');
+  }
 });

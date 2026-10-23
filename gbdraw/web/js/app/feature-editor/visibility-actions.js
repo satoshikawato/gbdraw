@@ -25,6 +25,7 @@ import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { replaceVisibilityRules } from '../../services/drawing/visibility-rules.js';
+import { msg, t } from '../../utils/i18n.js';
 /** @import { DrawingState } from '../../state.js' */
 /** @import { FeatureDrawnContext, FeatureVisibilityRuleDraft, VisibilityFeature } from '../../services/feature-visibility.js' */
 
@@ -210,15 +211,15 @@ export const createFeatureVisibilityActions = ({
     /** @type {VisibilityScope[]} */
     const scopes = [{
       id: 'feature',
-      label: 'This feature',
-      description: 'One rule for only this feature.'
+      label: t('This feature'),
+      description: t('One rule for only this feature.')
     }];
     const orthogroupMembers = getOrthogroupMemberFeatures(feat);
     if (orthogroupMembers.length > 1) {
       scopes.push({
         id: 'orthogroup',
-        label: `Current similarity-group members (${orthogroupMembers.length})`,
-        description: 'One rule per current similarity-group member.',
+        label: t('Current similarity-group members ({count})', { count: orthogroupMembers.length }),
+        description: t('One rule per current similarity-group member.'),
         features: orthogroupMembers
       });
     }
@@ -226,8 +227,8 @@ export const createFeatureVisibilityActions = ({
     if (featureType && product) {
       scopes.push({
         id: 'product',
-        label: `Exact product: ${product}`,
-        description: 'Exact product qualifier rule.',
+        label: t('Exact product: {product}', { product }),
+        description: t('Exact product qualifier rule.'),
         featureType,
         qualifier: 'product',
         value: product
@@ -244,8 +245,8 @@ export const createFeatureVisibilityActions = ({
     if (featureType && proteinId) {
       scopes.push({
         id: 'protein_id',
-        label: `Exact protein ID: ${proteinId}`,
-        description: 'Exact protein_id qualifier rule.',
+        label: t('Exact protein ID: {id}', { id: proteinId }),
+        description: t('Exact protein_id qualifier rule.'),
         featureType,
         qualifier: 'protein_id',
         value: proteinId
@@ -415,7 +416,7 @@ export const createFeatureVisibilityActions = ({
     };
 
     return {
-      label: 'Change selected feature visibility',
+      label: msg('Change selected feature visibility'),
       resultIndex: commandResultIndex,
       resultGenerationKey: commandGenerationKey,
       changes,
@@ -746,7 +747,7 @@ export const createFeatureVisibilityActions = ({
     const drawing = state.activeDrawing();
     const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
-      showNotice({ text: 'There are no complete Feature visibility rules to export.' });
+      showNotice({ text: t('There are no complete Feature visibility rules to export.') });
       return;
     }
     downloadTextFile('gbdraw_feature_visibility_table.tsv', text);

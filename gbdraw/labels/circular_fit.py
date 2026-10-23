@@ -133,6 +133,8 @@ class CircularLabelLayout:
     refused: bool = False
     features_separated: bool = False
     probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
+    # The largest font of the record's region labels, when some are cut or lie on another track (``circular_region``).
+    region_font_size: float = 0.0
 
     @property
     def fit(self) -> LabelFit:
@@ -147,9 +149,19 @@ class CircularLabelLayout:
         """The sides that do not fit; a refused radial record names its inner or outer side."""
 
         failing = tuple(kind for kind, fit in self.kind_fits.items() if not fit.fits)
-        if failing or not self.refused:
+        if any(kind != "circular_region" for kind in failing) or not self.refused:
             return failing
-        return ("circular_inner",) if self.label_counts.get("circular_inner") else ("circular_outer",)
+        return (
+            *failing,
+            "circular_inner" if self.label_counts.get("circular_inner") else "circular_outer",
+        )
+
+    @property
+    def failing_feature_kinds(self) -> tuple[LabelKind, ...]:
+        """The failing sides the rows can move: region labels that are cut (LP-D87) or lie on other tracks (LP-D86)
+        only warn, with no row."""
+
+        return tuple(kind for kind in self.failing_kinds if kind != "circular_region")
 
     @property
     def outer_only(self) -> bool:
@@ -158,7 +170,7 @@ class CircularLabelLayout:
         return (
             self.placement == "horizontal"
             and not self.refused
-            and self.failing_kinds == ("circular_outer",)
+            and self.failing_feature_kinds == ("circular_outer",)
             and self.probe is not None
         )
 
@@ -312,10 +324,12 @@ def _applicable_rows(layouts: Sequence[CircularLabelLayout]) -> frozenset[LabelF
         embedded = layout.kind_fits.get("circular_embedded", FITS)
         if embedded.overlap_pairs and not layout.features_separated:
             kinds.add("separate_features")
+        failing = layout.failing_feature_kinds
+        if not failing:
+            continue
         if layout.placement == "radial":
             kinds |= _RADIAL_ROWS
             continue
-        failing = layout.failing_kinds
         if "circular_outer" in failing:
             kinds |= _OUTER_ROWS
         if any(kind != "circular_outer" for kind in failing):
@@ -583,9 +597,9 @@ def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord
             record_id=layout.record_id,
             label_kind=kind,
             label_count=int(layout.label_counts.get(kind, 0)),
-            font_size=layout.font_size,
+            font_size=layout.region_font_size if kind == "circular_region" else layout.font_size,
             fit=layout.kind_fits.get(kind, FITS),
-            refused=layout.refused,
+            refused=layout.refused and kind != "circular_region",
         )
         for layout in layouts
         for kind in layout.failing_kinds

@@ -771,7 +771,7 @@
     },
     {
       "title": "Align the rows on similarity group og_6",
-      "body": "To line up the shared genes, align the rows on one similarity group. In the preview, click the neoU CDS of BGC0000709 (row 2), which belongs to og_6, and choose Review alignment options…. The Review alignment panel opens beside the figure: a Reference card for neoU, then one card per other record, grouped under sections such as Several candidates and One candidate. The figure rings the candidates and draws a reference line. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is preselected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Arrow direction at Keep as is, and click Apply. Apply regenerates the preview, so you do not click Generate Diagram.",
+      "body": "To line up the shared genes, align the rows on one similarity group. In the preview, click the neoU CDS of BGC0000709 (row 2), which belongs to og_6, and choose Review alignment options…. The Review alignment panel opens beside the figure: a Reference card for neoU, then one card per other record, grouped under sections such as Several candidates and One candidate. The figure rings the candidates and draws a reference line. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is preselected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Arrow direction at Keep as is, and click Apply. Apply regenerates the preview, so you do not click Generate Diagram. The neoU popup, hidden during the review, comes back after Apply; close it with its × button.",
       "note": "Align… applies the same recommended anchors without the review. Choose Skip in a record card to leave that record where it is. Reset alignment… undoes an alignment; see the Web alignment reference for its scopes.",
       "replay": [
         {
@@ -808,6 +808,15 @@
           "type": "waitForFunction",
           "timeout": 600000,
           "script": "() => { const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); return Boolean(app && !app.processing && !app.similarityAlignmentBusy && !document.querySelector('[data-similarity-alignment-dialog]') && content && content !== window.__gbdrawReplayResult); }"
+        },
+        {
+          "type": "click",
+          "selector": ".feature-popup button[aria-label=\"Close feature popup\"]"
+        },
+        {
+          "type": "waitForSelector",
+          "selector": ".feature-popup",
+          "state": "hidden"
         }
       ],
       "operations": [
@@ -1111,7 +1120,7 @@
             "orange"
           ],
           [
-            "Default CDS color",
+            "Default Colors › CDS feature color",
             "#dddddd"
           ]
         ]
@@ -1603,7 +1612,7 @@
             "Ruler (Ticks)"
           ],
           [
-            "Axis & Scale › Scale Font Size (linked to Ruler Label Font Size)",
+            "Axis & Scale › Scale Font Size (Link Scale and Ruler Label Font Sizes on)",
             "20"
           ],
           [
@@ -1623,19 +1632,19 @@
             "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
           ],
           [
-            "Definition line: Name / Species",
+            "Titles & Record Labels › Name / Species › Style",
             "20; Bold"
           ],
           [
-            "Definition line: Subtitle",
+            "Titles & Record Labels › Subtitle › Style",
             "20"
           ],
           [
-            "Definition line: Accession",
+            "Titles & Record Labels › Accession › Style",
             "20; #7b7c7d"
           ],
           [
-            "Definition line: Length / Coordinates",
+            "Titles & Record Labels › Length / Coordinates › Style",
             "20; #7b7c7d"
           ]
         ]
@@ -1735,7 +1744,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Name / Species style size\"]",
+          "selector": "input[aria-label=\"Name / Species font size\"]",
           "value": 20
         },
         {
@@ -1744,12 +1753,12 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Subtitle style size\"]",
+          "selector": "input[aria-label=\"Subtitle font size\"]",
           "value": 20
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Accession style size\"]",
+          "selector": "input[aria-label=\"Accession font size\"]",
           "value": 20
         },
         {
@@ -1759,7 +1768,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Length / Coordinates style size\"]",
+          "selector": "input[aria-label=\"Length / Coordinates font size\"]",
           "value": 20
         },
         {
@@ -1996,7 +2005,7 @@
                 "og_6: reference neoU (BGC0000709); BGC0000708 anchor livU; Arrow direction Keep as is"
               ],
               [
-                "Palette; Default CDS color",
+                "Palette; Default Colors › CDS feature color",
                 "orange; #dddddd"
               ],
               [
@@ -2048,7 +2057,7 @@
                 "Ruler (Ticks)"
               ],
               [
-                "Axis & Scale › Scale Font Size (linked to Ruler Label Font Size)",
+                "Axis & Scale › Scale Font Size (Link Scale and Ruler Label Font Sizes on)",
                 "20"
               ],
               [
@@ -2072,19 +2081,19 @@
                 "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
               ],
               [
-                "Definition line: Name / Species",
+                "Titles & Record Labels › Name / Species › Style",
                 "20; Bold"
               ],
               [
-                "Definition line: Subtitle",
+                "Titles & Record Labels › Subtitle › Style",
                 "20"
               ],
               [
-                "Definition line: Accession",
+                "Titles & Record Labels › Accession › Style",
                 "20; #7b7c7d"
               ],
               [
-                "Definition line: Length / Coordinates",
+                "Titles & Record Labels › Length / Coordinates › Style",
                 "20; #7b7c7d"
               ]
             ]

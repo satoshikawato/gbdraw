@@ -64,10 +64,9 @@ from gbdraw.api.options import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
-from tests.utils.comparison_tables import converted_pair_rows
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
-from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
 MG1655_START_CODON_SUBSET = (
@@ -83,19 +82,6 @@ def _record(
     record = SeqRecord(Seq(sequence), id=record_id)
     record.features = list(features or [])
     return record
-
-
-def _orthogroup_alignment_canvas_config() -> object:
-    return type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "alignment_width": 1000.0,
-            "longest_genome": 1000,
-        },
-    )()
 
 
 def _cds(
@@ -3654,7 +3640,7 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
 
 
 @pytest.mark.linear
-def test_web_losatp_pairwise_payload_uses_display_view_transform(
+def test_web_losatp_pairwise_payload_stores_a_reversed_record_in_its_search_frame(
     tmp_path: Path,
     stage_web_losatp_transport,
     monkeypatch: pytest.MonkeyPatch,
@@ -3742,8 +3728,9 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
     assert len(encoded_tables) == 1
     row = converted_pair_rows(result["pairs"][0])[0]
     assert row["query_protein_id"] == "qa"
-    assert row["qstart"] == 300
-    assert row["qend"] == 271
+    # The reversed query record is stored in its search frame (OV-1145).
+    assert row["qstart"] == 1
+    assert row["qend"] == 30
     assert row["sstart"] == 160
     assert row["send"] == 101
 
@@ -3899,7 +3886,8 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert "orthogroups" not in result
     rows = converted_pair_rows(result["pairs"][0])
     assert rows[0]["subject_feature_svg_id"] == "feature_b"
-    assert rows[0]["subject_view_feature_svg_id"] == display_feature_svg_id
+    # Stored in the search frame (OV-1145); the planner draws the display ID.
+    assert rows[0]["subject_view_feature_svg_id"] == subject_map["b"]["feature_svg_id"]
     assert rows[0]["orthogroup_id"] == "og_1"
     assert rows[0]["edge_kind"] == "rbh"
     assert rows[1]["orthogroup_id"] == "og_1"
@@ -3968,6 +3956,115 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert hit_bytes == miss_bytes
     assert json.loads(miss_bytes) == result["orthogroupResult"]
     assert hit["pairs"] == miss["pairs"] == result["pairs"]
+
+
+def _web_losatp_two_record_payload(table_count: int) -> dict[str, object]:
+    """Two records and `table_count` raw tables of one direction, each under its own raw key."""
+    query_map = {"a1": _web_protein_entry("a1", record_index=0, record_id="record_a")}
+    subject_map = {
+        "b": _web_protein_entry("b", record_index=1, record_id="record_b"),
+        "b2": _web_protein_entry("b2", record_index=1, record_id="record_b", feature_index=1, start=100, end=190),
+    }
+    hits = pd.DataFrame.from_records(
+        [_hit_row("a1", "b", bitscore=300), _hit_row("a1", "b2", bitscore=60)],
+        columns=COMPARISON_COLUMNS,
+    ).to_csv(sep="\t", header=False, index=False, lineterminator="\n")
+    return {
+        "records": [
+            {"recordIndex": index, "recordId": record_id, "proteinMap": protein_map,
+             "runtimeBindingHash": f"{record_id}-runtime", "displayBindingHash": f"{record_id}-display",
+             "viewTransform": {"length": 200, "reverse": False}}
+            for index, (record_id, protein_map) in enumerate((("record_a", query_map), ("record_b", subject_map)))
+        ],
+        "pairs": [
+            {"pairIndex": 0, "queryIndex": 0, "subjectIndex": 1, "displayPair": index == 0,
+             "cacheKey": f"pair-{index}", "blastText": hits}
+            for index in range(table_count)
+        ],
+    }
+
+
+@pytest.mark.linear
+def test_web_losatp_threshold_change_refilters_without_reparsing(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-1579: the parsed hits of a raw table do not depend on the thresholds."""
+    namespace = _load_web_helper_namespace()
+    parse_calls = []
+    parse = protein_colinearity_module.parse_losatp_outfmt6
+
+    def counted_parse(text):
+        parse_calls.append(1)
+        return parse(text)
+
+    monkeypatch.setattr(protein_colinearity_module, "parse_losatp_outfmt6", counted_parse)
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, _web_losatp_two_record_payload(2))
+    convert = namespace["convert_losatp_blastp_pairs_to_genomic_payload"]
+    results = [
+        json.loads(str(convert(str(pairs_path), str(raw_tsv_path), "pairwise", 5, bitscore, "1e-2", 0, 0)))
+        for bitscore in (50, 100, 50)
+    ]
+    assert [len(converted_pair_rows(result["pairs"][0])) for result in results] == [2, 1, 2]
+    # Each table is parsed once; the second threshold only filters again, and the third is the first's payload.
+    assert len(parse_calls) == 2
+    assert [result["cache"]["filteredHitCacheMisses"] for result in results] == [2, 2, 0]
+    assert results[2]["cache"]["convertedPayloadHit"] is True
+
+
+@pytest.mark.linear
+def test_web_losatp_conversion_keeps_every_table_of_a_large_comparison(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
+    """A comparison with more raw tables than the payload cache's 64 entries keeps its filtered tables."""
+    namespace = _load_web_helper_namespace()
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, _web_losatp_two_record_payload(81))
+    convert = namespace["convert_losatp_blastp_pairs_to_genomic_payload"]
+    first, second = (
+        json.loads(str(convert(str(pairs_path), str(raw_tsv_path), "pairwise", max_hits, 50, "1e-2", 0, 0)))
+        for max_hits in (5, 4)
+    )
+    assert first["cache"]["filteredHitCacheMisses"] == 81
+    # A display setting changed, so the payload is new, but the 81 thresholded tables are the same.
+    assert second["cache"]["convertedPayloadHit"] is False
+    assert second["cache"]["filteredHitCacheHits"] == 81
+    assert second["cache"]["filteredHitCacheMisses"] == 0
+
+
+@pytest.mark.linear
+def test_web_protein_manifest_is_validated_once_for_keys_and_downloads(monkeypatch) -> None:
+    """OV-1553: Generate's key request and each table of Download all send the same manifest text."""
+    namespace = _load_web_helper_namespace()
+    extraction = extract_protein_identity_manifest(
+        [_record("a", features=[_cds(0, 9, qualifiers={"translation": ["MKT"]})])],
+        record_instance_keys=("row-a",),
+    )
+    manifest_text = json.dumps(extraction.identity_manifest.to_dict())
+    validation_calls = []
+    validate = protein_colinearity_module.validate_protein_identity_manifest
+
+    def counted_validate(value):
+        validation_calls.append(1)
+        return validate(value)
+
+    monkeypatch.setattr(protein_colinearity_module, "validate_protein_identity_manifest", counted_validate)
+    pairs = json.dumps([{"queryRecordInstanceKey": "row-a", "subjectRecordInstanceKey": "row-a",
+                         "expectedOptions": {"program": "blastp", "outfmt": "6", "args": []}}])
+    first = json.loads(namespace["build_protein_losat_cache_keys_json"](manifest_text, pairs))
+    second = json.loads(namespace["build_protein_losat_cache_keys_json"](manifest_text, pairs))
+    assert first == second and "keys" in first
+    for _ in range(2):
+        # A table that does not resolve: the reply is an error, after the manifest was read.
+        hydrated = json.loads(namespace["hydrate_protein_losat_tsv_json"](json.dumps({"text": ""}), manifest_text))
+        assert hydrated["status"] == "error"
+    assert len(validation_calls) == 1
+    # A manifest that fails is not kept: each request with it is checked and refused.
+    invalid_text = json.dumps({**json.loads(manifest_text), "schema": 1})
+    for _ in range(2):
+        assert "error" in json.loads(namespace["build_protein_losat_cache_keys_json"](invalid_text, pairs))
+    assert len(validation_calls) == 3
 
 
 @pytest.mark.linear
@@ -4147,7 +4244,7 @@ def test_web_losatp_payload_helper_output_follows_explicit_display_pairs(
     assert displayed_only["cache"]["convertedPayloadHit"] is False
 
 
-def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
+def test_pairwise_match_group_places_each_end_through_its_record_placement() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
         _record("record_b", sequence="A" * 1000),
@@ -4163,35 +4260,21 @@ def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> Non
             }
         ]
     )
-    canvas_config = _orthogroup_alignment_canvas_config()
-    blast_config = type(
-        "BlastConfig",
-        (),
-        {
-            "fill_color": "#cccccc",
-            "identity": 0,
-            "min_color": "#eeeeee",
-            "max_color": "#111111",
-            "fill_opacity": 0.5,
-            "stroke_color": "#000000",
-            "stroke_width": 0.1,
-        },
-    )()
-
-    group = PairWiseMatchGroup(
-        canvas_config,
-        {"record_a": 1000, "record_b": 1000},
-        comparison,
-        100.0,
-        1,
-        blast_config,
+    group = ribbon_group(
         records,
-        record_offsets_x={1: -300.0},
-        align_center=canvas_config.align_center,
+        comparison,
+        height=100.0,
+        subject_x=-300.0,
+        fill_color="#cccccc",
+        min_color="#eeeeee",
+        max_color="#111111",
+        fill_opacity=0.5,
+        stroke_color="#000000",
+        stroke_width=0.1,
     ).get_group()
 
     path = group.elements[0]
-    assert 'd="M 100.0,0L200.0,0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
+    assert 'd="M 100.0,0.0L200.0,0.0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
 
 
 @pytest.mark.linear

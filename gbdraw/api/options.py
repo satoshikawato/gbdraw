@@ -282,6 +282,21 @@ def _validate_track_configuration(
     return normalized_axis_index
 
 
+def validate_feature_type_names(value: object, *, field_name: str) -> None:
+    """Refuse a feature type selection that is not ``None`` or a sequence of names.
+
+    ``field_name`` is the caller's name for the field (``types`` in
+    ``gbdraw.FeatureOptions``).
+    """
+
+    if value is None:
+        return
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise ValidationError(f"{field_name} must be a sequence of feature names or None.")
+    if not all(isinstance(feature_name, str) and feature_name.strip() for feature_name in value):
+        raise ValidationError(f"{field_name} must contain non-empty strings.")
+
+
 def _validate_center_reserved_radius(value: object, *, field_name: str) -> float | None:
     if value is None:
         return None
@@ -980,21 +995,7 @@ class _ModeDiagramOptions:
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
             object.__setattr__(self, "feature_shapes", normalized_shapes)
-        if self.selected_features_set is not None:
-            if isinstance(self.selected_features_set, (str, bytes)) or not isinstance(
-                self.selected_features_set,
-                Sequence,
-            ):
-                raise ValidationError(
-                    "selected_features_set must be a sequence of feature names or None."
-                )
-            if not all(
-                isinstance(feature_name, str) and feature_name.strip()
-                for feature_name in self.selected_features_set
-            ):
-                raise ValidationError(
-                    "selected_features_set must contain non-empty strings."
-                )
+        validate_feature_type_names(self.selected_features_set, field_name="selected_features_set")
         if self.depth_tracks is not None:
             if (
                 isinstance(self.depth_tracks, (str, bytes))

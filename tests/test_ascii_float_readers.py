@@ -11,6 +11,7 @@ as not a number, through each reader's own error path; everything else
 from __future__ import annotations
 
 import argparse
+import re
 from collections.abc import Callable
 
 import pytest
@@ -315,3 +316,90 @@ def test_config_numbers_read_non_ascii_text_as_not_a_number() -> None:
             if outcome == read or outcome[0] != not_a_number[0]:
                 failures.append((path, edited, outcome[0]))
     assert failures == []
+
+
+NON_FINITE_TEXT = ("nan", "inf", "-inf", "Infinity", "-NaN")
+
+
+@pytest.mark.parametrize("text", NON_FINITE_TEXT)
+def test_argparse_float_refuses_non_finite_values(text: str) -> None:
+    """OV-275: ``nan`` and ``inf`` reached the layout and ended in a raw traceback."""
+
+    from gbdraw.core.numeric import argparse_float, parse_ascii_finite_float
+
+    assert parse_ascii_finite_float(text) is None
+    assert parse_ascii_finite_float(" 2.5 ") == 2.5
+    with pytest.raises(argparse.ArgumentTypeError, match="must be a finite number"):
+        argparse_float(text)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_every_cli_float_option_refuses_non_finite_values(mode: str, capsys: pytest.CaptureFixture[str]) -> None:
+    """OV-275: every float option shares one finite-float type, so none lets ``nan`` through."""
+
+    from gbdraw import circular, linear
+
+    get_args = circular._get_args if mode == "circular" else linear._get_args
+    options = _float_options(mode)
+    assert len(options) > 15
+    for option in options:
+        for text in ("nan", "inf", "-inf"):
+            with pytest.raises(SystemExit) as raised:
+                get_args(["--gbk", "dummy.gb", f"{option}={text}"])
+            assert raised.value.code == 2, (option, text)
+            err = capsys.readouterr().err
+            assert f"argument {option}: invalid float value: {text!r}" in err, (option, text, err)
+
+
+@pytest.mark.parametrize(
+    ("mode", "argv", "message"),
+    [
+        ("linear", ["--track_axis_gap=nan"], "track axis gap must be a non-negative number or 'auto'"),
+        ("linear", ["--track_axis_gap=inf"], "track axis gap must be a non-negative number or 'auto'"),
+        ("circular", ["--arrow_head_length_ratio=nan"], "arrow head length ratio must be 'auto'"),
+        ("circular", ["--depth_track_tick_font_size", "nan"], "values must be numbers or auto"),
+        ("linear", ["--depth_track_height", "inf"], "values must be numbers or auto"),
+        # A slot scalar read nan and failed later with an unrelated overlap error.
+        ("circular", ["--circular_track_slot", "features:features@r=nan"], "must be a finite number"),
+        ("circular", ["--circular_track_slot", "features:features@w=infpx"], "must be a finite number"),
+        ("circular", ["--circular_track_slot", "features:features@r=-inf%"], "must be a finite number"),
+    ],
+)
+def test_cli_text_number_options_refuse_non_finite_values(
+    mode: str, argv: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from gbdraw import circular, linear
+
+    get_args = circular._get_args if mode == "circular" else linear._get_args
+    with pytest.raises(SystemExit):
+        get_args(["--gbk", "dummy.gb", *argv])
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_config_override_floats_must_be_finite(value: float) -> None:
+    """OV-275: ``config_overrides={"canvas.circular.radius": nan}`` ended in
+    ``ValueError: bbox bounds must be finite``; the override validator owns the domain."""
+
+    from gbdraw.config.modify import validate_config_overrides
+    from gbdraw.exceptions import ValidationError
+
+    assert validate_config_overrides({"canvas.circular.radius": 300}) == (("canvas.circular.radius", 300),)
+    for path in ("canvas.circular.radius", "labels.unified_adjustment.outer_labels.x_radius_offset"):
+        with pytest.raises(ValidationError, match=re.escape(path)) as raised:
+            validate_config_overrides({path: value})
+        assert raised.value.diagnostic == {"code": "INPUT_INVALID", "configPath": path, "reason": "FINITE"}
+
+
+def test_python_draw_refuses_a_non_finite_config_override() -> None:
+    from pathlib import Path
+
+    import gbdraw
+    from gbdraw.exceptions import ValidationError
+
+    records = gbdraw.read_genbank(Path(__file__).parent / "test_inputs" / "NC_001416.gb")
+    with pytest.raises(ValidationError, match="canvas.circular.radius"):
+        gbdraw.draw_circular(
+            records,
+            options=gbdraw.CircularOptions(config_overrides={"canvas.circular.radius": float("nan")}),
+        ).to_svg()

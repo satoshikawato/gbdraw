@@ -15,6 +15,9 @@ change nothing.
   owner or rule in `gbdraw/web/CLAUDE.md` or `AGENTS.md`, or a test that does
   not test what it claims. Leave out style preferences and speculative
   hardening.
+- Whatever the brief lists, check a change to code under `gbdraw/` against
+  "Owners and Boundaries in Every Fix" in `AGENTS.md`; any departure from it,
+  including a missing or wrong "Boundary analysis", is a finding.
 - For each finding give the file and line, what goes wrong, and a concrete
   case (input, state, and the wrong result).
 

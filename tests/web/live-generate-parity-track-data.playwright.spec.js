@@ -6,9 +6,13 @@
 // live-generate-parity.playwright.spec.js.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
+const { writeFile } = require('node:fs/promises');
+const { gunzipSync } = require('node:zlib');
+const { download } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
-const { expectLiveEqualsGenerate, semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const {
   SINGLE_FIXTURE, open, generate, history, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
 } = require('./helpers/live-generate-parity-steps.cjs');
@@ -19,6 +23,10 @@ test.describe.configure({ retries: 0 });
 // tick text, and Redo hides them again; the live Result equals what Generate
 // draws. A Depth source History step restores files, which suppresses the
 // track-visibility watcher, so the step projects the visibility itself.
+// OV-1198 (PD-OI-104): the Legend row of the hidden track leaves the Result and
+// the Legend list at once, and Undo, Redo, and adding the file again follow.
+const BATCH_DEPTH_TSV = ['TESTA', 'TESTB']
+  .flatMap((id) => [0, 1, 2, 3].map((index) => `${id}\t${index * 700 + 1}\t${10 + index}`)).join('\n');
 const DEPTH_CASES = {
   'circular, clearing the Depth file': {
     mode: 'circular',
@@ -30,16 +38,30 @@ const DEPTH_CASES = {
     add: (app, file) => app.setCircularDepthFile(0, file),
     remove: (app) => app.removeCircularDepthTrack(0)
   },
+  'circular, switching Show Depth off': {
+    mode: 'circular',
+    add: (app, file) => app.setCircularDepthFile(0, file),
+    // The Show Depth checkbox's change handler.
+    remove: (app) => app.setTrackShown('show_depth', false)
+  },
+  'circular batch, Result 2 shown, clearing the Depth file': {
+    mode: 'circular',
+    results: 'batch',
+    shown: 1,
+    tsv: BATCH_DEPTH_TSV,
+    add: (app, file) => app.setCircularDepthFile(0, file),
+    remove: (app) => app.setCircularDepthFile(0, null)
+  },
   'linear, clearing the Depth file': {
     mode: 'linear',
     add: (app, file) => app.setLinearDepthFile(app.linearSeqs[0], 0, file),
     remove: (app) => app.setLinearDepthFile(app.linearSeqs[0], 0, null)
   }
 };
-for (const [name, { mode, add, remove }] of Object.entries(DEPTH_CASES)) {
+for (const [name, { mode, results = 'single', shown = null, tsv = DEPTH_TSV, add, remove }] of Object.entries(DEPTH_CASES)) {
   test(`Undo and Redo of a Depth source removal match Generate (${name})`, async ({ page }) => {
-    test.setTimeout(180_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    test.setTimeout(240_000);
+    await open(page, { mode, results, reflow: 'off' });
     const inStep = async (label, change, ...args) => {
       await page.evaluate(async ({ stepLabel, source, values }) => {
         const run = new Function('app', 'text', `return (${source})(app, text && new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));`);
@@ -47,15 +69,462 @@ for (const [name, { mode, add, remove }] of Object.entries(DEPTH_CASES)) {
       }, { stepLabel: label, source: change.toString(), values: args });
       await settleLive(page);
     };
-    await inStep('Change uploaded file', add, DEPTH_TSV);
+    const listed = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+    const expectDepthRow = async (step, drawn) => {
+      const live = await semanticSnapshot(page);
+      expect(live.legend.some((row) => row.caption === 'depth'), `${name}: ${step}: Result row`).toBe(drawn);
+      expect((await listed()).includes('depth'), `${name}: ${step}: Legend list row`).toBe(drawn);
+    };
+    await inStep('Change uploaded file', add, tsv);
     await generate(page);
+    if (shown !== null) await showResult(page, shown);
+    await expectDepthRow('generated', true);
+    await inStep('Remove Depth', remove, null);
+    await expectDepthRow('removed', false);
+    await history(page, 'undo');
+    await expectDepthRow('Undo', true);
+    await expectLiveEqualsGenerate(page, { label: `${name}: Undo` });
+    // A comparison's Generate drops the Redo branch, so Redo and the re-add
+    // follow a new removal on the Result that draws the track.
     await inStep('Remove Depth', remove, null);
     await history(page, 'undo');
-    await expectLiveEqualsGenerate(page, { label: `${name}: Undo` });
     await history(page, 'redo');
-    await expectLiveEqualsGenerate(page, { label: `${name}: Redo` });
+    await expectDepthRow('Redo', false);
+    await inStep('Change uploaded file', add, tsv);
+    await expectDepthRow('added again', true);
+    await expectLiveEqualsGenerate(page, { label: `${name}: added again` });
+    await inStep('Remove Depth', remove, null);
+    await expectDepthRow('removed after Generate', false);
+    await expectLiveEqualsGenerate(page, { label: `${name}: Remove` });
   });
 }
+
+// OV-1198, OV-1215 (PD-OI-104): a drawn track hidden or shown again through
+// its checkbox (one History step): its Legend rows leave and return on the
+// Result and in the Legend list at once, and Undo, Redo and Generate agree.
+// The names the Legend list shows (its name inputs), in list order.
+const shownListNames = (page, pattern) => page.evaluate((source) => [...document.querySelectorAll('input[aria-label^="Legend entry "][aria-label$=" name"]')]
+  .map((input) => input.value).filter((value) => new RegExp(source, 'i').test(value)), pattern.source);
+const clickTrackCheckbox = (page, name) => page.evaluate((label) => {
+  const input = [...document.querySelectorAll('input[type=checkbox]')].find((each) => (
+    each.getAttribute('aria-label') === label || each.closest('label')?.textContent.trim() === label));
+  if (!input || input.disabled) throw new Error(`no enabled checkbox "${label}"`);
+  input.click();
+}, name);
+const twoDepthSeries = (app, text) => {
+  app.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+  app.addCircularDepthTrack();
+  app.setCircularDepthFile(1, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+};
+const oneDepthSeries = (app, text) => {
+  app.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+};
+// The drawn groups of a track kind (drawn-groups.js) the displayed Result shows.
+const shownTrackGroups = (page, groups) => page.evaluate(async (name) => {
+  const drawnGroups = await import('./js/services/drawn-groups.js');
+  const svg = window.__GBDRAW_APP__.svgContainer?.querySelector('svg');
+  return drawnGroups.findTrackGroups(svg, drawnGroups[name]).filter((group) => group.getAttribute('display') !== 'none').length;
+}, groups);
+const HIDDEN_TRACK_CASES = {
+  'circular Hide GC Content': { mode: 'circular', box: 'Hide GC Content', rows: /^GC content/i, groups: 'DINUCLEOTIDE_CONTENT_GROUPS' },
+  'circular Hide GC Skew': { mode: 'circular', box: 'Hide GC Skew', rows: /^GC skew/i, count: 2, groups: 'DINUCLEOTIDE_SKEW_GROUPS' },
+  'linear Show GC Content': {
+    mode: 'linear', box: 'Show GC Content', rows: /^GC content/i, form: { show_gc: true }, groups: 'DINUCLEOTIDE_CONTENT_GROUPS'
+  },
+  'linear Show GC Skew': {
+    mode: 'linear', box: 'Show GC Skew', rows: /^GC skew/i, count: 2, form: { show_skew: true }, groups: 'DINUCLEOTIDE_SKEW_GROUPS'
+  },
+  'circular Show Depth, two series labelled depth': {
+    mode: 'circular', box: 'Show Depth', rows: /^depth( \([12]\))?$/, count: 2, data: twoDepthSeries, groups: 'DEPTH_GROUPS'
+  },
+  // R2-M2: a batch Result selected after the hide shows neither the track nor its row.
+  'circular batch Show Depth, Result 2 selected after the hide': {
+    mode: 'circular', results: 'batch', box: 'Show Depth', rows: /^depth$/, data: oneDepthSeries, tsv: BATCH_DEPTH_TSV, groups: 'DEPTH_GROUPS'
+  }
+};
+for (const [name, { mode, results = 'single', box, rows, count = 1, form = {}, data = null, tsv = DEPTH_TSV, groups }]
+  of Object.entries(HIDDEN_TRACK_CASES)) {
+  test(`A hidden drawn track's Legend rows leave and return with it (${name})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode, results, reflow: 'off' });
+    await page.evaluate(({ values, source, text }) => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.form, values);
+      if (source) new Function('app', 'text', `return (${source})(app, text);`)(app, text);
+    }, { values: form, source: data && data.toString(), text: tsv });
+    await settleLive(page);
+    await generate(page);
+    const expectRows = async (step, drawn) => {
+      const live = (await semanticSnapshot(page)).legend.filter((row) => rows.test(row.caption)).map((row) => row.caption);
+      expect(live.length, `${name}: ${step}: Result rows`).toBe(drawn ? count : 0);
+      // OV-1217 (PD-OI-095): the list names the rows as the Result draws them.
+      expect(await shownListNames(page, rows), `${name}: ${step}: Legend list names`).toEqual(live);
+      expect((await shownTrackGroups(page, groups)) > 0, `${name}: ${step}: track shown`).toBe(drawn);
+    };
+    const toggle = async () => { await clickTrackCheckbox(page, box); await settleLive(page); };
+    await expectRows('generated', true);
+    await toggle();
+    await expectRows('hidden', false);
+    if (results === 'batch') {
+      await showResult(page, 1);
+      await expectRows('hidden, Result 2 selected', false);
+    }
+    await history(page, 'undo');
+    await expectRows('Undo', true);
+    await expectLiveEqualsGenerate(page, { label: `${name}: Undo` });
+    await toggle();
+    await history(page, 'undo');
+    await history(page, 'redo');
+    await expectRows('Redo', false);
+    await toggle();
+    await expectRows('shown again', true);
+    await expectLiveEqualsGenerate(page, { label: `${name}: shown again` });
+    // A returned row takes Python's place, in the list as on the Result.
+    const order = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.originalCaption));
+    expect(order, `${name}: shown again: Legend list order`).toEqual((await semanticSnapshot(page)).legend.map((row) => row.key));
+    await toggle();
+    await expectRows('hidden after Generate', false);
+    await expectLiveEqualsGenerate(page, { label: `${name}: hidden` });
+  });
+}
+
+// REVIEW H1 (OV-1198): a renamed Depth row hidden and shown again returns once,
+// under its name, and leaves no waiting copy; renamed back, it keeps that name.
+test('A renamed Depth row hidden and shown again returns once under its name', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await drawDepthFile()(page);
+  const rowsNow = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const drawing = state.activeDrawing();
+    const unref = (value) => (value && 'value' in value ? value.value : value) || [];
+    return {
+      listed: unref(drawing.legendEntries).map((entry) => entry.caption).filter((caption) => /depth|coverage/i.test(caption)),
+      dormant: unref(drawing.dormantLegendEntries).length
+    };
+  });
+  const hideAndShow = async () => {
+    await clickTrackCheckbox(page, 'Show Depth');
+    await settleLive(page);
+    await clickTrackCheckbox(page, 'Show Depth');
+    await settleLive(page);
+  };
+  await renameRow(page, 'depth', 'Coverage');
+  await settleLive(page);
+  await hideAndShow();
+  expect(await rowsNow(), 'renamed, hidden, shown').toEqual({ listed: ['Coverage'], dormant: 0 });
+  await renameRow(page, 'Coverage', 'depth');
+  await settleLive(page);
+  await hideAndShow();
+  expect(await rowsNow(), 'renamed back, hidden, shown').toEqual({ listed: ['depth'], dormant: 0 });
+  await expectLiveEqualsGenerate(page, { label: 'renamed back' });
+});
+
+// Brief 7 (OV-1198, OV-1216): the Depth row across hide/show, Session Save and Load, Reset, a
+// second series, and a label equal to a feature type.
+const depthRows = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return app.legendEntries.map((entry) => entry.caption).filter((caption) => /depth|coverage/i.test(caption));
+});
+const resultDepthRows = async (page) => (await semanticSnapshot(page)).legend
+  .map((row) => row.caption).filter((caption) => /depth|coverage/i.test(caption));
+const toggleDepth = async (page) => { await clickTrackCheckbox(page, 'Show Depth'); await settleLive(page); };
+const saveSessionJson = async (page, name) => {
+  const path = test.info().outputPath(`${name}-${Date.now()}.gbdraw-session.json`);
+  await page.evaluate(async (title) => {
+    const { state } = await import('./js/state.js');
+    state.sessionTitle.value = title;
+  }, name);
+  const bytes = await download(page, 'Save Session', path);
+  return JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+};
+// Counts of a caption among the saved Legend entries and every object key of the Session.
+const sessionKeyCount = (saved, key) => {
+  let count = 0;
+  const walk = (value) => {
+    if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === 'object') {
+      for (const [name, each] of Object.entries(value)) {
+        if (name === key) count += 1;
+        walk(each);
+      }
+    }
+  };
+  walk(saved.modes);
+  return count;
+};
+
+test('A Depth row renamed to Coverage, hidden, shown, saves its key once', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await drawDepthFile()(page);
+  await renameRow(page, 'depth', 'Coverage');
+  await settleLive(page);
+  await toggleDepth(page);
+  await toggleDepth(page);
+  expect(await depthRows(page), 'listed').toEqual(['Coverage']);
+  const saved = await saveSessionJson(page, 'depth-key-once');
+  const entries = saved.modes.circular.editorState.legend.entries
+    .filter((entry) => /depth|coverage/i.test(`${entry.originalCaption} ${entry.caption}`));
+  expect(entries.map((entry) => `${entry.originalCaption}=>${entry.caption}`), 'saved Legend entries').toEqual(['depth=>Coverage']);
+  const text = JSON.stringify(saved.modes.circular.editorState);
+  expect((text.match(/"depth"/g) || []).length, 'the key "depth" in the saved editor state').toBeLessThanOrEqual(1);
+  expect(sessionKeyCount(saved, 'Coverage'), 'a "Coverage" object key').toBeLessThanOrEqual(1);
+});
+
+test('Two Depth series labelled depth draw depth (1) and depth (2), and Show Depth off hides both', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(({ text }) => {
+    const app = window.__GBDRAW_APP__;
+    const file = () => new File([text], 'depth.tsv', { type: 'text/tab-separated-values' });
+    app.setCircularDepthFile(0, file());
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, file());
+  }, { text: DEPTH_TSV });
+  await settleLive(page);
+  const request = await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const committed = getCommittedCanonicalRenderRequest();
+    return JSON.stringify({
+      depthTracks: committed.depthTracks ?? committed.tracks?.depth ?? null,
+      slots: (committed.trackSlots ?? committed.circularTrackSlots ?? []).map((slot) => ({ r: slot.renderer, e: slot.enabled }))
+    });
+  });
+  console.log(`OV-1217 committed request: ${request}`);
+  await generate(page);
+  // Python numbers equal captions `depth (1)`, `depth (2)`; the row set must equal Generate's.
+  expect(await resultDepthRows(page), 'Generate rows').toEqual(['depth (1)', 'depth (2)']);
+  // OV-1217 (PD-OI-095): the Legend list shows the names the Result draws; a row's key stays `depth`.
+  expect(await shownListNames(page, /depth/i), 'Legend list names after Generate').toEqual(['depth (1)', 'depth (2)']);
+  expect(await depthRows(page), 'Legend list keys after Generate').toEqual(['depth', 'depth (2)']);
+  await toggleDepth(page);
+  expect(await resultDepthRows(page), 'hidden: Result rows').toEqual([]);
+  expect(await depthRows(page), 'hidden: listed rows').toEqual([]);
+  await expectLiveEqualsGenerate(page, { label: 'two Depth series hidden' });
+});
+
+// R2-H1 (OV-1198): while the Linear custom stack is on, its enabled slots draw the tracks; the Show Depth
+// and Show GC Content checkboxes it disables keep a stale false. Generate draws the track and its row,
+// and the Result and the Legend list keep both (PD-OI-066).
+const CUSTOM_STACK_CASES = {
+  'an enabled Depth slot, Show Depth off': { depth: true, flag: 'show_depth', renderer: 'depth', rows: /^depth$/, groups: 'DEPTH_GROUPS' },
+  'a GC content slot, Show GC Content off': {
+    depth: false, flag: 'show_gc', renderer: 'dinucleotide_content', rows: /^GC content$/, groups: 'DINUCLEOTIDE_CONTENT_GROUPS'
+  }
+};
+for (const [name, { depth, flag, renderer, rows, groups }] of Object.entries(CUSTOM_STACK_CASES)) {
+  test(`A Linear custom stack draws its track and row from Generate (${name})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    if (depth) await drawDepthFile('linear')(page);
+    // The checkbox's change handler, before the stack disables the checkbox.
+    await page.evaluate((key) => window.__GBDRAW_APP__.setTrackShown(key, false), flag);
+    await settleLive(page);
+    const draft = await page.evaluate(({ key, kind }) => {
+      const app = window.__GBDRAW_APP__;
+      app.setLinearTrackSlotsEnabled(true);
+      if (!app.adv.linear_track_slots.some((slot) => slot.renderer === kind && slot.enabled !== false)) app.addLinearTrackSlot(kind);
+      return { flag: app.form[key], slots: app.adv.linear_track_slots.filter((slot) => slot.renderer === kind && slot.enabled !== false).length };
+    }, { key: flag, kind: renderer });
+    expect(draft, `${name}: the draft`).toEqual({ flag: false, slots: 1 });
+    await settleLive(page);
+    expect(await page.evaluate((key) => window.__GBDRAW_APP__.form[key], flag), `${name}: ${flag} before Generate`).toBe(false);
+    await generate(page);
+    const live = (await semanticSnapshot(page)).legend.filter((row) => rows.test(row.caption)).map((row) => row.caption);
+    expect(live, `${name}: Result rows`).toHaveLength(1);
+    expect(await shownListNames(page, rows), `${name}: Legend list names`).toEqual(live);
+    expect(await shownTrackGroups(page, groups), `${name}: track shown`).toBeGreaterThan(0);
+  });
+}
+
+// R3-H-A (OV-1198): a slot edit that stops a track being drawn hides the track and its Legend rows in
+// one History step, as the track checkboxes do; Undo returns both (PD-OI-104).
+const SLOT_EDIT_CASES = {
+  'circular, Depth slot switched off': {
+    mode: 'circular', rows: /^depth$/, groups: 'DEPTH_GROUPS',
+    setup: (app, text) => {
+      app.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      app.setTrackShown('show_depth', true);
+      app.setCircularTrackSlotsEnabled(true);
+      return app.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth' && slot.enabled !== false).length;
+    },
+    edit: (app) => app.setCircularTrackSlotEnabled(app.adv.circular_track_slots.find((slot) => slot.renderer === 'depth'), false)
+  },
+  'linear, custom stack switched off with Show GC Content off': {
+    mode: 'linear', rows: /^GC content$/, groups: 'DINUCLEOTIDE_CONTENT_GROUPS',
+    setup: (app) => {
+      app.setTrackShown('show_gc', false);
+      app.setLinearTrackSlotsEnabled(true);
+      if (!app.adv.linear_track_slots.some((slot) => slot.renderer === 'dinucleotide_content' && slot.enabled !== false)) {
+        app.addLinearTrackSlot('dinucleotide_content');
+      }
+      return app.adv.linear_track_slots.filter((slot) => slot.renderer === 'dinucleotide_content' && slot.enabled !== false).length;
+    },
+    edit: (app) => app.setLinearTrackSlotsEnabled(false)
+  }
+};
+for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_EDIT_CASES)) {
+  test(`A slot edit that stops drawing a track hides it and its Legend rows at once (${name})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    const slots = await page.evaluate(({ source, text }) => new Function('app', 'text', `return (${source})(app, text);`)(
+      window.__GBDRAW_APP__, text), { source: setup.toString(), text: DEPTH_TSV });
+    expect(slots, `${name}: enabled slots`).toBe(1);
+    await settleLive(page);
+    await generate(page);
+    const expectRows = async (step, drawn) => {
+      const live = (await semanticSnapshot(page)).legend.filter((row) => rows.test(row.caption)).map((row) => row.caption);
+      expect(live.length, `${name}: ${step}: Result rows`).toBe(drawn ? 1 : 0);
+      expect(await shownListNames(page, rows), `${name}: ${step}: Legend list names`).toEqual(live);
+      expect((await shownTrackGroups(page, groups)) > 0, `${name}: ${step}: track shown`).toBe(drawn);
+    };
+    await expectRows('generated', true);
+    await inHistoryStep(page, 'Edit track slot', edit);
+    await expectRows('slot edit', false);
+    // One Undo returns the track and its row; the parity Generate comes last, as it is a History step of its own.
+    await history(page, 'undo');
+    await expectRows('Undo', true);
+    await history(page, 'redo');
+    await expectRows('Redo', false);
+    await expectLiveEqualsGenerate(page, { label: `${name}: slot edit` });
+  });
+}
+
+// R3-M-A (OV-1198): a Circular custom stack without an enabled Depth slot draws no Depth whatever the
+// Show Depth checkbox it disables says, so a Depth series without a file does not stop Generate (the build used its own copy of the rule).
+test('A Circular custom stack without a Depth slot generates with a Depth series that has no file', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const draft = await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    // Series 1 has no file; series 2 has one.
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+    app.setTrackShown('show_depth', true);
+    app.setCircularTrackSlotsEnabled(true);
+    app.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth').forEach((slot) => { slot.enabled = false; });
+    return { showDepth: app.form.show_depth, depthSlots: app.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth' && slot.enabled !== false).length };
+  }, DEPTH_TSV);
+  expect(draft, 'the draft').toEqual({ showDepth: true, depthSlots: 0 });
+  await settleLive(page);
+  await generate(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog ?? null), 'Generate error').toBeFalsy();
+  expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), 'shown Depth groups').toBe(0);
+});
+
+// Reset Settings keeps the Depth file and turns Show Depth off, so the next Generate draws no Depth
+// row. The list must equal that Generate, and the Result must equal the list at once, also after the
+// automatic rerender the Reset requests, which draws the committed request again (OV-1198 H2).
+const resetWithDepthKept = async (page) => {
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await drawDepthFile()(page);
+  await renameRow(page, 'depth', 'Coverage');
+  await settleLive(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+  await settleLive(page);
+};
+test('Reset Settings with the Depth files kept lists what the next Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await resetWithDepthKept(page);
+  const listed = await depthRows(page);
+  await generate(page);
+  expect(await depthRows(page), 'listed after the next Generate').toEqual(listed);
+  expect(await resultDepthRows(page), 'Result after the next Generate').toEqual(listed);
+});
+test('Reset Settings with the Depth files kept shows on the Result what the list holds', async ({ page }) => {
+  test.setTimeout(240_000);
+  await resetWithDepthKept(page);
+  expect(await resultDepthRows(page), 'Result after Reset').toEqual(await depthRows(page));
+  expect(await depthRows(page), 'listed after Reset').toEqual([]);
+  expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), 'shown Depth groups').toBe(0);
+});
+// R3-H-B (OV-1198): the rerender the Reset requests hides the track the draft hides also when the
+// track claims no Legend row: a Depth series labelled CDS in the CDS fill shares the CDS row (D-15-65).
+test('Reset Settings with the Depth files kept hides a Depth track that claims no Legend row', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const [cds] = (await semanticSnapshot(page)).legend.filter((row) => row.caption === 'CDS');
+  await page.evaluate(({ text, fill }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+    Object.assign(app.adv.depth_tracks[0], { label: 'CDS', color: fill });
+    app.adv.block_stroke_width = 0;
+  }, { text: DEPTH_TSV, fill: cds.fill });
+  await settleLive(page);
+  await generate(page);
+  expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), 'shown Depth groups after Generate').toBeGreaterThan(0);
+  // The renamed row makes the Reset ask for the rerender, as in the cases above.
+  await renameRow(page, 'CDS', 'Coding');
+  await settleLive(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.show_depth), 'Show Depth after Reset').toBe(false);
+  expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), 'shown Depth groups after Reset').toBe(0);
+});
+
+test('A Session saved with Depth hidden loads without a Depth row in the list', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await drawDepthFile()(page);
+  await toggleDepth(page);
+  expect(await depthRows(page), 'hidden before Save').toEqual([]);
+  const saved = await saveSessionJson(page, 'depth-hidden');
+  const path = test.info().outputPath(`depth-hidden-reload-${Date.now()}.gbdraw-session.json`);
+  await writeFile(path, JSON.stringify(saved));
+  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(true);
+  await settleLive(page);
+  expect(await depthRows(page), 'listed after Load').toEqual([]);
+  expect(await resultDepthRows(page), 'Result after Load').toEqual([]);
+  await generate(page);
+  expect(await depthRows(page), 'listed after Generate').toEqual([]);
+});
+
+// Residual risk 2: a Depth label equal to a feature-type palette key. Generate's colour and the live
+// colour are recorded; the case pins that they agree.
+test('A Depth label equal to a feature type draws the same colour live and from Generate', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await drawDepthFile()(page);
+  await renameRow(page, 'depth', 'tRNA');
+  await settleLive(page);
+  const swatch = async () => (await semanticSnapshot(page)).legend.filter((row) => row.caption === 'tRNA');
+  const live = await swatch();
+  await generate(page);
+  const generated = await swatch();
+  console.log(`CASE6 live=${JSON.stringify(live)} generated=${JSON.stringify(generated)}`);
+  expect(live, 'live rows named tRNA').toEqual(generated);
+});
+
+// D-15-65 (OV-1198 review 2 M3): a Depth series labelled like a feature row, in
+// that row's fill, shares the feature row and draws none of its own, so Show
+// Depth off keeps the row on the Result and in the list, as Generate draws it.
+test('A Depth series labelled CDS in the CDS fill shares the CDS row, and Show Depth off keeps it', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const cdsRows = async () => (await semanticSnapshot(page)).legend.filter((row) => /^CDS( \(\d+\))?$/.test(row.caption));
+  const [cds] = await cdsRows();
+  await page.evaluate(({ text, fill }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+    Object.assign(app.adv.depth_tracks[0], { label: 'CDS', color: fill });
+    // Python shares a row of the same name and swatch, stroke included: the feature blocks drop theirs.
+    app.adv.block_stroke_width = 0;
+  }, { text: DEPTH_TSV, fill: cds.fill });
+  await settleLive(page);
+  await generate(page);
+  const expectCdsRow = async (step, depthShown) => {
+    expect((await cdsRows()).map((row) => [row.caption, row.fill]), `${step}: Result rows`).toEqual([['CDS', cds.fill]]);
+    expect(await shownListNames(page, /^CDS( \(\d+\))?$/), `${step}: Legend list names`).toEqual(['CDS']);
+    expect((await shownTrackGroups(page, 'DEPTH_GROUPS')) > 0, `${step}: Depth shown`).toBe(depthShown);
+  };
+  await expectCdsRow('generated', true);
+  await clickTrackCheckbox(page, 'Show Depth');
+  await settleLive(page);
+  await expectCdsRow('Show Depth off', false);
+  await expectLiveEqualsGenerate(page, { label: 'Show Depth off' });
+});
 
 // OV-65: a Legend color on a row named only by a track's data (an annotation set,
 // a depth file) follows the caption: a data change retires the styles of the

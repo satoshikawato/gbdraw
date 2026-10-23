@@ -281,7 +281,9 @@ def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
         if row["subject_protein_id"] == target_runtime_handle
     )
     assert target_row["subject_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
-    assert target_row["subject_view_feature_svg_id"] == PROCESSED_FEATURE_ID
+    # The row is stored in the search frame (OV-1145): its view ID names the
+    # feature on the source strand; the planner draws it as PROCESSED_FEATURE_ID.
+    assert target_row["subject_view_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
     assert "orthogroups" not in result
 
 

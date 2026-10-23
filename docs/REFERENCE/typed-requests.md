@@ -29,7 +29,7 @@ Every `RecordInput` declares a `RecordCardinality`:
 | `FIRST` | deliberately selects the first source candidate |
 | `ALL` | expands all candidates in source order |
 
-Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. The planner loads each unique source once, then applies selection, reverse complement, and record-local region transforms. Collection-level ordering and layout are applied after expansion.
+Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. The planner loads each unique source once, then applies selection and the record-local region crop, then reverse complement: a region counts its coordinates on the source strand, whether the reverse complement comes from `RecordPresentation.reverse_complement` or the region's own setting. Collection-level ordering and layout are applied after expansion.
 
 For Linear Similarity Group alignment, `similarity_alignment` stores the exact
 reference and each record's anchor or Skip decision. It has no orientation
@@ -122,7 +122,7 @@ Use `render_session()` for a supported saved session and
 | `build_session_document()` | resolve one request, or several drawings, and embed their resources in a session document |
 | `save_session_document()` | build and write the document |
 | `load_session_document()` | parse and validate a saved document |
-| `upgrade_session_document()` | return a Session 31–44 in the current version without rendering it, with a warning for each dropped Result |
+| `upgrade_session_document()` | return a readable Session 31–47 in the current version without rendering it, with a warning for each dropped Result |
 | `materialize_session()` | expose embedded resources as temporary paths |
 | `session_to_request()` | convert one drawing of a materialized session to a typed request |
 | `with_request_output()` | replace output settings without mutating the request |
@@ -201,7 +201,7 @@ output path of every selected drawing is checked before the first file is
 written, and each embedded resource is parsed once for all drawings. The
 result maps drawing IDs to render results in document order.
 
-The current Session version, 46, holds at most one drawing of each mode: a
+The current Session version, 48, holds at most one drawing of each mode: a
 Circular drawing with ID `circular` and name `Circular`, and a Linear drawing
 with ID `linear` and name `Linear`. The Web app writes the second drawing's
 Result set in `otherModeResult`. Each drawing keeps its settings and Legend
@@ -210,7 +210,7 @@ edits in its mode's slice of `modes`; both drawings share the LOSAT caches.
 `SessionDrawingSpec(request, mode=, id=, name=, state=)` values, where `state`
 holds Web-owned drawing fields such as `results`, `editorState`, or the
 drawing's slice in `modes`; `active_drawing=` names the drawing to open. It
-rejects what version 47 cannot hold: two drawings of one mode, a second drawing
+rejects what version 48 cannot hold: two drawings of one mode, a second drawing
 without its Results, other IDs or names, or a second drawing whose shared
 fields differ from the first's.
 
@@ -226,7 +226,8 @@ Results are dropped until the next render. A drawing whose Results are dropped
 gets one line in `warnings` that names each dropped Result, and the line is
 logged as a warning. Render the drawing and save the Session to write new
 Results. Sessions 27–30 have no canonical request and raise
-`SessionVersionError`.
+`SessionVersionError`. A Session 46 or 47 keeps its drawings and is written as
+Session 48 ([compatibility](session-and-request-compatibility.md)).
 
 Request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands

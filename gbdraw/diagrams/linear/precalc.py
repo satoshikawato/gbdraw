@@ -30,10 +30,19 @@ from ...features.factory import (
 from ...features.objects import FeatureObject
 from ...render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 from ...labels.filtering import label_filter_maps
+from ...labels.linear_types import LinearLabel
 from ...render_stages import render_stage
-from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
+from ...labels.linear import (
+    LinearLabelFrame,
+    LinearRecordLabels,
+    calculate_label_y_bounds,
+    linear_label_rows,
+    linear_record_labels,
+    place_linear_label_row,
+)
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
+from ...layout.spatial import Aabb
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
 
 if TYPE_CHECKING:
@@ -146,13 +155,22 @@ def _precalculate_label_dimensions(
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     render_context: LinearRecordRenderContext,
+    *,
+    sequence_widths: Sequence[float],
     precomputed_feature_dicts: list[FeatureDict] | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
-    sequence_widths: Sequence[float] | None = None,
     feature_lane_geometries: Sequence[LinearFeatureLaneGeometry] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
-) -> tuple[float, list[list[dict]], list[float]]:
-    """Pre-calculates label placements for all records to determine the required canvas height."""
+    label_frames: Sequence[LinearLabelFrame] | None = None,
+    label_keep_clear: Sequence[tuple[Aabb, ...]] | None = None,
+) -> tuple[float, list[list[LinearLabel]], list[float]]:
+    """Pre-calculates label placements for all records to determine the required canvas height.
+
+    The labels of the records in one row (``label_frames``; each record alone in its row without them)
+    are stacked together (OV-1188). ``label_keep_clear`` are each record's boxes its labels keep
+    clear of, in their coordinates (``LinearRecordLabels.keep_clear``). ``sequence_widths`` are the
+    records' drawn axis widths (their placements' ``sequence_width``).
+    """
 
     profile = render_context.profile
     cfg = profile.config
@@ -167,15 +185,14 @@ def _precalculate_label_dimensions(
         profile=profile,
     )
     max_required_height: float = 0
-    all_labels_by_record: list[list[dict]] = []
+    record_labels: list[LinearRecordLabels | None] = []
+    all_labels_by_record: list[list[LinearLabel]] = []
     record_label_heights: list[float] = []
-    normalize_length = cfg.canvas.linear.normalize_length
     label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
-            all_labels_by_record.append([])
-            record_label_heights.append(0.0)
+            record_labels.append(None)
             continue
         member_ids, top_member_ids = orthogroup_label_sets_for_record(
             orthogroup_label_eligibility if label_scope == "orthogroup_top" else None,
@@ -200,22 +217,11 @@ def _precalculate_label_dimensions(
             feature_dict = feature_result.foreground_features
 
         record_length = len(record.seq)
-        if sequence_widths is not None:
-            alignment_width = float(sequence_widths[i])
-            genome_size_normalization_factor = 1.0
-        elif normalize_length:
-            alignment_width = canvas_config.alignment_width
-            genome_size_normalization_factor = 1.0
-        else:
-            alignment_width = canvas_config.alignment_width
-            genome_size_normalization_factor = record_length / canvas_config.longest_genome
-
-        # Label x-positions must use the same final axis width as record rendering.
-        label_list = prepare_label_list_linear(
+        # Label x-positions use the record's drawn axis width (its placement's ``sequence_width``).
+        labels = linear_record_labels(
             feature_dict,
             record_length,
-            alignment_width,
-            genome_size_normalization_factor,
+            float(sequence_widths[i]),
             canvas_config.cds_height,
             profile.strandedness,
             render_context.feature_track_layout,
@@ -233,16 +239,32 @@ def _precalculate_label_dimensions(
             record_transform=(record_transforms[i] if record_transforms is not None else None),
             label_filtering=label_filtering,
         )
+        if label_keep_clear is not None:
+            labels = labels._replace(keep_clear=label_keep_clear[i])
+        record_labels.append(labels)
+
+    placed_by_record: dict[int, list[LinearLabel]] = {}
+    for row in linear_label_rows(label_frames, len(records)):
+        members = [(i, x, unplaced) for i, x in row if (unplaced := record_labels[i]) is not None]
+        placed = place_linear_label_row(
+            [(unplaced, x) for _i, x, unplaced in members],
+            profile=profile,
+            track_layout=render_context.feature_track_layout,
+        )
+        placed_by_record.update(zip((i for i, _x, _unplaced in members), placed, strict=True))
+
+    for i in range(len(records)):
+        label_list = placed_by_record.get(i, [])
         all_labels_by_record.append(label_list)
+        if i not in placed_by_record:
+            record_label_heights.append(0.0)
+            continue
 
         min_y_coord_record = 0.0
         for label in label_list:
             label_top_y, _ = calculate_label_y_bounds(label)
-            is_above_feature_embedded = (
-                bool(label.get("is_embedded"))
-                and label_top_y < float(label.get("feature_top_y", 0.0))
-            )
-            if bool(label.get("is_embedded")) and not is_above_feature_embedded:
+            is_above_feature_embedded = label["is_embedded"] and label_top_y < float(label["feature_top_y"])
+            if label["is_embedded"] and not is_above_feature_embedded:
                 continue
             if label_top_y < min_y_coord_record:
                 min_y_coord_record = label_top_y

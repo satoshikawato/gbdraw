@@ -105,7 +105,10 @@ class LinearCanvasConfigurator:
     vertical_padding (float): Vertical padding between elements.
     configured_track_spacing (float): Default spacing between linear data tracks.
     comparison_height (float): Height for comparison tracks.
-    definition_gap (float): Minimum gap between definition text and record axis.
+    definition_gap (float): Minimum gap between definition text and what the record draws left of its
+        axis (the left-facing scalar axis tick labels, or the axis line).
+    definition_column_gap (float): Distance from a record's axis start to its definition column:
+        ``definition_gap`` plus the tick labels' room (``configure_definition_column_gap``).
     default_cds_height (float): Default height for coding sequences.
     default_gc_height (float): Default height for GC content.
     show_gc (bool): Flag to display GC content.
@@ -168,6 +171,7 @@ class LinearCanvasConfigurator:
         # based on feature track heights
         self.comparison_height: float = cfg.canvas.linear.comparison_height if has_comparisons else 0
         self.definition_gap: float = cfg.canvas.linear.definition_gap
+        self.definition_column_gap: float = self.definition_gap
         self.length_threshold = cfg.labels.length_threshold.linear
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
         self.default_cds_height: float = getattr(cfg.canvas.linear.default_cds_height, self.length_param)
@@ -389,12 +393,18 @@ class LinearCanvasConfigurator:
             normalize_length=self.normalize_length,
         )
 
+    def configure_definition_column_gap(self, tick_label_room: float) -> None:
+        """Set the definition column ``definition_gap`` past the records' left-facing scalar axis tick
+        labels, which reach ``tick_label_room`` left of the axis start (0 without any) (LP-D122)."""
+
+        self.definition_column_gap = float(self.definition_gap) + max(0.0, float(tick_label_room))
+
     def configure_plot_width(self, definition_reserve_width: float) -> None:
         """Resolve the legend-independent horizontal plot-space origin."""
 
         reserve = max(0.0, float(definition_reserve_width))
         self.alignment_width = float(self.fig_width)
-        self.horizontal_offset = reserve + float(self.definition_gap)
+        self.horizontal_offset = reserve + float(self.definition_column_gap)
         self.total_width = self.horizontal_offset + self.alignment_width
 
     def create_svg_canvas(self) -> Drawing:

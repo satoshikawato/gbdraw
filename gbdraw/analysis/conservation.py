@@ -22,6 +22,7 @@ from gbdraw.io.comparisons import (
     ComparisonFilter,
     filter_comparison_dataframe,
     normalize_comparison_dataframe,
+    read_comparison_resource,
     read_comparison_table,
 )
 
@@ -91,7 +92,7 @@ def _read_conservation_input(source: ConservationInput) -> ConservationTable:
     if isinstance(source, ConservationTable):
         return source
     # Deferred: gbdraw.api imports this module.
-    from gbdraw.api.prepared import register_prepared_resource_value, register_prepared_value_identity
+    from gbdraw.api.prepared import register_prepared_value_identity
 
     try:
         if isinstance(source, ConservationSearchResult):
@@ -102,7 +103,7 @@ def _read_conservation_input(source: ConservationInput) -> ConservationTable:
                 ("conservation_search_result", source.name, hashlib.sha256(source.text.encode("utf-8")).hexdigest()),
             )
         else:
-            rows = register_prepared_resource_value(read_comparison_table(source), source)
+            rows = read_comparison_resource(source)
     except ValidationError as exc:
         return ConservationTable(_input_name(source), None, str(exc))
     return ConservationTable(_input_name(source), rows)

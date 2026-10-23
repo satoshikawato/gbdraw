@@ -5,12 +5,12 @@ import sys
 import argparse
 import copy
 import logging
-import math
 import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .io.cli_tables import (
     read_circular_track_table,
 )
@@ -65,7 +65,7 @@ from .tracks import (
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.losat_jobs import unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, ascii_float
+from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -93,6 +93,7 @@ from .cli_utils.common import (
     setup_logging,
     validate_input_args,
     validate_label_args,
+    validate_output_choice_args,
     handle_output_formats,
 )
 from .cli_utils.session import (
@@ -106,6 +107,7 @@ from .cli_utils.session import (
     render_canonical_session_if_present,
     resolve_session_sidecar_path,
     save_session_sidecar_if_requested,
+    read_stored_font_size_options,
 )
 from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -487,6 +489,19 @@ def _get_args(
         default='auto',
         type=str)
     parser.add_argument(
+        '--label_line',
+        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
+        '(a turned label gets none); "none" draws none. '
+        f'Default: "{DEFAULT_LABEL_LINE["circular"]}".',
+        choices=LABEL_LINES,
+        type=str)
+    parser.add_argument(
+        '--label_protection',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
+        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["circular"]}".',
+        choices=LABEL_PROTECTIONS,
+        type=str)
+    parser.add_argument(
         '--label_placement',
         help='External circular label placement: "horizontal" or "radial". Default: "horizontal".',
         choices=['horizontal', 'radial'],
@@ -573,8 +588,12 @@ def _get_args(
     add_session_args(parser)
 
     args = parser.parse_args(args)
+    if _allow_legacy_track_transport:
+        read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if not _allow_legacy_track_transport:
+        validate_output_choice_args(args)
     if args.records_table and args.multi_record_position:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
     if args.conservation_table and args.conservation_blast:
@@ -597,10 +616,6 @@ def _get_args(
         parser.error("--gc_content_width must be > 0")
     if args.gc_content_radius is not None and args.gc_content_radius <= 0:
         parser.error("--gc_content_radius must be > 0")
-    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
-        option_value = getattr(args, option_name)
-        if option_value is not None and not math.isfinite(float(option_value)):
-            parser.error(f"--{option_name} must be a finite number")
     if (
         args.gc_content_min_percent is not None
         and args.gc_content_max_percent is not None
@@ -627,9 +642,7 @@ def _get_args(
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
         parser.error("--conservation_ring_gap must be > 0")
-    if args.center_reserved_radius is not None and (
-        not math.isfinite(float(args.center_reserved_radius)) or args.center_reserved_radius < 0
-    ):
+    if args.center_reserved_radius is not None and args.center_reserved_radius < 0:
         parser.error("--center_reserved_radius must be a finite number >= 0")
     try:
         ComparisonThresholds(
@@ -683,9 +696,8 @@ def _get_args(
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
-            try:
-                numeric_option_value = ascii_float(option_value)
-            except (TypeError, ValueError):
+            numeric_option_value = parse_ascii_finite_float(str(option_value))
+            if numeric_option_value is None:
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
                 parser.error(f"--{option_name} values must be > 0")
@@ -720,9 +732,9 @@ def _get_args(
             parser.error(str(exc))
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
-    if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
+    if args.multi_record_column_gap_ratio < 0:
         parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
-    if not math.isfinite(args.multi_record_row_gap_ratio) or args.multi_record_row_gap_ratio < 0:
+    if args.multi_record_row_gap_ratio < 0:
         parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
     return args
 
@@ -889,7 +901,10 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
     try:
         return CircularDiagramOptions(**values)
     except ValidationError as exc:
-        raise _cli_ring_error(exc, _args) from exc
+        rewritten = _cli_ring_error(exc, _args)
+        if rewritten is exc:
+            raise
+        raise rewritten from exc
 
 
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
@@ -1162,6 +1177,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.definition.circular.font_size": definition_font_size,
         "objects.definition.circular.plot_title_font_size": plot_title_font_size,
         "labels.rendering": label_rendering,
+        "labels.circular.line": args.label_line,
+        "labels.circular.protection": args.label_protection,
         "labels.circular.placement": circular_label_placement,
         "labels.filtering.raw": filtering_override,
         "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,

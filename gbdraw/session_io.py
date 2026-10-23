@@ -9,7 +9,6 @@ import base64
 import binascii
 import copy
 import csv
-import functools
 import gzip
 import hashlib
 import io
@@ -17,8 +16,8 @@ import json
 import math
 import os
 import re
-import sys
 import tempfile
+import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,12 +44,13 @@ from .core.numeric import (
     parse_ascii_integer,
     parse_ascii_nonnegative_integer,
 )
+from .config.models.root import read_stored_font_size
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import is_user_color, named_color_hex
+from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
-from .render.output_paths import commit_staged_output_file
+from .render.output_paths import OutputExistsError, commit_staged_output_file
 from .session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -84,22 +84,28 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 47
+CURRENT_SESSION_VERSION = 48
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
 # version 47 keys a slice's Legend color and stroke edits by the row key
 # (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5)
-# and adds each slice's ``adv.font_family`` (PD-OI-098).
+# and adds each slice's ``adv.font_family`` (PD-OI-098); version 48 stores
+# the protein results of a reverse-complemented Linear record in its search
+# frame (OV-1145) and what each file card's file put into a slice, for Remove
+# on the card (OV-1280).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
+# From version 48 a Session without a Web draft (CLI, Python API) holds each
+# table only as its file card's file: the Web reads every row as that file's.
+FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -110,7 +116,8 @@ FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
-    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, 47: CURRENT_FEATURE_CATALOG_SCHEMA,
+    CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
 # The fields of a record display draft row (Session 41+), the two that Session
 # 44 added, and the fields of its anchor intent.
@@ -593,21 +600,32 @@ def load_session(path: str | Path) -> dict[str, Any]:
 
     from .session import _validate_document
 
-    session_path = Path(path)
-    try:
-        payload = json.loads(
-            _read_session_text(session_path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
-    except OSError as exc:
-        raise ValidationError(f"Could not read session file: {session_path}") from exc
+    payload = _read_session_json(path)
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
     _validate_document(payload)
     return payload
+
+
+def _read_session_json(path: str | Path) -> object:
+    """Parse a plain or gzip Session file; every unreadable file is a ``ValidationError``.
+
+    A truncated or corrupt gzip stream and text that is not UTF-8 are "not a
+    valid JSON session file", as malformed JSON is (OV-1251); a duplicate key
+    raises its own ``ValidationError``.
+    """
+
+    session_path = Path(path)
+    try:
+        return json.loads(
+            _read_session_text(session_path),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, EOFError, zlib.error, gzip.BadGzipFile) as exc:
+        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
+    except OSError as exc:
+        raise ValidationError(f"Could not read session file: {session_path}") from exc
 
 
 def _read_session_text(path: str | Path) -> str:
@@ -683,8 +701,8 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_top_level_fields(session)
         _validate_mode_scoped_fields(session, version)
-        _validate_current_retired_active_config_paths(session)
-        _validate_current_comparison_authority(session)
+        _validate_current_retired_active_config_paths(session, version)
+        _validate_current_comparison_authority(session, version)
         _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
         _validate_other_mode_result(session, version)
@@ -698,7 +716,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, 46, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, 46, 47, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -754,9 +772,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, 46, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    if current and (session.get("version") not in (41, 42, 44, 46, 47, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, 46, or {CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, 46, 47, or {CURRENT_SESSION_VERSION} and c_gb."
         )
     resources = session.get("resources", {})
 
@@ -1155,6 +1173,7 @@ def _validate_mode_slice_fields(value: object, mode: str, container: str = "") -
 
 def _validate_current_retired_active_config_paths(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Reject the two retired v40 circular-track draft paths."""
 
@@ -1167,12 +1186,13 @@ def _validate_current_retired_active_config_paths(
     for field in ("cli_circular_track_order", "cli_circular_track_slots"):
         if field in advanced:
             raise ValidationError(
-                f"Session version 40 cannot contain config.adv.{field}."
+                f"Session version {version} cannot contain config.adv.{field}."
             )
 
 
 def _validate_current_comparison_authority(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Reject retired v40 comparison fields and validate an optional Web draft."""
 
@@ -1196,15 +1216,15 @@ def _validate_current_comparison_authority(
 
     if "blastSource" in config or "blastSource" in adv:
         raise ValidationError(
-            "Session version 40 cannot contain retired blastSource state."
+            f"Session version {version} cannot contain retired blastSource state."
         )
     if "blastSource" in ui:
         raise ValidationError(
-            "Session version 40 cannot contain ui.blastSource."
+            f"Session version {version} cannot contain ui.blastSource."
         )
     if layout is not None and "comparisons" in layout:
         raise ValidationError(
-            "Session version 40 cannot contain "
+            f"Session version {version} cannot contain "
             "config.linearRecordLayout.comparisons."
         )
 
@@ -1215,11 +1235,11 @@ def _validate_current_comparison_authority(
                 continue
             if "blast" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record BLAST bindings."
+                    f"Session version {version} cannot contain per-record BLAST bindings."
                 )
             if "losat_filename" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     linear_metadata = web_files.get("linearRecordMetadata")
     if isinstance(linear_metadata, list):
@@ -1228,11 +1248,11 @@ def _validate_current_comparison_authority(
                 continue
             if "losatFilename" in metadata or "losat_filename" in metadata:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     if "linearCanonicalComparisons" in bindings:
         raise ValidationError(
-            "Session version 40 cannot bind comparison artifacts outside "
+            f"Session version {version} cannot bind comparison artifacts outside "
             "the committed request."
         )
 
@@ -1578,7 +1598,7 @@ def _validate_current_feature_catalog_authority(
         duplicated = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS & set(features)
         if duplicated:
             raise ValidationError(
-                "Session version 40 cannot contain derived feature payloads in "
+                f"Session version {version} cannot contain derived feature payloads in "
                 f"features: {', '.join(sorted(duplicated))}."
             )
     elif "features" in session:
@@ -1588,7 +1608,7 @@ def _validate_current_feature_catalog_authority(
     if isinstance(orthogroup_state, Mapping):
         if "groups" in orthogroup_state:
             raise ValidationError(
-                "Session version 40 cannot contain derived orthogroupState.groups."
+                f"Session version {version} cannot contain derived orthogroupState.groups."
             )
     elif "orthogroupState" in session:
         raise ValidationError(
@@ -1597,14 +1617,14 @@ def _validate_current_feature_catalog_authority(
 
     results = session.get("results")
     if "results" not in session or not isinstance(results, list):
-        raise ValidationError("Session version 40 requires a results array.")
+        raise ValidationError(f"Session version {version} requires a results array.")
     editor_state = session.get("editorState")
     if (
         not isinstance(editor_state, Mapping)
         or "featureCatalog" not in editor_state
     ):
         raise ValidationError(
-            "Session version 40 "
+            f"Session version {version} "
             + (
                 "Results require editorState.featureCatalog."
                 if results
@@ -1628,7 +1648,7 @@ def _validate_current_feature_catalog_authority(
         return
     if not isinstance(catalog, Mapping):
         raise ValidationError(
-            "Session version 40 Results require editorState.featureCatalog."
+            f"Session version {version} Results require editorState.featureCatalog."
         )
     items = catalog.get("items")
     if (
@@ -2973,18 +2993,6 @@ def _normalize_palette_colors(colors: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-@functools.cache
-def _color_palettes() -> dict[str, Any]:
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-    from importlib import resources
-
-    with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as handle:
-        return tomllib.load(handle)
-
-
 def _palette_colors(name: object) -> dict[str, Any]:
     """A palette's normalized colors, or none (``paletteColorsFromDefinitions``).
 
@@ -2994,10 +3002,10 @@ def _palette_colors(name: object) -> dict[str, Any]:
     """
 
     palette = _js_text(name)
-    colors = _color_palettes().get(palette) if palette != "title" else None
-    if not isinstance(colors, Mapping) or not colors:
+    colors = packaged_color_palettes().get(palette)
+    if not colors:
         return {}
-    return _normalize_palette_colors({str(key): str(value) for key, value in colors.items()})
+    return _normalize_palette_colors(dict(colors))
 
 
 def _merges_override_colors(config: object) -> bool:
@@ -5628,10 +5636,7 @@ def _write_validated_session_json(
             overwrite=overwrite,
         )
     except FileExistsError as exc:
-        raise ValidationError(
-            f"Session output already exists: {output_path}. "
-            "Pass overwrite=True to replace it."
-        ) from exc
+        raise OutputExistsError((output_path,), subject="Session output") from exc
     except OSError as exc:
         raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
     finally:
@@ -6025,6 +6030,9 @@ def _gui_session_to_cli_args(
     form = form_value if isinstance(form_value, Mapping) else {}
     adv_value = config.get("adv")
     adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
+    # A stored font size <= 0 replays as Auto (no option), as Web Load reads it (OV-1282).
+    for key in [key for key in adv if str(key).endswith("font_size")]:
+        adv[key] = read_stored_font_size(adv[key], path=f"config.adv.{key}")
     if int(session.get("version", 0)) <= 30:
         effective_features = adv.get("features")
         if not isinstance(effective_features, list):
@@ -6626,7 +6634,10 @@ def _append_linear_definition_line_style_args(
         if not isinstance(raw_style, Mapping):
             continue
         parts: list[str] = []
-        font_size = raw_style.get("font_size")
+        font_size = read_stored_font_size(
+            raw_style.get("font_size"),
+            path=f"config.adv.linear_definition_line_styles.{line_kind}.font_size",
+        )
         if font_size not in (None, "", False):
             parts.append(f"size={font_size}")
         font_weight = str(raw_style.get("font_weight") or "").strip()
@@ -7198,6 +7209,7 @@ __all__ = [
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
+    "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION",
     "MODE_SCOPED_SESSION_MIN_VERSION",
     "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",

@@ -13,6 +13,7 @@ import {
   parseLinearTrackSlotSpec
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
+import { t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -1090,6 +1091,8 @@ const CIRCULAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'canvas.circular.track_type': '--track_type',
   'labels.spacing.circular': '--circular_label_spacing',
   'labels.circular.placement': '--label_placement',
+  'labels.circular.line': '--label_line',
+  'labels.circular.protection': '--label_protection',
   'objects.ticks.tick_labels.font_size': '--tick_label_font_size',
   'labels.unified_adjustment.outer_labels.x_radius_offset': '--outer_label_x_radius_offset',
   'labels.unified_adjustment.outer_labels.y_radius_offset': '--outer_label_y_radius_offset',
@@ -1102,6 +1105,8 @@ const LINEAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'labels.spacing.linear': '--linear_label_spacing',
   'labels.linear.placement': '--label_placement',
   'labels.linear.rotation': '--label_rotation',
+  'labels.linear.line': '--label_line',
+  'labels.linear.protection': '--label_protection',
   'canvas.linear.track_layout': '--track_layout',
   'canvas.linear.track_axis_gap': '--track_axis_gap',
   'canvas.linear.comparison_height': '--comparison_height',
@@ -1964,23 +1969,23 @@ export const buildShellCommand = (tokens) => (Array.isArray(tokens) ? tokens : [
 /** @param {unknown} elapsedMs */
 export const formatElapsedMs = (elapsedMs) => {
   const ms = Number(elapsedMs);
-  if (!Number.isFinite(ms) || ms < 0) return 'n/a';
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
+  if (!Number.isFinite(ms) || ms < 0) return t('n/a');
+  if (ms < 1000) return t('{value} ms', { value: Math.round(ms) });
+  if (ms < 60_000) return t('{value} s', { value: (ms / 1000).toFixed(ms < 10_000 ? 2 : 1) });
   const minutes = Math.floor(ms / 60_000);
   const seconds = (ms - minutes * 60_000) / 1000;
-  return `${minutes} min ${seconds.toFixed(1)} s`;
+  return t('{minutes} min {seconds} s', { minutes, seconds: seconds.toFixed(1) });
 };
 
 /** @param {unknown} level */
 export const reproducibilityLabel = (level) => {
   const normalized = String(level || '').trim();
-  if (normalized === 'source-unavailable') return 'Source recipe unavailable';
-  if (normalized === 'canonical-request') return 'Exact typed request';
-  if (normalized === 'exact-uploaded-files') return 'Source recipe ready';
-  if (normalized === 'requires-helper-files') return 'Source recipe needs helper files';
-  if (normalized === 'session-recommended') return 'Source recipe needs helper files';
-  return 'Approximate command';
+  if (normalized === 'source-unavailable') return t('Source recipe unavailable');
+  if (normalized === 'canonical-request') return t('Exact replay request (keeps parameter types)');
+  if (normalized === 'exact-uploaded-files') return t('Source recipe ready');
+  if (normalized === 'requires-helper-files') return t('Source recipe needs helper files');
+  if (normalized === 'session-recommended') return t('Source recipe needs helper files');
+  return t('Approximate command');
 };
 
 /**

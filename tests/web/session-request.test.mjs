@@ -289,7 +289,7 @@ assert.throws(
     supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer']
   }),
-  /unknown anchor_slot/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_ANCHOR' && error.context.field === 'anchor_slot'
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -334,7 +334,7 @@ assert.throws(
     supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer']
   }),
-  /uses anchor_slot without side=overlay/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_SIDE' && error.context.field === 'side'
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -777,6 +777,39 @@ assert.equal(
   ),
   false
 );
+// The feature label style of each mode (LP-D102): Save leaves the mode's packaged style (the generated mode
+// profile) unstated, as a request written before the setting does, and states another one; Load projects a stated
+// style into the drawing's settings, and a request without one into no field, so the drawing keeps its mode's
+// default (`createDefaultAdv`). Checked here for Circular and below for Linear.
+const { LABEL_STYLE_CHOICES, labelStyleForMode } = await import(pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js')));
+/** @param {() => { renderRequest: { diagramOptions: { configOverrides: Record<string, unknown> } } }} build */
+const assertLabelStyleRoundTrip = (build) => {
+  const mode = state.mode.value;
+  const defaults = labelStyleForMode(mode);
+  const paths = { label_line: `labels.${mode}.line`, label_protection: `labels.${mode}.protection` };
+  Object.assign(state.adv, defaults);
+  const plain = build();
+  for (const path of Object.values(paths)) {
+    assert.equal(Object.hasOwn(plain.renderRequest.diagramOptions.configOverrides, path), false, `${mode} ${path}`);
+  }
+  const plainAdv = projectCanonicalSessionRequest(plain).config.adv;
+  assert.deepEqual([Object.hasOwn(plainAdv, 'label_line'), Object.hasOwn(plainAdv, 'label_protection')], [false, false], mode);
+  const other = {
+    label_line: LABEL_STYLE_CHOICES.line.find((value) => value !== defaults.label_line),
+    label_protection: LABEL_STYLE_CHOICES.protection.find((value) => value !== defaults.label_protection)
+  };
+  Object.assign(state.adv, other);
+  const styled = build();
+  for (const [field, path] of Object.entries(paths)) {
+    assert.equal(styled.renderRequest.diagramOptions.configOverrides[path], other[field], `${mode} ${path}`);
+  }
+  const styledAdv = projectCanonicalSessionRequest(styled).config.adv;
+  assert.deepEqual({ label_line: styledAdv.label_line, label_protection: styledAdv.label_protection }, other, mode);
+  delete state.adv.label_line;
+  delete state.adv.label_protection;
+};
+assert.equal(state.mode.value, 'circular');
+assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({ state, filesData }));
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
@@ -1553,7 +1586,7 @@ invalidCircularOverlay.renderRequest.diagramOptions.tracks = {
 };
 assert.throws(
   () => projectCanonicalSessionRequest(invalidCircularOverlay),
-  /references unknown anchor_slot/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_ANCHOR' && error.context.field === 'anchor_slot'
 );
 
 const emptyDepthColumn = structuredClone(canonical);
@@ -2202,6 +2235,9 @@ assert.deepEqual(
   materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
   ['multi-source::record-1', 'multi-source::record-2']
 );
+assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
+  state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
+}));
 
 const oneSourceFilesData = {
   linearSeqs: [{
@@ -3811,6 +3847,11 @@ assert.deepEqual(circularSparseProjection.config.adv.depth_tracks.map((track) =>
   'Sample A',
   'Sample B'
 ]);
+// A request without Depth labels projects series that stay unnamed in the
+// draft, so their names follow the series count (OV-1508).
+const labelFreeSparseCanonical = structuredClone(circularSparseCanonical);
+labelFreeSparseCanonical.renderRequest.diagramOptions.depthTracks.forEach((track) => { track.label = null; });
+assert.deepEqual(projectCanonicalSessionRequest(labelFreeSparseCanonical).config.adv.depth_tracks.map((track) => track.label), ['', '']);
 const circularSparseRebuilt = buildCanonicalRenderRequest({
   state,
   filesData: circularSparseProjection.files
@@ -3910,6 +3951,26 @@ assert.deepEqual(
   sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.map((track) => track.label),
   ['Sample A', 'Sample B']
 );
+{
+  // A series without settings draws in the default color the series owner
+  // gives it, not in series 1's (OV-1510): series 1 takes the Depth color,
+  // a later series the palette.
+  const storedTracks = state.adv.depth_tracks;
+  const storedColor = state.adv.depth_color;
+  state.adv.depth_tracks = [];
+  state.adv.depth_color = '#AA0000';
+  const unsetCanonical = buildCanonicalRenderRequestRaw({
+    state,
+    filesData: sparseDepthFilesData,
+    comparisonPlanSnapshot: comparisonSnapshotForState(state, sparseDepthFilesData)
+  });
+  assert.deepEqual(
+    unsetCanonical.renderRequest.diagramOptions.depthTracks.map(({ label, color }) => [label, color]),
+    [['Depth 1', '#AA0000'], ['Depth 2', '#E45756']]
+  );
+  state.adv.depth_tracks = storedTracks;
+  state.adv.depth_color = storedColor;
+}
 [
   'depthTrackFiles',
   'depthTrackLabels',
@@ -3933,6 +3994,32 @@ assert.throws(
   () => projectCanonicalSessionRequest(mixedCanonicalDepth),
   /depthTracks cannot be combined with legacy depth fields: depthTrackFiles/
 );
+// Python draws a request's Depth series without a color in the request's
+// Depth color (`clone_depth_config`), so an import gives such a series that
+// color, in both the canonical and the legacy form: the imported draft redraws
+// the CLI figure (OV-1510).
+{
+  const colorFreeCanonical = structuredClone(sparseDepthCanonical);
+  colorFreeCanonical.renderRequest.diagramOptions.configOverrides = {
+    ...(colorFreeCanonical.renderRequest.diagramOptions.configOverrides || {}),
+    'objects.depth.fill_color': '#AA0000'
+  };
+  const colorFreeLegacy = structuredClone(colorFreeCanonical);
+  colorFreeCanonical.renderRequest.diagramOptions.depthTracks.forEach((track) => { track.color = null; });
+  const legacyOptions = colorFreeLegacy.renderRequest.diagramOptions;
+  legacyOptions.depthTrackFiles = [
+    [legacyOptions.depthTracks[0].source[0], null],
+    [null, legacyOptions.depthTracks[1].source[1]]
+  ];
+  legacyOptions.depthTrackColors = [null, null];
+  delete legacyOptions.depthTracks;
+  const importedColors = (request) => {
+    const { adv } = projectCanonicalSessionRequest(request).config;
+    return [adv.depth_color, adv.depth_tracks.map((track) => track.color)];
+  };
+  assert.deepEqual(importedColors(colorFreeCanonical), ['#AA0000', ['#AA0000', '#AA0000']]);
+  assert.deepEqual(importedColors(colorFreeLegacy), ['#AA0000', ['#AA0000', '#AA0000']]);
+}
 const wrongCanonicalDepthCardinality = structuredClone(sparseDepthCanonical);
 wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source =
   wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source.slice(0, 1);

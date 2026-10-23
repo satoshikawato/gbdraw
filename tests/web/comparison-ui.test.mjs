@@ -43,6 +43,10 @@ await Promise.all([
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
   ),
   cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'i18n.js'),
+    join(tempRoot, 'js', 'utils', 'i18n.js')
+  ),
+  cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'download-names.js'),
     join(tempRoot, 'js', 'utils', 'download-names.js')
   )
@@ -324,7 +328,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
 });
 
 // OV-1128 B (D-114): Paralog links per group shows wherever it draws: Similarity groups, and Collinear with
-// Infer orthogroups. Pairwise, Collinear without inference, another program, and Selected pairs hide it.
+// Build similarity groups with within-record searches. Pairwise, Collinear without inference, another program, and Selected pairs hide it.
 test('Paralog links per group projects for Similarity groups and inferring Collinear only', () => {
   const adjacent = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
   const selected = {

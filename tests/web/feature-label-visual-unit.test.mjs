@@ -680,13 +680,13 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
-  assert.deepEqual(messages, [{ text: 'Loaded 2 row(s). Applied to 2 label(s).', items: [] }]);
+  assert.deepEqual(messages, [{ text: 'Loaded 2 rows. Applied to 2 labels.', items: [] }]);
 });
 
 // OV-131: a Label TSV that applies to no label changes nothing. The import
 // replaces the label edits only when it applies, so the bulk and per-feature
 // label edits stay, no state change reaches History, and the message says why.
-const KEPT = 'Loaded 1 row(s). Not applied; the existing label edits were kept.';
+const KEPT = 'Loaded 1 row. Not applied; the existing label edits were kept.';
 for (const [name, body, tsv, message] of [
   ['no row matches a label', batchLabel('fa', 'alpha', 'dominant-baseline="central" '),
     '*\t*\tproduct\t^no such product$\tZZ\n',
@@ -696,7 +696,7 @@ for (const [name, body, tsv, message] of [
   ['every match lacks a feature key',
     '<text dominant-baseline="central" data-label-source-text="alpha">alpha</text>',
     '*\tCDS\tlabel\t^alpha$\tZZ\n',
-    { text: KEPT, items: ['The 1 matched label(s) lacked a feature key.'] }]
+    { text: KEPT, items: ['The 1 matched label lacked a feature key.'] }]
 ]) {
   test(`a Label TSV import keeps the label edits when ${name} (OV-131)`, async () => {
     const svg = new DOMParser().parseFromString(`<svg>${body}</svg>`, 'image/svg+xml').documentElement;
@@ -804,8 +804,8 @@ for (const preparationFollowsRows of [false, true]) {
     const { state } = harness;
     const input = target();
     await load(input, () => { setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' }); });
-    assert.deepEqual(messages, [{ text: 'Loaded 1 row(s). Not applied: a label or feature visibility edit was made while '
-      + 'the table loaded. The edit was kept. Load the table again.', tone: 'warning' }]);
+    assert.deepEqual(messages, [{ text: 'Loaded 1 row. Not applied: label text, label visibility, or feature visibility changed while '
+      + 'the table loaded. The changes were kept. Load the table again.', tone: 'warning' }]);
     assert.deepEqual(state.featureOverrides, { [keyFor('fa')]: rowFor('fa', { labelText: 'EDITED', labelSourceText: 'alpha' }) });
     assert.deepEqual(state.labelTextBulkOverrides, {});
     assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');
@@ -825,7 +825,7 @@ for (const [cause, change, notice] of [
     const { harness, messages, target, load } = held;
     const input = target();
     await load(input, () => change(held));
-    assert.deepEqual(messages, [{ text: `Loaded 1 row(s). Not applied: ${notice}. Load the table again.`, tone: 'warning' }]);
+    assert.deepEqual(messages, [{ text: `Loaded 1 row. Not applied: ${notice}. Load the table again.`, tone: 'warning' }]);
     assert.deepEqual([harness.state.featureOverrides, harness.state.labelTextBulkOverrides], [{}, {}]);
     assert.equal(harness.svg.querySelector('text').textContent, 'alpha');
     assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');
@@ -953,4 +953,73 @@ test('opening the editor reuses a current label binding until the root changes (
   } finally {
     globalThis.MutationObserver = previous;
   }
+});
+
+// OV-1291: a Linear Result draws other text with the central baseline of a
+// feature label: a region label in its annotation's group, the copy drawn in
+// front of the leader lines, and the depth and GC content axis ticks. None of
+// them is a feature label, so the editor neither lists it nor binds it to the
+// unlabeled feature next to it.
+test('a Linear region label or axis tick is never an editable feature label (OV-1291)', () => {
+  const central = (id, bbox) => `<text id="${id}" dominant-baseline="central" data-fake-bbox="${bbox}"></text>`;
+  const svg = new DOMParser().parseFromString([
+    '<svg>',
+    '<g id="record_group_1">',
+    '<path data-gbdraw-feature-id="labeled" data-fake-bbox="0 0 10 10" />',
+    '<path data-gbdraw-feature-id="unlabeled" data-fake-bbox="50 0 10 10" />',
+    central('feature-label', '0 12 10 4'),
+    '</g>',
+    '<g id="gbdraw-annotation-track-regions_1-1">',
+    '<g id="gbdraw-annotation-regions_1-rrna" data-gbdraw-annotation-id="rrna">',
+    '<rect data-fake-bbox="50 20 10 4" />', central('region-label', '50 12 10 4'),
+    '</g>',
+    '</g>',
+    '<g id="gbdraw-annotation-track-regions_1-1-front">',
+    '<g data-gbdraw-region-label-for="gbdraw-annotation-regions_1-control">', central('front-region-label', '52 12 6 4'), '</g>',
+    '</g>',
+    '<g id="depth"><g id="depth_axis">', central('depth-tick', '48 14 2 2'), '</g></g>',
+    '<g id="gc_content" data-gbdraw-slot-renderer="dinucleotide_content"><g id="gc_content_axis">',
+    central('gc-tick', '48 16 2 2'), '</g></g>',
+    '</svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const harness = buildHarness({ svg, featureId: 'labeled' });
+  harness.state.extractedFeatures.value = [featureFor('labeled'), featureFor('unlabeled')];
+  harness.actions.syncLabelEditor();
+  const byId = (id) => svg.querySelector(`#${id}`);
+  assert.equal(byId('feature-label').getAttribute('data-label-editable'), 'true');
+  assert.equal(byId('feature-label').getAttribute('data-label-feature-id'), 'labeled');
+  for (const id of ['region-label', 'front-region-label', 'depth-tick', 'gc-tick']) {
+    assert.equal(byId(id).getAttribute('data-label-editable'), null, `${id} is not an editable label`);
+    assert.equal(byId(id).getAttribute('data-label-feature-id'), null, `${id} is bound to no feature`);
+  }
+  assert.deepEqual(harness.state.editableLabels.value.map((entry) => entry.featureId), ['labeled']);
+});
+
+test('a curved Circular region label is never an editable feature label (OV-1210, OV-1291)', () => {
+  const curved = (id, bbox) => `<text id="${id}" data-fake-bbox="${bbox}"><textPath href="#${id}-path">label</textPath></text>`;
+  const svg = new DOMParser().parseFromString([
+    '<svg>',
+    '<g id="record_group_1">',
+    '<path data-gbdraw-feature-id="labeled" data-fake-bbox="0 0 10 10" />',
+    '<path data-gbdraw-feature-id="unlabeled" data-fake-bbox="50 0 10 10" />',
+    curved('feature-label', '2 3 6 4'),
+    '</g>',
+    '<g id="gbdraw-annotation-track-regions_1-1">',
+    '<g id="gbdraw-annotation-regions_1-rrna" data-gbdraw-annotation-id="rrna">',
+    '<path data-fake-bbox="50 20 10 4" />', curved('region-label', '50 12 10 4'),
+    '</g>',
+    '</g>',
+    '</svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const harness = buildHarness({ svg, featureId: 'labeled' });
+  harness.state.mode.value = 'circular';
+  harness.state.generatedMode.value = 'circular';
+  harness.state.extractedFeatures.value = [featureFor('labeled'), featureFor('unlabeled')];
+  harness.actions.syncLabelEditor();
+  const byId = (id) => svg.querySelector(`#${id}`);
+  assert.equal(byId('feature-label').getAttribute('data-label-editable'), 'true');
+  assert.equal(byId('feature-label').getAttribute('data-label-feature-id'), 'labeled');
+  assert.equal(byId('region-label').getAttribute('data-label-editable'), null);
+  assert.equal(byId('region-label').getAttribute('data-label-feature-id'), null);
+  assert.deepEqual(harness.state.editableLabels.value.map((entry) => entry.featureId), ['labeled']);
 });

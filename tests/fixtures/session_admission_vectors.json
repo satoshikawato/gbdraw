@@ -2864,7 +2864,7 @@
     }
    ],
    "python": "refuse",
-   "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
+   "pythonMessage": "Session version 46 requires editorState.featureCatalog.",
    "web": "repaired",
    "note": "Admission row CheckedSessionEditorState.featureCatalog.",
    "webRepairs": [
@@ -4030,7 +4030,7 @@
     }
    ],
    "python": "refuse",
-   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "pythonMessage": "Session version 44 Results require editorState.featureCatalog.",
    "web": "repaired",
    "note": "Admission row SessionChecked40.editorState.",
    "webRepairs": [
@@ -4212,7 +4212,7 @@
     }
    ],
    "python": "refuse",
-   "pythonMessage": "Session version 40 requires a results array.",
+   "pythonMessage": "Session version 44 requires a results array.",
    "web": "repaired",
    "note": "Admission row SessionChecked40.results.",
    "webRepairs": [
@@ -4283,7 +4283,7 @@
     }
    ],
    "python": "refuse",
-   "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
+   "pythonMessage": "Session version 46 requires editorState.featureCatalog.",
    "web": "repaired",
    "note": "Admission row SessionChecked46.editorState.",
    "webRepairs": [
@@ -4481,7 +4481,7 @@
     }
    ],
    "python": "refuse",
-   "pythonMessage": "Session version 40 requires a results array.",
+   "pythonMessage": "Session version 46 requires a results array.",
    "web": "repaired",
    "note": "Admission row SessionChecked46.results.",
    "webRepairs": [
@@ -4672,7 +4672,7 @@
    ],
    "finding": "A7c, J3: a development-branch feature field",
    "python": "refuse",
-   "pythonMessage": "Session version 40 cannot contain derived feature payloads in features: extracte",
+   "pythonMessage": "Session version 44 cannot contain derived feature payloads in features: extracte",
    "web": "repaired",
    "webRepairs": [
     "session-field-dropped@features.extractedFeatures"
@@ -4712,7 +4712,7 @@
    ],
    "finding": "A7c: derived orthogroup groups, no row (BA-OD93 a)",
    "python": "refuse",
-   "pythonMessage": "Session version 40 cannot contain derived orthogroupState.groups.",
+   "pythonMessage": "Session version 44 cannot contain derived orthogroupState.groups.",
    "web": "loaded"
   },
   {
@@ -4840,7 +4840,7 @@
    ],
    "finding": "A15: Results in a settings-only Session; a file whose request is null and that holds Results reads as one whose request is missing (E-OD29)",
    "python": "refuse",
-   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "pythonMessage": "Session version 46 Results require editorState.featureCatalog.",
    "web": "repaired",
    "webRepairs": [
     "request-dropped@renderRequest"
@@ -5180,7 +5180,7 @@
     }
    ],
    "python": "refuse",
-   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "pythonMessage": "Session version 44 Results require editorState.featureCatalog.",
    "web": "repaired",
    "webRepairs": [
     "session-part-dropped@editorState",

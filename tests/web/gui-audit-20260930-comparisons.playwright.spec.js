@@ -6,7 +6,7 @@ const { execFile } = require('node:child_process');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -59,12 +59,10 @@ const uploadComparison = async (page, name, text) => {
   await settle(page);
 };
 
-// Committed ribbons: data attributes and the x span of each endpoint side.
+// Ribbons of an SVG text: data attributes and the x span of each endpoint side.
 // A ribbon path runs query side (points 1-2) then subject side (points 3-4).
-const committedRibbons = (page) => page.evaluate(() => {
-  const app = window.__GBDRAW_APP__;
-  const content = String(app.results?.[app.selectedResultIndex]?.content || '');
-  const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
+const svgRibbons = (page, content) => page.evaluate((text) => {
+  const svg = new DOMParser().parseFromString(text, 'image/svg+xml');
   const numbers = (value) => (String(value || '').match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/gi) || []).map(Number);
   const span = (values) => [Math.round(Math.min(...values)), Math.round(Math.max(...values))];
   return [...svg.querySelectorAll('[data-gbdraw-pairwise-match-id]')].map((element) => {
@@ -74,7 +72,11 @@ const committedRibbons = (page) => page.evaluate(() => {
       .map(({ name, value }) => [name.slice(5), value]));
     return { data, queryX: span([point[0], point[2]]), subjectX: span([point[4], point[6]]) };
   });
-});
+}, content);
+const committedRibbons = async (page) => svgRibbons(page, await page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return String(app.results?.[app.selectedResultIndex]?.content || '');
+}));
 
 const featureSpan = (page, locusTag) => page.evaluate((tag) => {
   const app = window.__GBDRAW_APP__;
@@ -370,3 +372,154 @@ for (const scenario of ['upload', 'losatn']) {
     expect(spans).toEqual(provenance.mainRibbonSpans);
   });
 }
+
+// OV-1145 B-LOAD (D-128): the stored protein results of each kind, by content,
+// of the Web re-save and of the Python upgrade of the same Session (the
+// comparison resources; a Session 39 re-saves its color tables in another kind).
+const PROTEIN_RESOURCES_CHECK = `
+import base64, gzip, hashlib, json, sys
+from gbdraw.session import upgrade_session_document
+web_path, source = sys.argv[1], sys.argv[2]
+def contents(document):
+    return sorted((entry["kind"], hashlib.sha256(base64.b64decode(entry["data"])).hexdigest())
+                  for name, entry in document["resources"].items() if name.startswith("comparison-")
+                  and entry["kind"] in ("canonical-tsv", "orthogroup-result", "collinearity-result"))
+web = json.loads(gzip.decompress(open(web_path, "rb").read()))
+python = upgrade_session_document(source).document.to_dict()
+print(json.dumps({"version": web["version"], "web": contents(web), "python": contents(python),
+                  "stored": contents(json.loads(gzip.decompress(open(source, "rb").read())))}))
+`;
+
+test('a Session 47 with protein results of a reversed record shows its figure, then Python converts them once at Load', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  const sessions = path.join(root, 'tests/fixtures/sessions');
+  const fixture = path.join(sessions, 'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz');
+  await openFresh(page);
+  // What the app shows when each Worker helper is asked for.
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const metric = hooks.onStructuralMetric;
+    window.__HELPER_REQUESTS__ = [];
+    hooks.onStructuralMetric = (event) => {
+      metric?.(event);
+      if (event.name !== 'diagramHelperRequest') return;
+      const app = window.__GBDRAW_APP__;
+      window.__HELPER_REQUESTS__.push({ operation: event.operation, pending: app.sessionImportPending,
+        shown: app.results.length, previewShown: window.__AUDIT_LIFECYCLE__.includes('firstCommittedPreview') });
+    };
+  });
+  await loadSessionFile(page, fixture);
+  const conversions = (await page.evaluate(() => window.__HELPER_REQUESTS__))
+    .filter(({ operation }) => operation === 'convertStoredProteinResultFrames');
+  // Once, after the stored figure is shown, while edits and Save wait for the Load (PD-OI-045).
+  expect(conversions).toEqual([{ operation: 'convertStoredProteinResultFrames', pending: true, shown: 1,
+    previewShown: true }]);
+  // History's base holds the converted results: an Undo after an edit keeps them.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.runUndoable('Ribbon style', () => {
+    const { adv } = window.__GBDRAW_APP__;
+    adv.pairwise_match_style = adv.pairwise_match_style === 'curve' ? 'ribbon' : 'curve';
+  }));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
+  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  // The Session has a title, so Save asks for none.
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await download).saveAs(file);
+  const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
+    { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
+  const saved = JSON.parse(stdout.trim().split('\n').pop());
+  expect(saved.version).toBe(48);
+  expect(saved.web).toEqual(saved.python);
+  expect(saved.web).not.toEqual(saved.stored);
+  // A Generate reads the converted results and draws like the CLI replay of the Session.
+  await generateAndWaitForResult(page);
+  const replay = await svgRibbons(page, readFileSync(path.join(sessions, 'BGC0000708-BGC0000713.v47.replay.svg'), 'utf8'));
+  expect(ribbonGeometry(await committedRibbons(page))).toEqual(ribbonGeometry(replay));
+});
+
+// OV-1181: a main Session 39 stores the protein table of its reversed record in
+// the drawn frame; Load converts it the way the Python upgrade does (OV-1183).
+test('a main Session 39 with a protein table of a reversed record converts it at Load like Python', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  const fixture = path.join(root, 'tests/fixtures/sessions/BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz');
+  await openFresh(page);
+  await loadSessionFile(page, fixture);
+  await generateAndWaitForResult(page);
+  expect((await committedRibbons(page)).length).toBeGreaterThan(0);
+  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await download).saveAs(file);
+  const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
+    { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
+  const saved = JSON.parse(stdout.trim().split('\n').pop());
+  expect(saved.version).toBe(48);
+  expect(saved.web).toEqual(saved.python);
+  expect(saved.web).not.toEqual(saved.stored);
+});
+
+// OV-1145: Python reads the saved Session: its protein results of the cropped
+// and reversed record are in the search frame (a conversion leaves the request
+// as it is) and tagged; the CLI replay writes `<directory>/cli.svg`.
+const SEARCH_FRAME_CHECK = `
+import json, subprocess, sys
+from pathlib import Path
+from gbdraw.api.record_planning import comparison_record_bindings
+from gbdraw.api.request_render import plan_request
+from gbdraw.api.session_compat import drawn_frame_protein_results_to_search_frame
+from gbdraw.session import load_session_document, materialize_session, session_to_request
+source, directory = sys.argv[1], Path(sys.argv[2])
+document = load_session_document(source)
+with materialize_session(document, output_directory=directory) as materialized:
+    request = session_to_request(materialized)
+    plan = plan_request(request)
+    converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, request)
+    (_, binding) = comparison_record_bindings(plan.records, plan.provenance, search_frame=True)
+members = [member for group in request.options.orthogroups.orthogroups.values() for member in group
+           if member.record_index == 1]
+in_search_frame = sum((member.start, member.end, member.strand) == binding.current_spans.get(member.feature_index)
+                      for member in members)
+subprocess.run([sys.executable, "-m", "gbdraw.cli", "linear", "--session", source, "-o", str(directory / "cli"),
+                "-f", "svg"], check=True)
+print(json.dumps({"version": document.version, "reverse": binding.reverse, "same": converted is request,
+                  "unmatched": len(unmatched), "members": len(members), "inSearchFrame": in_search_frame}))
+`;
+
+test('a Web Similarity groups Generate stores a cropped reversed record in its search frame and draws like the CLI', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  await openLinearWith(page, [bgc('BGC0000708'), bgc('BGC0000713')]);
+  await useLosat(page, {
+    task: 'blastp',
+    proteinMode: 'orthogroup',
+    configure: () => {
+      const app = window.__GBDRAW_APP__;
+      app.setLinearRecordCrop(app.linearSeqs[1], 'region_start', 2001);
+      app.setLinearRecordCrop(app.linearSeqs[1], 'region_end', 29000);
+      app.linearSeqs[1].region_reverse = true;
+    }
+  });
+  await generateAndWaitForResult(page);
+  const web = ribbonGeometry(await committedRibbons(page));
+  expect(web.length).toBeGreaterThan(0);
+  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await answerSessionTitle(page, '');
+  await (await download).saveAs(file);
+  const { stdout } = await promisify(execFile)('python', ['-c', SEARCH_FRAME_CHECK, file, directory],
+    { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
+  const stored = JSON.parse(stdout.trim().split('\n').pop());
+  expect(stored).toEqual(expect.objectContaining({ version: 48, reverse: true, same: true, unmatched: 0 }));
+  expect(stored.members).toBeGreaterThan(0);
+  expect(stored.inSearchFrame).toBe(stored.members);
+  const cli = await svgRibbons(page, readFileSync(path.join(directory, 'cli.svg'), 'utf8'));
+  expect(ribbonGeometry(cli)).toEqual(web);
+});

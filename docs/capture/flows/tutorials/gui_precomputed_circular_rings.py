@@ -246,7 +246,7 @@ def capture_gui_precomputed_circular_rings(
         )
 
         toggle_disclosure(page.get_by_label("Pairwise Comparisons", exact=True))
-        upload = page.get_by_role("radio", name="Upload BLAST", exact=True)
+        upload = page.get_by_role("radio", name="Upload BLAST TSV", exact=True)
         upload.check()
         expect(upload).to_be_checked()
         page.get_by_label("BLAST outfmt 6/7 files", exact=True).set_input_files(
@@ -343,7 +343,7 @@ def capture_gui_precomputed_circular_rings(
         popup = page.get_by_role("dialog", name="Pairwise match details", exact=True)
         expect(popup).to_be_visible()
         popup_text = popup.inner_text()
-        for expected in ("Homology ring match", "NC_012920.1", "Reference side", "subject"):
+        for expected in ("Comparison ring match", "NC_012920.1", "Reference side", "subject"):
             if expected.casefold() not in popup_text.casefold():
                 raise AssertionError(f"Circular HSP popup is missing {expected!r}")
         fasta_buttons = popup.get_by_role("button", name=re.compile(r"FASTA"))
@@ -368,7 +368,7 @@ def capture_gui_precomputed_circular_rings(
             )
         )
         popup_report = {
-            "title": "Homology ring match",
+            "title": "Comparison ring match",
             "text": popup_text,
             "download_suggested_filename": fasta_download.suggested_filename,
         }

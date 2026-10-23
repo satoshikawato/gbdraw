@@ -1152,20 +1152,49 @@ def _canonicalize_recorded_cli_invocation(
     _edit_staged_session(session_path, canonicalize)
 
 
+def _read_session_file(session_path: Path) -> tuple[dict[str, Any], bool]:
+    """Return a Session file's JSON and whether the file is gzip-compressed."""
+
+    payload = session_path.read_bytes()
+    compressed = payload[:2] == b"\x1f\x8b"
+    return json.loads(gzip.decompress(payload) if compressed else payload), compressed
+
+
+def _write_session_file(session_path: Path, session: Mapping[str, Any], *, compressed: bool) -> None:
+    """Write Session JSON with no time in the gzip header, so equal JSON gives equal bytes."""
+
+    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    session_path.write_bytes(
+        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
+    )
+
+
 def _edit_staged_session(
     session_path: Path, edit: Callable[[dict[str, Any]], int]
 ) -> None:
     """Rewrite a staged Session file in its own encoding when ``edit`` changes it."""
 
-    payload = session_path.read_bytes()
-    compressed = payload[:2] == b"\x1f\x8b"
-    session = json.loads(gzip.decompress(payload) if compressed else payload)
-    if not edit(session):
-        return
-    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    session_path.write_bytes(
-        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
-    )
+    session, compressed = _read_session_file(session_path)
+    if edit(session):
+        _write_session_file(session_path, session, compressed=compressed)
+
+
+def _keep_created_at(tracked_path: Path, staged_path: Path) -> None:
+    """Give a refreshed Session the creation time of the Session it replaces.
+
+    The CLI replay stamps the time it ran; a refresh republishes the same
+    Session, so two refreshes of one input give the same bytes.
+    """
+
+    created_at = _read_session_file(tracked_path)[0]["createdAt"]
+
+    def edit(session: dict[str, Any]) -> int:
+        if session.get("createdAt") == created_at:
+            return 0
+        session["createdAt"] = created_at
+        return 1
+
+    _edit_staged_session(staged_path, edit)
 
 
 def _with_comparisons(comparisons: list[Any], session: dict[str, Any]) -> int:
@@ -1227,18 +1256,13 @@ def _declared_command_session(
         env=dict(env),
         check=True,
     )
-    payload = session_path.read_bytes()
-    compressed = payload[:2] == b"\x1f\x8b"
-    session = json.loads(gzip.decompress(payload) if compressed else payload)
+    session, compressed = _read_session_file(session_path)
     invocation = session["cliInvocation"]
     invocation["args"] = [
         args[output_index] if arg == staged_output else arg
         for arg in invocation["args"]
     ]
-    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    session_path.write_bytes(
-        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
-    )
+    _write_session_file(session_path, session, compressed=compressed)
 
 
 # The request comparisons that hold a computed protein result. Next to a
@@ -1663,6 +1687,7 @@ def refresh_gallery_sessions(
                     _assert_declared_figure(declared_path, staged_path)
             else:
                 _refresh_one_session(session_path, destination_path=staged_path)
+            _keep_created_at(session_path, staged_path)
             staged_session = load_session(staged_path)
             _validate_staged_gallery_session(
                 session_path,

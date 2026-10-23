@@ -32,9 +32,11 @@ def _rename_references(value: Any, aliases: dict[str, str]) -> Any:
     return value
 
 
-def two_mode_session() -> dict[str, Any]:
+def two_mode_session(linear: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The Session; ``linear`` replaces the Linear Gallery Session as the other set."""
+
     circular = json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8"))
-    linear = json.loads(LINEAR_SESSION.read_text(encoding="utf-8"))
+    linear = json.loads(LINEAR_SESSION.read_text(encoding="utf-8")) if linear is None else linear
     aliases = {resource_id: f"linear-{resource_id}" for resource_id in linear["resources"]}
     resources = dict(circular["resources"])
     for resource_id, descriptor in linear["resources"].items():

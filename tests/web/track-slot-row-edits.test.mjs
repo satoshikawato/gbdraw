@@ -90,6 +90,8 @@ const MODES = {
       canDuplicate: (slot) => editor.canDuplicateCircularTrackSlot(slot),
       duplicate: (index) => editor.duplicateCircularTrackSlot(index),
       setPlacement: (slot, placement) => editor.updateCircularTrackSlotPlacement(slot, placement),
+      setOverlayParam: (slot, key, value) => editor.setCircularOverlayAnnotationParam(slot, key, value),
+      setEnabled: (slot, enabled) => editor.setCircularTrackSlotEnabled(slot, enabled),
       offAxis: 'outside',
       referenceOptions: (slot, key) => editor.circularAnnotationAnchorOptions(slot, key).map((option) => option.id),
       referenceKnown: (slot, key) => editor.circularAnnotationAnchorIsKnown(slot, key)
@@ -108,6 +110,8 @@ const MODES = {
       canDuplicate: (slot) => editor.canDuplicateLinearTrackSlot(slot),
       duplicate: (index) => editor.duplicateLinearTrackSlot(index),
       setPlacement: (slot, placement) => editor.updateLinearTrackSlotPlacement(slot, placement),
+      setOverlayParam: (slot, key, value) => editor.setLinearOverlayAnnotationParam(slot, key, value),
+      setEnabled: (slot, enabled) => editor.setLinearTrackSlotEnabled(slot, enabled),
       offAxis: 'above',
       referenceOptions: (slot, key) => editor.linearAnnotationAnchorOptions(slot, key).map((option) => option.id),
       referenceKnown: (slot, key) => editor.linearAnnotationAnchorIsKnown(slot, key)
@@ -192,6 +196,78 @@ for (const [mode, create] of Object.entries(MODES)) {
     editor.setRenderer(regions(), 'spacer');
     assert.equal(Object.hasOwn(regions().params, 'to_slot'), false);
   });
+  // OV-1297 (LP-D91): the GUI has no z control, so Placement Overlay, Layer,
+  // the anchor and Extend to give an Overlay annotation row the z its layer
+  // needs: one below the lowest (Underlay) or one above the highest
+  // (Foreground) z of the slots it names; a z that already meets it is kept.
+  test(`${mode}: Overlay annotation edits give the row the z its layer needs`, () => {
+    const make = mode === 'circular' ? circularRow : linearRow;
+    const rows = ROWS[mode]();
+    rows.find((slot) => slot.id === 'gc_skew').z = -2;
+    const editor = create([...rows, make('regions', 'annotations', { set_id: 'review', layer: 'foreground' }, mode === 'circular' ? 'outside' : 'above')]);
+    editor.state.annotationSets.push({ id: 'review', name: 'review', annotations: [] });
+    const index = () => editor.slots().findIndex((slot) => slot.id === 'regions');
+    const regions = () => editor.slots()[index()];
+
+    editor.setPlacement(regions(), 'overlay');
+    editor.setOverlayParam(regions(), 'anchor_slot', 'features');
+    assert.deepEqual([regions().params.layer, regions().z], ['foreground', 1]);
+    assert.equal(editor.issue(index()), '', 'Overlay / Foreground draws above its anchor');
+
+    editor.setOverlayParam(regions(), 'layer', 'underlay');
+    assert.equal(regions().z, -1);
+    assert.equal(editor.issue(index()), '', 'Overlay / Underlay draws below its anchor');
+
+    editor.setOverlayParam(regions(), 'to_slot', 'gc_skew');
+    assert.equal(regions().z, -3, 'below the lowest of the anchor and the Extend to slot');
+    assert.equal(editor.issue(index()), '');
+
+    editor.setOverlayParam(regions(), 'layer', 'foreground');
+    assert.equal(regions().z, 1, 'above the highest of the anchor and the Extend to slot');
+    assert.equal(editor.issue(index()), '');
+
+    regions().z = 5;
+    editor.setOverlayParam(regions(), 'to_slot', '');
+    assert.equal(Object.hasOwn(regions().params, 'to_slot'), false, 'None leaves to_slot unset');
+    assert.equal(regions().z, 5, 'a z that meets the layer rule is kept');
+  });
+
+  // OV-1297: Placement Overlay alone binds the only anchor offered and gives
+  // the row its z, so the row is valid before any other edit.
+  test(`${mode}: Placement Overlay with one offered anchor leaves a valid row`, () => {
+    const make = mode === 'circular' ? circularRow : linearRow;
+    const rows = ROWS[mode]().filter((slot) => slot.id !== 'gc_skew');
+    const editor = create([...rows, make('regions', 'annotations', { set_id: 'review', layer: 'foreground' }, mode === 'circular' ? 'outside' : 'above')]);
+    editor.state.annotationSets.push({ id: 'review', name: 'review', annotations: [] });
+    const index = () => editor.slots().findIndex((slot) => slot.id === 'regions');
+    const regions = () => editor.slots()[index()];
+
+    editor.setPlacement(regions(), 'overlay');
+    assert.deepEqual([regions().params.anchor_slot, regions().z], ['features', 1]);
+    assert.equal(editor.issue(index()), '');
+  });
+
+  // OV-1297 review F1: a disabled anchor still counts, so a Layer change made
+  // while it is off leaves a row that is valid once it is on again.
+  test(`${mode}: a Layer change while the anchor is disabled keeps the row valid when it is enabled again`, () => {
+    const make = mode === 'circular' ? circularRow : linearRow;
+    const editor = create([...ROWS[mode](), make('regions', 'annotations', { set_id: 'review', layer: 'foreground' }, mode === 'circular' ? 'outside' : 'above')]);
+    editor.state.annotationSets.push({ id: 'review', name: 'review', annotations: [] });
+    const index = () => editor.slots().findIndex((slot) => slot.id === 'regions');
+    const regions = () => editor.slots()[index()];
+    const gcSkew = () => editor.slots().find((slot) => slot.id === 'gc_skew');
+
+    editor.setPlacement(regions(), 'overlay');
+    editor.setOverlayParam(regions(), 'anchor_slot', 'gc_skew');
+    assert.equal(regions().z, 1);
+    editor.setEnabled(gcSkew(), false);
+    editor.setOverlayParam(regions(), 'layer', 'underlay');
+    assert.equal(regions().z, -1);
+    editor.setEnabled(gcSkew(), true);
+    assert.equal(gcSkew().enabled, true);
+    assert.equal(editor.issue(index()), '');
+  });
+
   // GX-01: Duplicate uses the availability term of the other row controls.
   test(`${mode}: Duplicate is unavailable while a Session operation runs`, () => {
     const editor = create(ROWS[mode]());

@@ -6,6 +6,14 @@ from typing import Any, Literal, Mapping, cast
 from gbdraw.core.numeric import ascii_float, ascii_int
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.labels.label_style import (
+    DEFAULT_LABEL_LINE,
+    DEFAULT_LABEL_PROTECTION,
+    LabelLine,
+    LabelProtection,
+    normalize_label_line,
+    normalize_label_protection,
+)
 from gbdraw.labels.policy import LabelRenderingPolicy, normalize_label_rendering
 from gbdraw.labels.circular_types import (
     CircularLabelPlacement,
@@ -112,6 +120,9 @@ class LabelsLinearConfig:
     scope: LinearLabelScope
     placement: Literal["auto", "above_feature"]
     rotation: float
+    # The feature label style (gbdraw.labels.label_style); a stored config without them takes the defaults.
+    line: LabelLine
+    protection: LabelProtection
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsLinearConfig":
@@ -144,6 +155,10 @@ class LabelsLinearConfig:
             scope=cast(LinearLabelScope, scope),
             placement=placement,
             rotation=rotation,
+            line=normalize_label_line(raw.get("line", DEFAULT_LABEL_LINE["linear"]), path="labels.linear.line"),
+            protection=normalize_label_protection(
+                raw.get("protection", DEFAULT_LABEL_PROTECTION["linear"]), path="labels.linear.protection"
+            ),
         )
 
 
@@ -151,6 +166,9 @@ class LabelsLinearConfig:
 class LabelsCircularConfig:
     scope: CircularLabelScope
     placement: CircularLabelPlacement
+    # The feature label style (gbdraw.labels.label_style); a stored config without them takes the defaults.
+    line: LabelLine
+    protection: LabelProtection
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsCircularConfig":
@@ -168,6 +186,10 @@ class LabelsCircularConfig:
         return cls(
             scope=cast(CircularLabelScope, scope),
             placement=normalize_circular_label_placement(raw.get("placement", "horizontal")),
+            line=normalize_label_line(raw.get("line", DEFAULT_LABEL_LINE["circular"]), path="labels.circular.line"),
+            protection=normalize_label_protection(
+                raw.get("protection", DEFAULT_LABEL_PROTECTION["circular"]), path="labels.circular.protection"
+            ),
         )
 
 
@@ -191,7 +213,6 @@ class LabelsConfig:
     filtering: LabelsFilteringConfig
     length_threshold: LabelsLengthThresholdConfig
     font_size: LabelsFontSizeConfig
-    stroke_width: ShortLongFloatConfig
     stroke_color: LabelsStrokeColorConfig
     radius_factor: dict[str, dict[str, dict[str, float]]]
     inner_radius_factor: dict[str, dict[str, dict[str, float]]]
@@ -229,7 +250,6 @@ class LabelsConfig:
             filtering=LabelsFilteringConfig.from_dict(d.get("filtering", {})),
             length_threshold=LabelsLengthThresholdConfig.from_dict(d["length_threshold"]),
             font_size=LabelsFontSizeConfig.from_dict(d["font_size"]),
-            stroke_width=ShortLongFloatConfig.from_dict(d["stroke_width"]),
             stroke_color=LabelsStrokeColorConfig.from_dict(d["stroke_color"]),
             radius_factor=_factor_3level(d["radius_factor"]),
             inner_radius_factor=_factor_3level(d["inner_radius_factor"]),

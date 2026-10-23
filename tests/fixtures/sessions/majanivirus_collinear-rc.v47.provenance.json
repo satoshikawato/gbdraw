@@ -1,0 +1,79 @@
+{
+  "sourceCommit": "150d26706064e7ca20eef4d3553ea266b51b79f6",
+  "history": "first-parent main",
+  "writer": "main's Web Generate and Save reproduced natively on origin/main: the Python embedded in gbdraw/web/js/app/python-helpers.js (extract_cds_protein_fasta with reverse flag 0, convert_losatp_blastp_pairs_to_genomic_payload in collinear mode with viewTransform {length, reverse}), resources laid out as services/session-request.js buildComparisons/addJson, Result = main's CLI replay with its feature catalog and runMetadata",
+  "script": "tools/build_main_collinear_v47_fixture.py",
+  "command": "PYTHONPATH=<worktree at 150d26706> python3 tools/build_main_collinear_v47_fixture.py <worktree at 150d26706> <out> majanivirus_orthogroup",
+  "sourceSession": "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz at 150d26706 (sha256 ab2f64d4dbf3a36b5d84617abd2e5a41758fa81a529d8c5b3a79a4f57bfa754d)",
+  "losatCacheEntries": [
+    {
+      "query": "record-1",
+      "subject": "record-1",
+      "key": "ede85c500a523e091f0c5507e217af31babcca5b77297029ea12f1440532ad03"
+    },
+    {
+      "query": "record-2",
+      "subject": "record-2",
+      "key": "f34913a61ab65b3b5d1f5c855631280dd5746b452a43ec0178455042cfee7374"
+    },
+    {
+      "query": "record-1",
+      "subject": "record-2",
+      "key": "b0e430ffb955c1c44a1659749adb3cfeab04cf65de8a87ba2dc904c7ef75a151"
+    },
+    {
+      "query": "record-2",
+      "subject": "record-1",
+      "key": "a13dd068edb67bf6f35d22425f5c6e0cccc2b511a28183773a871b7e799bfe80"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "collinearityResult",
+      "resourceId": "comparison-canonical-collinearity-1",
+      "encoding": "canonicalJson",
+      "valueKind": "result"
+    },
+    {
+      "kind": "generatedProteinComparison",
+      "mode": "none",
+      "pairs": []
+    }
+  ],
+  "records": [
+    {
+      "index": 0,
+      "recordKey": "record-1",
+      "file": "MjeNMV.gb",
+      "genbankSha256": "d8be5d839ac165ef888867bee583cefe39ff6793d0e5d25f2b5948469a70b9f0",
+      "reverseComplement": false
+    },
+    {
+      "index": 1,
+      "recordKey": "record-2",
+      "file": "MelaMJNV.gb",
+      "genbankSha256": "29b12333be9ed7518b36998e7641486cbc529a3c132c072f123f7fc3d4d8a8a2",
+      "reverseComplement": true
+    }
+  ],
+  "sha256": "1217786033cf965397595fe7005a5f7e2647a021f9a70837cd94ac8c35aa9578",
+  "bytes": 1080317,
+  "compression": "gzip -n -9",
+  "sessionVersion": 47,
+  "requestSchema": 9,
+  "replay": {
+    "svg": "majanivirus_collinear-rc.v47.replay.svg",
+    "code": "e8b460772 (dev base of the PR)",
+    "command": "python -c 'from gbdraw.cli import main; main()' linear --session majanivirus_collinear-rc.v47.gbdraw-session.json.gz -o majanivirus_collinear-rc.v47.replay -f svg",
+    "sha256": "b306e5b637a4e920ccd2eab4665c8879220130b10a0d114f3a62ea15f9e886c9",
+    "mainReplaySha256": "b306e5b637a4e920ccd2eab4665c8879220130b10a0d114f3a62ea15f9e886c9",
+    "mainReplayEqualsBaseReplay": true
+  },
+  "reversedRecordItemsInV": {
+    "counts": {
+      "orthogroup members": 101,
+      "anchor sides": 100
+    },
+    "inF": 0
+  }
+}

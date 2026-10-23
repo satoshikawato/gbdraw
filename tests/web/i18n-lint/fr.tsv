@@ -1,0 +1,14 @@
+id	regex	flags	message	severity
+fr-never-words	(?<![\p{L}])(sauvegard\p{L}*|téléverser|téléversé\p{L}*|veuillez|réglages?)(?![\p{L}])	iu	Word on the STYLE 7.1 Never list: enregistrer / paramètres; téléverser is Importer; Veuillez is dropped (use the imperative).	error
+fr-feature-words	(?<![\p{L}])(caractéristiques?|fonctionnalités?)(?![\p{L}])	iu	Feature is élément, never caractéristique or fonctionnalité (STYLE 7.1, Owner P-07); keep these only for their own meaning.	warn
+fr-english-loan	(?<![\p{L}_])(records?|tracks?|features?|pop-?ups?)(?![\p{L}_])	iu	English word that STYLE 7.1 never keeps: enregistrement, piste, élément, fenêtre contextuelle.	warn
+fr-optional-invalid	(?<![\p{L}])(optionnel\p{L}*|invalide\p{L}*|supporté\p{L}*|éligible\p{L}*|non supporté\p{L}*)(?![\p{L}])	iu	Write facultatif, non valide, pris en charge, admissible (STYLE 7.1 Never).	error
+fr-edit-verb	(?<![\p{L}])(éditer|édite|édité\p{L}*)(?![\p{L}])	iu	Write modifier for modify; éditeur and édition stay only for the Editor and the edit mode (STYLE 7.1).	warn
+fr-bit-score	score binaire	iu	Bitscore stays Latin; score binaire is not used (glossary Bitscore).	error
+fr-reorder	réordonn\p{L}*	iu	Write réorganiser / réorganisation, not réordonner (glossary Reorder).	error
+fr-reselect	resélectionn\p{L}*	iu	Write sélectionner de nouveau; resélectionner is non-standard (glossary Reselect).	error
+fr-de-nouveau	à nouveau	iu	Write de nouveau, the catalog majority (glossary Reselect).	warn
+fr-en-serie	en série	iu	Serial is séquentiel, not en série (glossary Serial).	warn
+fr-actions-sur-la-ligne	Actions sur la ligne	iu	Row actions are opérations; Actions sur la ligne is not used (glossary Action).	error
+fr-similarity-alignment	alignement de similarité	iu	Similarity alignment is alignement par similarité (glossary).	error
+fr-mb-unit	(?<![\p{L}\d])\d[\d\s.,]*\s?(MB|GB|KB)(?![\p{L}])	u	Byte units are Mo / Go / ko in French (STYLE 7.3, round 2 D-04, P-07).	warn

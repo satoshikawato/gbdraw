@@ -1,0 +1,67 @@
+name: Translation review page
+
+# Republishes the data of the translation review page (branch translation-review,
+# served by GitHub Pages) from dev's catalogs, glossary and style with
+# tools/i18n/review-page-data.mjs. It pushes one commit only when the data
+# changed; the page, its screenshots and db/current stay as they are, and only
+# the latest data is published.
+on:
+  push:
+    branches: ["dev"]
+    paths:
+      - gbdraw/web/index.html
+      - gbdraw/web/js/**
+      - tests/web/helpers/error-text-keys.mjs
+      - docs/internal/I18N_GLOSSARY.tsv
+      - docs/internal/I18N_STYLE.md
+      - tools/i18n/**
+      - .github/workflows/translation-review.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: translation-review
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish review page data
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Checkout translation-review
+        uses: actions/checkout@v4
+        with:
+          ref: translation-review
+          path: .translation-review
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Generate the page data
+        run: node tools/i18n/review-page-data.mjs --out .translation-review/data
+
+      - name: Commit and push when the data changed
+        working-directory: .translation-review
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git add -A data
+          if git diff --cached --quiet; then
+            echo "The review page data is unchanged."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Regenerate the review page data from dev ${SOURCE_SHA}"
+          git push origin HEAD:translation-review

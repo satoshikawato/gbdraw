@@ -8,7 +8,6 @@ temporary and are valid only while the materialization context is active.
 from __future__ import annotations
 
 import copy
-import json
 import logging
 import re
 import tempfile
@@ -20,18 +19,18 @@ from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cas
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.table_text import legacy_table_rows
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
     MODE_SCOPED_SESSION_MIN_VERSION,
+    ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
-    _read_session_text,
+    _read_session_json,
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
-    _reject_duplicate_json_keys,
     _write_validated_session_json,
     expand_session_feature_catalog,
     materialize_embedded_file,
@@ -52,6 +51,7 @@ from gbdraw.session_drawings import (
 )
 
 if TYPE_CHECKING:
+    from gbdraw.api.migration_report import SessionMigrationReport
     from gbdraw.api.request_render import (
         CircularBatchRenderResult,
         RequestRenderResult,
@@ -88,6 +88,27 @@ class SessionConversionError(SessionError):
 
 class SessionRenderError(SessionError):
     """Raised when canonical session rendering fails."""
+
+
+def require_search_frame_protein_results(report: SessionMigrationReport) -> None:
+    """Refuse to write a Session whose replay kept protein results in the drawn frame.
+
+    A replay draws an item the Session 47 migrator could not place as stored;
+    a current Session must hold every protein result in the search frame
+    (OV-1145).
+    """
+
+    if report.unconverted_protein_results:
+        raise SessionConversionError(
+            f"Cannot write a version {CURRENT_SESSION_VERSION} Session: "
+            f"{report.unconverted_protein_results[0]}"
+            + (
+                f" (and {len(report.unconverted_protein_results) - 1} more)"
+                if len(report.unconverted_protein_results) > 1
+                else ""
+            )
+            + ". Generate the drawing again to compute its protein results."
+        )
 
 
 class SessionDrawingSelectionError(SessionError):
@@ -441,14 +462,7 @@ def load_session_document(
 
     path = Path(source)
     try:
-        payload = json.loads(
-            _read_session_text(path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except json.JSONDecodeError as exc:
-        raise SessionFormatError(f"Not a valid JSON session file: {path}") from exc
-    except OSError as exc:
-        raise SessionFormatError(f"Could not read session file: {path}") from exc
+        payload = _read_session_json(path)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     if not isinstance(payload, dict):
@@ -518,18 +532,16 @@ def _decode_drawing(
             "Sessions version 27 through 30 support internal CLI replay only and do not "
             "have a public typed-request conversion."
         )
-    from gbdraw.session_request_codec import (
-        CanonicalRequestCodecError,
-        decode_canonical_request,
-    )
+    from gbdraw.session_request_codec import CanonicalRequestCodecError
     from gbdraw.api.session_compat import (
-        canonical_payload_for_session_decode,
+        decode_session_request,
         promote_legacy_session_similarity_alignment_request,
     )
 
     try:
-        request = decode_canonical_request(
-            canonical_payload_for_session_decode(version, drawing.request),
+        request = decode_session_request(
+            version,
+            drawing.request,
             resource_paths=materialized.resource_paths,
             output_directory=materialized.output_directory,
         )
@@ -996,8 +1008,8 @@ def _drawing_builds(
 ) -> tuple[_DrawingBuild, ...]:
     """Resolve the requests of ``request`` or ``drawings`` (exactly one)."""
 
-    from gbdraw.api.request_render import resolve_request
     from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest, LinearDiagramRequest
+    from gbdraw.api.session_compat import resolve_session_write_request
 
     if (request is None) == (drawings is None):
         raise SessionFormatError("Pass either request or drawings.")
@@ -1026,7 +1038,7 @@ def _drawing_builds(
                 f"Session drawing mode {spec.mode!r} does not match its {mode} request."
             )
         try:
-            resolved = resolve_request(spec.request) if spec.request is not None else None
+            resolved = resolve_session_write_request(spec.request) if spec.request is not None else None
         except ValidationError as exc:
             raise SessionConversionError(str(exc)) from exc
         builds.append(
@@ -1079,18 +1091,21 @@ def _write_session_document(
     """Write one built session document through a staged commit."""
 
     try:
-        output_path = Path(path)
-        preflight_output_paths((output_path,), overwrite=True)
-        if (output_path.exists() or output_path.is_symlink()) and not overwrite:
-            raise ValidationError(
-                f"Session output already exists: {output_path}. "
-                "Pass overwrite=True to replace it."
-            )
+        _preflight_session_output(path, overwrite=overwrite)
         # The document was validated when it was built.
         _write_validated_session_json(path, document._data, overwrite=overwrite)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     return document
+
+
+def _preflight_session_output(path: str | Path, *, overwrite: bool) -> None:
+    """Refuse a Session output path before anything is built or written."""
+
+    output_path = Path(path)
+    preflight_output_paths((output_path,), overwrite=True)
+    if (output_path.exists() or output_path.is_symlink()) and not overwrite:
+        raise OutputExistsError((output_path,), subject="Session output")
 
 
 def save_session_document(
@@ -1106,6 +1121,11 @@ def save_session_document(
 ) -> SessionDocument:
     """Build and write a current canonical session through a staged commit."""
 
+    try:
+        # A refused output is reported before the drawings are rendered.
+        _preflight_session_output(path, overwrite=overwrite)
+    except ValidationError as exc:
+        raise SessionFormatError(str(exc)) from exc
     document = build_session_document(
         request,
         drawings=drawings,
@@ -1151,6 +1171,72 @@ def _dropped_results_warning(
     )
 
 
+def _upgrade_mode_scoped_session(
+    loaded: SessionDocument,
+    temporary_directory: str | Path | None,
+) -> SessionDocument:
+    """A Session 46 or 47 as the current version, every drawing kept.
+
+    Session 46 gets the Legend edits of each slice keyed by row key (47).
+    The stored protein results of each Linear drawing go to each record's
+    search frame (48, OV-1145): only their resources' bytes change, under
+    their stored IDs.
+    """
+
+    from gbdraw.api.session_compat import (
+        describe_unmatched_frame_item,
+        drawn_frame_protein_results_to_search_frame,
+        replace_resource_bytes,
+        search_frame_protein_resources,
+        stores_protein_results,
+    )
+
+    data = dict(loaded._data)
+    if loaded.version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
+        data, _outcomes = session_legend_edits_by_row_key(data)
+    drawings = [
+        drawing for drawing in loaded._drawings
+        if drawing.mode == "linear" and stores_protein_results(drawing.request)
+    ]
+    if drawings:
+        from gbdraw.api.request_render import plan_request
+
+        replaced: dict[str, bytes] = {}
+        with materialize_session(
+            loaded, output_directory=Path("."), temporary_directory=temporary_directory,
+        ) as materialized:
+            for drawing in drawings:
+                assert drawing.request is not None  # stores_protein_results
+                request = _decode_drawing(materialized, drawing)
+                try:
+                    converted, unmatched = drawn_frame_protein_results_to_search_frame(
+                        plan_request(request), request,
+                    )
+                    if unmatched:
+                        raise SessionConversionError(
+                            f"Cannot upgrade drawing {drawing.id!r} to Session {CURRENT_SESSION_VERSION}: "
+                            f"{describe_unmatched_frame_item(unmatched[0])}."
+                        )
+                    for resource_id, content in search_frame_protein_resources(
+                        drawing.request, request, converted,
+                    ).items():
+                        if replaced.get(resource_id, content) != content:
+                            raise SessionConversionError(
+                                f"Session resource {resource_id!r} holds two different protein results."
+                            )
+                        replaced[resource_id] = content
+                except SessionError:
+                    raise
+                except ValidationError as exc:
+                    raise SessionConversionError(str(exc)) from exc
+        resources = loaded._data["resources"]
+        data["resources"] = {
+            **resources,
+            **{key: replace_resource_bytes(resources[key], content) for key, content in replaced.items()},
+        }
+    return SessionDocument({**data, "version": CURRENT_SESSION_VERSION})
+
+
 def upgrade_session_document(
     document: SessionDocument | Mapping[str, Any] | str | Path,
     *,
@@ -1158,9 +1244,13 @@ def upgrade_session_document(
 ) -> SessionUpgrade:
     """Return a Session in the current version without rendering it.
 
-    A current document is returned unchanged. A Session 46 keeps its
-    drawings and gets its Legend color and stroke edits keyed by row key
-    (:func:`gbdraw.session_io.legend_edits_by_row_key`). A Session 31-44 gets the
+    A current document is returned unchanged. A Session 46 or 47 keeps its
+    drawings; a Session 46 gets its Legend color and stroke edits keyed by
+    row key (:func:`gbdraw.session_io.legend_edits_by_row_key`), and the
+    stored protein results of a reverse-complemented Linear record are
+    written in its search frame under their resource IDs (OV-1145); a result
+    matching neither strand of its record raises
+    :class:`SessionConversionError`. A Session 31-44 gets the
     migrations a CLI re-save applies: its request is decoded, adapted to
     current typed state (comparison frames, similarity alignment, LOSAT
     artifacts) and encoded again with the same resource IDs, and its
@@ -1179,10 +1269,8 @@ def upgrade_session_document(
     loaded = load_session_document(document)
     if loaded.version == CURRENT_SESSION_VERSION:
         return SessionUpgrade(loaded)
-    if loaded.version == MODE_SCOPED_SESSION_MIN_VERSION:
-        # Session 47 differs only in the keys of each slice's Legend edits.
-        keyed, _outcomes = session_legend_edits_by_row_key(loaded._data)
-        return SessionUpgrade(SessionDocument({**keyed, "version": CURRENT_SESSION_VERSION}))
+    if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
+        return SessionUpgrade(_upgrade_mode_scoped_session(loaded, temporary_directory))
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "
@@ -1246,6 +1334,7 @@ def upgrade_session_document(
             raise
         except ValidationError as exc:
             raise SessionConversionError(str(exc)) from exc
+        require_search_frame_protein_results(adapted.migration_report)
         state = with_current_artifacts(
             state,
             losat_cache_entries=adapted.artifacts.losat_cache_entries,

@@ -114,6 +114,14 @@ const CASES = [
     states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
     run: (page) => popupEdit(page, 'TESTA_0004', { visibility: 'off' })
   },
+  // OV-1485: of two CDS at the same location, the one left drawn keeps its
+  // rendered ID (its instance suffix) in the Result Generate draws.
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) of one of two identical features',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    run: (page) => popupEdit(page, { type: 'CDS', product: 'dup alpha' }, { visibility: 'off' })
+  },
   {
     kind: 'feature On',
     edit: 'Feature visibility On (popup) for a feature a rule hid at Generate',
@@ -800,6 +808,44 @@ test('Reset Settings after a palette change and a Legend row stroke shows what G
   const listed = await legendList(page);
   await expectLiveEqualsGenerate(page, { label: 'Reset Settings after a palette change' });
   expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
+});
+
+// OV-1385: a palette color of None draws the Legend row's swatch with fill
+// none, as Python draws it, and the next live edits of that row still find
+// the swatch: no page error, and each step shows what Generate draws (Linear,
+// two genomes, as reported).
+test('Palette color None and the live edits after it show the Legend row Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await openFresh(page);
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setDiagramMode('linear');
+    await window.Vue.nextTick();
+    if (app.linearSeqs.length < 2) app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
+    app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));
+    await window.Vue.nextTick();
+  }, { first: readFileSync('examples/MjeNMV.gb', 'utf8'), second: readFileSync('examples/MelaMJNV.gb', 'utf8') });
+  await generate(page);
+  const swatchFills = (key) => page.evaluate((row) => [...window.__GBDRAW_APP__.svgContainer
+    .querySelectorAll(`g[data-legend-key="${CSS.escape(row)}"]`)]
+    .map((entry) => [...entry.children].find((child) => child.localName === 'path')?.getAttribute('fill')), key);
+  await page.locator('summary[aria-label="Colors"]').click();
+  const mode = page.getByRole('combobox', { name: 'CDS feature color mode', exact: true });
+  const setMode = async (value) => { await mode.selectOption(value); await settleLive(page); };
+  await setMode('none');
+  expect(await swatchFills('CDS'), 'the swatch Python draws for None').toEqual(['none', 'none']);
+  await setMode('auto');
+  expect((await swatchFills('CDS')).every((fill) => fill && fill !== 'none'), 'Auto fills the swatch again').toBe(true);
+  await setMode('none');
+  await expectLiveEqualsGenerate(page, { label: 'CDS color None after Auto' });
+  expect(await swatchFills('CDS'), 'Generate draws the swatch with fill none').toEqual(['none', 'none']);
+  await setMode('auto');
+  await expectLiveEqualsGenerate(page, { label: 'CDS color Auto after a Generate of None' });
+  expect(errors, 'no live edit throws').toEqual([]);
 });
 
 for (const { edit, states, setup, run, knownMismatch } of CASES) {

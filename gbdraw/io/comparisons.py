@@ -19,6 +19,7 @@ from pandas import DataFrame
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 from ..exceptions import ValidationError
+from .table_text import EXACT_FLOAT_READ_OPTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,7 @@ def read_comparison_table(
             quoting=csv.QUOTE_NONE,
             skiprows=skipped or None,
             encoding="utf-8-sig",
+            **EXACT_FLOAT_READ_OPTIONS,
         )
         raw = raw.loc[:, [file_columns[position] for position in positions]]
         raw.columns = list(COMPARISON_COLUMNS)
@@ -362,6 +364,23 @@ class ComparisonFilter(Protocol):
     def alignment_length(self) -> int: ...
 
 
+def read_comparison_resource(source: str | os.PathLike[str]) -> DataFrame:
+    """``read_comparison_table`` of one comparison file, parsed once per Worker resource.
+
+    In a Web render the staged resource's identity keys the frame in the
+    prepared-input cache, so a table whose resource is unchanged is not parsed
+    again; elsewhere the file is read. The frame is shared between renders:
+    a reader copies it before changing it.
+    """
+
+    # Deferred: gbdraw.api imports this module.
+    from gbdraw.api.prepared import get_or_build_decoded_resource
+
+    return get_or_build_decoded_resource(
+        Path(source), ("comparison-table-v1",), lambda: read_comparison_table(source)
+    )
+
+
 def filter_comparison_dataframe(
     df: DataFrame, blast_config: ComparisonFilter
 ) -> DataFrame:
@@ -384,5 +403,6 @@ __all__ = [
     "ComparisonFilter",
     "filter_comparison_dataframe",
     "normalize_comparison_dataframe",
+    "read_comparison_resource",
     "read_comparison_table",
 ]

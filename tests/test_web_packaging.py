@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+from tests.utils.web_markup import read_english_index
 
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -362,7 +363,7 @@ def test_web_asset_notices_name_only_files_the_package_ships() -> None:
 
 @pytest.mark.gallery
 def test_index_links_to_hosted_interactive_gallery() -> None:
-    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    index_html = read_english_index(WEB_ROOT / "index.html")
     assert "Interactive Gallery" in index_html
     assert "./gallery/" not in index_html
 
@@ -702,7 +703,7 @@ def test_runnable_gallery_support_downloads_exist() -> None:
         "tobacco-chloroplast": {
             "./files/chloroplast_specific_table.tsv",
             "./files/qualifier_priority.tsv",
-            "./files/nicotiana-tabacum-regions.tsv",
+            "./files/nicotiana-tabacum-regions-span.tsv",
         },
         "BGC0000708-BGC0000713": {
             "./files/BGC0000708-BGC0000713_default_colors.tsv",
@@ -957,25 +958,28 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
         .get("annotations", {})
         .get("sets", [])
     )
-    assert len(annotation_sets) == 1
-    assert annotation_sets[0]["id"] == "plastome_regions"
-    annotations = annotation_sets[0]["annotations"]
-    assert [annotation["label"] for annotation in annotations] == [
-        "LSC",
-        "IRb",
-        "SSC",
-        "IRa",
+    # The named region lines, then the tint the Underlay span draws.
+    assert [annotation_set["id"] for annotation_set in annotation_sets] == [
+        "plastome_regions",
+        "plastome_tint",
     ]
-    actual_spans = [
-        (annotation["target"]["start"], annotation["target"]["end"])
-        for annotation in annotations
-    ]
-    assert actual_spans == [
+    expected_spans = [
         (1, 86686),
         (86687, 112029),
         (112030, 130600),
         (130601, 155943),
     ]
+    for annotation_set, labels in zip(
+        annotation_sets,
+        (["LSC", "IRb", "SSC", "IRa"], ["", "", "", ""]),
+        strict=True,
+    ):
+        annotations = annotation_set["annotations"]
+        assert [annotation["label"] for annotation in annotations] == labels
+        assert [
+            (annotation["target"]["start"], annotation["target"]["end"])
+            for annotation in annotations
+        ] == expected_spans
 
 
 @pytest.mark.gallery
@@ -1062,7 +1066,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
 
 
 @pytest.mark.browser
-def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
+def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     tmp_path: Path,
 ) -> None:
     from gbdraw._build_support import read_project_version
@@ -1092,12 +1096,10 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
     assert "gtag('config', 'G-GG6JMKM02Y');" in index_html
     assert "static.cloudflareinsights.com" not in index_html
     assert "cloudflareinsights.com" not in index_html
-    assert "Hosted Site Analytics" in index_html
-    assert "uses Google Analytics 4 for aggregate page-usage metrics" in index_html
-    assert (
-        "Uploaded genome files and generated diagrams are still processed locally in your browser"
-        in index_html
-    )
+    # The bundle carries the flag; the About notice is the source template's,
+    # translated like the rest of the page, and shows only when it is set.
+    assert index_html.count(cloudflare_module.HOSTED_ANALYTICS_FLAG) == 1
+    assert "The hosted {site} deployment uses Google Analytics 4" in index_html
     assert (
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;"
         in index_html
@@ -1170,6 +1172,32 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
     assert (
         bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg"
     ).exists()
+
+
+def test_hosted_analytics_flag_is_set_only_by_the_cloudflare_bundle(
+    tmp_path: Path,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    flag = cloudflare_module.HOSTED_ANALYTICS_FLAG
+    # The page reads the flag by the same meta name (utils/hosted-build.js).
+    reader = (REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "hosted-build.js").read_text(
+        encoding="utf-8"
+    )
+    assert f"meta[name=\"{cloudflare_module.HOSTED_ANALYTICS_META_NAME}\"]" in reader
+    assert f'name="{cloudflare_module.HOSTED_ANALYTICS_META_NAME}"' in flag
+    # A non-hosted build (the package's web assets, a stamped build) has no flag.
+    source_index = (REPO_ROOT / "gbdraw" / "web" / "index.html").read_text(encoding="utf-8")
+    assert cloudflare_module.HOSTED_ANALYTICS_META_NAME not in source_index
+    assert "GOOGLE_ANALYTICS_NOTICE" not in source_index
+    stamped_root = tmp_path / "stamped"
+    stamped_root.mkdir()
+    (stamped_root / "index.html").write_text(source_index, encoding="utf-8")
+    cloudflare_module._load_stamp_web_build_module().stamp_web_build(
+        stamped_root, commit_sha="abcdef1234567890abcdef1234567890abcdef12"
+    )
+    stamped_index = (stamped_root / "index.html").read_text(encoding="utf-8")
+    assert cloudflare_module.HOSTED_ANALYTICS_META_NAME not in stamped_index
+    assert "googletagmanager" not in stamped_index
 
 
 def test_cloudflare_gallery_remote_base_rejects_mutable_refs(

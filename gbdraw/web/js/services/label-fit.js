@@ -44,6 +44,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number} overlapPairs
  * @property {number} crossingPairs
  * @property {number} definitionOverlaps
+ * @property {number} regionOverlaps Region labels over other labels or lines (Linear).
  * @property {boolean} refused Radial labels that could not be placed (counts may be 0).
  * @property {string} counts Python's counts, or why the labels were refused.
  */
@@ -53,6 +54,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number} overlapPairs
  * @property {number} crossingPairs
  * @property {number} definitionOverlaps Labels over the definition text.
+ * @property {number} regionOverlaps Region labels over other labels or lines (Linear).
  * @property {readonly string[]} notice Python's sentences for the notice bar over a drawn figure.
  * @property {readonly LabelFitRecord[]} records
  * @property {readonly LabelFitRow[]} rows In the dialog order.
@@ -143,13 +145,14 @@ export const normalizeLabelFitRow = (value) => {
 const normalizeLabelFitReport = (parsed) => {
   if (!isObject(parsed) || parsed.schema !== 1 || typeof parsed.drawn !== 'boolean'
     || !isCount(parsed.overlapPairs) || !isCount(parsed.crossingPairs) || !isCount(parsed.definitionOverlaps)
+    || !isCount(parsed.regionOverlaps)
     || !Array.isArray(parsed.notice) || !parsed.notice.every((sentence) => typeof sentence === 'string')
     || !Array.isArray(parsed.records) || !Array.isArray(parsed.rows)) throw invalid();
   const records = parsed.records.map((record) => {
     if (!isObject(record) || typeof record.recordId !== 'string' || typeof record.labelKind !== 'string'
       || typeof record.labelKindTitle !== 'string' || !isCount(record.labelCount)
       || !isNumber(record.fontSize) || !isCount(record.overlapPairs) || !isCount(record.crossingPairs)
-      || !isCount(record.definitionOverlaps) || typeof record.refused !== 'boolean' || typeof record.counts !== 'string') {
+      || !isCount(record.definitionOverlaps) || !isCount(record.regionOverlaps) || typeof record.refused !== 'boolean' || typeof record.counts !== 'string') {
       throw invalid();
     }
     return Object.freeze({
@@ -161,6 +164,7 @@ const normalizeLabelFitReport = (parsed) => {
       overlapPairs: record.overlapPairs,
       crossingPairs: record.crossingPairs,
       definitionOverlaps: record.definitionOverlaps,
+      regionOverlaps: record.regionOverlaps,
       refused: record.refused,
       counts: record.counts
     });
@@ -170,6 +174,7 @@ const normalizeLabelFitReport = (parsed) => {
     overlapPairs: parsed.overlapPairs,
     crossingPairs: parsed.crossingPairs,
     definitionOverlaps: parsed.definitionOverlaps,
+    regionOverlaps: parsed.regionOverlaps,
     notice: Object.freeze([...parsed.notice]),
     records: Object.freeze(records),
     rows: Object.freeze(parsed.rows.map(normalizeLabelFitRow))

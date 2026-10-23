@@ -73,7 +73,7 @@ const importedMaliciousLegend = await importSession({
 }, { confirmLoadRepairs: async (dialog) => { maliciousLegendDialogs.push(dialog); return true; } });
 assert.equal(importedMaliciousLegend.status, 'ok');
 assert.deepEqual(maliciousLegendDialogs.map(({ items }) => items), [[
-  'Legend: entries "unsafe-current", "unsafe-deleted" (deleted) had a color the app does not accept and were dropped.'
+  'Legend: entries "unsafe-current" and "unsafe-deleted" (deleted) had a color the app does not accept and were dropped.'
 ]]);
 assert.equal(
   state.activeDrawing().legendEntries.value.some((entry) => entry.caption === 'unsafe-current'),

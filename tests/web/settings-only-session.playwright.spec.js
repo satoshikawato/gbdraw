@@ -63,13 +63,14 @@ const loadFile = async (page, file, message = 'Session loaded') => {
   await expect.poll(() => input.inputValue()).toBe('');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   const actual = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
-  const expected = await page.evaluate(async field => {
+  const expected = await page.evaluate(async context => {
     const { normalizeUserFacingError } = await import('./js/utils/error-normalization.js');
     return normalizeUserFacingError({ code: 'INPUT_INVALID', operation: 'session-load', stage: 'request-validation',
-      context: { field, reason: 'FIELDS' } });
-  }, message.field);
+      context: { reason: 'FIELDS', ...context } });
+  }, message);
   expect(actual).toEqual(expected);
-  expect(JSON.stringify(actual)).not.toMatch(/absent|axis_stroke_color|Invalid managed flag|newer than/);
+  expect(JSON.stringify(actual)).not.toMatch(
+    message.reason === 'SESSION_TOO_NEW' ? /absent|axis_stroke_color|Invalid managed flag/ : /absent|axis_stroke_color|Invalid managed flag|newer than/);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(expected.summary);
   return actual;
 };
@@ -274,7 +275,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
     ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
     ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
-    ['version', d => { d.version = 999; }, { field: 'schema' }],
+    ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: CURRENT_SESSION_VERSION }],
     // A Session 46 holds the draft in `modes` only (Session format).
     ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, 'Session loaded']
   ];

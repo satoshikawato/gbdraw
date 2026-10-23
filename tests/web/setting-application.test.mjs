@@ -41,7 +41,7 @@ const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'u
 const lineOf = (offset) => html.slice(0, offset).split('\n').length;
 
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-const PRESENTATION_COMPONENTS = new Set(['help-tip', 'settings-section-title', 'setting-note', 'markup-preview']);
+const PRESENTATION_COMPONENTS = new Set(['help-tip', 'settings-section-title', 'setting-note', 'markup-preview', 'i18n-text']);
 
 // The end of an opening tag, skipping '>' inside quoted attribute values.
 const tagEnd = (from) => {
@@ -246,7 +246,7 @@ test('every row renders its note or its class text', () => {
 });
 
 test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () => {
-  const toggles = settingsControls.filter((element) => /show_gc|show_skew|show_depth|setCircularGcSuppressed|setCircularSkewSuppressed/
+  const toggles = settingsControls.filter((element) => /show_gc|show_skew|setTrackShown|setCircularGcSuppressed|setCircularSkewSuppressed/
     .test(`${element.attributes.get('v-model') || ''} ${element.attributes.get('@change') || ''}`));
   assert.equal(toggles.length, 6, toggles.map(describe).join('\n'));
   for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));
@@ -289,8 +289,11 @@ test('Embed font in exported SVG is an export-only setting', () => {
 });
 
 test('no timing note is written as literal text in index.html', () => {
-  const page = html.replace(/<!--[\s\S]*?-->/g, '');
-  const literal = [...page.matchAll(/appl(?:y|ies) (?:on|to) (?:the next )?Generate|not to Generate|data-applies-on-generate/gi)]
-    .map((match) => `${match[0]} at line ${page.slice(0, match.index).split('\n').length}`);
+  // Skip matches inside HTML comments by their ranges instead of deleting the
+  // comments, which CodeQL reads as incomplete sanitization.
+  const comments = [...html.matchAll(/<!--[\s\S]*?-->/g)].map((match) => [match.index, match.index + match[0].length]);
+  const literal = [...html.matchAll(/appl(?:y|ies) (?:on|to) (?:the next )?Generate|not to Generate|data-applies-on-generate/gi)]
+    .filter((match) => !comments.some(([start, end]) => match.index >= start && match.index < end))
+    .map((match) => `${match[0]} at line ${html.slice(0, match.index).split('\n').length}`);
   assert.deepEqual(literal, []);
 });

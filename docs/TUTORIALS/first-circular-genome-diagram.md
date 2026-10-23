@@ -43,7 +43,7 @@ files selected.
 Select **Circular** at the top of the app and keep **GenBank** selected under **Input Genomes**. In **GenBank/DDBJ File**, choose `HmmtDNA.gbk`.
 
 The uploader should show `HmmtDNA.gbk` in green. The app inspects the file at
-once: **Source records** reports **1 source record(s) inspected**, and the
+once: **Source records** reports **1 source record inspected**, and the
 `NC_012920.1` rotation row appears below it.
 
 ![Circular GenBank input showing HmmtDNA.gbk selected](../images/t-gui-01/01-input-ready.png)

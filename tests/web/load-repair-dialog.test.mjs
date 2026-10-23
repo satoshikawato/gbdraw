@@ -23,21 +23,25 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-// Save Session downloads through a link (G2 saves the loaded Session).
-globalThis.document = { createElement: () => ({ click: () => {} }) };
+// Save Session downloads through a link (G2 saves the loaded Session); setUiLocale sets the page's lang.
+globalThis.document = { createElement: () => ({ click: () => {} }), documentElement: { setAttribute: () => {} } };
 installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
-const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
+const { getCommittedCanonicalSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 const { readSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 // A Session older than 40 has its Results transformed through the composition root's port.
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
+// Node has no diagram Worker: Python's conversion of the protein results a
+// Session up to 47 stored for a reversed record (OV-1145) is stubbed per test.
+const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+const { readSessionResourceText } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state);
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
@@ -98,7 +102,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   assert.deepEqual(dialogs, [{
     title: 'Load this file?',
     description: 'Some parts of this file cannot be fully restored:',
-    items: ['1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'],
+    items: ['1 feature edit from an older Session could not be matched to a feature of its saved diagram and was dropped.'],
     note: 'Save Session afterwards writes the current format. The file itself is not changed.'
   }]);
   assert.equal(loadedState(), snapshot);
@@ -392,8 +396,8 @@ test('the dialog words each code once, in area order, at most 12 lines (12.3)', 
     loadRepair({ code: 'legend-color-dropped', path: 'modes.linear.editorState.legend.entries', effect: 'dropped', label: 'X' })
   ]);
   assert.deepEqual(dialog.items, [
-    'Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.',
-    '2 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.',
+    'Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.',
+    '2 feature edits from an older Session could not be matched to a feature of its saved diagram and were dropped.',
     'Specific colors: line 3 had extra cells, joined into the last column with one space.',
     'Label whitelist: lines 1, 2, 3, 4, 5, and 2 more lacked a required column and were dropped.'
   ]);
@@ -427,7 +431,7 @@ test('no module outside utils/load-repairs.js words what Load could not restore 
     ? modules(`${dir}${entry.name}/`) : entry.name.endsWith('.js') ? [`${dir}${entry.name}`] : []));
   const texts = [
     'could not be matched to a feature of its saved diagram',
-    'Feature visibility edit(s) from an older Session',
+    'Feature visibility edits from an older Session',
     'could not be renamed to the hash of a feature',
     'had a color the app does not accept',
     'joined into the last column',
@@ -435,7 +439,9 @@ test('no module outside utils/load-repairs.js words what Load could not restore 
     'had a color the table does not accept',
     'cannot be fully restored'
   ];
-  const owners = modules('').filter((path) => texts.some((text) => readFileSync(new URL(path, root), 'utf8').includes(text)));
+  // The generated translation catalogs repeat the English as their keys; they word nothing.
+  const owners = modules('').filter((path) => !path.startsWith('utils/i18n-catalogs/'))
+    .filter((path) => texts.some((text) => readFileSync(new URL(path, root), 'utf8').includes(text)));
   assert.deepEqual(owners, ['utils/load-repairs.js']);
 });
 
@@ -1322,6 +1328,24 @@ test('a feature shape of a feature type the user added survives Save and Load', 
   assert.equal(modeDrawing(state, 'linear').adv.feature_shapes.gene, 'arrow');
 });
 
+// A stored feature label style outside its list (LP-D102) reads as the
+// drawing's mode's packaged style, which the generated mode profile gives
+// (Linear an underline on a box, Circular neither), and is listed.
+test('a stored label style outside its list reads as its mode\'s default and is listed', async () => {
+  const { configFieldRepairs, defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  const { labelStyleForMode } = await import('../../gbdraw/web/js/mode-profiles.js');
+  for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const targets = defaultSettingsContainers(mode);
+    const repairs = configFieldRepairs(targets, { adv: { label_line: 'over', label_protection: 'bogus' } }, 'config', { mode });
+    const { label_line: line, label_protection: protection } = labelStyleForMode(mode);
+    assert.deepEqual([targets.adv.label_line, targets.adv.label_protection], [line, protection], mode);
+    assert.deepEqual(describeLoadRepairs(repairs)?.items, [
+      `Settings: the value "over" (config.adv.label_line) cannot be used; ${line} is used.`,
+      `Settings: the value "bogus" (config.adv.label_protection) cannot be used; ${protection} is used.`
+    ], mode);
+  }
+});
+
 // A similarity-group name that is no text (an object, a boolean) is
 // dropped and counted, not applied as its text; a number is its text. The
 // older `priorityRules` is read only when `qualifierPriorityRules` is
@@ -1593,7 +1617,10 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz', 'cli-linear-protein.v30.gbdraw-session.json.gz', 'conservation-fasta.v39.gbdraw-session.json.gz',
   'lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
   'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz',
-  'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz'
+  'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz',
+  'legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz', 'legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz',
+  // gui-audit-20260930-comparisons loads it in the browser (OV-1181).
+  'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz'
 ]);
 const NEEDS_DIAGRAM_WORKER = new Set([
   'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
@@ -1616,10 +1643,16 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     /** @param {string | URL} url */
     constructor(url) { askedDiagramWorker ||= !String(url).endsWith('/session-import-worker.js'); super(url); }
   };
+  // The protein result conversion answers "nothing changed"; it is asked for
+  // exactly the Sessions that stored protein results of a reversed record.
+  const askedProteinConversion = new Set();
+  let current = '';
+  setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
   for (const [name, url] of corpus) {
     const bytes = readFileSync(url);
     const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
     askedDiagramWorker = false;
+    current = name;
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     if (NEEDS_DIAGRAM_WORKER.has(name)) {
       assert.equal(loaded.status, 'error', `${name} loads in node now: check it here`);
@@ -1637,6 +1670,92 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     if (saved) assert.deepEqual(readSessionDocument(saved).repairs, [], `${name}: G2b`);
   }
   globalThis.Worker = ImportWorker;
+  setStoredProteinResultFrameConverter(null);
+  assert.deepEqual([...askedProteinConversion].sort(), [
+    'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz', 'BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz',
+    'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
+  ]);
+});
+
+// OV-1181: a Session 39 converts too. Its Load commits a detached copy of the
+// stored document, which takes the returned bytes, and the Linear draft's
+// comparisons are projected again from them.
+test('a Session 39 with a protein table of a reversed record installs the converted bytes Python returns at Load', async () => {
+  const session = fixture('BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz');
+  const tableId = 'comparison-resolved-1';
+  const converted = `${resourceText(session.resources[tableId])}# converted\n`;
+  const calls = [];
+  setStoredProteinResultFrameConverter(async (payload) => {
+    calls.push({ version: payload.version, resources: Object.keys(payload.resources).sort() });
+    return { result: { resources: { [tableId]: {
+      data: Buffer.from(converted, 'utf8').toString('base64'), size: Buffer.byteLength(converted)
+    } } } };
+  });
+  try {
+    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(calls, [{ version: 39, resources: Object.keys(session.resources).sort() }]);
+    const committed = getCommittedCanonicalSession();
+    assert.equal(resourceText(committed.resources[tableId]), converted, 'the committed copy holds the converted bytes');
+    assert.equal(committed.resources[tableId].size, Buffer.byteLength(converted));
+    const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
+    assert.equal(await draft.file.text(), converted, 'the Linear draft holds the converted bytes');
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
+});
+
+const COLLINEAR_RC = 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz';
+const COLLINEARITY_ID = 'comparison-canonical-collinearity-1';
+const resourceText = (resource) => Buffer.from(resource.data, 'base64').toString('utf8');
+
+// OV-1145 B-LOAD: the Collinear Session 47 with a reversed record asks Python
+// once, before History's base; the returned bytes replace the stored ones
+// under their ID in what Load commits, the Linear draft and the next Save.
+test('a Collinear Session 47 with a reversed record installs the converted bytes Python returns at Load', async () => {
+  const session = fixture(COLLINEAR_RC);
+  const converted = `${resourceText(session.resources[COLLINEARITY_ID])}\n`;
+  const calls = [];
+  setStoredProteinResultFrameConverter(async (payload) => {
+    calls.push({ version: payload.version, resources: Object.keys(payload.resources).sort() });
+    return { result: { resources: { [COLLINEARITY_ID]: {
+      data: Buffer.from(converted, 'utf8').toString('base64'), size: Buffer.byteLength(converted)
+    } } } };
+  });
+  try {
+    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => assert.fail('no row') });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(calls, [{ version: 47, resources: Object.keys(session.resources).sort() }]);
+    const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'collinearityResult');
+    assert.equal(await readSessionResourceText(draft.file), converted, 'the Linear draft holds the converted bytes');
+    const saved = await savedSession('collinear rc');
+    assert.equal(resourceText(saved.resources[COLLINEARITY_ID]), converted, 'Save writes the converted bytes');
+    assert.equal(saved.resources[COLLINEARITY_ID].size, Buffer.byteLength(converted));
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
+});
+
+// PD-OI-046: a conversion that fails fails the Load; the Session, Results
+// and input files committed before it stay. The shown artifact's run
+// metadata is the app's rollback extension (createSessionImportRollbackState),
+// which this harness does not compose.
+test('a failed protein result conversion fails the Load and keeps what was committed', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const before = loadedState();
+  const savedBefore = await savedSession('before');
+  setStoredProteinResultFrameConverter(async () => { throw new Error('probe: conversion failed'); });
+  try {
+    const loaded = await importSession(input(fixture('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz')), {
+      transformLegacyResultSvg, confirmLoadRepairs: async () => true
+    });
+    assert.equal(loaded.status, 'error');
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
+  assert.equal(loadedState(), before);
+  const savedAfter = await savedSession('before');
+  assert.deepEqual({ ...savedAfter, createdAt: null, runMetadata: null }, { ...savedBefore, createdAt: null, runMetadata: null });
 });
 
 // A Session whose font this page cannot draw also asks the Font question
@@ -1663,4 +1782,19 @@ test('the font question of a lossy Session comes after the repair dialog', async
   assert.deepEqual(await answered(true, false), { status: 'canceled', asked: ['repairs', fonts] });
   assert.deepEqual(await answered(true, true), { status: 'ok', asked: ['repairs', fonts] });
   assert.equal(modeDrawing(state, 'linear').adv.font_family, "'Missing Probe Font'");
+});
+
+// Review L3 (D-17): a Session table's label in a repair line is a key of the error wording
+// owner (`SESSION_TABLE_LABELS`) and is shown in the UI language, inside the translated line.
+test('a table repair line shows the table label in the UI language', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+  try {
+    await setUiLocale('ja', async () => ({ default: { 'Specific colors': '«Specific colors»' } }));
+    const dialog = describeLoadRepairs([loadRepair({ code: 'table-row-joined', path: 'specific-colors', effect: 'changed', line: 3 }),
+      loadRepair({ code: 'table-row-dropped', path: 'unknown-table', effect: 'dropped', line: 2 })]);
+    assert.deepEqual(dialog.items, ['«Specific colors»: line 3 had extra cells, joined into the last column with one space.',
+      'unknown-table: line 2 lacked a required column and was dropped.']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

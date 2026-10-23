@@ -1056,8 +1056,8 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       runDiagramHelperOperation
     } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const helper = await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-      { caption: 'lazy worker reuse', fontFamily: 'Arial', fontSize: 14 }
+      DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+      { features: [], rules: [], kind: 'color' }
     );
     const beforeSecond = history.getDiagnostics();
     const undoCountBeforeSecond = history.getUndoCount();
@@ -1067,9 +1067,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const undoCountAfterSecond = history.getUndoCount();
     const redoCountAfterSecond = history.getRedoCount();
     const generateProbe = window.__GBDRAW_LAZY_SESSION_PROBE__.snapshot();
-    const editableFeature = app.extractedFeatures.find((feature) => (
-      app.canEditFeatureColor(feature)
-    ));
+    const editableFeature = app.extractedFeatures[0];
     if (!editableFeature) {
       throw new Error('The synthetic session has no editable feature for mutation isolation.');
     }
@@ -1136,7 +1134,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
         redoEdit,
         afterRedoEdit
       },
-      helperWidth: Number(helper?.result?.width || 0),
+      helperAnswered: Array.isArray(helper?.result?.matches),
       errorSummary: String(app.errorLog?.summary || '')
     };
   });
@@ -1145,7 +1143,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     second: { status: 'ok' },
     errorSummary: ''
   });
-  expect(generated.helperWidth).toBeGreaterThan(0);
+  expect(generated.helperAnswered).toBe(true);
   expect(generated.firstUndoCount).toBe(1);
   expect(generated.firstRedoCount).toBe(0);
   expect(generated.firstUndoLabel).toBe('Generate diagram');
@@ -1556,7 +1554,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   expect(rejected.status).toBe('error');
   expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' }
+    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'SESSION_TOO_NEW', latestSessionVersion: expect.any(Number) }
   });
   expect(rejected.message).not.toContain('unused-lazy-contract');
   expect(await page.evaluate(() => {

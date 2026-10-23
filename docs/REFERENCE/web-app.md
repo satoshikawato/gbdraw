@@ -53,9 +53,11 @@ label edits, Feature placements, annotation sets, Depth series, custom track
 stacks, and the layout positions. A change made in one mode stays in that mode,
 including a Generate; switching modes changes no setting and shows that mode's
 settings and Result. **Reset Settings** resets both modes, and one **Undo**
-restores both. The input files, LOSAT run settings (run mode and threads), and
-the rich feature popup are shared. A saved Session keeps each mode's settings
-(Session 47, [compatibility](session-and-request-compatibility.md)).
+restores both. The Circular inputs (**GenBank/DDBJ File**, or **GFF3 File** and
+**FASTA File**) and the Linear **File** cards are separate inputs: a Circular
+upload does not appear in Linear, and a mode switch keeps both. LOSAT run settings (run mode and threads) and the rich
+feature popup are shared. A saved Session keeps each mode's settings
+(Session 48, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
@@ -171,6 +173,8 @@ settings change. Other manual positions have no new regeneration guarantee.
 generation keeps the last successful Result. While a diagram is generating,
 **Undo** and **Redo** and their keyboard shortcuts are unavailable, and the
 header names the reason; settings edits stay available and are recorded.
+Undo history has a memory limit. When a large diagram reaches it, the oldest
+steps are discarded and a notice says so; the step just taken stays undoable.
 
 **Save Session** saves the current Result and supported settings draft together.
 **Load Session** displays that saved Result without applying a newer draft.
@@ -332,6 +336,21 @@ format contains and the export notices, and
 [Session fonts](session-and-request-compatibility.md#fonts) for loading a
 Session whose font is not available.
 
+### Label Line and Label Protection
+
+**Label Line** (**None**, **Underline**) and **Label Protection** (**None**,
+**Halo**, **Box**) follow **Label Rendering** under **Labels**. They set how a
+feature label with a leader line is drawn, as `--label_line` and
+`--label_protection` do on the
+[command line](command-line.md#tracks-annotations-and-presentation). Circular
+and Linear each have their own pair (Linear **Underline** and **Box**, Circular
+**None** and **None** by default; **Halo** can be chosen), which applies on Generate and is saved in
+Sessions. **Underline** is drawn under horizontal labels only; a turned label
+gets no line, and its leader ends at the letters. **Box** is a white box at 80 % opacity behind the letters; in Linear a turned
+**Above Feature** label on its feature gets one too. When **Halo** is chosen, the PDF
+export draws labels without their halos; SVG, Interactive SVG and PNG keep
+them. A box is drawn in every format.
+
 ### Numeric settings
 
 Generate sends every numeric setting as you typed it. An empty field means Auto
@@ -389,6 +408,11 @@ overlay from its anchor to that slot (`to_slot`, see
 [Region annotations](../CLI_Reference.md#region-annotations)), or **None**. The
 list offers the anchor's slots except the anchor itself, and the setting applies
 on Generate. Moving the row off its anchor or changing its renderer clears it.
+The editor has no `z` field: placing the row on its anchor, or changing its
+layer (**Underlay** or **Foreground**), anchor or **Extend to**, gives it a `z`
+one below the lowest (**Underlay**) or one above the highest (**Foreground**)
+`z` of the slots it names, and keeps a `z` that already meets that rule, such as one from a loaded
+Session.
 
 Each Circular row keeps its inner and outer gap in a disclosure under the row;
 for a GC or AT content or skew row it also holds the dinucleotide, the legend
@@ -422,7 +446,10 @@ use, and turning the option off enables those rows again. A row with another
 dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
 rows it drew; any other row, and every row before the first Generate, shows an
-estimate written as "≈ … (estimate)". A ticks row's **Radius** note is the tick
+estimate written as "≈ … (estimate)". An **Overlay anchor** annotation row
+that no diagram has drawn yet names the rows it follows instead, such as
+"follows features → gc_content" (Circular **Width** and **Radius**, Linear
+height). A ticks row's **Radius** note is the tick
 anchor, the radius that a typed **Radius** pins, not the centre of its band.
 
 ### Follow a Result and its settings draft
@@ -432,16 +459,14 @@ For a small Linear comparison, download the complete GenBank records
 and [DE3 (NC_042057.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text).
 Save them as `NC_001416.1.gb` and `NC_042057.1.gb`. Check the VERSION lines and
 complete lengths, 48,502 and 42,925 bp, before uploading them to two Linear File
-cards. A sequence version does not freeze its annotation table; the capture's
-exact source retrieval and hashes are recorded in the
-[reproduction receipt](../capture/linear-live-edit-source-verification.json).
+cards. A sequence version does not freeze its annotation table.
 
-1. Open **Advanced comparison and layout**, enable **Arrange in rows**, and put
+1. Open **Advanced comparison and layout**, check that **Arrange in rows** is on, and put
    both records in row 1. The Auto explanation describes hiding Accession and
    Length throughout the next generated diagram. Follow **Record Labels:
    Accession** to its unchanged Auto selection. Choose Show for both fields,
    then put DE3 in row 2 to return to a stacked comparison.
-2. In **Linear Layout**, turn **Lock Definition Column** OFF and back ON.
+2. In **Layout**, turn **Lock Definition Column** OFF and back ON.
    Choose **Run LOSAT**, keep LOSATN, and enable all labels under **Labels**.
    To reproduce the figure, set **Label Font Size** and Record Labels' **Default
    font size** to `24`, and upload `cds_gene_qualifier_priority.tsv` as the
@@ -468,16 +493,14 @@ CDS	gene
 ![A Lambda–DE3 comparison containing the live portal label, record metadata, feature labels, legend, and comparison ribbons.](../assets/web-app/linear-current-result.png)
 
 The figure uses a gene-label priority rule and uses larger label fonts for
-readability. Use preview zoom and pan to inspect individual features. The
-[documentation capture instructions](../capture/README.md#linear-result-and-draft-checkpoints)
-regenerate the image and verify all checkpoints through the UI.
+readability. Use preview zoom and pan to inspect individual features.
 
 ## Circular source records and one-record settings
 
 The browser inspects a Circular source as soon as you choose a **GenBank/DDBJ
 File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
 needed. **Source records** shows **Inspecting source records…** and then the
-count, such as **1 source record(s) inspected**. Each record's rotation row
+count, such as **1 source record inspected**. Each record's rotation row
 appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
 **Upload both GFF3 and FASTA files to inspect records.** Replacing the file
 inspects the new source. For GFF3 + FASTA, the records are the sequences that have GFF3 rows, in FASTA
@@ -620,7 +643,7 @@ When every record is off, **Generate Diagram** shows "Turn on at least one
 record to draw." LOSAT keeps the whole subject File as its E-value database and
 runs pairs only between records that are on.
 
-Turn on **Arrange in rows** to assign records to rows. Record-card order is the
+**Arrange in rows** is on by default; with it on, you assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
@@ -640,7 +663,8 @@ organism gets no row-level text.
 
 New Web diagrams and **Reset Settings** start with **Lock Definition Column**
 on. Definitions then share a left edge, with the configured definition gap
-before the nearest sequence. Turn it off explicitly to use a common column
+before the nearest sequence, or before its depth or GC% axis labels when it
+draws them. Turn it off explicitly to use a common column
 center that follows each row's horizontal offset. Shorter text can leave more
 space; record-local text stays above its own sequence. Either selection
 redraws the current Result (**Live edit**).
@@ -649,7 +673,7 @@ Loading a session preserves its saved ON or OFF selection and its saved Result.
 Supported older sessions that omitted the setting keep their former OFF meaning.
 The CLI and Python API still default to OFF when the option is omitted.
 
-**Show Replicon** controls one automatic name per record, taking the first available
+The **Show** box of the **Replicon** row under **Titles & Record Labels → Record Labels** controls one automatic name per record, taking the first available
 source qualifier in the order chromosome, plasmid, organelle. It is off by default.
 Automatic names use the **Replicon** line style; explicit subtitles use **Subtitle**
 and stay visible independently, even when their text matches the automatic name.
@@ -664,7 +688,7 @@ the entire diagram. Turning **Arrange in rows** off ignores dormant shared-row
 assignments. Changing the layout recalculates Auto but never rewrites an explicit
 Show or Hide selection. **Replicon** stays a separate checkbox.
 
-The Auto explanation in **Linear Layout** and **Record Labels** names the affected
+The Auto explanation in **Layout** and **Record Labels** names the affected
 fields. It describes the current Result when that Result already shows or hides
 them as Auto now would, and otherwise the next successful Generate. Select **Record Labels: Accession** or **Record Labels: Length /
 Coordinates** beside that explanation to open the label controls and focus the
@@ -695,6 +719,7 @@ definitions, and legends do not change biological coordinates.
 | Comparison | No rings until configured | No comparison until a command creates a plan |
 | Pairwise match style | Ribbon | Curve |
 | Accession / Length visibility | Not applicable | Auto · Shown |
+| Arrange in rows | Not applicable | On |
 | Lock Definition Column | Not applicable | On |
 
 Loading a session restores its saved values instead of applying these
@@ -724,7 +749,7 @@ the **LOSATP mode** menu selects
 **Similarity groups**, **Collinear blocks**, or **Pairwise matches**. Selected
 or mixed pair plans allow LOSATN, TLOSATX, and LOSATP Pairwise matches.
 Similarity groups and Collinear blocks require all-adjacent LOSAT; with
-selected pairs those options read **(all pairs only)** and cannot be chosen.
+selected pairs those options read **(all adjacent pairs only)** and cannot be chosen.
 
 Problems in the pair plan appear once, in the **Fix before Generate** list under
 the Comparison commands. Each entry names its cause and offers the action that
@@ -751,19 +776,20 @@ plan is reported as an error instead.
 **Settings** shows only controls used by the active LOSAT program and, for
 LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's
 active genetic code in that record's **Record options**. LOSATP **Pairwise
-matches** shows **Max hits per protein**; **Similarity groups** shows **Member
-hits per protein**; **Collinear blocks** shows its primary block, scope, and
+matches** shows **Max hits per protein**; **Similarity groups** shows **Max
+hits per protein for groups**; **Collinear blocks** shows its primary block, scope, and
 color controls. **Result filters** and **Comparison appearance** follow, then
 **Search limits** and **Performance**. **Max target seqs** is visible under
-**Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Member hits per protein**
+**Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Max hits per protein for groups**
 initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
 remembers its own edited values. Blank means unbounded.
 
-Collinear also shows **Infer orthogroups with self-comparisons**, initially
-OFF. Enable it to add within-record searches and paralog-aware orthogroup
-inference. OFF builds blocks from comparisons between records only. **Paralog links per
+Collinear also shows **Build similarity groups with within-record searches**,
+initially OFF. Enable it to add within-record searches and group proteins,
+paralogs included, into similarity groups before blocks are built. OFF builds
+blocks from comparisons between records only. **Paralog links per
 group** appears in Advanced under **Advanced collinear search** when inference is enabled,
-and under **Advanced similarity groups** in Similarity groups; both modes draw with the
+and under **Advanced similarity group settings** in Similarity groups; both modes draw with the
 same value, initially `2`. Shared result
 filters appear in the same disclosure. LOSATN,
 TLOSATX, LOSATP Pairwise matches, and uploaded comparison files also show **Comparison
@@ -803,7 +829,7 @@ block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
 
-Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST**.
+Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
 Uploaded comparison tables use **BLAST outfmt 6/7 files** and **Reference side**
 (**Auto (...)**, **Query**, or **Subject**). A browser-generated Circular
 comparison uses the displayed Circular record as the search subject and each
@@ -849,7 +875,9 @@ narrow. While it is open, the figure is fitted to the room that remains, the
 Editor is closed, and the feature popup is hidden. **Cancel**, Escape, or a
 successful **Apply** closes the panel and brings back the popup, the Editor
 tab, and the zoom and pan from before the review; a Session saved during the
-review stores that earlier zoom and pan. A one-click **Align…** that applies
+review stores that earlier zoom and pan. A review of one mode that ends while
+the other mode is shown leaves that mode's zoom and pan as they are. A
+one-click **Align…** that applies
 without a review leaves the Editor, the popup, and the view as they are.
 
 The header carries the label **Apply required**: nothing changes until
@@ -1116,7 +1144,13 @@ or rules that draw the row, the feature type's default color, or colors set on
 individual features. **Color** and **Legend name** edit the row as the Legend
 tab does, with the same **Merge into "<name>"**, **Keep both**, or **Cancel**
 choice for a name another row uses, and **Remove from legend** moves the row to the Legend tab's
-**Deleted items**. A click on a record definition (the Linear record label on
+**Deleted items**. On a row that the feature type's default color draws, **Color**
+sets that type's default color, as **Legend item** in the **Color Change Scope**
+dialog does, so the features and the legend change together in one History step.
+The popup of a GC content, GC skew, or Depth row names its
+plot (**Content plot**, **Skew plot**, **Depth plot**) instead of a feature
+count; its **Color** changes the legend swatch only, and the plot keeps the
+color set in Settings. A click on a record definition (the Linear record label on
 the left, or the Circular center text) opens the record popup. Its heading
 shows the name lines of the definition as the Result draws them. It lists the
 **Accession**, **Length**, **Reverse complement**, **Display start**, and
@@ -1182,11 +1216,15 @@ keeps `CDS (2)` as written, and the numbering of `CDS` skips it. Rows of one
 name and one swatch are one row, so **Keep both** with an equal swatch gives
 one row and its button names it without a number. When the rename takes only
 some features of a row, their new row goes right after the row of that name,
-so the legend draws the name the dialog showed. In the color scope, legend name, and
+so the legend draws the name the dialog showed. Renaming a row that a feature type's default
+color draws keeps its features drawn when you later clear that type in **Feature Types**; set
+their **Feature visibility** to **Off** to hide them. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
 list, a popup stroke edit, or a legend rename opens them, each choice is one
 History step and **Cancel** records none. After a choice the dialog stays open with its buttons
-disabled and shows **Applying an edit…** until the edit is applied. The first
+disabled and shows **Applying an edit…** until the edit is applied. A choice or **Cancel** in the
+**Color Change Scope** or **Stroke Change Scope** dialog leaves the feature popup that opened it
+open with the feature's fill and stroke, so a stroke edit can follow a fill edit. The first
 choice after a page or Session load can wait several seconds while the Python
 runtime starts. A legend row that a color rule draws under the name of a
 generated row in another color (the two are then numbered, such as `rRNA (1)`
@@ -1233,6 +1271,7 @@ changes. They also stay when crop, reverse complement, record order, or a second
 copy of the record changes how the feature is drawn. Every drawn copy of the
 feature shows the edit. Hiding a feature hides its label in the current Result, as Generate does;
 with **Auto Reflow** on, the remaining labels are placed again.
+**Auto Reflow** (Editor) places the labels again after each later label text, **Label visibility**, or feature visibility edit. Turning it on does not move the labels already drawn; they are placed again at the next such edit or **Generate Diagram**.
 
 The Features list and **Search features** list the displayed Result's features
 of the types selected in **Features** at the last Generate, every feature the
@@ -1413,7 +1452,12 @@ multi-record legend position, stays unset. **Reset Settings** is broader than un
 first; its dialog lists what it resets and what stays, and **Reset all settings** applies it. Every Legend rename, of a feature row or a track row such as GC content, returns
 to the caption Python draws. The reset also removes the label table that a loaded
 Session saved and every Similarity group name, including the saved names of
-groups that the current results do not show. In Linear it also clears each record's **Definition**, **Subtitle**,
+groups that the current results do not show. The **Default colors file**,
+**Specific rules file**, **Blacklist File**, **Whitelist File**, and **Priority
+File (TSV)** cards are removed with the settings they loaded; the input files
+(genome, Depth, and comparison files for circular diagrams) stay. **Remove** on one of these
+cards takes back what its file loaded in both modes and keeps your own edits,
+including the rows a **Preset scheme** added; one **Undo** brings both back. In Linear the reset also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan, and turns the
 Linear comparisons off (their uploaded tables stay); the Files, each
 row's selected record, the file defaults, and Depth assignments stay. The name
@@ -1491,8 +1535,8 @@ in the page reading order. Each tip adds one tab stop.
 
 The Linear comparison command group is named **Set all adjacent comparisons**.
 Its buttons are named **Set no comparison**, **Run LOSAT for all adjacent
-pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The buttons do
-not expose pressed state because they are commands. The separate current-plan
+pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The button
+that matches the current plan has `aria-pressed="true"`. The separate current-plan
 status, native disclosure summaries, record uploaders, and pair actions stay keyboard reachable.
 
 ### Color and Label patterns
@@ -1517,7 +1561,7 @@ Retry adds no History action. Revert restores the accepted pattern and field
 focus without evaluating Python or adding History.
 
 **Save Session** and **Generate Diagram** use the last accepted rule, while
-Export uses the current Result. The rejected pattern draft is not saved in a
+the **SVG**, **Interactive SVG**, **PNG**, and **PDF** downloads use the current Result. The rejected pattern draft is not saved in a
 Session or included in diagnostics. Closing and reopening Editor, or temporarily
 switching diagram modes in the same document, retains it. Removing its rule,
 Undo/Redo that replaces that rule, successful document or Session replacement,

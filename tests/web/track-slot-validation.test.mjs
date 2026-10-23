@@ -76,7 +76,7 @@ const {
 const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack } = await import(
   pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
@@ -565,8 +565,38 @@ test('Linear editor shows the row issue after a File clear keeps the series', ()
       annotationSets: []
     })
   });
-  assert.equal(editor.linearTrackSlotIssue(slots[1], 1), "Linear Depth track 'depth_1' has no logical Depth source.");
+  assert.equal(editor.linearTrackSlotIssue(slots[1], 1), 'This row has no Depth source.');
   assert.equal(editor.linearTrackSlotIssue(slots[2], 2), '');
+});
+
+// D-51: the slot editor shows each issue as one sentence in the UI language,
+// worded for the row it sits in; `message` stays the English that Generate throws.
+test('Linear editor shows row and global issues in the UI language (D-51)', async () => {
+  const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  const { errorText } = await import(pathToFileURL(join(tempRoot, 'utils', 'error-text.js')));
+  // OV-1409: a global issue keeps its identity (its code) for the list's key.
+  const shownGlobal = () => editor.linearTrackGlobalIssues().map((issue) => [issue.code, errorText(issue.parts)]);
+  const spacer = (id) => ({ id, renderer: 'spacer', enabled: true, side: 'below', z: 0, params: {} });
+  const slots = [feature(), spacer('gap'), spacer('gap')];
+  const state = withDrawings({
+    form: { linear_track_layout: 'middle', show_depth: false },
+    adv: { linear_track_slots: slots, linear_track_slots_axis_index: 9, nt: 'GC', depth_tracks: [] },
+    linearSeqs: [],
+    annotationSets: []
+  });
+  const editor = createLinearTrackSlotEditor({ state });
+  const plan = validate({ slots, axisIndex: 9 });
+  assert.deepEqual(plan.rowIssues.get(2).map((issue) => issue.message), ["Linear track ID 'gap' is used by more than one enabled row."]);
+  assert.deepEqual(plan.globalIssues.map((issue) => issue.message), ['Linear Axis boundary must be an integer from 0 to 3.']);
+  assert.equal(editor.linearTrackSlotIssue(slots[2], 2), "Track ID 'gap' is used by more than one enabled row.");
+  assert.deepEqual(shownGlobal(), [['axis_out_of_range', 'The Axis boundary must be an integer from 0 to 3.']]);
+  await setUiLocale('ja');
+  try {
+    assert.equal(editor.linearTrackSlotIssue(slots[2], 2), 'トラックID「gap」が、複数の有効な行で使われています。');
+    assert.deepEqual(shownGlobal(), [['axis_out_of_range', '軸の境界は0から3までの整数にしてください。']]);
+  } finally {
+    await setUiLocale('en');
+  }
 });
 
 test('validates Annotation set inventory and advanced params', () => {
@@ -713,6 +743,46 @@ test('Extend to (to_slot) faults are the ones Python refuses, in both modes and 
       assert.throws(() => validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]), undefined, `${label}: binding check`);
     }
   });
+});
+
+// OV-1302: a disabled or missing slot named by an Overlay row refuses Save, Generate and
+// Load with a recognized diagnostic that names the row, not a plain Error.
+test('an Overlay row naming a disabled or missing slot throws a named diagnostic', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const [overlay, reason, field] of [
+      [{ params: { to_slot: 'off' } }, 'OVERLAY_SPAN', 'to_slot'],
+      [{ params: { to_slot: 'missing' } }, 'OVERLAY_SPAN', 'to_slot'],
+      [{ params: { anchor_slot: 'off' } }, 'OVERLAY_ANCHOR', 'anchor_slot']
+    ]) {
+      const slots = spanStack(mode, overlay);
+      assert.throws(() => validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]), (error) => (
+        error.code === 'TRACK_INVALID' && error.context.reason === reason
+        && error.context.field === field && error.context.slotIndex === slots.length - 1
+      ), `${mode} ${field}`);
+    }
+  }
+});
+
+// Every other throw of the same binding loop names the row too (OV-1302 channel).
+test('Overlay binding faults other than a missing slot throw a named diagnostic', () => {
+  const cases = [
+    ['anchor required', { params: { anchor_slot: '' } }, 'OVERLAY_ANCHOR', 'anchor_slot'],
+    ['off Overlay', { side: null, params: { to_slot: 'gc' } }, 'OVERLAY_SIDE', 'side'],
+    ['bad layer', { params: { layer: 'middle' } }, 'LAYER', 'layer'],
+    ['anchor ineligible', { params: { anchor_slot: 'space' } }, 'OVERLAY_ANCHOR', 'anchor_slot'],
+    ['to_slot ineligible', { params: { to_slot: 'notes' } }, 'OVERLAY_SPAN', 'to_slot'],
+    ['z order', { params: { to_slot: 'low' } }, 'DRAW_ORDER', 'z']
+  ];
+  for (const mode of ['circular', 'linear']) {
+    for (const [name, overlay, reason, field] of cases) {
+      const side = overlay.side === null ? { side: mode === 'circular' ? 'inside' : 'below' } : {};
+      const slots = spanStack(mode, { ...overlay, ...side });
+      assert.throws(() => validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]), (error) => (
+        error.code === 'TRACK_INVALID' && error.context.reason === reason
+        && error.context.field === field && error.context.slotIndex === slots.length - 1
+      ), `${mode} ${name}`);
+    }
+  }
 });
 
 test('Extend to (to_slot) is written to the slot text and the payload, and None writes nothing', () => {
@@ -912,4 +982,33 @@ test('invalid depth height remains editable without overwriting its last valid c
   editor.setLinearTrackSlotHeight(slot, '1e1PX');
   assert.equal(state.adv.depth_tracks[0].height, 10);
   assert.deepEqual(buildLinearTrackSlotPayload(slot).height, { value: 10, unit: 'px' });
+});
+
+// OV-1263: Generate stores the Axis index the rows' sides were set from, so an Overlay
+// Annotations row neither moves the Axis under the other rows nor leaves a row between it and
+// the split Features row in conflict with the index.
+test('Generate places a Circular stack and keeps the Axis index its sides follow (OV-1263)', () => {
+  const annotations = (anchor) => ({
+    id: 'annotations', renderer: 'annotations', enabled: true, side: 'overlay', z: 1, params: { set_id: 'r', anchor_slot: anchor }
+  });
+  const row = (id, renderer, side = 'inside', params = {}) => ({ id, renderer, enabled: true, side, z: 0, params });
+  for (const [label, slots, expectedAxis] of [
+    ['an Overlay Annotations row above a row and the split Features row', [
+      annotations('features'), row('gc_content', 'dinucleotide_content'),
+      row('features', 'features', 'overlay', { lane_direction: 'split' }), row('gc_skew', 'dinucleotide_skew')
+    ], 0],
+    ['an Overlay Annotations row after rows inside the Axis', [
+      row('features', 'features', 'inside', { lane_direction: 'inside' }), row('gc_content', 'dinucleotide_content'),
+      row('gc_skew', 'dinucleotide_skew'), annotations('gc_skew')
+    ], 0]
+  ]) {
+    const placed = placeCircularTrackStack(slots, 'GC', 'tuckin', 0);
+    assert.equal(placed.axisIndex, expectedAxis, label);
+    const plan = validateCustomTrackPlan({
+      mode: 'circular', slots: placed.slots, axisIndex: placed.axisIndex, trackType: 'tuckin',
+      depthTrackCount: 0, annotationSetIds: ['r'], conservationSeries: []
+    });
+    const codes = [...plan.rowIssues.values()].flat().map((issue) => issue.code);
+    assert.deepEqual(codes.filter((code) => code === 'axis_side_conflict'), [], label);
+  }
 });

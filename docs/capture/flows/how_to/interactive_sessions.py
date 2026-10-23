@@ -69,7 +69,7 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 47
+CURRENT_SESSION_VERSION = 48
 CURRENT_RENDER_REQUEST_SCHEMA = 9
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
@@ -286,7 +286,7 @@ def _search_and_open_feature(
     search = page.get_by_role("searchbox", name="Search features", exact=True)
     search.fill(query)
     field_control = page.get_by_role(
-        "combobox", name="Search field", exact=True
+        "combobox", name="Field to search", exact=True
     )
     field_control.select_option(field)
     expect(field_control).to_have_value(field)

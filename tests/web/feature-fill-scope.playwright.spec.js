@@ -439,3 +439,81 @@ test('a popup scope dialog opens ready and keeps focus while its choice applies'
     await page.context().close();
   }
 });
+
+// OV-1278 (Owner, Q-04(3), 2026-10-19): a choice in the Color or Stroke Change
+// Scope dialog, Cancel included, leaves the feature popup that opened it open
+// with the value the feature now has, so a stroke edit can follow a fill edit.
+test('the feature popup stays open after a Color or Stroke Change Scope choice (OV-1278)', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+  try {
+    const featureId = await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const feature = app.extractedFeatures.find((candidate) => candidate.type === 'tRNA');
+      app.openFeatureEditorFromList(feature, { clientX: 220, clientY: 220 });
+      return feature.svg_id;
+    });
+    const popup = page.getByRole('dialog', { name: /Feature details:/ });
+    const fill = popup.getByLabel('Feature fill color').first();
+    const width = popup.getByLabel('Feature stroke width', { exact: true });
+    const drawn = () => page.evaluate((id) => {
+      const element = window.__GBDRAW_APP__.svgContainer.querySelector(`svg [id="${CSS.escape(id)}"]`);
+      const shape = element?.matches('path, rect, polygon') ? element : element?.querySelector('path, rect, polygon');
+      return { fill: shape?.getAttribute('fill'), width: shape?.getAttribute('stroke-width') };
+    }, featureId);
+    const choose = async (title, button) => {
+      const scope = page.getByRole('dialog', { name: title });
+      await expect(scope).toBeVisible();
+      await expect(popup, `the popup stays while the ${title} dialog asks`).toBeVisible();
+      await page.waitForFunction(() => !window.__GBDRAW_HISTORY__.mutationPending());
+      await scope.getByRole('button', typeof button === 'string' ? { name: button, exact: true } : { name: button }).click();
+      await expect(scope).toHaveCount(0, { timeout: 120_000 });
+      await page.waitForFunction(() => !window.__GBDRAW_HISTORY__.mutationPending());
+      await expect(popup, `the popup stays after ${button} in ${title}`).toBeVisible();
+    };
+    await expect(popup).toBeVisible();
+    const original = await drawn();
+
+    await fill.fill('#c026d3');
+    await choose('Color Change Scope', 'Cancel');
+    await expect(fill, 'Cancel: the popup shows the feature\'s color').toHaveValue(String(original.fill).toLowerCase());
+    expect(await drawn()).toEqual(original);
+
+    // All tRNA features: the type's default color (OIC-029), so the feature
+    // keeps sharing its row and the stroke edit asks next.
+    await fill.fill('#c026d3');
+    await choose('Color Change Scope', /^Legend item "tRNA"/);
+    await expect(fill).toHaveValue('#c026d3');
+    await expect.poll(async () => (await drawn()).fill).toBe('#c026d3');
+
+    // Choosing Color in the mode select keeps the stroke's own color (no dialog); a picked color asks, and Cancel
+    // returns the picker to the color the feature has.
+    const strokeMode = popup.getByLabel('Feature stroke color mode');
+    const strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
+    await expect(strokeMode).toHaveValue('auto');
+    // The mode path: None asks, and Cancel puts the select back to Auto.
+    await strokeMode.selectOption('none');
+    await choose('Stroke Change Scope', 'Cancel');
+    await expect(strokeMode, 'Cancel: the mode select shows Auto again').toHaveValue('auto');
+    const strokeOriginal = await strokePicker.inputValue();
+    await strokeMode.selectOption('color');
+    await expect(strokeMode).toHaveValue('color');
+    await strokePicker.fill('#00aa00');
+    await choose('Stroke Change Scope', 'Cancel');
+    await expect(strokePicker, 'Cancel: the stroke picker shows the feature\'s color').toHaveValue(strokeOriginal);
+    await expect(strokeMode).toHaveValue('color');
+
+    await width.fill('2.5');
+    await width.press('Enter');
+    await choose('Stroke Change Scope', 'Cancel');
+    await expect(width, 'Cancel: the popup shows the feature\'s stroke width').toHaveValue(String(Number(original.width)));
+    await width.fill('2.5');
+    await width.press('Enter');
+    await choose('Stroke Change Scope', 'This feature only');
+    await expect(width).toHaveValue('2.5');
+    await expect.poll(async () => (await drawn()).width).toBe('2.5');
+    await expect.poll(async () => (await drawn()).fill, 'the fill edit stays').toBe('#c026d3');
+  } finally {
+    await page.context().close();
+  }
+});

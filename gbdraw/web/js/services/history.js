@@ -5,13 +5,17 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 
+// tests/web/history-inputs.test.mjs loads this module with its own imports
+// only, so it declares the key marker of utils/i18n.js itself.
+/** @param {string} text @returns {string} */
+const msg = (text) => text;
+
 const DEFAULT_MAX_ACTIONS = 30;
-const HISTORY_LIMIT_MESSAGE = 'Older undo history was discarded to stay within the history limit.';
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
 // The Session availability wording for an edit still being applied.
 const HISTORY_EDIT_BUSY = Object.freeze({
   status: 'busy',
-  reason: 'Applying an edit. Retry after the edit finishes.'
+  reason: msg('Applying an edit. Retry after the edit finishes.')
 });
 
 /**
@@ -361,12 +365,17 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {HistoryBudget} [budget]
  *   The byte budget and file retention this manager shares with the other
  *   drawings' managers (`createHistoryRouter`); its own by default.
+ * @property {(message: string) => void} [onHistoryLimit]
+ *   Told when the byte limit dropped steps, with the sentence that says so
+ *   (English, marked with `msg`); the step-count window (`maxActions`) drops
+ *   its oldest step silently.
  * @property {<T>(value: T) => { value: T }} [makeRef]
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
  *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
  * @property {(step: { type: string, changes?: unknown }) => HistoryBusy | null} [stepAvailability]
- *   The composition root's busy answer for one Undo or Redo step.
+ *   The composition root's busy answer for one Undo or Redo step. Undo, Redo,
+ *   and their enabled state read it for the top step, so it must read reactive state.
  * @property {readonly string[] | null} [identityMapPath]
  *   The intent path of a map keyed by Result identity (the composition
  *   offsets); `heldIdentities` lists the keys History holds there (OV-110).
@@ -386,17 +395,19 @@ const checkpointSvgBytes = (checkpoint) => (
  * @typedef {object} HistoryBudgetMember
  * @property {() => number} entryBytes The bytes its entries retain.
  * @property {() => Set<string>} retainedFileIds The files its current intent and entries name.
- * @property {() => 'undo' | 'redo' | null} dropOldestStep
+ * @property {(kept: object | null) => 'undo' | 'redo' | null} dropOldestStep
  *   Drops its oldest Undo entry, or its Redo entries when no Undo entry is left,
- *   and says which; `null` when it holds none.
- * @property {() => void} noteEvicted Shows that its older Undo History was discarded.
+ *   and says which; `null` when it holds none. It keeps `kept`, the step just
+ *   recorded, undone, or redone (OV-1260).
+ * @property {(message: string) => void} noteEvicted
+ *   Tells that the byte limit dropped its steps, with the sentence that says so.
  *
  * The byte budget and file retention of every drawing's History (OV-112).
  * @typedef {object} HistoryBudget
  * @property {(member: HistoryBudgetMember) => void} join
- * @property {() => void} enforce
+ * @property {(kept?: object | null) => void} enforce
  *   Drops steps until the retained bytes fit, oldest first, from the members in
- *   `evictionOrder`; then releases the files no member names.
+ *   `evictionOrder`, keeping `kept` (OV-1260); then releases the files no member names.
  * @property {() => void} releaseUnreferencedFiles
  */
 
@@ -432,16 +443,24 @@ export const createHistoryBudget = ({
   const releaseUnreferencedFiles = () => {
     if (retainOnlyFiles) retainOnlyFiles(retainedFileIds());
   };
-  const enforce = () => {
+  // OV-1260, OV-1365: every byte-limit drop is announced through the one
+  // notice path, in English marked with `msg`: the notice translates it where
+  // it shows it.
+  /** @param {object | null} [kept] */
+  const enforce = (kept = null) => {
     evictionOrder([...members]).forEach((candidate) => {
       let undoDropped = false;
+      let redoDropped = false;
       while (overBudget()) {
-        const dropped = candidate.dropOldestStep();
+        const dropped = candidate.dropOldestStep(kept);
         if (!dropped) break;
         if (dropped === 'undo') undoDropped = true;
+        else redoDropped = true;
       }
-      // The notice names undo history: a pass that drops only Redo steps is silent.
-      if (undoDropped) candidate.noteEvicted();
+      const message = undoDropped && redoDropped ? msg('Older undo history and the redo history were discarded to stay within the history limit.')
+        : undoDropped ? msg('Older undo history was discarded to stay within the history limit.')
+          : redoDropped ? msg('Redo history was discarded to stay within the history limit.') : '';
+      if (message) candidate.noteEvicted(message);
     });
     releaseUnreferencedFiles();
   };
@@ -465,6 +484,7 @@ export const createHistoryManager = ({
   budget = createHistoryBudget({
     maxBytes, estimateFileBytes: fileStore?.estimateBytes, retainOnlyFiles: fileStore?.retainOnly
   }),
+  onHistoryLimit = () => {},
   makeRef = makeBox,
   mutationAvailability = () => null,
   stepAvailability = () => null,
@@ -498,7 +518,6 @@ export const createHistoryManager = ({
   // open intent before `restoring` included (E1: the mode switch waits for them).
   const traversals = makeRef(0);
   const capturing = makeRef(false);
-  const historyLimitMessage = makeRef('');
   const diagnostics = {
     intentBuilds: 0,
     artifactCheckpointBuilds: 0,
@@ -594,8 +613,10 @@ export const createHistoryManager = ({
 
   // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
   // that still owns its intent commit, owns the current state. Undo, Redo, and
-  // their buttons and shortcuts share this one reactive availability; the
-  // Session owner words a Generate or diagram update in progress.
+  // their buttons and shortcuts share this one reactive availability; Undo,
+  // Redo, and their enabled state also read the top step's check
+  // (`topStepAvailability`, OV-1339). The Session owner words a Generate or
+  // diagram update in progress.
   const historyAvailability = () => {
     void transactionRevision.value;
     const busy = mutationAvailability();
@@ -880,27 +901,29 @@ export const createHistoryManager = ({
   const budgetMember = {
     entryBytes: () => totalEntryBytes,
     retainedFileIds: collectRetainedFileIds,
-    dropOldestStep: () => {
-      if (undoStack.length > 0) {
+    // OV-1260: the step just recorded, undone, or redone (`kept`) stays even
+    // when it alone is over the byte limit; the oldest other steps drop first.
+    dropOldestStep: (kept) => {
+      if (undoStack.length > 0 && undoStack[0] !== kept) {
         dropOldestUndo();
         return 'undo';
       }
-      if (redoStack.length === 0) return null;
-      clearRedo();
+      const keptRedo = redoStack.filter((entry) => entry === kept);
+      if (keptRedo.length === redoStack.length) return null;
+      redoStack.filter((entry) => entry !== kept).forEach(removeEntryBytes);
+      redoStack.splice(0, redoStack.length, ...keptRedo);
       return 'redo';
     },
-    noteEvicted: () => { historyLimitMessage.value = HISTORY_LIMIT_MESSAGE; }
+    noteEvicted: onHistoryLimit
   };
   budget.join(budgetMember);
 
-  const enforceLimits = () => {
-    let evicted = false;
-    while (undoStack.length > maxActions) {
-      dropOldestUndo();
-      evicted = true;
-    }
-    historyLimitMessage.value = evicted ? HISTORY_LIMIT_MESSAGE : '';
-    budget.enforce();
+  // OV-1365: the step-count window drops silently, as an undo window does;
+  // only drops caused by the byte limit are announced.
+  /** @param {HistoryEntry | null} [kept] */
+  const enforceLimits = (kept = null) => {
+    while (undoStack.length > maxActions) dropOldestUndo();
+    budget.enforce(kept);
   };
 
   const captureBaseline = async (_label = 'Baseline') => {
@@ -1052,7 +1075,7 @@ export const createHistoryManager = ({
       changeCount: entry.changes.length,
       bytes: entry.byteSize
     });
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     settingsStepListener(entry.changes);
     return true;
@@ -1285,7 +1308,7 @@ export const createHistoryManager = ({
       created: true,
       bytes: entry.byteSize
     });
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     notifyCheckpointCapture(options, 'after-end');
     settingsStepListener(changes);
@@ -1357,7 +1380,7 @@ export const createHistoryManager = ({
     entry.fileIds = new Set([...entry.before.fileIds, ...after.fileIds]);
     addEntryBytes(entry);
     setCurrentCheckpoint(after);
-    enforceLimits();
+    enforceLimits(entry);
     return true;
   };
 
@@ -1620,7 +1643,7 @@ export const createHistoryManager = ({
       bytes: namedBytes
     });
     endStep(entry, transaction);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     emitHistoryDiagnostic({
       type: 'commit',
@@ -1789,7 +1812,7 @@ export const createHistoryManager = ({
     }
     await refreshCurrentIntent();
     endStep(command, command);
-    enforceLimits();
+    enforceLimits(command);
     touch();
     return true;
   };
@@ -1887,6 +1910,13 @@ export const createHistoryManager = ({
     return historyAvailability();
   };
 
+  // OV-1339: the busy answer for the step an Undo (or Redo) takes next, the
+  // top of its stack. The action and its enabled state read this one check.
+  /** @param {HistoryEntry[]} stack */
+  const topStepAvailability = (stack) => (
+    stack.length > 0 ? stepAvailability(stack[stack.length - 1]) : null
+  );
+
   /** @param {() => Promise<unknown>} step */
   const traverse = async (step) => {
     traversals.value += 1;
@@ -1901,9 +1931,9 @@ export const createHistoryManager = ({
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || undoStack.length === 0) return false;
-    const entry = undoStack[undoStack.length - 1];
-    const stepBusy = stepAvailability(entry);
+    const stepBusy = topStepAvailability(undoStack);
     if (stepBusy) return stepBusy;
+    const entry = undoStack[undoStack.length - 1];
     if (entry.type === 'command') {
       const reverted = await applyCommandWithFlag(entry, 'undo');
       if (!reverted) {
@@ -1921,7 +1951,7 @@ export const createHistoryManager = ({
     await restoreSessionPart(entry, 'undo');
     undoStack.pop();
     redoStack.push(entry);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     return true;
   });
@@ -1930,9 +1960,9 @@ export const createHistoryManager = ({
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || redoStack.length === 0) return false;
-    const entry = redoStack[redoStack.length - 1];
-    const stepBusy = stepAvailability(entry);
+    const stepBusy = topStepAvailability(redoStack);
     if (stepBusy) return stepBusy;
+    const entry = redoStack[redoStack.length - 1];
     if (entry.type === 'command') {
       const applied = await applyCommandWithFlag(entry, 'redo');
       if (!applied) {
@@ -1950,7 +1980,7 @@ export const createHistoryManager = ({
     await restoreSessionPart(entry, 'redo');
     redoStack.pop();
     undoStack.push(entry);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     return true;
   });
@@ -1993,8 +2023,12 @@ export const createHistoryManager = ({
     touch();
   };
 
-  const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
-  const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
+  /** @param {HistoryEntry[]} stack */
+  const canTraverse = (stack) => (
+    stack.length > 0 && !restoring.value && !historyAvailability() && !topStepAvailability(stack)
+  );
+  const canUndo = () => canTraverse(undoStack);
+  const canRedo = () => canTraverse(redoStack);
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
@@ -2036,7 +2070,6 @@ export const createHistoryManager = ({
     keepRedrawnResult,
     adoptDrawnWrite,
     intentStepSerial: () => intentStepSerial,
-    historyLimitMessage,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,
     markSavePoint,
@@ -2087,7 +2120,8 @@ export const createHistoryManager = ({
  *   managerOptions: (drawingId: string) => HistoryManagerOptions,
  *   sessionHistory: SessionHistoryPorts,
  *   makeRef?: <T>(value: T) => { value: T },
- *   maxActions?: number
+ *   maxActions?: number,
+ *   onHistoryLimit?: (message: string) => void
  * }} HistoryRouterOptions
  *   The drawings, each with its own History; the shown drawing, whose History
  *   Undo and Redo walk; the capture and restore of one drawing's History and
@@ -2124,6 +2158,7 @@ export const createHistoryRouter = ({
   sessionHistory,
   makeRef = makeBox,
   maxActions = DEFAULT_MAX_ACTIONS,
+  onHistoryLimit = () => {},
   ...budgetOptions
 }) => {
   /** @type {Map<HistoryBudgetMember, string | typeof PROJECT_STREAM>} The stream of each budget member. */
@@ -2168,10 +2203,9 @@ export const createHistoryRouter = ({
     projectUndo.push(entry);
     projectRedo.length = 0;
     every().forEach((manager) => manager.dropRedo());
-    let evicted = false;
-    while (projectUndo.length > maxActions) { projectUndo.shift(); evicted = true; }
-    if (evicted) managerOf(activeDrawingId()).historyLimitMessage.value = HISTORY_LIMIT_MESSAGE;
-    budget.enforce();
+    // The step-count window drops silently (OV-1365).
+    while (projectUndo.length > maxActions) projectUndo.shift();
+    budget.enforce(entry);
     touchProject();
   };
   // The Session-level values a step changed. A step that changed a drawing
@@ -2216,10 +2250,18 @@ export const createHistoryRouter = ({
 
   const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([drawingId, createHistoryManager({
     ...managerOptions(drawingId),
+    onHistoryLimit,
     stepOpened: sessionRecord,
     stepEnded,
     applySessionPart: (part, direction) => applySession(part, direction, { asLeft: true }),
-    budget: { ...budget, join: (member) => joinBudget(drawingId, member) }
+    budget: {
+      ...budget,
+      join: (member) => joinBudget(drawingId, member),
+      // OV-1260 keeps the step the user just recorded, undid or redid in the
+      // shown drawing; a hidden drawing's step drops in the order that follows
+      // the shown drawing (A3 review Low 4).
+      enforce: (kept) => budget.enforce(drawingId === activeDrawingId() ? kept : null)
+    }
   })])));
   /** @param {string} drawingId */
   const managerOf = (drawingId) => {
@@ -2240,14 +2282,15 @@ export const createHistoryRouter = ({
       projectEntries().forEach((entry) => entry.fileIds.forEach((id) => ids.add(id)));
       return ids;
     },
-    dropOldestStep: () => {
-      if (projectUndo.length > 0) { projectUndo.shift(); touchProject(); return 'undo'; }
-      if (projectRedo.length === 0) return null;
-      projectRedo.length = 0;
+    dropOldestStep: (kept) => {
+      if (projectUndo.length > 0 && projectUndo[0] !== kept) { projectUndo.shift(); touchProject(); return 'undo'; }
+      const keptRedo = projectRedo.filter((entry) => entry === kept);
+      if (keptRedo.length === projectRedo.length) return null;
+      projectRedo.splice(0, projectRedo.length, ...keptRedo);
       touchProject();
       return 'redo';
     },
-    noteEvicted: () => { managerOf(activeDrawingId()).historyLimitMessage.value = HISTORY_LIMIT_MESSAGE; }
+    noteEvicted: onHistoryLimit
   });
 
   // A project step's Session-level values, or a drawing entry's (`asLeft`:
@@ -2286,7 +2329,7 @@ export const createHistoryRouter = ({
     });
     from.pop();
     to.push(entry);
-    budget.enforce();
+    budget.enforce(entry);
     touchProject();
     return true;
   };
@@ -2362,12 +2405,14 @@ export const createHistoryRouter = ({
     // checkpoint, as a caller of the action expects; each other drawing
     // captured its state first and records what `fn` changed in it. Their
     // entries are the step's parts, with the Session-level values it changed.
+    // `shouldCommit` answers, from the result, whether the step is recorded.
     /**
      * @template R
      * @param {string} label
      * @param {() => R | Promise<R>} fn
+     * @param {{ shouldCommit?: (result: unknown) => boolean }} [options]
      */
-    runProjectStep: (label, fn) => {
+    runProjectStep: (label, fn, { shouldCommit = () => true } = {}) => {
       const shownId = activeDrawingId();
       /** @type {ProjectPart[]} */
       const parts = [];
@@ -2388,17 +2433,17 @@ export const createHistoryRouter = ({
       /** @type {ReturnType<DrawingHistory['runUndoableCheckpoint']>} */
       let result;
       try {
-        result = managerOf(shownId).runUndoableCheckpoint(label, fn, { takeEntry: take(shownId) });
+        result = managerOf(shownId).runUndoableCheckpoint(label, fn, { takeEntry: take(shownId), shouldCommit });
       } catch (error) {
         void settle(false);
         throw error;
       }
       if (!isPromiseLike(result)) {
-        void settle(true);
+        void settle(shouldCommit(result));
         return result;
       }
       return Promise.resolve(result).then(
-        async (value) => { await settle(true); return value; },
+        async (value) => { await settle(shouldCommit(value)); return value; },
         async (error) => { await settle(false); throw error; }
       );
     },

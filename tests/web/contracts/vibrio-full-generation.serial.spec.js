@@ -789,14 +789,14 @@ const assertRecoverableErrorState = async (page, diagnostic, originalPreview) =>
       runDiagramHelperOperation
     } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const helper = await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-      { caption: 'Vibrio recovery probe', fontFamily: 'Arial', fontSize: 14 }
+      DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+      { features: [], rules: [], kind: 'color' }
     );
     return {
       appAlive: Boolean(app),
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
       previewPreserved: String(selected?.content || '') === expectedPreview,
-      helperWidth: Number(helper?.result?.width || 0)
+      helperAnswered: Array.isArray(helper?.result?.matches)
     };
   }, { expectedPreview: originalPreview });
   expect(recovery, JSON.stringify(diagnostic, null, 2)).toMatchObject({
@@ -804,7 +804,7 @@ const assertRecoverableErrorState = async (page, diagnostic, originalPreview) =>
     previewVisible: true,
     previewPreserved: true
   });
-  expect(recovery.helperWidth).toBeGreaterThan(0);
+  expect(recovery.helperAnswered).toBe(true);
   return recovery;
 };
 
@@ -1373,12 +1373,12 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
       runDiagramHelperOperation
     } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const response = await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-      { caption: 'Vibrio worker alive', fontFamily: 'Arial', fontSize: 14 }
+      DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+      { features: [], rules: [], kind: 'color' }
     );
-    return Number(response?.result?.width || 0);
+    return Array.isArray(response?.result?.matches);
   });
-  expect(workerPing).toBeGreaterThan(0);
+  expect(workerPing).toBe(true);
   const afterPing = await getDiagramWorkerActivity(page);
   expect(afterPing.constructions).toBe(1);
   expect(afterPing.initializations).toBe(1);

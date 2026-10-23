@@ -188,18 +188,22 @@ _GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.js
 
 
 @pytest.mark.parametrize(
-    ("mode", "rows", "display"),
+    ("mode", "rows", "display", "reversed_record"),
     (
         # Similarity groups on the default chain: the edges number the pairs.
-        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}),
+        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, None),
         # Collinear on a CLI row grid with search scope 'all': the grid
         # displays (0, 1) and (0, 2), each numbered by its own adjacent-row edge.
-        ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}),
+        ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
         # A 2x2 grid: the search order and the numbers come from the vector
         # that the Web test checks too (tests/web/linear-comparisons.test.mjs).
-        ("collinear", None, None),
+        ("collinear", None, None, None),
+        # A reverse-complemented record: both payloads hold its results in the
+        # search frame (OV-1145).
+        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, 1),
+        ("collinear", None, {(0, 1): 0, (1, 2): 1}, 1),
     ),
-    ids=("orthogroup", "collinear-grid", "collinear-grid-2x2"),
+    ids=("orthogroup", "collinear-grid", "collinear-grid-2x2", "orthogroup-reversed", "collinear-reversed"),
 )
 def test_web_lookup_converter_and_api_build_one_derived_entry(
     monkeypatch: pytest.MonkeyPatch,
@@ -208,6 +212,7 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
     mode: str,
     rows: tuple[int, ...] | None,
     display: dict[tuple[int, int], int] | None,
+    reversed_record: int | None,
 ) -> None:
     import json
 
@@ -239,6 +244,12 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
             assert [
                 [record.presentation.grid_row, record.presentation.grid_column] for record in request.records
             ] == vector["grid"]
+    if reversed_record is not None:
+        request = replace(request, records=tuple(
+            replace(record, presentation=replace(record.presentation, reverse_complement=True))
+            if index == reversed_record else record
+            for index, record in enumerate(request.records)
+        ))
     source_mode = "orthogroup" if mode == "similarity_groups" else mode
     explicit = rows is not None
 
@@ -266,7 +277,7 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
             "proteinMap": extracted["protein_map"],
             "runtimeBindingHash": extracted["runtime_binding_hash"],
             "displayBindingHash": extracted["display_binding_hash"],
-            "viewTransform": {"length": extracted["record_length"], "reverse": False},
+            "viewTransform": {"length": extracted["record_length"], "reverse": index == reversed_record},
         })
     specs = losatp_job_specs(
         source_mode,
@@ -338,10 +349,28 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
 
     api_payload = api_entry["payload"]
     typed_name = "collinearityResult" if source_mode == "collinear" else "orthogroupResult"
-    assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
-    assert converted["identity"] == api_payload["identity"]
-    assert converted["provenance"] == api_payload["provenance"]
     assert converted["pairs"] == api_payload["pairs"]
+    if reversed_record is not None:
+        # Rows of the reversed record name its CDS in the search frame (F).
+        search_frame = {
+            (int(protein["start"]) + 1, int(protein["end"]))
+            for protein in web_records[reversed_record]["proteinMap"].values()
+        }
+        ends = [
+            tuple(sorted(int(value) for value in columns[start:start + 2]))
+            for pair in api_payload["pairs"]
+            for row in pair["tsv"].splitlines()
+            for columns in [row.split("\t")]
+            for index, start in ((pair["query_index"], 6), (pair["subject_index"], 8))
+            if index == reversed_record
+        ]
+        assert ends and set(ends) <= search_frame
+    if reversed_record is None:
+        # The identity of a reversed record differs between the two (OV-1180,
+        # pre-existing on dev); its pairs and typed result agree.
+        assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
+        assert converted["identity"] == api_payload["identity"]
+        assert converted["provenance"] == api_payload["provenance"]
     assert [(pair["pair_index"], pair["query_index"], pair["subject_index"]) for pair in api_payload["pairs"]] == [
         (number, query, subject) for (query, subject), number in display.items()
     ]
@@ -2302,14 +2331,15 @@ _RECORDED_DERIVED_ENTRIES = {
     # re-recorded when each pair's `rows` became `canonicalTsv` (D-66), and when
     # one owner built the identity, key and pairs (OV-1063: semantics v2, the
     # write-only `orthogroups` member gone, the paralog-link limit in the
-    # orthogroup block).
+    # orthogroup block), and when stored results moved to the search frame
+    # (OV-1145: semantics v3).
     "similarity_groups": (
-        "976d4c7d01a684f025f0f9513b340eeaf9625ef9a7308078f7c267ab8730764e",
-        "d622918a6696b52446d9c8bd54b3b8c869303aa704731bdb35b9020a081ea29c",
+        "ab49e6402431c26299e66aaca22d7f6843b63dbd46c3f9af12f87033ea348768",
+        "36e6fa4e0ce0bb7e070fa2b2799e3818510edac628a6d16c1b99e95cbafebd14",
     ),
     "collinear": (
-        "65970149b79afcbed2563299c8705ccc123d50c6033bcd9cdbfa7d489c83e095",
-        "a8bf088d6d436bddc991f3d28f5d38736d375072d237e8034549c8e9f7b81990",
+        "4fcdd2219f1d0ecad06457bfb21995964b48d48232965edfafa5420093892e49",
+        "8eda1cb2048bfcd0048e4d4fdca44f89c09c636716373e0ff57bee1bd54757c4",
     ),
 }
 
@@ -2558,3 +2588,58 @@ def test_derived_entry_switch_is_reset_after_an_exception() -> None:
 
     assert request_render_module._DERIVED_LOSAT_ENTRIES_WANTED.get() is True
     assert _build_derived_entries(context) == (expected,)
+
+
+@pytest.mark.parametrize("mode", ["similarity_groups", "collinear"])
+def test_a_session_stores_the_protein_results_of_a_reversed_record_in_its_search_frame(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str,
+) -> None:
+    # OV-1145: the stored results do not depend on the drawn strand.
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.api.request_render import stored_protein_result_request
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    forward, _identities = _request(mode, tmp_path)
+    reversed_request = replace(forward, records=tuple(
+        replace(record, presentation=replace(record.presentation, reverse_complement=index == 1))
+        for index, record in enumerate(forward.records)
+    ))
+
+    def spans(orthogroups, collinearity, tables) -> dict[tuple[str, str], set[tuple[object, ...]]]:
+        """Each protein's spans by item kind (the fake search pairs by rank, so pairs differ)."""
+
+        found: dict[tuple[str, str], set[tuple[object, ...]]] = {}
+        groups = orthogroups.orthogroups.values() if orthogroups is not None else ()
+        for member in (member for group in groups for member in group):
+            found.setdefault(("member", member.protein_id), set()).add((member.start, member.end, member.strand))
+        blocks = collinearity.blocks if collinearity is not None else ()
+        for anchor in (anchor for block in blocks for anchor in block.anchors):
+            for role in ("query", "subject"):
+                found.setdefault(("anchor", getattr(anchor, f"{role}_protein_id")), set()).add(tuple(
+                    getattr(anchor, f"{role}_{field}") for field in ("start", "end", "strand", "view_feature_svg_id")
+                ))
+        for table in tables or ():
+            for row in table.to_dict("records"):
+                for role, prefix in (("query", "q"), ("subject", "s")):
+                    found.setdefault(("row", row[role]), set()).add((row[f"{prefix}start"], row[f"{prefix}end"]))
+        return found
+
+    def stored(request: LinearDiagramRequest) -> tuple[dict, dict]:
+        built = build_request_diagram(request)
+        assert built.linear_metadata is not None
+        drawn = built.linear_metadata
+        options = stored_protein_result_request(request, drawn).options
+        return (
+            spans(options.orthogroups, options.collinearity_blocks, options.protein_comparisons),
+            spans(drawn.orthogroups, drawn.collinearity_result, drawn.protein_comparisons),
+        )
+
+    expected, forward_drawn = stored(forward)
+    actual, reversed_drawn = stored(reversed_request)
+    # Forward records: the stored results are the drawn ones (Collinear stores no members).
+    assert expected and all(forward_drawn[key] == value for key, value in expected.items())
+    assert any(reversed_drawn[key] != value for key, value in expected.items())  # drawn is V
+    assert all(actual[key] <= expected[key] for key in actual if key in expected)
+    assert actual.keys() <= expected.keys()
+    assert {kind for kind, _protein in actual} == {kind for kind, _protein in expected}

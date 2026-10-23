@@ -446,12 +446,14 @@ def test_comparison_gradient_color_with_alpha_is_a_table_error_where_it_is_inter
 
 
 def test_orientation_identity_gradient_names_the_collinear_color_key() -> None:
-    from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+    from tests.utils.comparison_tables import ribbon_group
 
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.match_min_color = "#ffffff"
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
-    group.collinearity_orientation_min_colors = {"plus": "#11223344", "minus": "#ffeeee"}
+    group = ribbon_group(
+        [object(), object()],
+        min_color="#ffffff",
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
+        collinearity_orientation_min_colors={"plus": "#11223344", "minus": "#ffeeee"},
+    )
     row = SimpleNamespace(
         collinearity_block_id="b1",
         collinearity_color_mode="orientation_identity",

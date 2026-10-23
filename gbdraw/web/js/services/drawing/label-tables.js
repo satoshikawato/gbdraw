@@ -192,18 +192,6 @@ export const setLabelFilterMode = (slice, mode) => { membersOf(slice).filterMode
 export const setBlacklistText = (slice, text) => { membersOf(slice).manualBlacklist.value = text; };
 
 /**
- * Adds words after the blacklist's own (a blacklist file).
- * @param {LabelTablesSlice} slice
- * @param {readonly string[]} words
- */
-export const appendBlacklistWords = (slice, words) => {
-  const { manualBlacklist } = membersOf(slice);
-  const existing = manualBlacklist.value ? manualBlacklist.value.trim() : '';
-  const separator = existing && !existing.endsWith(',') ? ', ' : '';
-  manualBlacklist.value = existing + separator + words.join(', ');
-};
-
-/**
  * @param {LabelTablesSlice} slice
  * @param {readonly StoredWhitelistRule[]} rules New rows (copied).
  */
@@ -220,30 +208,53 @@ export const removeWhitelistRule = (slice, index) => {
 };
 
 /**
- * One field of a whitelist row; a row of no list of this slice changes nothing.
+ * One field of a whitelist row, which makes the row the user's: it loses its
+ * file card (OV-1280). A row of no list of this slice changes nothing.
  * @param {LabelTablesSlice} slice
  * @param {Readonly<StoredWhitelistRule>} rule
- * @param {keyof StoredWhitelistRule} field
+ * @param {'feat' | 'qual' | 'key'} field
  * @param {string} value
  */
 export const setWhitelistRuleField = (slice, rule, field, value) => {
   const row = membersOf(slice).manualWhitelist.find((candidate) => candidate === rule);
-  if (row) row[field] = value;
+  if (!row) return;
+  row[field] = value;
+  // The mark of the Whitelist file card (services/file-imports.js).
+  delete row.importedFrom;
 };
 
 /**
- * Sets the qualifier order of each rule's feature type: a type with a rule
- * takes the new order, another type is added.
+ * Sets the qualifier order of each rule's feature type by hand: a type with
+ * a row takes a new row of the user's (it loses its file card, OV-1280),
+ * another type is added.
  * @param {LabelTablesSlice} slice
  * @param {readonly Readonly<QualifierPriorityRule>[]} rules
  */
 export const setPriorityRules = (slice, rules) => {
   const list = membersOf(slice).manualPriorityRules;
   rules.forEach(({ feat, order }) => {
-    const row = list.find((candidate) => candidate.feat === feat);
-    if (row) row.order = order;
+    const index = list.findIndex((candidate) => candidate.feat === feat);
+    if (index >= 0) list.splice(index, 1, { feat, order });
     else list.push({ feat, order });
   });
+};
+
+// OV-1280 (D-19): a Whitelist or Qualifier priority file's import and its
+// Remove on the card: the rows services/file-imports.js marks and takes back.
+/**
+ * @param {LabelTablesSlice} slice
+ * @param {readonly StoredWhitelistRule[]} rules The whole list (copied).
+ */
+export const replaceWhitelistRules = (slice, rules) => {
+  replaceList(membersOf(slice).manualWhitelist, /** @type {StoredWhitelistRule[]} */ (cloneJsonData([...rules])));
+};
+
+/**
+ * @param {LabelTablesSlice} slice
+ * @param {readonly Readonly<QualifierPriorityRule>[]} rules The whole list (copied).
+ */
+export const replacePriorityRules = (slice, rules) => {
+  replaceList(membersOf(slice).manualPriorityRules, /** @type {QualifierPriorityRule[]} */ (cloneJsonData([...rules])));
 };
 
 /**

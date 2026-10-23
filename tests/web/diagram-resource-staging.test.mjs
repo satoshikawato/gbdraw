@@ -184,3 +184,57 @@ test('a resource no committed drawing names is released', async () => {
   assert.equal(next.commit(), true);
   assert.deepEqual(stagedTokens(await transport.prepare(circular)), [sha256Hex('OLD CIRCULAR')]);
 });
+
+test('staging decodes base64 with the one shared decoder (OV-1560)', async () => {
+  const bytes = Uint8Array.from({ length: 200_003 }, (_, index) => (index * 89 + 7) % 256);
+  const resources = {
+    big: { kind: 'genbank', name: 'big.gb', type: '', size: bytes.length, lastModified: 0,
+      encoding: 'base64', data: Buffer.from(bytes).toString('base64') },
+    bad: { kind: 'genbank', name: 'bad.gb', type: '', size: 3, lastModified: 0, encoding: 'base64', data: 'TQ!A' }
+  };
+  const request = (resourceId) => ({ records: [{ source: { kind: 'genbank', resourceId } }] });
+  const native = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'setFromBase64');
+  const decodeWith = async (setFromBase64) => {
+    Object.defineProperty(Uint8Array.prototype, 'setFromBase64', { ...native, value: setFromBase64 });
+    try {
+      return await createDiagramResourceTransport().prepare({ request: request('big'), resources });
+    } finally {
+      Object.defineProperty(Uint8Array.prototype, 'setFromBase64', native);
+    }
+  };
+  let nativeCalls = 0;
+  const viaNative = await decodeWith(function (...args) { nativeCalls += 1; return native.value.apply(this, args); });
+  assert.ok(nativeCalls > 0, 'the engine decoder writes the transfer buffer');
+  assert.deepEqual(new Uint8Array(viaNative.stagedResources[0].bytes), bytes);
+  const viaFallback = await decodeWith(undefined);
+  assert.deepEqual(new Uint8Array(viaFallback.stagedResources[0].bytes), bytes);
+  await assert.rejects(
+    createDiagramResourceTransport().prepare({ request: request('bad'), resources }),
+    /Canonical resource bad contains invalid base64 data\./
+  );
+});
+
+test('two Linear cards that read one Session resource both find its committed resource id (OV-1555)', async () => {
+  const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const { adoptCurrentSessionResources, createSessionResourceFileView, sessionResourceSource } = await import(
+    '../../gbdraw/web/js/services/session-resource-backing.js'
+  );
+  const table = adoptCurrentSessionResources({ 'record-1-genbank': descriptor('LOCUS two\nORIGIN\n//\n') });
+  const firstCard = createSessionResourceFileView(table, 'record-1-genbank');
+  const secondCard = createSessionResourceFileView(table, 'record-1-genbank');
+  // A Save serializes each card's view to the one source descriptor, and the last card names its owner;
+  // the request keeps one resource for both cards (`session-request.js` `addFile`).
+  const source = sessionResourceSource(firstCard).descriptor;
+  setResourcePayloadOwner(source, firstCard);
+  setResourcePayloadOwner(source, secondCard);
+  const committed = {
+    'record-1-genbank': setResourcePayloadOwner({ ...source }, secondCard)
+  };
+  assert.equal(resourceIdOwnedBy(committed, firstCard, 'genbank'), 'record-1-genbank');
+  assert.equal(resourceIdOwnedBy(committed, secondCard, 'genbank'), 'record-1-genbank');
+  assert.equal(resourceIdOwnedBy(committed, firstCard, 'fasta'), null);
+  const uploaded = { name: 'new.gb', size: 3 };
+  assert.equal(resourceIdOwnedBy(committed, uploaded, 'genbank'), null);
+  const uploadedResources = { 'record-2-genbank': setResourcePayloadOwner(descriptor('LOCUS new'), uploaded) };
+  assert.equal(resourceIdOwnedBy(uploadedResources, uploaded, 'genbank'), 'record-2-genbank');
+});

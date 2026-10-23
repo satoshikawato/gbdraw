@@ -10,14 +10,18 @@ from gbdraw.web_support.feature_metadata import (
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
+    prepared_input_lookup,
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
+from gbdraw.api import GenBankInputSource
+from gbdraw.api.record_planning import prepared_parsed_source
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
 from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
+from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
@@ -30,11 +34,11 @@ def _start_web_worker_state():
     epoch and the random seed. The helpers call it when they load; a Worker
     restored from a Pyodide snapshot calls it again, so no two Workers share
     the state the snapshot froze (OV-1000)."""
-    global _WEB_LOSATP_FILTERED_HIT_CACHE, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
+    global _WEB_LOSATP_HIT_TABLES, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
     global _WEB_PREPARED_INPUT_CACHE, _WEB_LABEL_FIT_SEARCHES
     import random
     random.seed()
-    _WEB_LOSATP_FILTERED_HIT_CACHE = {}
+    _WEB_LOSATP_HIT_TABLES = {}
     _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
     _WEB_LOSATP_CACHE_ORDER = []
     _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
@@ -43,8 +47,6 @@ def _start_web_worker_state():
     _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
 
 def _web_losatp_cache_by_name(name):
-    if name == "filtered":
-        return _WEB_LOSATP_FILTERED_HIT_CACHE
     if name == "converted":
         return _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE
     raise KeyError(name)
@@ -270,7 +272,8 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
     """Extract the first record as FASTA for LOSAT input."""
     from Bio import SeqIO
     from io import StringIO
-    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    from gbdraw.io.record_select import parse_record_selector, select_record
+    from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
@@ -289,10 +292,8 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         else:
             records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-        records = reverse_records(records, reverse)
-        if region_spec:
-            from gbdraw.io.regions import apply_region_specs, parse_region_specs
-            records = apply_region_specs(records, parse_region_specs([region_spec]))
+        specs = parse_region_specs([region_spec]) if region_spec else []
+        records = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
         record = records[0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
@@ -506,19 +507,25 @@ def _web_feature_view_hash_parts(record, source_feature_position):
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
     from Bio import SeqIO
     from gbdraw.features.source import build_source_feature_catalog
-    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
-    from gbdraw.io.regions import apply_region_specs, parse_region_specs
+    from gbdraw.io.record_select import parse_record_selector, select_record
+    from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
 
     selector = parse_record_selector(_normalize_web_record_selector(record_selector))
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
     if fmt == "genbank":
-        records = list(SeqIO.parse(path, "genbank"))
-        if not records:
+        # The records the last Generate parsed from this staged file (OV-1555),
+        # shared and read only; otherwise this reader's own parse.
+        prepared = prepared_parsed_source(GenBankInputSource(path))
+        source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
+        if not source_records:
             raise ValueError("No records found")
-        records = select_record(records, selector) if selector is not None else [records[0]]
+        records = select_record(source_records, selector) if selector is not None else [source_records[0]]
         if source_feature_catalogs is not None:
-            source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
-        records = reverse_records(records, reverse)
+            if prepared is None:
+                source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
+            else:
+                catalogs = {id(record): catalog for record, catalog in zip(prepared.records, prepared.source_feature_catalogs)}
+                source_feature_catalogs.extend(catalogs[id(record)] for record in records)
     elif fmt == "gff":
         if not fasta_path:
             raise ValueError("GFF3 protein extraction requires a FASTA path.")
@@ -529,14 +536,13 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
             selected_features_set=["CDS"],
             keep_all_features=True,
             record_selectors=[_normalize_web_record_selector(record_selector) or ""],
-            reverse_flags=[reverse],
             source_feature_catalogs=source_feature_catalogs,
         )
         records = records[:1]
     else:
         raise ValueError(f"Unsupported format: {fmt}")
-    if region_spec:
-        records = apply_region_specs(records, parse_region_specs([region_spec]))
+    specs = parse_region_specs([region_spec]) if region_spec else []
+    records = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
     if not records:
         raise ValueError("No records found")
     return records[0]
@@ -963,6 +969,23 @@ def _web_derived_settings(settings):
         _WEB_DERIVED_SETTING_NAMES[name]: value for name, value in settings.items()
     })
 
+# The last valid protein identity manifest, by its exact JSON text (OV-1553): Generate's key request and every
+# table of Download all send the same manifest, and its validation reads nothing else. A manifest that fails is not
+# kept, and the helpers that read the kept one do not change it.
+_web_validated_protein_manifest = (None, None)
+
+def _validated_web_protein_manifest(identity_manifest_json):
+    global _web_validated_protein_manifest
+    from gbdraw.analysis.protein_colinearity import validate_protein_identity_manifest
+
+    text = str(identity_manifest_json)
+    held_text, held_manifest = _web_validated_protein_manifest
+    if held_text == text:
+        return held_manifest
+    manifest = validate_protein_identity_manifest(json.loads(text))
+    _web_validated_protein_manifest = (text, manifest)
+    return manifest
+
 def build_protein_losat_cache_keys_json(
     identity_manifest_json,
     pairs_json,
@@ -984,10 +1007,9 @@ def build_protein_losat_cache_keys_json(
         from gbdraw.analysis.protein_colinearity import (
             build_protein_losat_cache_key,
             build_protein_losat_pair_identity,
-            validate_protein_identity_manifest,
         )
 
-        manifest = validate_protein_identity_manifest(json.loads(str(identity_manifest_json)))
+        manifest = _validated_web_protein_manifest(identity_manifest_json)
         pairs = json.loads(str(pairs_json))
         keys = []
         for pair in pairs:
@@ -1059,8 +1081,7 @@ def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
         from gbdraw.analysis.protein_colinearity import hydrate_protein_losat_tsv
 
         entry = json.loads(str(entry_json))
-        manifest = json.loads(str(identity_manifest_json))
-        text = hydrate_protein_losat_tsv(entry, manifest)
+        text = hydrate_protein_losat_tsv(entry, _validated_web_protein_manifest(identity_manifest_json))
         return json.dumps({
             "status": "ok",
             "text": text,
@@ -1099,6 +1120,64 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
         display_data["view_feature_svg_id"] = view_feature_svg_id
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
+
+def _web_protein_map_bindings(record_payloads):
+    """Each record's search-frame binding, built from its Web protein map (OV-1145).
+
+    The raw map holds the search frame (F) and the display map the drawn
+    frame of a reversed record: the binding the planner makes from the
+    record for its CDS keys, with no second plan. A forward record draws
+    its search frame, so its binding has no other strand.
+    """
+    from gbdraw.api.record_planning import ComparisonRecordBinding
+
+    by_index = {}
+    for record in record_payloads:
+        raw_map = record["protein_map"] if isinstance(record["protein_map"], dict) else {}
+        transform = record["view_transform"]
+        reverse = bool(transform["reverse"])
+        length = int(transform["length"]) or next(
+            (int(data.get("coord_length") or 0) for data in raw_map.values() if isinstance(data, dict)), 0
+        )
+        flipped = {"length": length, "reverse": True}
+        source, current, opposite, current_spans, opposite_spans = {}, {}, {}, {}, {}
+        for data in raw_map.values():
+            if not isinstance(data, dict):
+                continue
+            index = int(data.get("feature_index") or 0)
+            span = _web_transform_cds_span(data.get("start", 0), data.get("end", 0), data.get("strand"), {})
+            source[index] = data.get("feature_svg_id")
+            current[index] = data.get("view_feature_svg_id") or data.get("feature_svg_id")
+            current_spans[index] = span
+            if reverse:
+                flipped_span = _web_transform_cds_span(*span, flipped)
+                opposite[index] = _display_feature_svg_id_from_data(data, *flipped_span, flipped)
+                opposite_spans[index] = flipped_span
+        by_index[int(record["record_index"])] = ComparisonRecordBinding(
+            source, current, opposite, length, current_spans, opposite_spans, reverse,
+        )
+    empty = ComparisonRecordBinding({}, {}, {}, 0, {}, {}, False)
+    return tuple(by_index.get(index, empty) for index in range(max(by_index, default=-1) + 1))
+
+def _web_search_frame_results(bindings, pairs, typed=None):
+    """The pairs ((pair, query, subject, table)) and typed result in each record's
+    search frame, as every Session writer stores them (R5, OV-1145)."""
+    from gbdraw.analysis.collinearity import CollinearityResult
+    from gbdraw.api.options import LinearDiagramOptions
+    from gbdraw.api.record_planning import project_source_bound_results
+    from gbdraw.linear_comparison import LinearComparison
+
+    collinear = isinstance(typed, CollinearityResult)
+    stored = project_source_bound_results(LinearDiagramOptions(
+        linear_comparisons=tuple(LinearComparison(query, subject, table) for _, query, subject, table in pairs),
+        orthogroups=None if collinear else typed,
+        collinearity_blocks=typed if collinear else None,
+    ), bindings).options
+    return (
+        [(pair[0], pair[1], pair[2], comparison.matches)
+         for pair, comparison in zip(pairs, stored.linear_comparisons or (), strict=True)],
+        stored.collinearity_blocks if collinear else stored.orthogroups,
+    )
 
 def _build_web_protein_extraction(protein_maps, identity_manifest=None):
     from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
@@ -1317,6 +1396,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             combined_protein_map.update(protein_map)
         extraction = _build_web_protein_extraction(protein_maps_by_record.values())
 
+        # The tables of the last conversion, by raw key: the parsed hits and the hits the last thresholds kept
+        # (OV-1579). A threshold change filters again without reading or parsing a table, and only this
+        # conversion's tables stay, so the hold does not depend on a count limit the tables can exceed.
+        global _WEB_LOSATP_HIT_TABLES
+        thresholds = (
+            str(settings.bitscore),
+            str(settings.evalue),
+            str(settings.identity),
+            str(settings.alignment_length),
+        )
+        kept_tables = {}
         filtered_cache_hits = 0
         filtered_cache_misses = 0
         pair_items = []
@@ -1327,31 +1417,30 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing queryIndex {query_index}.")
             if subject_index not in protein_maps_by_record:
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing subjectIndex {subject_index}.")
-            filter_cache_key = (
-                item["cache_key"],
-                str(settings.bitscore),
-                str(settings.evalue),
-                str(settings.identity),
-                str(settings.alignment_length),
-            )
-            filtered = _web_losatp_cache_get("filtered", filter_cache_key)
-            if filtered is None:
+            table = kept_tables.get(item["cache_key"]) or _WEB_LOSATP_HIT_TABLES.get(item["cache_key"])
+            if table is None:
                 with open(str(raw_tsv_path), "rb") as raw_tsv_handle:
                     raw_tsv_handle.seek(item["raw_tsv_offset"])
                     blast_text = raw_tsv_handle.read(item["raw_tsv_bytes"]).decode("utf-8")
-                hits = parse_losatp_outfmt6(blast_text)
-                filtered = filter_protein_hits_by_thresholds(
-                    hits,
-                    evalue=settings.evalue,
-                    bitscore=settings.bitscore,
-                    identity=settings.identity,
-                    alignment_length=settings.alignment_length,
-                )
-                _web_losatp_cache_set("filtered", filter_cache_key, filtered.copy())
-                filtered_cache_misses += 1
-            else:
-                filtered = filtered.copy()
+                table = {"hits": parse_losatp_outfmt6(blast_text), "thresholds": None, "filtered": None}
+            if table["thresholds"] == thresholds:
                 filtered_cache_hits += 1
+            else:
+                # The filter copies the parsed hits, so the kept ones stay unchanged.
+                table = {
+                    "hits": table["hits"],
+                    "thresholds": thresholds,
+                    "filtered": filter_protein_hits_by_thresholds(
+                        table["hits"],
+                        evalue=settings.evalue,
+                        bitscore=settings.bitscore,
+                        identity=settings.identity,
+                        alignment_length=settings.alignment_length,
+                    ),
+                }
+                filtered_cache_misses += 1
+            kept_tables[item["cache_key"]] = table
+            filtered = table["filtered"].copy()
             pair_items.append(
                 {
                     "pair_index": item["pair_index"],
@@ -1363,6 +1452,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 }
             )
 
+        _WEB_LOSATP_HIT_TABLES = kept_tables
         cache_stats = {
             "convertedPayloadHit": False,
             "filteredHitCacheHits": filtered_cache_hits,
@@ -1447,14 +1537,14 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     color_mode=color_mode,
                     search_scope=search_scope,
                 )
-                converted_pairs = [
-                    derived_pair_payload(display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
+                drawn_pairs = [
+                    (display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
                     for pair in display_pairs
                     if pair in converted_by_pair
                 ]
             else:
-                converted_pairs = [
-                    derived_pair_payload(pair_index, pair_index, pair_index + 1, converted)
+                drawn_pairs = [
+                    (pair_index, pair_index, pair_index + 1, converted)
                     for pair_index, converted in enumerate(convert_collinearity_blocks_to_comparisons(
                         collinearity_result,
                         record_ids=record_ids,
@@ -1462,13 +1552,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                         search_scope=search_scope,
                     ))
                 ]
+            stored_pairs, collinearity_result = _web_search_frame_results(
+                _web_protein_map_bindings(record_payloads), drawn_pairs, collinearity_result,
+            )
+            converted_pairs = [derived_pair_payload(*pair) for pair in stored_pairs]
             canonical_content = encode_canonical_typed_resource("result", collinearity_result)
             return _finalize_losatp_payload({"pairs": converted_pairs},
                collinearity_result=collinearity_result,
                canonical_content=canonical_content, canonical_kind="collinearity-result")
 
         if normalized_mode == "pairwise":
-            converted_pairs = []
+            drawn_pairs = []
             for item in pair_items:
                 display_hits = select_top_hits_per_query(
                     item["hits"],
@@ -1480,9 +1574,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     item["subject_map"],
                     orthogroups=None,
                 )
-                converted_pairs.append(derived_pair_payload(
-                    item["pair_index"], item["query_index"], item["subject_index"], converted
-                ))
+                drawn_pairs.append((item["pair_index"], item["query_index"], item["subject_index"], converted))
+            stored_pairs, _ = _web_search_frame_results(_web_protein_map_bindings(record_payloads), drawn_pairs)
+            converted_pairs = [derived_pair_payload(*pair) for pair in stored_pairs]
             return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": []})
 
         hits_by_direction = {
@@ -1507,7 +1601,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         )
         orthogroups = edge_selection.orthogroups
 
-        converted_pairs = []
+        drawn_pairs = []
         for query_index, subject_index in sorted(edge_selection.adjacent_display_edges_by_pair):
             display_hits = edge_selection.adjacent_display_edges_by_pair[(query_index, subject_index)]
             forward = hits_by_direction.get((query_index, subject_index))
@@ -1519,11 +1613,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 forward["subject_map"],
                 orthogroups=orthogroups,
             )
-            converted_pairs.append(
-                derived_pair_payload(
-                    display_pair_indices[(query_index, subject_index)], query_index, subject_index, converted
-                )
-            )
+            drawn_pairs.append((display_pair_indices[(query_index, subject_index)], query_index, subject_index, converted))
+        stored_pairs, orthogroups = _web_search_frame_results(
+            _web_protein_map_bindings(record_payloads), drawn_pairs, orthogroups,
+        )
+        converted_pairs = [derived_pair_payload(*pair) for pair in stored_pairs]
         canonical_content = encode_canonical_typed_resource("orthogroupResult", orthogroups)
         return _finalize_losatp_payload({"pairs": converted_pairs},
             canonical_content=canonical_content, canonical_kind="orthogroup-result")
@@ -1568,7 +1662,18 @@ def list_sequence_records(path, format):
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
-        records = list(SeqIO.parse(path, format_map[format]))
+        try:
+            records = list(SeqIO.parse(path, format_map[format]))
+        except ValueError as parse_error:
+            if format != "genbank":
+                raise
+            from gbdraw.exceptions import ParseError
+            from gbdraw.io.genome import genbank_read_diagnostic
+            raise ParseError('GenBank file could not be read', diagnostic=genbank_read_diagnostic(path)) from parse_error
+        # OV-1258: a record without sequence cannot be drawn; the inspection says so.
+        if format == "genbank" and not all(getattr(record.seq, "defined", True) for record in records):
+            from gbdraw.exceptions import ValidationError
+            raise ValidationError('Sequence content is undefined', diagnostic={"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"})
         if not records:
             missing = ValueError('No records found')
             if format == "genbank":
@@ -1648,22 +1753,6 @@ def register_web_fonts_json(fonts_json="[]"):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})
 
-def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
-    """Measure one legend caption at the DPI the renderer resolves from the request config."""
-    try:
-        from gbdraw.api.config import apply_config_overrides
-        from gbdraw.core.text import calculate_bbox_dimensions
-        cfg = apply_config_overrides(json.loads(str(config_json)), json.loads(str(overrides_json)))
-        width, _ = calculate_bbox_dimensions(
-            str(caption),
-            str(font_family or "Arial"),
-            float(font_size or 14),
-            int(cfg.canvas.dpi),
-        )
-        return json.dumps({"width": width})
-    except Exception as error:
-        return json.dumps({'error': serialize_web_error(error, operation='measureLegendText', stage="helper")})
-
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
@@ -1694,26 +1783,54 @@ def compute_label_fit_row_json(row_token, kind):
     return json.dumps({"row": _WEB_LABEL_FIT_SEARCHES.row(str(row_token), str(kind))}, ensure_ascii=False)
 
 
+def _with_prepared_input_lookup(helper, paths_argument=None):
+    """A helper that reads the resources the Worker staged for it reads the inputs
+    the last Generate prepared (read-only: nothing is published, pruned or
+    evicted). The Worker passes the identities of the helper's resource
+    manifest after the helper's own arguments; paths_argument is the place
+    of its resource paths among them, or None when the Worker passes them
+    just before the identities, outside the helper's arguments."""
+    def run(*arguments):
+        *helper_arguments, identities_json = arguments
+        if paths_argument is None:
+            *helper_arguments, paths_json = helper_arguments
+        else:
+            paths_json = helper_arguments[paths_argument]
+        with prepared_input_lookup(
+            _WEB_PREPARED_INPUT_CACHE,
+            resource_paths=json.loads(str(paths_json)),
+            resource_identities=json.loads(str(identities_json)),
+        ):
+            return helper(*helper_arguments)
+    return run
+
+
 _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
-    "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
+    "resolve_similarity_alignment_json": (
+        _with_prepared_input_lookup(resolve_similarity_alignment_json, 2), "resolveSimilarityAlignment"
+    ),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
-    "extract_cds_protein_fasta": (extract_cds_protein_fasta, "extractCdsProteinFasta"),
+    "extract_cds_protein_fasta": (_with_prepared_input_lookup(extract_cds_protein_fasta), "extractCdsProteinFasta"),
     "build_protein_losat_cache_keys_json": (build_protein_losat_cache_keys_json, "buildProteinLosatCacheKeys"),
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
     "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
+    "stored_protein_results_to_search_frame_json": (
+        _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
+    ),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
-    "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
-    "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
+    "read_feature_override_table_json": (
+        _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"
+    ),
     "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),

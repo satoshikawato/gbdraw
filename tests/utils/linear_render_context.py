@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
+from Bio.SeqRecord import SeqRecord
+
+from gbdraw.canvas.linear import LinearCanvasConfigurator
 from gbdraw.config.models import LinearRenderProfile
+from gbdraw.layout.linear_multi_record import (
+    LinearRecordMeasurement,
+    RecordKey,
+    solve_linear_horizontal_layout,
+)
 from gbdraw.layout.linear import (
     LinearRecordRenderContext,
     LinearResolvedTrack,
@@ -47,4 +57,22 @@ def make_linear_record_render_context(
     )
 
 
-__all__ = ["make_linear_record_render_context"]
+def alone_sequence_widths(
+    records: Sequence[SeqRecord], canvas_config: LinearCanvasConfigurator
+) -> list[float]:
+    """Each record's drawn width alone in its row, from the horizontal solve the assembler runs."""
+
+    horizontal = solve_linear_horizontal_layout(
+        [
+            LinearRecordMeasurement(index, RecordKey(f"record-{index + 1}"), len(record.seq))
+            for index, record in enumerate(records)
+        ],
+        tuple(range(len(records))),
+        available_width=float(canvas_config.alignment_width),
+        align_center=bool(canvas_config.align_center),
+        normalize_length=bool(canvas_config.normalize_length),
+    )
+    return [horizontal.placement_for_index(index).sequence_width for index in range(len(records))]
+
+
+__all__ = ["alone_sequence_widths", "make_linear_record_render_context"]

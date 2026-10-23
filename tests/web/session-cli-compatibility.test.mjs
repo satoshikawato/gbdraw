@@ -60,6 +60,7 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
+const { isCardRow } = await import('../../gbdraw/web/js/services/file-imports.js');
 // The Generate's reuse test of stored protein results is module-private; a
 // copy of run-analysis.js that exports it imports the same modules.
 const runAnalysisUrl = pathToFileURL(path.join(process.cwd(), 'gbdraw/web/js/app/run-analysis.js'));
@@ -605,7 +606,7 @@ with materialize_session(document, output_directory=directory / 'out') as materi
 // loads it. Load gives the drawing every table the request holds, so the next
 // Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
 // replay and Python save again (no Web draft either) load the same way, and so
-// do a case's Sessions 40 to 44 from older CLI writers (`legacySessions`,
+// do a case's Sessions 40 to 47 from older CLI writers (`legacySessions`,
 // OV-269). The CLI and Python cells of the matrix are
 // tests/test_cli_session_cross_surface.py.
 const crossSurface = (...args) => JSON.parse(execFileSync('python', [
@@ -625,6 +626,17 @@ const LOADED_TABLES = {
   '--qualifier_priority': (drawing, file) => drawing.manualPriorityRules.length === fixtureRows(file),
   '--feature_override_table': drawing => Object.keys(drawing.featureOverrides).length > 0
 };
+// OV-1280 (D-19): from Session 48 on, the rows and colors a CLI table option
+// gives are its file card's, so Remove on the card takes them back; an older
+// Session's rows read as rows added by hand.
+const cardRows = (rows, card) => rows.map(row => (isCardRow(row, card) ? card : null));
+const CARD_ROWS = {
+  '-t': drawing => cardRows(drawing.manualSpecificRules, 't_color'),
+  '-d': drawing => [drawing.fileImports.d_color?.CDS?.color ?? null],
+  '--label_whitelist': drawing => cardRows(drawing.manualWhitelist, 'whitelist'),
+  '--qualifier_priority': drawing => cardRows(drawing.manualPriorityRules, 'qualifier_priority')
+};
+const CARD_MARKS = { '-t': 't_color', '-d': '#123456', '--label_whitelist': 'whitelist', '--qualifier_priority': 'qualifier_priority' };
 // A Session of the request and resources the Web renders.
 const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
   format: 'gbdraw-session', version: SESSION_VERSION, createdAt: '2026-10-09T00:00:00.000Z', renderRequest,
@@ -719,6 +731,22 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
           const index = entry.args.indexOf(option);
           if (index >= 0) assert.ok(loaded(drawing, entry.args[index + 1]), `${entry.id}, ${source}: ${option}`);
         }
+        // A case's older Session (`id@v40`) is the CLI Session of its entry.
+        const marked = !(source === 'CLI Session' && entry.id.includes('@'));
+        for (const [option, rows] of Object.entries(CARD_ROWS)) {
+          const values = rows(drawing);
+          if (entry.args.includes(option)) {
+            assert.deepEqual(values, values.map(() => (marked ? CARD_MARKS[option] : null)), `${entry.id}, ${source}: ${option} card`);
+          }
+        }
+        // The CLI reads `--label_blacklist` as keywords, a path too (OV-1338), so a CLI Session no longer binds it as
+        // a Blacklist File: the card stays empty and the keyword box holds the text the CLI drew with. An older CLI
+        // Session (`id@v47`) that bound it keeps that binding through a CLI re-save, whose card holds the same text
+        // (OV-1380); the figure is the CLI's either way.
+        const blacklist = entry.args[entry.args.indexOf('--label_blacklist') + 1];
+        const keptBinding = source === 'CLI re-save' && entry.id.includes('@') && entry.args.includes('--label_blacklist');
+        assert.deepEqual(drawing.fileImports.blacklist?.words, keptBinding ? [blacklist] : undefined,
+          `${entry.id}, ${source}: blacklist card`);
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });

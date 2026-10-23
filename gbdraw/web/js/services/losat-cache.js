@@ -239,13 +239,13 @@ const stableObjectText = (value) => {
 
 /**
  * @param {Record<string, unknown>} target
- * @param {unknown} incoming
+ * @param {unknown} incoming The map of an admitted manifest: its values are frozen, so the merge shares them.
  * @param {string} owner
  */
 const mergeManifestMap = (target, incoming, owner) => {
   Object.entries(incoming || {}).forEach(([key, value]) => {
     if (!Object.prototype.hasOwnProperty.call(target, key)) {
-      target[key] = cloneJson(value);
+      target[key] = value;
       return;
     }
     if (stableObjectText(target[key]) !== stableObjectText(value)) {
@@ -303,11 +303,67 @@ export const emptyProteinIdentityManifest = () => ({
   recordInstances: {}
 });
 
+// The manifests the merge admitted (OV-1553): each passed `validateProteinIdentityManifest` once and is deeply
+// frozen, so no reader can change it and its checks, its runtime ID sets and the raw tables verified against it
+// stay valid for the life of the object.
+/** @type {WeakSet<object>} */
+const admittedManifests = new WeakSet();
+
+/**
+ * @param {unknown} manifest
+ * @returns {manifest is ProteinIdentityManifest}
+ */
+const isAdmittedProteinIdentityManifest = (manifest) => (
+  typeof manifest === 'object' && manifest !== null && admittedManifests.has(manifest)
+);
+
+/**
+ * @param {unknown} value A JSON value.
+ * @returns {void}
+ */
+const deepFreeze = (value) => {
+  if (!value || typeof value !== 'object') return;
+  Object.freeze(value);
+  Object.values(value).forEach(deepFreeze);
+};
+
+/**
+ * Validates `manifest` once and freezes it. The caller gives up the right to change it.
+ * @param {unknown} manifest
+ * @returns {manifest is ProteinIdentityManifest}
+ */
+const admitProteinIdentityManifest = (manifest) => {
+  if (isAdmittedProteinIdentityManifest(manifest)) return true;
+  if (!validateProteinIdentityManifest(manifest)) return false;
+  deepFreeze(manifest);
+  admittedManifests.add(manifest);
+  return true;
+};
+
+/**
+ * The runtime handles of one record instance of an admitted manifest, one Set per frozen instance object, so a
+ * merge that shares the instance shares its Set.
+ * @type {WeakMap<object, Set<string>>}
+ */
+const admittedInstanceRuntimeIds = new WeakMap();
+
+/** @param {ProteinIdentityInstance} instance A record instance of an admitted manifest. */
+const admittedRuntimeIdsOf = (instance) => {
+  let runtimeIds = admittedInstanceRuntimeIds.get(instance);
+  if (!runtimeIds) {
+    runtimeIds = new Set(Object.values(instance.runtimeIds));
+    admittedInstanceRuntimeIds.set(instance, runtimeIds);
+  }
+  return runtimeIds;
+};
+
 /**
  * @param {unknown} manifest
  * @returns {manifest is ProteinIdentityManifest}
  */
 export const validateProteinIdentityManifest = (manifest) => {
+  // An admitted manifest passed this check and is frozen, so the answer cannot have changed.
+  if (isAdmittedProteinIdentityManifest(manifest)) return true;
   if (!isPlainObject(manifest) || manifest.schema !== PROTEIN_IDENTITY_MANIFEST_SCHEMA) {
     return false;
   }
@@ -437,30 +493,70 @@ export const releaseValidatedProteinIdentityIndex = (index) => (
 );
 
 /**
+ * The validated identity of an admitted manifest: built once per frozen manifest object.
+ * @type {WeakMap<object, { manifest: ProteinIdentityManifest, runtimeIdsByInstance: Map<string, Set<string>>, runtimeHandles: Set<string> | null }>}
+ */
+const admittedIdentities = new WeakMap();
+
+/**
+ * The checked identity of `manifest`: the one `index` names, or the one of an admitted manifest.
  * @param {unknown} manifest
  * @param {object | null | undefined} index
  */
 const indexedProteinIdentity = (manifest, index) => {
   const validated = index && validatedProteinIdentityIndexes.get(index);
-  return validated?.manifest === manifest ? validated : null;
+  if (validated?.manifest === manifest) return validated;
+  if (!isAdmittedProteinIdentityManifest(manifest)) return null;
+  let identity = admittedIdentities.get(manifest);
+  if (!identity) {
+    identity = {
+      manifest,
+      runtimeIdsByInstance: new Map(Object.entries(manifest.recordInstances).map(
+        ([instanceKey, instance]) => [instanceKey, admittedRuntimeIdsOf(instance)]
+      )),
+      runtimeHandles: null
+    };
+    admittedIdentities.set(manifest, identity);
+  }
+  return identity;
 };
 
 /**
+ * The raw table each protein raw entry was last verified against (OV-1554): its text and the two runtime ID Sets
+ * of an admitted manifest. The scan's answer depends on nothing else, and an admitted manifest's Sets never change.
+ * @type {WeakMap<object, { text: string, queryIds: Set<string>, subjectIds: Set<string> }>}
+ */
+const verifiedRawProteinTexts = new WeakMap();
+
+/** @type {{ inputs: unknown[], merged: ProteinIdentityManifest } | null} */
+let lastMerge = null;
+
+/**
+ * Merges the manifests of the compared records into one admitted (frozen) manifest. Each input is admitted:
+ * validated once in its life and frozen, so the caller passes manifests it owns (the extraction's) and does not
+ * change them afterwards. The merged manifest shares the inputs' frozen parts. The same inputs, in the same
+ * order, return the manifest of the previous merge (OV-1553); a failed merge keeps nothing.
  * @param {unknown} manifests
  * @param {{ invalidInputMessage?: string | null }} [options]
+ * @returns {ProteinIdentityManifest}
  */
 export const mergeProteinIdentityManifests = (manifests, { invalidInputMessage = null } = {}) => {
   const inputs = Array.isArray(manifests) ? manifests : [];
+  if (
+    lastMerge
+    && lastMerge.inputs.length === inputs.length
+    && lastMerge.inputs.every((input, index) => input === inputs[index])
+  ) return lastMerge.merged;
   // A caller-supplied input error takes precedence over any merge conflict.
   // Keep the default helper's interleaved failure order for other callers.
   const inputsValidated = invalidInputMessage !== null
-    && inputs.every((manifest) => validateProteinIdentityManifest(manifest));
+    && inputs.every((manifest) => admitProteinIdentityManifest(manifest));
   if (invalidInputMessage !== null && !inputsValidated) {
     throw new Error(invalidInputMessage);
   }
   const merged = emptyProteinIdentityManifest();
   inputs.forEach((manifest) => {
-    if (!inputsValidated && !validateProteinIdentityManifest(manifest)) {
+    if (!inputsValidated && !admitProteinIdentityManifest(manifest)) {
       throw new Error('Cannot merge an invalid protein identity manifest.');
     }
     mergeManifestMap(merged.proteinSets, manifest.proteinSets, 'protein set');
@@ -470,6 +566,10 @@ export const mergeProteinIdentityManifests = (manifests, { invalidInputMessage =
   if (!validateProteinIdentityManifest(merged)) {
     throw new Error('Merged protein identity manifest is invalid.');
   }
+  // The values are the inputs' frozen ones; freezing the maps completes the merged manifest.
+  [merged.proteinSets, merged.recordAnalyses, merged.recordInstances, merged].forEach((value) => Object.freeze(value));
+  admittedManifests.add(merged);
+  lastMerge = { inputs: [...inputs], merged };
   return merged;
 };
 
@@ -499,13 +599,22 @@ export const validateProteinRawEntryReferences = (
     queryAnalysis?.proteinSetHash !== entry.queryProteinSetHash ||
     subjectAnalysis?.proteinSetHash !== entry.subjectProteinSetHash
   ) return false;
-  return rawProteinTextMatchesBindings(
-    entry.text,
-    indexedIdentity?.runtimeIdsByInstance.get(entry.queryRecordInstanceKey)
-      || new Set(Object.values(queryInstance.runtimeIds)),
-    indexedIdentity?.runtimeIdsByInstance.get(entry.subjectRecordInstanceKey)
-      || new Set(Object.values(subjectInstance.runtimeIds))
-  );
+  const queryIds = indexedIdentity?.runtimeIdsByInstance.get(entry.queryRecordInstanceKey)
+    || new Set(Object.values(queryInstance.runtimeIds));
+  const subjectIds = indexedIdentity?.runtimeIdsByInstance.get(entry.subjectRecordInstanceKey)
+    || new Set(Object.values(subjectInstance.runtimeIds));
+  const verified = verifiedRawProteinTexts.get(entry);
+  if (
+    verified
+    && verified.text === entry.text
+    && verified.queryIds === queryIds
+    && verified.subjectIds === subjectIds
+  ) return true;
+  if (!rawProteinTextMatchesBindings(entry.text, queryIds, subjectIds)) return false;
+  if (isAdmittedProteinIdentityManifest(manifest)) {
+    verifiedRawProteinTexts.set(entry, { text: entry.text, queryIds, subjectIds });
+  }
+  return true;
 };
 
 /**

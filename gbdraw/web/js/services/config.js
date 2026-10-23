@@ -1,6 +1,8 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
+import { t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
@@ -32,6 +34,7 @@ import {
   migrateLinearTrackSlotsToCurrentSchema
 } from './linear-track-slot-model.js';
 import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
+import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
 import {
   decodeDepthText,
@@ -41,7 +44,7 @@ import {
   configFieldRepairs, defaultSettingsContainers, installStoredSettings, readBlacklistText, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
   readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
-  readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
+  readColorRules, readFileImports, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readSessionInputType, readSimilarityAlignment
@@ -120,11 +123,14 @@ import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
   bytesToBase64,
+  fileDescriptorOf,
   getSessionResourceSource,
-  readFileBytes
+  readFileBytes,
+  rememberFileDescriptor
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
+  createSessionResourceFileView,
   isSessionResourceFileView
 } from './session-resource-backing.js';
 import { normalizeLogicalResults } from './result-normalization.js';
@@ -162,7 +168,9 @@ import {
   largeSessionDownloadMegabytes
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
-import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
+import {
+  convertMainSessionComparisonFrames, convertStoredProteinResultFrames, withConvertedResources
+} from './main-session-comparison-frame.js';
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
@@ -244,6 +252,7 @@ import {
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+  FILE_IMPORT_ORIGIN_SESSION_VERSION,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -296,7 +305,9 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { CommittedCanonicalSession, LiveSettingWrite, SessionRequestProjection, SettingsOnlyProjectionInput } from './session-request.js' */
+/** @import { StoredDrawing } from './main-session-comparison-frame.js' */
+/** @import { CommittedCanonicalSession, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
+ *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
@@ -311,7 +322,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
-/** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
+/** @import { DiagnosticContext, ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
 /** @import { ProteinIdentityManifest } from './losat-cache.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
@@ -321,7 +332,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
-/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
@@ -893,6 +904,7 @@ export const buildConfigData = (drawing) => ({
   filterMode: drawing.filterMode.value,
   whitelist: LABEL_TABLES_SLICE.capture(drawing.slices.labelTables).manualWhitelist,
   blacklistText: drawing.manualBlacklist.value,
+  fileImports: cloneJsonData(drawing.fileImports),
   losatProgram: drawing.losatProgram.value,
   circularConservation: drawing.circularConservation,
   annotationSets: normalizeAnnotationSets(ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets).annotationSets),
@@ -1126,12 +1138,20 @@ const replacePlainObject = (target, source) => {
  */
 /** @type {ConfigCheckPort | null} */
 let unmanagedConfigOverrideValidator = null;
+// The overrides the validator accepted, by the JSON of its whole request: its
+// reply is a function of that request, so Load and every Save ask once per
+// distinct request. A refusal or a failed call is not kept; the entries are
+// bounded and belong to the port that answered them.
+const ACCEPTED_CONFIG_CHECKS_LIMIT = 16;
+/** @type {Map<string, Record<string, unknown>>} */
+const acceptedConfigChecks = new Map();
 
 /** @param {typeof unmanagedConfigOverrideValidator} validator */
 export const setUnmanagedConfigOverrideValidator = (validator) => {
   unmanagedConfigOverrideValidator = typeof validator === 'function'
     ? validator
     : null;
+  acceptedConfigChecks.clear();
 };
 
 /**
@@ -1172,13 +1192,13 @@ const checkUnmanagedConfigOverrides = async ({
   if (!unmanagedConfigOverrideValidator) {
     throw new Error('Configuration validation service is unavailable.');
   }
-  const result = await unmanagedConfigOverrideValidator({
-    mode,
-    config,
-    configOverrides: overrides,
-    managedPaths,
-    source
-  });
+  /** @type {ConfigCheckRequest} */
+  const request = { mode, config, configOverrides: overrides, managedPaths, source };
+  const requestKey = JSON.stringify(request);
+  const accepted = acceptedConfigChecks.get(requestKey);
+  if (accepted) return { overrides: cloneJsonData(accepted) };
+  const validator = unmanagedConfigOverrideValidator;
+  const result = await validator(request);
   if (result?.result?.error && typeof result.result.error === 'object') {
     return { refusal: Object.assign(new Error('Configuration validation failed.'), result.result.error) };
   }
@@ -1190,7 +1210,15 @@ const checkUnmanagedConfigOverrides = async ({
     throw new Error('Configuration validation returned an invalid preserved-settings result.');
   }
   // The cast: `isPlainObject(preserved)` above (this module's predicate is no type guard).
-  return { overrides: cloneJsonData(/** @type {Record<string, unknown>} */ (preserved)) };
+  const kept = cloneJsonData(/** @type {Record<string, unknown>} */ (preserved));
+  if (validator === unmanagedConfigOverrideValidator) {
+    acceptedConfigChecks.delete(requestKey);
+    acceptedConfigChecks.set(requestKey, kept);
+    if (acceptedConfigChecks.size > ACCEPTED_CONFIG_CHECKS_LIMIT) {
+      acceptedConfigChecks.delete(/** @type {string} */ (acceptedConfigChecks.keys().next().value));
+    }
+  }
+  return { overrides: cloneJsonData(kept) };
 };
 
 /**
@@ -2143,7 +2171,7 @@ const readSessionRequests = (rawData, version, repairs) => {
       const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
       repairs.push(loadRepair({
         code: 'other-result-set-dropped', path: otherRead.path, effect: 'dropped',
-        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+        ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
       }));
       const { otherModeResult: _dropped, ...rest } = data;
       data = rest;
@@ -2345,13 +2373,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
   const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
-  /** @type {SessionRequestProjection | null} */
-  const canonicalProjection = settingsOnly
-    // The cast: Load read the shown mode (`readSettingsOnlyMode`, K19) and Session authority the Web
-    // inventory; no step after replaces `ui.mode`.
-    ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
-    : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
-    ? projectCanonicalSessionRequest({
+  // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
+  /** @type {Parameters<typeof projectCanonicalSessionRequest>[0] | null} */
+  const canonicalProjectionInput = !settingsOnly && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
+    ? {
         renderRequest: projectionRenderRequest,
         resources: data.resources,
         webFiles: data.webFiles,
@@ -2370,9 +2395,18 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         // A Session without a Web draft (CLI, Python) holds its tables only
         // in the request, so Load reads them; a draft holds them already.
         deferResourceContent: currentSession && hasStoredDraft,
-        adoptCanonicalPayloads: currentSession
-      })
+        adoptCanonicalPayloads: currentSession,
+        // OV-1280: from Session 48 on, a Session without a draft holds each
+        // table as its card's file.
+        markCardFileRows: !hasStoredDraft && sourceSessionVersion >= FILE_IMPORT_ORIGIN_SESSION_VERSION
+      }
     : null;
+  /** @type {SessionRequestProjection | null} */
+  const canonicalProjection = settingsOnly
+    // The cast: Load read the shown mode (`readSettingsOnlyMode`, K19) and Session authority the Web
+    // inventory; no step after replaces `ui.mode`.
+    ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
+    : canonicalProjectionInput && projectCanonicalSessionRequest(canonicalProjectionInput);
   repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
   let restoredConfig = canonicalProjection
@@ -2499,6 +2533,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     data,
     sourceSessionVersion,
     canonicalProjection,
+    canonicalProjectionInput,
     restoredConfig,
     projectionResult,
     adoptedCanonicalSession: adoptedSession?.canonical || null,
@@ -2871,6 +2906,8 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
     manualWhitelist: storedWhitelist.kept ? undefined : storedWhitelist.value,
     manualBlacklist: data.blacklistText === undefined ? undefined : readBlacklistText(data.blacklistText).value
   });
+  // Absent before Session 48: no file's colors or words to take back (OV-1280).
+  SETTINGS_SLICE.install(drawing.slices.settings, { fileImports: readFileImports(data.fileImports).value });
   drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
   const webEdits = readPlainObject(data.webEdits).value;
   GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
@@ -2950,11 +2987,6 @@ const restorePendingPaletteFromSession = (drawing, ui = {}) => {
 };
 
 /**
- * The descriptor each file was saved or loaded as, keyed by that file.
- * @type {WeakMap<object, RawSessionResourceDescriptor>}
- */
-const serializedFileDescriptors = new WeakMap();
-/**
  * @template {RawSessionResourceDescriptor} D
  * @param {object} file A `File`, or another object whose bytes were read.
  * @param {D} descriptor
@@ -2962,8 +2994,7 @@ const serializedFileDescriptors = new WeakMap();
  */
 const cacheSerializedFileDescriptor = (file, descriptor) => {
   setResourcePayloadOwner(descriptor, file);
-  serializedFileDescriptors.set(file, descriptor);
-  return descriptor;
+  return rememberFileDescriptor(file, descriptor);
 };
 
 /**
@@ -2984,15 +3015,12 @@ const serializeFile = async (file) => {
     setResourcePayloadOwner(descriptor, file);
     return descriptor;
   }
-  // A key is an object (functions included): any other value has no entry.
-  const cached = typeof file === 'object' || typeof file === 'function'
-    ? serializedFileDescriptors.get(/** @type {object} */ (file))
-    : undefined;
+  const cached = fileDescriptorOf(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
   // `readFileBytes` resolves only for an object (or a function) with `arrayBuffer()`.
   const owner = /** @type {object} */ (file);
-  const shared = serializedFileDescriptors.get(owner);
+  const shared = fileDescriptorOf(owner);
   if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(view?.name || 'file')
@@ -3522,22 +3550,6 @@ export const applyOrthogroupStateData = (
   });
 };
 
-/** @param {string} mode @param {DrawingState} drawing */
-const customDepthRequested = (mode, drawing) => {
-  const adv = drawing?.adv || {};
-  const form = drawing?.form || {};
-  const customEnabled = mode === 'linear'
-    ? Boolean(adv.linear_track_slots_enabled)
-    : Boolean(adv.circular_track_slots_enabled);
-  if (!customEnabled) return Boolean(form.show_depth);
-  const slots = mode === 'linear'
-    ? adv.linear_track_slots
-    : adv.circular_track_slots;
-  return (Array.isArray(slots) ? slots : []).some(
-    (slot) => slot?.enabled !== false && slot?.renderer === 'depth'
-  );
-};
-
 /**
  * The one check that a drawing has its biological inputs; Generate and Save
  * from the draft both use it, so both explain the same missing input. The
@@ -3629,7 +3641,7 @@ export const serializeActiveRenderFiles = async (
   const normalizedLinearSeqs = mode === 'linear'
     ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
     : [];
-  const depthRequested = customDepthRequested(mode, drawing);
+  const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
   const serializedLinearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq) => ({
       uid: seq.uid,
@@ -3945,6 +3957,97 @@ export const canonicalRenderArtifactOwner = Object.freeze({
 });
 
 /**
+ * B-LOAD (OV-1145, D-128): a Session up to 47 stored the protein results of a
+ * reversed Linear record in the drawn frame. Once Load shows its stored
+ * figure, Python converts them; the bytes replace the stored ones under their
+ * IDs in the shown artifact, the kept one and the Linear draft's views of
+ * them, before History takes its base. Each resources object and resource
+ * table is replaced once. A failure throws, and the Load rolls back (PD-OI-046).
+ * @param {number} version
+ * @param {Readonly<ArtifactSlot> | null} keptSlot The other mode's artifact.
+ * @returns {Promise<Readonly<ArtifactSlot> | null>} The kept artifact holding the converted bytes; null when it is unchanged.
+ */
+const convertLoadedProteinResultFrames = async (version, keptSlot) => {
+  /** @typedef {{ committedCanonicalSession: typeof committedCanonicalSession, activeSessionResourceTable: typeof activeSessionResourceTable }} CanonicalHolder */
+  /** @type {CanonicalHolder | null} */
+  const kept = keptSlot?.runtimeState?.canonical ?? null;
+  /** @type {CanonicalHolder} */
+  const shown = { committedCanonicalSession, activeSessionResourceTable };
+  const converted = await convertStoredProteinResultFrames(version, [
+    shown.committedCanonicalSession, kept?.committedCanonicalSession
+  ]);
+  if (converted.size === 0) return null;
+  /** @type {Map<unknown, Record<string, unknown>>} */
+  const resourcesOf = new Map();
+  /** @type {Map<unknown, NonNullable<typeof activeSessionResourceTable>>} */
+  const tableOf = new Map();
+  /** @param {CanonicalHolder} holder @returns {Promise<CanonicalHolder>} */
+  const replace = async (holder) => {
+    const session = holder.committedCanonicalSession;
+    if (!session) return holder;
+    if (!resourcesOf.has(session.resources)) {
+      resourcesOf.set(session.resources, await withConvertedResources(session.resources, converted));
+    }
+    const resources = resourcesOf.get(session.resources);
+    if (resources === session.resources) return holder;
+    const table = holder.activeSessionResourceTable;
+    if (table && !tableOf.has(table)) tableOf.set(table, adoptCurrentSessionResources(resources));
+    const next = { ...session, resources };
+    return {
+      committedCanonicalSession: isAdoptedCanonicalSession(session) ? adoptRuntimeCanonicalSession(next) : next,
+      activeSessionResourceTable: table ? tableOf.get(table) ?? null : null
+    };
+  };
+  const nextShown = await replace(shown);
+  const nextKept = kept ? await replace(kept) : null;
+  if (nextShown !== shown) canonicalRenderArtifactOwner.restore(nextShown);
+  // The Linear draft reads them through views of the Linear artifact's table.
+  const linearTable = [nextShown, nextKept]
+    .find((holder) => holder?.committedCanonicalSession?.renderRequest?.mode === 'linear')?.activeSessionResourceTable;
+  if (linearTable) {
+    /** @type {RequestCanonicalComparison[]} */
+    const comparisons = state.files.linearCanonicalComparisons;
+    state.files.linearCanonicalComparisons = comparisons.map((comparison) => {
+      const view = /** @type {SessionResourceFileView | undefined} */ (comparison?.file);
+      const resourceId = /** @type {{ resourceId?: string } | null} */ (getSessionResourceSource(view))?.resourceId;
+      return view && resourceId !== undefined && converted.has(resourceId)
+        ? { ...comparison, file: createSessionResourceFileView(linearTable, resourceId, view) } : comparison;
+    });
+  }
+  return keptSlot && nextKept && nextKept !== kept
+    ? createArtifactSlot({
+      ...keptSlot, drawing: state.drawingOf(keptSlot.drawingId), runtimeState: { ...keptSlot.runtimeState, canonical: nextKept }
+    }) : null;
+};
+
+/**
+ * OV-1181: the same stage for a Session 39, whose Load commits a detached
+ * copy and gives the draft detached files. The copy takes the converted
+ * bytes, and the Linear draft's comparisons are projected again from them
+ * with the input Load projected them with. A failure throws, and the Load
+ * rolls back (PD-OI-046).
+ * @template {{ renderRequest?: unknown, resources?: unknown }} T
+ * @param {number} version
+ * @param {T} committed
+ * @param {Parameters<typeof projectCanonicalSessionRequest>[0] | null} projectionInput
+ * @returns {Promise<T>} `committed` itself when nothing is converted
+ */
+const convertDetachedProteinResultFrames = async (version, committed, projectionInput) => {
+  const converted = await convertStoredProteinResultFrames(version, [/** @type {StoredDrawing} */ (committed)]);
+  if (converted.size === 0) return committed;
+  const resources = await withConvertedResources(/** @type {Record<string, unknown>} */ (committed.resources), converted);
+  const mode = /** @type {UnvalidatedFields<'mode'> | undefined} */ (committed.renderRequest)?.mode;
+  if (projectionInput && mode === 'linear') {
+    state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+      projectCanonicalSessionRequest({ ...projectionInput, resources }).files.linearCanonicalComparisons,
+      // Load listed the repairs of these entries when it first read them.
+      { repairs: [] }
+    );
+  }
+  return { ...committed, resources };
+};
+
+/**
  * OV-893 (E-OD30): a Circular comparison series whose BLAST table Load could
  * not read (an empty place of `c_conservation_blasts`) is left out with its
  * files, as Remove leaves a series out (`withoutConservationSeries`), and
@@ -4078,11 +4181,7 @@ const applyFiles = (filesData, {
   targetState.files.c_conservation_fastas = [];
   targetState.files.c_conservation_sequence_sources = [];
   targetState.files.linearCanonicalComparisons = [];
-  targetState.files.d_color = null;
-  targetState.files.t_color = null;
-  targetState.files.blacklist = null;
-  targetState.files.whitelist = null;
-  targetState.files.qualifier_priority = null;
+  // The setting-table cards are cleared by Reset Settings, which every Session replace runs first.
   targetState.linearReorderNotice.value = '';
 
   if (!filesData) {
@@ -4957,12 +5056,16 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
 /**
  * @param {DrawingState} drawing
  * @param {{ status?: string, recoveredFeatureState?: SavedFeatureFields | null,
- *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null } | null | undefined} plan
- *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds).
+ *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null,
+ *   warningParts?: readonly ErrorTextPart[] } | null | undefined} plan
+ *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds:
+ *   its warning is a normalized failure, `warningParts`).
  * @param {{ generationId?: string }} [options]
  */
 const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
+  // A plan's warning is a marked text (`msg`) or the parts of a normalized failure.
+  const shownWarning = plan?.warningParts ? errorText(plan.warningParts) : plan?.warning ? tm(plan.warning) : null;
 
   if (plan?.status === 'recovered' || plan?.status === 'aligned') {
     if (plan.recoveredFeatureState) applyFeatureStateData(drawing, plan.recoveredFeatureState);
@@ -4971,7 +5074,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'summary-ready',
       generationId,
-      error: plan.warning || null,
+      error: shownWarning,
       // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
       summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
         ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
@@ -4981,7 +5084,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   }
 
   if (plan?.status === 'unrecoverable' || plan?.status === 'failed') {
-    const warning = plan.warning || 'Feature metadata recovery failed. The SVG preview remains available.';
+    const warning = shownWarning || t('Feature metadata recovery failed. The SVG preview remains available.');
     state.featureExtractionError.value = { summary: warning, details: [] };
     setFeatureEditorStatusData({
       status: 'failed',
@@ -5202,9 +5305,9 @@ const exportSessionDocument = async (
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const choice = await askChoice({
-      title: 'Download the Session again?',
-      description: `"${sessionFilename}" was already downloaded. Your browser may replace that file or save this one under a new name.`,
-      actions: [{ id: 'download', label: 'Download again', tone: 'primary' }]
+      title: t('Download the Session again?'),
+      description: t('"{file}" was already downloaded. Your browser may replace that file or save this one under a new name.', { file: sessionFilename }),
+      actions: [{ id: 'download', label: t('Download again'), tone: 'primary' }]
     });
     if (choice !== 'download' || !isCurrent()) {
       recordSessionLifecycleEvent('session-save-download-canceled', {
@@ -5367,8 +5470,8 @@ const exportSessionDocument = async (
   if (!isCurrent()) return { status: 'canceled' };
   const largeMegabytes = largeSessionDownloadMegabytes(compressed);
   if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
-    title: 'Download a large Session?',
-    description: `The Session file is ${largeMegabytes.toFixed(1)} MB.`
+    title: t('Download a large Session?'),
+    description: t('The Session file is {size} MB.', { size: largeMegabytes.toFixed(1) })
   })) {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',
@@ -5482,6 +5585,7 @@ const importSessionDocument = async (e, options = {}) => {
     const {
       sourceSessionVersion,
       canonicalProjection,
+      canonicalProjectionInput,
       restoredConfig,
       projectionResult,
       adoptedCanonicalSession,
@@ -5845,7 +5949,7 @@ const importSessionDocument = async (e, options = {}) => {
           )
         }));
       } catch (error) {
-        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeCaughtError(error).summary };
+        legacyFeatureRecoveryPlan = { status: 'failed', warningParts: normalizeCaughtError(error).summaryParts };
       }
       // The Features card says why after the Load (`applySessionFeatureRecoveryPlan`).
       if (legacyFeatureRecoveryPlan?.status === 'unrecoverable' || legacyFeatureRecoveryPlan?.status === 'failed') {
@@ -5975,7 +6079,8 @@ const importSessionDocument = async (e, options = {}) => {
         return Object.fromEntries(Object.entries(draft).filter(([key]) => !unsaved.includes(key)));
       };
       const split = splitDraftIntoModes({
-        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides']) || {},
+        // A Session 27-44 draft never saved `fileImports` (Session 48).
+        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides', 'fileImports']) || {},
         // With a catalog, the feature-edit migration writes `featureOverrides`.
         ...(savedDraft(data.features) ? { features: withoutUnsavedEmpty(features, data.features, [
           'featureColorOverrides', 'featureVisibilityManualRules', 'labelOverrideRows', 'labelTextBulkOverrides',
@@ -6429,9 +6534,11 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
+    /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
+    const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
     {
-      /** @type {{ installLoadedArtifactSlots?: (slots: LoadedArtifactSlots) => void }} */ (options)
-        .installLoadedArtifactSlots?.(opensOtherSet
+      installLoadedArtifactSlots?.(opensOtherSet
         ? { opening: otherArtifactSlot, stashed: topArtifactSlot }
         : { opening: null, stashed: otherArtifactSlot });
       if (opensOtherSet) desiredResultIndex = Number(state.selectedResultIndex.value) || 0;
@@ -6474,7 +6581,11 @@ const importSessionDocument = async (e, options = {}) => {
     if (!currentSchemaSession) {
       // Only a request Load read and projected is committed: a Session before
       // 31 has none (`readSessionRequests`, OV-862), whatever its file holds (OV-819).
-      const committed = canonicalSession ? cloneCanonicalSession(data) : null;
+      const stored = canonicalSession ? cloneCanonicalSession(data) : null;
+      // OV-1181 B-LOAD: after the stored figure, before History's base (`afterImport`).
+      const committed = stored && await convertDetachedProteinResultFrames(
+        sourceSessionVersion, stored, canonicalProjectionInput
+      );
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({
@@ -6485,6 +6596,12 @@ const importSessionDocument = async (e, options = {}) => {
       }
       setCommittedCanonicalSession(committed);
       activeSessionResourceTable = null;
+    } else {
+      // OV-1145 B-LOAD: after the stored figure, before History's base (`afterImport`).
+      const convertedKeptSlot = await convertLoadedProteinResultFrames(
+        sourceSessionVersion, opensOtherSet ? topArtifactSlot : otherArtifactSlot
+      );
+      if (convertedKeptSlot && options.isCurrent()) installLoadedArtifactSlots?.({ opening: null, stashed: convertedKeptSlot });
     }
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'success',

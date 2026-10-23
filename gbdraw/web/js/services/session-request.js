@@ -14,14 +14,19 @@ import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/c
 import {
   EDITOR_TABLE_OPTIONS,
   editorTableRef,
+  markedRows,
+  parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
   parseSpecificRules,
   parseWhitelistRules,
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
-  serializeSpecificRules
+  serializeSpecificRules,
+  withImportedBlacklistWords,
+  withImportedDefaultColors
 } from './file-imports.js';
+/** @import { FileImports } from './file-imports.js' */
 import {
   buildBulkLabelProjection,
   parseLabelOverrideTsv,
@@ -53,6 +58,9 @@ import {
 } from './linear-track-slot-model.js';
 import {
   activeDepthTrackIndices,
+  defaultDepthSeriesLabel,
+  depthSeriesDefaultColor,
+  importedDepthSeriesColor,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -114,6 +122,7 @@ import {
   comparisonFiltersForMode,
   effectiveLinearAxisColor,
   isModeProfileDefault,
+  labelStyleForMode,
   linearAxisRulerApplies,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
@@ -180,6 +189,7 @@ import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
+  getResourcePayloadIdentity,
   getResourcePayloadOwner,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
@@ -686,6 +696,11 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
   circular: 'labels.circular.scope',
   linear: 'labels.linear.scope'
 });
+// The feature label style of a drawing's mode: its `adv` field and config path.
+const MODE_LABEL_STYLE_PATHS = Object.freeze({
+  circular: Object.freeze({ label_line: 'labels.circular.line', label_protection: 'labels.circular.protection' }),
+  linear: Object.freeze({ label_line: 'labels.linear.line', label_protection: 'labels.linear.protection' })
+});
 
 /** @type {Readonly<Record<string, string>>} */
 const CIRCULAR_LABEL_SCOPES = Object.freeze({ none: 'none', out: 'outer', both: 'both' });
@@ -778,6 +793,7 @@ export const managedConfigOverridePathsForMode = (mode) => {
     Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
   );
   paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
+  Object.values(MODE_LABEL_STYLE_PATHS[mode]).forEach((path) => paths.add(path));
   for (const path of [
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth,
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth,
@@ -1062,10 +1078,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const encodedEntry = adoptedSource?.descriptor || entry;
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
-    const owner = getResourcePayloadOwner(entry);
-    const identity = /** @type {SessionResourceSource | null} */ (
-      getSessionResourceSource(owner)
-    )?.descriptor || owner;
+    const identity = getResourcePayloadIdentity(entry);
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
     /** @type {RawSessionResourceDescriptor} */
@@ -1714,6 +1727,11 @@ const buildConfigOverrides = (
       : Boolean(form.show_skew),
     [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
+    // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
+    [MODE_LABEL_STYLE_PATHS[state.mode.value].label_line]:
+      adv.label_line === labelStyleForMode(state.mode.value).label_line ? null : adv.label_line,
+    [MODE_LABEL_STYLE_PATHS[state.mode.value].label_protection]:
+      adv.label_protection === labelStyleForMode(state.mode.value).label_protection ? null : adv.label_protection,
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
@@ -2094,8 +2112,8 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
     const track = tracks[trackIndex] || {};
     return {
       source,
-      label: String(track.label || (logicalTrackCount === 1 ? 'Depth' : `Depth ${trackIndex + 1}`)),
-      color: String(track.color || drawing.adv.depth_color || '#4A90E2'),
+      label: String(track.label || defaultDepthSeriesLabel(trackIndex, logicalTrackCount)),
+      color: String(track.color || depthSeriesDefaultColor(trackIndex, drawing.adv)),
       height: state.mode.value === 'linear'
         ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
         : null,
@@ -4138,8 +4156,10 @@ const projectCanonicalDepthTracks = ({
     const label = canonicalDepthText(track.label, `${fieldName}.label`);
     const color = canonicalDepthText(track.color, `${fieldName}.color`);
     return {
-      label: label ?? (options.depthTracks.length === 1 ? 'Depth' : `Depth ${trackIndex + 1}`),
-      color: color ?? '#4A90E2',
+      // A series the request does not name stays unnamed in the draft (OV-1508).
+      label: label ?? '',
+      // The import gives a series without a color the request's Depth color.
+      color,
       height: mode === 'linear'
         ? canonicalDepthNumber(track.height, `${fieldName}.height`)
         : null,
@@ -4343,6 +4363,7 @@ const projectFullConfigOverrides = (config, mode) => {
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   paths.add(labelScopePath);
+  Object.values(MODE_LABEL_STYLE_PATHS[mode]).forEach((path) => paths.add(path));
   Object.values(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS).forEach((path) => {
     paths.add(`${path}.short`);
     paths.add(`${path}.long`);
@@ -4401,6 +4422,9 @@ const projectCanonicalConfigOverrides = (overrides, mode) => {
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   if (Object.prototype.hasOwnProperty.call(overrides, labelScopePath)) {
     projected.label_scope = overrides[labelScopePath];
+  }
+  for (const [field, path] of Object.entries(MODE_LABEL_STYLE_PATHS[mode])) {
+    if (Object.prototype.hasOwnProperty.call(overrides, path)) projected[field] = overrides[path];
   }
   for (const [semanticName, path] of Object.entries(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS)) {
     const value = sharedLengthOverrideValue(overrides, path);
@@ -4700,7 +4724,8 @@ export const projectCanonicalSessionRequest = ({
   repairLegacyTableRows = false,
   sessionResourceTable = null,
   deferResourceContent = false,
-  adoptCanonicalPayloads = false
+  adoptCanonicalPayloads = false,
+  markCardFileRows = false
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -5215,7 +5240,7 @@ export const projectCanonicalSessionRequest = ({
     if (!deferResourceContent) {
       projectedSpecificRules = readSessionTable('specific-colors', () => parseSpecificRules(
         resourceTextFromRef(resources, colorTableRef)
-      )).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
+      )).rules;
     }
   }
   let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)
@@ -5242,6 +5267,14 @@ export const projectCanonicalSessionRequest = ({
     if (!deferResourceContent) {
       projectedPriorityRules = readLegacyTable('qualifier-priority', qualifierPriorityRef, parsePriorityRules).rules;
     }
+  }
+  // OV-1280: a Session 48 without a Web draft (CLI, Python) holds its tables
+  // only as the cards' files, so each row read from one is its card's row.
+  const fromCardFiles = markCardFileRows && !deferResourceContent;
+  if (fromCardFiles) {
+    if (colorTableRef?.resourceId) projectedSpecificRules = markedRows(projectedSpecificRules, 't_color');
+    if (whitelistRef) projectedWhitelist = markedRows(projectedWhitelist, 'whitelist');
+    if (qualifierPriorityRef) projectedPriorityRules = markedRows(projectedPriorityRules, 'qualifier_priority');
   }
   const visibilityRef = editorTableRef(options, 'visibility');
   const projectedFeatureVisibilityRules = !deferResourceContent && visibilityRef
@@ -5433,11 +5466,15 @@ export const projectCanonicalSessionRequest = ({
   ) {
     throw new Error('diagramOptions.depthTrackHeights must contain only null values for Circular requests.');
   }
-  const projectedDepthTracks = canonicalDepth?.tracks || Array.from(
+  const projectedDepthColor = overrides.depth_color || '#4A90E2';
+  const projectedDepthTracks = canonicalDepth?.tracks.map((track) => ({
+    ...track,
+    color: importedDepthSeriesColor(track.color, projectedDepthColor)
+  })) || Array.from(
     { length: projectedDepthTrackCount },
     (_, index) => ({
-      label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
-      color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
+      label: String(options.depthTrackLabels?.[index] ?? ''),
+      color: importedDepthSeriesColor(options.depthTrackColors?.[index], projectedDepthColor),
       height: projectOptionalNumber(options.depthTrackHeights?.[index], { field: 'height' }),
       large_tick_interval: projectOptionalNumber(options.depthTrackLargeTickIntervals?.[index], { field: 'large_tick_interval' }),
       small_tick_interval: projectOptionalNumber(options.depthTrackSmallTickIntervals?.[index], { field: 'small_tick_interval' }),
@@ -5521,6 +5558,9 @@ export const projectCanonicalSessionRequest = ({
     window_size: options.window ?? null,
     step_size: options.step ?? null,
     label_rendering: overrides.label_rendering || 'auto',
+    // A request without a label style drew its mode's default, which Load gives a missing field.
+    ...(Object.hasOwn(overrides, 'label_line') ? { label_line: overrides.label_line } : {}),
+    ...(Object.hasOwn(overrides, 'label_protection') ? { label_protection: overrides.label_protection } : {}),
     circular_label_placement: renderRequest.mode === 'circular'
       ? (overrides.circular_label_placement || 'horizontal')
       : 'horizontal',
@@ -5582,7 +5622,7 @@ export const projectCanonicalSessionRequest = ({
     gc_content_tick_interval: overrides.gc_content_large_tick_interval ?? null,
     gc_content_small_tick_interval: overrides.gc_content_small_tick_interval ?? null,
     gc_content_tick_font_size: overrides.gc_content_tick_font_size ?? null,
-    depth_color: overrides.depth_color || '#4A90E2',
+    depth_color: projectedDepthColor,
     depth_height: overrides.depth_height ?? null,
     depth_min: overrides.depth_min ?? null,
     depth_max: overrides.depth_max ?? null,
@@ -5670,6 +5710,15 @@ export const projectCanonicalSessionRequest = ({
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
     ? overrides.label_blacklist.join(', ')
     : String(overrides.label_blacklist || '');
+  /** @type {FileImports} */
+  const projectedFileImports = {};
+  if (fromCardFiles && defaultColorsRef?.resourceId) {
+    projectedFileImports.d_color = withImportedDefaultColors({}, projectedDefaultColors, () => null).imported;
+  }
+  // A CLI blacklist file gives every word of the text the request holds.
+  const blacklistImport = fromCardFiles && explicitBindings?.blacklist != null
+    ? withImportedBlacklistWords('', parseBlacklistWords(projectedBlacklistText).words).imported : null;
+  if (blacklistImport) projectedFileImports.blacklist = blacklistImport;
   let inputType = records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb';
   // CLI rendering can normalize GFF records to GenBank resources. Without a
   // saved Web draft, initialize the input selector from the original bindings.
@@ -5713,6 +5762,7 @@ export const projectCanonicalSessionRequest = ({
         : (projectedBlacklistText.trim() ? 'Blacklist' : 'None'),
       whitelist: projectedWhitelist,
       blacklistText: projectedBlacklistText,
+      fileImports: projectedFileImports,
       linearRecordLayout: linearLayout,
       annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{

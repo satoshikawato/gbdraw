@@ -77,11 +77,8 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),
 // expected until their fix: a difference line each one names.
-const KNOWN_MISMATCHES = Object.freeze({
-  // OV-1198: a drawn Depth file removed live hides its track, but its Legend
-  // row stays on the Result and in the Legend list; Generate draws none.
-  trackData: { id: 'OV-1198', matches: (line) => line === 'legend walk-depth drawn: live true, generated false' }
-});
+/** @type {Readonly<Record<string, { id: string, matches: (line: string) => boolean }>>} */
+const KNOWN_MISMATCHES = Object.freeze({});
 
 // The fixtures: the shown drawing with its Result, and the other drawing's
 // Result (Linear always draws the one-record file).

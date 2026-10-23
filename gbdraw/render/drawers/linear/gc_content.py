@@ -7,6 +7,9 @@ from gbdraw.svg.elements import Group, Line, Path, Rect, Text
 from ....analysis.gc import gc_content_percent_df
 from ....layout.linear_coords import normalize_position_to_linear_track
 from ....layout.scalar_axis import (
+    LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
+    LINEAR_SCALAR_AXIS_STROKE_PX,
+    LINEAR_SCALAR_AXIS_TICK_PX,
     format_percent_tick,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
@@ -46,8 +49,8 @@ class GcContentDrawer:
         self.percent_border_color: str = str(getattr(gc_config, "percent_border_color", "#4b5563"))
         self.percent_border_width: float = float(getattr(gc_config, "percent_border_width", 0.8))
         self.axis_stroke: str = "#4b5563"
-        self.axis_stroke_width: float = 0.8
-        self.axis_tick_size: float = 3.0
+        self.axis_stroke_width: float = LINEAR_SCALAR_AXIS_STROKE_PX
+        self.axis_tick_size: float = LINEAR_SCALAR_AXIS_TICK_PX
         self.axis_small_tick_size: float = 2.0
 
     def _tick_font_size(self, track_height: float) -> float:
@@ -58,7 +61,6 @@ class GcContentDrawer:
         group: Group,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -68,7 +70,6 @@ class GcContentDrawer:
             record_len,
             record_len,
             alignment_width,
-            genome_size_normalization_factor,
         )
         width = max(0.0, float(final_x) - float(start_x))
         group.add(
@@ -111,7 +112,6 @@ class GcContentDrawer:
         group: Group,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -125,7 +125,6 @@ class GcContentDrawer:
             record_len,
             record_len,
             alignment_width,
-            genome_size_normalization_factor,
         )
         axis_group = Group(id=axis_group_id)
         axis_group.add(
@@ -183,7 +182,7 @@ class GcContentDrawer:
             axis_group.add(
                 Text(
                     format_percent_tick(tick_value),
-                    insert=(start_x - self.axis_tick_size - 1.5, tick_y),
+                    insert=(start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX, tick_y),
                     fill=self.axis_stroke,
                     font_size=font_size,
                     text_anchor="end",
@@ -200,7 +199,6 @@ class GcContentDrawer:
         gc_df: DataFrame,
         record_len: int,
         alignment_width: float,
-        genome_size_normalization_factor: float,
         track_height: float,
         start_x: float,
         start_y: float,
@@ -221,7 +219,6 @@ class GcContentDrawer:
                 plot_df,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 record_transform=record_transform,
             )
@@ -232,7 +229,6 @@ class GcContentDrawer:
                 gc_df,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 dinucleotide,
                 record_transform=record_transform,
@@ -244,7 +240,6 @@ class GcContentDrawer:
                 group,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 start_x,
                 start_y,
@@ -268,7 +263,6 @@ class GcContentDrawer:
                 record_len,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
             )
             self._add_percent_border(
                 group,
@@ -282,7 +276,6 @@ class GcContentDrawer:
                 group,
                 record_len,
                 alignment_width,
-                genome_size_normalization_factor,
                 track_height,
                 start_x,
                 start_y,

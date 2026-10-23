@@ -47,8 +47,9 @@ class ValidationError(GbdrawError):
 class LabelLayoutError(ValidationError):
     """A label setting the engine cannot draw (radial labels that find no room).
 
-    The label fit counts it as a setting that does not fit; any other error of
-    an assembly is not about labels and is raised.
+    The label fit counts it as a setting that does not fit, as it counts a
+    ``TRACK_LAYOUT`` error of a row's assembly (the row's settings leave the
+    tracks no room). Any other error of an assembly is raised.
     """
 
 

@@ -13,6 +13,7 @@ import { diagnosticError, normalizeUserFacingError } from '../../utils/error-nor
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { featureEditsOf } from '../../services/drawing/feature-edits.js';
+import { joinSentences, t, tn } from '../../utils/i18n.js';
 /** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
 /** @import { FeatureRequestRecord } from '../../services/feature-placement.js' */
 /** @import { FeatureEditsSlice } from '../../services/drawing/feature-edits.js' */
@@ -97,21 +98,21 @@ export const createFeatureEditTableActions = ({
     const records = committed?.renderRequest?.records || [];
     const rows = committed && records.length ? requestFeatureOverrides(drawing.featureOverrides, records) : [];
     if (!committed || rows.length === 0) {
-      showNotice({ text: 'There are no feature edits to export.' });
+      showNotice({ text: t('There are no feature edits to export.') });
       return false;
     }
     const { text, reason } = await buildFeatureOverrideTable({
       renderRequest: committed.renderRequest, resources: committed.resources, rows, readResourceRecordCount
     });
     if (!text) {
-      showNotice({ text: `Cannot export feature edits: ${reason}`, tone: 'warning' });
+      showNotice({ text: t('Cannot export feature edits: {reason}', { reason: String(reason) }), tone: 'warning' });
       return false;
     }
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
     const elsewhere = Object.values(drawing.featureOverrides).filter(hasEdit).length - rows.length;
     if (elsewhere > 0) {
-      showNotice({ text: `Exported ${rows.length} feature edit(s).`, items: [
-        `${elsewhere} feature edit(s) of records outside the current diagram were not exported.`
+      showNotice({ text: tn(rows.length, 'Exported {count} feature edit.', 'Exported {count} feature edits.'), items: [
+        tn(elsewhere, '{count} feature edit of a record outside the current diagram was not exported.', '{count} feature edits of records outside the current diagram were not exported.')
       ] });
     }
     return true;
@@ -137,7 +138,7 @@ export const createFeatureEditTableActions = ({
     const records = committed?.renderRequest?.records || [];
     try {
       if (!committed || !records.length) {
-        showNotice({ text: 'No diagram is shown. Generate a diagram, then load the Feature Edits TSV.', tone: 'warning' });
+        showNotice({ text: t('No diagram is shown. Generate a diagram, then load the Feature Edits TSV.'), tone: 'warning' });
         return false;
       }
       // app-setup wires the helper; a missing one throws here and is reported as a Feature edits TSV error.
@@ -154,9 +155,9 @@ export const createFeatureEditTableActions = ({
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
       showNotice({
-        text: `Loaded ${rows.length + unmatchedRows.length} row(s). Applied ${rows.length} feature edit(s).`,
+        text: joinSentences(tn(rows.length + unmatchedRows.length, 'Loaded {count} row.', 'Loaded {count} rows.'), tn(rows.length, 'Applied {count} feature edit.', 'Applied {count} feature edits.')),
         items: unmatchedRows.length > 0
-          ? [`${unmatchedRows.length} row(s) name no record or feature of the current diagram and were not applied.`]
+          ? [tn(unmatchedRows.length, '{count} row was not applied: no matching record, or no matching feature in that record.', '{count} rows were not applied: no matching record, or no matching feature in that record.')]
           : []
       });
       return true;

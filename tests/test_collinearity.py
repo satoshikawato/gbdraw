@@ -18,8 +18,9 @@ import gbdraw.analysis.collinearity as collinearity_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
+import gbdraw.io.comparisons as comparisons_io_module
 from gbdraw.legend.sources import ComparisonLegendSource
-from tests.utils.comparison_tables import converted_pair_rows
+from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -305,28 +306,11 @@ def _translate_xy_or_zero(transform: str | None) -> tuple[float, float]:
 
 
 def _build_collinearity_match_group() -> PairWiseMatchGroup:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
+    return ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
+        collinearity_orientation_min_colors={"plus": "#eeeeee", "minus": "#ffeeee"},
     )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
-    group.collinearity_orientation_min_colors = {"plus": "#eeeeee", "minus": "#ffeeee"}
-    return group
 
 
 def _web_protein_entry(
@@ -2864,26 +2848,10 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
 
 @pytest.mark.linear
 def test_collinearity_match_path_with_metadata_serializes() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
+    group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
     )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
 
     row = SimpleNamespace(
         identity=95,
@@ -3445,7 +3413,8 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
     def fake_read_comparison_table(_blast_file):
         return frame
 
-    monkeypatch.setattr(linear_assemble_module, "read_comparison_table", fake_read_comparison_table)
+    # Linear assembly reads the table through read_comparison_resource, which parses with this reader.
+    monkeypatch.setattr(comparisons_io_module, "read_comparison_table", fake_read_comparison_table)
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],
@@ -3468,26 +3437,10 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
 
 @pytest.mark.linear
 def test_collinearity_orientation_colors_use_default_color_overrides() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
+    group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])],
+        collinearity_orientation_colors={"plus": "#112233", "minus": "#445566"},
     )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
 
     row = SimpleNamespace(
         identity=95,
@@ -3622,25 +3575,7 @@ def test_average_identity_collinearity_ignores_orientation_colors() -> None:
 
 @pytest.mark.linear
 def test_non_collinearity_match_path_does_not_add_metadata_attributes() -> None:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
-    )
-    group.records = [_record("record_a", []), _record("record_b", [])]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
+    group = ribbon_group([_record("record_a", []), _record("record_b", [])])
 
     row = SimpleNamespace(
         identity=95,
@@ -3685,31 +3620,8 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
         },
     ]
     comparison_df = pd.DataFrame.from_records(rows)
-    canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=1000,
-        align_center=False,
-    )
-    blast_config = SimpleNamespace(
-        fill_color="#d3d3d3",
-        min_color="#ffffff",
-        max_color="#000000",
-        fill_opacity=1.0,
-        stroke_color="none",
-        stroke_width=0,
-        identity=0,
-        sequence_length_dict={},
-    )
-    match_group = PairWiseMatchGroup(
-        canvas_config,
-        blast_config.sequence_length_dict,
-        comparison_df,
-        40,
-        1,
-        blast_config,
-        [_record("record_a", []), _record("record_b", [])],
-        align_center=canvas_config.align_center,
+    match_group = ribbon_group(
+        [_record("record_a", []), _record("record_b", [])], comparison_df, fill_opacity=1.0
     ).get_group()
 
     drawing = Drawing(debug=False)
@@ -3878,3 +3790,66 @@ def test_chain_merge_preserves_float_score_and_final_order(reverse, min_anchors,
         m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
         expected = cluster_lossless_collinearity_anchors(anchors, params=params)
     assert actual == expected
+
+
+def _left_to_right_sum(values, /, start=0):
+    """``sum()`` as Python 3.10 and 3.11 add floats (3.12 compensates them)."""
+
+    total = start
+    for value in values:
+        total = total + value
+    return total
+
+
+def _protein_float_reductions():
+    anchors = tuple(
+        replace(_anchor(index, index, bitscore=0.1), identity=0.1, alignment_length=1)
+        for index in range(10)
+    )
+    block = CollinearityBlock(
+        block_id="block",
+        query_record_index=0,
+        subject_record_index=1,
+        orientation="plus",
+        score=collinearity_module._anchor_bitscore_total(anchors),
+        anchors=anchors,
+    )
+    (row,) = convert_collinearity_blocks_to_pair_comparisons(
+        CollinearityResult(blocks=(block,)), record_ids=["a", "b"]
+    )[(0, 1)][["bitscore", "identity"]].itertuples(index=False)
+    size = 12
+    hits = pd.DataFrame(
+        {
+            "query": [f"q{index % 3}" for index in range(size)],
+            "subject": [f"s{index % 2}" for index in range(size)],
+            "length_product": [float(100 + (index % 7) * 17) for index in range(size)],
+            "bitscore": [float(10 + (index % 4) * 3) for index in range(size)],
+        }
+    )
+    return (
+        block.score,
+        collinearity_module._weighted_identity(anchors),
+        tuple(row),
+        protein_colinearity_module._fit_expected_bitscore_model(hits, top_fraction=1.0),
+    )
+
+
+def test_protein_float_reductions_do_not_depend_on_the_python_version(monkeypatch) -> None:
+    """Stored Gallery protein results equal a rebuild on every Python (OV-1237).
+
+    Python 3.12 changed ``sum()`` of floats to compensated summation, so a
+    result built with ``sum()`` on 3.10 or 3.11 differed in its last bits from
+    the 3.13 Sessions and the Web's Pyodide.
+    """
+
+    current = _protein_float_reductions()
+    with monkeypatch.context() as patched:
+        patched.setattr("builtins.sum", _left_to_right_sum)
+        left_to_right = _protein_float_reductions()
+
+    assert current == left_to_right
+    score, identity, (bitscore, row_identity), model = current
+    assert score == bitscore == 1.0
+    assert identity == row_identity == 0.1
+    # CPython 3.12+ sum() values; left-to-right addition gives (0.2345015637431571, 0.645579356667975).
+    assert model == (0.23450156374315714, 0.6455793566679746)

@@ -3386,12 +3386,12 @@ test('@comparison-contract File source order moves multi-record blocks through p
     const app = window.__GBDRAW_APP__;
     app.setLinearRecordRow(app.linearSeqs[0].uid, app.linearRecordRows.at(-1).row);
   });
-  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('does not give each File its own consecutive rows');
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
   await expect(page.getByLabel('Arrange linear records in rows')).not.toBeChecked();
-  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('does not give each File its own consecutive rows');
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
 
@@ -3871,7 +3871,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   await settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true }).selectOption('1');
   await settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true }).selectOption('2');
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'));
-  const member = settings.getByRole('spinbutton', { name: 'Member hits per protein', exact: true });
+  const member = settings.getByRole('spinbutton', { name: 'Max hits per protein for groups', exact: true });
   await expect(member).toHaveValue('');
   await expect(member).toHaveAttribute('placeholder', 'Unbounded');
   await member.fill('7');
@@ -4076,7 +4076,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
     ['32', 12, 2], ['16', 12, 1], ['2', 2, 1], ['8', 8, 1], ['24', 12, 2]
   ]) {
     await total.selectOption(budget);
-    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} runs)`);
+    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} parallel runs)`);
     await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
   }
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -4110,7 +4110,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await expect(runs.locator('option:checked')).toContainText('1 effective');
   await expect(threads.locator('option:checked')).toContainText('4 effective');
   await total.selectOption('32');
-  await expect(runs.locator('option:checked')).toHaveText('2 runs');
+  await expect(runs.locator('option:checked')).toHaveText('2 parallel runs');
   await expect(threads.locator('option:checked')).toHaveText('8');
   await runs.selectOption({ index: 0 });
   await threads.selectOption('auto');
@@ -4131,7 +4131,7 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
     app.setLinearComparisonLosatpMode('collinear');
     app.losat.blastp.collinearSearchScope = 'all';
   });
-  const checkbox = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  const checkbox = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches' });
   await expect(checkbox).not.toBeChecked();
   const run = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;

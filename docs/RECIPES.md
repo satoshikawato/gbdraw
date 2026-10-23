@@ -178,6 +178,8 @@ gbdraw linear --gbk genome.gb -o output -f svg --show_labels all
 gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg --show_labels first
 ```
 
+If the run stops with "Linear labels do not fit", run it again with an option the message lists; see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
+
 ### Put tracks below the axis
 
 ```bash
@@ -290,6 +292,20 @@ gbdraw linear \
   -f svg
 ```
 
+### Two-genome comparison with LOSATN
+
+```bash
+gbdraw linear \
+  --gbk genome1.gb genome2.gb \
+  --losat losatn \
+  --align_center \
+  --separate_strands \
+  -o losatn_comparison \
+  -f svg
+```
+
+gbdraw runs the nucleotide search itself with native LOSAT or NCBI `blastn`; do not combine `--losat` with `-b/--blast`. Use `--losat tlosatx` for translated comparisons. See [Install native LOSAT](./REFERENCE/command-line.md#install-native-losat).
+
 ### Multi-genome comparison
 
 ```bash
@@ -331,6 +347,8 @@ gbdraw linear \
   -f svg
 ```
 
+If the run stops with "Linear labels do not fit", run it again with an option the message lists; see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
+
 Use `--losatp_mode pairwise`, `similarity_groups`, or `collinear`. The
 `similarity_groups` mode creates gbdraw similarity groups for visualization; it does
 not infer phylogeny-based orthogroups. Do not combine `--losat` with
@@ -371,6 +389,17 @@ gbdraw circular \
 ```
 
 Pass more `--conservation_blast` files to add rings. Each ring shows raw BLAST HSP spans, not an inferred measure of evolutionary conservation. Reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
+
+To let gbdraw run the nucleotide search for the ring, give the comparison genome instead of a BLAST file:
+
+```bash
+gbdraw circular \
+  --gbk reference.gb \
+  --losat losatn \
+  --conservation_sequence comparison.fasta \
+  -o circular_losatn_ring \
+  -f svg
+```
 
 For a standalone interactive SVG with both matched spans available, add one comparison genome (FASTA, GenBank, or DDBJ) per BLAST source:
 
@@ -458,6 +487,14 @@ gbdraw linear --gff annotations.gff --fasta sequence.fasta -o output -f svg
 ```
 
 ## Output formats
+
+### Set the font
+
+```bash
+gbdraw linear --gbk genome.gb --font_family "DejaVu Serif" -o serif -f svg
+```
+
+`--font_family` applies to all diagram text. To use a font file that is not installed, add `--font_file PATH`. See [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 
 ### Export to multiple formats
 

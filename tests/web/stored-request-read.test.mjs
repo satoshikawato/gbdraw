@@ -13,6 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
+import { SESSION_VERSION } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -556,23 +557,24 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
 // drops that request at its root (K22), `restoresNothing` refuses the file.
 test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is missing, unreadable or of no integer schema: nothing restored, nothing committed (E-OD21, E-OD22)', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'gbdraw-cli-47-'));
-  let cli47;
+  let cliCurrent;
   try {
     const file = join(directory, 'cli.gbdraw-session.json.gz');
     execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
       '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
       cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
     });
-    cli47 = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+    cliCurrent = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
   const sessions = [
     ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
     ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
-    ['cli.v47', cli47]
+    ['cli.v47', { ...cliCurrent, version: 47 }],
+    ['cli.current', cliCurrent]
   ];
-  assert.equal(cli47.version, 47);
+  assert.equal(cliCurrent.version, SESSION_VERSION);
   for (const [name, base] of sessions) {
     assert.ok(!Object.hasOwn(base, 'config') && !Object.hasOwn(base, 'modes'), name);
     const missing = clone(base);
@@ -626,6 +628,10 @@ const requestRow = ({ code, path }) => REQUEST_ROW_CODES.has(code) || /^(otherMo
 
 test('every Gallery Session and Session fixture loads with no stored-request row and commits the current schema (G3)', { timeout: 600000 }, async () => {
   const { readdirSync } = await import('node:fs');
+  // Node has no diagram Worker: Python's conversion of the protein results a
+  // Session up to 47 stored for a reversed record (OV-1145) answers "nothing changed".
+  const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  setStoredProteinResultFrameConverter(async () => ({ result: { resources: {} } }));
   const findings = {};
   let loaded = 0;
   for (const folder of ['gbdraw/web/gallery/sessions/', 'tests/fixtures/sessions/']) {
@@ -642,6 +648,7 @@ test('every Gallery Session and Session fixture loads with no stored-request row
       loaded += 1;
     }
   }
+  setStoredProteinResultFrameConverter(null);
   assert.deepEqual(findings, {});
   assert.ok(loaded >= 50, String(loaded));
 });

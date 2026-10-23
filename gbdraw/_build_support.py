@@ -44,6 +44,7 @@ _WEB_APP_PACKAGE_DATA = [
     "web/js/services/*.js",
     "web/js/services/*/*.js",
     "web/js/utils/*.js",
+    "web/js/utils/*/*.js",
     "web/presets/*.txt",
     "web/presets/*.tsv",
     "web/tutorial-data/*.json",

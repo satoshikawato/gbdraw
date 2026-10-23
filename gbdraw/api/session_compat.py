@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import json
 import logging
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
-from typing import Any, Collection, Mapping, Sequence, cast
+from typing import Any, Callable, Collection, Mapping, Sequence, cast
 
 from pandas import DataFrame
 
@@ -47,9 +49,14 @@ from gbdraw.session_io import (
 from .migration_report import SessionMigrationReport
 from .options import LinearMultiRecordOptions, LinearRecordTranslation, losatp_analysis_mode
 from .record_planning import (
+    _SOURCE_BINDING_COLUMNS,
     ResolvedRecordCollection,
     ResolvedRecordProvenance,
+    UnmatchedFrameItem,
+    comparison_record_bindings,
+    has_source_bound_results,
     project_similarity_alignment_centers,
+    project_source_bound_results,
 )
 
 from .request_render import (
@@ -77,6 +84,7 @@ from .requests import (
     _with_legacy_similarity_alignment,
 )
 from ..linear_comparison import (
+    LinearComparison,
     _endpoint_frame,
     project_search_frame_comparisons,
     reverse_endpoint_table_text,
@@ -1133,7 +1141,121 @@ def _replace_plan_request(
     )
 
 
-_MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
+MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
+# Sessions up to 47 stored the protein results of a reversed Linear record in
+# the drawn frame; Session 48 stores them in the search frame (OV-1145).
+DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION = 47
+
+
+def describe_unmatched_frame_item(item: UnmatchedFrameItem) -> str:
+    feature = "" if item.feature_index is None else f", source feature {item.feature_index}"
+    return (
+        f"the stored {item.kind} of protein {item.protein_id!r} (record #{item.record_index + 1}{feature}) "
+        "matches neither strand of its record"
+    )
+
+
+def drawn_frame_protein_results_to_search_frame(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+) -> tuple[DiagramRequest, tuple[UnmatchedFrameItem, ...]]:
+    """Store the protein results of ``request`` in each record's search frame.
+
+    The core of the Session 47 migrator (OV-1145): every table row and typed
+    item tells its frame by its tags, so a tagged item already in the search
+    frame stays. An untagged anchor side (Session 39) of a reversed record is
+    decided by its record, so only a Session up to 47 may be converted, once.
+    An item matching neither frame stays as given and is returned; it draws
+    as stored, and a Session writer refuses it.
+    """
+
+    if not isinstance(plan, LinearRequestPlan) or not isinstance(request, LinearDiagramRequest):
+        return request, ()
+    options = request.options
+    if not has_source_bound_results(
+        options.linear_comparisons, options.protein_comparisons,
+        options.orthogroups, options.collinearity_blocks,
+    ):
+        return request, ()
+    projection = project_source_bound_results(
+        options,
+        comparison_record_bindings(plan.records, plan.provenance, search_frame=True),
+    )
+    if projection.options is options:
+        return request, projection.unmatched
+    return replace(request, options=projection.options), projection.unmatched
+
+
+_STORED_PROTEIN_RESULT_KINDS = frozenset(
+    {"precomputedProteinComparison", "orthogroupResult", "collinearityResult"}
+)
+
+
+def stores_protein_results(payload: Mapping[str, Any] | None) -> bool:
+    """Whether a stored Linear request payload holds protein results."""
+
+    comparisons = payload.get("comparisons") if isinstance(payload, Mapping) else None
+    return isinstance(payload, Mapping) and payload.get("mode") == "linear" and any(
+        isinstance(item, Mapping) and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS
+        for item in (comparisons if isinstance(comparisons, list) else ())
+    )
+
+
+def search_frame_protein_resources(
+    payload: Mapping[str, Any],
+    request: DiagramRequest,
+    converted: DiagramRequest,
+) -> dict[str, bytes]:
+    """The new bytes of the stored resources of ``payload`` that ``converted`` changed.
+
+    ``request`` is ``payload`` decoded and ``converted`` its results in the
+    search frame. Both are encoded alone; each protein item whose bytes the
+    conversion changed gets the converted bytes under its stored resource ID,
+    so the request and every other resource stay as stored (OV-1145).
+    """
+
+    from gbdraw.session_request_codec import encode_canonical_request
+    from gbdraw.session_resources import SessionResourceTable
+    from gbdraw.session_io import _embedded_resource_bytes
+
+    def protein_items(value: DiagramRequest) -> tuple[list[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]]:
+        table = SessionResourceTable()
+        encoded = encode_canonical_request(value, table=table).payload
+        return [item for item in encoded["comparisons"] if item.get("kind") in _STORED_PROTEIN_RESULT_KINDS], \
+            table.descriptors()
+
+    stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
+              and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS]
+    # ``request`` as stored: its tables encode to the bytes they were read from.
+    as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
+                 if isinstance(request, LinearDiagramRequest) else request)
+    (before, before_resources), (after, after_resources) = protein_items(as_stored), protein_items(converted)
+    if not len(stored) == len(before) == len(after):
+        raise ValidationError("Stored protein results do not match their decoded request.")
+    changed: dict[str, bytes] = {}
+    for item, old, new in zip(stored, before, after, strict=True):
+        if not item["kind"] == old["kind"] == new["kind"]:
+            raise ValidationError("Stored protein results do not match their decoded request.")
+        content = _embedded_resource_bytes(after_resources[new["resourceId"]])
+        if content == _embedded_resource_bytes(before_resources[old["resourceId"]]):
+            continue
+        resource_id = str(item["resourceId"])
+        if changed.get(resource_id, content) != content:
+            raise ValidationError(f"Stored resource {resource_id!r} holds two different protein results.")
+        changed[resource_id] = content
+    return changed
+
+
+def replace_resource_bytes(descriptor: Mapping[str, Any], content: bytes) -> dict[str, Any]:
+    """``descriptor`` holding ``content``: base64 data, size and any checksum."""
+
+    replaced = {**descriptor, "encoding": "base64", "data": base64.b64encode(content).decode("ascii"),
+                "size": len(content)}
+    checksum = descriptor.get("checksum")
+    if checksum not in (None, ""):
+        prefix = "sha256:" if str(checksum).lower().startswith("sha256:") else ""
+        replaced["checksum"] = prefix + hashlib.sha256(content).hexdigest()
+    return replaced
 
 
 def _main_display_frame_rows_to_search_frame(
@@ -1154,7 +1276,7 @@ def _main_display_frame_rows_to_search_frame(
     if (
         not isinstance(plan, LinearRequestPlan)
         or not isinstance(request, LinearDiagramRequest)
-        or drawing.version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
+        or drawing.version > MAIN_DISPLAY_FRAME_SESSION_VERSION
         or not request.options.linear_comparisons
     ):
         return request
@@ -1318,6 +1440,9 @@ def _adapt_session_plan(
         plan=plan if isinstance(plan, LinearRequestPlan) else None,
     )
     request = _main_display_frame_rows_to_search_frame(plan, request, drawing)
+    unconverted: tuple[UnmatchedFrameItem, ...] = ()
+    if drawing.version <= DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION:
+        request, unconverted = drawn_frame_protein_results_to_search_frame(plan, request)
     if request is not plan.request:
         plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
@@ -1431,6 +1556,7 @@ def _adapt_session_plan(
             protein_derived_evidence=evidence,
             protein_id_map=id_map,
             warnings=warnings,
+            unconverted_protein_results=tuple(map(describe_unmatched_frame_item, unconverted)),
         ),
     ), extraction, plan
 
@@ -1544,6 +1670,90 @@ def render_session_compatible_request(
         include_feature_catalog=include_feature_catalog,
     )
     return replace(result, migration_report=migration_report)
+
+
+# main's Web writers of Session 39, and of Session 40 before 3bca0e8d9 (#319),
+# stored a reversed record's drawn-frame feature ID in a protein table's
+# ``*_feature_svg_id`` and wrote no ``*_view_feature_svg_id``; a later Session
+# 40 writes both, so the missing column, not the version, tells them apart
+# (OV-1183).
+DRAWN_FEATURE_ID_SESSION_MAX_VERSION = 40
+
+
+def _stores_drawn_feature_ids(frame: DataFrame) -> bool:
+    # The projection's own predicate: only rows with source bindings are projected.
+    if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
+        return False
+    return any(f"{role}_view_feature_svg_id" not in frame.columns for role in ("query", "subject"))
+
+
+def decode_session_request(
+    session_version: int,
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    output_directory: str | Path,
+) -> DiagramRequest:
+    """Decode one stored request of a Session of ``session_version``.
+
+    The canonical payload is migrated first, and a stored font size <= 0 reads
+    as Auto (``with_stored_font_sizes_as_auto``); a Linear table of a Session up
+    to 40 without view ID columns is marked ``drawn_feature_ids``, so the
+    planner reads its stored IDs as views (OV-1183).
+    """
+
+    from gbdraw.session_request_codec import decode_canonical_request, with_stored_font_sizes_as_auto
+
+    request = decode_canonical_request(
+        with_stored_font_sizes_as_auto(canonical_payload_for_session_decode(session_version, payload)),
+        resource_paths=resource_paths,
+        output_directory=output_directory,
+    )
+    if session_version > DRAWN_FEATURE_ID_SESSION_MAX_VERSION or not isinstance(request, LinearDiagramRequest):
+        return request
+    return _with_drawn_feature_id_marks(request, lambda comparison: _stores_drawn_feature_ids(comparison.matches))
+
+
+def _with_drawn_feature_id_marks(
+    request: LinearDiagramRequest,
+    marked: Callable[[LinearComparison], bool],
+) -> LinearDiagramRequest:
+    """``request`` whose comparisons carry ``drawn_feature_ids`` where ``marked`` says so."""
+
+    stored = request.options.linear_comparisons or ()
+    comparisons = tuple(
+        comparison if comparison.drawn_feature_ids == marked(comparison)
+        else replace(comparison, drawn_feature_ids=marked(comparison))
+        for comparison in stored
+    )
+    if all(before is after for before, after in zip(stored, comparisons, strict=True)):
+        return request
+    adapted = replace(request, options=replace(request.options, linear_comparisons=comparisons))
+    # ``replace`` drops the old-schema alignment state (an ``init=False`` field).
+    legacy = request._legacy_similarity_alignment
+    return adapted if legacy is None else _with_legacy_similarity_alignment(adapted, legacy)
+
+
+def resolve_session_write_request(request: DiagramRequest) -> DiagramRequest:
+    """Resolve ``request`` for a Session writer.
+
+    A table still read with the drawn-frame IDs of a Session up to 40 moves
+    to the search frame first, as an upgrade moves it, so the written table
+    holds source and view IDs (OV-1183). A row matching neither frame raises.
+    """
+
+    plan = plan_request(request)
+    resolved = plan.request
+    if not isinstance(resolved, LinearDiagramRequest) or not any(
+        comparison.drawn_feature_ids for comparison in resolved.options.linear_comparisons or ()
+    ):
+        return resolved
+    converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, resolved)
+    if unmatched:
+        raise ValidationError(f"Cannot write {describe_unmatched_frame_item(unmatched[0])}.")
+    legacy = resolved._legacy_similarity_alignment
+    return converted if legacy is None or not isinstance(converted, LinearDiagramRequest) else (
+        _with_legacy_similarity_alignment(converted, legacy))
 
 
 def canonical_payload_for_session_decode(
@@ -1661,11 +1871,20 @@ def _migrate_legacy_linear_track_slot_spec(spec: str) -> str:
 
 
 __all__ = [
+    "DRAWN_FEATURE_ID_SESSION_MAX_VERSION",
+    "DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION",
+    "MAIN_DISPLAY_FRAME_SESSION_VERSION",
     "AdaptedSessionRequest",
     "SessionMigrationReport",
     "adapt_session_request",
     "build_session_compatible_request_diagram",
     "canonical_payload_for_session_decode",
+    "decode_session_request",
+    "drawn_frame_protein_results_to_search_frame",
+    "replace_resource_bytes",
+    "resolve_session_write_request",
+    "search_frame_protein_resources",
+    "stores_protein_results",
     "project_legacy_similarity_alignment_for_current_write",
     "promote_legacy_session_similarity_alignment_request",
     "render_session_compatible_request",

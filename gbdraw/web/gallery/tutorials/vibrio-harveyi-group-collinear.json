@@ -272,7 +272,7 @@
     },
     {
       "title": "Compare the genomes with LOSATP Collinear blocks",
-      "body": "To see which regions the genomes share, compare their proteins. In Comparison, choose Run LOSAT. Open Settings, press LOSATP, set LOSATP mode, Color mode, Max unit gap, and Min block genes, and turn on Infer orthogroups with self-comparisons, as the command line does by default. Set Diagonal drift under Advanced comparison and layout, then click Generate Diagram. The ribbons run diagonally and wrap around the row ends, because NCBI starts each chromosome at an unrelated position.",
+      "body": "To see which regions the genomes share, compare their proteins. In Comparison, choose Run LOSAT. Open Settings, press LOSATP, set LOSATP mode, Color mode, Max unit gap, and Min block genes, and turn on Build similarity groups with within-record searches, as the command line does by default. Set Diagonal drift under Advanced comparison and layout, then click Generate Diagram. The ribbons run diagonally and wrap around the row ends, because NCBI starts each chromosome at an unrelated position.",
       "table": {
         "columns": [
           "Setting",
@@ -304,7 +304,7 @@
             "3"
           ],
           [
-            "Infer orthogroups with self-comparisons",
+            "Build similarity groups with within-record searches",
             "On"
           ],
           [
@@ -349,7 +349,7 @@
         },
         {
           "type": "check",
-          "selector": "input[aria-label='Infer orthogroups with self-comparisons']"
+          "selector": "input[aria-label='Build similarity groups with within-record searches']"
         },
         {
           "type": "evaluate",
@@ -652,7 +652,7 @@
     },
     {
       "title": "Start chromosome I at dnaA",
-      "body": "Start each chromosome I at its replication initiator, dnaA. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search; it finds the dnaA CDS of both species. Click Open, then in the popup open Rotate record using this feature, choose Start of the record, and click Apply when I Generate. Click > for the second match and do the same.",
+      "body": "Start each chromosome I at its replication initiator, dnaA. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search; it finds the dnaA CDS of both species. Click Open, then in the popup open Rotate record using this feature, choose Start of the record, and click Apply when I Generate. Click > for the second match; the open popup follows it. Rotate that record the same way, then close the popup.",
       "table": {
         "columns": [
           "Record",
@@ -686,7 +686,7 @@
         },
         {
           "type": "select",
-          "selector": "select[aria-label='Search field']",
+          "selector": "select[aria-label='Field to search']",
           "value": "qualifier-value"
         },
         {
@@ -748,14 +748,6 @@
           "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 of 2 matches'"
         },
         {
-          "type": "click",
-          "selector": "button[aria-label='Open active feature']"
-        },
-        {
-          "type": "waitForSelector",
-          "selector": ".feature-popup"
-        },
-        {
           "type": "waitForFunction",
           "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_022349.1'"
         },
@@ -778,6 +770,15 @@
         {
           "type": "wait",
           "ms": 400
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label='Close feature popup']"
+        },
+        {
+          "type": "waitForSelector",
+          "selector": ".feature-popup",
+          "state": "hidden"
         }
       ],
       "operations": [
@@ -786,7 +787,7 @@
           "title": "Search by qualifier value",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-06-01-search-dnaa.webp",
-            "alt": "Feature search bar with Search field set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 of 2 matches, and the first match named as NC_004603.1.",
+            "alt": "Feature search bar with Field to search set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 of 2 matches, and the first match named as NC_004603.1.",
             "caption": "Set the search field to Qualifier value, enter gene and dnaA, and click Search."
           },
           "capture": {
@@ -803,7 +804,7 @@
               },
               {
                 "type": "select",
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "qualifier-value"
               },
               {
@@ -839,7 +840,7 @@
             ],
             "visibleControls": [
               {
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "Qualifier value"
               },
               {
@@ -876,7 +877,7 @@
               },
               {
                 "type": "select",
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "qualifier-value"
               },
               {
@@ -967,7 +968,7 @@
     },
     {
       "title": "Start chromosome II at rctB",
-      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open and rotate the record to start at the feature with Apply when I Generate. Then click Clear to end the search, so the preview stops dimming the other features.",
+      "body": "Search Qualifier key product for RctB. Click Open and rotate the first match's record to start at the feature with Apply when I Generate. Click >, rotate the second record the same way in the popup, and close the popup. Then click Clear to end the search, so the preview stops dimming the other features.",
       "table": {
         "columns": [
           "Record",
@@ -1001,7 +1002,7 @@
         },
         {
           "type": "select",
-          "selector": "select[aria-label='Search field']",
+          "selector": "select[aria-label='Field to search']",
           "value": "qualifier-value"
         },
         {
@@ -1063,14 +1064,6 @@
           "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 of 2 matches'"
         },
         {
-          "type": "click",
-          "selector": "button[aria-label='Open active feature']"
-        },
-        {
-          "type": "waitForSelector",
-          "selector": ".feature-popup"
-        },
-        {
           "type": "waitForFunction",
           "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_022359.1'"
         },
@@ -1096,6 +1089,15 @@
         },
         {
           "type": "click",
+          "selector": "button[aria-label='Close feature popup']"
+        },
+        {
+          "type": "waitForSelector",
+          "selector": ".feature-popup",
+          "state": "hidden"
+        },
+        {
+          "type": "click",
           "selector": "button[aria-label='Clear search']"
         }
       ],
@@ -1105,7 +1107,7 @@
           "title": "Search the RctB product",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-07-01-search-rctb.webp",
-            "alt": "Feature search bar with Search field set to Qualifier value, product as the qualifier key, RctB as the query, 1 of 2 matches, and the first match named as NC_004605.1.",
+            "alt": "Feature search bar with Field to search set to Qualifier value, product as the qualifier key, RctB as the query, 1 of 2 matches, and the first match named as NC_004605.1.",
             "caption": "Search Qualifier key product for RctB; it finds the RctB CDS of both species."
           },
           "capture": {
@@ -1118,11 +1120,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector(\"button[aria-label='Close feature popup']\")?.click(); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
               },
               {
                 "type": "select",
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "qualifier-value"
               },
               {
@@ -1158,7 +1160,7 @@
             ],
             "visibleControls": [
               {
-                "selector": "select[aria-label='Search field']",
+                "selector": "select[aria-label='Field to search']",
                 "value": "Qualifier value"
               },
               {
@@ -1387,7 +1389,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label='Name / Species style size']",
+          "selector": "input[aria-label='Name / Species font size']",
           "value": 18
         },
         {
@@ -1396,7 +1398,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label='Subtitle style size']",
+          "selector": "input[aria-label='Subtitle font size']",
           "value": 16
         }
       ],

@@ -178,7 +178,9 @@
  * @property {unknown} [inner_label_y_offset]
  * @property {unknown} [keep_full_definition_with_plot_title]
  * @property {unknown} [label_font_size]
+ * @property {unknown} [label_line]
  * @property {unknown} [label_placement]
+ * @property {unknown} [label_protection]
  * @property {unknown} [label_rendering]
  * @property {unknown} [label_rotation]
  * @property {unknown} [legend_box_size]
@@ -261,6 +263,7 @@
  * @property {unknown} [circularConservation]
  * @property {unknown} [colors]
  * @property {unknown} [featurePlacementOverrides]
+ * @property {unknown} [fileImports]
  * @property {unknown} [filterMode]
  * @property {SessionModeSliceConfigForm} [form]
  * @property {unknown} [importedComparisonResolution]
@@ -614,7 +617,9 @@
  * @property {unknown} [inner_label_y_offset]
  * @property {unknown} [keep_full_definition_with_plot_title]
  * @property {unknown} [label_font_size]
+ * @property {unknown} [label_line]
  * @property {unknown} [label_placement]
+ * @property {unknown} [label_protection]
  * @property {unknown} [label_rendering]
  * @property {unknown} [label_rotation]
  * @property {unknown} [legend_box_size]
@@ -697,6 +702,7 @@
  * @property {unknown} [circularConservation]
  * @property {unknown} [colors]
  * @property {Record<string, unknown>} [featurePlacementOverrides]
+ * @property {unknown} [fileImports]
  * @property {unknown} [filterMode]
  * @property {CheckedSessionModeSliceConfigForm} [form]
  * @property {unknown} [importedComparisonResolution]
@@ -765,7 +771,7 @@
  * @property {unknown} [runMetadata]
  * @property {unknown} [cliInvocation]
  * @property {'gbdraw-session'} format
- * @property {46 | 47} version
+ * @property {46 | 47 | 48} version
  * @property {unknown} [createdAt]
  * @property {unknown} renderRequest
  * @property {Record<string, unknown>} resources

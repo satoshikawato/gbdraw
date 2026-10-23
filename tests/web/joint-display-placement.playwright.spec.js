@@ -380,7 +380,7 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   await generateFromControl(page);
   expect(await placements()).toBe(0);
   await expect(page.getByTestId('feature-identity-notice')).toContainText(
-    'Removed 1 feature edit(s) whose feature the replaced source no longer has.'
+    'Removed 1 feature edit whose feature the replaced source no longer has.'
   );
 });
 

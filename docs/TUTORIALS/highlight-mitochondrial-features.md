@@ -77,14 +77,14 @@ files selected.
 
 Select **Circular** and **GenBank**, then choose `HmmtDNA.gbk`. Set **Output
 Prefix** to `mitochondrial_features_highlighted`, Species to `<i>Homo
-sapiens</i>`, Track Preset to **Middle**, and leave **Separate Strands** off.
+sapiens</i>`, Track Preset to **Middle**, and turn **Separate Strands** off.
 
 ### Step 2: Set colors, labels, and feature appearance
 
 Open **Colors**. Leave Palette on **default** and load
 `presentation_colors.tsv` as **Specific rules file**.
 
-Open **Labels**, select **Both**, choose **Whitelist**, and load
+Open **Labels**, select **Both (Out + Inner)**, choose **Whitelist**, and load
 `presentation_labels.tsv` as **Whitelist File**. Load
 `cds_gene_qualifier_priority.tsv` as **Priority File (TSV)** and leave Label
 Rendering on **Auto**. This displays all 13 CDS labels from their `gene`

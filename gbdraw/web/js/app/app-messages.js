@@ -1,4 +1,10 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
+
+// The texts of a question and of a notice are shown as given: the caller words
+// them with `t` or `tn` where it asks (utils/i18n.js). The choice dialog is
+// modal, so the UI language cannot change while it shows; a notice keeps the
+// language it was shown in until it is replaced or dismissed.
 
 /**
  * The style of a choice button: one primary choice, secondary choices, or a
@@ -44,9 +50,13 @@
  * @property {string[]} [items] Warnings listed under the text.
  * @property {NoticeTone} [tone]
  *
+ * The notice one `ShowNotice` call showed: `dismiss` ends it while it still
+ * shows, and leaves a later notice.
+ * @typedef {{ dismiss: () => void }} NoticeHandle
+ *
  * Shows the outcome of an operation in the notice banner, replacing the
- * notice it shows.
- * @typedef {(request: NoticeRequest) => void} ShowNotice
+ * notice it shows. A caller without a banner returns nothing.
+ * @typedef {(request: NoticeRequest) => NoticeHandle | void} ShowNotice
  */
 
 /**
@@ -64,7 +74,7 @@ export const createChoicePrompt = ({ reactive }) => {
     items: /** @type {string[]} */ ([]),
     note: '',
     actions: /** @type {ChoiceAction[]} */ ([]),
-    cancelLabel: 'Cancel',
+    cancelLabel: '',
     field: /** @type {TextField | null} */ (null)
   });
   /** @type {((choice: string) => void) | null} */
@@ -85,7 +95,7 @@ export const createChoicePrompt = ({ reactive }) => {
       items: [...(request.items || [])],
       note: request.note || '',
       actions: request.actions.map((action) => ({ tone: 'secondary', ...action })),
-      cancelLabel: request.cancelLabel || 'Cancel',
+      cancelLabel: request.cancelLabel || t('Cancel'),
       field: null,
       show: true
     });
@@ -119,8 +129,12 @@ export const createNoticeBanner = ({ reactive }) => {
   const notice = reactive({
     text: '', items: /** @type {string[]} */ ([]), tone: /** @type {NoticeTone} */ ('info'), announcement: ''
   });
-  /** @type {ShowNotice} */
+  let shownCount = 0;
+  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info', announcement: '' }); };
+  /** @type {(request: NoticeRequest) => NoticeHandle} */
   const show = ({ text, items = [], tone }) => {
+    shownCount += 1;
+    const id = shownCount;
     const shown = items.filter(Boolean);
     const spoken = [text, ...shown].join(' ');
     Object.assign(notice, {
@@ -131,7 +145,7 @@ export const createNoticeBanner = ({ reactive }) => {
       // repeats the shown one differs from it by a trailing no-break space.
       announcement: notice.announcement === spoken ? `${spoken}\u00A0` : spoken
     });
+    return { dismiss: () => { if (shownCount === id) dismiss(); } };
   };
-  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info', announcement: '' }); };
   return { notice, show, dismiss };
 };

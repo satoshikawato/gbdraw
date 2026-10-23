@@ -32,11 +32,23 @@ const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: '
   { operation: 'session-load' });
 assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
 assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
+// OV-1253: a Session version this app does not read is named with the versions
+// it reads, in the CLI's words (gbdraw/session_io.py `validate_session`); the
+// Session reader names those versions in the context.
+const versionRefusal = (context) => normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
+  context: { field: 'schema', ...context } }, { operation: 'session-load' }).summary;
+assert.match(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 49, latestSessionVersion: 48 }),
+  /Session version 49 is newer than this gbdraw supports \(48\)\./);
+assert.match(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '27–33, 39–42, 44, and 46–48' }),
+  /Unsupported session version: 34\. This gbdraw reads Session versions 27–33, 39–42, 44, and 46–48\./);
+assert.doesNotMatch(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 99, latestSessionVersion: 48 }), /Check the required fields/);
+// A context word list that is not a version list is dropped, not shown.
+assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '<b>27</b>' }), /<b>/);
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
   context: { reason: 'SELECTED_PAIRS_NEED_PAIRWISE' } });
-assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all pairs, or choose Pairwise matches\.$/);
+assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all adjacent pairs, or choose Pairwise matches\.$/);
 assert.doesNotMatch(selectedPairs.summary, /does not run LOSAT/);
 // A PNG export never names the SVG embedding opt-out, which does not change PNG.
 const pngFont = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'helper', context: { reason: 'FONT_RASTER' } });
@@ -68,7 +80,7 @@ assert(normalizeUserFacingError(source, { summaryLimit: 5000, detailLimit: 9000 
 
 // Diagnostic numeric boundaries must survive transport exactly, while larger,
 // fractional, nonfinite and nonnumeric values are omitted rather than clamped.
-for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx']) {
+for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx']) {
   const maximum = key === 'codepoint' ? 0x10ffff : 10000000;
   const bounded = value => roundtrip({ ...source, context: { [key]: value, positionUnit: 'python-character' } });
   for (const value of [0, maximum]) assert.equal(bounded(value).context[key], value, key);
@@ -119,7 +131,7 @@ for (const kind of ['color', 'label']) {
 }
 const cleanupOnlyProxy = () => '{}';
 cleanupOnlyProxy.destroy = () => { throw new Error(sentinel); };
-assert.throws(() => callJsonHelper({ globals: { get: () => cleanupOnlyProxy } }, 'measure_legend_text_json', []),
+assert.throws(() => callJsonHelper({ globals: { get: () => cleanupOnlyProxy } }, 'evaluate_rules_json', []),
   (error) => error.code === 'CLEANUP_FAILED' && error.stage === 'cleanup');
 const primary = { ...source, secondary: [] };
 assert.equal(resolveGenerationCleanupOutcome({ result: { error: primary }, destroyError: new Error(sentinel) }).error, primary);
@@ -478,6 +490,42 @@ test('a Circular placement limited by the center reservation names that cause', 
   }
 });
 
+// OV-1274, OV-1276: Python names the room kept below the band, the rows with an
+// off control it is kept for, and the failed row when it has one (radial_layout.py
+// `_InsideFitError`); the summary names them and offers their controls.
+test('a Circular placement names the room the GC rows keep inside it and their remedy', () => {
+  const layout = (context) => roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context });
+  // OV-1274 review item 6: each remedy is one whole sentence, after the sentence that introduces them.
+  const gcRemedies = 'To make room, do one of the following\\. Select Hide GC Content, or reduce GC Content Width \\(with Custom Track Slots'
+    + ' on, the row width\\)\\. Select Hide GC Skew, or reduce GC Skew Width \\(with Custom Track Slots on, the row width\\)\\.';
+  const both = layout({ reason: 'DEFINITION_RESERVED', innerPx: 190, outerPx: 386, keptInsidePx: 67, keptInsideTracks: 'gc_content,gc_skew' });
+  assert.equal(both.context.keptInsideTracks, 'gc_content,gc_skew');
+  assert.match(both.summary, new RegExp('^A circular track does not fit\\. The center definition text limits the inside tracks\\. .* Available band: 190–386 px\\. '
+    + 'Below it, 67 px are kept for the tracks inside it, among them GC content and GC skew\\. '
+    + `${gcRemedies}$`));
+  // Review N-1: the Depth row that shares the room (tests/test_circular_definition_fit.py, lambda + Depth) is not
+  // a named row, so the sentence does not give all of the room to the GC rows.
+  const depth = layout({ reason: 'DEFINITION_RESERVED', innerPx: 213, outerPx: 386, keptInsidePx: 91, keptInsideTracks: 'gc_content,gc_skew' });
+  assert.match(depth.summary, / Below it, 91 px are kept for the tracks inside it, among them GC content and GC skew\. To make room, /);
+  const skew = layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34, keptInsideTracks: 'gc_skew' });
+  assert.match(skew.summary, / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it, among them GC skew\. To make room, do one of the following\. Select Hide GC Skew, or reduce GC Skew Width \(with Custom Track Slots on, the row width\)\.$/);
+  // Room kept for other rows is a fact, without a remedy.
+  assert.match(layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34 }).summary,
+    / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it\.$/);
+  // OV-1276: scale ticks that do not fit beside the definition text offer the scale's control.
+  const ticks = layout({ reason: 'DEFINITION_RESERVED', innerPx: 123, outerPx: 386, slotTrack: 'ticks' });
+  assert.equal(ticks.context.slotTrack, 'ticks');
+  assert.match(ticks.summary, / Available band: 123–386 px\. To make room, do the following\. Clear Show Coordinate Scale \(with Custom Track Slots on, remove the Ticks row\)\.$/);
+  // Unknown or repeated names are dropped; nothing is left of a list without a known name.
+  assert.equal(layout({ reason: 'CANNOT_FIT', keptInsideTracks: 'gc_skew,PRIVATE,gc_skew' }).context.keptInsideTracks, 'gc_skew');
+  for (const keptInsideTracks of ['PRIVATE', '', ['gc_content'], 7]) {
+    assert.equal(layout({ reason: 'CANNOT_FIT', keptInsideTracks }).context.keptInsideTracks, undefined);
+  }
+  for (const slotTrack of ['PRIVATE', 'depth', '', ['ticks'], 7, 'constructor']) {
+    assert.equal(layout({ reason: 'CANNOT_FIT', slotTrack }).context.slotTrack, undefined);
+  }
+});
+
 // OV-09 (R6): Python reports the request row of an unsupported Feature placement
 // lane; the Web adds that feature's caption and the summary names it.
 test('an unsupported Feature placement lane names the feature and the ways out', () => {
@@ -494,6 +542,17 @@ test('an unsupported Feature placement lane names the feature and the ways out',
   const long = normalizeUserFacingError({ code: 'FEATURE_PLACEMENT', context: { featureCaption: 'x'.repeat(200) } });
   assert.equal(long.context.featureCaption.length, 80);
   assert.equal(normalizeUserFacingError({ code: 'FEATURE_PLACEMENT', context: { featureCaption: 7 } }).context.featureCaption, undefined);
+});
+
+// OV-1262: an explicit-lane conflict of the annotation table under "Error on
+// overflow" (gbdraw/annotations/layout.py) names its cause and the ways out,
+// not the engine failure with a ValidationError class.
+test('an annotation lane conflict names the table lane and the Overflow behavior choices (OV-1262)', () => {
+  const model = roundtrip({ code: 'TRACK_INVALID', operation: 'generate', stage: 'render', context: { reason: 'ANNOTATION_LANE_CONFLICT' } });
+  assert.deepEqual([model.code, model.stage, model.context], ['TRACK_INVALID', 'render', { reason: 'ANNOTATION_LANE_CONFLICT' }]);
+  assert.match(model.summary, /^The track settings are invalid\. Two region annotations overlap in the same lane of the annotation table, /);
+  assert.match(model.summary, /Overflow behavior to Compress or Clip in Custom Track Slots \(Use custom stack\)\.$/);
+  assert.deepEqual(model.actions, ['edit-track', 'retry']);
 });
 
 // B9 (P07: offer only working actions): an unclassified failure inside the
@@ -533,7 +592,8 @@ test('a display start beyond the record and an unparsable GenBank file are input
   assert.match(display.summary, /Use a display start between 1 and the record length\./);
   assert.deepEqual(display.actions, ['edit-input', 'retry']);
   assert.deepEqual([genbank.code, genbank.operation, genbank.stage], ['INPUT_UNREADABLE', 'generate', 'render']);
-  assert.deepEqual(genbank.context, {});
+  // OV-1258: the reason says the file is cut off or damaged.
+  assert.deepEqual(genbank.context, { reason: 'GENBANK_PARSE' });
   assert.deepEqual(genbank.actions, ['select-input', 'retry']);
   for (const model of [display, genbank]) {
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_|RENDER_FAILED/);
@@ -565,12 +625,23 @@ test('a preserved setting of the other diagram mode names the setting and the wa
 // the committed Session with the current editor tables, so repeating the edit
 // sends the same request. The note above the Result comes from the failure's
 // normalized model and offers Retry only for a failure that changes no input.
+// The note is shown as the model's `note`, or (D-17, translated error text) through
+// the display helper from the parts the note is composed of; in English the parts
+// render to the same note.
 test('a live edit failure note offers Retry only when the same request can succeed (B11)', async () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const note = html.match(/<p v-if="labelReflowProcessing \|\| labelReflowLastError"[^>]*>([^<]*)<\/p>/)[1];
   assert.doesNotMatch(note, /Retry the live edit/, 'the failure note is not fixed text');
-  assert.match(note, /: labelReflowLastError\.note \}\}/);
-  const { liveEditFailure } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  assert.match(note, /: (?:labelReflowLastError\.note|errorText\(labelReflowLastError\.noteParts\)) \}\}/);
+  const { liveEditFailure, renderErrorText } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  // The English the note shows: its parts rendered without translation, which equals `note`.
+  const shown = (model) => {
+    if (!model.noteParts) return model.note;
+    assert.equal(typeof renderErrorText, 'function', 'a note with parts has the parts renderer');
+    const text = renderErrorText(model.noteParts);
+    assert.equal(text, model.note, model.code);
+    return text;
+  };
   assert.equal(liveEditFailure(null), null);
   const prefix = /^Live edit failed: direct edits already applied are kept; geometry may still need updating\. /;
   const repeating = [
@@ -582,10 +653,10 @@ test('a live edit failure note offers Retry only when the same request can succe
   for (const error of repeating) {
     const model = liveEditFailure(error);
     assert.deepEqual([model.code, model.actions], [error.code, ['generate']], error.code);
-    assert.match(model.note, prefix);
-    assert.ok(model.note.includes(error.summary), error.code);
-    assert.doesNotMatch(model.note, /Retry the live edit/, error.code);
-    assert.match(model.note, / Change the edit, or change the settings and use Generate\.$/);
+    assert.match(shown(model), prefix);
+    assert.ok(shown(model).includes(error.summary), error.code);
+    assert.doesNotMatch(shown(model), /Retry the live edit/, error.code);
+    assert.match(shown(model), / Change the edit, or change the settings and use Generate\.$/);
   }
   const transient = [
     normalizeUserFacingError(new Error('PRIVATE_ worker transport failure'), { operation: 'generate', stage: 'render' }),
@@ -595,14 +666,14 @@ test('a live edit failure note offers Retry only when the same request can succe
   for (const error of transient) {
     const model = liveEditFailure(error);
     assert.deepEqual([model.code, model.actions], [error.code, ['retry', 'generate']], error.code);
-    assert.match(model.note, prefix);
-    assert.match(model.note, new RegExp(` Retry the live edit or use Generate\\.$`));
+    assert.match(shown(model), prefix);
+    assert.match(shown(model), new RegExp(` Retry the live edit or use Generate\\.$`));
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
   }
   assert.equal(transient[0].code, 'UNKNOWN');
   const generate = liveEditFailure(normalizeUserFacingError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
   assert.deepEqual(generate.actions, ['generate']);
-  assert.equal(generate.note, 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
+  assert.equal(shown(generate), 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
 });
 
 // OV-05..OV-07, OV-13 (R6): a Label visibility On that the diagram does not

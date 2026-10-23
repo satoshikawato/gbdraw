@@ -37,6 +37,47 @@ const matchesSelectorPart = (element, selector) => {
   return exclusions.every((excluded) => !matchesSelectorPart(element, excluded));
 };
 
+// A selector part as compound selectors and the combinators between them
+// (' ' descendant, '>' child), split outside brackets and parentheses.
+const selectorChain = (selector) => {
+  const chain = [];
+  let current = '';
+  let depth = 0;
+  let combinator = '';
+  const push = () => {
+    if (!current) return;
+    if (chain.length) chain.push(combinator || ' ');
+    chain.push(current);
+    current = '';
+    combinator = '';
+  };
+  for (const character of String(selector || '').trim()) {
+    if (character === '[' || character === '(') depth += 1;
+    if (character === ']' || character === ')') depth -= 1;
+    if (depth === 0 && (character === '>' || /\s/.test(character))) {
+      push();
+      if (character === '>') combinator = '>';
+      continue;
+    }
+    current += character;
+  }
+  push();
+  return chain;
+};
+
+// Whether `element` matches the compound at `index` of `chain` and its ancestors match the rest.
+const matchesChain = (element, chain, index = chain.length - 1) => {
+  if (!element || !matchesSelectorPart(element, chain[index])) return false;
+  if (index === 0) return true;
+  if (chain[index - 1] === '>') return matchesChain(element.parentElement, chain, index - 2);
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (matchesChain(node, chain, index - 2)) return true;
+  }
+  return false;
+};
+
+const matchesSelector = (element, selector) => matchesChain(element, selectorChain(selector));
+
 class FakeSvgElement {
   constructor(source) {
     const tagName = String(source || '').match(/^<\s*([\w:-]+)/)?.[1] || '';
@@ -92,7 +133,7 @@ class FakeSvgElement {
     const matches = [];
     const visit = (node) => {
       node.children.forEach((child) => {
-        if (selectors.some((part) => matchesSelectorPart(child, part))) matches.push(child);
+        if (selectors.some((part) => matchesSelector(child, part))) matches.push(child);
         visit(child);
       });
     };
@@ -107,7 +148,7 @@ class FakeSvgElement {
   closest(selector) {
     const selectors = selectorParts(selector);
     for (let node = this; node; node = node.parentElement) {
-      if (selectors.some((part) => matchesSelectorPart(node, part))) return node;
+      if (selectors.some((part) => matchesSelector(node, part))) return node;
     }
     return null;
   }

@@ -14,7 +14,7 @@ const workerSource = (await readFile(workerUrl, 'utf8')).replace(
 );
 let workerNumber = 0;
 const loadStagingOwner = () => import(`data:text/javascript;base64,${Buffer.from(
-  `${workerSource}\nexport { stageRenderResources };\n// instance ${++workerNumber}`
+  `${workerSource}\nexport { prepareCanonicalResources };\n// instance ${++workerNumber}`
 ).toString('base64')}`);
 
 class MemoryFS {
@@ -55,17 +55,27 @@ class StagingWorker {
     this.messages.push(copy);
     if (message.type === 'init') {
       queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true, capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
+    } else if (message.type === 'helper' && message.payload?.resourceManifest) {
+      this.operation = this.stageForHelper(structuredClone(message));
     } else if (['helper', 'feature-extraction'].includes(message.type)) {
       queueMicrotask(() => this.emit({ type: message.type, requestId: message.requestId, ok: false, error: { code: 'HELPER_PROTOCOL', stage: 'request-validation', operation: message.operation || 'feature-extraction' } }));
     } else {
       this.operation = this.run(structuredClone(message));
     }
   }
+  // A helper stages as the Worker's helpers do: it reads the cache and prunes nothing.
+  async stageForHelper({ requestId, payload }) {
+    const workspace = `/helper-${requestId}`;
+    const { prepareCanonicalResources } = await this.owner;
+    const paths = await prepareCanonicalResources({ FS: this.fs }, workspace, payload);
+    this.fs.cleanWorkspace(workspace);
+    this.emit({ type: 'helper', requestId, ok: true, result: { staged: Object.keys(paths) } });
+  }
   async run({ requestId, payload }) {
     const workspace = `/request-${requestId}`;
     try {
-      const { stageRenderResources } = await this.owner;
-      const paths = await stageRenderResources({ FS: this.fs }, workspace, payload.resourceManifest, payload.stagedResources, payload.retainedResourceTokens, false, requestId);
+      const { prepareCanonicalResources } = await this.owner;
+      const paths = await prepareCanonicalResources({ FS: this.fs }, workspace, payload, { requestId, prune: true });
       const content = Object.fromEntries(Object.entries(paths).map(([id, path]) => [id, Buffer.from(this.fs.read(path)).toString()]));
       this.fs.cleanWorkspace(workspace);
       this.staged?.();
@@ -264,3 +274,23 @@ test('equal bytes under two resource IDs travel once and share one cache file', 
   assert.deepEqual(transferred(current()), ['first']);
   assert.deepEqual(cachedTexts(current()), ['SAME']);
 });
+
+const helperLeavesCaches = async (operation, helperPayload) => {
+  await run({ first: 'A', second: 'B' });
+  const worker = current();
+  const { resources } = payload({ first: 'A' });
+  const reply = await runDiagramHelperOperation(operation, { ...helperPayload, resources });
+  assert.deepEqual(reply.result, { staged: ['first'] });
+  assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
+  assert.deepEqual(content(await run({ first: 'A', second: 'B' })), { first: 'A', second: 'B' });
+  assert.deepEqual(transferred(worker), []);
+  assert.equal(worker.fs.cacheFiles().length, 2);
+};
+
+test('a helper that stages part of the drawing leaves both staging caches to the next Generate (OV-1590)', () => (
+  helperLeavesCaches('readFeatureOverrideTable', { canonicalRequest: payload({ first: 'A' }).request })
+));
+
+test('the blastp extraction stages one record source by its resource id (OV-1555)', () => (
+  helperLeavesCaches('extractCdsProteinFasta', { recordSource: { kind: 'genbank', resourceId: 'first' }, format: 'genbank' })
+));

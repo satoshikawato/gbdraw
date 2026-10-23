@@ -520,7 +520,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert payload["losatDerivedCache"] == {"entries": []}
 
     sidecar.write_text("keep this session", encoding="utf-8")
-    with pytest.raises(ValidationError, match="--overwrite"):
+    from gbdraw.render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
+
+    # OV-1240: the refusal is one error; the CLI prints it with --overwrite.
+    with pytest.raises(OutputExistsError, match="Session output already exists") as refused:
         save_session_sidecar_if_requested(
             save_session=True,
             session_output=str(sidecar),
@@ -528,6 +531,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
             run_result=run_result,
             cmd_args=(),
         )
+    assert "--overwrite" in refused.value.message(CLI_OVERWRITE_OPTION)
     assert sidecar.read_text(encoding="utf-8") == "keep this session"
 
     save_session_sidecar_if_requested(
@@ -543,10 +547,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
 def test_current_session_version_matches_web_config() -> None:
     # The Web reads these values from `contracts/schema.generated.js`.
-    assert CURRENT_SESSION_VERSION == ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
+    assert CURRENT_SESSION_VERSION == 48 and ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
     assert MODE_SCOPED_SESSION_MIN_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
     )
 
 
@@ -1051,7 +1055,7 @@ def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> 
         "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
     }
 
-    assert payload["version"] == CURRENT_SESSION_VERSION == 47
+    assert payload["version"] == CURRENT_SESSION_VERSION == 48
     validate_session(payload)
 
     triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))
@@ -2001,7 +2005,7 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
     flat["version"] = 44
     flat["config"] = flat.pop("modes")["circular"]["config"]
     with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
-        session_io_module._validate_current_retired_active_config_paths(flat)
+        session_io_module._validate_current_retired_active_config_paths(flat, 44)
 
 
 def test_current_comparison_authority_validates_file_bindings() -> None:
@@ -3606,8 +3610,8 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     The request names the crop (in source coordinates) and the orientation, as
     the Web writes them, instead of a re-serialized copy of the drawn record.
     The Web draft that loads the bound input file then draws the same record,
-    and a replay draws the same SVG. Orientation applied before a crop (the
-    CLI order) is written as the equivalent source-coordinate crop.
+    and a replay draws the same SVG. ``--reverse_complement`` applies after
+    the crop, as ``:rc`` does (OV-1279), so the request names the same crop.
     """
 
     single, multi = _cli_session_inputs(tmp_path)
@@ -3633,9 +3637,9 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     ] == [
         (first, None, single_region, False),
         (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
-        # Reversed 360 bp record cropped to 21..300 = source 61..340, reversed.
+        # Cropped to source 21..300, then reversed.
         (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
-                        "start": 61, "end": 340, "reverseComplement": True}, False),
+                        "start": 21, "end": 300, "reverseComplement": True}, False),
     ]
     assert _resource_bytes(session, first) == single.read_bytes()
     assert _resource_bytes(session, second) == multi.read_bytes()

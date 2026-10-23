@@ -37,10 +37,20 @@ def linear_axis_ruler_applies(
     )
 
 
+FEATURE_OVERLAP_TOLERANCE_PATH = "canvas.feature_overlap_tolerance_bp"
+
+
 def validate_feature_overlap_tolerance(value: Any) -> int:
     """The shared bp tolerance is a nonnegative integer, never a boolean."""
     if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
-        raise ValidationError("canvas.feature_overlap_tolerance_bp must be a nonnegative integer")
+        raise ValidationError(
+            "canvas.feature_overlap_tolerance_bp must be a nonnegative integer",
+            diagnostic={
+                "code": "INPUT_INVALID",
+                "reason": "NONNEGATIVE_INTEGER",
+                "configPath": FEATURE_OVERLAP_TOLERANCE_PATH,
+            },
+        )
     return int(value)
 
 

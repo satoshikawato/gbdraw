@@ -340,7 +340,7 @@ const SIBLINGS = [
       await settleLive(page);
       await generate(page);
       await colorLegendRow(page, 'depth');
-      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
       await settleLive(page);
     }
   },
@@ -356,7 +356,7 @@ const SIBLINGS = [
       await settleLive(page);
       await generate(page);
       await colorLegendRow(page, 'depth');
-      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
       await settleLive(page);
     }
   },
@@ -432,11 +432,11 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
     await settleLive(page);
     await generate(page);
     await colorLegendRow(page, 'depth', '#7b2cbf');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
     await settleLive(page);
     await generate(page);
     expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).not.toContain('depth');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', true); });
     await settleLive(page);
     await generate(page);
     const row = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === 'depth');
@@ -456,13 +456,13 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
     await renameRow(page, 'depth', 'Coverage');
     await settleLive(page);
     await colorLegendRow(page, 'Coverage', '#7b2cbf');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
     await settleLive(page);
     await generate(page);
     const hidden = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
     expect(hidden).not.toContain('Coverage');
     expect(hidden).not.toContain('depth');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', true); });
     await settleLive(page);
     await generate(page);
     const returned = (await semanticSnapshot(page)).legend;
@@ -1674,6 +1674,50 @@ test('legend names: a rule row keeps its place when its key changes with the sha
   await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha (1)', 'repeat_region', 'alpha (2)'], 'the name becomes shared in a user order');
   await setRuleField(page, 1, 'cap', 'beta');
   await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha', 'repeat_region', 'beta'], 'the name stops being shared in a user order');
+});
+
+// OV-1235: a rule color that writes a caption in a second color splits its
+// row in two (`alpha [#e63946]`, `alpha [#2a9d8f]`), which Python places in
+// rule order; the live edit asks Python, as for any row that loses part of its
+// features (OV-43).
+test('OV-1235: a rule color that splits the row of its caption draws the rows in rule order, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, RULE_ROWS[0]);
+  await addColorRule(page, { ...RULE_ROWS[1], cap: 'alpha', color: RULE_ROWS[0].color });
+  await expectLegendNames(page, ['alpha', 'other proteins', 'repeat_region'], 'two rules of one name and one color');
+  await setRuleField(page, 1, 'color', RULE_ROWS[1].color);
+  await expectNamesLiveAndGenerated(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'the second rule in another color');
+});
+
+// OV-1236: Python draws no row for a color of a caption that no drawn feature
+// uses, so hiding the only feature of `alpha [#2a9d8f]` leaves one row, named
+// `alpha`; the live edit asks Python (OV-42).
+test('OV-1236: hiding the only feature of one color of a shared caption leaves one row of the caption, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, RULE_ROWS[0]);
+  await addColorRule(page, { ...RULE_ROWS[1], cap: 'alpha' });
+  await expectLegendNames(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'two rules of one name');
+  await addVisibilityRule(page, { ...FL1_OFF, value: '^fl2$' });
+  await expectNamesLiveAndGenerated(page, ['alpha', 'other proteins', 'repeat_region'], 'FL2 hidden');
+});
+
+// OV-1486 (PD-OI-063, D-08): Generate replays a sorted order after a color
+// rule's removal brings back a row the order never held: the sorted rows keep
+// their places and the returning row follows them, live and at Generate. The
+// inventory a drawn Result leaves is Python's order of its rows, which the
+// executor recorded before it replayed the sorted order, not the order shown.
+test('OV-1486: a sorted Legend order keeps its places when removing a color rule brings back the CDS row, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, RULE_ROWS[0]);
+  await generate(page);
+  await expectLegendNames(page, ['alpha', 'other proteins', 'repeat_region'], 'a rule takes one CDS');
+  await appAction(page, 'sortLegendEntries', 'desc');
+  await expectNamesLiveAndGenerated(page, ['repeat_region', 'other proteins', 'alpha'], 'the Legend sorted Z to A');
+  await appAction(page, 'removeSpecificRule', 0);
+  await expectNamesLiveAndGenerated(page, ['repeat_region', 'CDS'], 'the rule removed in the sorted order');
 });
 
 // OV-660: a stroke stored on a rule row follows the row when its key changes

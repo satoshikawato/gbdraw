@@ -21,6 +21,7 @@ import {
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 import { ownEntry } from '../../utils/own-entry.js';
+import { t, tn } from '../../utils/i18n.js';
 /** @import { FeatureSearchIndex } from './search-core.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
@@ -174,11 +175,11 @@ export const createPreviewFeatureSearch = ({
     // No count before a search; after one, the active match of all.
     if (!String(previewFeatureSearchQuery.value || '').trim()) return '';
     const total = previewFeatureSearchMatches.value.length;
-    if (!total) return 'No matches';
+    if (!total) return t('No matches');
     const current = previewFeatureSearchActiveIndex.value >= 0
       ? previewFeatureSearchActiveIndex.value + 1
       : 0;
-    return `${current} of ${total} ${total === 1 ? 'match' : 'matches'}`;
+    return tn(total, '{current} of {count} match', '{current} of {count} matches', { current });
   });
   const previewFeatureSearchActiveDetail = computed(() => {
     const activeId = getActiveMatchId();

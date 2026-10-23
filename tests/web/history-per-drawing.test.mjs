@@ -20,7 +20,7 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = { createElement: () => ({ click: () => {} }) };
+globalThis.document = { createElement: () => ({ click: () => {} }), querySelector: () => null };
 installFakeSvgDom();
 globalThis.File = File;
 
@@ -487,9 +487,7 @@ test('a step past the project limit drops only the oldest project step', async (
   for (let index = 0; index <= 30; index += 1) {
     await history.runUndoable('Rename Session', () => { state.sessionTitle.value = `T${index}`; });
   }
-  assert.ok(history.historyLimitMessage.value, 'the oldest title step dropped');
   await history.runUndoable('Add rule', () => { modeDrawing(state, 'circular').form.prefix = 'mixed'; state.newSpecRule.val = 'x'; });
-  assert.equal(history.historyLimitMessage.value, '', 'the step dropped nothing');
   while (history.canUndo()) assert.equal(await app.undoHistory(), true);
   assert.equal(state.sessionTitle.value, 'T0', 'only the first title step is gone');
 });

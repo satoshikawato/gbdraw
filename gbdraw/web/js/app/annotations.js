@@ -23,16 +23,23 @@ import {
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { joinSentences, t, tn } from '../utils/i18n.js';
 
 // The editor keeps every id valid: an empty id takes the default and a used
 // one a numbered suffix. The panel notice names the id it stored (FL-14).
-/** @param {string} field @param {any} requested @param {string} stored @param {string} owner */
-const idEditNotice = (field, requested, stored, owner) => {
+/** @param {'set' | 'annotation'} kind @param {any} requested @param {string} stored */
+const idEditNotice = (kind, requested, stored) => {
   const text = String(requested ?? '').trim();
   if (text === stored) return '';
+  const params = { text, stored };
+  if (kind === 'set') {
+    return text
+      ? t('Set id "{text}" is used by another set, so it was saved as "{stored}".', params)
+      : t('Set id cannot be empty, so it was saved as "{stored}".', params);
+  }
   return text
-    ? `${field} "${text}" is used by ${owner}, so it was saved as "${stored}".`
-    : `${field} cannot be empty, so it was saved as "${stored}".`;
+    ? t('Annotation id "{text}" is used by another annotation of this set, so it was saved as "{stored}".', params)
+    : t('Annotation id cannot be empty, so it was saved as "{stored}".', params);
 };
 
 /**
@@ -94,7 +101,7 @@ export const createAnnotationEditor = ({
   /** @param {AnnotationItem | null | undefined} item */
   const featureTargetCaption = (item) => {
     const feature = catalogFeature(item?.target);
-    return feature ? getFeatureCaption(feature) : `${item?.target?.biologicalFeatureId} (not in the current diagram)`;
+    return feature ? getFeatureCaption(feature) : t('{id} (not in the current diagram)', { id: String(item?.target?.biologicalFeatureId) });
   };
   // Design Q4 6.4: the drawn record position and the feature hash of a
   // selected feature, which a `hash` selector matches (OV-401).
@@ -133,7 +140,7 @@ export const createAnnotationEditor = ({
     const oldId = String(set?.id || '');
     const nextId = uniqueAnnotationSetId(drawing.annotationSets.filter((item) => item !== set), id);
     writeSetId(drawing.slices.annotationSets, set, nextId);
-    onImportNotice?.(idEditNotice('Set id', id, nextId, 'another set'));
+    onImportNotice?.(idEditNotice('set', id, nextId));
     [drawing.adv.circular_track_slots, drawing.adv.linear_track_slots].forEach((slots) => (
       (Array.isArray(slots) ? slots : []).forEach((slot) => {
         if (slot?.renderer === 'annotations' && slot?.params?.set_id === oldId) slot.params.set_id = nextId;
@@ -193,7 +200,7 @@ export const createAnnotationEditor = ({
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
     if (!targets) {
-      onImportNotice?.('Generate the diagram again to annotate the selected features.');
+      onImportNotice?.(t('Generate the diagram again to annotate the selected features.'));
       return [];
     }
     // Each new row's id counts the rows before it.
@@ -230,7 +237,7 @@ export const createAnnotationEditor = ({
     let id = base;
     for (let index = 2; used.has(id); index += 1) id = `${base}_${index}`;
     setAnnotationFields(drawing.slices.annotationSets, set, item, { id });
-    onImportNotice?.(idEditNotice('Annotation id', value, id, 'another annotation of this set'));
+    onImportNotice?.(idEditNotice('annotation', value, id));
   };
   /**
    * @template {keyof AnnotationStyle} K
@@ -295,9 +302,10 @@ export const createAnnotationEditor = ({
   // choice, and Cancel changes nothing.
   /** @param {number} setCount */
   const askReplaceAll = (setCount) => askChoice({
-    title: 'Remove all annotation sets?',
-    description: `The imported table has no annotation rows. Importing it removes all ${setCount} annotation ${setCount === 1 ? 'set' : 'sets'}.`,
-    actions: [{ id: 'remove', label: 'Remove all sets', tone: 'danger' }]
+    title: t('Remove all annotation sets?'),
+    description: joinSentences(t('The imported table has no annotation rows.'),
+      tn(setCount, 'Importing it removes all {count} annotation set.', 'Importing it removes all {count} annotation sets.')),
+    actions: [{ id: 'remove', label: t('Remove all sets'), tone: 'danger' }]
   });
   /** @param {string} text */
   const importAnnotationTable = async (text) => {
@@ -319,10 +327,14 @@ export const createAnnotationEditor = ({
       encodeAnnotationTableWithNotice(drawing.annotationSets, { drawnPlacement })
     );
     downloadTextFile('annotations.tsv', text);
-    const notice = [
-      placed > 0 ? `${placed} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.` : '',
-      skipped > 0 ? `${skipped} annotation(s) of selected features that the current diagram does not draw were not exported.` : ''
-    ].filter(Boolean).join(' ');
+    const notice = joinSentences(...[
+      placed > 0 ? tn(placed,
+        '{count} annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.',
+        '{count} annotations of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.') : '',
+      skipped > 0 ? tn(skipped,
+        '{count} annotation of a selected feature that the current diagram does not draw was not exported.',
+        '{count} annotations of selected features that the current diagram does not draw were not exported.') : ''
+    ].filter(Boolean));
     onImportNotice?.(notice);
   };
   /** @param {{ target?: HTMLInputElement | null } | null | undefined} event The change event of the file input. */
@@ -352,7 +364,7 @@ export const createAnnotationEditor = ({
       if (!isCurrent()) return;
       return await importAnnotationTable(text);
     } catch (error) {
-      if (isCurrent()) onImportNotice?.(`Could not import annotations: ${error.message}`);
+      if (isCurrent()) onImportNotice?.(t('Could not import annotations: {reason}', { reason: error.message }));
     } finally {
       if (sequence === importSequence && input.files?.[0] === file) input.value = '';
     }

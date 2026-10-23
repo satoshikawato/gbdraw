@@ -766,18 +766,18 @@ def _run_browser_contract(contract: str) -> None:
                     runDiagramHelperOperation
                   } = await import('./js/services/diagram-generation.js');
                   const response = await runDiagramHelperOperation(
-                    DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-                    { caption: 'offline helper probe', fontFamily: 'Arial', fontSize: 14 }
+                    DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+                    { features: [], rules: [], kind: 'color' }
                   );
                   return response?.result || null;
                 }
                 """
             )
             if not isinstance(helper_result, dict) or not isinstance(
-                helper_result.get("width"), (int, float)
+                helper_result.get("matches"), list
             ):
                 raise RuntimeError(
-                    "Offline helper operation did not settle with a measured width: "
+                    "Offline helper operation did not settle with its rule matches: "
                     f"{helper_result!r}"
                 )
             _assert_diagram_worker_activity(

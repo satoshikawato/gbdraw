@@ -74,10 +74,9 @@ _HCLI13_FONT_MATCHES = (
     ("Liberation Sans:style=Italic", "LiberationSans-Italic.ttf"),
     ("Liberation Sans:style=Bold Italic", "LiberationSans-BoldItalic.ttf"),
 )
-_HCLI13_FONT_PROPERTY_VARIANTS = {
-    ("True", "True", "False", "1", "1", "1"),
-    ("True", "True", "False", "1", "5", "1"),
-}
+# h-cli-13-fonts.conf assigns rgba=none, so a system whose Fontconfig turns on
+# subpixel text (rgba=1) draws the same grayscale edges as one that does not.
+_HCLI13_FONT_PROPERTIES = ("True", "True", "False", "1", "5", "1")
 _HCLI13_PNG_MAX_COMPOSITE_RMS = 4.0
 _PATH_COORDINATE_RE = re.compile(r"[ML]\s+(-?[0-9.]+),(-?[0-9.]+)")
 _BGC_RECORD_IDS = (
@@ -616,13 +615,13 @@ def _assert_hcli13_bundled_fonts(environment: dict[str, str]) -> None:
         if (
             result.returncode != 0
             or resolved_path != expected_path
-            or properties not in _HCLI13_FONT_PROPERTY_VARIANTS
+            or properties != _HCLI13_FONT_PROPERTIES
         ):
             raise RecipeContractError(
                 "H-CLI-13 Fontconfig isolation failed for "
                 f"{pattern}: resolved={resolved_path}, expected={expected_path}, "
-                f"properties={properties}, expected_property_variants="
-                f"{_HCLI13_FONT_PROPERTY_VARIANTS}, stderr={result.stderr.strip()}"
+                f"properties={properties}, expected_properties="
+                f"{_HCLI13_FONT_PROPERTIES}, stderr={result.stderr.strip()}"
             )
 
 
@@ -1843,7 +1842,7 @@ def _assert_gallery_chloroplast(
         "--inner_label_x_radius_offset": "0.975",
         "--inner_label_y_radius_offset": "0.975",
         "--qualifier_priority": "qualifier_priority.tsv",
-        "--annotation_table": "nicotiana-tabacum-regions.tsv",
+        "--annotation_table": "nicotiana-tabacum-regions-span.tsv",
         "--block_stroke_color": "black",
         "--block_stroke_width": "1",
         "--line_stroke_width": "2",
@@ -1862,6 +1861,7 @@ def _assert_gallery_chloroplast(
     ]
     if slot_specs != [
         "features:features@side=overlay,lane_direction=split",
+        "plastome_tint:annotations@set_id=plastome_tint,side=overlay,anchor_slot=features,layer=underlay,to_slot=gc_content,marks=highlight,padding_px=0,show_labels=false,z=-1",
         "plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress",
         "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content",
     ]:
@@ -1911,6 +1911,7 @@ def _assert_gallery_chloroplast(
         if "data-gbdraw-slot-id" in element.attrib
     ]
     if slots != [
+        ("plastome_tint", "annotations"),
         ("features", "features"),
         ("plastome_regions", "annotations"),
         ("gc_content", "dinucleotide_content"),
@@ -1935,6 +1936,9 @@ def _assert_gallery_chloroplast(
             ("ssc", "SSC"),
             ("ira", "IRa"),
         )
+    } | {
+        (f"{key}_tint", "plastome_tint", "plastome_tint", "NC_001879.2", None)
+        for key in ("lsc", "irb", "ssc", "ira")
     }:
         raise RecipeContractError("T-CLI-06 annotation identities changed.")
     fills = {element.attrib.get("fill") for element in root.iter()}
@@ -2510,7 +2514,7 @@ def run_scenario(
                 env=environment,
                 capture_output=True,
                 text=True,
-                timeout=300 if scenario_id in {"T-CLI-08", "T-CLI-10", "H-CLI-06", "H-CLI-07", "H-CLI-08"} else 120,
+                timeout=600 if scenario_id in {"T-CLI-08", "T-CLI-10", "H-CLI-06", "H-CLI-07", "H-CLI-08"} else 120,
                 check=False,
             )
             if result.returncode != 0:

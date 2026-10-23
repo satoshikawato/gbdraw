@@ -1,7 +1,11 @@
 // @ts-check
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame',
+// This module has no imports (tests/web/helpers/error-text-keys.mjs loads a
+// copy of it alone), so it declares the identity of utils/i18n.js `msg`.
+/** @param {string} text */
+const msg = (text) => text;
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame', 'convertStoredProteinResultFrames',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
-  'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
+  'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords',
   'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
@@ -34,9 +38,9 @@ const REASONS = Object.freeze({
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
   ANNOTATION_SET: 'Select an existing annotation set.', ANNOTATION_MARKS: 'Use supported annotation mark filters.',
   OVERFLOW: 'Choose error, compress, or clip.', LAYER: 'Choose foreground or underlay.',
-  OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an Overlay annotation track.',
+  OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an annotation track whose placement is Overlay anchor (Circular) or On axis (Linear).',
   OVERLAY_SPAN: 'For Extend to, select an eligible enabled slot other than the anchor, or None.',
-  OVERLAY_SIDE: 'Use Overlay when an anchor or an Extend to slot is selected.',
+  OVERLAY_SIDE: 'Choose the placement Overlay anchor (Circular) or On axis (Linear) when an anchor or an Extend to slot is selected.',
   DRAW_ORDER: 'Place underlay annotations below the anchor and the Extend to slot, and foreground annotations above them.',
   TRACK_RENDERER: 'Choose a renderer supported by the current diagram mode.', TRACK_SIDE: 'Choose a side supported by the current diagram mode and renderer.',
   TRACK_PARAMS: 'Use the parameters supported by the selected renderer.', TRACK_AXIS: 'Select one eligible enabled feature track as the axis.',
@@ -81,11 +85,11 @@ const REASONS = Object.freeze({
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
   // A Selected plan with a LOSATP mode that compares every adjacent pair.
-  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
+  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all adjacent pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
   // The LOSATP converter named another derived identity than Generate looked up (run-analysis.js).
   DERIVED_KEY_MISMATCH: 'The converted LOSATP comparison does not match the settings it was looked up with. If Retry fails the same way, save the Session and report the problem.',
-  RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
+  RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for comparison rings.',
   RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',
   SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',
   UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
@@ -110,15 +114,17 @@ const REASONS = Object.freeze({
   STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
   REFERENCE_REQUIRED: 'Supply the depth reference column.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',
-  NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #index to distinguish records with the same ID.',
+  NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #<number> to distinguish records with the same ID.',
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
   NONE_DRAWN: 'Turn on at least one record to draw.',
-  REGION_FORMAT: 'Use record_id:start-end[:rc] or #index:start-end[:rc].',
+  REGION_FORMAT: 'Use record_id:start-end[:rc] or #<number>:start-end[:rc].',
   CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it on the other side of the Axis.',
   DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
   SPLIT_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use split feature lanes (Track Preset Middle).',
   OVERLAY_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use Track Layout Features on axis with Separate Strands off.',
+  // OV-1262: gbdraw/annotations/layout.py, an explicit lane under Overflow "Error on overflow".
+  ANNOTATION_LANE_CONFLICT: 'Two region annotations overlap in the same lane of the annotation table, counting their labels and padding. Give one of them another lane in Region Annotations, or set the Annotations row\'s Overflow behavior to Compress or Clip in Custom Track Slots (Use custom stack).',
   THREE_COLUMNS: 'Supply at least three tab-separated columns.',
   POSITIVE_INTEGER_OR_AUTO: 'Use Auto or an integer greater than zero.',
   DINUCLEOTIDE: 'Use two letters from A, C, G, T, and U, for example GC.',
@@ -126,16 +132,27 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
+  SESSION_TOO_NEW: 'This Session was saved by a newer gbdraw.',
+  SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
-  EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
-  SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
+  // gbdraw/render/groups/linear/pairwise_match.py: a link end without a usable feature ID or index.
+  EMPTY_ENDPOINT: 'Check the comparison inputs: a comparison link does not identify the feature at one of its ends.',
+  INDEX_ALIGNMENT: 'Check the comparison inputs: a comparison link does not identify the feature at one of its ends.',
+  SOURCE_INDEX: 'Check the comparison inputs: a comparison link does not identify the feature at one of its ends.',
+  SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
   RECORD_ID: 'A table row names another displayed record in this column. Swap the query and subject columns of the table, or assign the table to the pair it describes.',
   BLAST_TSV_REQUIRED: 'Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.',
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
+  // OV-1258, OV-1257: what a GenBank/DDBJ, GFF3, or FASTA slot file lacks.
+  GZIP_INPUT: 'The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.',
+  GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
+  SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
+  GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',
+  FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
   FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
   FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
   FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
@@ -143,7 +160,8 @@ const REASONS = Object.freeze({
 });
 // What a decline names as changed under an evaluation of rule inputs (OV-447,
 // OV-449): the label table import and the Specific rules import read it here.
-export const RULE_INPUT_CHANGE_WORDS = "colors, color rules, the Legend, or the diagram's inputs";
+// A key of its own (OV-1415): the label table's notice shows it with `tm`.
+export const RULE_INPUT_CHANGE_WORDS = msg("colors, color rules, the Legend, or the diagram's inputs");
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
@@ -184,7 +202,7 @@ const DEFINITIONS = Object.freeze({
   COMPARISON_INPUT: ['The comparison input is invalid.', ['edit-comparison', 'retry'], 'Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.'],
   LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
-  COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
+  COMPARISON_IDENTITY: ['The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   // A read-only saved comparison fails the same way until Inherit, Replace, or Clear is chosen.
   COMPARISON_CHOICE_REQUIRED: ['Choose how to handle the saved comparison in the Comparison panel, then Generate again.', ['edit-comparison']],
   // Replace with an empty draft would clear the saved comparison, which Clear comparison does explicitly.
@@ -220,7 +238,7 @@ const DEFINITIONS = Object.freeze({
 /** @type {Readonly<Record<string, string>>} */
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
-  losatp_member_max_hits: 'Protein BLASTP member hits per protein',
+  losatp_member_max_hits: 'Protein BLASTP max hits per protein for groups',
   output_prefix: 'Output Prefix',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
@@ -240,13 +258,111 @@ FloatingPointError OverflowError ArithmeticError AssertionError AttributeError I
 NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 /** @type {Readonly<Record<string, string>>} */
-const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
+const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result {n}.', COMPARISON_INPUT: 'Comparison sequence {n}.' });
 // The tables a Session stores as text resources, as the documentation names them.
 /** @type {Readonly<Record<string, string>>} */
 export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
   'label-whitelist': 'Label whitelist', 'qualifier-priority': 'Qualifier priority', 'feature-visibility': 'Feature visibility',
   'label-overrides': 'Label overrides' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
+// OV-1274, OV-1276: the Circular track rows with an off control that a failed
+// placement names (`keptInsideTracks`, `slotTrack`; gbdraw/diagrams/circular/radial_layout.py
+// `SWITCHED_TRACK_IDS`), and the remedy: one sentence that names the control that turns it
+// off and the setting that narrows it, with the number of choices it offers.
+/** @typedef {{ name: string, remedy: string, options: number }} SwitchedTrack */
+/** @type {Readonly<Record<string, SwitchedTrack>>} */
+const SWITCHED_TRACKS = Object.freeze({
+  gc_content: { name: 'GC content', remedy: 'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).', options: 2 },
+  gc_skew: { name: 'GC skew', remedy: 'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).', options: 2 },
+  ticks: { name: 'the scale', remedy: 'Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).', options: 1 }
+});
+// The sentences of a summary other than the table rows above: each is one part
+// (`ErrorTextPart`) and a catalog key; `{name}` takes the part's value.
+const PHRASES = Object.freeze({
+  diagramLinear: 'Diagram: Linear.', diagramCircular: 'Diagram: Circular.', sessionTable: 'Session table: {table}.',
+  sequence: 'Sequence {n}.', pair: 'Pair: #{query} to #{subject}.', featureCaption: 'Feature: {caption}.',
+  line: 'Line {row}.', column: 'Column {column}.', trackRow: 'Track row {row}.', depthSeries: 'Depth series {series}.',
+  setting: 'Setting: {path}.', feature: 'Feature: {feature}.', featuresAffected: 'Features affected: {count}.',
+  field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
+  sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
+  sessionUnsupported: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
+  keptBelow: 'Below it, {px} px are kept for the tracks inside it.',
+  keptBelowAmong: 'Below it, {px} px are kept for the tracks inside it, among them {tracks}.',
+  // OV-1389 review item 6: each remedy is a whole sentence of `SWITCHED_TRACKS`, after one of these.
+  makeRoom: 'To make room, do the following.', makeRoomAny: 'To make room, do one of the following.',
+  and: '{first} and {second}',
+  position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
+  exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
+  schema: 'Load a supported Session file or recreate it with the current writer.',
+  notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
+  liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
+  liveEditRetry: 'Retry the live edit or use Generate.',
+  liveEditChange: 'Change the edit, or change the settings and use Generate.',
+  operationError: 'Operation error'
+});
+/**
+ * One sentence or phrase of a user-facing error text. `text` is the English
+ * template and its catalog key; each `{name}` takes `params[name]`: a part is
+ * shown through its own key, a string or a number as written (identifiers,
+ * file names, counts). A `verbatim` text is no key: it is shown as written
+ * (Python words it, D-09).
+ * @typedef {object} ErrorTextPart
+ * @property {string} text
+ * @property {Readonly<Record<string, string | number | ErrorTextPart>>} [params]
+ * @property {true} [verbatim]
+ */
+const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+/**
+ * @param {ErrorTextPart} part
+ * @param {(text: string) => string} translate
+ * @returns {string}
+ */
+const renderPart = (part, translate) => {
+  const text = part.verbatim ? part.text : translate(part.text);
+  const { params } = part;
+  return params ? text.replace(PLACEHOLDER, (whole, /** @type {string} */ name) => {
+    if (!Object.hasOwn(params, name)) return whole;
+    const value = params[name];
+    return typeof value === 'object' ? renderPart(value, translate) : String(value);
+  }) : text;
+};
+/**
+ * The one renderer of error text parts: the English text with no `translate`,
+ * the shown text with the UI translation (`errorText` in utils/error-text.js).
+ * @param {readonly ErrorTextPart[]} parts
+ * @param {(text: string) => string} [translate] the shown text of a key
+ * @param {string} [separator] between two parts
+ * @returns {string}
+ */
+export const renderErrorText = (parts, translate = (text) => text, separator = ' ') =>
+  parts.map((part) => renderPart(part, translate)).join(separator);
+/**
+ * The leading whole parts whose English text fits in `limit` characters, so the
+ * summary and the shown text are one cut; a first part longer than `limit` is
+ * cut as English text, shown as written.
+ * @param {readonly ErrorTextPart[]} parts
+ * @param {number} limit
+ * @returns {ErrorTextPart[]}
+ */
+const capParts = (parts, limit) => {
+  /** @type {ErrorTextPart[]} */
+  const kept = [];
+  let length = -1;
+  for (const part of parts) {
+    length += 1 + renderPart(part, (text) => text).length;
+    if (length > limit) break;
+    kept.push(part);
+  }
+  if (kept.length || !parts.length) return kept;
+  const cut = renderErrorText(parts).slice(0, limit);
+  return cut ? [{ text: cut, verbatim: true }] : [];
+};
+/**
+ * Joins parts with `and` as English does: "A and B and C".
+ * @param {ErrorTextPart[]} items at least one
+ * @returns {ErrorTextPart}
+ */
+const andPart = (items) => items.reduce((first, second) => ({ text: PHRASES.and, params: { first, second } }));
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
@@ -279,10 +395,16 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [codepoint]
  * @property {number} [innerPx]
  * @property {number} [outerPx]
+ * @property {number} [keptInsidePx] The room kept below the band for the inside rows placed after it.
+ * @property {string} [keptInsideTracks] The rows with an off control it is kept for (`SWITCHED_TRACKS` keys, comma-separated).
+ * @property {string} [slotTrack] The failed row, when it has an off control (a `SWITCHED_TRACKS` key).
  * @property {number} [placementIndex]
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
  * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
+ * @property {number} [sessionVersion] The version of a Session file this app does not read.
+ * @property {number} [latestSessionVersion] The newest Session version this app reads.
+ * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
  */
 
 /**
@@ -293,7 +415,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {string} stage
  * @property {UserFacingContext} context
  * @property {{ code: string, stage: string }[]} secondary
- * @property {string} summary
+ * @property {string} summary The English text of `summaryParts`.
+ * @property {ErrorTextPart[]} summaryParts The sentences of the summary, shown through `errorText`.
  * @property {{ label: string, text: string }[]} details
  * @property {string[]} actions
  */
@@ -347,7 +470,7 @@ for (const [message, code] of [
 // Fixed labels/options emitted by the existing current-option validators.
 for (const [label, field, reason] of [
   ['Protein BLASTP Pairwise max hits', 'protein_blastp_max_hits', 'POSITIVE_INTEGER'],
-  ['Protein BLASTP member hits per protein', 'orthogroup_member_max_hits', 'POSITIVE_INTEGER'],
+  ['Protein BLASTP max hits per protein for groups', 'orthogroup_member_max_hits', 'POSITIVE_INTEGER'],
   ['Collinear minimum anchors', 'collinear_min_anchors', 'POSITIVE_INTEGER'],
   ['Collinear maximum unit gap', 'collinear_max_unit_gap', 'NONNEGATIVE_INTEGER'],
   ['Collinear maximum diagonal drift', 'collinear_max_diagonal_drift', 'NONNEGATIVE_INTEGER'],
@@ -535,20 +658,68 @@ const contextFor = (value) => {
   const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
   if (caption) context.featureCaption = caption;
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
+  if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
+  if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
+  if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
+    context.readSessionVersions = value.readSessionVersions;
+  }
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
   if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
     context.labelFitCounts = value.labelFitCounts;
   }
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
+  if (typeof value.keptInsideTracks === 'string' && value.keptInsideTracks.length <= 80) {
+    const tracks = [...new Set(value.keptInsideTracks.split(','))].filter((track) => Object.hasOwn(SWITCHED_TRACKS, track));
+    if (tracks.length) context.keptInsideTracks = tracks.join(',');
+  }
+  if (typeof value.slotTrack === 'string' && Object.hasOwn(SWITCHED_TRACKS, value.slotTrack)) context.slotTrack = value.slotTrack;
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
   }
   return context;
+};
+
+// OV-1253: the CLI's words for a Session version this app does not read
+// (gbdraw/session_io.py `validate_session`). The Session reader
+// (services/session-authority.js) names the versions it reads.
+/**
+ * @param {UserFacingContext} context
+ * @returns {ErrorTextPart | null}
+ */
+const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, readSessionVersions }) => {
+  if (sessionVersion === undefined) return null;
+  if (reason === 'SESSION_TOO_NEW' && latestSessionVersion !== undefined) {
+    return { text: PHRASES.sessionTooNew, params: { version: sessionVersion, latest: latestSessionVersion } };
+  }
+  if (reason === 'SESSION_VERSION_UNSUPPORTED' && readSessionVersions) {
+    return { text: PHRASES.sessionUnsupported, params: { version: sessionVersion, versions: readSessionVersions } };
+  }
+  return null;
+};
+
+// OV-1274, OV-1276: the room a Circular placement keeps below its band for the
+// inside rows after it (other rows may share it), and the off controls and widths
+// of the failed row and the kept rows that have them.
+/**
+ * @param {UserFacingContext} context
+ * @returns {ErrorTextPart[]}
+ */
+const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
+  const kept = keptInsidePx !== undefined && keptInsideTracks ? keptInsideTracks.split(',') : [];
+  /** @type {ErrorTextPart[]} */
+  const parts = keptInsidePx === undefined ? [] : [kept.length
+    ? { text: PHRASES.keptBelowAmong, params: { px: keptInsidePx, tracks: andPart(kept.map((track) => ({ text: SWITCHED_TRACKS[track].name }))) } }
+    : { text: PHRASES.keptBelow, params: { px: keptInsidePx } }];
+  const tracks = [...new Set([...(slotTrack ? [slotTrack] : []), ...kept])].map((track) => SWITCHED_TRACKS[track]);
+  if (!tracks.length) return parts;
+  const options = tracks.reduce((count, track) => count + track.options, 0);
+  parts.push({ text: options > 1 ? PHRASES.makeRoomAny : PHRASES.makeRoom }, ...tracks.map((track) => ({ text: track.remedy })));
+  return parts;
 };
 
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
@@ -579,47 +750,52 @@ export const normalizeUserFacingError = (value, {
   }
   const [message, actions] = DEFINITIONS[result.code];
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
-  const { featureId, featureType, featureStart, featureEnd, featureCount } = result.context;
+  const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
-  const locators = [
-    diagramMode !== undefined ? `Diagram: ${diagramMode === 'linear' ? 'Linear' : 'Circular'}.` : '',
-    sessionTable !== undefined ? `Session table: ${SESSION_TABLE_LABELS[sessionTable]}.` : '',
-    inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
+  const { queryRecordIndex, subjectRecordIndex, labelFitCounts, exceptionType } = result.context;
+  // One part per sentence, in the order the summary shows them.
+  /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
+  const pieces = [
+    { text: message },
+    diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
+    sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
+    inputOrdinal !== undefined && { text: ORDINAL_LABELS[result.code] || PHRASES.sequence, params: { n: inputOrdinal } },
     // A comparison pair as the comparison panel numbers it (#1 to #2).
-    result.context.queryRecordIndex !== undefined && result.context.subjectRecordIndex !== undefined
-      ? `Pair: #${result.context.queryRecordIndex + 1} to #${result.context.subjectRecordIndex + 1}.` : '',
-    featureCaption !== undefined ? `Feature: ${featureCaption}.` : '',
-    row !== undefined ? `Line ${row}.` : '',
-    column !== undefined ? `Column ${column}.` : '',
-    slotIndex !== undefined ? `Track row ${slotIndex + 1}.` : '',
-    seriesIndex !== undefined ? `Depth series ${seriesIndex + 1}.` : '',
-    configPath !== undefined ? `Setting: ${configPath}.` : '',
-    featureName ? `Feature: ${featureName}.` : '',
+    queryRecordIndex !== undefined && subjectRecordIndex !== undefined
+      && { text: PHRASES.pair, params: { query: queryRecordIndex + 1, subject: subjectRecordIndex + 1 } },
+    featureCaption !== undefined && { text: PHRASES.featureCaption, params: { caption: featureCaption } },
+    row !== undefined && { text: PHRASES.line, params: { row } },
+    column !== undefined && { text: PHRASES.column, params: { column } },
+    slotIndex !== undefined && { text: PHRASES.trackRow, params: { row: slotIndex + 1 } },
+    seriesIndex !== undefined && { text: PHRASES.depthSeries, params: { series: seriesIndex + 1 } },
+    configPath !== undefined && { text: PHRASES.setting, params: { path: configPath } },
+    featureName && { text: PHRASES.feature, params: { feature: featureName } },
     // `undefined > 1` is false: with no count there is no line.
-    /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
-  ].filter(Boolean).map((text) => ` ${text}`).join('');
-  const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const guidance = REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
-  const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
-  // The context keeps Python's zero-based index; people count from one.
-  const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
-  const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
-  const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
-  const labelFit = result.context.labelFitCounts ? ` ${result.context.labelFitCounts}` : '';
-  const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
-  const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
-    ? ' Load a supported Session file or recreate it with the current writer.' : '';
+    /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
+    field && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
+    sessionVersionGuidance(result.context)
+      || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
+    innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
+    ...trackRoomParts(result.context),
+    labelFitCounts && { text: labelFitCounts, verbatim: /** @type {const} */ (true) },
+    // The context keeps Python's zero-based index; people count from one.
+    position !== undefined && { text: PHRASES.position, params: { position: position + 1 } },
+    columnCount !== undefined && { text: PHRASES.requiredColumns, params: { count: columnCount } },
+    recordCount !== undefined && { text: PHRASES.loadedRecords, params: { count: recordCount } },
+    exceptionType && { text: PHRASES.exception, params: { type: exceptionType } },
+    result.operation === 'align' && field === 'direction' && reason === 'SOURCE_VIEW_CONFLICT' && { text: PHRASES.applyAgain },
+    result.code === 'INPUT_INVALID' && field === 'schema' && { text: PHRASES.schema }
+  ];
   // A file chosen in Load Session that is not JSON is not a Session;
   // every other Session reason keeps its correction.
   const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
-    && result.context.field === 'schema' && result.context.reason === 'JSON_FORMAT'
-    ? 'This file is not a gbdraw Session: it is not valid JSON.' : '';
-  const continuation = result.operation === 'align' && result.context.field === 'direction'
-    && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${labelFit}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)
-    .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
+    && field === 'schema' && reason === 'JSON_FORMAT';
+  result.summaryParts = capParts(notASession ? [{ text: PHRASES.notASession }]
+    : pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece)),
+  Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
+  result.summary = renderErrorText(result.summaryParts);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
     ...result.secondary.map((item) => `Secondary: ${item.code} / ${item.stage}`)].join('\n');
@@ -659,26 +835,31 @@ export const retryCanSucceed = (error) =>
 export const liveEditFailure = (error) => {
   if (!error) return null;
   const retry = retryCanSucceed(error);
-  const next = error.actions.includes('generate') ? ''
-    : retry ? ' Retry the live edit or use Generate.' : ' Change the edit, or change the settings and use Generate.';
-  return { ...error, actions: retry ? ['retry', 'generate'] : ['generate'],
-    note: `Live edit failed: direct edits already applied are kept; geometry may still need updating. ${error.summary}${next}` };
+  const next = error.actions.includes('generate') ? [] : [{ text: retry ? PHRASES.liveEditRetry : PHRASES.liveEditChange }];
+  const noteParts = [{ text: PHRASES.liveEditFailed }, ...error.summaryParts, ...next];
+  return { ...error, actions: retry ? ['retry', 'generate'] : ['generate'], noteParts, note: renderErrorText(noteParts) };
 };
 
 // Presentation of finite operation and transaction facts stays with public wording.
-/** @param {string | null | undefined} operation */
-export const operationErrorTitle = (operation) => (/** @type {Readonly<Record<string, string>>} */ ({
+/** @type {Readonly<Record<string, string>>} */
+const OPERATION_TITLES = Object.freeze({
   generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error', 'session-load': 'Session not loaded',
   'export-svg': 'SVG export error', 'export-png': 'PNG export error', 'export-pdf': 'PDF export error',
   listSequenceRecords: 'Input error', listGffFastaRecords: 'Input error', readComparisonSequence: 'Input error',
   readFeatureOverrideTable: 'Feature edits TSV error',
   'feature-extraction': 'Feature preparation error'
-})[/** @type {string} */ (operation)] || 'Operation error');
-/** @param {string | null | undefined} recovery */
-export const generationRecoveryGuidance = (recovery) => (/** @type {Readonly<Record<string, string>>} */ ({
+});
+/** @type {Readonly<Record<string, string>>} */
+const RECOVERY_GUIDANCE = Object.freeze({
   'no-result': 'No successful Result is available yet. Correct the cause and retry.',
   // The one notice that the shown Result is the last successful one (PD-OI-016).
   preserved: 'Showing the last successful Result; your changes were not applied.',
   restored: 'Showing the last successful Result again; your changes were not applied. Correct the cause and retry.',
   'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'
-})[/** @type {string} */ (recovery)] || '');
+});
+/** @param {string | null | undefined} operation */
+export const operationErrorTitle = (operation) => (
+  Object.hasOwn(OPERATION_TITLES, String(operation)) ? OPERATION_TITLES[String(operation)] : PHRASES.operationError);
+/** @param {string | null | undefined} recovery */
+export const generationRecoveryGuidance = (recovery) => (
+  Object.hasOwn(RECOVERY_GUIDANCE, String(recovery)) ? RECOVERY_GUIDANCE[String(recovery)] : '');

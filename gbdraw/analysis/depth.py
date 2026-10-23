@@ -16,6 +16,7 @@ from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
 from gbdraw.exceptions import ParseError, ValidationError
+from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
 _DEPTH_TSV_CACHE_MAXSIZE = 8
@@ -98,6 +99,7 @@ def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> Data
                 "position": "int64",
                 "depth": "float64",
             },
+            **EXACT_FLOAT_READ_OPTIONS,
         )
     except ValueError as exc:
         raise ParseError(

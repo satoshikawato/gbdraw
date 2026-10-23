@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from gbdraw.cli_utils.common import add_font_file_args, register_font_files
+from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.core.fonts import custom_font_families
 from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.exceptions import ValidationError
@@ -25,10 +26,11 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.render.formats import (
     SVG_FORMAT,
+    parse_output_formats,
     resolve_format_output_path,
     resolve_output_paths,
 )
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
@@ -99,6 +101,28 @@ class SessionCliRequest:
     embed_fonts: bool = True
 
 
+def read_stored_font_size_options(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Read each replayed ``--*font_size`` option <= 0 as Auto (OV-1282, D-PYB-7).
+
+    The released CLI stored such a value in ``cliInvocation.args`` and drew it;
+    replay keeps the option's default instead (``auto`` for one value of a
+    per-track list), with the notice of the other Session readers. The options
+    are the parsed ones whose destination names a font size.
+    """
+
+    for dest, value in vars(args).items():
+        if not dest.endswith("font_size") or value is None:
+            continue
+        path = f"cliInvocation.args --{dest}"
+        if isinstance(value, list):
+            setattr(args, dest, [
+                "auto" if read_stored_font_size(item, path=path) is None and item is not None else item
+                for item in value
+            ])
+        elif read_stored_font_size(value, path=path) is None:
+            setattr(args, dest, parser.get_default(dest))
+
+
 def add_session_args(parser: argparse.ArgumentParser) -> None:
     """Add session input/output options to a diagram parser."""
 
@@ -133,6 +157,12 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         ),
         type=str,
     )
+
+
+def _format_override(value: str | None) -> str | None:
+    """Read a ``-f/--format`` override typed with ``--session`` (OV-1244)."""
+
+    return None if value is None else ",".join(parse_output_formats(value))
 
 
 def parse_session_pre_args(
@@ -180,7 +210,7 @@ def parse_session_pre_args(
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -269,7 +299,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -342,10 +372,7 @@ def preflight_session_sidecar_if_requested(
             "Choose a distinct --session_output path."
         )
     if sidecar_path.exists() and not overwrite:
-        raise ValidationError(
-            f"Session output already exists: {sidecar_path}. "
-            "Use --overwrite to replace it."
-        )
+        raise OutputExistsError((sidecar_path,), subject="Session output")
     return sidecar_path
 
 
@@ -656,7 +683,9 @@ def _rendered_drawing_build(
     """The re-save of one rendered drawing: its request, Results and artifacts."""
 
     from gbdraw.api.request_render import CircularBatchRenderResult, stored_protein_result_request
-    from gbdraw.session import _DrawingBuild
+    from gbdraw.session import _DrawingBuild, require_search_frame_protein_results
+
+    require_search_frame_protein_results(rendered.migration_report)
 
     state, web_file_inventory = project_session_adjunct_for_current_write(
         copy.deepcopy(dict(plan.drawing.artifacts.fields)),
@@ -1112,7 +1141,6 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "-t": "files.t_color",
     "--table": "files.t_color",
     "--label_whitelist": "files.whitelist",
-    "--label_blacklist": "files.blacklist",
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
@@ -1206,9 +1234,6 @@ def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: boo
         return
     if slot == "files.t_color":
         files["t_color"] = entry
-        return
-    if slot == "files.blacklist":
-        files["blacklist"] = entry
         return
     if slot == "files.whitelist":
         files["whitelist"] = entry
@@ -1308,6 +1333,7 @@ __all__ = [
     "RenderedSvg",
     "SessionCliRequest",
     "add_session_args",
+    "read_stored_font_size_options",
     "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
     "collect_track_slot_geometry_records",

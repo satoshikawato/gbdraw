@@ -4,14 +4,15 @@ import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/
 import { clearQueuedPalette, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette, setDefaultColors } from '../services/drawing/palette.js';
 /** @import { PaletteDrawing } from '../services/drawing/palette.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+import { listText, t } from '../utils/i18n.js';
+import { withImportedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
+/** @import { FileImports } from '../services/file-imports.js' */
 
 // The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
 /** @param {string[]} keys */
 const describeKeys = (keys) => {
   const rest = keys.length - 3;
-  const parts = rest > 0 ? [...keys.slice(0, 3), `${rest} more`] : keys;
-  if (parts.length <= 2) return parts.join(' and ');
-  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+  return listText(rest > 0 ? [...keys.slice(0, 3), t('{count} more', { count: rest })] : keys);
 };
 
 /**
@@ -27,7 +28,11 @@ const describeKeys = (keys) => {
  * @property {PaletteColorsDialog} paletteColorsDialog
  */
 
-/** @typedef {PaletteDrawing & { readonly id: DrawingId }} ResultsManagerDrawing The palette of a drawing (`DrawingState` of state.js). */
+/**
+ * The palette of a drawing (`DrawingState` of state.js), and what its Default
+ * colors file set (`fileImports`, OV-1280; a setting its owners write).
+ * @typedef {PaletteDrawing & { readonly id: DrawingId, readonly fileImports: FileImports }} ResultsManagerDrawing
+ */
 
 /**
  * @param {{
@@ -181,6 +186,8 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     const colors = getPaletteBaseColors(paletteName);
     if (choice === 'keep') rows.forEach(([key, color]) => { colors[key] = color; });
     selectDrawingPalette(drawing.slices.palette, paletteName, colors);
+    // A switch that drops the user colors drops the file's with them (OV-1280).
+    if (choice !== 'keep') delete drawing.fileImports.d_color;
     // The applied palette queues nothing: switching back to it while another
     // is queued applies its colors live (Q5 A, Owner 2026-10-09).
     if (paletteInstantPreviewEnabled.value || paletteName === appliedPaletteName.value) {
@@ -205,6 +212,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   /** @param {ResultsManagerDrawing} drawing */
   const resetColors = (drawing) => {
     replaceDefaultColors(drawing.slices.palette, getPaletteBaseColors(paletteNameOf(drawing)));
+    delete drawing.fileImports.d_color;
     syncPaletteDraftState();
   };
 
@@ -273,8 +281,31 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {string} color
    */
   const editDefaultColor = (key, color) => editDefaultColors(state.activeDrawing(), { [key]: color });
+  // OV-1280 (D-19): a Default colors file's colors over the drawing's, and
+  // their Remove: each type takes back its user color, else the palette's.
+  /**
+   * @param {ResultsManagerDrawing} drawing
+   * @param {Record<string, string>} colors
+   */
+  const importDefaultColors = (drawing, colors) => {
+    const { imported } = withImportedDefaultColors(drawing.currentColors.value, colors, (type) => readUserDefaultColor(drawing, type));
+    editDefaultColors(drawing, colors);
+    drawing.fileImports.d_color = imported;
+  };
+  /** @param {ResultsManagerDrawing} drawing */
+  const removeImportedDefaultColors = (drawing) => {
+    const imported = drawing.fileImports.d_color;
+    if (!imported) return;
+    replaceDefaultColors(drawing.slices.palette, withoutImportedDefaultColors(
+      drawing.currentColors.value, imported, getPaletteBaseColors(paletteNameOf(drawing))
+    ));
+    delete drawing.fileImports.d_color;
+    if (drawing === state.activeDrawing()) syncPaletteDraftState();
+  };
 
   return {
+    importDefaultColors,
+    removeImportedDefaultColors,
     requestPaletteChange,
     selectPalette,
     requestResetColors,

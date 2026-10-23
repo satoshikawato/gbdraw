@@ -63,6 +63,7 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
@@ -81,6 +82,7 @@ from gbdraw.features.placement import (
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -107,6 +109,7 @@ from gbdraw.annotations import (
     HatchStyle,
     RegionAnnotation,
     RegionAnnotationStyle,
+    annotation_track_params_from_mapping,
 )
 
 from .api.options import (
@@ -1938,6 +1941,78 @@ def _decode_diagram_options(
     return decoded
 
 
+def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a stored request with each font size <= 0 read as Auto, as Web Load does (Owner Q-13 a, OV-1282).
+
+    The Session reader (``decode_session_request``) calls it; a fresh request,
+    such as a Web Generate, keeps refusing such a size (PD-OI-081).
+
+    A font size is a ``POSITIVE`` style leaf (``style_leaf_domain``), in
+    ``config`` or ``configOverrides``. Auto is the value the request's base
+    gives that path: an override leaf is dropped, and inside ``config`` (or an
+    override that holds a table) the leaf takes the stored ``config`` value
+    (for an override), else the packaged one, else ``None`` (a Linear
+    definition line style then inherits its size). Changed containers are
+    copies; the stored request stays as saved.
+    """
+
+    packaged: list[Mapping[str, object]] = []  # Read on the first replacement only.
+    packaged_base = object()
+
+    def lookup(tree: object, path: str) -> object:
+        if tree is packaged_base:
+            if not packaged:
+                packaged.append(load_config_toml("gbdraw.data", "config.toml"))
+            tree = packaged[0]
+        for key in path.split("."):
+            if not isinstance(tree, MappingABC) or key not in tree:
+                return None
+            tree = tree[key]
+        return tree
+
+    def read(value: object, path: str, where: str, bases: tuple[object, ...]) -> object:
+        if isinstance(value, MappingABC):
+            children = {
+                key: read(child, f"{path}.{key}", f"{where}.{key}", bases) for key, child in value.items()
+            }
+            return children if any(children[key] is not value[key] for key in value) else value
+        domain = style_leaf_domain(path)
+        if (
+            value is None  # Unset stays unset; only a stored number <= 0 is replaced.
+            or domain is None
+            or domain[0] != "POSITIVE"
+            or read_stored_font_size(value, path=where) is not None
+        ):
+            return value
+        return next((default for base in bases if (default := lookup(base, path)) is not None), None)
+
+    result = dict(payload)
+    stored = result.get("diagramOptions")
+    if not isinstance(stored, MappingABC):
+        return result
+    options = dict(stored)
+    result["diagramOptions"] = options
+    config = options.get("config")
+    if isinstance(config, MappingABC):
+        options["config"] = {
+            key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged_base,))
+            for key, child in config.items()
+        }
+    overrides = options.get("configOverrides")
+    if isinstance(overrides, MappingABC):
+        bases = (options.get("config"), packaged_base)
+        kept: dict[str, Any] = {}
+        for key, value in overrides.items():
+            where = f'renderRequest.diagramOptions.configOverrides["{key}"]'
+            if isinstance(value, MappingABC):
+                kept[key] = read(value, key, where, bases)
+            elif read(value, key, where, ()) is value:
+                kept[key] = value
+            # Else dropped, as Web Load drops it: the base value applies.
+        options["configOverrides"] = kept
+    return result
+
+
 def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Return request ``diagramOptions`` with a scale interval <= 0 read as automatic.
 
@@ -3470,6 +3545,11 @@ def _encode_track_slot(
                     + ", ".join(sorted(private_keys))
                     + "."
                 )
+            # A spec string keeps `marks=a|b` as text; the Session holds the
+            # mark list the Web reads (OV-1298). Read before the style
+            # override below becomes its camelCase Session form.
+            if isinstance(raw.get("marks"), str):
+                raw["marks"] = list(annotation_track_params_from_mapping(raw).marks or ())
             if isinstance(raw.get("style_override"), RegionAnnotationStyle):
                 raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
@@ -3770,6 +3850,12 @@ def _encode_comparisons(
                 }
             )
             continue
+        if comparison.drawn_feature_ids:
+            raise CanonicalRequestEncodingError(
+                f"Linear comparison {index} still holds the drawn-frame feature IDs of a "
+                "Session up to 40; write it with gbdraw.session.save_session_document, "
+                "which moves it to the search frame (OV-1183)."
+            )
         comparison = reverse_unbound_endpoint_rows(comparison, *endpoint_frames)
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
@@ -3949,12 +4035,24 @@ def _decode_comparisons(
                 subject_index = _non_negative_index(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
+                from gbdraw.api.prepared import (
+                    get_or_build_decoded_resource,
+                    register_prepared_resource_value,
+                )
+
                 # The resource text stays on the edge, so a re-saved Session
-                # writes the same nucleotideBlast resource.
-                try:
+                # writes the same nucleotideBlast resource. Both are read once
+                # per Worker resource.
+                def read_edge(
+                    resource_path: Path = resource_path,
+                    label: str = f"BLAST resource {item['resourceId']!r}",
+                ) -> tuple[str, DataFrame]:
                     text = resource_path.read_bytes().decode("utf-8")
-                    table = read_comparison_table(
-                        StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
+                    return text, read_comparison_table(StringIO(text), label=label)
+
+                try:
+                    text, table = get_or_build_decoded_resource(
+                        resource_path, ("nucleotide-blast-edge-v1",), read_edge
                     )
                 except (OSError, UnicodeError, ValidationError) as exc:
                     # The reader's diagnostic plus the record pair the Web names (CI-04).
@@ -3965,8 +4063,6 @@ def _decode_comparisons(
                         f"Could not decode {path}: {exc}",
                         diagnostic=cause and {**cause, "queryRecordIndex": query_index, "subjectRecordIndex": subject_index},
                     ) from exc
-                from gbdraw.api.prepared import register_prepared_resource_value
-
                 explicit_comparisons.append(
                     LinearComparison(
                         query_index,
@@ -3986,13 +4082,18 @@ def _decode_comparisons(
                 raise CanonicalRequestDecodingError(
                     f"Unsupported protein comparison encoding at {path}."
                 )
-            table = _read_canonical_table(
-                _resolve_resource(
-                    item["resourceId"],
-                    path=f"{path}.resourceId",
-                    resource_paths=resource_paths,
-                ),
-                context=path,
+            protein_path = _resolve_resource(
+                item["resourceId"],
+                path=f"{path}.resourceId",
+                resource_paths=resource_paths,
+            )
+            from gbdraw.api.prepared import get_or_build_decoded_resource
+
+            # Read once per Worker resource, like the nucleotide edges above.
+            table = get_or_build_decoded_resource(
+                protein_path,
+                ("canonical-protein-comparison-v1",),
+                lambda: _read_canonical_table(protein_path, context=path),
             )
             if schema >= 2:
                 query_index = _non_negative_index(
@@ -4393,7 +4494,7 @@ def _read_canonical_table(
     text_options: dict[str, Any] = (
         {"dtype": str, "keep_default_na": False}
         if text_cells
-        else {"float_precision": "round_trip"}
+        else EXACT_FLOAT_READ_OPTIONS
     )
     try:
         table = read_csv(file_path, sep="\t", **text_options)
@@ -5511,4 +5612,5 @@ __all__ = [
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
     "with_automatic_scale_interval",
+    "with_stored_font_sizes_as_auto",
 ]

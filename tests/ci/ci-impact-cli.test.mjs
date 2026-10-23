@@ -844,6 +844,9 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   const release = job('release-gate');
   assert.match(release, /CI_IMPACT_EXPECTED_PROFILE: release/);
   assert.match(release, /inputs\.tier == 'release'/);
+  // Missing or stale Web UI translations fail only the release tier.
+  assert.match(release, /run: node tools\/i18n\/sync\.mjs status --require-complete\n/);
+  assert.equal((workflow.match(/sync\.mjs status --require-complete/g) || []).length, 1);
   for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
     assert.ok(release.includes(`      - ${id}\n`), `release gate missing ${id}`);
   }

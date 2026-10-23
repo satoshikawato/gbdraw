@@ -959,10 +959,13 @@ test('M17 circular: Reset Stroke and Reset all strokes give the strokes Generate
 // editor turns it into a rule row, which the live edit appended to the Legend
 // and Generate kept last. The row keeps its place, live and at Generate,
 // recorded as an edited order (PD-OI-063), and Sort by default keeps it there.
+// OV-1277 (Owner, Q-04(1), 2026-10-19): also through Undo, Redo, and a Session
+// save and load.
 for (const mode of ['linear', 'circular']) {
-  test(`M15 ${mode}: a renamed feature row keeps its place live and at Generate`, async ({ browser }) => {
+  test(`M15 ${mode}: a renamed feature row keeps its place live and at Generate`, async ({ browser }, testInfo) => {
     test.setTimeout(600_000);
     const page = await loadWithGc(browser, mode);
+    let fresh;
     try {
       const before = (await legendRowsByCaption(page)).editor;
       const index = before.indexOf('repeat_region');
@@ -987,9 +990,33 @@ for (const mode of ['linear', 'circular']) {
       expect(await drawnLegendOrder(page), 'Sort by default, drawn').toEqual(renamed);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Sort by default` });
       expect((await legendRowsByCaption(page)).editor).toEqual(renamed);
+
+      for (const [direction, expected] of [['undo', before], ['redo', renamed]]) {
+        while ((await legendRowsByCaption(page)).editor.join() !== expected.join()) {
+          const moved = await evaluateWithRetainedPromise(page, async (name) => {
+            const history = window.__GBDRAW_HISTORY__;
+            if ((name === 'undo' ? history.getUndoCount() : history.getRedoCount()) === 0) return false;
+            await history[name]();
+            return true;
+          }, direction);
+          expect(moved, `${direction} reaches ${expected}`).toBe(true);
+          await settleLive(page);
+        }
+        expect(await drawnLegendOrder(page), `${direction}, drawn`).toEqual(expected);
+      }
+      const saved = testInfo.outputPath(`ov1277-${mode}.gbdraw-session.json.gz`);
+      await download(page, 'Save Session', saved);
+      fresh = await load(browser, saved);
+      fresh.setDefaultTimeout(180_000);
+      expect((await legendRowsByCaption(fresh)).editor, 'a loaded Session').toEqual(renamed);
+      expect(await drawnLegendOrder(fresh), 'a loaded Session, drawn').toEqual(renamed);
+      await generate(fresh);
+      expect(await drawnLegendOrder(fresh), 'a loaded Session, Generate').toEqual(renamed);
       expect(page.externalRequests).toEqual([]);
+      expect(fresh.externalRequests).toEqual([]);
     } finally {
       await page.context().close();
+      if (fresh) await fresh.context().close();
     }
   });
 }

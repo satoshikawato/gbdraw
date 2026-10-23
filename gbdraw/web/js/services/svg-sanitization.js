@@ -124,6 +124,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-record-translation-y',
     'data-gbdraw-annotation-mark',
     'data-gbdraw-annotation-label',
+    'data-gbdraw-region-label-for',
     'data-gbdraw-role',
     'data-gbdraw-composition-schema',
     'data-gbdraw-composition',
@@ -167,7 +168,8 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'dominant-baseline',
     'writing-mode',
     'letter-spacing',
-    'display'
+    'display',
+    'pointer-events'
   ],
   FORBID_TAGS: [
     'style',

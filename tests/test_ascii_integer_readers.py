@@ -279,7 +279,7 @@ def test_comparison_feature_indexes_refuse_non_ascii_digits(digit: str) -> None:
 
     from gbdraw.api.record_planning import ComparisonRecordBinding, project_comparison_frame
 
-    binding = ComparisonRecordBinding({1: "a"}, {1: "a"}, {1: "b"}, 100)
+    binding = ComparisonRecordBinding({1: "a"}, {1: "a"}, {1: "b"}, 100, {}, {}, False)
 
     def frame(index: str) -> pd.DataFrame:
         return pd.DataFrame(

@@ -15,7 +15,9 @@ import {
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
 import { createLinearTrackSlotEditor } from '../../gbdraw/web/js/app/linear-track-slots.js';
+import { trackLayoutWithVisibility } from '../../gbdraw/web/js/app/track-slot-edits.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 const WEB = 'gbdraw/web';
 const MODES = ['circular', 'linear'];
@@ -87,6 +89,24 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   assert.equal(placement.layoutChange.open, false);
   assert.equal(steps.length, 1);
   assert.equal(everything(linear), linearBefore);
+});
+
+// OV-1418: the dialog names a checkbox's new value in the shown language.
+test('a checkbox edit that drops a lane names its new value in the shown language', async () => {
+  const linear = draftState('linear');
+  linear.featurePlacementOverrides.l = lane('linear', 'above');
+  const store = withModeDrawings(linear, { circular: draftState('circular'), linear });
+  const placement = createFeaturePlacementActions({ state: store, getCommittedRequest: () => null, isCurrentFeature: () => true,
+    runUndoable: async (label, fn) => { fn(); } });
+  try {
+    await setUiLocale('ja', async () => ({ default: { On: 'オン', Off: 'オフ' } }));
+    const strands = { type: 'checkbox', checked: true, getAttribute: () => 'Separate Strands' };
+    placement.changeLayoutSetting({ target: strands }, 'separate_strands');
+    assert.deepEqual({ ...placement.layoutChange }, { open: true, count: 1, setting: 'Separate Strands', value: 'オン' });
+    await placement.resolveLayoutChange('cancel');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // Each editor export runs with every call below, on a stack whose feature row
@@ -329,11 +349,31 @@ test('the stack editors are created once, with the transition', () => {
   const sites = sources(`${WEB}/js`).flatMap((path) => [...readFileSync(path, 'utf8')
     .matchAll(/create(?:Circular|Linear)TrackSlotEditor\(\{([^}]*)\}\)/g)]
     .map((match) => [relative(`${WEB}/js`, path), match[1].replace(/\s+/g, ' ').trim()]));
-  // The Circular editor also takes the choice dialog and History's undoable step,
-  // which its Hide GC content / skew question uses, and the reader of the
-  // record lengths its estimates describe.
+  // Both editors take the Legend port their stack edits run in. The Circular
+  // editor also takes the choice dialog and History's undoable step, which its
+  // Hide GC content / skew question uses, and the reader of the record lengths
+  // its estimates describe.
   assert.deepEqual(sites, [
-    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths'],
-    ['app/app-setup.js', 'state, changeTrackLayout']
+    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions'],
+    ['app/app-setup.js', 'state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions']
   ]);
+});
+
+test('a stack edit runs in the Legend port once, and a deferred Reset apply runs in it on its own', () => {
+  const log = [];
+  const visibility = (change) => { log.push('enter'); const result = change(); log.push('leave'); return result; };
+  // No lane is lost: the layout transition applies at once.
+  const direct = trackLayoutWithVisibility((apply) => apply(), visibility);
+  assert.equal(direct(() => { log.push('apply'); return 'done'; }), 'done');
+  assert.deepEqual(log, ['enter', 'apply', 'leave']);
+  // A lane is lost: the transition applies, restores, keeps the edit for its dialog, and returns false.
+  log.length = 0;
+  let pending = null;
+  const asking = trackLayoutWithVisibility((apply) => { apply(); log.push('restore'); pending = apply; return false; }, visibility);
+  assert.equal(asking(() => { log.push('apply'); }), false);
+  assert.deepEqual(log, ['enter', 'apply', 'restore', 'leave']);
+  // The Reset choice applies the kept edit later, inside the Legend port.
+  log.length = 0;
+  pending();
+  assert.deepEqual(log, ['enter', 'apply', 'leave']);
 });

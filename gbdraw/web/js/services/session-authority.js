@@ -31,6 +31,7 @@ import {
   OTHER_MODE_RESULT_LEGEND_FIELDS,
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
+  ROW_KEYED_LEGEND_SESSION_VERSION,
   SESSION_VERSION,
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
@@ -155,6 +156,19 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 ]);
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
+// The versions this reader takes, in words, for the refusal of another
+// version (OV-1253): "27–33, 39–42, 44, and 46–48".
+const READ_SESSION_VERSIONS = (() => {
+  /** @type {[number, number][]} */
+  const runs = [];
+  for (const version of SUPPORTED_SESSION_VERSIONS) {
+    const last = runs[runs.length - 1];
+    if (last && version === last[1] + 1) last[1] = version;
+    else runs.push([version, version]);
+  }
+  const words = runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`));
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
+})();
 const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
 
 /**
@@ -175,7 +189,11 @@ export const readSessionInput = (value) => {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_TOO_OLD' });
   }
   if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
-    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    // OV-1253: a Session names its version, as the CLI does; another file keeps the generic refusal.
+    throw diagnosticError('INPUT_INVALID', value.format !== 'gbdraw-session' ? { field: 'schema', reason: 'FIELDS' }
+      : version > SESSION_VERSION
+        ? { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: version, latestSessionVersion: SESSION_VERSION }
+        : { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: version, readSessionVersions: READ_SESSION_VERSIONS });
   }
   if (value.format !== 'gbdraw-session') throw formatInvalid();
   return /** @type {SessionEnvelope} */ (value); // `format` and `version` were checked above
@@ -797,11 +815,11 @@ export const hasBiologicalSessionInputs = (files = {}) => (
  * @returns {boolean}
  */
 export const isSettingsOnlySessionDocument = data => data != null && typeof data.version === 'number'
-  && [42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(data.version)
+  && [42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /**
- * Whether a Session's version has a settings-only form (42, 44, 46, 47): one
+ * Whether a Session's version has a settings-only form (42, 44, 46, 47, 48): one
  * whose request cannot be read loads as settings only (K22, C-OD07).
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
@@ -1310,7 +1328,7 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
       const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (other)?.renderRequest?.mode;
       repairs.push(loadRepair({
         code: 'other-result-set-dropped', path: 'otherModeResult.renderRequest', effect: 'dropped',
-        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+        ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
       }));
       data = rest;
     } else if (faults.some(({ kind }) => !['receipt', 'receipt-missing'].includes(kind))) {
@@ -1439,8 +1457,10 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(Number(version))) {
-    throw new Error(`Web binding schema 2 requires session version 41, 42, 44, ${MODE_SCOPED_SESSION_VERSION}, or ${SESSION_VERSION}.`);
+  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION]
+    .includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, 44, '
+      + `${MODE_SCOPED_SESSION_VERSION}, ${ROW_KEYED_LEGEND_SESSION_VERSION}, or ${SESSION_VERSION}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {

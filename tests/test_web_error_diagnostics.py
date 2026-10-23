@@ -333,8 +333,9 @@ def test_depth_failure_reports_series_locator(tmp_path: Path, surface, content, 
         ({"objects.scale.interval": 1.5}, "INTEGER", "objects.scale.interval"),
         ({"labels.font_size.short": 0}, "POSITIVE", "labels.font_size.short"),
         ({"objects.definition.linear.line_styles.name.font_size": -1.0}, "POSITIVE", "objects.definition.linear.line_styles.name.font_size"),
-        ({"labels.stroke_width.long": -0.5}, "NONNEGATIVE", "labels.stroke_width.long"),
-        ({"objects.depth.tick_font_size": math.inf}, "POSITIVE", "objects.depth.tick_font_size"),
+        ({"objects.features.line_stroke_width.long": -0.5}, "NONNEGATIVE", "objects.features.line_stroke_width.long"),
+        # OV-275: a float leaf is finite before its own domain is checked.
+        ({"objects.depth.tick_font_size": math.inf}, "FINITE", "objects.depth.tick_font_size"),
         ({"objects.depth.tick_font_size": 0.0}, "POSITIVE", "objects.depth.tick_font_size"),
         ({"objects.ticks.tick_width": -1.0}, "NONNEGATIVE", "objects.ticks.tick_width"),
     ],
@@ -493,7 +494,8 @@ def test_unparsable_genbank_is_unreadable_input_not_a_render_failure(tmp_path: P
         load_gbks([str(broken)])
     payload = _web(caught.value)
     assert payload["code"] == "INPUT_UNREADABLE"
-    assert payload["context"] == {}
+    # OV-1258: the reason says the file is cut off or damaged.
+    assert payload["context"] == {"reason": "GENBANK_PARSE"}
     assert "PRIVATE" not in json.dumps(payload)
 
 
@@ -566,3 +568,43 @@ def test_circular_labels_that_do_not_fit_reach_the_web_as_label_layout():
         # Python words the counts (one wording owner); the Web shows the sentence as sent.
         "context": {"labelFitCounts": "Overlapping label pairs: 20. Crossing leader pairs: 24."},
     }
+
+
+def test_the_gc_rows_kept_inside_a_placement_reach_the_web_by_name() -> None:
+    """OV-1274, OV-1276: the rows with an off option that a placement names pass the adapter by the engine's
+    vocabulary, and the Web wording owner words each."""
+
+    import re
+
+    from gbdraw.diagrams.circular.radial_layout import SWITCHED_TRACK_IDS
+
+    wording = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js").read_text(
+        encoding="utf-8"
+    )
+    block = wording[wording.index("const SWITCHED_TRACKS") :]
+    web_tracks = set(re.findall(r"\b([a-z_]+): \{ name:", block[: block.index("});")]))
+    assert SWITCHED_TRACK_IDS == web_tracks == {"gc_content", "gc_skew", "ticks"}
+
+    context = serialize_web_error(
+        ValidationError(
+            "PRIVATE",
+            diagnostic={
+                "code": "TRACK_LAYOUT",
+                "reason": "CANNOT_FIT",
+                "keptInsidePx": 34,
+                "keptInsideTracks": ["gc_skew", "PRIVATE", "gc_skew"],
+                "slotTrack": "ticks",
+            },
+        ),
+        operation="generate",
+        stage="render",
+    )["context"]
+    assert context == {"reason": "CANNOT_FIT", "keptInsidePx": 34, "keptInsideTracks": "gc_skew", "slotTrack": "ticks"}
+    unnamed = serialize_web_error(
+        ValidationError(
+            "PRIVATE", diagnostic={"code": "TRACK_LAYOUT", "keptInsideTracks": ["PRIVATE"], "slotTrack": "depth"}
+        ),
+        operation="generate",
+        stage="render",
+    )["context"]
+    assert "keptInsideTracks" not in unnamed and "slotTrack" not in unnamed

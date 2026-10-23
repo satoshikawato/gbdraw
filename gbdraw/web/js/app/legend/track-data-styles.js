@@ -1,10 +1,14 @@
 // @ts-check
-import { getDepthTrackFallbackLabel } from '../depth-tracks.js';
-import { retireLegendPaint } from '../../services/drawing/paint.js';
+import { defaultDepthSeriesLabel } from '../../services/depth-track-state.js';
+import {
+  legendEntryKey, paintOf, replaceDormantLegendRows, retireLegendPaint
+} from '../../services/drawing/paint.js';
 /** @import { PaintSlice } from '../../services/drawing/paint.js' */
 
 /** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
+
+/** @typedef {{ caption?: unknown, originalCaption?: unknown }} KeyedLegendRow A Legend list row: its name and its key. */
 
 /**
  * The Legend captions that a draft's track data names: the legend labels of
@@ -37,7 +41,9 @@ export const trackDataLegendCaptions = ({
     (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {{ legendLabel?: unknown } | null | undefined} */ annotation) => add(annotation?.legendLabel));
   });
   const sourced = new Set(sourcedDepthTrackIndexes);
-  sourced.forEach((index) => add(depthTracks?.[index]?.label || getDepthTrackFallbackLabel(index)));
+  // A series without a label draws the name its index has among all the series.
+  const seriesCount = Math.max(Array.isArray(depthTracks) ? depthTracks.length : 0, ...[...sourced].map((index) => index + 1));
+  sourced.forEach((index) => add(depthTracks?.[index]?.label || defaultDepthSeriesLabel(index, seriesCount)));
   (Array.isArray(depthSlots) ? depthSlots : []).forEach((slot) => {
     if (slot?.renderer === 'depth' && sourced.has(Number(slot?.params?.track_index ?? 0))) {
       add(slot.params?.legend_label);
@@ -58,20 +64,54 @@ export const trackDataLegendCaptions = ({
  * entries with a retired rename on the displayed Result, as Undo and Redo do.
  * The renamed rows a Generate hid (OV-120) follow the same rule: a row whose
  * data is removed leaves `dormantLegendEntries` with its styles.
+ * The rows of a drawn track the draft hides (`hiddenRows`: Show Depth off,
+ * Hide GC Content, Hide GC Skew) leave the list with the track, and a renamed
+ * one waits in `dormantLegendEntries` as after a Generate (OV-1198, OV-1215);
+ * once the track shows again, they return. The Legend list owner lists them
+ * (`relistLegendEntries`, which leaves out the hidden rows), and a returned
+ * row leaves `dormantLegendEntries`.
  * @param {{
  *   drawing: { readonly slices: { readonly paint: PaintSlice } },
  *   namedCaptions: () => Set<string>,
+ *   hiddenRows?: () => readonly string[],
+ *   relistLegendEntries?: () => void,
  *   projectLegendEntries: () => void
  * }} options
  * @returns {<T>(change: () => T) => T}
  */
-export const buildLegendStyleRetirement = ({ drawing, namedCaptions, projectLegendEntries }) => (
+export const buildLegendStyleRetirement = ({ drawing, namedCaptions,
+  hiddenRows = () => [], relistLegendEntries = () => {}, projectLegendEntries }) => (
   (change) => {
     const before = namedCaptions();
+    const hiddenBefore = new Set(hiddenRows());
     const result = change();
     const after = namedCaptions();
     const retired = new Set([...before].filter((caption) => !after.has(caption)));
-    if (retired.size > 0 && retireLegendPaint(drawing.slices.paint, retired)) projectLegendEntries();
+    const paint = paintOf(drawing.slices.paint);
+    const renameRetired = retired.size > 0 && retireLegendPaint(drawing.slices.paint, retired);
+    const hiddenAfter = new Set(hiddenRows());
+    const hiding = new Set([...hiddenAfter].filter((key) => !hiddenBefore.has(key)));
+    const showing = new Set([...hiddenBefore].filter((key) => !hiddenAfter.has(key)));
+    if (hiding.size === 0 && showing.size === 0) {
+      if (renameRetired) projectLegendEntries();
+      return result;
+    }
+    // A renamed row of a track the change hides waits with its rename. The list
+    // owner names a returning row from the list, else from the waiting rename;
+    // once listed, the row no longer waits (review H1).
+    const renamed = paint.legendEntries.value
+      .filter((entry) => hiding.has(legendEntryKey(entry)) && String(entry.caption ?? '').trim() !== legendEntryKey(entry));
+    if (renamed.length > 0) {
+      replaceDormantLegendRows(drawing.slices.paint, [
+        ...paint.dormantLegendEntries.value.filter((entry) => !hiding.has(legendEntryKey(entry))), ...renamed
+      ]);
+    }
+    relistLegendEntries();
+    const listed = new Set(paint.legendEntries.value.map(legendEntryKey));
+    const waiting = paint.dormantLegendEntries.value;
+    const dormant = waiting.filter((entry) => !(showing.has(legendEntryKey(entry)) && listed.has(legendEntryKey(entry))));
+    if (dormant.length !== waiting.length) replaceDormantLegendRows(drawing.slices.paint, dormant);
+    projectLegendEntries();
     return result;
   }
 );

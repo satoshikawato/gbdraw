@@ -256,7 +256,7 @@ def capture_gui_interactive_handoff(
         prefix.fill(RESTORED_PREFIX)
         prefix.press("Tab")
         final_report = generate_finished_human_diagram(page)
-        expect_circular_source_status(page, "1 source record(s) inspected")
+        expect_circular_source_status(page, "1 source record inspected")
         _assert_reproduced(source_report, final_report)
         _reset_finished_preview_viewport(page, target_zoom=50)
         final_report["restoredPreviewFrame"] = _frame_finished_preview_with_legend(

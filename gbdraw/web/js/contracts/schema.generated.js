@@ -3,11 +3,11 @@
 // above each constant; do not edit manually.
 
 // gbdraw/session_io.py: CURRENT_SESSION_VERSION
-export const SESSION_VERSION = 47;
+export const SESSION_VERSION = 48;
 
 // gbdraw/session_io.py: SUPPORTED_SESSION_VERSIONS
 /** @type {readonly number[]} */
-export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]);
+export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48]);
 
 // gbdraw/session_io.py: TYPED_DRAFT_SESSION_MIN_VERSION
 export const TYPED_DRAFT_SESSION_VERSION = 44;
@@ -17,6 +17,9 @@ export const MODE_SCOPED_SESSION_VERSION = 46;
 
 // gbdraw/session_io.py: ROW_KEYED_LEGEND_SESSION_MIN_VERSION
 export const ROW_KEYED_LEGEND_SESSION_VERSION = 47;
+
+// gbdraw/session_io.py: FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION
+export const FILE_IMPORT_ORIGIN_SESSION_VERSION = 48;
 
 // gbdraw/session_io.py: DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
 export const DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41;
@@ -32,6 +35,12 @@ export const CANONICAL_SESSION_MIN_VERSION = 31;
 
 // gbdraw/session_io.py: DRAWN_HASH_RULE_SESSION_MAX_VERSION
 export const DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44;
+
+// gbdraw/api/session_compat.py: MAIN_DISPLAY_FRAME_SESSION_VERSION
+export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;
+
+// gbdraw/api/session_compat.py: DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION
+export const DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION = 47;
 
 // gbdraw/session_request_codec.py: CANONICAL_REQUEST_SCHEMA
 export const CANONICAL_REQUEST_SCHEMA = 9;
@@ -63,7 +72,8 @@ export const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   44: 4,
   46: 5,
-  47: 5
+  47: 5,
+  48: 5
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA
@@ -228,4 +238,18 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   collinearityStandardParalogLinks: 'maxParalogLinksPerOrthogroup',
   paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
   paralogLinksDefault: 2
+});
+
+// gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
+/** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
+export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({
+  values: /** @type {readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[]} */ (Object.freeze(['anchor', 'coortholog', 'inparalog', 'low_confidence', 'local_paralog'])),
+  default: 'anchor'
+});
+
+// gbdraw/analysis/protein_colinearity.py: OrthogroupMember.confidence
+/** @type {Readonly<{ values: readonly ('high' | 'medium' | 'low')[], default: 'high' }>} */
+export const ORTHOGROUP_MEMBER_CONFIDENCE = Object.freeze({
+  values: /** @type {readonly ('high' | 'medium' | 'low')[]} */ (Object.freeze(['high', 'medium', 'low'])),
+  default: 'high'
 });

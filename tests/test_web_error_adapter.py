@@ -15,7 +15,7 @@ from gbdraw.exceptions import ComparisonIdentityError, ParseError, ValidationErr
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.io.record_select import parse_record_selector, select_record
 from gbdraw.labels.filtering import _build_label_override_rules
-from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+from tests.utils.comparison_tables import ribbon_group
 from gbdraw.web_support.error_adapter import serialize_web_error, private_web_execution
 
 
@@ -33,9 +33,11 @@ def helpers():
     ('private', '0', 'SOURCE_VIEW_CONFLICT'),
 ])
 def test_comparison_identity_producer_preserves_valueerror(value, indexes, reason):
-    group = object.__new__(PairWiseMatchGroup)
-    group.records = [object()]
-    group.feature_dom_index = SimpleNamespace(by_source_index={(0, 0): 'other'}, by_view_id={(0, 'private'): ['private']})
+    group = ribbon_group(
+        [object()],
+        subject_index=0,
+        feature_dom_index=SimpleNamespace(by_source_index={(0, 0): 'other'}, by_view_id={(0, 'private'): ['private']}),
+    )
     with pytest.raises(ValueError) as caught:
         group._rendered_feature_svg_id_values(value, record_index=0, feature_index_value=indexes)
     assert isinstance(caught.value, ComparisonIdentityError)
@@ -116,8 +118,8 @@ def test_unknown_and_unmapped_validation_are_distinct_and_private(helpers, capsy
         print(sentinel)
         logging.error(sentinel)
         raise error
-    helpers['_WEB_JSON_HELPERS']['measure_legend_text_json'] = (fail, 'measureLegendText')
-    result = json.loads(helpers['call_web_json_helper']('measure_legend_text_json'))
+    helpers['_WEB_JSON_HELPERS']['evaluate_rules_json'] = (fail, 'evaluateRules')
+    result = json.loads(helpers['call_web_json_helper']('evaluate_rules_json'))
     assert result['error']['code'] == 'UNKNOWN'
     assert sentinel not in json.dumps(result)
     assert capsys.readouterr() == ('', '')
@@ -225,8 +227,75 @@ def test_undecodable_input_is_unreadable_not_unclassified_validation(helpers, tm
     gzipped = tmp_path / 'PRIVATE.gbk'
     gzipped.write_bytes(b'\x1f\x8b\x08\x00' + bytes(range(128, 256)))
     result = json.loads(helpers['list_sequence_records'](str(gzipped), 'genbank'))
+    # OV-1258: the inspection says the file is gzip-compressed.
     assert result['error'] == {'code': 'INPUT_UNREADABLE', 'operation': 'listSequenceRecords',
-                               'stage': 'helper', 'context': {}}
+                               'stage': 'helper', 'context': {'reason': 'GZIP_INPUT'}}
+
+
+HMMT_GENBANK = Path(__file__).resolve().parent / 'test_inputs' / 'HmmtDNA.gbk'
+
+
+def test_a_genbank_file_cut_off_names_the_cause_at_inspection_and_generate(helpers, tmp_path):
+    # OV-1258: a GenBank file cut off inside its feature table was "An input
+    # could not be read" with no reason.
+    path = tmp_path / 'PRIVATE.gbk'
+    path.write_bytes(HMMT_GENBANK.read_bytes()[:3000])
+    listed = json.loads(helpers['list_sequence_records'](str(path), 'genbank'))
+    assert listed['error']['code'] == 'INPUT_UNREADABLE'
+    assert listed['error']['context'] == {'reason': 'GENBANK_PARSE'}
+    from gbdraw.io.genome import load_gbks
+    with pytest.raises(ParseError) as caught:
+        load_gbks([str(path)])
+    model = serialize_web_error(caught.value, operation='generate', stage='render')
+    assert (model['code'], model['context']) == ('INPUT_UNREADABLE', {'reason': 'GENBANK_PARSE'})
+
+
+def test_a_genbank_record_without_sequence_is_an_input_error_not_an_engine_failure(helpers, tmp_path):
+    # OV-1258: a LOCUS without ORIGIN read as RENDER_FAILED "Python exception: ValueError".
+    path = tmp_path / 'PRIVATE.gbk'
+    path.write_text('LOCUS       PRIVATE 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')
+    listed = json.loads(helpers['list_sequence_records'](str(path), 'genbank'))
+    assert listed['error']['code'] == 'INPUT_UNREADABLE'
+    assert listed['error']['context'] == {'reason': 'SEQUENCE_UNDEFINED'}
+    from Bio import SeqIO
+    record = next(SeqIO.parse(str(path), 'genbank'))
+    try:
+        bytes(record.seq)
+    except ValueError as error:
+        model = serialize_web_error(error, operation='generate', stage='render')
+    assert (model['code'], model['context']) == ('INPUT_UNREADABLE', {'reason': 'SEQUENCE_UNDEFINED'})
+    assert 'PRIVATE' not in json.dumps(listed)
+
+
+GFF_INPUTS = Path(__file__).resolve().parent / 'test_inputs'
+
+
+@pytest.mark.parametrize(('gff', 'fasta', 'reason'), [
+    (b'##gff-version 3\n', None, 'GFF_NO_FEATURES'),
+    (None, b'PRIVATE plain text\n', 'FASTA_NO_ENTRIES'),
+    (None, b'', 'FASTA_NO_ENTRIES'),
+])
+def test_a_gff3_or_fasta_slot_file_without_entries_says_which(helpers, tmp_path, gff, fasta, reason):
+    # OV-1257: these read "Input validation failed" or "Supply a matching FASTA input".
+    gff_path = tmp_path / 'PRIVATE.gff3'
+    fasta_path = tmp_path / 'PRIVATE.fasta'
+    gff_path.write_bytes(gff if gff is not None else (GFF_INPUTS / 'NC_013668.gff3').read_bytes())
+    fasta_path.write_bytes(fasta if fasta is not None else (GFF_INPUTS / 'NC_013668.fasta').read_bytes())
+    listed = json.loads(helpers['list_gff_fasta_records'](str(gff_path), str(fasta_path)))
+    assert listed['error'] == {'code': 'NO_RECORDS', 'operation': 'listGffFastaRecords',
+                               'stage': 'helper', 'context': {'reason': reason}}
+
+
+def test_a_fasta_with_text_before_its_first_entry_reads_under_every_biopython(helpers, tmp_path):
+    # Biopython 1.85 skips text before the first ">" line and 1.88 refuses it;
+    # gbdraw reads such a file the same way under both.
+    gff_path = tmp_path / 'PRIVATE.gff3'
+    fasta_path = tmp_path / 'PRIVATE.fasta'
+    gff_path.write_bytes((GFF_INPUTS / 'NC_013668.gff3').read_bytes())
+    fasta_path.write_bytes(b'notes before the entries\n\n' + (GFF_INPUTS / 'NC_013668.fasta').read_bytes())
+    listed = json.loads(helpers['list_gff_fasta_records'](str(gff_path), str(fasta_path)))
+    assert 'error' not in listed
+    assert [record['record_id'] for record in listed['records']] == ['NC_013668.3']
 
 
 @pytest.mark.parametrize(('content', 'reason'), [

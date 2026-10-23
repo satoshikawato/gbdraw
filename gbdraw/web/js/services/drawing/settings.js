@@ -1,6 +1,8 @@
 // @ts-check
-// The settings slice of a drawing: its fifteen draft settings (Session 46
-// `modes.<m>.config` and the drawing's `ui` values). Unlike an editor slice,
+// The settings slice of a drawing: its sixteen draft settings (Session 46
+// `modes.<m>.config` and the drawing's `ui` values), among them what the
+// Default colors and Blacklist files set (`fileImports`, Session 48, OV-1280;
+// its owner is services/file-imports.js). Unlike an editor slice,
 // the controls and owners that edit a setting keep writing it (plan-r2 §13
 // items 3 and 4): this module owns the whole-member paths only. Load and a
 // History restore write members with `install`, the live-input rollback and
@@ -16,7 +18,7 @@ import { createSliceHandle, sliceMembers } from './slice-handle.js';
 const SETTINGS_MEMBERS = /** @type {const} */ ([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
   'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts', 'recordsOff',
-  'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked'
+  'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked', 'fileImports'
 ]);
 /** @typedef {typeof SETTINGS_MEMBERS[number]} SettingsMember */
 /** @typedef {{ [K in SettingsMember]: unknown }} SettingsMembers The members, untyped (plan-r2 §13 item 4). */

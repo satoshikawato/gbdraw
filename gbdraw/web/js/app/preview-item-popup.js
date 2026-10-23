@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq } from '../state.js' */
 /** @import { LegendRow } from '../services/drawing/paint.js' */
+/** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -14,6 +15,8 @@ import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
+import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
+import { msg, t, tn, tm } from '../utils/i18n.js';
 
 /**
  * The item a preview popup is about: a Legend row by its key, or the
@@ -53,6 +56,8 @@ import {
  * @property {LinearSeq[]} linearSeqs
  * @property {{ value: ReadonlyArray<{ type?: unknown }> }} extractedFeatures
  * @property {() => DrawingState} activeDrawing
+ * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
+ * @property {{ value: string }} appliedPaletteName The palette of the displayed Result.
  */
 
 /**
@@ -73,6 +78,12 @@ import {
  *   The color rules that draw a row of the displayed Result.
  * @property {(caption: string) => number} countLegendCaptionFeatures
  *   The number of features whose legend entry is `caption`.
+ * @property {(entry: LegendRow) => DrawnTrack['kind'] | null} readLegendTrackKind
+ *   The kind of the track whose row this is in the displayed Result (`trackLegendRows`); null: a feature row.
+ * @property {(entry: LegendRow) => string | null} readLegendRowDefaultColorType
+ *   The type whose default color draws the row and its Color sets (OV-1281), once the matches are ready.
+ * @property {(type: string) => string | null} readUserDefaultColor
+ *   The user default color of a feature type, or null when the user set none.
  * @property {() => { records?: readonly RequestRecordLike[] } | null} getCommittedRequest
  *   The request of the displayed Result.
  * @property {() => { records?: readonly AlignmentDecisionLike[] } | null} readAlignmentInspector
@@ -121,40 +132,80 @@ export const previewItemTarget = (target, svg) => {
   return { element, item: { kind: 'record-definition', recordIndex, recordId: text(element.getAttribute('data-gbdraw-record-id')) } };
 };
 
-/** @param {ColorRuleLike} rule */
+/**
+ * OV-1466: a rule without a feature type is a whole sentence of its own, so a
+ * locale writes "any feature" where and how its sentence needs it.
+ * @param {ColorRuleLike} rule
+ */
 const colorRuleText = (rule) => {
-  const feature = text(rule?.feat) || 'Any feature';
+  const feature = text(rule?.feat);
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
-  if (!qualifier && !pattern) return `${feature} color rule`;
-  return `${feature} where ${qualifier || 'a qualifier'} matches “${pattern}”`;
+  if (!qualifier && !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
+  const params = { qualifier: qualifier || t('a qualifier'), pattern };
+  return feature
+    ? t('{feature} where {qualifier} matches “{pattern}”', { feature, ...params })
+    : t('Any feature where {qualifier} matches “{pattern}”', params);
 };
+
+// OV-1272: a track row names its plot; it lists no features, and its Color
+// edits only the swatch (the plot's color is a Settings value).
+/** @type {Readonly<Record<DrawnTrack['kind'], string>>} */
+const TRACK_ROW_SUBTITLE = Object.freeze({ content: msg('Content plot'), skew: msg('Skew plot'), depth: msg('Depth plot') });
+const TRACK_ROW_COLOR_SOURCE = msg('Changes this legend swatch only. The plot keeps the color set in Settings.');
+
+/**
+ * OIC-029: what the Legend item choice of the scope dialog and the Legend popup's Color do to a type's default
+ * color. The one owner of that line; `DefaultColorScopeLine` draws it.
+ * @typedef {{ kind: 'sets' | 'replaces', type: string, color: string | null }} DefaultColorScopeLine
+ * @param {string | null | undefined} type
+ * @param {string | null | undefined} replacedColor the user default color of `type`, if the user set one
+ * @returns {DefaultColorScopeLine | null}
+ */
+export const defaultColorScopeLine = (type, replacedColor) => (
+  type ? { kind: replacedColor ? 'replaces' : 'sets', type, color: replacedColor || null } : null
+);
 
 /**
  * The legend-entry popup view.
  * @param {{ entry: LegendRow, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
- *   featureCount: number | null, featureTypes: ReadonlySet<string> }} input `name`: the name the Legend draws.
+ *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null,
+ *   defaultColorType: string | null, replacedDefaultColor: string | null, pickerFallback: string }} input
+ *   `name`: the name the Legend draws. `trackKind`: the kind of the track whose row it is; null: a feature row.
+ *   `pickerFallback`: where the Color input starts on a row of color none.
  */
-const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes }) => {
+const buildLegendEntryView = ({
+  entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType, replacedDefaultColor, pickerFallback
+}) => {
   const key = text(legendEntryKey(entry));
-  const ruleLines = rules.map(colorRuleText);
-  const colorSource = ruleLines.length
-    ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
-    : featureTypes.has(key)
-      ? `Default color of ${key} features`
-      : 'Set on individual features';
+  const ruleLines = trackKind ? [] : rules.map(colorRuleText);
+  const defaultColorLine = trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor);
+  // OV-1336: the OIC-029 line, once shown, says where the color comes from by itself; the caption gives way.
+  const colorSource = defaultColorLine
+    ? null
+    : trackKind
+      ? tm(TRACK_ROW_COLOR_SOURCE)
+      : ruleLines.length
+        ? tn(ruleLines.length, 'From this color rule:', 'From these {count} color rules:')
+        : featureTypes.has(key)
+          ? t('Default color of {type} features', { type: key })
+          : t('Color set on individual features');
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,
-    dialogLabel: `Legend item: ${name}`,
+    dialogLabel: t('Legend item: {name}', { name }),
     index,
     name,
     color,
+    swatch: colorSwatchView(color, pickerFallback),
     title: name,
-    subtitle: featureCount == null
-      ? 'Counting features…'
-      : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
+    subtitle: trackKind
+      ? tm(TRACK_ROW_SUBTITLE[trackKind])
+      : featureCount == null
+        ? t('Counting features…')
+        : tn(featureCount, '{count} feature', '{count} features', { count: NUMBER.format(featureCount) }),
     colorSource,
+    defaultColorLine,
     ruleLines
   };
 };
@@ -163,16 +214,16 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
 const regionText = (region) => {
   const start = positive(region?.start);
   const end = positive(region?.end);
-  if (start == null && end == null) return 'Whole record';
+  if (start == null && end == null) return t('Whole record');
   return `${start == null ? '1' : NUMBER.format(start)}..${end == null ? 'end' : NUMBER.format(end)}`;
 };
 
 /** @param {AlignmentDecisionLike | null | undefined} decision */
 const alignmentText = (decision) => {
-  if (!decision) return 'Not aligned';
-  if (decision.status === 'reference') return `Reference (${text(decision.anchorLabel)})`;
-  if (decision.status === 'aligned') return `Aligned on ${text(decision.anchorLabel)}`;
-  return `Not moved (${text(decision.rationaleLabel).toLowerCase() || 'skipped'})`;
+  if (!decision) return t('Not aligned');
+  if (decision.status === 'reference') return t('Reference ({anchor})', { anchor: text(decision.anchorLabel) });
+  if (decision.status === 'aligned') return t('Aligned on {anchor}', { anchor: text(decision.anchorLabel) });
+  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel).toLowerCase() || t('skipped') });
 };
 
 /**
@@ -197,21 +248,21 @@ const buildRecordDefinitionView = ({
   const start = positive(record?.display?.startCoordinate);
   /** @type {PreviewItemFact[]} */
   const facts = [
-    { label: 'Accession', value: accession || '—' },
+    { label: t('Accession'), value: accession || '—' },
     // OV-502: only a Linear definition marks which line is the record's name.
     // A Circular definition's name lines may be an organism, a strain, a
     // replicon or a Record label, wrapped or not: they are the heading only.
-    ...(scope === 'linear' && named ? [{ label: 'Organism', value: name }] : []),
-    { label: 'Length', value: text(drawn.length) || '—' },
-    { label: 'Reverse complement', value: reversed ? 'Yes' : 'No' },
-    { label: 'Display start', value: start == null ? 'Record start' : NUMBER.format(start) },
-    { label: 'Region', value: regionText(record?.region) }
+    ...(scope === 'linear' && named ? [{ label: t('Organism'), value: name }] : []),
+    { label: t('Length'), value: text(drawn.length) || '—' },
+    { label: t('Reverse complement'), value: reversed ? t('Yes') : t('No') },
+    { label: t('Display start'), value: start == null ? t('Record start') : NUMBER.format(start) },
+    { label: t('Region'), value: regionText(record?.region) }
   ];
-  if (alignmentShown) facts.push({ label: 'Alignment', value: alignmentText(alignment) });
+  if (alignmentShown) facts.push({ label: t('Alignment'), value: alignmentText(alignment) });
   return {
     kind: /** @type {const} */ ('record-definition'),
     identity: `record:${scope}:${recordIndex}:${recordId}`,
-    dialogLabel: `Record ${accession}`,
+    dialogLabel: t('Record {accession}', { accession }),
     scope,
     recordIndex,
     title: name || accession,
@@ -252,27 +303,27 @@ const readDrawnDefinitionLines = (group, recordId) => {
 const LINEAR_FIELDS = { name: 'definition', subtitle: 'record_subtitle', reverse: 'region_reverse' };
 const CIRCULAR_RECORD = {
   fields: { name: 'circular_record_label', subtitle: 'circular_record_subtitle', reverse: 'circular_reverse' },
-  nameLabel: 'Record label', subtitleLabel: 'Subtitle',
+  nameLabel: msg('Record label'), subtitleLabel: msg('Subtitle'),
   settingsSelector: '[data-circular-record-presentation] input[type="text"]'
 };
 const CIRCULAR_DRAWING = {
   fields: { name: 'species', subtitle: 'strain', reverse: 'circular_reverse' },
-  nameLabel: 'Species', subtitleLabel: 'Strain', settingsSelector: '#circular-species'
+  nameLabel: msg('Species'), subtitleLabel: msg('Strain'), settingsSelector: '#circular-species'
 };
 // What a popup without edit fields says instead. A Circular record's sentence
 // names the cause; the second and third are the sidebar's for the same cause.
-const LINEAR_EDIT_HINT = 'Edit this record in its File card in the sidebar.';
+const LINEAR_EDIT_HINT = msg('Edit this record in its File card in the sidebar.');
 const CIRCULAR_EDIT_HINTS = {
-  'not-inspected': 'Inspect source records in the sidebar to edit this record\'s label.',
-  'multi-record-canvas': 'Multi-Record Canvas uses a grid. Turn it off to select one record.',
-  'no-single-record': 'Select one record to edit crop, orientation, and title lines.'
+  'not-inspected': msg('Inspect source records in the sidebar to edit this record\'s label.'),
+  'multi-record-canvas': msg('Multi-Record Canvas uses a grid. Turn it off to select one record.'),
+  'no-single-record': msg('Select one record to edit crop, orientation, and title lines.')
 };
 /** @typedef {keyof typeof CIRCULAR_EDIT_HINTS} CircularOwnRecordBlock */
 
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
   state, computed, revealSetting, readLegendEntryColor, readShownLegendName = (caption) => caption, readLegendRowRules, countLegendCaptionFeatures,
-  getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
+  readLegendTrackKind, readLegendRowDefaultColorType, readUserDefaultColor, getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
   /** @returns {readonly LegendRow[]} */
@@ -284,19 +335,33 @@ export const createPreviewItemPopup = ({
     const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key);
     const entry = entries[index];
     if (!entry) return null;
+    const trackKind = readLegendTrackKind(entry);
     /** @type {readonly ColorRuleLike[]} */
     let rules = [];
     /** @type {number | null} */
     let featureCount = null;
-    try {
-      rules = readLegendRowRules(entry);
-      if (matchesReady) featureCount = countLegendCaptionFeatures(text(legendEntryKey(entry)));
-    } catch {
-      // The rule matches are still preparing: the popup shows the color alone.
+    /** @type {string | null} */
+    let defaultColorType = null;
+    /** @type {string | null} */
+    let replacedDefaultColor = null;
+    // A track row has no rules and no features to read.
+    if (!trackKind) {
+      try {
+        rules = readLegendRowRules(entry);
+        if (matchesReady) [featureCount, defaultColorType] = [countLegendCaptionFeatures(text(legendEntryKey(entry))), readLegendRowDefaultColorType(entry)];
+        if (defaultColorType) replacedDefaultColor = readUserDefaultColor(defaultColorType);
+      } catch {
+        // The rule matches are still preparing: the popup shows the color alone.
+      }
     }
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
-      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
+      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes,
+      trackKind, defaultColorType, replacedDefaultColor,
+      // OV-1386: a row of color none opens the Color input at its type's palette color, as the Palette pane does.
+      pickerFallback: appliedFeatureColorOf(
+        { paletteDefinitions: state.paletteDefinitions, appliedPaletteName: state.appliedPaletteName }, defaultColorType ?? undefined
+      ) || '#cccccc'
     });
   };
 
@@ -306,8 +371,8 @@ export const createPreviewItemPopup = ({
     subtitle: text(resolveLinearRecordEffectiveSubtitle(sequence)),
     reverse: Boolean(sequence.region_reverse),
     reverseAvailable: true,
-    nameLabel: 'Organism / strain',
-    subtitleLabel: 'Subtitle',
+    nameLabel: t('Organism / strain'),
+    subtitleLabel: t('Subtitle'),
     sequenceUid: sequence.uid,
     fields: LINEAR_FIELDS,
     // The record's own name fields, on its File card or in its Record options.
@@ -324,6 +389,8 @@ export const createPreviewItemPopup = ({
     if (!ownRecord && (text(form.circular_record_label) || text(form.circular_record_subtitle))) return null;
     return {
       ...target,
+      nameLabel: tm(target.nameLabel),
+      subtitleLabel: tm(target.subtitleLabel),
       name: text(form[target.fields.name]),
       subtitle: text(form[target.fields.subtitle]),
       reverse: Boolean(form.circular_reverse),
@@ -366,7 +433,7 @@ export const createPreviewItemPopup = ({
       drawn: readDrawnDefinitionLines(group, recordId),
       record,
       draft: scope === 'linear' ? linearDraft(sequence) : circularDraft(!circularBlock),
-      editHint: scope === 'linear' ? LINEAR_EDIT_HINT : (circularBlock && CIRCULAR_EDIT_HINTS[circularBlock]),
+      editHint: scope === 'linear' ? tm(LINEAR_EDIT_HINT) : (circularBlock && tm(CIRCULAR_EDIT_HINTS[circularBlock])),
       alignment: scope === 'linear'
         ? readAlignmentInspector()?.records?.find((decision) => decision.recordKey === record?.recordKey) || null
         : null,
@@ -397,7 +464,7 @@ export const createPreviewItemPopup = ({
     if (!key) return null;
     const next = field === 'reverse' ? Boolean(value) : String(value ?? '');
     if (target[key] === next) return null;
-    return runUndoable(field === 'reverse' ? 'Change Reverse complement' : 'Edit record definition', () => {
+    return runUndoable(field === 'reverse' ? msg('Change Reverse complement') : msg('Edit record definition'), () => {
       target[key] = next;
     });
   };

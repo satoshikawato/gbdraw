@@ -512,17 +512,26 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const version of [undefined, null, '46', 46.5, true, [46], {}]) {
     assert.equal(refusal({ format: 'gbdraw-session', version }), format, `version ${JSON.stringify(version)}`);
   }
-  for (const version of [48, 45, 43, 38, 34, 26, 0, -1]) {
-    // B51 (Q2): a Session older than 27 is refused as an old version.
-    assert.equal(refusal({ format: 'gbdraw-session', version }), version === 26 ? 'INPUT_INVALID:SESSION_TOO_OLD' : fields,
-      `version ${version}`);
+  for (const version of [49, 45, 43, 38, 34, 26, 0, -1]) {
+    // B51 (Q2): a Session older than 27 is refused as an old version; OV-1253:
+    // a newer one, and one in a gap, are refused as such.
+    const reason = version === 26 ? 'SESSION_TOO_OLD' : version > 48 ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED';
+    assert.equal(refusal({ format: 'gbdraw-session', version }), `INPUT_INVALID:${reason}`, `version ${version}`);
+    if (reason === 'SESSION_TOO_OLD') continue;
+    // The refusal names the versions this reader takes.
+    assert.throws(() => readSessionInput({ format: 'gbdraw-session', version }), (error) => {
+      assert.deepEqual(error.context, reason === 'SESSION_TOO_NEW'
+        ? { field: 'schema', reason, sessionVersion: version, latestSessionVersion: 48 }
+        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: '27–33, 39–42, 44, and 46–48' });
+      return true;
+    });
     // The version is read before the format.
     assert.equal(refusal({ format: 'other', version }), fields, `version ${version}, other format`);
   }
   for (const formatValue of [undefined, null, 'other', 'GBDRAW-SESSION', ['gbdraw-session'], 46]) {
     assert.equal(refusal({ format: formatValue, version: 46 }), format, `format ${JSON.stringify(formatValue)}`);
   }
-  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]) {
+  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48]) {
     const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
     assert.equal(readSessionInput(document), document, `version ${version}`);
   }

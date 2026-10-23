@@ -4,6 +4,33 @@ import {
   writeCircularMeasureValue,
   changeCircularMeasureUnit
 } from '../../services/circular-track-measure.js';
+import { circularMeasureInvalidParts } from '../../services/track-slot-validation.js';
+import { errorText } from '../../utils/error-text.js';
+import { msg, tm } from '../../utils/i18n.js';
+
+/** @import { CircularMeasureField } from '../../services/track-slot-validation.js' */
+
+/**
+ * The texts of one field, as catalog keys: its label and the accessible names
+ * of its value and unit controls (`{id}` is the slot id).
+ * @typedef {object} CircularMeasureFieldTexts
+ * @property {string} label
+ * @property {string} valueName
+ * @property {string} unitName
+ */
+/** @type {Readonly<Record<CircularMeasureField, CircularMeasureFieldTexts>>} */
+const FIELD_TEXTS = Object.freeze({
+  width: Object.freeze({
+    label: msg('Width'),
+    valueName: msg('Circular track slot {id} Width value'),
+    unitName: msg('Circular track slot {id} Width unit')
+  }),
+  radius: Object.freeze({
+    label: msg('Radius'),
+    valueName: msg('Circular track slot {id} Radius value'),
+    unitName: msg('Circular track slot {id} Radius unit')
+  })
+});
 
 export const CircularMeasureInput = {
   template: '#circular-measure-input-template',
@@ -24,8 +51,9 @@ export const CircularMeasureInput = {
     const { computed, ref } = window.Vue;
     // Only Auto has a local next-input preference. Manual units come from the slot.
     const autoUnit = ref('factor');
-    const label = computed(() => props.field === 'width' ? 'Width' : 'Radius');
-    const view = computed(() => readCircularMeasure(props.modelValue, label.value));
+    /** @returns {CircularMeasureField} */
+    const field = () => (props.field === 'width' ? 'width' : 'radius');
+    const view = computed(() => readCircularMeasure(props.modelValue));
     const selectedUnit = computed({
       get: () => view.value.isAuto ? autoUnit.value : view.value.selectedUnit,
       set: (/** @type {string} */ unit) => {
@@ -41,12 +69,16 @@ export const CircularMeasureInput = {
       get: () => view.value.valueText,
       set: (/** @type {string} */ text) => emit('update:modelValue', writeCircularMeasureValue(text, selectedUnit.value))
     });
-    const accessibleName = computed(() => `Circular track slot ${props.slotId} ${label.value}`);
+    const label = computed(() => tm(FIELD_TEXTS[field()].label));
+    const valueName = computed(() => tm(FIELD_TEXTS[field()].valueName, { id: props.slotId }));
+    const unitName = computed(() => tm(FIELD_TEXTS[field()].unitName, { id: props.slotId }));
+    // The validator's sentence for this field (TK-12); empty while the value is valid.
+    const error = computed(() => (view.value.invalid ? errorText(circularMeasureInvalidParts(field())) : ''));
     const describedBy = computed(() => [
       'circular-measure-help',
       view.value.isAuto && props.autoText ? `${props.controlId}-auto` : '',
-      view.value.error ? `${props.controlId}-error` : ''
+      view.value.invalid ? `${props.controlId}-error` : ''
     ].filter(Boolean).join(' '));
-    return { view, valueText, selectedUnit, label, accessibleName, describedBy };
+    return { view, valueText, selectedUnit, label, valueName, unitName, error, describedBy };
   }
 };

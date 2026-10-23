@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import random
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 from svgwrite import Drawing
@@ -285,6 +288,131 @@ def test_linear_region_crop_with_file_prefix(tmp_path: Path, gbdraw_runner) -> N
     assert "200 bp" not in svg_content
     assert f"{lengths['RecB']:,} bp" in svg_content
     assert f"{lengths['RecA']:,} bp" not in svg_content
+
+
+def _resolved_window(record_input, record_options=None) -> SeqRecord:
+    from gbdraw.api.record_planning import resolve_record_inputs
+
+    return resolve_record_inputs(
+        (record_input,),
+        record_options=record_options,
+        gff_candidate_features=None,
+        gff_keep_all_features=True,
+    ).records[0]
+
+
+def test_reverse_complement_applies_after_region_crop_in_every_spelling() -> None:
+    from gbdraw.api.requests import (
+        InMemoryRecordSource,
+        RecordCardinality,
+        RecordCollectionOptions,
+        RecordInput,
+        RecordPresentation,
+    )
+    from gbdraw.io.regions import parse_region_spec
+
+    # Not periodic, so reversing before the crop would give another window.
+    rng = random.Random(1279)
+    source = SeqRecord(
+        Seq("".join(rng.choice("ACGT") for _ in range(60))),
+        id="RecA",
+        annotations={"molecule_type": "DNA"},
+    )
+    source.features = [SeqFeature(FeatureLocation(12, 18, strand=1), type="CDS")]
+    reverse = RecordPresentation(reverse_complement=True)
+
+    def record_input(**kwargs) -> RecordInput:
+        return RecordInput(
+            source=InMemoryRecordSource(source),
+            cardinality=RecordCardinality.EXACTLY_ONE,
+            **kwargs,
+        )
+
+    windows = {
+        "region rc": _resolved_window(record_input(region=parse_region_spec("11-40:rc"))),
+        "region + presentation": _resolved_window(
+            record_input(region=parse_region_spec("11-40"), presentation=reverse)
+        ),
+        "collection region + presentation": _resolved_window(
+            record_input(presentation=reverse),
+            RecordCollectionOptions(regions=(parse_region_spec("#1:11-40"),)),
+        ),
+        # D-PYB-1: an rc collection region (the CLI --region) with the
+        # presentation flag reverses once; a record's own region refuses both.
+        "collection region rc + presentation": _resolved_window(
+            record_input(presentation=reverse),
+            RecordCollectionOptions(regions=(parse_region_spec("#1:11-40:rc"),)),
+        ),
+    }
+    expected = str(source.seq[10:40].reverse_complement())
+    assert expected != str(source.seq.reverse_complement()[10:40])
+    for spelling, window in windows.items():
+        assert str(window.seq) == expected, spelling
+        assert [
+            (int(feature.location.start), int(feature.location.end), feature.location.strand)
+            for feature in window.features
+            if feature.type == "CDS"
+        ] == [(22, 28, -1)], spelling
+
+
+@pytest.mark.linear
+def test_linear_cli_reverse_complement_flag_crops_the_region_first(
+    tmp_path: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = tmp_path / "multi_records_region_rc.gbk"
+    _write_multi_record_gbk(gbk_path)
+    svgs = []
+    for name, region_args in (
+        ("flag", ["--region", "RecA:101-400", "--reverse_complement", "1"]),
+        ("suffix", ["--region", "RecA:101-400:rc"]),
+        ("both", ["--region", "#1:101-400:rc", "--reverse_complement", "1"]),  # D-PYB-1: once
+    ):
+        returncode, output, svg_path = gbdraw_runner.run(
+            "linear",
+            [gbk_path],
+            f"linear_region_rc_{name}",
+            tmp_path,
+            extra_args=["--record_id", "RecA", *region_args, "--legend", "none"],
+        )
+        assert returncode == 0, f"gbdraw failed: {output}"
+        svgs.append(svg_path.read_text().replace(f"linear_region_rc_{name}", "OUT"))
+    assert "400-101" in svgs[0]
+    assert svgs[0] == svgs[1] == svgs[2]
+
+
+@pytest.mark.parametrize(
+    ("reverse", "comparison", "warned"),
+    [("1", True, True), ("0", True, False), ("1", False, False)],
+)
+def test_legacy_replay_warns_when_a_reversed_region_has_stored_comparisons(
+    reverse: str, comparison: bool, warned: bool, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """N-1: a Session 27-30 replay that crops and reverses a record with comparisons now
+    draws another window (OV-1279), while its stored matches still load."""
+    from types import SimpleNamespace
+
+    from gbdraw.cli_utils.session import SessionCliRequest
+    from gbdraw.session import SessionDocument
+
+    inputs = Path(__file__).resolve().parent / "test_inputs"
+    args = [
+        "--gbk", str(inputs / "AP027078.gb"), str(inputs / "AP027131.gb"),
+        "--region", "#1:1-5000", "--reverse_complement", reverse, "-o", "out",
+    ]
+    if comparison:
+        args += ["-b", str(inputs / "AP027078_AP027131.tblastx.out")]
+    spec = SimpleNamespace(args=args, cli_invocation_args=args, file_bindings=())
+    monkeypatch.setattr(linear_cli_module, "session_to_cli_args", lambda *_, **__: spec)
+    monkeypatch.setattr(linear_cli_module, "run_linear_from_namespace", lambda _: None)
+    monkeypatch.setattr(linear_cli_module, "save_session_sidecar_if_requested", lambda **_: None)
+    request = SessionCliRequest(
+        session_path="stored.gbdraw-session.json", output=None, format=None,
+        overwrite=False, save_session=False, session_output=None,
+    )
+    document = cast("SessionDocument", SimpleNamespace(_data={}, drawings=()))
+    linear_cli_module.replay_legacy_session(document, request)
+    assert ("re-run the comparison" in caplog.text) is warned
 
 
 @pytest.mark.linear
@@ -780,3 +908,44 @@ def test_linear_plot_title_keeps_plain_text_around_inline_italics(
     assert plot_title_group is not None
     assert "".join(plot_title_group.itertext()) == "Erythromycin A biosynthetic gene cluster from Saccharopolyspora erythraea"
     assert _extract_group_italic_tspan_texts(root, "plot_title") == ["Saccharopolyspora erythraea"]
+
+
+def test_web_helpers_crop_before_reverse_complementing(tmp_path: Path) -> None:
+    """N-2: the Web helpers and Session re-reads use the planner's order (OV-1279)."""
+    import json
+
+    from gbdraw.web_support.feature_metadata import (
+        extract_features_from_genbank_payload,
+        extract_features_from_gff_fasta_payload,
+    )
+
+    rng = random.Random(350)
+    sequence = "".join(rng.choice("ACGT") for _ in range(90))
+    record = SeqRecord(Seq(sequence), id="RecA", annotations={"molecule_type": "DNA"})
+    record.features = [SeqFeature(FeatureLocation(14, 29, strand=1), type="CDS", qualifiers={"locus_tag": ["a"]})]
+    gb_path = tmp_path / "rec.gb"
+    SeqIO.write([record], gb_path, "genbank")
+    fasta_path = tmp_path / "rec.fa"
+    fasta_path.write_text(f">RecA\n{sequence}\n", encoding="utf-8")
+    gff_path = tmp_path / "rec.gff3"
+    gff_path.write_text("##gff-version 3\nRecA\tt\tCDS\t15\t29\t.\t+\t0\tID=a;locus_tag=a\n", encoding="utf-8")
+    helpers_js = (Path(__file__).resolve().parents[1] / "gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helpers: dict[str, object] = {}
+    exec(helpers_js.split("`", 1)[1].rsplit("`", 1)[0], helpers)
+    extract_first_fasta = cast("Callable[..., str]", helpers["extract_first_fasta"])
+    load_for_proteins = cast("Callable[..., SeqRecord]", helpers["_load_single_linear_record_for_proteins"])
+
+    def reads(region: str, reverse: str) -> tuple[object, ...]:
+        fasta = json.loads(extract_first_fasta(str(gb_path), "genbank", region, None, reverse))
+        loaded = load_for_proteins(str(gff_path), "gff", str(fasta_path), region, None, reverse)
+        return (
+            fasta["fasta"].split("\n", 1)[1],
+            str(loaded.seq),
+            extract_features_from_genbank_payload(gb_path, region, None, reverse)["features"],
+            extract_features_from_gff_fasta_payload(gff_path, fasta_path, region_spec=region, reverse_flag=reverse)["features"],
+        )
+
+    flagged = reads("11-70", "1")
+    assert flagged == reads("11-70:rc", "0")
+    assert flagged[1] == str(Seq(sequence[10:70]).reverse_complement())
+    assert flagged[1] != str(Seq(sequence).reverse_complement()[10:70])

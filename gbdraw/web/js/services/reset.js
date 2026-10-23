@@ -113,8 +113,24 @@ const resetEditorDraftState = (state, drawing) => {
 
 // Reset Settings returns both drawings to their own mode's defaults
 // (PD-OI-070), and the app-level LOSAT execution and popup settings.
+/**
+ * The uploaded tables whose rows become settings (Default colors, Specific
+ * color rules, Blacklist, Whitelist, Priority File). Reset Settings, which a
+ * Session replace also runs, clears those settings, so the cards go with them
+ * (OV-1267); a card that stayed would name a table its rules no longer hold.
+ * @param {Record<'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority', unknown>} files
+ */
+const clearSettingTableFiles = (files) => {
+  files.d_color = null;
+  files.t_color = null;
+  files.blacklist = null;
+  files.whitelist = null;
+  files.qualifier_priority = null;
+};
+
 /** @param {typeof AppState} state */
 export const resetSettings = (state) => {
+  clearSettingTableFiles(state.files);
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
   state.drawingList().forEach((drawing) => {

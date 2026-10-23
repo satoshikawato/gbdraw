@@ -12,6 +12,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
+from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
 
@@ -500,7 +501,7 @@ def test_gallery_svg_is_the_frozen_similarity_group_reference() -> None:
 def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> None:
     source = HEPATOPLASMA_FLOW_PATH.read_text(encoding="utf-8")
     wrapper = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
-    index = WEB_INDEX_PATH.read_text(encoding="utf-8")
+    index = read_english_index(WEB_INDEX_PATH)
     for fragment in (
         'name="Set all adjacent comparisons", exact=True',
         'name="Run LOSAT for all adjacent pairs", exact=True',
@@ -529,7 +530,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'settings.get_by_label("Collinear search between", exact=True).select_option(',
         '"Advanced comparison and layout"',
         'if evidence_scope not in {"all", "adjacent"}',
-        'name="Infer orthogroups with self-comparisons", exact=True',
+        'name="Build similarity groups with within-record searches", exact=True',
         "infer_orthogroups.check()",
         'settings.get_by_label("LOSATP Max target seqs", exact=True)',
         'max_target_seqs.fill("")',
@@ -587,7 +588,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     ):
         assert fragment in source + wrapper
     # The match popup frame also shows legend and record items; a match keeps this name.
-    assert ": 'Pairwise match details content'\"" in index
+    assert ": t('Pairwise match details content')\"" in index
     assert 'role="region"' in index
     assert source.count('name="Set all adjacent comparisons", exact=True') == 1
     assert "Load Session" not in source
@@ -672,7 +673,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
                 "Axis Stroke Width",
                 "`5`",
                 "40%",
-                "First record",
+                "First Record Only",
                 "`gene`",
             ):
                 assert value in page
@@ -733,7 +734,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     } <= set(gallery_chapter["execution"]["assertions"])
     assert "does not load a Gallery session" in gallery_collinear
     assert "Search between | Adjacent pairs" in gallery_collinear
-    assert "Infer orthogroups with self-comparisons | Selected" in gallery_collinear
+    assert "Build similarity groups with within-record searches | Selected" in gallery_collinear
     assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
     assert "Advanced comparison and layout | Execution" not in gallery_collinear
     assert "Open **Selected pairs (4)**" in gallery_collinear

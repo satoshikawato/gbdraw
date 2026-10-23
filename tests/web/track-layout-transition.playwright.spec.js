@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load, generate, switchMode } = require('./helpers/mode-transition.cjs');
 
 // R-3, Q3 (Owner, 2026-10-04): every edit that changes the direction of a
@@ -68,7 +68,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
     // Preset Reset: the dialog asks before the stack changes; Cancel keeps it.
     const tuckin = page.getByRole('button', { name: 'Reset to Tuckin', exact: true });
     await tuckin.click();
-    await expect(dialog(page)).toContainText('Reset to Tuckin removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Choosing Reset to Tuckin removes the lane for 1 feature you placed manually.');
     await expect(resetButton(page)).toBeFocused();
     expect(await layoutState(page, key)).toEqual(placed);
     await page.screenshot({ path: testInfo.outputPath('preset-reset-dialog.png') });
@@ -79,7 +79,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
 
     // Row reorder: Reset applies the move and removes the row as one step.
     await runRowAction(stackRow(page, 'circular'), 'Move outside Axis');
-    await expect(dialog(page)).toContainText('Move outside Axis removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Choosing Move outside Axis removes the lane for 1 feature you placed manually.');
     expect(await layoutState(page, key)).toEqual(placed);
     // Keep current layout returns focus to the row's Row actions.
     await cancelButton(page).click();
@@ -309,4 +309,53 @@ test('removing a Circular Depth series outside the Axis keeps the feature row in
   await page.evaluate(() => window.__GBDRAW_APP__.removeCircularDepthTrack(0));
   const kept = (rows) => rows.filter((row) => !row.startsWith('depth'));
   expect(kept(await stack())).toEqual(kept(before));
+});
+
+// OV-1263 (audit G5b-03): a fresh Circular custom stack (every row inside the Axis) with an
+// Annotations row set to Overlay. Generate keeps the Axis where the other rows put it; before,
+// it took the Overlay Annotations row for the track on the Axis, and Outside axis then moved
+// the Features, Ticks, and GC rows outside instead of the Annotations row.
+test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis moves only that row', async ({ page }) => {
+  test.setTimeout(240000);
+  const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions/';
+  await openApp(page);
+  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).first().setInputFiles(`${data}NC_001879.gbk`);
+  await page.locator('[data-setting="region-annotations"] input[type=file]').first()
+    .setInputFiles(`${data}nicotiana-tabacum-regions.tsv`);
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);
+  const stack = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { adv } = state.activeDrawing();
+    return { axis: adv.circular_track_slots_axis_index, sides: Object.fromEntries(adv.circular_track_slots.map((slot) => [slot.id, slot.side])) };
+  });
+  const place = (side) => page.evaluate(async (placement) => {
+    const { state } = await import('./js/state.js');
+    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.renderer === 'annotations');
+    return window.__GBDRAW_APP__.updateCircularTrackSlotPlacement(row, placement);
+  }, side);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularTrackSlotsEnabled(true);
+    app.addCircularTrackSlot('annotations');
+  });
+  await place('overlay');
+  // An anchor under the row (the editor gives it the z its layer needs, OV-1297)
+  // and Compress, so the Generate draws (two regions share a lane under Error).
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.renderer === 'annotations');
+    window.__GBDRAW_APP__.setCircularOverlayAnnotationParam(row, 'anchor_slot', 'features');
+    row.params.overflow = 'compress';
+  });
+  const before = await stack();
+  expect(before.sides.annotations).toBe('overlay');
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { error: state.errorLog.value?.code ?? null, results: state.results.value.length };
+  })).toEqual({ error: null, results: 1 });
+  expect((await stack()).axis).toBe(before.axis);
+  await place('outside');
+  expect((await stack()).sides).toEqual({ ...before.sides, annotations: 'outside' });
 });

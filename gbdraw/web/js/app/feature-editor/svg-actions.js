@@ -3,6 +3,7 @@
 /** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
+/** @import { PopupRow } from '../pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds } from '../../utils/popup-bounds.js';
@@ -29,6 +30,9 @@ import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
+  ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR
+} from '../../services/drawn-groups.js';
+import {
   featureIdentity,
   indexFeatureIdentities,
   renderedFeatureIdentity
@@ -44,6 +48,7 @@ import {
   getFeatureIdentity,
   normalizeFeatureIdentity
 } from '../../services/feature-dom.js';
+import { t } from '../../utils/i18n.js';
 
 // The hover highlight of a feature or band is written once the pointer has
 // rested on it this long (OV-900, D-01): a pointer passing over bands writes
@@ -78,7 +83,7 @@ export {
 
 /**
  * The hover summary of a pairwise match, as the match popup builds it.
- * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: Array<{ label: string, value: string }> }} MatchHoverSummary
+ * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: PopupRow[] }} MatchHoverSummary
  */
 
 /**
@@ -424,15 +429,15 @@ export const createFeatureSvgActions = ({
     /** @type {Array<[string, unknown, boolean?]>} */
     const rows = [];
 
-    if (gene && gene !== primaryLabel) rows.push(['Gene', gene]);
-    if (locusTag && locusTag !== primaryLabel) rows.push(['Locus', locusTag]);
-    if (product && product !== primaryLabel) rows.push(['Product', product, true]);
-    if (note && note !== primaryLabel && note !== product) rows.push(['Note', note, true]);
-    rows.push(['Length', formatFeatureLength(feat)]);
-    rows.push(['Location', locationText]);
-    rows.push(['Record', feat?.record_id || '']);
-    if (feat?.orthogroupId) rows.push(['Similarity group', feat.orthogroupId]);
-    if (legendName && legendName !== primaryLabel) rows.push(['Legend', legendName]);
+    if (gene && gene !== primaryLabel) rows.push([t('Gene'), gene]);
+    if (locusTag && locusTag !== primaryLabel) rows.push([t('Locus'), locusTag]);
+    if (product && product !== primaryLabel) rows.push([t('Product'), product, true]);
+    if (note && note !== primaryLabel && note !== product) rows.push([t('Note'), note, true]);
+    rows.push([t('Length'), formatFeatureLength(feat)]);
+    rows.push([t('Location'), locationText]);
+    rows.push([t('Record'), feat?.record_id || '']);
+    if (feat?.orthogroupId) rows.push([t('Similarity group'), feat.orthogroupId]);
+    if (legendName && legendName !== primaryLabel) rows.push([t('Legend'), legendName]);
     return rows;
   };
 
@@ -441,9 +446,9 @@ export const createFeatureSvgActions = ({
   // Similarity group section its group.
   /** @param {FeatureLike} feat */
   const buildDetailRows = (feat) => [
-    { key: 'type', label: 'Feature type', value: feat.type },
-    { key: 'length', label: 'Length', value: formatFeatureLength(feat) },
-    { key: 'protein_id', label: 'Protein ID', value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
+    { key: 'type', label: t('Feature type'), value: feat.type },
+    { key: 'length', label: t('Length'), value: formatFeatureLength(feat) },
+    { key: 'protein_id', label: t('Protein ID'), value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
   ]
     .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
     .filter((row) => row.value !== '');
@@ -469,6 +474,20 @@ export const createFeatureSvgActions = ({
     const featureEl = target.closest(FEATURE_SELECTOR);
     if (!featureEl || !svg.contains(featureEl)) return null;
     return featureEl;
+  };
+
+  /**
+   * The annotation a click on `target` selects. A region label drawn in front of the leader lines
+   * (LP-D82) is outside its annotation's group and names that group by id.
+   * @param {MaybeElementTarget | null | undefined} target @param {Element} svg
+   */
+  const getAnnotationTarget = (target, svg) => {
+    if (!target || typeof target.closest !== 'function') return null;
+    const front = target.closest(REGION_LABEL_FRONT_SELECTOR)?.getAttribute(REGION_LABEL_FOR_ATTRIBUTE);
+    const annotationEl = front
+      ? svg.querySelector(`[id="${CSS.escape(front)}"]${ANNOTATION_SELECTOR}`)
+      : target.closest(ANNOTATION_SELECTOR);
+    return annotationEl && svg.contains(annotationEl) ? annotationEl : null;
   };
 
   /** @param {MaybeElementTarget | null | undefined} target @param {Element} svg */
@@ -616,7 +635,7 @@ export const createFeatureSvgActions = ({
       orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
       orthogroupMember: feat.orthogroupMember || null,
       hasEditableLabel: false,
-      labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
+      labelUnavailableReason: t('No editable feature label for this feature in current diagram.')
     };
   };
 
@@ -802,7 +821,7 @@ export const createFeatureSvgActions = ({
     color: resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8',
     heading: summary.title,
     subtitle: summary.subtitle || summary.id || '',
-    rows: summary.rows.map((row) => ({ ...row, clamp: row.label === 'Query' || row.label === 'Subject' }))
+    rows: summary.rows.map((row) => ({ ...row, clamp: row.id === 'Query' || row.id === 'Subject' }))
   };
 
   // The rows without a value are not shown; the view keeps its other rows
@@ -1845,13 +1864,13 @@ export const createFeatureSvgActions = ({
           }
           return;
         }
-        const annotationEl = /** @type {MaybeElementTarget | null} */ (e.target)?.closest?.('[data-gbdraw-annotation-id]');
-        if (annotationEl && svg.contains(annotationEl)) {
+        const annotationEl = getAnnotationTarget(/** @type {MaybeElementTarget | null} */ (e.target), svg);
+        if (annotationEl) {
           e.preventDefault();
           e.stopPropagation();
           if (selectedAnnotation) {
             selectedAnnotation.value = {
-              id: annotationEl.getAttribute('data-gbdraw-annotation-id') || '',
+              id: annotationEl.getAttribute(ANNOTATION_ID_ATTRIBUTE) || '',
               setId: annotationEl.getAttribute('data-gbdraw-annotation-set-id') || '',
               trackId: annotationEl.getAttribute('data-gbdraw-annotation-track-id') || ''
             };
@@ -2102,7 +2121,7 @@ export const createFeatureSvgActions = ({
       if (element?.style) element.style.cursor = 'pointer';
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
-      element.setAttribute('aria-label', `Pairwise match ${index + 1}`);
+      element.setAttribute('aria-label', t('Pairwise match {n}', { n: index + 1 }));
     });
     delegatedFeatureHandlers.pairwiseAffordancesPrepared = true;
     return true;

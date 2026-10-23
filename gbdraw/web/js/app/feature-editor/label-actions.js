@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { ShowNotice } from '../app-messages.js' */
+/** @import { NoticeHandle, ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState, DiagramMode } from '../../state.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
@@ -21,7 +21,11 @@ import { readFileText } from '../../services/file-content-cache.js';
 import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
-import { LENGTH_BAR_ID, TICK_GROUPS, trackGroupSelector } from '../../services/drawn-groups.js';
+import {
+  ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
+  TICK_GROUPS, trackGroupSelector
+} from '../../services/drawn-groups.js';
+import { joinSentences, t, tm, tn } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -48,6 +52,10 @@ import { LENGTH_BAR_ID, TICK_GROUPS, trackGroupSelector } from '../../services/d
  * @typedef {{ files: ArrayLike<File> | null, value: string }} LabelTableInput
  */
 
+// The groups whose text is never a feature label. A Linear Result draws a
+// feature label with the central baseline, and so does it draw a region label
+// (in its annotation's group, and its copy in front of the leader lines, which
+// names that group) and the depth and GC content axis ticks (OV-1291).
 export const EXCLUDED_GROUP_SELECTOR = [
   '#legend',
   '#feature_legend',
@@ -55,7 +63,11 @@ export const EXCLUDED_GROUP_SELECTOR = [
   '#horizontal_legend',
   '#vertical_legend',
   `#${LENGTH_BAR_ID}`,
-  trackGroupSelector(TICK_GROUPS)
+  trackGroupSelector(TICK_GROUPS),
+  ANNOTATION_SELECTOR,
+  REGION_LABEL_FRONT_SELECTOR,
+  trackGroupSelector(DEPTH_GROUPS),
+  trackGroupSelector(DINUCLEOTIDE_CONTENT_GROUPS)
 ].join(', ');
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';
@@ -333,10 +345,12 @@ const getPhasedCircularFeatureLine = (svg, textEl) => {
   const leaderGroups = Array.from(svg.querySelectorAll('g[id="label_leaders"], g[id^="label_leaders_"]'));
   const groupIndex = textGroups.indexOf(textGroup);
   if (groupIndex < 0 || groupIndex >= leaderGroups.length) return null;
-  const textIndex = Array.from(textGroup.querySelectorAll('text')).indexOf(textEl);
-  if (textIndex < 0) return null;
-  const leaderLines = Array.from(leaderGroups[groupIndex].querySelectorAll('line'));
-  return leaderLines[(2 * textIndex) + 1] || null;
+  const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+  if (!featureId) return null;
+  // The leader layer draws two parts per label, both bound to its feature:
+  // bend to letters, then bend to feature.
+  const leaderLines = leaderGroups[groupIndex].querySelectorAll(`line[${LABEL_FEATURE_ID_ATTRIBUTE}="${CSS.escape(featureId)}"]`);
+  return /** @type {SVGLineElement | undefined} */ (leaderLines[1]) || null;
 };
 
 /** @param {SVGSVGElement} svg @param {SVGTextElement} textEl */
@@ -940,8 +954,8 @@ export const createFeatureLabelActions = ({
     clickedFeature.value.labelUnavailableReason = editable
       ? ''
       : (featureId
-        ? 'Generate the diagram again to edit this feature\'s label.'
-        : 'No editable feature label for this feature in current diagram.');
+        ? t('Generate the diagram again to edit this feature\'s label.')
+        : t('No editable feature label for this feature in current diagram.'));
   };
 
   /**
@@ -1564,10 +1578,18 @@ export const createFeatureLabelActions = ({
     queueLabelReflow();
   };
 
+  /** @type {{ drawing: DrawingState, notice: NoticeHandle } | null} The notice of the last Label TSV load, and the drawing it edited. */
+  let labelImportNotice = null;
   const resetAllLabelTextOverrides = () => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    // D-06: the notice of the Label TSV edits this removes ends with them.
+    const importNotice = labelImportNotice;
+    if (importNotice && importNotice.drawing === drawing) {
+      importNotice.notice.dismiss();
+      labelImportNotice = null;
+    }
     const svg = svgContainer.value?.querySelector('svg');
     if (svg) resetLabelsToSourceText(drawing, svg);
     clearOverrides(drawing);
@@ -1656,6 +1678,7 @@ export const createFeatureLabelActions = ({
       if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
+      const loadedRowsText = tn(rows.length, 'Loaded {count} row.', 'Loaded {count} rows.');
 
       const svg = sourceSvg;
       const labels = svg ? labelImportTargets(drawing, svg) : [];
@@ -1672,17 +1695,17 @@ export const createFeatureLabelActions = ({
       // change. An edit of the label intent stays; it is named first, since
       // it also redraws the diagram and makes the rule preparation stale.
       const changed = labelIntent !== labelIntentSignature(drawing)
-        ? 'a label or feature visibility edit was made while the table loaded. The edit was kept'
+        ? t('Not applied: label text, label visibility, or feature visibility changed while the table loaded. The changes were kept. Load the table again.')
         : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
-          ? 'the displayed diagram changed while the table loaded'
+          ? t('Not applied: the displayed diagram changed while the table loaded. Load the table again.')
           : !rulePreparation.isCurrent(before)
-            ? `${RULE_INPUT_CHANGE_WORDS} changed while the table loaded` : '';
+            ? t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: tm(RULE_INPUT_CHANGE_WORDS) }) : '';
       if (changed) {
-        showNotice({ text: `Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`, tone: 'warning' });
+        showNotice({ text: joinSentences(loadedRowsText, changed), tone: 'warning' });
         return;
       }
       if (!svg) {
-        showNotice({ text: `Loaded ${rows.length} row(s). No diagram is shown, so nothing was applied.`, tone: 'warning' });
+        showNotice({ text: joinSentences(loadedRowsText, t('No diagram is shown, so nothing was applied.')), tone: 'warning' });
         return;
       }
       // A `location` or `record_location` row cannot be decided for a label
@@ -1696,10 +1719,10 @@ export const createFeatureLabelActions = ({
         && (row.featureType === '*' || row.featureType === String(/** @type {LabelFeature} */ (feature).type ?? ''))
       ))).length;
       if (undecided > 0) {
-        showNotice({ text: `Loaded ${rows.length} row(s). Not applied.`, items: [
-          `location and record_location rows cannot be matched to ${undecided} label(s) on cropped, `
-            + 'reverse-complemented, or rotated records until the diagram records where it drew them. '
-            + 'Generate the diagram again, then load the table.'
+        showNotice({ text: joinSentences(loadedRowsText, t('Not applied.')), items: [
+          tn(undecided,
+        'location and record_location rows cannot be matched to {count} label on a cropped, reverse-complemented, or rotated record until the diagram records where it drew it. Generate the diagram again, then load the table.',
+        'location and record_location rows cannot be matched to {count} labels on cropped, reverse-complemented, or rotated records until the diagram records where it drew them. Generate the diagram again, then load the table.')
         ] });
         return;
       }
@@ -1722,10 +1745,10 @@ export const createFeatureLabelActions = ({
         return [{ entry, matchedRow, tracked }];
       });
       if (applicable.length === 0) {
-        showNotice({ text: `Loaded ${rows.length} row(s). Not applied; the existing label edits were kept.`, items: [
+        showNotice({ text: joinSentences(loadedRowsText, t('Not applied; the existing label edits were kept.')), items: [
           skippedNonTrackableCount > 0
-            ? `The ${skippedNonTrackableCount} matched label(s) lacked a feature key.`
-            : 'No row matched a label of the diagram.'
+            ? tn(skippedNonTrackableCount, 'The {count} matched label lacked a feature key.', 'The {count} matched labels lacked a feature key.')
+            : t('No row matched a label of the diagram.')
         ] });
         return;
       }
@@ -1744,13 +1767,14 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      const message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
+      const message = joinSentences(loadedRowsText, tn(applicable.length, 'Applied to {count} label.', 'Applied to {count} labels.'));
       const skipped = skippedNonTrackableCount > 0
-        ? [`${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`]
+        ? [tn(skippedNonTrackableCount, '{count} match lacked a feature key and was not applied.', '{count} matches lacked a feature key and were not applied.')]
         : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
-      showNotice({ text: message, items: skipped });
+      const notice = showNotice({ text: message, items: skipped });
+      labelImportNotice = notice ? { drawing, notice } : null;
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || state.errorLog?.value !== previousError) return;
@@ -1776,7 +1800,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      showNotice({ text: 'There are no label rules to export. Export Feature Edits TSV writes per-feature label edits.' });
+      showNotice({ text: joinSentences(t('There are no label rules to export.'), t('Export Feature Edits TSV writes per-feature label edits.')) });
       return;
     }
     const selectedIdx = selectedResultIndex.value;

@@ -9,6 +9,8 @@ import warnings
 from Bio import SeqIO
 import pytest
 
+from tests.utils.web_markup import read_english_index
+
 from gbdraw.api import (
     CircularDiagramOptions,
     CircularDiagramRequest,
@@ -64,7 +66,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["records"] == [{
         "recordId": "rec-1", "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
-        "definitionOverlaps": 0, "refused": False,
+        "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False,
         "counts": "20 label pairs overlap, 21 leader pairs cross",
     }]
     vertical, font, tighter, combination = payload["rows"]
@@ -142,7 +144,7 @@ def test_every_control_a_row_names_has_that_accessible_name() -> None:
 
     from gbdraw.web_support import label_fit
 
-    html = (Path(__file__).parents[1] / "gbdraw" / "web" / "index.html").read_text(encoding="utf-8")
+    html = read_english_index(Path(__file__).parents[1] / "gbdraw" / "web" / "index.html")
     names = {name for name, _ in label_fit._SETTING_NAMES.values()}
     names |= {name for name, _ in label_fit._MODE_SETTING_NAMES.values()}
     for name in sorted(names):
@@ -204,13 +206,33 @@ def _sars_request(overrides: dict[str, object]) -> dict:
     ).to_dict()
 
 
+# Lambda with outer labels at 16 pt and no blacklist: 11 leader pairs cross and no labels overlap, so
+# the figure is drawn with the notice. (SARS-CoV-2 with external labels only at 14 pt crossed only
+# because labels next to the origin could wrap past their neighbours, OV-1366; it fits now.)
+CROSSING_OVERRIDES: dict[str, object] = {
+    "labels.circular.scope": "outer",
+    "labels.filtering.blacklist_keywords": [],
+    "labels.font_size.short": 16.0,
+    "labels.font_size.long": 16.0,
+}
+
+
+def _crossing_record():
+    return SeqIO.read(str(TEST_INPUTS / "NC_001416.gb"), "genbank")
+
+
+def _crossing_options() -> CircularDiagramOptions:
+    return CircularDiagramOptions(config_overrides=dict(CROSSING_OVERRIDES))
+
+
 def _crossing_request() -> dict:
-    # External labels only: crossing leaders, no overlap (the embedded labels would overlap).
-    return _sars_request({
-        "labels.rendering": "external_only",
-        "labels.font_size.short": 14.0,
-        "labels.font_size.long": 14.0,
-    })
+    return build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(_crossing_record())),),
+            options=_crossing_options(),
+            output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
+        )
+    ).to_dict()
 
 
 def _web_render(document: dict, tmp_path: Path, searches: LabelFitRowSearches | None = None) -> dict:
@@ -263,14 +285,14 @@ def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_dra
     assert separate["values"] == {SEPARATE_FEATURES_PATH: True}
     assert separate["settings"] == [{"name": "Resolve Overlaps", "unit": "", "value": "On"}]
     assert separate["canvasSize"] is not None
-    assert separate["note"] == "14 leader pairs still cross"
+    assert separate["note"] == "15 leader pairs still cross"
     assert {row["note"] for row in rows if row is not separate} == {None}
-    assert "  --resolve_overlaps   (separate overlapping features; 14 leader pairs still cross)\n" in str(raised.value)
+    assert "  --resolve_overlaps   (separate overlapping features; 15 leader pairs still cross)\n" in str(raised.value)
 
     drawn = _web_render(_sars_request({**strands, SEPARATE_FEATURES_PATH: True}), tmp_path / "drawn")
     (entry,) = drawn["metadata"]["labelFitReports"]
     assert entry["report"]["drawn"] is True
-    assert (entry["report"]["overlapPairs"], entry["report"]["crossingPairs"]) == (0, 14)
+    assert (entry["report"]["overlapPairs"], entry["report"]["crossingPairs"]) == (0, 15)
 
 
 def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_later(tmp_path) -> None:
@@ -323,7 +345,7 @@ def test_a_row_computed_after_the_conservation_file_is_gone_reads_no_file(tmp_pa
     import gbdraw.analysis.conservation as conservation
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
 
-    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    record = _crossing_record()
     ring = tmp_path / "ring.tsv"
     ring.write_text(
         "".join(
@@ -332,15 +354,7 @@ def test_a_row_computed_after_the_conservation_file_is_gone_reads_no_file(tmp_pa
         ),
         encoding="utf-8",
     )
-    options = CircularDiagramOptions(
-        config_overrides={
-            "labels.circular.scope": "outer",
-            "labels.rendering": "external_only",
-            "labels.font_size.short": 14.0,
-            "labels.font_size.long": 14.0,
-        },
-        conservation_blast_files=(str(ring),),
-    )
+    options = CircularDiagramOptions(config_overrides=dict(CROSSING_OVERRIDES), conservation_blast_files=(str(ring),))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
@@ -385,13 +399,7 @@ def _crossing_options_with_files(paths: dict[str, Path]) -> CircularDiagramOptio
     from gbdraw.api.options import ColorOptions
 
     return CircularDiagramOptions(
-        config_overrides={
-            "labels.circular.scope": "outer",
-            "labels.rendering": "external_only",
-            "labels.font_size.short": 14.0,
-            "labels.font_size.long": 14.0,
-            "canvas.show_depth": True,
-        },
+        config_overrides={**CROSSING_OVERRIDES, "canvas.show_depth": True},
         colors=ColorOptions(
             color_table_file=str(paths["colors"]), default_colors_file=str(paths["default_colors"])
         ),
@@ -406,7 +414,7 @@ def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_fi
 
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
 
-    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    record = _crossing_record()
     drawings = {}
     for name in ("kept", "gone"):
         paths = _write_input_files(tmp_path / name, record)
@@ -431,7 +439,7 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
 
     import shutil
 
-    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    record = _crossing_record()
     paths = _write_input_files(tmp_path / "inputs", record)
     document = build_session_document(
         CircularDiagramRequest(
@@ -458,9 +466,9 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
 def _two_records_with_files(directory: Path) -> tuple[list[Any], dict[str, Path]]:
     import copy
 
-    base = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    base = _crossing_record()
     records = []
-    for record_id in ("SARS_A", "SARS_B"):
+    for record_id in ("LAMBDA_A", "LAMBDA_B"):
         record = copy.deepcopy(base)
         record.id = record.name = record_id
         records.append(record)
@@ -472,7 +480,7 @@ def _two_records_with_files(directory: Path) -> tuple[list[Any], dict[str, Path]
         encoding="utf-8",
     )
     paths["annotations"].write_text(
-        "set_id\tid\tmark\trecord\tstart\tend\tlabel\ns\ta\tband\tSARS_B\t1\t500\tregion\n", encoding="utf-8"
+        "set_id\tid\tmark\trecord\tstart\tend\tlabel\ns\ta\tband\tLAMBDA_B\t1\t500\tregion\n", encoding="utf-8"
     )
     return records, paths
 
@@ -536,15 +544,8 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
     from gbdraw.api.diagram import _checked_circular_drawing, build_circular_diagram, label_fit_row
     from gbdraw.exceptions import LabelLayoutError
 
-    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
-    options = CircularDiagramOptions(
-        config_overrides={
-            "labels.circular.scope": "outer",
-            "labels.rendering": "external_only",
-            "labels.font_size.short": 14.0,
-            "labels.font_size.long": 14.0,
-        }
-    )
+    record = _crossing_record()
+    options = _crossing_options()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
@@ -565,20 +566,48 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
     assert row is not None and row.status == "not_found"
 
 
+def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
+    """OV-1266: a row's settings that leave the tracks no room (TRACK_LAYOUT) do not fit; Generate goes on."""
+
+    from gbdraw.api.diagram import (
+        _checked_circular_drawing,
+        _unfit_row_verification,
+        build_circular_diagram,
+        label_fit_row,
+    )
+
+    record = _crossing_record()
+    options = _crossing_options()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
+    error = ValidationError(
+        "Circular track slot 'features' cannot fit inside",
+        diagnostic={"code": "TRACK_LAYOUT", "reason": "DEFINITION_RESERVED"},
+    )
+
+    def assemble(overrides):
+        if not overrides:
+            return drawing
+        raise error
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        checked = _checked_circular_drawing(assemble, warn_search_seconds=0.0)
+    row = label_fit_row(checked, "smaller_font")
+    assert row is not None and row.status == "not_found"
+    unfit = _unfit_row_verification(error)
+    assert unfit is not None and unfit.outcome == "stop"
+    assert unfit.reason == "The tracks do not fit with this setting"
+
+
 def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
     """OV-737: a failure of a mode keeps its last drawn figure; a newer drawn render releases both."""
 
     from gbdraw.api.diagram import build_circular_diagram
 
-    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
-    options = CircularDiagramOptions(
-        config_overrides={
-            "labels.circular.scope": "outer",
-            "labels.rendering": "external_only",
-            "labels.font_size.short": 14.0,
-            "labels.font_size.long": 14.0,
-        }
-    )
+    record = _crossing_record()
+    options = _crossing_options()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
@@ -624,15 +653,8 @@ def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
     from gbdraw.api.diagram import build_circular_diagram
 
     assert WEB_ROW_SEARCH_SECONDS == 30.0
-    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
-    options = CircularDiagramOptions(
-        config_overrides={
-            "labels.circular.scope": "outer",
-            "labels.rendering": "external_only",
-            "labels.font_size.short": 14.0,
-            "labels.font_size.long": 14.0,
-        }
-    )
+    record = _crossing_record()
+    options = _crossing_options()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
@@ -665,3 +687,51 @@ def test_label_fit_row_token_with_non_ascii_digits_is_stale(digit: str) -> None:
     for stale in (f"{mode}:{digit}:{index}", f"{mode}:{generation}:{digit}"):
         row = searches.row(stale, "combination")
         assert row["status"] == "not_computed" and row["reason"]
+
+
+def test_a_linear_figure_with_region_labels_over_others_opens_the_notice_with_no_rows(tmp_path) -> None:
+    """LP-D68, LP-D82: the Linear Result carries a report for the notice bar, with no fix rows."""
+
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api import (
+        AnnotationOptions,
+        AnnotationSet,
+        CoordinateSpan,
+        LinearDiagramOptions,
+        LinearDiagramRequest,
+        RegionAnnotation,
+    )
+
+    record = SeqRecord(Seq("ACGT" * 1500), id="adjacent", name="adjacent", annotations={"topology": "linear"})
+    record.features = [
+        SeqFeature(FeatureLocation(2999, 3300, strand=1), type="CDS", qualifiers={"product": ["photosystem II protein D1"]}),
+    ]
+    regions = (
+        RegionAnnotation("r0", CoordinateSpan(None, 1000, 1100), label="First region with a long label", mark="highlight"),
+        RegionAnnotation("r1", CoordinateSpan(None, 1120, 1220), label="Second region with a long label", mark="highlight"),
+    )
+    document = build_session_document(
+        LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=LinearDiagramOptions(
+                config_overrides={"labels.linear.scope": "all", "canvas.linear.track_layout": "above"},
+                annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            ),
+            output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
+        )
+    ).to_dict()
+    searches = LabelFitRowSearches()
+    response = _web_render(document, tmp_path, searches)
+
+    (entry,) = response["metadata"]["labelFitReports"]
+    report = entry["report"]
+    assert report["drawn"] is True and report["regionOverlaps"] == 1
+    assert report["notice"] == ["Region labels overlap other labels or lines (1)."]
+    (record_payload,) = report["records"]
+    assert (record_payload["labelKind"], record_payload["labelKindTitle"], record_payload["counts"]) == (
+        "linear_region", "region labels", "1 region label overlap"
+    )
+    assert report["rows"] == []

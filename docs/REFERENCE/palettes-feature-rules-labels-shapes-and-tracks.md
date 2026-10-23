@@ -92,7 +92,18 @@ not fit, the error names the slot that could not be placed and the reserved
 definition radius. Shorten the species or strain text, reduce the definition
 font size, set a smaller center reserved radius, or place tracks outside. When
 an explicit center reserved radius is the limit, the error names that radius
-instead; set a smaller radius or place tracks outside.
+instead; set a smaller radius or place tracks outside. When GC content or GC
+skew tracks lie inside the slot that could not be placed, the error also names
+the room kept for the tracks inside it and offers turning the GC tracks off or
+narrowing them (`--no-gc`, `--no-skew`, `--gc_content_width`,
+`--gc_skew_width`; in the web app, **Hide GC Content**, **Hide GC Skew**,
+**GC Content Width**, **GC Skew Width**, or the row widths when Custom Track
+Slots is on). When a GC row is the slot that could not be placed, the error offers turning
+that row off or narrowing it. When the scale ticks are the slot that could not
+be placed, the error also offers hiding the scale (`--hide_scale`; with an
+explicit track list, `--hide_scale` does not remove an enabled ticks slot, so
+remove the ticks slot; in the web app, clear **Show Coordinate Scale**, or
+remove the Ticks row when Custom Track Slots is on).
 
 GC-content mode can show deviation from the record mean or an absolute
 percentage. Window and step control smoothing and sampling: larger values
@@ -208,9 +219,10 @@ is drawn in three cases: the feature is hidden, the feature is drawn as
 `underlay`, or, with `labels.rendering = "embedded_only"`, the label does not
 fit inside its feature. Such a row shows a label only once one of these
 changes. The Web
-feature popup writes these rows for **Label visibility** **On** and **Off**. A
-label text edit uses `locus_tag`, `gene`, or `record_location` when one of them
-identifies the feature, and falls back to `hash` only when none does.
+feature popup's **Label visibility** and label text are feature overrides, not
+label-override rows; see [Feature override
+table](input-formats-and-tsv-schemas.md#feature-override-table). **Export Feature
+Edits TSV** writes them as `--feature_override_table` rows.
 
 Feature visibility actions are `show`, `off`, and `exclude_matching`.
 `exclude_matching` keeps the feature visible but removes it from protein-search
@@ -263,7 +275,9 @@ horizontally and 0.1 px vertically; radial, embedded, and Linear labels
 overlap when their text areas intersect. Two leader lines cross when they
 intersect; lines that only touch do not cross. A Circular label with a leader
 covers the definition text in the centre when its box overlaps a line of that
-text by more than 0.5 px in both directions.
+text by more than 0.5 px in both directions. A Linear label covers the
+definition text beside its record when its text area intersects that text's
+box.
 
 Before the check, gbdraw repairs small defects of horizontal Circular labels.
 When a record has 1 to 100 overlapping label pairs, crossing leader pairs, and
@@ -292,13 +306,16 @@ affected.
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a
   `GbdrawError`.
-- If leader lines cross or labels cover the definition text, but no labels
-  overlap, the figure is drawn as before. The command line prints the same
+- If leader lines cross, labels cover the definition text, Linear region
+  (annotation) labels overlap other labels or lines, or Circular region labels
+  are cut to fit their circle or lie on other tracks, but no labels overlap,
+  the figure is drawn as before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
   `LabelLeadersCrossWarning`, a `UserWarning`.
 
-The message counts the overlapping label pairs, crossing leader pairs, and
-labels over the definition text of each record and side, and lists settings
+The message counts the overlapping label pairs, crossing leader pairs,
+labels over the definition text, region label overlaps, cut region labels, and
+region labels on other tracks of each record and side, and lists settings
 that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
@@ -329,8 +346,66 @@ When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
 rows it did not reach. When nothing is drawn, every outer-label row is
 searched; for inner, embedded, or radial labels the switches and then the font
 search share 30 seconds, and a setting is tried only if drawing the figure once
-more ends within that time. Linear labels get only the separate overlapping
-features row, because the Linear layout keeps its other labels apart.
+more ends within that time. Linear feature labels get only the separate
+overlapping features row, because the Linear layout keeps its other labels
+apart. Linear region labels and Circular region labels that are cut or lie
+on other tracks get no row.
+
+A Circular region label with `label_orientation` `auto` or `arc` is drawn
+along its circle and can take just under a whole turn, less 1 em at each
+end. A longer label keeps its start followed by `…`, centred on the same
+place, and
+each such label counts as one cut region label (`1 region label cut`). This
+only warns: the Web app shows "Region labels are cut to fit their circle (N)."
+over the figure, with no **Choose a fix** button. A label that meets another
+label or line in Circular is still drawn without a warning.
+
+Circular keeps room for region labels beyond their annotation slot, or, for an
+annotation slot with `side=overlay`, beyond the outermost slot it covers, and
+places the other tracks outside that room. Of the slots it covers, an
+`outside` slot lies outermost, then split feature lanes
+(`lane_direction=split`), then `inside` slots in the order they are listed. An
+overlay that spans nothing (no `to_slot`, `cover_anchor=false`) keeps the room
+beyond its own mark when its anchor is an `inside` or `outside` slot or split
+feature lanes. An overlay without labels (`show_labels=false`) keeps no room.
+A track with a set radius (`r=`) keeps it, so where set radii leave no room
+the labels are drawn on the track. Each
+label whose letters reach more than 0.5 px into the band another track takes
+(its drawing, with its tick or axis labels and its own labels' room) counts as
+one region label on another track (`1 region label on another track`). This
+only warns: the Web app shows "Region labels lie on other tracks: the set
+track radii leave them no room (N)." over the figure, with no **Choose a fix**
+button. Annotation overlays take no band. A span whose outer edge is another
+overlay (other than split feature lanes), and an overlay that spans nothing on
+a plot overlay (such as `ov:dinucleotide_skew@side=overlay,r=0.6,w=10px`),
+keep no room, so their labels are not counted.
+
+A Linear region label moves along its region to a place clear of the feature
+labels, leader lines, record names and definition text, other records of its
+row, and the region labels placed before it. When no place along its region
+is clear, gbdraw tries, in this order:
+
+1. the empty area inside the region's own filled box (a `highlight` or `band`
+   with a solid fill), clear of feature glyphs, the axis, and other tracks by
+   the label spacing;
+2. at the label's place along its region, each feature label whose letters
+   it meets moves to another row on its side: the nearest row first, then
+   one new row beyond the others, for which the figure is drawn again;
+3. a label that then meets only the leader lines of its record's feature
+   labels is drawn in front of them on a white rounded box at 70% opacity,
+   and a leader line behind the box does not count.
+
+Steps 2 and 3 may combine. gbdraw uses a step only when it clears every
+conflict of the label and makes no new overlap, checked by drawing the
+figure; otherwise the label stays on one line along its region. The font
+size and the number of lines never change. A figure in which every region
+label has a clear place along its region is drawn as before. When a conflict
+remains, each thing the label still overlaps counts as one region label
+overlap (a feature label and its leader line count once). This only warns:
+the Web app shows "Region labels overlap other labels or lines (N)." over
+the figure, with no **Choose a fix** button. SVG, PNG, and PDF keep the box's
+opacity and drawing order; EPS and PS keep them by rasterizing the area of
+the box.
 
 In the Web app, the rows appear in the **Labels do not fit** dialog. Generate
 searches no row of a figure drawn anyway; the dialog computes each row that
@@ -348,7 +423,8 @@ are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.
 
 In Python, `LabelsDoNotFitError.report` and `LabelLeadersCrossWarning.report`
 hold a `LabelFitReport`: the records that do not fit, by label kind
-(`circular_outer`, `circular_inner`, `circular_embedded`, or `linear`), with
+(`circular_outer`, `circular_inner`, `circular_embedded`, `linear`, or
+`linear_region` for Linear region labels), with
 their label counts, font sizes, and counts, and `refused` for radial labels
 without room; and the rows. A row's `values` maps config paths to the values
 that fit, and its `status` is `found`, `found_with_notice` (the figure then

@@ -1,8 +1,10 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-/** @import { ChangeTrackLayout } from './track-slot-edits.js' */
+/** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 import {
   activeDepthTrackIndices,
+  depthTrackConfigForEdit,
+  depthTrackEditDefaults,
   depthTrackMatrixWidth,
   reconcileManagedDepthSlots
 } from '../services/depth-track-state.js';
@@ -11,10 +13,13 @@ import {
   findTrackSlotGeometry,
   formatPxAuto,
   isManualSlotValue,
-  normalizeOptionalText
+  normalizeOptionalText,
+  overlayFollowsNote
 } from '../services/track-slot-display.js';
-import { featureSlotEdits } from './track-slot-edits.js';
-import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
+import { msg, t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
+import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -56,12 +61,12 @@ const UI_RENDERERS = SUPPORTED_RENDERERS.slice();
 
 /** @type {Record<string, string>} */
 const RENDERER_LABELS = {
-  features: 'Features',
-  dinucleotide_content: 'Dinucleotide content',
-  dinucleotide_skew: 'Dinucleotide skew',
-  depth: 'Depth',
-  annotations: 'Annotations',
-  spacer: 'Spacer'
+  features: msg('Features'),
+  dinucleotide_content: msg('Dinucleotide content'),
+  dinucleotide_skew: msg('Dinucleotide skew'),
+  depth: msg('Depth'),
+  annotations: msg('Annotations'),
+  spacer: msg('Spacer')
 };
 
 const STACK_ENTRY_AXIS = 'axis';
@@ -213,6 +218,8 @@ const replaceObjectContents = (target, source) => {
  * @typedef {object} LinearTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
+ * @property {ChangeTrackVisibility} [changeTrackVisibility] The Legend port every stack edit runs in: a drawn track
+ *   the edit hides or shows again takes its Legend rows with it (OV-1198; default: apply directly).
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -221,7 +228,9 @@ const replaceObjectContents = (target, source) => {
 /**
  * @param {LinearTrackSlotEditorOptions} options
  */
-export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
+export const createLinearTrackSlotEditor = ({
+  state, changeTrackLayout = (apply) => apply(), changeTrackVisibility = (change) => change()
+}) => {
   /** @type {WeakMap<LinearTrackSlot, string>} */
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -239,7 +248,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
 
   const linearTrackRenderers = UI_RENDERERS.slice();
   /** @param {unknown} renderer */
-  const linearTrackRendererLabel = (renderer) => RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || '');
+  const linearTrackRendererLabel = (renderer) => tm(RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || ''));
   /** @param {DrawingState} drawing */
   const annotationSetIds = (drawing) => (
     (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
@@ -266,17 +275,12 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       ? Number(index)
       : drawing.adv.linear_track_slots.findIndex((/** @type {unknown} */ candidate) => candidate === slot);
     if (resolvedIndex < 0) return '';
-    return (linearTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
-      .map((issue) => issue.message)
-      .join(' ');
+    return errorText((linearTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
+      .flatMap((issue) => issue.parts));
   };
 
-  const linearTrackGlobalIssues = () => {
-    const drawing = state.drawingOfMode('linear');
-    return (
-      linearTrackValidationPlan(drawing).globalIssues.map((issue) => issue.message)
-    );
-  };
+  /** The plan's issues, each shown as `errorText(issue.parts)` and keyed by its code (codes do not repeat). */
+  const linearTrackGlobalIssues = () => linearTrackValidationPlan(state.drawingOfMode('linear')).globalIssues;
 
   /**
    * The slots an Overlay annotation row may name: for its anchor, every
@@ -306,32 +310,53 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     return !reference || linearAnnotationAnchorOptions(slot, key).some((/** @type {{ id: string }} */ option) => option.id === reference);
   };
 
-  /** @param {OptionalLinearSlot} slot */
-  const bindOnlyLinearAnnotationAnchor = (slot) => {
+  /**
+   * A row placed on Overlay keeps a valid anchor or takes the only one offered,
+   * and the z its layer needs (OV-1297).
+   * @param {DrawingState} drawing The drawing whose slot it is.
+   * @param {OptionalLinearSlot} slot
+   */
+  const bindOnlyLinearAnnotationAnchor = (drawing, slot) => {
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     const options = linearAnnotationAnchorOptions(slot);
     const current = String(slot.params.anchor_slot || '').trim();
-    if (options.some((/** @type {{ id: string }} */ option) => option.id === current)) return;
-    if (options.length === 1) slot.params.anchor_slot = options[0].id;
-    else delete slot.params.anchor_slot;
+    if (!options.some((/** @type {{ id: string }} */ option) => option.id === current)) {
+      if (options.length === 1) slot.params.anchor_slot = options[0].id;
+      else delete slot.params.anchor_slot;
+    }
+    slot.z = overlayAnnotationZ(slot, drawing.adv.linear_track_slots);
+  };
+
+  /**
+   * The Layer, anchor and Extend to selects of an Overlay annotation row (OV-1297).
+   * @param {OptionalLinearSlot} slot
+   * @param {OverlaySlotReference | 'layer'} key
+   * @param {unknown} value
+   */
+  const setLinearOverlayAnnotationParam = (slot, key, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
+    setOverlayAnnotationParam(slot, state.drawingOfMode('linear').adv.linear_track_slots, key, value);
+  };
+
+  /** Why Add track cannot add this renderer, or '' (OV-1254). @param {unknown} renderer */
+  const linearTrackAddBlockReason = (renderer) => {
+    const drawing = state.drawingOfMode('linear');
+    const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
+    return trackAddBlockReason(normalizedRenderer, {
+      supported: true,
+      annotationSetCount: annotationSetIds(drawing).length,
+      depthSeriesCount: linearAvailableDepthTrackCountForState(state),
+      featuresRowEnabled: drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
+        slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
+      ))
+    });
   };
 
   /** @param {unknown} renderer */
-  const canAddLinearTrackRenderer = (renderer) => {
-    const drawing = state.drawingOfMode('linear');
-    const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
-    if (normalizedRenderer === 'annotations') return annotationSetIds(drawing).length > 0;
-    if (normalizedRenderer === 'depth') {
-      return linearAvailableDepthTrackCountForState(state) > 0;
-    }
-    if (normalizedRenderer === 'features') {
-      return !drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
-        slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
-      ));
-    }
-    return true;
-  };
+  const canAddLinearTrackRenderer = (renderer) => linearTrackAddBlockReason(renderer) === '';
 
   // Duplicate shares the availability of the other row controls (GX-01).
   /** @param {OptionalLinearSlot} slot */
@@ -668,7 +693,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     if (targetPlacement === 'overlay' && movingRenderer === 'annotations') {
       syncLinearSlotPlacementFromSide(movingSlot, 'overlay');
       movingSlot.params = cloneParams(movingSlot.params);
-      bindOnlyLinearAnnotationAnchor(movingSlot);
+      bindOnlyLinearAnnotationAnchor(drawing, movingSlot);
       normalizeCurrentSlots();
       return;
     }
@@ -789,7 +814,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     if (normalizeRenderer(slot.renderer) === 'annotations') {
       slot.params = cloneParams(slot.params);
       if (normalizePlacement(placement) === 'overlay') {
-        bindOnlyLinearAnnotationAnchor(slot);
+        bindOnlyLinearAnnotationAnchor(drawing, slot);
       } else {
         OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete slot.params[key]; });
       }
@@ -872,8 +897,8 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
   /** @param {OptionalLinearSlot} slot */
   const linearTrackSlotPlacementLabel = (slot) => {
     const placement = effectiveLinearSlotPlacement(slot);
-    if (placement === 'overlay') return 'On Axis';
-    return placement === 'above' ? 'Above Axis' : 'Below Axis';
+    if (placement === 'overlay') return t('On Axis');
+    return placement === 'above' ? t('Above Axis') : t('Below Axis');
   };
 
   /** @param {OptionalLinearSlot} slot */
@@ -883,8 +908,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, linearDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
-    if (renderer === 'depth') return 'Depth';
-    return 'Legend label';
+    return t('Legend label');
   };
 
   /** @param {LinearTrackSlotInput | null | undefined} slot */
@@ -904,34 +928,6 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     }
   };
 
-  /** @param {DrawingState} drawing @param {unknown} trackIndex */
-  const ensureDepthTrackConfigForSlotIndex = (drawing, trackIndex) => {
-    const idx = Math.max(0, Number(trackIndex) || 0);
-    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
-    while (drawing.adv.depth_tracks.length <= idx) {
-      const nextIndex = drawing.adv.depth_tracks.length;
-      drawing.adv.depth_tracks.push({
-        label: nextIndex === 0 ? 'Depth' : `Depth ${nextIndex + 1}`,
-        color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-        height: null,
-        large_tick_interval: null,
-        small_tick_interval: null,
-        tick_font_size: null
-      });
-    }
-    if (!drawing.adv.depth_tracks[idx] || typeof drawing.adv.depth_tracks[idx] !== 'object' || Array.isArray(drawing.adv.depth_tracks[idx])) {
-      drawing.adv.depth_tracks[idx] = {
-        label: idx === 0 ? 'Depth' : `Depth ${idx + 1}`,
-        color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
-        height: null,
-        large_tick_interval: null,
-        small_tick_interval: null,
-        tick_font_size: null
-      };
-    }
-    return drawing.adv.depth_tracks[idx];
-  };
-
   /** @param {OptionalLinearSlot} slot */
   const linearDepthTrackIndexForSlot = (slot) => {
     if (!slot || normalizeRenderer(slot.renderer) !== 'depth') return null;
@@ -939,10 +935,13 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     return normalizeTrackIndex(params.track_index) ?? 0;
   };
 
-  /** @param {DrawingState} drawing @param {unknown} trackIndex */
+  // The stored height of a Depth series, read without writing: a series
+  // without settings has none.
+  /** @param {DrawingState} drawing @param {number} trackIndex */
   const heightTextFromDepthTrackConfig = (drawing, trackIndex) => {
-    const config = ensureDepthTrackConfigForSlotIndex(drawing, trackIndex);
-    const height = parsePositivePxNumber(config.height);
+    const tracks = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks : [];
+    const config = tracks[trackIndex];
+    const height = config && typeof config === 'object' ? parsePositivePxNumber(config.height) : null;
     return height === null ? '' : String(height);
   };
 
@@ -1011,11 +1010,10 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
   };
 
   // Only a rendered row has resolved geometry; a disabled row shows the estimate.
-  /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot */
-  const linearTrackSlotDisplayGeometry = (drawing, slot) => {
-    const resolved = slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null;
-    return resolved || estimateLinearSlotGeometry(drawing, slot);
-  };
+  /** @param {OptionalLinearSlot} slot */
+  const linearResolvedSlotGeometry = (slot) => (
+    slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null
+  );
 
   // The row index is part of the shared template call; Linear geometry is
   // found by slot ID alone.
@@ -1023,16 +1021,16 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
   const linearTrackSlotGeometryAutoText = (slot, _slotIndex, field) => {
     const drawing = state.drawingOfMode('linear');
     if (isManualSlotValue(linearSlotManualValue(slot, field))) return '';
-    const geometry = linearTrackSlotDisplayGeometry(drawing, slot);
+    const resolved = linearResolvedSlotGeometry(slot);
+    const follows = !resolved && field === 'height' ? overlayFollowsNote(slot) : '';
+    if (follows) return follows;
+    const geometry = resolved || estimateLinearSlotGeometry(drawing, slot);
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
-    const autoText = formatPxAuto(value);
-    if (normalizeRenderer(slot?.renderer) === 'features') {
-      return autoText
-        ? autoText.replace('(auto)', '(auto; varies by record)')
-        : 'record-specific (auto)';
-    }
+    const variesByRecord = normalizeRenderer(slot?.renderer) === 'features';
+    const autoText = formatPxAuto(value, { variesByRecord });
+    if (variesByRecord) return autoText || t('record-specific (auto)');
     if (field === 'height' || field === 'spacing') return autoText;
     return '';
   };
@@ -1059,7 +1057,12 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     slot.height = text;
     if (normalizeRenderer(slot.renderer) !== 'depth') return;
     const trackIndex = linearDepthTrackIndexForSlot(slot) ?? 0;
-    const config = ensureDepthTrackConfigForSlotIndex(drawing, trackIndex);
+    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
+    // A row whose series the drawing does not have keeps its own height only (TK-03).
+    const config = depthTrackConfigForEdit(
+      drawing.adv.depth_tracks, trackIndex, linearAvailableDepthTrackCountForState(state), depthTrackEditDefaults(drawing.adv)
+    );
+    if (!config) return;
     try {
       config.height = parseOptionalPixel(text, 'Linear track height', { allowZero: false });
     } catch {
@@ -1111,7 +1114,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
     changeLinearDepthSources,
-    ...featureSlotEdits(changeTrackLayout, {
+    ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetLinearTrackSlotsFromSimpleControls,
       setLinearTrackSlotsEnabled,
       addLinearTrackSlot,
@@ -1126,6 +1129,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       updateLinearTrackSlotPlacement
     }),
     canAddLinearTrackRenderer,
+    linearTrackAddBlockReason,
     canDuplicateLinearTrackSlot,
     canMoveLinearTrackSlot,
     canMoveLinearTrackSlotAbove,
@@ -1144,6 +1148,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     setLinearAnnotationPadding: (/** @type {OptionalLinearSlot} */ slot, /** @type {unknown} */ value) => setLinearAnnotationNumber(slot, 'padding_px', value, 2),
     linearAnnotationCoverAnchor,
     setLinearAnnotationCoverAnchor,
+    setLinearOverlayAnnotationParam,
     linearTrackSlotHeightValue,
     linearTrackSlotGeometryAutoText,
     linearTrackSlotGeometryHasManual,

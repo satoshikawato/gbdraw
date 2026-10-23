@@ -193,6 +193,22 @@ def leader_crossing_count(labels: Sequence[CircularLabel]) -> int:
     return polyline_crossing_count([leader_polyline(label) for label in labels])
 
 
+def rim_text_placement(label: CircularLabel, record_length: int) -> tuple[Point, str, str, float]:
+    """Where an outer or inner label's text is drawn: its point, anchor, baseline and turn (radial labels only)."""
+
+    if label.get("placement") == "radial":
+        return (
+            (float(label.get("text_x", label["start_x"])), float(label.get("text_y", label["start_y"]))),
+            str(label.get("text_anchor", "middle")),
+            str(label.get("dominant_baseline", "middle")),
+            float(label.get("rotation_deg", 0.0)),
+        )
+    anchor, baseline = horizontal_label_alignment(
+        record_length, label["middle"], label["start_x"], is_inner=label.get("is_inner", False)
+    )
+    return (float(label["start_x"]), float(label["start_y"])), anchor, baseline, 0.0
+
+
 __all__ = [
     "CONTACT_GAP_PX",
     "LeaderContact",
@@ -208,4 +224,5 @@ __all__ = [
     "leader_crossing_count",
     "leader_polyline",
     "leader_segments",
+    "rim_text_placement",
 ]

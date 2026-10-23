@@ -60,7 +60,7 @@
     },
     {
       "title": "Set the circular layout",
-      "body": "Use these circular layout settings before enabling the Multi-Record Canvas.",
+      "body": "Use these circular layout settings and keep Multi-Record Canvas on (its default).",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -101,25 +101,6 @@
             },
             "openSelect": {
               "selectedLabel": "orchid",
-              "options": [
-                "default",
-                "pastel",
-                "vivid",
-                "colorblind",
-                "grayscale",
-                "warm",
-                "cool",
-                "earth",
-                "marine",
-                "forest",
-                "sunset",
-                "berry",
-                "citrus",
-                "orchid",
-                "royal_gala",
-                "ajisai",
-                "orange"
-              ],
               "cardTitle": "Colors",
               "selectIndex": 1,
               "minWidth": 150,
@@ -183,12 +164,12 @@
       ]
     },
     {
-      "title": "Enable Multi-Record Canvas",
-      "body": "Turn on Multi-Record Canvas and use these sizing and row-placement values.",
+      "title": "Set up the Multi-Record Canvas",
+      "body": "Keep Multi-Record Canvas on and use these sizing and row-placement values.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Multi-Record Canvas", "on"],
+          ["Multi-Record Canvas", "on (default)"],
           ["Record Size Mode", "Auto"],
           ["Min Radius Ratio", "0.55"],
           ["Column Gap Ratio", "0.1"],

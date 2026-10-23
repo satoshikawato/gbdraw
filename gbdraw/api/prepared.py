@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import secrets
+import sys
 
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -130,6 +131,9 @@ class _PreparedCacheTransaction:
     # check every used owner in full.
     record_touched: bool = False
     retention: PreparedInputRetention | None = None
+    # A helper's lookup (``transaction(read_only=True)``): entries are read,
+    # never published, pruned, evicted or reordered; misses build for the call.
+    read_only: bool = False
 
 
 # The first element of a resolved record's identity (``request_render``).
@@ -497,8 +501,31 @@ def _owner_mutation_detail(before: Hashable, after: Hashable) -> str:
     return "record provenance"
 
 
-def _retained_bytes(value: Any) -> int:
+# The smallest str object: each object cell of a frame points to one beside its characters.
+_STR_OBJECT_BYTES = sys.getsizeof("")
+
+
+def _retained_bytes(value: object, source_bytes: int) -> int:
+    """Estimate the bytes ``value`` holds without walking its rows.
+
+    ``source_bytes`` is the size of the resources it was built from: the text
+    in a decoded frame's cells, and the estimate of a decoded value of another
+    kind (an orthogroup or collinearity result).
+    """
+
+    if isinstance(value, DataFrame):
+        object_cells = len(value) * sum(1 for dtype in value.dtypes if dtype.kind == "O")
+        return (
+            int(value.memory_usage(index=True, deep=False).sum())
+            + object_cells * _STR_OBJECT_BYTES
+            + source_bytes
+        )
+    if isinstance(value, str):
+        return len(value)
     records = _records_from_value(value)
+    if isinstance(value, tuple) and records is None:
+        # A nucleotide edge holds its text beside its frame.
+        return sum(_retained_bytes(item, source_bytes) for item in value)
     if records is not None:
         total = 0
         for record in records:
@@ -518,7 +545,7 @@ def _retained_bytes(value: Any) -> int:
                                for key, values in entry.qualifiers)
                          for entry in catalog)
         return total
-    return 0
+    return source_bytes
 
 
 class PreparedBiologicalInputCache:
@@ -537,10 +564,13 @@ class PreparedBiologicalInputCache:
     stages keep only the last successful render's. A changed semantic key
     rebuilds its dependent layer; a resource identity that is neither requested
     nor retained evicts every entry that refers to it.
-    The retained-byte diagnostic estimates source bytes, sequence lengths,
-    feature counts and qualifier counts without serializing them; render-stage
-    results are not counted. Worker termination releases the cache with the Python
-    runtime.
+    The retained-byte diagnostic estimates what each entry holds without
+    serializing it: sequence lengths, feature and qualifier counts of records;
+    the columns, string cells and text of a comparison frame; the text of a
+    nucleotide edge; the source size of another decoded value. Render-stage
+    results are not counted. The total is kept as entries are published and
+    removed, so no transaction walks the entries it does not use. Worker
+    termination releases the cache with the Python runtime.
 
     Ownership guard (D-05): a reused entry is checked by structure when it is
     read and in full, every feature, when the transaction commits, so a change
@@ -549,6 +579,14 @@ class PreparedBiologicalInputCache:
     that takes a record (O-2, D-07); otherwise a change is found by the next
     request that does. After a transaction that did not commit, the next one
     checks in full when it reads, too.
+
+    A Worker helper that plans the request the Worker staged (alignment
+    projection, Feature Edits TSV, stored protein frames) reads the cache in a
+    read-only transaction: a lookup hits under the same keys, a miss builds a
+    value that serves only that call, and nothing is published, pruned,
+    evicted or reordered, so the render-stage entries stay for the next
+    Generate. The owners it read are checked when it ends, as a commit checks
+    them.
     """
 
     def __init__(self) -> None:
@@ -565,6 +603,12 @@ class PreparedBiologicalInputCache:
         self._epoch = _new_cache_epoch()
         # A4b: by drawing, the input-layer keys its last committed request used.
         self._drawing_inputs: dict[str, dict[str, frozenset[Hashable]]] = {}
+        # The retained bytes of every entry, kept as entries are published
+        # and removed (OV-1583).
+        self._retained_total = 0
+        # Every resource identity an entry names (a superset after an
+        # eviction): a manifest that holds them all removes no entry.
+        self._held_identities: frozenset[PreparedResourceIdentity] = frozenset()
 
     def _evict(
         self,
@@ -572,13 +616,18 @@ class PreparedBiologicalInputCache:
         key: Hashable,
         transaction: _PreparedCacheTransaction,
     ) -> None:
-        if self._layers[layer].pop(key, None) is not None:
+        entry = self._layers[layer].pop(key, None)
+        if entry is not None:
+            self._retained_total -= entry.retained_bytes
             _record_metric(transaction, "preparedInputCacheEvictionCount")
 
     def _synchronize_resources(
         self,
         transaction: _PreparedCacheTransaction,
     ) -> None:
+        if self._held_identities <= transaction.active_identities:
+            return
+        held: set[PreparedResourceIdentity] = set()
         retention = transaction.retention
         held_tokens = (
             frozenset()
@@ -588,25 +637,23 @@ class PreparedBiologicalInputCache:
         )
         for layer, entries in self._layers.items():
             for key, entry in tuple(entries.items()):
-                if not all(
+                if all(
                     identity in transaction.active_identities
                     or identity.cache_token in held_tokens
                     for identity in entry.resource_identities
                 ):
+                    held.update(entry.resource_identities)
+                else:
                     self._evict(layer, key, transaction)
+        self._held_identities = frozenset(held)
 
     def _set_retained_metric(
         self,
         transaction: _PreparedCacheTransaction,
     ) -> None:
-        retained = sum(
-            entry.retained_bytes
-            for entries in self._layers.values()
-            for entry in entries.values()
-        )
         if transaction.diagnostics is not None:
             metrics = transaction.diagnostics.setdefault("metrics", {})
-            metrics["preparedInputCacheRetainedBytes"] = int(retained)
+            metrics["preparedInputCacheRetainedBytes"] = self._retained_total
 
     @contextmanager
     def transaction(
@@ -615,8 +662,12 @@ class PreparedBiologicalInputCache:
         resource_paths: Mapping[str | Path, PreparedResourceIdentity],
         diagnostics: MutableMapping[str, Any] | None,
         retention: PreparedInputRetention | None = None,
+        read_only: bool = False,
     ) -> Iterator[None]:
-        """Activate one transactional Web render against the active manifest."""
+        """Activate one transactional Web render against the active manifest.
+
+        ``read_only`` opens a helper's lookup instead (see the class docstring).
+        """
 
         if _ACTIVE_PREPARED_TRANSACTION.get() is not None:
             raise ValidationError("Prepared input cache transactions cannot be nested.")
@@ -630,6 +681,7 @@ class PreparedBiologicalInputCache:
             resource_paths=normalized_paths,
             active_identities=frozenset(resource_paths.values()),
             diagnostics=diagnostics,
+            read_only=read_only,
             font_environment=tuple(
                 sorted(
                     (font.family, font.weight, font.italic, font.face.content_id, font.face.index)
@@ -642,17 +694,23 @@ class PreparedBiologicalInputCache:
             metrics = diagnostics.setdefault("metrics", {})
             for name in _CACHE_METRICS:
                 metrics.setdefault(name, 0)
-        self._synchronize_resources(transaction)
+        if not read_only:
+            self._synchronize_resources(transaction)
         self._set_retained_metric(transaction)
         token = _ACTIVE_PREPARED_TRANSACTION.set(transaction)
         try:
             yield
-            self._commit(transaction)
+            if read_only:
+                self._verify_used_owners(transaction)
+            else:
+                self._commit(transaction)
         except BaseException:
             self._previous_transaction_failed = True
             raise
         else:
-            self._previous_transaction_failed = False
+            # A lookup checked only the owners it read.
+            if not read_only:
+                self._previous_transaction_failed = False
         finally:
             self._set_retained_metric(transaction)
             _ACTIVE_PREPARED_TRANSACTION.reset(token)
@@ -680,7 +738,8 @@ class PreparedBiologicalInputCache:
                 transaction,
                 walk_features=self._previous_transaction_failed,
             )
-        self._layers[layer].move_to_end(key)
+        if not transaction.read_only:
+            self._layers[layer].move_to_end(key)
         return entry
 
     def _verify_owner(
@@ -735,16 +794,15 @@ class PreparedBiologicalInputCache:
         transaction.accessed[layer][key] = value
         if _records_from_value(value) is not None:
             transaction.record_touched = True
-        if publish is not None and not publish(value):
+        if transaction.read_only or (publish is not None and not publish(value)):
             return value
         entry = _PreparedCacheEntry(
             value=value,
             resource_identities=resource_identities,
             owner_stamp=_owner_stamp(value, walk_features=True),
             structure_stamp=_owner_stamp(value, walk_features=False),
-            retained_bytes=(
-                _retained_bytes(value)
-                + sum(identity.size for identity in resource_identities)
+            retained_bytes=_retained_bytes(
+                value, sum(identity.size for identity in resource_identities)
             ),
         )
         transaction.pending[layer][key] = entry
@@ -775,6 +833,9 @@ class PreparedBiologicalInputCache:
     ) -> None:
         """Stage one render-stage result; it is published if the render succeeds."""
 
+        # A helper's lookup publishes nothing, so it does not walk the key either.
+        if transaction.read_only:
+            return
         transaction.pending[_RENDER_STAGE_LAYER][key] = _PreparedCacheEntry(
             value=value,
             resource_identities=_key_resource_identities(key),
@@ -806,10 +867,39 @@ class PreparedBiologicalInputCache:
             return None
         return (self._epoch, entry.build_id)
 
-    def _commit(self, transaction: _PreparedCacheTransaction) -> None:
+    def _used_entries(
+        self,
+        layer: str,
+        transaction: _PreparedCacheTransaction,
+    ) -> Iterator[tuple[Hashable, _PreparedCacheEntry]]:
+        current = self._layers[layer]
+        pending = transaction.pending[layer]
+        for key in transaction.used[layer]:
+            entry = pending.get(key)
+            if entry is None:
+                entry = current.get(key)
+            if entry is not None:
+                yield key, entry
+
+    def _verify_used_owners(self, transaction: _PreparedCacheTransaction) -> None:
         # O-2: without a record built or read by a stage, the structure check
         # (made when each entry was read) is repeated, not the feature walk.
         walk_features = transaction.record_touched
+        for layer in self._layers:
+            # A render-stage entry has no owner to check (one constant stamp).
+            if layer == _RENDER_STAGE_LAYER:
+                continue
+            for key, entry in tuple(self._used_entries(layer, transaction)):
+                self._verify_owner(
+                    layer,
+                    key,
+                    entry,
+                    transaction,
+                    walk_features=walk_features,
+                )
+
+    def _commit(self, transaction: _PreparedCacheTransaction) -> None:
+        self._verify_used_owners(transaction)
         retention = transaction.retention
         # A4b: the other drawings' inputs stay; this drawing's become this request's.
         other_drawings = (
@@ -822,11 +912,10 @@ class PreparedBiologicalInputCache:
             ]
         )
         replacements: dict[str, tuple[OrderedDict[Hashable, _PreparedCacheEntry], int]] = {}
+        retained_total = 0
+        held: set[PreparedResourceIdentity] = set()
         for layer in self._layers:
             current = self._layers[layer]
-            pending = transaction.pending[layer]
-            # A render-stage entry has no owner to check (one constant stamp).
-            check_owner = layer != _RENDER_STAGE_LAYER
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
             kept = 0
             # Read by no request here, so checked when one reads it (D-05).
@@ -834,22 +923,13 @@ class PreparedBiologicalInputCache:
                 for key in inputs.get(layer, ()):
                     if key in current and key not in retained and key not in transaction.used[layer]:
                         retained[key] = current[key]
+                        retained_total += current[key].retained_bytes
+                        held.update(current[key].resource_identities)
                         kept += 1
-            for key in transaction.used[layer]:
-                entry = pending.get(key)
-                if entry is None:
-                    entry = current.get(key)
-                    if entry is None:
-                        continue
-                if check_owner:
-                    self._verify_owner(
-                        layer,
-                        key,
-                        entry,
-                        transaction,
-                        walk_features=walk_features,
-                    )
+            for key, entry in self._used_entries(layer, transaction):
                 retained[key] = entry
+                retained_total += entry.retained_bytes
+                held.update(entry.resource_identities)
                 # A pending key is a new entry, not one kept from the layer.
                 if key in current:
                     kept += 1
@@ -883,6 +963,8 @@ class PreparedBiologicalInputCache:
             self._drawing_inputs = {
                 drawing: inputs for drawing, inputs in stored.items() if any(inputs.values())
             }
+        self._retained_total = retained_total
+        self._held_identities = frozenset(held)
         self._set_retained_metric(transaction)
 
 

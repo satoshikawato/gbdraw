@@ -58,7 +58,7 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
 });
 
 test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
-  assert.equal(SESSION_VERSION, 47);
+  assert.equal(SESSION_VERSION, 48);
   resetDrawings();
   installShownDrawing('circular');
   modeDrawing(state, 'circular').adv.label_font_size = 13;
@@ -244,7 +244,7 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   assert.deepEqual(shownRows(modeDrawing(state, 'circular')), kept);
   assert.deepEqual(modeDrawing(state, 'circular').deletedLegendEntries.value, []);
   assert.deepEqual(loadDialogs.map(({ items }) => items),
-    [['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']]);
+    [['Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.']]);
   assert.deepEqual(loaded.notices, []);
   assert.deepEqual(alerts, []);
 
@@ -453,4 +453,44 @@ test('a Linear drawing with no ON record names the fix', () => {
     (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
   modeDrawing(sourceState, 'linear').recordsOff = ['a'];
   assert.doesNotThrow(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState));
+});
+
+// OV-1280 (D-19, D-ORIGIN-2): the Web writer's Session 48 after the five file
+// cards keeps each card's rows and what its file set through Load and Save,
+// and the file-imports.js helpers each card's Remove calls take back only that
+// file's effect (the Remove path itself: auxiliary-file-history Playwright cases).
+test('Session 48 keeps what each file card loaded through Load and Save, and the card-mark helpers take back only that', async () => {
+  const fileImports = await import('../../gbdraw/web/js/services/file-imports.js');
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  const loaded = await load(fixture);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const drawing = state.drawings.circular;
+  const plain = (value) => JSON.parse(JSON.stringify(value));
+  const read = () => ({
+    rules: plain(drawing.manualSpecificRules), priority: plain(drawing.manualPriorityRules),
+    whitelist: plain(drawing.manualWhitelist), blacklist: drawing.manualBlacklist.value, fileImports: plain(drawing.fileImports)
+  });
+  const stored = fixture.modes.circular.config;
+  assert.deepEqual(read(), {
+    rules: stored.rules, priority: stored.qualifierPriorityRules, whitelist: stored.whitelist,
+    blacklist: stored.blacklistText, fileImports: stored.fileImports
+  });
+  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.files[key])),
+    [true, true, true, true, true]);
+  // Save writes them back as they were loaded.
+  const saved = await save('file cards');
+  for (const field of ['rules', 'qualifierPriorityRules', 'whitelist', 'blacklistText', 'fileImports']) {
+    assert.deepEqual(saved.modes.circular.config[field], stored[field], field);
+  }
+  // Remove on each card, as the card's owner takes it back.
+  assert.deepEqual(fileImports.withoutImportedRows(drawing.manualSpecificRules, 't_color').map((rule) => [rule.val, rule.color]),
+    [['hand', '#445566'], ['beta', '#999999']]);
+  const priority = plain(drawing.manualPriorityRules);
+  fileImports.removeImportedPriorityRows(priority);
+  assert.deepEqual(priority, [{ feat: 'CDS', order: 'gene' }, { feat: 'tRNA', order: 'product' }, { feat: 'rRNA', order: 'locus_tag' }]);
+  assert.deepEqual(fileImports.withoutImportedRows(drawing.manualWhitelist, 'whitelist').map((rule) => rule.key), ['mine', 'betas']);
+  assert.equal(fileImports.withoutImportedBlacklistWords(drawing.manualBlacklist.value, drawing.fileImports.blacklist), 'hypothetical, mine');
+  const colors = fileImports.withoutImportedDefaultColors(drawing.currentColors.value, drawing.fileImports.d_color, { CDS: '#aaaaaa', tRNA: '#bbbbbb' });
+  assert.deepEqual([colors.CDS, colors.tRNA], ['#111111', '#abcdef']);
 });

@@ -6,12 +6,11 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 from gbdraw.annotations import RegionAnnotationStyle, ResolvedRegionAnnotation, is_auto_feature_underlay
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
 from gbdraw.layout.text_geometry import TextAnchor
-
-DEFAULT_LABEL_FONT_SIZE = 10.0
 
 
 def dom_token(value: str) -> str:
@@ -93,32 +92,44 @@ def mark_reach(
     return MarkReach(reach, reach - half_lane)
 
 
-def label_font_size(style: RegionAnnotationStyle) -> float:
-    return float(style.label_font_size or DEFAULT_LABEL_FONT_SIZE)
+def past_span_edge(reach: MarkReach, inset: float) -> float:
+    """How far a span's mark paints past the span's edge on the label side, when its lane lies ``inset`` inside
+    that edge; zero while the paint stays within the span. A span's label keeps ``label_offset`` beyond that."""
+
+    return max(0.0, reach.past_lane_edge - inset)
+
+
+# The em box a label falls back to when its font cannot be read, above and below each baseline it is drawn on (em).
+_FALLBACK_EM_BOX = {"central": (-0.5, 0.5), "alphabetic": (-0.8, 0.2)}
 
 
 def label_ink_offsets(
-    text: str, font_family: str, font_size: float, anchor: TextAnchor
+    text: str,
+    font_family: str,
+    font_size: float,
+    anchor: TextAnchor,
+    baseline: Literal["central", "alphabetic"] = "central",
 ) -> tuple[float, float, float, float]:
-    """``text_ink_offsets`` of a central-baseline label, or an em box when the font cannot be read."""
+    """``text_ink_offsets`` of a label on its ``baseline`` (central for straight text, alphabetic for text along a
+    path), or an em box when the font cannot be read."""
 
-    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline="central", text_anchor=anchor)
+    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline=baseline, text_anchor=anchor)
     if offsets is None:
         # The fallback width of calculate_bbox_dimensions.
         width = 0.6 * len(text) * font_size
         origin = -TEXT_ANCHOR_SHARE[anchor] * width
-        return origin, origin + width, -0.5 * font_size, 0.5 * font_size
+        top, bottom = _FALLBACK_EM_BOX[baseline]
+        return origin, origin + width, top * font_size, bottom * font_size
     return offsets
 
 
 __all__ = [
-    "DEFAULT_LABEL_FONT_SIZE",
     "MarkReach",
     "annotation_dom_id",
     "cap_size",
     "capped_ends",
     "dom_token",
-    "label_font_size",
     "label_ink_offsets",
     "mark_reach",
+    "past_span_edge",
 ]

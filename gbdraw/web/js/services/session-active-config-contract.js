@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { FileImports } from './file-imports.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
@@ -9,7 +10,7 @@ import { canonicalRecordReverseComplement } from './record-display-model.js';
 import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { trackSlotLeafFaults, validateTrackSlotBindingInvariants } from './track-slot-validation.js';
 import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentConfigFields } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
-import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, labelStyleForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { isUnsetValue } from '../utils/field-reading.js';
@@ -58,6 +59,7 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
  * @property {string} [filterMode] `None`, `Whitelist`, or `Blacklist`.
  * @property {Array<Record<string, any>>} [whitelist]
  * @property {string} [blacklistText]
+ * @property {FileImports} [fileImports] What the Default colors and Blacklist files set (OV-1280).
  * @property {string} [losatProgram]
  * @property {Record<string, any>} [circularConservation]
  * @property {Array<Record<string, any>>} [annotationSets]
@@ -88,7 +90,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
   features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
   arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, font_family: null, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
-  circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
+  ...labelStyleForMode(mode), circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
   legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
   linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
@@ -126,7 +128,7 @@ export const createDefaultCircularConservation = () => ({ enabled: false, source
   subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
-  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
+  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'fileImports', 'losatProgram', 'circularConservation',
   'annotationSets', 'recordDisplayDrafts', 'recordsOff', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
@@ -177,11 +179,11 @@ export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDef
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
-  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
+  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string', fileImports: 'object',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 /** The fields of a stored rule row (Save refuses another; Load drops it with a row). */
 export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
-  qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
+  qualifierPriorityRules: ['feat', 'order', 'importedFrom', 'handOrder'], whitelist: ['feat', 'qual', 'key', 'importedFrom'],
   annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] });
 const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',

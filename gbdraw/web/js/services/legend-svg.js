@@ -240,16 +240,18 @@ export const isCurrentLegendHorizontal = (svg) => {
   return false;
 };
 
+// The solid swatch of a Legend row: the path Python draws in the row's group,
+// found by that structure, never by the fill it shows now (a row of color
+// `none` has a swatch of fill `none`, OV-1385). A row Python draws with a
+// paint server (a gradient bar, a hatch pattern) has none.
 /**
  * @param {Element | null | undefined} entryGroup
  * @returns {Element | null}
  */
-export const getLegendEntrySwatch = (entryGroup) => Array.from(
-  entryGroup?.querySelectorAll?.('path') || []
-).find((path) => {
-  const fill = path.getAttribute('fill');
-  return fill && fill !== 'none' && !fill.startsWith('url(');
-}) || null;
+export const getLegendEntrySwatch = (entryGroup) => {
+  const swatch = Array.from(entryGroup?.children || []).find((child) => child.localName === 'path') || null;
+  return String(pythonDrawnAttribute(swatch, 'fill') ?? '').startsWith('url(') ? null : swatch;
+};
 
 // The stroke Python drew on the swatch of the Legend row of `key`, shown or
 // merged into a shown row (D-35), which a row stroke edit keeps as

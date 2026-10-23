@@ -1,0 +1,49 @@
+id	regex	flags	message	severity
+zh-Hant-s2twp-01	会話	u	Mainland form from OpenCC s2twp or a Simplified term: write 工作階段 (Session (product decision); STYLE 4.4.1).	error
+zh-Hant-s2twp-02	(?<!產)生成	u	Mainland form from OpenCC s2twp or a Simplified term: write 產生 (Generate; STYLE 4.4.1).	error
+zh-Hant-s2twp-03	註釋	u	Mainland form from OpenCC s2twp or a Simplified term: write 註解 (Annotation; STYLE 4.4.1).	error
+zh-Hant-s2twp-04	示例	u	Mainland form from OpenCC s2twp or a Simplified term: write 範例 (Example / Gallery; STYLE 4.4.1).	error
+zh-Hant-s2twp-05	特徵型別	u	Mainland form from OpenCC s2twp or a Simplified term: write 特徵類型 (Feature type; STYLE 4.4.1).	error
+zh-Hant-s2twp-06	應用(?!程式)	u	Mainland form from OpenCC s2twp or a Simplified term: write 套用 (Apply; STYLE 4.4.1).	error
+zh-Hant-s2twp-07	重置	u	Mainland form from OpenCC s2twp or a Simplified term: write 重設 (Reset; STYLE 4.4.1).	error
+zh-Hant-s2twp-08	撤銷	u	Mainland form from OpenCC s2twp or a Simplified term: write 復原 (Undo; STYLE 4.4.1).	error
+zh-Hant-s2twp-09	高級	u	Mainland form from OpenCC s2twp or a Simplified term: write 進階 (Advanced; STYLE 4.4.1).	error
+zh-Hant-s2twp-10	佈局	u	Mainland form from OpenCC s2twp or a Simplified term: write 版面配置 (Layout; STYLE 4.4.1).	error
+zh-Hant-s2twp-11	選項卡	u	Mainland form from OpenCC s2twp or a Simplified term: write 分頁 (Tab; STYLE 4.4.1).	error
+zh-Hant-s2twp-12	幫助	u	Mainland form from OpenCC s2twp or a Simplified term: write 說明 (Help; STYLE 4.4.1).	error
+zh-Hant-s2twp-13	欄目	u	Mainland form from OpenCC s2twp or a Simplified term: write 區段 (Section; STYLE 4.4.1).	error
+zh-Hant-s2twp-14	自定義	u	Mainland form from OpenCC s2twp or a Simplified term: write 自訂 (Custom; STYLE 4.4.1).	error
+zh-Hant-s2twp-15	拖動|跳過|替換	u	Mainland form from OpenCC s2twp or a Simplified term: write 拖曳 / 略過 / 取代 (Drag, Skip, Replace; STYLE 4.4.1).	error
+zh-Hant-s2twp-16	修復	u	Mainland form from OpenCC s2twp or a Simplified term: write 修正 (Fix; STYLE 4.4.1).	error
+zh-Hant-s2twp-17	嵌入|偏移	u	Mainland form from OpenCC s2twp or a Simplified term: write 內嵌 / 位移 (Embed, Offset; STYLE 4.4.1).	error
+zh-Hant-s2twp-18	歸一化	u	Mainland form from OpenCC s2twp or a Simplified term: write 正規化 (Normalize; STYLE 4.4.1).	error
+zh-Hant-s2twp-19	命令|請求	u	Mainland form from OpenCC s2twp or a Simplified term: write 指令 / 要求 (Command, Request; STYLE 4.4.1).	error
+zh-Hant-s2twp-20	(?<!版面)(?<!重新)配置	u	Mainland form from OpenCC s2twp or a Simplified term: write 組態 (Configuration; STYLE 4.4.1).	error
+zh-Hant-s2twp-21	後設資料|架構(?!圖)	u	Mainland form from OpenCC s2twp or a Simplified term: write 中繼資料 / 結構描述 (Metadata, Schema; STYLE 4.4.1).	error
+zh-Hant-s2twp-22	許可證|開源	u	Mainland form from OpenCC s2twp or a Simplified term: write 授權條款 / 開放原始碼 (License, Open source; STYLE 4.4.1).	error
+zh-Hant-s2twp-23	不可用|可選(?!擇)	u	Mainland form from OpenCC s2twp or a Simplified term: write 無法使用 / 選填 (Unavailable, Optional; STYLE 4.4.1).	error
+zh-Hant-s2twp-24	必需|缺失	u	Mainland form from OpenCC s2twp or a Simplified term: write 必要 / 缺少 (Required, Missing; STYLE 4.4.1).	error
+zh-Hant-s2twp-25	推薦	u	Mainland form from OpenCC s2twp or a Simplified term: write 建議 (Recommended; STYLE 4.4.1).	error
+zh-Hant-s2twp-26	並行	u	Mainland form from OpenCC s2twp or a Simplified term: write 平行 (Parallel; STYLE 4.4.1).	error
+zh-Hant-s2twp-27	跨源	u	Mainland form from OpenCC s2twp or a Simplified term: write 跨來源 (Cross-origin; STYLE 4.4.1).	error
+zh-Hant-s2twp-28	高亮	u	Mainland form from OpenCC s2twp or a Simplified term: write 醒目提示 (Highlight; STYLE 4.4.1).	error
+zh-Hant-s2twp-29	標尺	u	Mainland form from OpenCC s2twp or a Simplified term: write 尺規 (Ruler; STYLE 4.4.1).	error
+zh-Hant-s2twp-30	描邊	u	Mainland form from OpenCC s2twp or a Simplified term: write 筆畫 (Stroke; STYLE 4.4.1).	error
+zh-Hant-s2twp-31	渲染	u	Mainland form from OpenCC s2twp or a Simplified term: write 繪製 (Rendering; STYLE 4.4.1).	error
+zh-Hant-s2twp-32	泳道	u	Mainland form from OpenCC s2twp or a Simplified term: write 子軌道 (Lane; STYLE 4.4.1).	error
+zh-Hant-s2twp-33	圖例項(?!目)	u	Mainland form from OpenCC s2twp or a Simplified term: write 圖例項目 (Legend item; STYLE 4.4.1).	error
+zh-Hant-s2twp-34	基因組	u	Mainland form from OpenCC s2twp or a Simplified term: write 基因體 (Genome; STYLE 4.4.1).	error
+zh-Hant-s2twp-35	鏈	u	Mainland form from OpenCC s2twp or a Simplified term: write 股 (Strand; STYLE 4.4.1).	error
+zh-Hant-s2twp-36	細胞器	u	Mainland form from OpenCC s2twp or a Simplified term: write 胞器 (Organelle; STYLE 4.4.1).	error
+zh-Hant-s2twp-37	密碼錶	u	Mainland form from OpenCC s2twp or a Simplified term: write 密碼表 (Genetic code; STYLE 4.4.1).	error
+zh-Hant-s2twp-38	登入號	u	Mainland form from OpenCC s2twp or a Simplified term: write 登錄號 (Accession; STYLE 4.4.1).	error
+zh-Hant-s2twp-39	溢位	u	Mainland form from OpenCC s2twp or a Simplified term: write 溢出 (Layout overflow; STYLE 4.4.1).	error
+zh-Hant-s2twp-40	原始檔	u	Mainland form from OpenCC s2twp or a Simplified term: write 來源檔案 (Source recipe; STYLE 4.4.1).	error
+zh-Hant-hk-terms	會話|數據|界面|網絡|線程|緩存|打印|氨基酸|軟件|註釋	u	Hong Kong form: the catalog follows Taiwan usage: 工作階段, 資料, 介面, 網路, 執行緒, 快取, 列印, 胺基酸, 軟體, 註解 (STYLE 4.3).	error
+zh-Hant-twn-locale-label	台灣|台湾	u	The Language menu entry is plain 繁體中文, with no 台灣 suffix (Owner, 2026-10-19).	warn
+zh-Hant-mainland-quotes	“|”|‘|’	u	Traditional Chinese quotes with 「」, nested 『』 (STYLE 4.2).	warn
+zh-Hant-ascii-ellipsis	\.\.\.	u	Write … (U+2026), not three ASCII periods.	error
+zh-Hant-fullwidth-digit	[０-９]	u	Write ASCII digits 0-9.	error
+zh-Hant-latin-space	[\u4e00-\u9fff] \d|\d%? [\u4e00-\u9fff]	u	No space between Chinese and digits: 10筆記錄 (STYLE 4.2 / 3.3).	warn
+zh-Hant-linear-xian	線形|(?<!共)線性	u	Diagram mode Linear is 線狀; only the Record Size Mode option Linear is 線性 (STYLE 4.5).	warn
+zh-Hant-period-after-period	。 	u	No space follows 。 between two sentences (D-18).	error

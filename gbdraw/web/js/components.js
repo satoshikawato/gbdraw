@@ -1,6 +1,7 @@
 // @ts-check
 import { state } from './state.js';
 import {
+  colorSwatchView,
   colorValueForMode,
   colorValueMode,
   toNativeColorInputValue
@@ -9,16 +10,18 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
+import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
+/** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
 /** @import { SettingsPaneView } from './app/settings-pane.js' */
 
-const { ref, reactive, computed, inject, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
+const { h, ref, reactive, computed, inject, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
 /** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | SVGElement | null }} FocusScope */
 /** @type {FocusScope[]} */
@@ -107,15 +110,38 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in. `label` names a tip whose holder has no such text;
+// the row group it is in (this function). The name comes from the page text,
+// so the tip reads it when it mounts and again after a UI locale switch has
+// re-rendered the page. `label` names a tip whose holder has no such text;
 // the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;
   const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
   const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
-  const name = `${group} ${label}`.replace(/\s+/g, ' ').trim();
-  return name ? `Help: ${name}` : 'Help';
+  return `${group} ${label}`.replace(/\s+/g, ' ').trim();
+};
+
+// A sentence with elements inside it, kept as one translation key (D-04 of the
+// translation work): `text` is the shown text of the key, `t('…')` without
+// values; a `{name}` placeholder with a slot of that name shows the slot, and
+// `params` fill the others (`textParts`). With `textClass`, the text around
+// the slots is in spans of that class (`sr-only`: only the slots are seen).
+// Registered globally in app.js.
+export const I18nText = {
+  props: {
+    text: { type: String, required: true },
+    params: { type: Object, default: null },
+    textClass: { type: String, default: null }
+  },
+  /**
+   * @param {{ text: string, params: TranslationParams | null, textClass: string | null }} props
+   * @param {{ slots: Readonly<Record<string, (() => unknown[]) | undefined>> }} context
+   */
+  setup: (props, { slots }) => () => textParts(props.text, Object.keys(slots), props.params ?? undefined)
+    .flatMap((part) => ('slot' in part
+      ? (slots[part.slot]?.() ?? [])
+      : [props.textClass ? h('span', { class: props.textClass }, part.text) : part.text]))
 };
 
 // Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the
@@ -147,7 +173,7 @@ export const HelpTip = {
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
-    const name = ref('Help');
+    const name = ref('');
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -198,7 +224,9 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    onMounted(() => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); });
+    const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
+    onMounted(readName);
+    watch(uiLocale, () => nextTick(readName));
     return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
@@ -282,7 +310,7 @@ export const SettingsSectionTitle = {
   props: { section: { type: String, required: true } },
   /** @param {{ section: SettingsSectionKey }} props */
   setup: (props) => ({ entry: SETTINGS_SECTIONS.find((section) => section.key === props.section) }),
-  template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ entry.title }}'
+  template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ tm(entry.title) }}'
 };
 
 // The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),
@@ -529,7 +557,7 @@ export const SettingsSectionIndex = {
       nextTick(mark);
     });
 
-    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn };
+    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn, settingsShortText };
   }
 };
 
@@ -651,12 +679,43 @@ export const ActionMenu = {
   `
 };
 
+/**
+ * The swatch of one color, by `colorSwatchView`: a color of none shows empty (OV-1386). Its size and border are
+ * the parent's classes.
+ */
+export const ColorSwatch = {
+  props: { color: { type: String, default: '' } },
+  /** @param {{ color: string }} props */
+  setup(props) {
+    return { swatch: computed(() => colorSwatchView(props.color)) };
+  },
+  template: `<span :class="{ 'color-swatch-none': swatch.none }" :style="{ backgroundColor: swatch.fill }" :title="swatch.label" :data-color-none="swatch.none ? '' : null"></span>`
+};
+
+/** The OIC-029 line from `defaultColorScopeLine`: the sentence for a Legend item choice that sets a type's default color. */
+export const DefaultColorScopeLine = {
+  components: { ColorSwatch },
+  props: { line: { type: Object, required: true } },
+  /** @param {{ line: { color: string | null } }} props */
+  setup(props) {
+    return { swatch: computed(() => colorSwatchView(props.line.color)) };
+  },
+  template: `
+    <span data-default-color-scope-sentence>
+      <i18n-text v-if="line.kind === 'replaces'" :text="t('Replaces your {type} default color {color}.')" :params="{ type: line.type }">
+        <template #color><color-swatch class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :color="line.color"></color-swatch><span :class="{ 'font-mono': !swatch.none }">{{ swatch.label }}</span></template>
+      </i18n-text>
+      <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
+    </span>
+  `
+};
+
 export const ColorValueControl = {
   props: {
     modelValue: { default: null },
     fallback: { type: String, default: '#000000' },
     allowNone: { type: Boolean, default: true },
-    ariaLabel: { type: String, default: 'Color value' },
+    ariaLabel: { type: String, default: '' },
     ariaDescribedby: { type: String, default: null }
   },
   emits: ['update:modelValue'],
@@ -670,6 +729,12 @@ export const ColorValueControl = {
     const pickerValue = computed(() => (
       toNativeColorInputValue(props.modelValue, props.fallback)
     ));
+    // Controlled: a parent that refuses the emit (a cancelled scope dialog) leaves the props unchanged, so Vue
+    // does not patch the native input; put the shown value back to the prop's.
+    const settleControl = async (/** @type {HTMLInputElement | HTMLSelectElement} */ target, /** @type {() => string} */ shown) => {
+      await nextTick();
+      if (target.isConnected && target.value !== shown()) target.value = shown();
+    };
     const updateMode = (/** @type {{ target: HTMLSelectElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
@@ -678,6 +743,7 @@ export const ColorValueControl = {
         'update:modelValue',
         colorValueForMode(nextMode, props.modelValue, props.fallback)
       );
+      return settleControl(event.target, () => mode.value);
     };
     const updateColor = (/** @type {{ target: HTMLInputElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
@@ -686,6 +752,7 @@ export const ColorValueControl = {
         'update:modelValue',
         toNativeColorInputValue(event?.target?.value, props.fallback)
       );
+      return settleControl(event.target, () => pickerValue.value);
     };
     return { mode, pickerValue, updateMode, updateColor, controlAvailable };
   },
@@ -696,12 +763,12 @@ export const ColorValueControl = {
         :disabled="!controlAvailable"
         @change="updateMode"
         class="form-input form-input-compact min-w-0"
-        :aria-label="\`\${ariaLabel} mode\`"
+        :aria-label="t('{name} mode', { name: ariaLabel || t('Color value') })"
         :aria-describedby="ariaDescribedby"
       >
-        <option value="auto">Auto</option>
-        <option v-if="allowNone" value="none">None</option>
-        <option value="color">Color</option>
+        <option value="auto">{{ t('Auto') }}</option>
+        <option v-if="allowNone" value="none">{{ t('None') }}</option>
+        <option value="color">{{ t('Color') }}</option>
       </select>
       <input
         type="color"
@@ -709,7 +776,7 @@ export const ColorValueControl = {
         @input="updateColor"
         :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
-        :aria-label="ariaLabel"
+        :aria-label="ariaLabel || t('Color value')"
         :aria-describedby="ariaDescribedby"
       >
     </div>
@@ -723,8 +790,10 @@ export const ColorValueControl = {
  * @property {{ name?: string } | { name?: string }[] | null} [modelValue] the selected file, or the files of a `multiple` slot
  * @property {boolean | string} [multiple]
  * @property {boolean | string} [requestClear]
- * @property {boolean} [artifactHistory]
- * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored; a result of `false` is not committed
+ * @property {boolean} [projectHistory] a selection and a Remove are one project step: the card's
+ *   file changes what every drawing loaded from it (OV-1280, D-15-51)
+ * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored, and after
+ *   a Remove with the removed file (OV-1280); a result of `false` is not committed
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -732,7 +801,7 @@ export const ColorValueControl = {
 // selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory', 'inspectionFailed'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'projectHistory', 'inspectionFailed'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -749,10 +818,10 @@ export const FileUploader = {
     const selectedLabel = computed(() => {
       const items = selectedFiles.value;
       if (items.length === 0) return '';
-      if (items.length === 1) return items[0]?.name || 'Selected file';
-      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || 'file').join(', ');
+      if (items.length === 1) return items[0]?.name || t('Selected file');
+      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || t('file')).join(', ');
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
-      return `${items.length} files: ${firstNames}${suffix}`;
+      return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
     const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
@@ -771,10 +840,10 @@ export const FileUploader = {
         await nextTick();
         return await props.afterChange?.(nextFiles[0]);
       };
-      if (props.artifactHistory) {
-        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+      if (props.projectHistory) {
+        void history.runProjectStep(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', apply);
+        void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         update();
       }
@@ -787,12 +856,18 @@ export const FileUploader = {
         emit('clearRequest', event?.currentTarget || null);
         return;
       }
+      // One History step holds the Remove and what it takes back (OV-1280).
+      const removed = /** @type {File | undefined} */ (selectedFiles.value[0]);
       const history = window.__GBDRAW_HISTORY__;
-      if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', async () => {
-          emit('update:modelValue', props.multiple ? [] : null);
-          await nextTick();
-        });
+      const apply = async () => {
+        emit('update:modelValue', props.multiple ? [] : null);
+        await nextTick();
+        return await props.afterChange?.(removed);
+      };
+      if (props.projectHistory) {
+        void history.runProjectStep(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+      } else if (history?.runUndoable) {
+        void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         emit('update:modelValue', props.multiple ? [] : null);
       }
@@ -857,8 +932,9 @@ export const OperationError = {
   /** @param {{ error: string | Record<string, unknown> | null | undefined, recovery: string | null | undefined }} props */
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
-    const title = computed(() => operationErrorTitle(model.value?.operation));
-    const recoveryText = computed(() => generationRecoveryGuidance(props.recovery));
+    // The title and the recovery line are rows of the wording owner's tables, shown translated.
+    const title = computed(() => tm(operationErrorTitle(model.value?.operation)));
+    const recoveryText = computed(() => tm(generationRecoveryGuidance(props.recovery)));
     const diagnostics = computed(() => (model.value?.details || []).map((/** @type {UserFacingError['details'][number]} */ section) =>
       `${section.label}\n${section.text}`).join('\n\n'));
     const details = ref(null);
@@ -879,10 +955,10 @@ export const OperationError = {
       try {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
         await navigator.clipboard.writeText(text);
-        if (props.error === displayed) copyStatus.value = 'Diagnostics copied.';
+        if (props.error === displayed) copyStatus.value = t('Diagnostics copied.');
       } catch (_) {
         if (props.error !== displayed) return;
-        copyStatus.value = 'Clipboard unavailable. Select diagnostics and copy manually.';
+        copyStatus.value = t('Clipboard unavailable. Select diagnostics and copy manually.');
       }
     };
     return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,
@@ -904,7 +980,7 @@ export const SpecificRuleRows = {
 // field; nothing when the text has no markup.
 export const MarkupPreview = {
   props: ['text'],
-  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">{{ t('Preview:') + ' ' }}</span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
   /** @param {{ text?: string | null }} props */
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };

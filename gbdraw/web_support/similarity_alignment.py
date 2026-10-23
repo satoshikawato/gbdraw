@@ -11,10 +11,10 @@ from typing import Any, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
-    ResolvedRecordCollection, project_similarity_alignment_anchor_fact,
+    ResolvedRecordCollection, _source_details, project_similarity_alignment_anchor_fact,
     similarity_alignment_evidence_edges,
 )
-from gbdraw.api.request_render import plan_linear_request
+from gbdraw.api.request_render import plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
@@ -337,53 +337,65 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
     )
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("Alignment projection requires a Linear request.")
-    keys = [record.record_key for record in request.records]
-    if len(set(keys)) != len(keys) or None in keys:
+    keys = [record.record_key for record in request.records if record.record_key is not None]
+    if len(set(keys)) != len(request.records):
         raise ValidationError("Alignment projection requires keyed records.")
     # The caller materializes current placements through the composition bridge.
     # The plan is deliberately removed for raw, untranslated placement facts.
     request = replace(request, similarity_alignment=None)
     before = plan_linear_request(request)
     before_collection = ResolvedRecordCollection(before.records, before.provenance)
+    # Counterfactual source transforms are always available for local direction edits.
+    flipped_orientations = {key: item.source_step == 1
+                            for key, item in zip(keys, before.transforms, strict=True)}
     orientations = raw["orientations"]
     if orientations is None:
-        orientations = {key: item.source_step == 1
-                        for key, item in zip(keys, before.transforms, strict=True)}
+        orientations = flipped_orientations
     else:
-        orientations = _object(orientations, set(cast("list[str]", keys)), "projection.orientations")
+        orientations = _object(orientations, set(keys), "projection.orientations")
         orientations = {key: _boolean(value, f"projection.orientations.{key}")
                         for key, value in orientations.items()}
+    after = plan_linear_request(_oriented_request(request, orientations))
+    # The flipped records serve only anchor facts, so they are resolved, not
+    # planned; without orientations (the stale-target repair) they are the
+    # requested ones (OV-1585).
+    flipped_collection = (
+        ResolvedRecordCollection(after.records, after.provenance)
+        if orientations == flipped_orientations
+        else resolve_request_records(_oriented_request(request, flipped_orientations))
+    )
+    return raw, before, before_collection, after, flipped_collection, request.options.orthogroups, request
+
+
+def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str, bool]) -> LinearDiagramRequest:
+    """The request with each record drawn in the given absolute direction."""
+
     records = []
     for record in request.records:
-        reverse = orientations[record.record_key]
+        reverse = reverse_by_key[cast(str, record.record_key)]
         if record.region is not None:
             records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
                                    presentation=replace(record.presentation, reverse_complement=False)))
         else:
             records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
-    after = plan_linear_request(replace(request, records=tuple(records)))
-    # Counterfactual source transforms are always available for local direction edits.
-    flipped_records = []
-    for record, transform in zip(request.records, before.transforms, strict=True):
-        reverse = transform.source_step == 1
-        if record.region is not None:
-            flipped_records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
-                                           presentation=replace(record.presentation, reverse_complement=False)))
-        else:
-            flipped_records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
-    flipped = plan_linear_request(replace(request, records=tuple(flipped_records)))
-    return raw, before, before_collection, after, flipped, request.options.orthogroups
+    return replace(request, records=tuple(records))
 
 
 def _serialize_projection(context, candidates, raw_request):
-    raw, before, collection, after, flipped, _orthogroups = context
+    raw, before, collection, after, flipped_collection, _orthogroups, request = context
     before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
     after_placements = getattr(after.build().drawing, "_gbdraw_alignment_placements")
-    flipped_collection = ResolvedRecordCollection(flipped.records, flipped.provenance)
-    fingerprints = {}
+    # The content of each source this call staged, hashed once per file. Not
+    # ``provenance.source_paths``: records the Worker's cache supplied name the
+    # files of the Generate that parsed them.
+    fingerprints: dict[int, list[str]] = {}
+    hashes: dict[str, str] = {}
     for provenance in collection.provenance:
-        for path in provenance.source_paths:
-            fingerprints[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        _kind, paths = _source_details(request.records[provenance.input_index].source)
+        for path in paths:
+            if path not in hashes:
+                hashes[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        fingerprints[provenance.input_index] = [hashes[path] for path in paths]
     binding_records = []
     records = []
     base = {item.record_key: item for item in (before.layout.record_translations if before.layout else ())}
@@ -404,7 +416,7 @@ def _serialize_projection(context, candidates, raw_request):
                             "y": 0.0 if translation is None else float(translation.y)},
             "sourceRecordIndex": provenance.source_record_index,
             "sourceRecordId": provenance.source_record_id,
-            "sourceFingerprints": [fingerprints[path] for path in provenance.source_paths],
+            "sourceFingerprints": fingerprints[provenance.input_index],
         })
         variants = []
         for reverse in (False, True):

@@ -23,6 +23,7 @@ import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
@@ -92,6 +93,7 @@ import { toRaw } from '../utils/vue-raw.js';
  * @property {GenerationPayload['resources']} [resources]
  * @property {unknown} [canonicalRequest]
  * @property {{ canonicalRequest?: unknown } | null} [projection]
+ * @property {CanonicalRecordSource} [recordSource] The record source of the drawing the blastp extraction reads.
  */
 
 /**
@@ -107,6 +109,7 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
+export { resourceIdOwnedBy } from './diagram-resource-staging.js';
 
 export class DiagramGenerationCanceledError extends Error {
   constructor(message = 'Diagram generation was canceled.') {
@@ -1061,15 +1064,22 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
     return Promise.reject(deserializeWorkerError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' }));
   }
   recordStructuralMetric('diagramHelperRequest', 1, { operation: normalizedOperation });
-  // Helpers that read the records of a committed request stage its resources.
-  const staging = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE ? payload
-    : (normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT ? payload.projection : undefined);
+  // Helpers that read the records of a committed request stage the resources it
+  // names; the blastp extraction stages the one record source it reads (OV-1555).
+  /** @type {readonly string[]} */
+  const stagingOperations = [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE,
+    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES];
+  const staging = stagingOperations.includes(normalizedOperation) ? { references: payload.canonicalRequest }
+    : normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT && payload.projection
+      ? { references: payload.projection.canonicalRequest }
+      : normalizedOperation === DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA && payload.recordSource
+        ? { references: payload.recordSource } : null;
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
     type: 'helper', operation: normalizedOperation,
     payload: staging ? helperPayload : payload,
     prepareResources: staging ? () => resourceTransport.prepare({
-      request: staging.canonicalRequest, resources
+      request: staging.references, resources, retain: true
     }) : null,
     activeRequests: activeHelperRequests,
     onProgress

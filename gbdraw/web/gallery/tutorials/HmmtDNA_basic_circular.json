@@ -131,7 +131,7 @@
     },
     {
       "title": "Choose the compact layout and labels",
-      "body": "Use the compact Middle preset, keep both GC tracks visible, and place feature labels outside the circle.",
+      "body": "Use the compact Middle preset, keep both GC tracks visible, place feature labels outside the circle, and put the legend on the right.",
       "table": {
         "columns": [
           "Control",
@@ -157,6 +157,10 @@
           [
             "Label Mode",
             "Out"
+          ],
+          [
+            "Legend position",
+            "Right"
           ]
         ]
       },

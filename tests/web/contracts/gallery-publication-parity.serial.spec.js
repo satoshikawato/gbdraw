@@ -83,8 +83,8 @@ for (const example of commonExamples) {
           'features', 'gc_content', 'gc_skew', 'a_skew_2', 'ticks'
         ]);
       } else if (example.id === 'tobacco-chloroplast') {
-        expect(loaded.annotationSetIds).toContain('plastome_regions');
-        expect(loaded.slotIds).toHaveLength(3);
+        expect(loaded.annotationSetIds).toEqual(['plastome_regions', 'plastome_tint']);
+        expect(loaded.slotIds).toEqual(['features', 'plastome_tint', 'plastome_regions', 'gc_content']);
         expect(loaded.legend).toBe('upper_left');
       } else if (example.id === 'majanivirus_orthogroup') {
         expect(loaded.recordCount).toBe(9);

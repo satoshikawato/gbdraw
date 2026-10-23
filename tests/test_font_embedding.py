@@ -126,6 +126,9 @@ def isolated_fonts(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(fonts, "_platform_index", {}, raising=False)
     monkeypatch.setattr(diagram_module, "_warned_font_families", set(), raising=False)
     fonts.clear_registered_fonts()
+    clear_face_urls = getattr(getattr(font_embedding, "_face_data_url_for", None), "cache_clear", None)
+    if clear_face_urls is not None:
+        clear_face_urls()
     yield
     fonts.clear_registered_fonts()
 
@@ -146,6 +149,29 @@ def test_a_registered_truetype_font_is_embedded_as_a_subset_of_its_used_characte
     assert mime == "font/ttf" and "glyf" in font
     assert set(font.getBestCmap()) == {ord(char) for char in "Hello you"}
     assert len(font.getGlyphOrder()) == len(set("Hello you")) + 1  # and .notdef
+
+
+def test_a_second_export_of_the_same_characters_subsets_the_face_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # OV-1568: SVG and PNG exports of one Result embed the same subset.
+    fonts.register_font_file(_renamed_font("LiberationSerif-Regular", "Gbdraw Embed Twice", tmp_path / "t.ttf"))
+    subsets: list[set[str]] = []
+    real = font_embedding._subset
+
+    def counting(font: TTFont, characters: set[str]) -> None:
+        subsets.append(set(characters))
+        real(font, characters)
+
+    monkeypatch.setattr(font_embedding, "_subset", counting)
+    svg = _svg(("'Gbdraw Embed Twice', serif", "normal", "Hello"))
+    first = font_embedding.svg_font_embedding(svg)
+    assert font_embedding.svg_font_embedding(svg) == first
+    assert font_embedding.svg_font_embedding(svg, kind="raster") == first
+    assert subsets == [set("Hello")]
+    # Other characters are another subset.
+    font_embedding.svg_font_embedding(_svg(("'Gbdraw Embed Twice', serif", "normal", "Help")))
+    assert subsets == [set("Hello"), set("Help")]
 
 
 def test_an_opentype_cff_font_keeps_its_flavour(tmp_path: Path) -> None:

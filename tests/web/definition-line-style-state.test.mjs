@@ -12,7 +12,8 @@ const modulePath = join(tempDir, 'js', 'services', 'definition-line-style-state.
 
 const {
   createDefaultLinearDefinitionLineStyles,
-  normalizeDefinitionLineStyleState
+  normalizeDefinitionLineStyleState,
+  refusedDefinitionLineFontSizePath
 } = await import(pathToFileURL(modulePath));
 
 assert.deepEqual(createDefaultLinearDefinitionLineStyles(), {
@@ -38,3 +39,10 @@ assert.deepEqual(
     length: { font_size: 9, font_weight: '700', fill: 'rgb(1,2,3)' }
   }
 );
+
+// OV-1270 (PD-OI-081): Generate names a font size of zero or less by its
+// setting path instead of drawing it as Auto; Auto and positive sizes pass.
+assert.equal(refusedDefinitionLineFontSizePath({ name: { font_size: '-1' } }), 'objects.definition.linear.line_styles.name.font_size');
+assert.equal(refusedDefinitionLineFontSizePath({ name: { font_size: '12' }, accession: { font_size: 0 } }), 'objects.definition.linear.line_styles.accession.font_size');
+assert.equal(refusedDefinitionLineFontSizePath({ name: { font_size: '12', font_weight: 'heavy' }, length: { font_size: '' } }), '');
+assert.equal(refusedDefinitionLineFontSizePath(null), '');

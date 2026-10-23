@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib
 import json
 import math
 import re
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, get_args, get_type_hints
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "contracts" / "schema.generated.js"
@@ -28,11 +29,15 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("TYPED_DRAFT_SESSION_VERSION", "gbdraw.session_io", "TYPED_DRAFT_SESSION_MIN_VERSION"),
     ("MODE_SCOPED_SESSION_VERSION", "gbdraw.session_io", "MODE_SCOPED_SESSION_MIN_VERSION"),
     ("ROW_KEYED_LEGEND_SESSION_VERSION", "gbdraw.session_io", "ROW_KEYED_LEGEND_SESSION_MIN_VERSION"),
+    ("FILE_IMPORT_ORIGIN_SESSION_VERSION", "gbdraw.session_io", "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION"),
     ("DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION", "gbdraw.session_io", "DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION"),
     ("CURRENT_AUTHORITY_SESSION_MIN_VERSION", "gbdraw.session_io", "CURRENT_AUTHORITY_SESSION_MIN_VERSION"),
     ("CURRENT_ARTIFACT_SESSION_MIN_VERSION", "gbdraw.session_io", "CURRENT_ARTIFACT_SESSION_MIN_VERSION"),
     ("CANONICAL_SESSION_MIN_VERSION", "gbdraw.session_io", "CANONICAL_SESSION_MIN_VERSION"),
     ("DRAWN_HASH_RULE_SESSION_MAX_VERSION", "gbdraw.session_io", "DRAWN_HASH_RULE_SESSION_MAX_VERSION"),
+    ("MAIN_DISPLAY_FRAME_SESSION_VERSION", "gbdraw.api.session_compat", "MAIN_DISPLAY_FRAME_SESSION_VERSION"),
+    ("DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION", "gbdraw.api.session_compat",
+     "DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION"),
     ("CANONICAL_REQUEST_SCHEMA", "gbdraw.session_request_codec", "CANONICAL_REQUEST_SCHEMA"),
     ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
     ("FEATURE_OVERRIDE_SCHEMA", "gbdraw.session_request_codec", "FEATURE_OVERRIDE_SCHEMA"),
@@ -69,6 +74,14 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities"),
     ("CONFIG_UNSET_NUMBER_PATHS", "gbdraw.config.modify", "config_paths_reading_unset_spellings"),
     ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
+)
+# (Web name, Python module, dataclass, field): the values of a field typed as a
+# string Literal (typing.get_args, in the owner's order) and the field's
+# default, written after the derived values. The Web shows these values in the
+# UI language (app/pairwise-match-popup.js).
+_LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
+    ("ORTHOGROUP_MEMBER_ROLE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "role"),
+    ("ORTHOGROUP_MEMBER_CONFIDENCE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "confidence"),
 )
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 
@@ -126,6 +139,22 @@ def _owner(module: str, name: str) -> str:
     return f"// {module.replace('.', '/')}.py: {name}\n"
 
 
+def _literal_field_declaration(web_name: str, owner: type, field_name: str) -> str:
+    """The values and the default of a dataclass field typed as a string Literal."""
+    values = get_args(get_type_hints(owner)[field_name])
+    default = next(field.default for field in dataclasses.fields(owner) if field.name == field_name)
+    if not values or not all(isinstance(value, str) for value in values) or default not in values:
+        raise TypeError(f"{owner.__name__}.{field_name} is not a string Literal field with a listed default")
+    union = f"readonly ({' | '.join(_scalar(value) for value in values)})[]"
+    return (
+        f"/** @type {{Readonly<{{ values: {union}, default: {_scalar(default)} }}>}} */\n"
+        f"export const {web_name} = Object.freeze({{\n"
+        f"  values: /** @type {{{union}}} */ ({_frozen(list(values))}),\n"
+        f"  default: {_scalar(default)}\n"
+        "});\n"
+    )
+
+
 def render_web_contracts_module() -> str:
     parts = [
         "// @ts-check\n"
@@ -143,6 +172,11 @@ def render_web_contracts_module() -> str:
             else f"export const {web_name} = {_frozen(value)};\n"
         )
         parts.append(_owner(module, f"{name}()") + declaration)
+    for web_name, module, class_name, field_name in _LITERAL_FIELDS:
+        owner = getattr(importlib.import_module(module), class_name)
+        parts.append(
+            _owner(module, f"{class_name}.{field_name}") + _literal_field_declaration(web_name, owner, field_name)
+        )
     return "\n".join(parts)
 
 

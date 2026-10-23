@@ -944,3 +944,137 @@ def test_composite_document_replays_only_committed_request(tmp_path):
     with materialize_session(committed, output_directory=tmp_path / 'committed') as materialized:
         control = render_session(materialized)
     assert result.output_paths[0].read_bytes() == control.output_paths[0].read_bytes()
+
+
+# OV-1145: Session 48 stores the protein results of a reverse-complemented
+# Linear record in its search frame; an upgrade or re-save of a Session 46/47
+# converts them.
+_SESSION_FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
+_V47_BGC = _SESSION_FIXTURES / "BGC0000708-BGC0000713.v47.gbdraw-session.json.gz"
+_PROTEIN_RESOURCES = ("comparison-canonical-orthogroups-1", "comparison-canonical-protein-4")
+
+
+def _v47_bgc() -> dict:
+    import gzip
+
+    return json.loads(gzip.decompress(_V47_BGC.read_bytes()))
+
+
+def _two_drawings(version: int) -> dict:
+    from tests.utils.two_mode_session import two_mode_session
+
+    return {**two_mode_session(_v47_bgc()), "version": version}
+
+
+@pytest.mark.parametrize("version", [46, 47])
+def test_an_upgrade_stores_the_protein_results_of_a_reversed_record_in_the_search_frame(
+    tmp_path: Path, version: int,
+) -> None:
+    from gbdraw.session import upgrade_session_document
+
+    source = _two_drawings(version)
+    upgrade = upgrade_session_document(source, temporary_directory=tmp_path)
+    upgraded = upgrade.document.to_dict()
+
+    assert upgrade.warnings == ()
+    assert upgraded["version"] == CURRENT_SESSION_VERSION == 48
+    assert [drawing.id for drawing in upgrade.document.drawings] == ["circular", "linear"]
+    # Bytes change under the stored IDs, only for the protein results.
+    assert upgraded["resources"].keys() == source["resources"].keys()
+    changed = sorted(
+        key for key, descriptor in upgraded["resources"].items() if descriptor != source["resources"][key]
+    )
+    assert changed == sorted(f"linear-{key}" for key in _PROTEIN_RESOURCES)
+    for key in changed:
+        stored = base64.b64decode(upgraded["resources"][key]["data"])
+        assert upgraded["resources"][key]["size"] == len(stored)
+    assert upgrade_session_document(upgraded, temporary_directory=tmp_path).document.to_dict() == upgraded
+
+
+def test_a_cli_resave_of_a_session_47_writes_the_search_frame_for_both_drawings(
+    tmp_path: Path,
+) -> None:
+    from gbdraw.cli_utils.session import render_main
+    from gbdraw.session import load_session_document, upgrade_session_document
+    from gbdraw.session_io import write_session_json
+
+    source = tmp_path / "two.gbdraw-session.json"
+    write_session_json(source, _two_drawings(47))
+    render_main(["--session", str(source), "-o", str(tmp_path / "fig"), "-f", "svg", "--save_session"])
+    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json")
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document
+
+    assert resaved.version == CURRENT_SESSION_VERSION
+    assert [drawing.id for drawing in resaved.drawings] == ["circular", "linear"]
+
+    def protein_results(document) -> tuple[object, ...]:
+        # Both hold the same search-frame results.
+        from gbdraw.session import materialize_session, session_to_request
+
+        with materialize_session(document, output_directory=tmp_path) as materialized:
+            options = session_to_request(materialized, drawing="linear").options
+        return (
+            [comparison.matches.to_dict("records") for comparison in options.linear_comparisons or ()],
+            repr(options.orthogroups),
+        )
+
+    assert protein_results(resaved) == protein_results(upgraded)
+    # The re-save keeps the IDs of the converted resources, as the upgrade does
+    # (the base re-save wrote the table under a new ID).
+    for key in (f"linear-{key}" for key in _PROTEIN_RESOURCES):
+        assert resaved.to_dict()["resources"][key]["data"] == upgraded.to_dict()["resources"][key]["data"]
+
+
+def test_python_load_reads_a_session_47_and_a_settings_only_session_47() -> None:
+    from gbdraw.session import load_session_document
+    from gbdraw.session_io import is_settings_only_session
+
+    data = _v47_bgc()
+    data["webFiles"]["bindings"] = {"schema": 2, "c_gb": None}
+    assert load_session_document(data).version == 47
+    # A settings-only Session 47: the current one, written by a 47 writer.
+    from gbdraw.session import upgrade_session_document
+
+    current = upgrade_session_document(
+        load_session_document(_SESSION_FIXTURES / "settings-only.v42.json.gz")
+    ).document.to_dict()
+    settings_only = {**current, "version": 47}
+    assert is_settings_only_session(settings_only)
+    assert load_session_document(settings_only).drawings == load_session_document(current).drawings
+
+
+def test_session_save_warns_about_a_linear_record_once_and_refuses_an_existing_output_first(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1246: a save to an existing path built the whole document, and warned
+    about the record's topology again, before it refused the output."""
+
+    import logging
+
+    import gbdraw.session as session_module
+
+    seqrecord = SeqRecord(
+        Seq("ATGCGCAT"),
+        id="linear_record",
+        annotations={"molecule_type": "DNA", "topology": "linear"},
+    )
+    request = CircularDiagramRequest(records=(RecordInput(source=InMemoryRecordSource(seqrecord)),))
+    session_path = tmp_path / "linear.gbdraw-session.json"
+    question = "Are you sure you want to visualize it as circular?"
+
+    with caplog.at_level(logging.WARNING):
+        save_session_document(session_path, request)
+    assert caplog.text.count(question) == 1
+
+    caplog.clear()
+    builds: list[object] = []
+    real_build = session_module.build_session_document
+    monkeypatch.setattr(
+        session_module,
+        "build_session_document",
+        lambda *args, **kwargs: builds.append(args) or real_build(*args, **kwargs),
+    )
+    with caplog.at_level(logging.WARNING), pytest.raises(SessionFormatError, match="already exists"):
+        save_session_document(session_path, request)
+    assert builds == []
+    assert question not in caplog.text

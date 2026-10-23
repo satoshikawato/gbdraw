@@ -33,6 +33,7 @@ from gbdraw.features.ids import (
 )
 from gbdraw.render.groups.linear import build_linear_feature_dom_index
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+from tests.utils.comparison_tables import ribbon_group
 from gbdraw.svg.ids import instance_svg_id
 
 
@@ -49,28 +50,7 @@ def _write_blast_table(path: Path, rows: list[tuple[object, ...]]) -> None:
 
 
 def _build_pairwise_group(match_style: str = "ribbon") -> PairWiseMatchGroup:
-    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
-    group.canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=400,
-    )
-    group.records = [_build_record(), _build_record()]
-    group.comparison_count = 1
-    group.comparison_height = 40
-    group.query_offset_x = 0
-    group.subject_offset_x = 0
-    group.query_alignment_offset_x = 0
-    group.subject_alignment_offset_x = 0
-    group.min_identity = 0
-    group.match_min_color = "#ffffff"
-    group.match_max_color = "#000000"
-    group.match_fill_opacity = 0.75
-    group.match_stroke_color = "none"
-    group.match_stroke_width = 0
-    group.match_style = match_style
-    group.curve_tension = 0.5
-    return group
+    return ribbon_group([_build_record(), _build_record()], px_per_bp=2.5, match_style=match_style)
 
 
 def _build_match_row() -> SimpleNamespace:
@@ -236,14 +216,24 @@ def test_linear_cli_rejects_invalid_pairwise_match_style(capsys: pytest.CaptureF
 
 
 @pytest.mark.linear
-@pytest.mark.parametrize("value", ["0", "-2", "nan", "inf", "-inf"])
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("0", "--comparison_height must be a positive finite number"),
+        ("-2", "--comparison_height must be a positive finite number"),
+        # OV-275: the shared float option type refuses non-finite values.
+        ("nan", "argument --comparison_height: invalid float value: 'nan' (must be a finite number)"),
+        ("inf", "argument --comparison_height: invalid float value: 'inf' (must be a finite number)"),
+        ("-inf", "argument --comparison_height: invalid float value: '-inf' (must be a finite number)"),
+    ],
+)
 def test_linear_cli_rejects_invalid_comparison_height(
-    value: str, capsys: pytest.CaptureFixture[str]
+    value: str, message: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit):
         linear_cli_module._get_args(["--gbk", "dummy.gb", f"--comparison_height={value}"])
 
-    assert "--comparison_height must be a positive finite number" in capsys.readouterr().err
+    assert message in capsys.readouterr().err
 
 
 @pytest.mark.linear
@@ -447,6 +437,9 @@ def test_pairwise_match_resolves_duplicate_view_ids_by_source_feature_index() ->
     assert view_id == compute_feature_object_hash(second)
     # An untransformed record draws the source location: one hash for both.
     first.feature_hash = second.feature_hash = view_id
+    # The feature factory gives identical features their source index as
+    # their rendered instance (features/ids.py, shared_source_feature_hashes).
+    first.rendered_instance_index, second.rendered_instance_index = 4, 7
     feature_dom_index = build_linear_feature_dom_index(
         [{"first": first, "second": second}, {}]
     )
@@ -487,6 +480,7 @@ def test_linear_feature_dom_index_rejects_repeated_source_feature_index() -> Non
             record_id="record_1",
             source_feature_index=4,
             feature_hash="fsource",
+            rendered_instance_index=4,
         )
 
     with pytest.raises(ValueError, match="duplicate source feature index"):
@@ -527,31 +521,8 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
         },
     ]
     comparison_df = pd.DataFrame.from_records(rows)
-    canvas_config = SimpleNamespace(
-        normalize_length=False,
-        alignment_width=1000,
-        longest_genome=400,
-        align_center=False,
-    )
-    blast_config = SimpleNamespace(
-        fill_color="#d3d3d3",
-        min_color="#ffffff",
-        max_color="#000000",
-        fill_opacity=1.0,
-        stroke_color="none",
-        stroke_width=0,
-        identity=0,
-        sequence_length_dict={},
-    )
-    match_group = PairWiseMatchGroup(
-        canvas_config,
-        blast_config.sequence_length_dict,
-        comparison_df,
-        40,
-        1,
-        blast_config,
-        [_build_record(), _build_record()],
-        align_center=canvas_config.align_center,
+    match_group = ribbon_group(
+        [_build_record(), _build_record()], comparison_df, px_per_bp=2.5, fill_opacity=1.0
     ).get_group()
 
     drawing = Drawing(debug=False)
@@ -559,6 +530,28 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
     svg = drawing.tostring()
 
     assert svg.index('data-identity-factor="0.1"') < svg.index('data-identity-factor="0.95"')
+
+
+@pytest.mark.linear
+def test_pairwise_match_group_reads_its_records_from_their_placements() -> None:
+    """The ribbons' record indices are the placements' records, the ones the ribbons are drawn
+    between, whatever the comparison's position in the drawing."""
+
+    records = [SeqRecord(Seq("A" * 400), id=f"record_{index}") for index in range(3)]
+    match_group = ribbon_group(
+        records,
+        pd.DataFrame.from_records([{"identity": 95, "qstart": 1, "qend": 80, "sstart": 1, "send": 80}]),
+        px_per_bp=2.5,
+        subject_index=2,
+        fill_opacity=1.0,
+    ).get_group()
+
+    assert match_group.attribs["data-query-record-index"] == 0
+    assert match_group.attribs["data-subject-record-index"] == 2
+    path = match_group.elements[0].tostring()
+    assert 'data-query-record-index="0"' in path
+    assert 'data-subject-record-index="2"' in path
+    assert 'data-subject-record-id="record_2"' in path
 
 
 @pytest.mark.linear
@@ -576,3 +569,20 @@ def test_comparison_rows_refuse_an_ordered_table_past_the_last_record(source: st
     with pytest.raises(ValidationError, match="outside the loaded records: query=#2, subject=#3, record_count=2") as caught:
         linear_comparison_rows(blast, protein, (), thresholds, records, (0, 1), False)
     assert caught.value.diagnostic["code"] == "COMPARISON_INPUT"
+
+
+def test_comparison_table_reads_each_value_as_the_nearest_double(tmp_path: Path) -> None:
+    # OV-1534: pandas before 3.1 read "2.41e-73" as 2.4100000000000003e-73 and
+    # 3.1 reads it exactly, so the drawing's data-evalue followed the pandas version.
+    from gbdraw.io.comparisons import read_comparison_table
+
+    written = ("2.41e-73", "6.69e-59", "5.84e-79")
+    table = tmp_path / "hits.tsv"
+    table.write_text(
+        "".join(f"q\ts\t42.963\t135\t77\t0\t1\t135\t1\t135\t{evalue}\t60.6\n" for evalue in written),
+        encoding="utf-8",
+    )
+
+    frame = read_comparison_table(table)
+
+    assert [repr(value) for value in frame["evalue"]] == list(written)

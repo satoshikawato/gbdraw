@@ -1,4 +1,5 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
 import { setDpiInPng } from '../utils/png.js';
 import {
   ensureSvgDefs,
@@ -148,7 +149,7 @@ const svgFontPort = ({ embedFonts, embedInSvg }) => (embedInSvg && embedFonts ? 
  * @returns {string[]}
  */
 const refusedFontWarnings = (families) => families.map((family) => (
-  `Font ${family} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where ${family} is installed.`
+  t('Font {family} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where {family} is installed.', { family })
 ));
 
 /**
@@ -418,6 +419,18 @@ export const normalizeTextBaselinesForPdf = (svg) => {
   });
 };
 
+// svg2pdf draws a `<use>` of a text as a filled copy of its letters, whatever
+// the `<use>` paints: a label's halo (a white stroke of its text) would print
+// each label twice, in black. The PDF draws labels without halos (LP-D102).
+/** @param {ParentNode} svg */
+const dropTextUsesForPdf = (svg) => {
+  svg.querySelectorAll('use').forEach((use) => {
+    const href = use.getAttribute('href') || use.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
+    const target = href.startsWith('#') ? svg.querySelector(`[id="${CSS.escape(href.slice(1))}"]`) : null;
+    if (target?.tagName.toLowerCase() === 'text') use.remove();
+  });
+};
+
 /** @param {SVGSVGElement | null} svg */
 const prepareSvgForPdf = (svg) => {
   if (!svg) {
@@ -433,6 +446,9 @@ const prepareSvgForPdf = (svg) => {
   }
 
   const staging = document.createElement('div');
+  // The figure's text is English in every UI language: the browser measures
+  // it, and picks fallback fonts, as English (as the preview does).
+  staging.lang = 'en';
   staging.style.position = 'absolute';
   staging.style.left = '-10000px';
   staging.style.top = '-10000px';
@@ -442,6 +458,7 @@ const prepareSvgForPdf = (svg) => {
 
   try {
     moveGradientsToDefs(clone);
+    dropTextUsesForPdf(clone);
     flattenTextPathsForPdf(clone);
     normalizeTextBaselinesForPdf(clone);
   } catch (error) {

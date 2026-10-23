@@ -150,8 +150,8 @@ test('the annotation TSV writes a selected feature by its current record positio
   expect([cell('record'), cell('feature_selector'), cell('envelope'), cell('circular_path')])
     .toEqual(['#1', `hash=${X.identity}`, 'outer_bounds', 'shortest']);
   await expect(panel(page).getByRole('status')).toHaveText(
-    '1 annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. '
-      + 'They name the same features only while the record order stays as drawn.'
+    '1 annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. '
+      + 'It names the same feature only while the record order stays as drawn.'
   );
 
   // The table imported back draws the same annotation in the same placement.
@@ -341,8 +341,8 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
-  await expect(page.locator('[data-app-notice] li')).toHaveText(['1 annotation(s) from an older Session named a feature by '
-    + 'hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.']);
+  await expect(page.locator('[data-app-notice] li')).toHaveText(['1 annotation from an older Session named a feature by '
+    + 'hash=. It now names that feature by its source, so it stays on the feature when the crop or orientation changes.']);
   const testa = await page.evaluate(async () => {
     const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
     return getCommittedCanonicalRenderRequest().records[0].recordKey;

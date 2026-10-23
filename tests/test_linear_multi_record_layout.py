@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 
 import pandas as pd
 import pytest
@@ -28,10 +29,12 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.linear_multi_record import (
+    LinearLayoutPlan,
     LinearRecordMeasurement,
     RecordKey,
     record_pairs_between_adjacent_rows,
     resolve_record_row_positions,
+    solve_linear_horizontal_layout,
     solve_linear_layout,
 )
 from gbdraw.canvas.linear import LinearCanvasConfigurator
@@ -88,12 +91,33 @@ def _translate(group: ET.Element) -> tuple[float, float]:
     )
 
 
+def _solve(
+    measurements: Sequence[LinearRecordMeasurement],
+    rows: Sequence[int],
+    *,
+    available_width: float,
+    record_gap_px: float = 24.0,
+    align_center: bool = True,
+    **stacking: object,
+) -> LinearLayoutPlan:
+    """The horizontal solve, then the row stacking, as the assembler runs them."""
+
+    horizontal = solve_linear_horizontal_layout(
+        measurements,
+        rows,
+        available_width=available_width,
+        record_gap_px=record_gap_px,
+        align_center=align_center,
+    )
+    return solve_linear_layout(measurements, horizontal, **stacking)  # type: ignore[arg-type]
+
+
 def test_shared_scale_and_fixed_gap_for_two_by_two_layout() -> None:
     measurements = tuple(
         LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length)
         for index, length in enumerate((1000, 500, 800, 700))
     )
-    plan = solve_linear_layout(
+    plan = _solve(
         measurements,
         (0, 0, 1, 1),
         available_width=1024,
@@ -101,10 +125,31 @@ def test_shared_scale_and_fixed_gap_for_two_by_two_layout() -> None:
         align_center=False,
     )
 
-    assert plan.px_per_bp == pytest.approx(1000 / 1500)
+    assert plan.placement_for_index(0).px_per_bp == pytest.approx(1000 / 1500)
     assert plan.placement_for_index(0).sequence_width == pytest.approx(2000 / 3)
     assert plan.placement_for_index(1).x == pytest.approx((2000 / 3) + 24)
     assert plan.placement_for_index(2).sequence_width == pytest.approx(1600 / 3)
+
+
+@pytest.mark.parametrize(
+    "stacked",
+    [
+        pytest.param(lambda items: items[:1], id="missing"),
+        pytest.param(lambda items: items + items[:1], id="duplicate"),
+        pytest.param(
+            lambda items: (items[0], LinearRecordMeasurement(1, RecordKey("other"), 500)), id="other-record"
+        ),
+    ],
+)
+def test_row_stacking_takes_exactly_the_horizontally_placed_records(stacked) -> None:
+    measurements = (
+        LinearRecordMeasurement(0, RecordKey("key-0"), 1000),
+        LinearRecordMeasurement(1, RecordKey("key-1"), 500),
+    )
+    horizontal = solve_linear_horizontal_layout(measurements, (0, 1), available_width=1024)
+
+    with pytest.raises(ValueError, match="horizontal places"):
+        solve_linear_layout(stacked(measurements), horizontal)
 
 
 def test_non_contiguous_rows_and_token_column_order_are_normalized() -> None:
@@ -146,12 +191,51 @@ def test_layout_rejects_gap_that_consumes_available_width() -> None:
         LinearRecordMeasurement(1, RecordKey("b"), 10),
     )
     with pytest.raises(ValidationError, match="record_count=2"):
-        solve_linear_layout(
+        solve_linear_horizontal_layout(
             measurements,
             (0, 0),
             available_width=24,
             record_gap_px=24,
         )
+
+
+@pytest.mark.parametrize("available_width", (1000.0, 997.3))
+@pytest.mark.parametrize("align_center", (True, False))
+def test_records_alone_in_their_rows_keep_their_share_of_the_longest_record(
+    available_width: float, align_center: bool
+) -> None:
+    """One horizontal solve places every record, also one alone in its row: its width is its share of
+    the longest record, and centring splits the rest evenly, with the arithmetic the drawings had."""
+
+    lengths = (1000, 777, 333, 4097)
+    longest = max(lengths)
+    horizontal = solve_linear_horizontal_layout(
+        [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length) for index, length in enumerate(lengths)],
+        tuple(range(len(lengths))),
+        available_width=available_width,
+        align_center=align_center,
+    )
+
+    for index, length in enumerate(lengths):
+        placement = horizontal.placement_for_index(index)
+        width = available_width * length / longest
+        assert placement.sequence_width == width
+        assert placement.x == (available_width * ((longest - length) / longest) / 2 if align_center else 0.0)
+        assert placement.px_per_bp == width / length
+
+
+def test_normalized_records_fill_their_rows() -> None:
+    measurements = [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length) for index, length in enumerate((1000, 333))]
+    horizontal = solve_linear_horizontal_layout(
+        measurements, (0, 1), available_width=997.3, normalize_length=True
+    )
+
+    assert [(p.x, p.sequence_width, p.px_per_bp) for p in horizontal.placements] == [
+        (0.0, 997.3, 997.3 / 1000),
+        (0.0, 997.3, 997.3 / 333),
+    ]
+    with pytest.raises(ValidationError, match="normalize_length"):
+        solve_linear_horizontal_layout(measurements, (0, 0), available_width=997.3, normalize_length=True)
 
 
 def test_comparison_anchor_can_overlay_x_disjoint_record_header() -> None:
@@ -180,7 +264,7 @@ def test_comparison_anchor_can_overlay_x_disjoint_record_header() -> None:
             ),
         ),
     )
-    plan = solve_linear_layout(
+    plan = _solve(
         measurements,
         (0, 1),
         available_width=100,
@@ -215,7 +299,7 @@ def test_multi_record_solver_reserves_comparison_only_on_active_boundary() -> No
         for index in range(3)
     )
 
-    plan = solve_linear_layout(
+    plan = _solve(
         measurements,
         (0, 1, 2),
         available_width=100,

@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 // The fixture as both drawings (PD-OI-090: one History per drawing), with a
@@ -136,6 +137,56 @@ const createLayoutPreferences = () => ({
   assert.deepEqual(await history.redo(), busy);
   assert.equal(value, 0);
   assert.equal(history.getRedoCount(), 1);
+}
+
+// OV-1339: the enabled state reads the availability the action reads. While
+// the top step is busy, Undo (or Redo) and its label are off; they come back,
+// reactively and without another History change, when the busy state ends.
+// The header buttons' computed is built as app-setup.js builds it, over the
+// vendored Vue.
+{
+  const vueContext = vm.createContext({});
+  vm.runInContext(
+    await readFile(join(repoRoot, 'gbdraw', 'web', 'vendor', 'vue', 'vue.global.prod.js'), 'utf8'),
+    vueContext
+  );
+  const Vue = vm.runInContext('Vue', vueContext);
+  let value = 0;
+  const busySource = Vue.ref(false);
+  const busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => { value = snapshot.value; };
+  const history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState,
+    makeRef: Vue.ref,
+    stepAvailability: (step) => (step.type === 'intent' && busySource.value ? busy : null)
+  });
+  const canUndoHistory = Vue.computed(() => { void history.revision.value; return history.canUndo(); });
+  const canRedoHistory = Vue.computed(() => { void history.revision.value; return history.canRedo(); });
+  await history.captureBaseline('initial');
+  await history.runUndoable('Increment', () => { value = 1; });
+  assert.equal(canUndoHistory.value, true);
+  busySource.value = true;
+  assert.equal(history.canUndo(), false);
+  assert.equal(history.undoLabel(), '');
+  assert.equal(canUndoHistory.value, false);
+  assert.deepEqual(await history.undo(), busy);
+  assert.equal(history.getUndoCount(), 1);
+  busySource.value = false;
+  assert.equal(canUndoHistory.value, true);
+  assert.equal(history.undoLabel(), 'Increment');
+  assert.equal(await history.undo(), true);
+  assert.equal(canRedoHistory.value, true);
+  busySource.value = true;
+  assert.equal(history.canRedo(), false);
+  assert.equal(history.redoLabel(), '');
+  assert.equal(canRedoHistory.value, false);
+  busySource.value = false;
+  assert.equal(canRedoHistory.value, true);
+  assert.equal(history.redoLabel(), 'Increment');
 }
 
 {
@@ -531,8 +582,10 @@ const createLayoutPreferences = () => ({
     retainedBytes: 80,
     fileIds: []
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxBytes: 100,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => ({}),
@@ -552,8 +605,15 @@ const createLayoutPreferences = () => ({
     return { status: 'ok' };
   }, { shouldCommit: (result) => result.status === 'ok' });
   assert.equal(history.getDiagnostics().artifactReplacementHistoryEntryCount, 1);
-  assert.equal(history.canUndo(), false);
-  assert.match(history.historyLimitMessage.value, /discarded/);
+  // OV-1260: the Generate just taken stays undoable although it alone is over
+  // the limit; it drops no older step, so nothing is announced.
+  assert.equal(history.canUndo(), true);
+  assert.deepEqual(limitMessages, []);
+  assert.equal(await history.undo(), true);
+  assert.equal(artifact.identity.compactSignature, 'a');
+  assert.equal(history.canRedo(), true, 'the step just undone stays redoable');
+  assert.equal(await history.redo(), true);
+  assert.equal(artifact.identity.compactSignature, 'b');
 }
 
 {
@@ -655,8 +715,10 @@ const createLayoutPreferences = () => ({
   const applyState = async (snapshot) => {
     value = snapshot.value;
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxActions: 2,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -670,6 +732,9 @@ const createLayoutPreferences = () => ({
     });
   }
   assert.equal(history.getUndoCount(), 2);
+  // OV-1365: the step-count window drops its oldest step silently; only the
+  // byte limit is announced.
+  assert.deepEqual(limitMessages, []);
   await history.undo();
   assert.equal(value, 2);
   await history.undo();
@@ -683,8 +748,10 @@ const createLayoutPreferences = () => ({
   const applyState = async (snapshot) => {
     value = snapshot.value;
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxBytes: 220,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -692,11 +759,19 @@ const createLayoutPreferences = () => ({
   });
 
   await history.captureBaseline('initial');
+  await history.runUndoable('Small edit', () => {
+    value = 'tiny';
+  });
+  assert.equal(history.getUndoCount(), 1);
   await history.runUndoable('Large state', () => {
     value = 'x'.repeat(1000);
   });
-  assert.equal(history.canUndo(), false);
-  assert.equal(history.historyLimitMessage.value.length > 0, true);
+  // OV-1260: the newest step stays; the older one drops and the drop is announced.
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Large state');
+  assert.deepEqual(limitMessages, ['Older undo history was discarded to stay within the history limit.']);
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 'tiny');
 }
 
 {
@@ -3080,6 +3155,36 @@ for (const previousSuppressed of [false, true]) {
   console.log('history action remainder tests passed');
 }
 
+// OV-1260: a kept rerender that grows the last step over the byte limit
+// drops the Redo steps, and the drop is announced as an Undo drop is.
+{
+  let rules = 0;
+  let figure = 'drawn-0';
+  const limitMessages = [];
+  const history = createHistoryManager({
+    maxBytes: 1000,
+    onHistoryLimit: (message) => limitMessages.push(message),
+    buildIntent: () => ({ rules }),
+    applyIntent: (intent) => { rules = intent.rules; },
+    buildCheckpoint: () => ({ rules, figure }),
+    applyCheckpoint: (checkpoint) => { rules = checkpoint.rules; figure = checkpoint.figure; }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change feature color', () => {
+    rules = 1;
+    figure = 'shown-1';
+  }, { drawn: { before: () => true, change: false } });
+  await history.runUndoable('Edit setting', () => { rules = 2; });
+  await history.undo();
+  assert.equal(history.getRedoCount(), 1);
+  assert.deepEqual(limitMessages, []);
+  figure = 'x'.repeat(2000);
+  assert.equal(await history.keepRedrawnResult(), true);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.undoLabel(), 'Change feature color');
+  assert.deepEqual(limitMessages, ['Redo history was discarded to stay within the history limit.']);
+}
+
 // D-24 (OV-731): a checkpoint step's caller says whether the figure of each
 // side is the one its state draws, and Undo and Redo pass that on. A side not
 // yet drawn takes the figure of a rerender drawn from the current state (D-36)
@@ -3406,10 +3511,12 @@ for (const previousSuppressed of [false, true]) {
     const shown = ref('linear');
     const values = { circular: '', linear: '' };
     const files = { circular: null, linear: null };
+    const notices = [];
     const router = createHistoryRouter({
       drawingIds,
       activeDrawingId: () => shown.value,
       maxBytes,
+      onHistoryLimit: (message) => { notices.push(message); },
       sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
       estimateFileBytes: fileStore.estimateBytes,
       retainOnlyFiles: fileStore.retainOnly,
@@ -3425,7 +3532,7 @@ for (const previousSuppressed of [false, true]) {
         return { buildIntent: buildState, applyIntent: applyState, buildCheckpoint: buildState, applyCheckpoint: applyState };
       }
     });
-    return { router, shown, values, files, fileStore };
+    return { router, shown, values, files, fileStore, notices };
   };
 
   // The size of one step, measured with no limit.
@@ -3436,7 +3543,7 @@ for (const previousSuppressed of [false, true]) {
   assert.ok(stepBytes > 0);
 
   // Two steps exceed the budget; one fits. The hidden drawing's step goes.
-  const { router, shown, values, files, fileStore } = makeRouter(Math.floor(stepBytes * 1.5));
+  const { router, shown, values, files, fileStore, notices } = makeRouter(Math.floor(stepBytes * 1.5));
   files.linear = fileA;
   await router.captureBaseline();
   // The file's id as History names it (`describeFile` gives a released file a new one).
@@ -3448,7 +3555,7 @@ for (const previousSuppressed of [false, true]) {
   await router.runUndoable('Circular edit', () => { values.circular = 'y'.repeat(400); });
   assert.equal(router.canUndo(), true, 'the shown drawing keeps its step');
   assert.equal(router.managerOf('linear').canUndo(), false, 'the hidden drawing loses its step first');
-  assert.equal(router.managerOf('linear').historyLimitMessage.value.length > 0, true);
+  assert.deepEqual(notices, ['Older undo history was discarded to stay within the history limit.']);
   assert.equal(fileStore.has(fileAId), false, 'no manager names file A any more');
 
   // A file stays while any manager names it: the Linear step names file B,
@@ -3466,8 +3573,8 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(files.linear?.name, 'b.gb');
   assert.equal(values.circular, 'z', 'Undo in Linear leaves Circular unchanged');
 
-  // D-15-50 (4): the notice names undo history, so a pass that drops only the
-  // hidden drawing's Redo steps shows none.
+  // OV-1365: a pass that drops only the hidden drawing's Redo steps names the
+  // redo history.
   const redoOnly = makeRouter(Math.floor(stepBytes * 1.5));
   await redoOnly.router.captureBaseline();
   await redoOnly.router.runUndoable('Linear edit', () => { redoOnly.values.linear = 'x'.repeat(400); });
@@ -3476,7 +3583,7 @@ for (const previousSuppressed of [false, true]) {
   redoOnly.shown.value = 'circular';
   await redoOnly.router.runUndoable('Circular edit', () => { redoOnly.values.circular = 'y'.repeat(400); });
   assert.equal(redoOnly.router.managerOf('linear').canRedo(), false, 'the hidden drawing loses its Redo step');
-  assert.equal(redoOnly.router.managerOf('linear').historyLimitMessage.value, '', 'a Redo-only drop shows no notice');
+  assert.deepEqual(redoOnly.notices, ['Redo history was discarded to stay within the history limit.']);
 
   // A3 review Low 4: the order follows the shown drawing, not the drawing
   // that commits. A step a hidden drawing records drops its own steps first.

@@ -221,7 +221,7 @@
         "gbdraw/web/js/app/legend/layout-actions.js:createLegendLayoutActions"
       ],
       "vector": "tests/fixtures/legend_layout_vectors.json",
-      "reason": "A Legend edit lays out in the browser with no Generate; 462 measurement and 132 Legend cases from Python pin the port (difference 0).",
+      "reason": "A Legend edit lays out in the browser with no Generate; 462 measurement and 140 Legend cases from Python pin the port (difference 0).",
       "retireWhen": "incremental rendering lays out an edited Legend in Python (OV-165 part 2)",
       "source": "inventory C section B (Legend measurement and layout; OV-127, OV-143, OV-165, #940)"
     },
@@ -256,18 +256,20 @@
     },
     {
       "id": "vector:tests/fixtures/legend_track_slot_rows.json",
-      "concern": "Track-slot Legend rows, slot ids and fills (OV-484)",
+      "concern": "Track-slot Legend rows, slot ids and fills (OV-484), and the Depth rows a request draws (OV-1198)",
       "pythonOwner": [
         "gbdraw/legend/table.py:_generated_legend_rows",
         "gbdraw/diagrams/circular/assemble.py:_sync_legend_table_for_circular_slots",
-        "gbdraw/diagrams/linear/assemble.py:_sync_legend_table_for_linear_slots"
+        "gbdraw/diagrams/linear/assemble.py:_sync_legend_table_for_linear_slots",
+        "gbdraw/analysis/depth_tracks.py:sync_depth_track_legend_entries"
       ],
       "jsOwner": [
+        "gbdraw/web/js/services/track-legend-rows.js:drawnTracks",
         "gbdraw/web/js/services/track-legend-rows.js:trackLegendRows",
         "gbdraw/web/js/services/track-legend-rows.js:trackRowColor"
       ],
       "vector": "tests/fixtures/legend_track_slot_rows.json",
-      "reason": "A track-slot edit shows its Legend rows before Generate; the vector pins them.",
+      "reason": "A track-slot edit shows its Legend rows before Generate, and a drawn track the draft hides takes its rows off the live Result (OV-1198, OV-1215); the vector pins them.",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },

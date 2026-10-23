@@ -3362,7 +3362,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     var fieldSelect = createXhtmlNode('select', {
       className: 'gfs-select',
-      'aria-label': 'Search field',
+      'aria-label': 'Field to search',
       'data-search-field': 'true'
     });
     var searchFieldOptions = [
@@ -6698,6 +6698,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function closestAnnotation(node) {
     while (node && node !== svg) {
       if (node.matches && node.matches(ANNOTATION_SELECTOR)) return node;
+      var frontOf = node.getAttribute ? node.getAttribute('data-gbdraw-region-label-for') : null;
+      if (frontOf) {
+        var owner = svg.ownerDocument.getElementById(frontOf);
+        return owner && svg.contains(owner) && owner.matches(ANNOTATION_SELECTOR) ? owner : null;
+      }
       node = node.parentNode;
     }
     return null;

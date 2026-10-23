@@ -17,6 +17,9 @@ class SessionMigrationReport:
     protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
     protein_id_map: Mapping[str, str] | None = None
     warnings: tuple[str, ...] = ()
+    # Stored protein results of a reversed record that matched neither frame
+    # (OV-1145): a replay draws them as stored; writing them as Session 48 fails.
+    unconverted_protein_results: tuple[str, ...] = ()
 
 
 __all__ = ["SessionMigrationReport"]

@@ -239,7 +239,7 @@ test('a Linear File clear leaves a manual Depth row whose row issue stops Genera
       issue: app.linearTrackSlotIssue(app.adv.linear_track_slots[index], index)
     };
   });
-  expect(state).toMatchObject({ width: 1, issue: "Linear Depth track 'depth' has no logical Depth source." });
+  expect(state).toMatchObject({ width: 1, issue: 'This row has no Depth source.' });
   expect(await depthRows(page, 'linear_track_slots')).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
   await generateAndWaitForResult(page, { expectedStatus: 'error' });
   expect(await page.evaluate(() => {
@@ -264,7 +264,7 @@ test('Add Depth TSV series keeps a disabled Linear Depth row disabled', async ({
     slot.params = { ...slot.params, legend_label: 'Coverage A' };
   });
   const before = await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)));
-  await page.getByRole('button', { name: 'Add Depth TSV series from file 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Depth TSV series to all files (file 1)', exact: true }).click();
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].depth.length)).toBe(2);
   expect(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)))).toEqual(before);

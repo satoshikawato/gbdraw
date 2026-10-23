@@ -30,7 +30,7 @@ const editedColors = () => ({
 // A drawing's palette slice, with its handle under `slices`.
 const drawingOf = (members) => {
   const { handle, view } = PALETTE_SLICE.create(members);
-  return { ...view, slices: { palette: handle } };
+  return { ...view, fileImports: {}, slices: { palette: handle } };
 };
 
 const setup = ({ colors = editedColors(), instant = true } = {}) => {

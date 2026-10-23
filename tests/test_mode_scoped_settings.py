@@ -85,7 +85,7 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
     assert MODE_SCOPED_SETTINGS_REVISION == 5
     with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
         table = list(csv.DictReader(handle, delimiter="\t"))
-    assert len(table) == 277
+    assert len(table) == 280
     rows = set()
     for row in table:
         if row["migrate"] == "-":
@@ -357,7 +357,7 @@ def session_46(written_session_46: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_session_46_reads_two_mode_slices_and_rejects_session_45(session_46: dict[str, Any]) -> None:
-    assert CURRENT_SESSION_VERSION == 47 and 45 not in SUPPORTED_SESSION_VERSIONS
+    assert CURRENT_SESSION_VERSION == 48 and 45 not in SUPPORTED_SESSION_VERSIONS
     assert set(session_46["modes"]) == {"circular", "linear"}
     validate_session(session_46)
     with pytest.raises(ValidationError, match="Unsupported session version: 45"):
@@ -462,6 +462,32 @@ def test_cli_resave_keeps_a_session_46_slices(tmp_path: Path) -> None:
     assert [payload["version"] for payload in written] == [CURRENT_SESSION_VERSION] * 2
     assert written[1]["modes"] == written[0]["modes"]
     assert "config" not in written[1] and "features" not in written[1]
+
+
+def test_session_48_keeps_what_the_file_cards_imported_through_a_cli_resave(
+    session_46: dict[str, Any], tmp_path: Path
+) -> None:
+    # OV-1280 (D-19, D-ORIGIN-2): a slice stores what each file card's file
+    # put into it, so Remove on the card takes it back; the CLI re-save keeps
+    # the Web writer's marks (the positive fixture's) as stored.
+    written = _read("file-card-imports-circular.v48.gbdraw-session.json.gz")
+    validate_session(written)
+    marks = {
+        key: written["modes"]["circular"]["config"][key]
+        for key in ("rules", "qualifierPriorityRules", "whitelist", "blacklistText", "fileImports")
+    }
+    session_46["modes"]["linear"]["config"].update(copy.deepcopy(marks))
+    validate_session(session_46)
+    source = tmp_path / "marked.gbdraw-session.json"
+    source.write_text(json.dumps(session_46), encoding="utf-8")
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    linear_main(
+        ["--session", str(source), "--output", str(tmp_path / "replay"), "--format", "svg",
+         "--session_output", str(sidecar)]
+    )
+
+    config = load_session_document(sidecar).to_dict()["modes"]["linear"]["config"]
+    assert {key: config[key] for key in marks} == marks
 
 
 def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_targets(

@@ -11,7 +11,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
     Object.freeze({minVersion: 31, versions: Object.freeze([31, 32, 33]), root: "SessionChecked31"}),
     Object.freeze({minVersion: 39, versions: Object.freeze([39]), root: "SessionChecked39"}),
     Object.freeze({minVersion: 40, versions: Object.freeze([40, 41, 42, 44]), root: "SessionChecked40"}),
-    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47]), root: "SessionChecked46"})
+    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47, 48]), root: "SessionChecked46"})
   ]),
   types: Object.freeze({
     CheckedSessionResult: Object.freeze({
@@ -374,7 +374,9 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         inner_label_y_offset: Object.freeze({kind: "unknown"}),
         keep_full_definition_with_plot_title: Object.freeze({kind: "unknown"}),
         label_font_size: Object.freeze({kind: "unknown"}),
+        label_line: Object.freeze({kind: "unknown"}),
         label_placement: Object.freeze({kind: "unknown"}),
+        label_protection: Object.freeze({kind: "unknown"}),
         label_rendering: Object.freeze({kind: "unknown"}),
         label_rotation: Object.freeze({kind: "unknown"}),
         legend_box_size: Object.freeze({kind: "unknown"}),
@@ -472,7 +474,9 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         "inner_label_y_offset",
         "keep_full_definition_with_plot_title",
         "label_font_size",
+        "label_line",
         "label_placement",
+        "label_protection",
         "label_rendering",
         "label_rotation",
         "legend_box_size",
@@ -594,6 +598,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         circularConservation: Object.freeze({kind: "unknown"}),
         colors: Object.freeze({kind: "unknown"}),
         featurePlacementOverrides: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
+        fileImports: Object.freeze({kind: "unknown"}),
         filterMode: Object.freeze({kind: "unknown"}),
         form: Object.freeze({kind: "ref", name: "CheckedSessionModeSliceConfigForm"}),
         importedComparisonResolution: Object.freeze({kind: "unknown"}),
@@ -617,6 +622,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         "circularConservation",
         "colors",
         "featurePlacementOverrides",
+        "fileImports",
         "filterMode",
         "form",
         "importedComparisonResolution",
@@ -727,7 +733,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         runMetadata: Object.freeze({kind: "unknown"}),
         cliInvocation: Object.freeze({kind: "unknown"}),
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
-        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47])}),
+        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47, 48])}),
         createdAt: Object.freeze({kind: "unknown"}),
         renderRequest: Object.freeze({kind: "unknown"}),
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),

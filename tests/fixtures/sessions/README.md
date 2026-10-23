@@ -228,6 +228,15 @@ became the file name without the extension (D-03,
 `test_losat_circular_rings.py`). The commands and hashes are in
 `precomputed-ring.provenance.json`.
 
+`legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz` and
+`legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz` are Linear and
+Circular CLI Sessions written by release tag `0.13.0` with `--label_font_size 0`
+(and, Circular, `--legend_font_size 0`) in `cliInvocation`. That writer drew
+them. They are the positive fixtures for the legacy replay, which reads a
+stored font size of 0 or less as Auto with the Web's notice (OV-1282, D-PYB-7,
+`test_stored_font_size.py`). The commands and hashes are in
+`legacy-font-size.provenance.json`.
+
 `cli-linear-tables.v40-early.gbdraw-session.json.gz`,
 `cli-linear-tables.v40.gbdraw-session.json.gz`,
 `cli-linear-tables.v41.gbdraw-session.json.gz`,
@@ -289,3 +298,46 @@ fixture, compressed with `gzip -n -9`. It is the version 29 base of the
 admission description's soundness test (`tests/test_session_contract.py`). Its
 decompressed SHA-256 is
 `71b923ce1a2b8fb587ed394e51571e5b15f289df58574fbc84734a1b2042b220`.
+
+`BGC0000708-BGC0000713.v47.gbdraw-session.json.gz` is the Gallery Session of
+first-parent `main` commit `150d26706` (bytes unchanged, `gzip -n -9`; see its
+`.provenance.json`). Its record 5 is reverse complemented, and Session 47
+stored that record's LOSATP table (`comparison-canonical-protein-4`) and its
+`orthogroupResult` members in the drawn frame.
+`majanivirus_collinear-rc.v47.gbdraw-session.json.gz` holds two records of the
+majanivirus Gallery Session, the second reverse complemented, with the
+`collinearityResult` that `main`'s Web converter (the Python of
+`python-helpers.js` at `150d26706`, run natively) computes from that pair's raw
+LOSATP entries, stored as `main`'s Web Session writer lays it out;
+`tools/build_main_collinear_v47_fixture.py` rebuilds it from a worktree at
+`150d26706` (command in its `.provenance.json`). Both are the positive fixtures of the
+Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.py`
+replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
+`e8b460772` drew (equal to `main`'s replay); the BGC replay was redrawn after the
+Linear label packing changed its record rows and again after the label boxes
+added white boxes to its turned labels, whose text is unchanged, once more for float last bits when one
+owner placed the Linear records, and when `above_feature` labels kept their row gap
+(`.v47.provenance.json`), and `tests/test_api_session.py`
+upgrades and re-saves the BGC Session.
+
+`BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
+`BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz` hold the first two
+records of the BGC Gallery Session, the second reverse complemented, with the
+pairwise LOSATP table that `main`'s Web writer computes from that pair's raw
+LOSATP entry (the Python of `python-helpers.js` and the JavaScript of
+`session-request.js` `addCanonicalTable` at `cdd310134` (Session 39) and
+`7aad9e3e0` (Session 40 before `3bca0e8d9`), run natively), stored as
+`comparison-resolved-1`, with the Result of `main`'s CLI replay.
+`tools/build_main_pairwise_rc_fixture.py` rebuilds each byte for byte (command
+in its `.provenance.json`). The table names the reversed record's drawn-frame
+features in `*_feature_svg_id` and has no `*_view_feature_svg_id` column; both
+are the positive fixtures of that reading (OV-1183) and of the Session 39 Web
+Load conversion (OV-1181): `tests/test_session_compat.py` converts and replays
+them.
+
+`file-card-imports-circular.v48.gbdraw-session.json.gz` is a Web **Save
+Session** download of the current writer (Session 48, OV-1280, D-ORIGIN-2):
+Circular holds no genome, the five file cards, and hand edits made before and
+after each load. It pins the rows each card marks, the Default colors and
+Blacklist words in `config.fileImports`, and the rows a hand edit made the
+user's. The steps and inputs are in `file-card-imports.provenance.json`.

@@ -541,6 +541,13 @@ def render_staged_canonical_web_request(
     )
 
 
+def _require_resource_map(resource_paths: object) -> None:
+    """The one check that a staged resource map is an object (render and helper paths)."""
+
+    if not isinstance(resource_paths, Mapping):
+        raise ValidationError("The staged Web render resource map must be an object.")
+
+
 @web_error_stage("resource-staging")
 def _render_staged_canonical_web_request_with_prepared_inputs(
     payload: Mapping[str, Any],
@@ -555,8 +562,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _held_feature_catalog_revision: str | None = None,
     _held_segments: AbstractSet[str] = frozenset(),
 ) -> WebRenderReply:
-    if not isinstance(resource_paths, Mapping):
-        raise ValidationError("The staged Web render resource map must be an object.")
+    _require_resource_map(resource_paths)
     workspace_path = Path(workspace)
     resource_directory = workspace_path / "resources"
     cache_directory = workspace_path.parent / "gbdraw-web-render-resource-cache"
@@ -598,7 +604,11 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
                 raise ValidationError(
                     f"Staged Web render resource {resource_id!r} is outside its workspace."
                 )
-            validated_paths[resource_id] = path
+            # The request reads the file the Worker keeps for this resource's
+            # token, not the workspace link to it: a cached value that names
+            # its source then names a file that lives as long as its key does
+            # (OV-1581), and the workspace is removed below.
+            validated_paths[resource_id] = resolved
         validated_identities = _validate_prepared_resource_identities(
             _resource_identities,
             resource_paths=validated_paths,
@@ -645,6 +655,36 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
                     raise ValidationError(
                         "The temporary staged Web render workspace could not be cleaned up."
                     ) from cleanup_error
+
+
+@contextmanager
+def prepared_input_lookup(
+    cache: PreparedBiologicalInputCache,
+    *,
+    resource_paths: Mapping[str, str | Path],
+    resource_identities: Mapping[str, Mapping[str, object]],
+) -> Iterator[None]:
+    """Let a Worker helper read the inputs the last Generate prepared.
+
+    A helper that plans the request the Worker staged for it (alignment
+    projection, Feature Edits TSV, stored protein frames) passes the identities
+    of its manifest, validated as a render's are. Lookups under them hit what
+    a Generate stored; a miss parses once for the whole call and is not kept;
+    nothing is published, pruned or evicted (``transaction(read_only=True)``).
+    """
+
+    _require_resource_map(resource_paths)
+    paths = {resource_id: Path(raw_path) for resource_id, raw_path in resource_paths.items()}
+    identities = _validate_prepared_resource_identities(
+        resource_identities, resource_paths=paths, cache_requested=True,
+    )
+    assert identities is not None
+    with cache.transaction(
+        resource_paths={paths[resource_id]: identity for resource_id, identity in identities.items()},
+        diagnostics=None,
+        read_only=True,
+    ):
+        yield
 
 
 def _validate_prepared_resource_identities(
@@ -739,6 +779,7 @@ def _validate_prepared_input_retention(
 
 
 __all__ = [
+    "prepared_input_lookup",
     "render_canonical_web_request",
     "render_embedded_canonical_web_request",
     "render_staged_canonical_web_request",

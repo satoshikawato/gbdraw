@@ -44,6 +44,7 @@ from gbdraw.api.session_compat import (
     adapt_session_request,
     canonical_payload_for_session_decode,
     render_session_compatible_request,
+    replace_resource_bytes,
     rewrite_protein_artifact_references,
 )
 from gbdraw.exceptions import ValidationError
@@ -68,7 +69,11 @@ from gbdraw.session_io import (
     migrate_session_hash_rules,
     source_hash_selector_value,
 )
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA,
+    CanonicalRequestEncodingError,
+    encode_canonical_request,
+)
 
 _RELEASED_SCHEMA_V2_SESSION = (
     Path(__file__).parent
@@ -2083,3 +2088,341 @@ def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path)
     assert ">nan<" not in second_svg
     # The replay of the re-saved Session draws the figure the first replay drew.
     assert second_svg == first_svg
+
+
+# OV-1145: Sessions up to 47 stored the protein results of a reverse-
+# complemented Linear record in the drawn frame; Session 48 stores them in the
+# search frame. Each fixture is a Session 47 that main wrote, with the SVG the
+# base code draws for it (`.v47.provenance.json`).
+_V47_PROTEIN_SESSIONS = ("BGC0000708-BGC0000713", "majanivirus_collinear-rc")
+_SESSION_FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
+
+
+def _v47_protein_session(name: str, tmp_path: Path, resource_id: str = "", edit=None) -> Path:
+    from gbdraw.api.session_compat import replace_resource_bytes
+
+    data = json.loads(gzip.decompress((_SESSION_FIXTURES / f"{name}.v47.gbdraw-session.json.gz").read_bytes()))
+    if edit is not None:
+        typed = json.loads(base64.b64decode(data["resources"][resource_id]["data"]))
+        edit(typed["value"]["fields"])
+        data["resources"][resource_id] = replace_resource_bytes(
+            data["resources"][resource_id], json.dumps(typed, separators=(",", ":")).encode("utf-8"),
+        )
+    path = tmp_path / f"{name}.gbdraw-session.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def _protein_results(options) -> tuple[object, ...]:
+    tables = tuple(
+        (comparison.query_record_index, comparison.subject_record_index, comparison.matches.to_dict("records"))
+        for comparison in (*(options.linear_comparisons or ()), *(options.protein_comparisons or ()))
+    )
+    return tables, repr(options.orthogroups), repr(options.collinearity_blocks)
+
+
+def _replay(session: Path, tmp_path: Path, prefix: str, *extra: str) -> str:
+    linear_main(["--session", str(session), "-o", str(tmp_path / prefix), "-f", "svg", *extra])
+    return (tmp_path / f"{prefix}.svg").read_text(encoding="utf-8")
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("name", _V47_PROTEIN_SESSIONS)
+def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_frame(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
+    from gbdraw.api.request_render import plan_request
+    from gbdraw.api.session_compat import drawn_frame_protein_results_to_search_frame
+
+    monkeypatch.chdir(tmp_path)
+    source = _v47_protein_session(name, tmp_path)
+    document = load_session_document(source)
+    assert document.version == 47
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        stored = session_to_request(materialized)
+        adapted = adapt_session_request(stored, session_drawing_artifacts(document))
+        converted = adapted.request
+        assert adapted.migration_report.unconverted_protein_results == ()
+        assert _protein_results(converted.options) != _protein_results(stored.options)
+        plan = plan_request(converted)
+        # F -> F is the same request; F -> V gives the results the base drew.
+        assert drawn_frame_protein_results_to_search_frame(plan, converted) == (converted, ())
+        drawn = comparison_record_bindings(plan.records, plan.provenance, search_frame=False)
+        assert _protein_results(project_source_bound_results(converted.options, drawn).options) == (
+            _protein_results(project_source_bound_results(stored.options, drawn).options)
+        )
+
+    expected = (_SESSION_FIXTURES / f"{name}.v47.replay.svg").read_text(encoding="utf-8")
+    resaved = tmp_path / "resaved.gbdraw-session.json"
+    assert _replay(source, tmp_path, "replay", "--session_output", str(resaved)) == expected
+    saved = load_session_document(resaved)
+    assert saved.version == CURRENT_SESSION_VERSION == 48
+    with materialize_session(saved, output_directory=tmp_path) as materialized:
+        written = session_to_request(materialized)
+        assert _protein_results(written.options) == _protein_results(converted.options)
+    # The re-save is read as F: no second conversion, the same drawing.
+    assert _replay(resaved, tmp_path, "resaved") == expected
+
+
+# OV-1183: main's Web writers of Session 39, and of Session 40 before
+# `3bca0e8d9`, stored a reversed record's drawn-frame feature ID in
+# `*_feature_svg_id` and wrote no `*_view_feature_svg_id`. Each fixture is such
+# a Session that main's writer laid out (`cdd310134` and `7aad9e3e0`;
+# `tools/build_main_pairwise_rc_fixture.py`); its record 2 is reversed.
+_DRAWN_ID_SESSIONS = {39: "v39", 40: "v40-early"}
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("version", sorted(_DRAWN_ID_SESSIONS))
+def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: int,
+) -> None:
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
+    from gbdraw.api.request_render import plan_request
+
+    monkeypatch.chdir(tmp_path)
+    source = _SESSION_FIXTURES / f"BGC0000708-BGC0000709-rc.{_DRAWN_ID_SESSIONS[version]}.gbdraw-session.json.gz"
+    document = load_session_document(source)
+    assert document.version == version
+    direct = tmp_path / "direct.gbdraw-session.json"
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        stored = session_to_request(materialized)
+        # A direct save writes the tables in the search frame, as an upgrade does.
+        save_session_document(direct, stored)
+        [table] = stored.options.linear_comparisons
+        assert table.drawn_feature_ids
+        rows = table.matches
+        assert "subject_view_feature_svg_id" not in rows.columns
+        adapted = adapt_session_request(stored, session_drawing_artifacts(document))
+        assert adapted.migration_report.unconverted_protein_results == ()
+        [converted] = adapted.request.options.linear_comparisons
+        assert not converted.drawn_feature_ids
+        # A writer that skips the move is refused.
+        with pytest.raises(CanonicalRequestEncodingError, match="drawn-frame feature IDs"):
+            encode_canonical_request(plan_request(stored).request)
+        plan = plan_request(adapted.request)
+        length = len(plan.records[1])
+        # Search frame: the reversed record's sides flip; each side names its
+        # source feature and its view; the forward record's side stays.
+        assert list(converted.matches["sstart"]) == [length + 1 - value for value in rows["sstart"]]
+        assert list(converted.matches["qstart"]) == list(rows["qstart"])
+        assert list(converted.matches["query_feature_svg_id"]) == list(rows["query_feature_svg_id"])
+        assert not set(converted.matches["subject_feature_svg_id"]) & set(rows["subject_feature_svg_id"])
+        # Drawn again, the rows are the ones main stored and drew.
+        drawn = comparison_record_bindings(plan.records, plan.provenance, search_frame=False)
+        [projected] = project_source_bound_results(adapted.request.options, drawn).options.linear_comparisons
+        for column in ("qstart", "qend", "sstart", "send"):
+            assert list(projected.matches[column]) == list(rows[column])
+        assert list(projected.matches["subject_view_feature_svg_id"]) == list(rows["subject_feature_svg_id"])
+        # Without the Session 40 reading the same rows are refused, and a
+        # table with view IDs is read strictly.
+        with pytest.raises(ValidationError, match="conflicts with its source feature ID"):
+            plan_request(replace(stored, options=replace(
+                stored.options, linear_comparisons=(replace(table, drawn_feature_ids=False),))))
+        tagged = rows.assign(subject_view_feature_svg_id=rows["subject_feature_svg_id"])
+        with pytest.raises(ValidationError, match="conflicts with its source feature ID"):
+            plan_request(replace(stored, options=replace(
+                stored.options, linear_comparisons=(replace(table, matches=tagged),))))
+
+    resaved = tmp_path / "resaved.gbdraw-session.json"
+    first = _replay(source, tmp_path, "replay", "--session_output", str(resaved))
+    saved = load_session_document(resaved)
+    assert saved.version == CURRENT_SESSION_VERSION == 48
+    with materialize_session(saved, output_directory=tmp_path) as materialized:
+        [written] = session_to_request(materialized).options.linear_comparisons
+        assert not written.drawn_feature_ids
+        assert list(written.matches["sstart"]) == list(converted.matches["sstart"])
+    # The re-save is read as F: no second conversion, the same drawing.
+    assert _replay(resaved, tmp_path, "resaved") == first
+    with materialize_session(load_session_document(direct), output_directory=tmp_path) as materialized:
+        [written] = session_to_request(materialized).options.linear_comparisons
+        for column in ("qstart", "sstart", "subject_feature_svg_id", "subject_view_feature_svg_id"):
+            assert list(written.matches[column]) == list(converted.matches[column])
+    assert _replay(direct, tmp_path, "direct") == first
+    # The Web Worker helper returns the table the upgrade writes (OV-1181).
+    from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
+
+    upgraded = upgrade_session_document(document, temporary_directory=tmp_path).document.to_dict()
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        helper = json.loads(stored_protein_results_to_search_frame_json(
+            json.dumps({"version": version, "renderRequest": document.to_dict()["renderRequest"]}),
+            json.dumps({key: str(path) for key, path in materialized.resource_paths.items()}),
+            str(tmp_path),
+        ))["resources"]
+    assert [entry["data"] for entry in helper.values()] == [upgraded["resources"]["comparison-explicit-1"]["data"]]
+
+
+@pytest.mark.linear
+def test_early_session_table_with_only_a_header_is_written_as_stored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A Session 40 table without rows holds no feature IDs to read, so it is
+    # not marked, and every Session writer takes it as before.
+    monkeypatch.chdir(tmp_path)
+    data = json.loads(gzip.decompress(
+        (_SESSION_FIXTURES / "BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz").read_bytes()))
+    entry = data["resources"]["comparison-resolved-1"]
+    header = base64.b64decode(entry["data"]).split(b"\n", 1)[0] + b"\n"
+    assert b"subject_feature_svg_id" in header
+    data["resources"]["comparison-resolved-1"] = replace_resource_bytes(entry, header)
+    source = tmp_path / "header-only.v39.gbdraw-session.json"
+    source.write_text(json.dumps(data), encoding="utf-8")
+    document = load_session_document(source)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        save_session_document(tmp_path / "direct.gbdraw-session.json", request)
+        [table] = request.options.linear_comparisons
+        assert table.matches.empty and not table.drawn_feature_ids
+    assert upgrade_session_document(source).document.version == CURRENT_SESSION_VERSION
+
+
+@pytest.mark.linear
+def test_untagged_session_39_anchors_of_a_reversed_record_follow_their_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Session 39 anchors carry neither view IDs nor feature indexes; the
+    # record-level rule of gbdraw.linear_comparison decides them: V up to
+    # Session 47, which the migrator turns to F, and F in a request, which the
+    # planner turns to V. A schema 3 resource requires the tags, so the
+    # untagged anchors are built from the fixture's typed result.
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
+    from gbdraw.api.request_render import plan_request
+    from gbdraw.api.session_compat import drawn_frame_protein_results_to_search_frame
+
+    def untag(result):
+        def anchor(item):
+            return replace(item, query_view_feature_svg_id="", subject_view_feature_svg_id="",
+                           query_feature_index=None, subject_feature_index=None)
+
+        return replace(
+            result,
+            blocks=tuple(replace(block, anchors=tuple(map(anchor, block.anchors))) for block in result.blocks),
+            unblocked_anchors=tuple(map(anchor, result.unblocked_anchors)),
+        )
+
+    def spans(result) -> list[tuple[object, ...]]:
+        return [
+            (anchor.query_record_index, anchor.query_start, anchor.query_end, anchor.query_strand,
+             anchor.subject_record_index, anchor.subject_start, anchor.subject_end, anchor.subject_strand)
+            for block in result.blocks for anchor in block.anchors
+        ] + [(block.block_id, block.orientation) for block in result.blocks]
+
+    monkeypatch.chdir(tmp_path)
+    document = load_session_document(_v47_protein_session("majanivirus_collinear-rc", tmp_path))
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        stored = session_to_request(materialized)
+        assert isinstance(stored, LinearDiagramRequest)
+        untagged = replace(stored, options=replace(
+            stored.options, collinearity_blocks=untag(stored.options.collinearity_blocks),
+        ))
+        plan = plan_request(untagged)
+        converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, untagged)
+        tagged, _ = drawn_frame_protein_results_to_search_frame(plan_request(stored), stored)
+    assert unmatched == ()
+    # The untagged anchors land where the tagged ones do (F) ...
+    assert spans(converted.options.collinearity_blocks) == spans(tagged.options.collinearity_blocks)
+    assert spans(converted.options.collinearity_blocks) != spans(untagged.options.collinearity_blocks)
+    # ... and the planner draws them as stored.
+    drawn = project_source_bound_results(
+        converted.options, comparison_record_bindings(plan.records, plan.provenance, search_frame=False),
+    ).options
+    assert spans(drawn.collinearity_blocks) == spans(untagged.options.collinearity_blocks)
+
+
+@pytest.mark.linear
+def test_a_session_47_result_matching_neither_frame_draws_but_is_not_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Re-review finding 1: a replay keeps the item and draws as stored; only a
+    # writer of Session 48 refuses it.
+    # A member of the reversed record (#5) whose span matches neither strand.
+    def corrupt(fields: dict[str, Any]) -> None:
+        member = next(
+            member["fields"] for members in fields["orthogroups"].values() for member in members
+            if member["fields"]["recordIndex"] == 4
+        )
+        for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
+            stored["start"] += 1
+
+    monkeypatch.chdir(tmp_path)
+    source = _v47_protein_session("BGC0000708-BGC0000713", tmp_path, "comparison-canonical-orthogroups-1", corrupt)
+    document = load_session_document(source)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        adapted = adapt_session_request(session_to_request(materialized), session_drawing_artifacts(document))
+    unconverted = adapted.migration_report.unconverted_protein_results
+    assert unconverted and "member" in unconverted[0] and "record #5" in unconverted[0]
+
+    assert "<svg" in _replay(source, tmp_path, "replay")
+    with pytest.raises(SessionConversionError, match="matches neither strand"):
+        _replay(source, tmp_path, "written", "--session_output", str(tmp_path / "out.gbdraw-session.json"))
+    assert not (tmp_path / "out.gbdraw-session.json").exists()
+    with pytest.raises(SessionConversionError):
+        upgrade_session_document(source, temporary_directory=tmp_path)
+
+
+def test_the_worker_helper_converts_a_session_47_drawing_like_the_upgrade(tmp_path: Path) -> None:
+    # The Web boundary of the conversion returns the bytes the upgrade writes,
+    # by stored resource ID, and nothing for a Session 48.
+    from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
+
+    source = _v47_protein_session("BGC0000708-BGC0000713", tmp_path)
+    document = load_session_document(source)
+    data = document.to_dict()
+    upgraded = upgrade_session_document(document, temporary_directory=tmp_path).document.to_dict()
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        paths = json.dumps({key: str(path) for key, path in materialized.resource_paths.items()})
+
+        def convert(version: int) -> dict[str, Any]:
+            payload = json.dumps({"version": version, "renderRequest": data["renderRequest"]})
+            return json.loads(stored_protein_results_to_search_frame_json(payload, paths, str(tmp_path)))["resources"]
+
+        converted = convert(47)
+        assert convert(48) == {}
+    assert sorted(converted) == ["comparison-canonical-orthogroups-1", "comparison-canonical-protein-4"]
+    for key, value in converted.items():
+        assert value["data"] == upgraded["resources"][key]["data"]
+        assert value["size"] == upgraded["resources"][key]["size"]
+
+    # A result matching neither strand is a bounded conversion error (design section 4).
+    def corrupt(fields: dict[str, Any]) -> None:
+        member = next(
+            member["fields"] for members in fields["orthogroups"].values() for member in members
+            if member["fields"]["recordIndex"] == 4
+        )
+        for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
+            stored["start"] += 1
+
+    (tmp_path / "corrupt").mkdir()
+    broken = load_session_document(_v47_protein_session(
+        "BGC0000708-BGC0000713", tmp_path / "corrupt", "comparison-canonical-orthogroups-1", corrupt,
+    ))
+    with materialize_session(broken, output_directory=tmp_path) as materialized:
+        with pytest.raises(SessionConversionError, match="matches neither strand"):
+            stored_protein_results_to_search_frame_json(
+                json.dumps({"version": 47, "renderRequest": broken.to_dict()["renderRequest"]}),
+                json.dumps({key: str(path) for key, path in materialized.resource_paths.items()}),
+                str(tmp_path),
+            )
+
+
+def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_path: Path) -> None:
+    # Review finding 2: the 31-44 upgrade path writes Session 48 too, so it
+    # refuses an unconverted item as the Session 46/47 path does.
+    from gbdraw.api.session_compat import replace_resource_bytes
+
+    data = json.loads(_VERSION_40_LEGACY_ALIGNMENT_SESSION.read_text(encoding="utf-8"))
+    resource_id = "comparison-canonical-orthogroups-1"
+    typed = json.loads(base64.b64decode(data["resources"][resource_id]["data"]))
+    fields = typed["value"]["fields"]
+    member = next(
+        member["fields"] for members in fields["orthogroups"].values() for member in members
+        if member["fields"]["recordIndex"] == 4
+    )
+    for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
+        stored["start"] += 1
+    data["resources"][resource_id] = replace_resource_bytes(
+        data["resources"][resource_id], json.dumps(typed, separators=(",", ":")).encode("utf-8"),
+    )
+    with pytest.raises(SessionConversionError, match="matches neither strand"):
+        upgrade_session_document(data, temporary_directory=tmp_path)

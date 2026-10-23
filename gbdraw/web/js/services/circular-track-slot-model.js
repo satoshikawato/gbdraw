@@ -566,11 +566,24 @@ export const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => 
  * @param {number | null} [axisIndex]
  * @returns {CircularTrackSlot[]}
  */
-export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
+export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => (
+  placeCircularTrackStack(slots, defaultNt, preset, axisIndex).slots
+);
+
+/**
+ * The placed stack and the Axis index its sides were set from. Generate stores this index, so
+ * the request never carries an index the sides conflict with (OV-1263).
+ * @param {unknown} slots
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @param {unknown} [axisIndex]
+ * @returns {{ slots: CircularTrackSlot[], axisIndex: number }}
+ */
+export const placeCircularTrackStack = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
   const normalized = normalizeCircularTrackSlots(slots, defaultNt, preset);
   const resolvedAxis = syncSlotsFromAxisIndex(normalized, axisIndex, preset);
   enforceSingleOnAxisSlot(normalized, resolvedAxis, preset);
-  return normalized;
+  return { slots: normalized, axisIndex: resolvedAxis };
 };
 
 /**

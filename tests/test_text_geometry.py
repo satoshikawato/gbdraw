@@ -7,6 +7,7 @@ import pytest
 from gbdraw.layout.text_geometry import (
     oriented_boxes_intersect,
     oriented_text_box,
+    rotate_point,
     segment_intersects_polygon,
 )
 
@@ -73,3 +74,19 @@ def test_segment_corner_touch_semantics() -> None:
     segment = ((10.0, 5.0), (20.0, 10.0))
     assert segment_intersects_polygon(segment, box.corners, touching=True)
     assert not segment_intersects_polygon(segment, box.corners, touching=False)
+
+
+def test_grown_convex_polygon_moves_every_edge_of_a_sector_part_out_by_the_same_distance() -> None:
+    from gbdraw.layout.text_geometry import annular_sector_parts, grown_convex_polygon
+
+    # A turned rectangle grows by the distance on every side; a sector part (a trapezoid) keeps it from every edge.
+    rectangle = tuple(rotate_point(point, 30.0) for point in ((0.0, 0.0), (10.0, 0.0), (10.0, 4.0), (0.0, 4.0)))
+    (part,) = annular_sector_parts(100.0, 112.0, -90.0, 2.0)
+    for polygon in (rectangle, part, tuple(reversed(part))):
+        grown = grown_convex_polygon(polygon, 3.0)
+        for index, (x1, y1) in enumerate(polygon):
+            x2, y2 = polygon[(index + 1) % len(polygon)]
+            (gx, gy) = grown[index]
+            # The grown corner's distance from the line of each edge it touches.
+            distance = abs((x2 - x1) * (y1 - gy) - (x1 - gx) * (y2 - y1)) / math.hypot(x2 - x1, y2 - y1)
+            assert distance == pytest.approx(3.0)

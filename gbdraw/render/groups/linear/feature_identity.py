@@ -1,10 +1,10 @@
 """Exact rendered identities shared by Linear features, labels, and matches."""
 
-from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
+from ....features.objects import FeatureObject
 from ....layout.linear import VerticalBand
 from ....svg.ids import instance_svg_id
 from ...drawers.linear.features import FeatureDrawer
@@ -20,7 +20,7 @@ class LinearFeatureDomIndex:
 
 
 def build_linear_feature_dom_index(
-    feature_dicts: Sequence[Mapping[str, object]],
+    feature_dicts: Sequence[Mapping[str, FeatureObject]],
 ) -> LinearFeatureDomIndex:
     """Index the exact DOM IDs produced from the prepared feature layers."""
 
@@ -33,7 +33,6 @@ def build_linear_feature_dom_index(
             str(FeatureDrawer.get_feature_data_id(feature) or "")
             for feature in features
         ]
-        stable_id_counts = Counter(stable_id for stable_id in stable_ids if stable_id)
         mutable_by_view_id: dict[str, list[str]] = {}
         for feature, stable_id in zip(features, stable_ids, strict=True):
             if not stable_id:
@@ -45,9 +44,9 @@ def build_linear_feature_dom_index(
             )
             if not rendered_id:
                 continue
-            source_index = getattr(feature, "source_feature_index", None)
-            if stable_id_counts[stable_id] > 1 and source_index is not None:
-                rendered_id = instance_svg_id(rendered_id, source_index)
+            source_index = feature.source_feature_index
+            if feature.rendered_instance_index is not None:
+                rendered_id = instance_svg_id(rendered_id, feature.rendered_instance_index)
             # Comparison rows name a drawn feature by its drawn-location hash
             # (`*_view_feature_svg_id`), which tells the row's frame.
             view_id = compute_feature_object_hash(feature)

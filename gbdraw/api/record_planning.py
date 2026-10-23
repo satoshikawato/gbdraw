@@ -7,11 +7,16 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, Sequence, cast
+from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.analysis.collinearity import (
+    CollinearityAnchor,
+    CollinearityBlock,
+    CollinearityResult,
+)
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
     OrthogroupMember,
@@ -30,16 +35,14 @@ from gbdraw.io.cli_tables import (
     read_conservation_table,
     read_records_table,
 )
-from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.comparisons import read_comparison_resource
 from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
-    reverse_records,
 )
-from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
+from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.api.prepared import register_prepared_resource_value
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -49,7 +52,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
 )
-from gbdraw.linear_comparison import LinearComparison
+from gbdraw.linear_comparison import LinearComparison, reverse_unbound_endpoint_span
 
 from .options import (
     CircularDiagramOptions,
@@ -228,18 +231,27 @@ _SOURCE_BINDING_COLUMNS = frozenset(
 )
 
 
+SourceFeatureSpan: TypeAlias = tuple[int, int, int | None]
+
+
 @dataclass(frozen=True)
 class ComparisonRecordBinding:
-    """A drawn record's source feature IDs and view feature IDs, by source feature index.
+    """A drawn record's source feature IDs, view feature IDs and spans, by source feature index.
 
     ``current`` holds the view IDs of the record as drawn (in the search frame
-    when the binding was made for it), ``opposite`` those of the other strand.
+    when the binding was made for it), ``opposite`` those of the other strand;
+    ``current_spans`` and ``opposite_spans`` hold the 0-based [start, end) and
+    strand of each feature in the same two frames. ``reverse`` is whether the
+    drawn record is reverse-complemented; it decides items without tags.
     """
 
     source: Mapping[int, str]
     current: Mapping[int, str]
     opposite: Mapping[int, str]
     length: int
+    current_spans: Mapping[int, SourceFeatureSpan]
+    opposite_spans: Mapping[int, SourceFeatureSpan]
+    reverse: bool
 
 
 def comparison_record_binding(
@@ -251,33 +263,71 @@ def comparison_record_binding(
 
     current: dict[int, str] = {}
     opposite: dict[int, str] = {}
+    current_spans: dict[int, SourceFeatureSpan] = {}
+    opposite_spans: dict[int, SourceFeatureSpan] = {}
     for ordinal, feature in enumerate(_iter_source_features(record.features)):
         if feature.location is None:
             continue
         index = _source_feature_index(feature)
         index = ordinal if index is None else index
-        for target, location in ((current, feature.location),
-                                 (opposite, feature.location._flip(len(record)))):
+        for target, spans, location in ((current, current_spans, feature.location),
+                                        (opposite, opposite_spans, feature.location._flip(len(record)))):
             target[index] = compute_feature_hash_from_location_parts(
                 feature.type,
                 [(int(part.start), int(part.end), part.strand) for part in location.parts],
                 record_id=record.id,
             )
+            spans[index] = (int(location.start), int(location.end),
+                            location.strand if location.strand in (-1, 1) else None)
     source = {feature.source_feature_index: feature.stable_feature_id
               for feature in source_feature_catalog or ()}
-    if search_frame and _read_coord_map(record)[1] == -1:
+    reverse = record_is_reverse_complemented(record)
+    if search_frame and reverse:
         current, opposite = opposite, current
-    return ComparisonRecordBinding(source, current, opposite, len(record))
+        current_spans, opposite_spans = opposite_spans, current_spans
+    return ComparisonRecordBinding(
+        source, current, opposite, len(record), current_spans, opposite_spans, reverse,
+    )
+
+
+def record_is_reverse_complemented(record: SeqRecord) -> bool:
+    """Whether a resolved record is drawn reverse-complemented (its search frame differs)."""
+
+    return _read_coord_map(record)[1] == -1
+
+
+def comparison_record_bindings(
+    records: Sequence[SeqRecord],
+    provenance: Sequence[ResolvedRecordProvenance],
+    *,
+    search_frame: bool,
+) -> tuple[ComparisonRecordBinding, ...]:
+    """One binding per record: drawn views, or each record's search frame."""
+
+    return tuple(
+        render_stage(
+            "comparison_rows",
+            comparison_record_binding,
+            record,
+            item.source_feature_catalog,
+            search_frame,
+        )
+        for record, item in zip(records, provenance, strict=True)
+    )
 
 
 def project_comparison_frame(
     frame: pd.DataFrame,
     query: ComparisonRecordBinding,
     subject: ComparisonRecordBinding,
+    drawn_feature_ids: bool = False,
 ) -> pd.DataFrame:
-    """Rows of ``frame`` in the drawn views (render stage ``comparison_rows``).
+    """Rows of ``frame`` in the views of the bindings (render stage ``comparison_rows``).
 
-    Returns ``frame`` itself when no row changes.
+    With ``drawn_feature_ids`` (``LinearComparison.drawn_feature_ids``), a side
+    without a ``*_view_feature_svg_id`` column reads its ``*_feature_svg_id``
+    as the view ID, takes the source ID of its feature index, and gets both
+    written. Returns ``frame`` itself when no row changes.
     """
 
     if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
@@ -292,8 +342,11 @@ def project_comparison_frame(
             indices = [index for index in parsed_indices if index is not None]
             if len(indices) != len(parsed_indices):
                 raise ValidationError("Comparison source feature indexes must be integers.")
-            source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
-            view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
+            view_column = f"{role}_view_feature_svg_id"
+            drawn_ids = drawn_feature_ids and view_column not in frame.columns
+            view_ids = str(row.get(view_column, row[f"{role}_feature_svg_id"])).split(";")
+            source_ids = ([str(binding.source.get(index, "")) for index in indices] if drawn_ids
+                          else str(row[f"{role}_feature_svg_id"]).split(";"))
             if not len(indices) == len(source_ids) == len(view_ids):
                 raise ValidationError("Comparison source feature binding has inconsistent coverage.")
             if any(binding.source.get(index) != source_id
@@ -305,17 +358,22 @@ def project_comparison_frame(
             if flip and view_ids != opposite_ids:
                 raise ValidationError("Comparison view feature IDs do not match the current source/crop binding.")
             flips.append(flip)
-            if not flip:
+            if not flip and not drawn_ids:
                 continue
             if updated is None:
                 updated = frame.copy(deep=True)
+            if drawn_ids:
+                updated.at[row_index, f"{role}_feature_svg_id"] = ";".join(source_ids)
+            if not flip:
+                updated.at[row_index, view_column] = ";".join(view_ids)
+                continue
             for coordinate_field in (f"{prefix}start", f"{prefix}end"):
                 coordinate = row[coordinate_field]
                 if not 1 <= coordinate <= binding.length or int(coordinate) != coordinate:
                     raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
                 updated.at[row_index, coordinate_field] = binding.length + 1 - int(coordinate)
             # Every ID is present: view_ids matched opposite_ids, which has the same keys.
-            updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(
+            updated.at[row_index, view_column] = ";".join(
                 cast("list[str]", current_ids)
             )
         if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
@@ -325,61 +383,259 @@ def project_comparison_frame(
     return frame if updated is None else updated
 
 
-def project_source_bound_comparisons(
-    options: LinearDiagramOptions,
-    records: Sequence[SeqRecord],
-    provenance: Sequence[ResolvedRecordProvenance],
-    *,
-    search_frame: bool = False,
-) -> LinearDiagramOptions:
-    """Reproject existing source-bound evidence into the drawn record views.
+class UnmatchedFrameItem(NamedTuple):
+    """A stored item whose tag matches neither frame of its record's binding."""
 
-    View hashes must match this source/crop's current or opposite orientation;
-    each row's view IDs tell which frame it is in. Source identities, scores and
-    block membership remain unchanged. Coordinates are record-local; the
-    existing renderer alone applies a circular display cut. The diagram build
-    calls this; a planned request keeps the rows it was given, so a Session
-    saved from it keeps the search frame (OV-399). ``search_frame`` projects
-    rows of the drawn ``records`` back into each record's search frame.
+    kind: Literal["member", "anchor", "block"]
+    record_index: int
+    feature_index: int | None
+    protein_id: str
+
+
+@dataclass(frozen=True)
+class FrameProjection:
+    """Options with their source-bound results projected, and what stayed unmatched."""
+
+    options: LinearDiagramOptions
+    unmatched: tuple[UnmatchedFrameItem, ...] = ()
+
+
+def has_source_bound_results(
+    comparisons: Sequence[LinearComparison] | None,
+    protein_comparisons: Sequence[pd.DataFrame] | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    collinearity: CollinearityResult | Sequence[CollinearityBlock] | None,
+) -> bool:
+    """Whether any table row or typed result is bound to source features."""
+
+    frames = [comparison.matches for comparison in comparisons or ()]
+    frames.extend(protein_comparisons or ())
+    return (
+        orthogroups is not None
+        or bool(collinearity)
+        or any(not frame.empty and _SOURCE_BINDING_COLUMNS <= set(frame.columns) for frame in frames)
+    )
+
+
+def _binding(bindings: Sequence[ComparisonRecordBinding], index: int) -> ComparisonRecordBinding:
+    if not 0 <= index < len(bindings):
+        raise ValidationError("Comparison record endpoint is outside the resolved collection.")
+    return bindings[index]
+
+
+class _AnchorSide(NamedTuple):
+    record_index: int
+    feature_index: int | None
+    view_id: str
+    start: int
+    end: int
+    strand: int | None
+    protein_id: str
+
+
+def _anchor_side(anchor: CollinearityAnchor, query: bool) -> _AnchorSide:
+    if query:
+        return _AnchorSide(anchor.query_record_index, anchor.query_feature_index,
+                           anchor.query_view_feature_svg_id, anchor.query_start, anchor.query_end,
+                           anchor.query_strand, anchor.query_protein_id)
+    return _AnchorSide(anchor.subject_record_index, anchor.subject_feature_index,
+                       anchor.subject_view_feature_svg_id, anchor.subject_start, anchor.subject_end,
+                       anchor.subject_strand, anchor.subject_protein_id)
+
+
+class _ResultProjector:
+    """Projects the typed results of one request, item by item by tag (OV-1145).
+
+    A member is tagged by its span against its feature's spans, an anchor
+    side by its view ID; an item matching ``opposite`` moves to ``current``.
+    An anchor side without tags (Session 39) follows the record-level rule of
+    :func:`gbdraw.linear_comparison.reverse_unbound_endpoint_span`. An item
+    matching neither frame, or a block whose sides do not each agree, is kept
+    unchanged and named in ``unmatched``. Ranks and IDs never change.
     """
-    frames = [comparison.matches for comparison in options.linear_comparisons or ()]
-    frames.extend(options.protein_comparisons or ())
-    if not any(not frame.empty and _SOURCE_BINDING_COLUMNS <= set(frame.columns) for frame in frames):
-        return options
-    bindings = [
-        render_stage(
-            "comparison_rows",
-            comparison_record_binding,
-            record,
-            item.source_feature_catalog,
-            search_frame,
-        )
-        for record, item in zip(records, provenance, strict=True)
-    ]
 
-    def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:
+    def __init__(self, bindings: Sequence[ComparisonRecordBinding]) -> None:
+        self.bindings = bindings
+        self.unmatched: list[UnmatchedFrameItem] = []
+        self._orthogroups: dict[int, OrthogroupResult | OrthogroupGraphResult] = {}
+
+    def member(self, member: OrthogroupMember) -> OrthogroupMember:
+        binding = _binding(self.bindings, int(member.record_index))
+        index = int(member.feature_index)
+        span = (int(member.start), int(member.end), member.strand if member.strand in (-1, 1) else None)
+        if span == binding.current_spans.get(index):
+            return member
+        if span != binding.opposite_spans.get(index):
+            self.unmatched.append(UnmatchedFrameItem("member", member.record_index, index, member.protein_id))
+            return member
+        start, end, strand = binding.current_spans[index]
+        return replace(member, start=start, end=end, strand=strand)
+
+    def orthogroups(
+        self, result: OrthogroupResult | OrthogroupGraphResult,
+    ) -> OrthogroupResult | OrthogroupGraphResult:
+        known = self._orthogroups.get(id(result))
+        if known is not None:
+            return known
+        projected: dict[int, OrthogroupMember] = {}
+
+        def project(member: OrthogroupMember) -> OrthogroupMember:
+            if id(member) not in projected:
+                projected[id(member)] = self.member(member)
+            return projected[id(member)]
+
+        groups = {group_id: [project(member) for member in members]
+                  for group_id, members in result.orthogroups.items()}
+        by_protein = {protein_id: project(member) for protein_id, member in result.member_by_protein_id.items()}
+        changed = any(
+            after is not before
+            for before, after in zip(
+                (member for members in result.orthogroups.values() for member in members),
+                (member for members in groups.values() for member in members),
+                strict=True,
+            )
+        ) or any(by_protein[key] is not member for key, member in result.member_by_protein_id.items())
+        output = replace(result, orthogroups=groups, member_by_protein_id=by_protein) if changed else result
+        self._orthogroups[id(result)] = output
+        return output
+
+    def _side_flip(self, side: _AnchorSide) -> bool | None:
+        """Whether an anchor side moves to the other frame; None when unmatched."""
+
+        binding = _binding(self.bindings, int(side.record_index))
+        if not side.view_id and side.feature_index is None:
+            return binding.reverse
+        if side.view_id and side.feature_index is not None:
+            if side.view_id == binding.current.get(int(side.feature_index)):
+                return False
+            if side.view_id == binding.opposite.get(int(side.feature_index)):
+                return True
+        self.unmatched.append(UnmatchedFrameItem(
+            "anchor", int(side.record_index), side.feature_index, str(side.protein_id),
+        ))
+        return None
+
+    def _flipped(self, side: _AnchorSide) -> tuple[int, int, int | None, str]:
+        binding = self.bindings[int(side.record_index)]
+        start, end, strand = reverse_unbound_endpoint_span(
+            int(side.start), int(side.end), side.strand, (binding.length, True),
+        )
+        view_id = side.view_id
+        if view_id and side.feature_index is not None:
+            view_id = binding.current[int(side.feature_index)]
+        return start, end, strand, view_id
+
+    def anchor(self, anchor: CollinearityAnchor) -> tuple[CollinearityAnchor, tuple[bool, bool] | None]:
+        query, subject = _anchor_side(anchor, True), _anchor_side(anchor, False)
+        query_flip, subject_flip = self._side_flip(query), self._side_flip(subject)
+        if query_flip is None or subject_flip is None:
+            return anchor, None
+        projected = anchor
+        if query_flip:
+            start, end, strand, view_id = self._flipped(query)
+            projected = replace(projected, query_start=start, query_end=end, query_strand=strand,
+                                query_view_feature_svg_id=view_id)
+        if subject_flip:
+            start, end, strand, view_id = self._flipped(subject)
+            projected = replace(projected, subject_start=start, subject_end=end, subject_strand=strand,
+                                subject_view_feature_svg_id=view_id)
+        return projected, (query_flip, subject_flip)
+
+    def block(self, block: CollinearityBlock) -> CollinearityBlock:
+        before = len(self.unmatched)
+        projected = [self.anchor(anchor) for anchor in block.anchors]
+        flips = {sides for _, sides in projected if sides is not None}
+        if len(self.unmatched) != before:
+            return block
+        if len(flips) > 1:
+            first = block.anchors[0]
+            self.unmatched.append(UnmatchedFrameItem(
+                "block", int(block.query_record_index), first.query_feature_index, str(first.query_protein_id),
+            ))
+            return block
+        if not flips or flips == {(False, False)}:
+            return block
+        ((query_flip, subject_flip),) = flips
+        orientation = block.orientation
+        if query_flip != subject_flip:
+            orientation = "minus" if orientation == "plus" else "plus"
+        return replace(block, anchors=tuple(anchor for anchor, _ in projected), orientation=orientation)
+
+    def collinearity(
+        self, value: CollinearityResult | Sequence[CollinearityBlock],
+    ) -> CollinearityResult | Sequence[CollinearityBlock]:
+        blocks = value.blocks if isinstance(value, CollinearityResult) else tuple(value)
+        projected_blocks = tuple(self.block(block) for block in blocks)
+        changed = any(before is not after for before, after in zip(blocks, projected_blocks, strict=True))
+        if not isinstance(value, CollinearityResult):
+            return projected_blocks if changed else value
+        unblocked = tuple(self.anchor(anchor)[0] for anchor in value.unblocked_anchors)
+        orthogroups = None if value.orthogroups is None else self.orthogroups(value.orthogroups)
+        changed = (changed or orthogroups is not value.orthogroups
+                   or any(before is not after for before, after in
+                          zip(value.unblocked_anchors, unblocked, strict=True)))
+        if not changed:
+            return value
+        return replace(value, blocks=projected_blocks, unblocked_anchors=unblocked, orthogroups=orthogroups)
+
+
+def project_source_bound_results(
+    options: LinearDiagramOptions,
+    bindings: Sequence[ComparisonRecordBinding],
+) -> FrameProjection:
+    """Project source-bound tables and typed results into the frames of ``bindings``.
+
+    Drawn bindings give the drawn views (the planner); search-frame bindings
+    give each record's search frame (every Session writer, R5). Each table row
+    and typed item tells its frame by its tags, so either direction is exact
+    and an item already in the target frame stays. Source identities, scores,
+    ranks and block membership remain unchanged. Coordinates are record-local;
+    the existing renderer alone applies a circular display cut. Returns
+    ``options`` itself when nothing changes. Unmatched table rows raise; an
+    unmatched typed item stays as given and is listed (OV-1145).
+    """
+
+    def project(frame: pd.DataFrame, query_index: int, subject_index: int,
+                drawn_feature_ids: bool = False) -> pd.DataFrame:
         if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
             return frame
-        if not (0 <= query_index < len(bindings) and 0 <= subject_index < len(bindings)):
-            raise ValidationError("Comparison record endpoint is outside the resolved collection.")
         return render_stage(
             "comparison_rows",
             project_comparison_frame,
             frame,
-            bindings[query_index],
-            bindings[subject_index],
+            _binding(bindings, query_index),
+            _binding(bindings, subject_index),
+            drawn_feature_ids,
         )
 
+    # A projected table holds source and view IDs, so it is no longer read
+    # with the drawn-frame IDs of a Session up to 40.
     explicit = tuple(replace(comparison, matches=project(comparison.matches,
-        comparison.query_record_index, comparison.subject_record_index))
+        comparison.query_record_index, comparison.subject_record_index, comparison.drawn_feature_ids),
+        drawn_feature_ids=False)
         for comparison in options.linear_comparisons or ())
     protein = None if options.protein_comparisons is None else tuple(
         project(frame, index, index + 1) for index, frame in enumerate(options.protein_comparisons))
-    changed = any(before.matches is not after.matches for before, after in
-                  zip(options.linear_comparisons or (), explicit, strict=True))
-    changed = changed or (protein is not None and any(before is not after for before, after in
-                         zip(options.protein_comparisons or (), protein, strict=True)))
-    return replace(options, linear_comparisons=explicit, protein_comparisons=protein) if changed else options
+    projector = _ResultProjector(bindings)
+    orthogroups = None if options.orthogroups is None else projector.orthogroups(options.orthogroups)
+    collinearity = (None if options.collinearity_blocks is None
+                    else projector.collinearity(options.collinearity_blocks))
+    changed = (
+        any(before.matches is not after.matches or before.drawn_feature_ids for before, after in
+            zip(options.linear_comparisons or (), explicit, strict=True))
+        or any(before is not after for before, after in
+               zip(options.protein_comparisons or (), protein or (), strict=True))
+        or orthogroups is not options.orthogroups
+        or collinearity is not options.collinearity_blocks
+    )
+    projected = replace(
+        options,
+        linear_comparisons=explicit if options.linear_comparisons is not None else None,
+        protein_comparisons=protein,
+        orthogroups=orthogroups,
+        collinearity_blocks=collinearity,
+    ) if changed else options
+    return FrameProjection(projected, tuple(projector.unmatched))
 
 
 def project_similarity_alignment_centers(
@@ -840,6 +1096,33 @@ def _load_source_records(
     )
 
 
+class _NotPrepared(Exception):
+    """A parsed-source lookup that found no entry: it builds nothing."""
+
+
+def prepared_parsed_source(source: RecordInputSource) -> ParsedRecordInputs | None:
+    """The records a Generate parsed from this staged Web source, or ``None``.
+
+    A Worker helper inside ``prepared_input_lookup`` reads the entry the last
+    Generate stored under the same resource identities. On a miss it gets
+    ``None`` and keeps its own reader, so its result and its errors are the
+    ones it has without the cache. The records are shared: a reader must not
+    change them (the lookup checks their owner stamps).
+    """
+
+    cache_spec = _prepared_source_cache_spec(source)
+    if cache_spec is None:
+        return None
+
+    def not_prepared() -> ParsedRecordInputs:
+        raise _NotPrepared
+
+    try:
+        return cast(ParsedRecordInputs, get_or_build_parsed_source(*cache_spec, not_prepared))
+    except _NotPrepared:
+        return None
+
+
 def _prepared_source_cache_spec(
     source: RecordInputSource,
 ) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
@@ -1005,12 +1288,18 @@ def _apply_collection_options(
     records: list[SeqRecord],
     provenance: Sequence[ResolvedRecordProvenance],
     options: RecordCollectionOptions,
-) -> list[SeqRecord]:
-    if options.regions:
-        try:
-            records = apply_region_specs(records, options.regions, log=logger)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
+    pending_reverse: Sequence[bool],
+) -> tuple[list[SeqRecord], frozenset[int]]:
+    """Crop by collection regions, then reverse-complement each pending record.
+
+    A record's presentation reverse complement applies after its crop, the
+    order a region's own ``:rc`` uses, so both spellings draw one window.
+    """
+
+    try:
+        records, cropped = crop_then_reverse_records(records, options.regions, pending_reverse, log=logger)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
     # Labels and subtitles apply by place through effective_record_presentation.
     for field_name in ("labels", "subtitles"):
         if len(getattr(options, field_name)) > len(records):
@@ -1021,7 +1310,7 @@ def _apply_collection_options(
             )
     for record, item in zip(records, provenance, strict=True):
         _apply_provenance_annotations(record, item)
-    return records
+    return records, cropped
 
 
 def _detached_record(record: SeqRecord) -> SeqRecord:
@@ -1065,6 +1354,7 @@ def resolve_record_inputs(
     id_counts: dict[tuple[object, ...], Counter[str]] = {}
     records: list[SeqRecord] = []
     provenance: list[ResolvedRecordProvenance] = []
+    pending_reverse: list[bool] = []
     for input_index, record_input in enumerate(inputs):
         key = _source_key(record_input.source)
         parsed = cache.get(key)
@@ -1093,20 +1383,18 @@ def resolve_record_inputs(
                 )
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = _detached_record(source_record)
-            record = reverse_records(
-                (record,),
-                record_input.presentation.reverse_complement,
-                log=logger,
-            )[0]
+            reverse = record_input.presentation.reverse_complement
             if record_input.region is not None:
+                region = _unqualified_region(record_input.region)
                 try:
-                    record = apply_region_specs(
-                        (record,),
-                        (_unqualified_region(record_input.region),),
+                    record = crop_record_to_region(
+                        record,
+                        replace(region, reverse_complement=region.reverse_complement or reverse),
                         log=logger,
-                    )[0]
+                    )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc
+                reverse = False
             base_key = record_input.record_key or f"record-{input_index + 1}"
             record_key = (
                 f"{base_key}:{source_record_index + 1}"
@@ -1140,18 +1428,20 @@ def resolve_record_inputs(
             _apply_provenance_annotations(record, item)
             records.append(record)
             provenance.append(item)
-    before_collection = records
+            pending_reverse.append(reverse)
     collection_options = record_options or RecordCollectionOptions()
-    records = _apply_collection_options(records, provenance, collection_options)
+    records, collection_cropped = _apply_collection_options(
+        records, provenance, collection_options, pending_reverse
+    )
     provenance = [
         replace(
             item,
-            has_collection_region=record is not before,
+            has_collection_region=index in collection_cropped,
             presentation=effective_record_presentation(
                 item.presentation, collection_options, item.resolved_index
             ),
         )
-        for item, record, before in zip(provenance, records, before_collection, strict=True)
+        for index, item in enumerate(provenance)
     ]
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
 
@@ -1172,7 +1462,7 @@ def _normalized_cli_values(
     return normalized
 
 
-def _parse_cli_bool(value: object) -> bool:
+def parse_cli_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
     text = str(value or "").strip().lower()
@@ -1254,7 +1544,7 @@ def record_input_manifest_from_paths(
                 cardinality=cardinality,
                 selector=selector,
                 presentation=RecordPresentation(
-                    reverse_complement=_parse_cli_bool(reverse_values[index]),
+                    reverse_complement=parse_cli_bool(reverse_values[index]),
                 ),
                 record_key=f"record-{index + 1}",
             )
@@ -1461,7 +1751,7 @@ def resolve_linear_options(
             continue
         try:
             # The file's staged identity keys the stages that take its rows.
-            matches = register_prepared_resource_value(read_comparison_table(row.blast), row.blast)
+            matches = read_comparison_resource(row.blast)
         except ValidationError as exc:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
@@ -1561,6 +1851,8 @@ __all__ = [
     "ResolvedRecordCollection",
     "ResolvedRecordProvenance",
     "depth_track_inputs_from_cli",
+    "parse_cli_bool",
+    "prepared_parsed_source",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",

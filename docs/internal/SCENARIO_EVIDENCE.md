@@ -373,7 +373,7 @@ gbdraw circular \
 gbdraw circular \
   --gbk HmmtDNA.gbk \
   -k CDS,rRNA,tRNA \
-  --palette colorblind \
+  --palette default \
   --table tables/presentation_colors.tsv \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
   --label_whitelist tables/presentation_labels.tsv \

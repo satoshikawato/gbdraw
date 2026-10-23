@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -223,48 +224,48 @@ const anchorKey = (anchor) => JSON.stringify(anchor);
 
 /** @param {unknown} strand */
 const strandLabel = (strand) => (
-  strand === 1 ? '+' : strand === -1 ? '-' : 'unknown'
+  strand === 1 ? '+' : strand === -1 ? '-' : t('unknown')
 );
 
 /** @type {Readonly<Record<string, string>>} */
 const rationaleLabels = Object.freeze({
-  reference: 'Exact reference',
-  user_selected: 'Selected by user',
-  only_usable_candidate: 'Only usable candidate',
-  unique_direct_rbh: 'Unique direct RBH',
-  skipped_by_user: 'Skipped by user',
-  skipped_no_candidate: 'No usable candidate',
-  skipped_unmappable: 'Candidate center outside the displayed crop'
+  reference: msg('Exact reference'),
+  user_selected: msg('Selected by user'),
+  only_usable_candidate: msg('Only usable candidate'),
+  unique_direct_rbh: msg('Unique direct RBH'),
+  skipped_by_user: msg('Skipped by user'),
+  skipped_no_candidate: msg('No usable candidate'),
+  skipped_unmappable: msg('Candidate center outside the displayed crop')
 });
 
 /** @type {Readonly<Record<string, string>>} */
 const directionExclusionLabels = Object.freeze({
-  selection_required: 'Select an anchor or Skip this record first.',
-  skipped_by_user: 'Skipped by user.',
-  skipped_no_candidate: 'No usable candidate in this record.',
-  skipped_unmappable: 'Candidate center is outside the displayed crop.',
-  unusable_anchor: 'The selected anchor cannot be displayed.',
-  unknown_strand: 'The selected anchor has no known direction; it is never guessed.'
+  selection_required: msg('Select an anchor or Skip this record first.'),
+  skipped_by_user: msg('Skipped by user.'),
+  skipped_no_candidate: msg('No usable candidate in this record.'),
+  skipped_unmappable: msg('Candidate center is outside the displayed crop.'),
+  unusable_anchor: msg('The selected anchor cannot be displayed.'),
+  unknown_strand: msg('The selected anchor has no known direction; it is never guessed.')
 });
 
 /** @param {unknown} arrow */
-const arrowLabel = (arrow) => arrow === 1 ? 'right-facing' : arrow === -1 ? 'left-facing' : 'unknown';
+const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t('left-facing') : t('unknown');
 
 // Direct evidence kinds between a candidate and the exact reference (Python edge kinds).
 /** @type {Readonly<Record<string, string>>} */
 const evidenceLabels = Object.freeze({
-  rbh: 'reciprocal best hit',
-  coortholog: 'near-reciprocal hit',
-  record_local_paralog: 'local paralog hit'
+  rbh: msg('reciprocal best hit'),
+  coortholog: msg('near-reciprocal hit'),
+  record_local_paralog: msg('within-record paralog hit')
 });
 
 // Why a candidate is recommended, as a clause after its name ("Recommended: livU, …").
 /** @type {Readonly<Record<string, string>>} */
 const reviewReasonLabels = Object.freeze({
-  only_usable_candidate: 'the only usable candidate in this record',
-  unique_direct_rbh: 'the only candidate with a reciprocal best hit',
-  unique_representative: 'the only group representative among the candidates',
-  deterministic_candidate_1: 'the first candidate in a fixed order; none stands out'
+  only_usable_candidate: msg('the only usable candidate in this record'),
+  unique_direct_rbh: msg('the only candidate with a reciprocal best hit'),
+  unique_representative: msg('the only group representative among the candidates'),
+  deterministic_candidate_1: msg('the first candidate in a fixed order; none stands out')
 });
 
 /**
@@ -321,7 +322,7 @@ const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const end = locationPartBound(feature.end == null ? facts : feature, 'end');
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
     ? `${(start + 1).toLocaleString('en-US')}..${end.toLocaleString('en-US')} bp` : '';
-  const typeName = [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
+  const typeName = [displayText(feature.type, facts.type) || t('Feature'), coordinates].filter(Boolean).join(' ');
   return { name: typeName, ids: [], label: typeName };
 };
 
@@ -391,7 +392,7 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
     const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
       || (fileName ? plainTextLinearRecordLabel(fileName) : '')
-      || `Record ${index + 1}`;
+      || t('Record {n}', { n: index + 1 });
     return { label, name: name || accession || label, accession: name && accession !== name ? accession : '' };
   });
   /** @type {Map<string, number>} */
@@ -401,7 +402,7 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
   return new Map(recordKeys.map((recordKey, index) => {
     const { label, name, accession } = parts[index];
     // Every label was counted above.
-    const duplicate = /** @type {number} */ (counts.get(label)) > 1 ? `Record ${index + 1}` : '';
+    const duplicate = /** @type {number} */ (counts.get(label)) > 1 ? t('Record {n}', { n: index + 1 }) : '';
     return [recordKey, {
       label: duplicate ? `${label} · ${duplicate}` : label,
       name,
@@ -428,7 +429,7 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     name: feature.name,
     ids: feature.ids,
     // A kind is helper text: one the table does not hold is shown as written (OV-573).
-    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? evidenceLabels[kind] : kind),
+    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? tm(evidenceLabels[kind]) : kind),
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
     representative: candidate.representative,
@@ -491,11 +492,11 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
       reasonLabel: reason
-        ? reviewReasonLabels[reason] || rationaleLabels[reason] : 'Unchanged',
+        ? tm(reviewReasonLabels[reason] || rationaleLabels[reason]) : t('Unchanged'),
       recommendedKey,
       recommendationReasonLabel: recommendedKey
         // `recommendedKey` is set only when `REVIEW_REASONS` has the reason, so it is text.
-        ? reviewReasonLabels[/** @type {string} */ (reason)] : null,
+        ? tm(reviewReasonLabels[/** @type {string} */ (reason)]) : null,
       choice: record.kind === 'ambiguous' ? null : selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
@@ -523,9 +524,8 @@ const successfulSummary = (plan, reversed) => {
     explicitlySkipped,
     noCandidate,
     reversed,
-    text: `Alignment applied: ${aligned} aligned, ${unchanged} unchanged, `
-      + `${explicitlySkipped} explicitly skipped, ${noCandidate} no-candidate, `
-      + `${reversed} reversed.`
+    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} no-candidate, {reversed} reversed.',
+      { aligned, unchanged, explicitlySkipped, noCandidate, reversed })
   });
 };
 
@@ -554,7 +554,7 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
   return deepFreeze({
     groupId: plan.groupId,
     // The collapsed inspector line: what the alignment holds fixed.
-    summary: `Aligned to ${reference.name} in ${shortRecordName(referenceRecord)}`,
+    summary: t('Aligned to {name} in {record}', { name: reference.name, record: shortRecordName(referenceRecord) }),
     reference: {
       ...plan.reference,
       label: reference.label,
@@ -567,10 +567,10 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
         recordLabel: recordName?.label,
         recordName: recordName?.name,
         recordDetail: recordName?.detail,
-        anchorLabel: decision.anchor ? nameOf(decision.anchor).label : 'Skip',
+        anchorLabel: decision.anchor ? nameOf(decision.anchor).label : t('Skip'),
         status: decision.status,
         rationale: decision.rationale,
-        rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
+        rationaleLabel: rationaleLabels[decision.rationale] ? tm(rationaleLabels[decision.rationale]) : decision.rationale,
         reversedFromSource: records.get(decision.recordKey) || false
       };
     })
@@ -1479,7 +1479,7 @@ export const createSimilarityAlignmentActions = ({
     noticeState.value = { text: String(message || ''), whileNoPlan };
   };
 
-  /** @param {string} reason */
+  /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
   const clearCommittedPlan = (reason) => {
     const hadPlan = Boolean(state.similarityAlignmentPlan?.value);
     if (activeApply && typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
@@ -1493,7 +1493,7 @@ export const createSimilarityAlignmentActions = ({
     state.similarityAlignmentPlan.value = null;
     summary.value = null;
     repair.value = null;
-    publishNotice(`Alignment cleared: ${reason}`, true);
+    publishNotice(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
     return true;
   };
 
@@ -1572,7 +1572,7 @@ export const createSimilarityAlignmentActions = ({
       committed: /** @type {AlignmentBaseline} */ (activeBaseline).canonical,
       plan: response.plan, orientations,
       translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
-    const promise = runAlignmentCandidate({canonical, label: 'Align Similarity Group',
+    const promise = runAlignmentCandidate({canonical, label: msg('Align Similarity Group'),
       alignmentResetBefore: /** @type {AlignmentBaseline} */ (activeBaseline).canonical});
     activeApply = promise;
     let outcome;
@@ -1693,12 +1693,12 @@ export const createSimilarityAlignmentActions = ({
       const candidate = row.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor));
       if (!candidate) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'select', candidateKey: candidate.key },
-        reason: 'user_selected', reasonLabel: 'Selected by user',
+        reason: 'user_selected', reasonLabel: t('Selected by user'),
         unchanged: false, repairRequired: false };
     } else if (update.kind === 'skip') {
       if (!row.candidates.length) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'skip', candidateKey: null },
-        reason: 'skipped_by_user', reasonLabel: 'Skipped by user',
+        reason: 'skipped_by_user', reasonLabel: t('Skipped by user'),
         unchanged: true, repairRequired: false };
     } else return { status: 'rejected' };
     draft.value = deepFreeze({
@@ -1780,7 +1780,7 @@ export const createSimilarityAlignmentActions = ({
     const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (members.map((member) => {
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
-        const record = shortRecordName(records.get(anchor.recordKey)) || 'Unavailable record';
+        const record = shortRecordName(records.get(anchor.recordKey)) || t('Unavailable record');
         const start = locationPartBound(member, 'start');
         const end = locationPartBound(member, 'end');
         return {
@@ -1861,11 +1861,11 @@ export const createSimilarityAlignmentActions = ({
   /** @param {ReturnType<typeof referenceOptionsOf>} options */
   const disabledReasonOf = (options) => {
     if (['resolving', 'applying'].includes(status.value)) {
-      return 'Wait for the current alignment operation to finish.';
+      return t('Wait for the current alignment operation to finish.');
     }
-    if (!options.length) return 'No exact reference features are available for this group.';
+    if (!options.length) return t('No exact reference features are available for this group.');
     if (!pickedReference(options)) {
-      return 'Select an exact reference record and feature before aligning.';
+      return t('Select an exact reference record and feature before aligning.');
     }
     return '';
   };
@@ -1895,18 +1895,18 @@ export const createSimilarityAlignmentActions = ({
     const targets = (receipt?.directions || []).map((/** @type {AlignmentResetReceipt['directions'][number]} */ delta) => {
       const record = request?.records.find((/** @type {CommittedRecord} */ {recordKey}) => recordKey === delta.recordKey);
       const recordName = names.get(delta.recordKey);
-      return {recordKey: delta.recordKey, label: recordName?.label || 'Unavailable record',
-        name: shortRecordName(recordName) || 'Unavailable record',
+      return {recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
+        name: shortRecordName(recordName) || t('Unavailable record'),
         current: baseReverseComplement(record), restored: delta.before,
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
     const count = targets.length;
     return { targets,
-      directionsLabel: count ? `Positions and directions (${count} ${count === 1 ? 'record' : 'records'})`
-        : 'Positions and directions',
+      directionsLabel: count ? tn(count, 'Positions and directions ({count} record)', 'Positions and directions ({count} records)')
+        : t('Positions and directions'),
       disabledReason: !receipt
-        ? 'Not available: this Session does not record which directions the latest Align changed.'
-        : !count ? 'Not available: the latest Align did not change any record direction.' : '' };
+        ? t('Not available: this Session does not record which directions the latest Align changed.')
+        : !count ? t('Not available: the latest Align did not change any record direction.') : '' };
   });
   /** @param {string} [scope] */
   const resetAlignment = async (scope = 'positions') => {
@@ -1963,15 +1963,15 @@ export const createSimilarityAlignmentActions = ({
       }
       const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
       promise = runAlignmentCandidate({canonical, label: scope === 'positions'
-        ? 'Reset alignment positions' : 'Reset alignment positions and direction changes', alignmentResetReceipt:null});
+        ? msg('Reset alignment positions') : msg('Reset alignment positions and directions'), alignmentResetReceipt:null});
       activeApply = promise;
       const outcome = await promise;
       if (expectedActionId !== actionId) return {status:'stale'};
       if (outcome?.status === 'ok') {
         clearDraft(); repair.value = null; summary.value = null; resetDialogOpen.value = false;
         error.value = null;
-        publishNotice(scope === 'positions' ? 'Alignment reset: record positions restored; record directions unchanged.'
-          : 'Alignment reset: positions and the latest Align direction changes restored.');
+        publishNotice(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
+          : t('Alignment reset: record positions and directions restored to before the latest Align.'));
       } else if (!['canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
     } catch (cause) {
@@ -2017,9 +2017,9 @@ export const createSimilarityAlignmentActions = ({
     repair.value = deepFreeze({
       kind: 'reference',
       groupId: state.similarityAlignmentPlan?.value?.groupId || '',
-      reason: String(reason || 'The exact reference is no longer available.')
+      reason: String(reason || t('The exact reference is no longer available.'))
     });
-    publishNotice(`Alignment needs repair: ${repair.value.reason}`);
+    publishNotice(t('Alignment needs repair: {reason}', { reason: repair.value.reason }));
     return { status: 'blocked', reason: 'stale-reference' };
   };
 
@@ -2061,10 +2061,10 @@ export const createSimilarityAlignmentActions = ({
     repair.value = deepFreeze({
       kind: 'targets',
       groupId: plan.groupId,
-      reason: 'One or more saved target anchors are no longer usable. Select or Skip each target.'
+      reason: t('One or more saved target anchors are no longer usable. Select or Skip each target.')
     });
     status.value = 'reviewing';
-    publishNotice(`Alignment needs repair: ${repair.value.reason}`);
+    publishNotice(t('Alignment needs repair: {reason}', { reason: repair.value.reason }));
     return { status: 'blocked', reason: 'stale-target' };
   };
 
@@ -2087,7 +2087,7 @@ export const createSimilarityAlignmentActions = ({
     const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
       !catalogFeatures.length || uniqueCatalogFeature(catalogFeatures, anchor) !== null);
     if (!resolves(plan.reference)) {
-      return markStaleReference('The alignment reference feature is no longer found in its record.');
+      return markStaleReference(t('The alignment reference feature is no longer found in its record.'));
     }
     const goneRecordKeys = new Set(decisions
       .filter(({ status, anchor }) => status === 'aligned' && !resolves(anchor))
@@ -2109,7 +2109,7 @@ export const createSimilarityAlignmentActions = ({
     // Target repair offers this group's members and keeps the other choices,
     // so it needs the reference and every remaining target in the group.
     if (regrouped) {
-      return markStaleReference('An aligned target feature is no longer found in its record.');
+      return markStaleReference(t('An aligned target feature is no longer found in its record.'));
     }
     let request;
     try {
@@ -2142,7 +2142,7 @@ export const createSimilarityAlignmentActions = ({
       if (alignedKeys.size > 0) {
         return prepareStaleTargetRepair(plan, request, alignedKeys, expectedActionId);
       }
-      return markStaleReference('The exact reference is no longer usable with current facts.');
+      return markStaleReference(t('The exact reference is no longer usable with current facts.'));
     }
     repair.value = null;
     return { status: 'ok' };
@@ -2186,7 +2186,7 @@ export const createSimilarityAlignmentActions = ({
     const materializedPlan = state.similarityAlignmentPlan?.value;
     installBaseState(pendingRecordDragBaseline);
     pendingRecordDragBaseline = null;
-    materializedRecordDrag = clearCommittedPlan('record moved manually.');
+    materializedRecordDrag = clearCommittedPlan(msg('record moved manually.'));
     if (!materializedRecordDrag) return false;
     const recordKeys = currentRecordKeys();
     state.linearRecordTranslations.value = materializedTranslations(
@@ -2210,14 +2210,19 @@ export const createSimilarityAlignmentActions = ({
       const beforeDirection = arrowLabel(record.beforeArrow);
       const afterDirection = arrowLabel(record.afterArrow);
       // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
+      const exclusionReason = (/** @type {string} */ code) => tm(directionExclusionLabels[code] || code);
       const exclusionLabel = record.exclusion
-        ? `${record.exclusion === 'unknown_strand' ? 'Direction unchanged' : 'Unchanged'}: ${directionExclusionLabels[record.exclusion] || record.exclusion}`
+        ? (record.exclusion === 'unknown_strand'
+          ? t('Direction unchanged: {reason}', { reason: exclusionReason(record.exclusion) })
+          : t('Unchanged: {reason}', { reason: exclusionReason(record.exclusion) }))
         : '';
       return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
         shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
         reversed: record.beforeReverseComplement !== record.afterReverseComplement,
         // The accessible before/after statement each card and its Custom select describe.
-        description: `${label}${isReference ? ' · exact reference' : ''}: Current ${beforeDirection}; after Align ${afterDirection}.`
+        description: (isReference
+          ? t('{label} · exact reference: Current {before}; after Align {after}.', { label, before: beforeDirection, after: afterDirection })
+          : t('{label}: Current {before}; after Align {after}.', { label, before: beforeDirection, after: afterDirection }))
           + (exclusionLabel ? ` ${exclusionLabel}` : '') };
     });
     const eligible = records.filter(record => !record.exclusion);
@@ -2226,27 +2231,43 @@ export const createSimilarityAlignmentActions = ({
     const excluded = records.filter(record => record.exclusion
       && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
     const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
-    const plural = (/** @type {number} */ count, /** @type {string} */ word) => `${count} ${word}${count === 1 ? '' : 's'}`;
-    const reversedText = `${plural(reversed.length, 'record')} (${reversed.map(({ shortLabel }) => shortLabel).join(', ')})`;
+    const reversedText = tn(reversed.length, '{count} record ({names})', '{count} records ({names})',
+      { names: listText(reversed.map(({ shortLabel }) => shortLabel)) });
     const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
       ? (eligible[0].afterArrow === 1 ? 'right' : eligible[0].afterArrow === -1 ? 'left' : '') : '';
-    const features = eligible.length === 1 ? 'the chosen feature' : `all ${eligible.length} chosen features`;
     let effect;
     if (intent.mode === 'custom') {
-      effect = reversed.length ? `Reverses ${reversedText}.` : 'No record is reversed yet. Choose a direction in each card.';
+      effect = reversed.length ? t('Reverses {records}.', { records: reversedText }) : t('No record is reversed yet. Choose a direction in each card.');
     } else if (reversed.length) {
-      effect = `Reverses ${reversedText} so ${features} point${eligible.length === 1 ? 's' : ''} ${intent.mode}.`;
+      // The direction is part of each whole sentence: a bare "right" or "left" is no key.
+      effect = intent.mode === 'left'
+        ? tn(eligible.length, 'Reverses {records} so the chosen feature points left.',
+          'Reverses {records} so all {count} chosen features point left.', { records: reversedText })
+        : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
+          'Reverses {records} so all {count} chosen features point right.', { records: reversedText });
     } else if (sameAfter) {
-      effect = `No record is reversed. ${features[0].toUpperCase()}${features.slice(1)} already point${eligible.length === 1 ? 's' : ''} ${sameAfter}.`;
+      effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
+        ? tn(eligible.length, 'The chosen feature already points left.', 'All {count} chosen features already point left.')
+        : tn(eligible.length, 'The chosen feature already points right.', 'All {count} chosen features already point right.'));
     } else {
-      effect = `No record is reversed. ${plural(eligible.length, 'chosen feature')} keep their current directions.`;
+      effect = joinSentences(t('No record is reversed.'),
+        tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));
     }
-    if (excluded) effect += ` ${plural(excluded, 'record')} ${excluded === 1 ? 'stays' : 'stay'} unchanged; the reason is in ${excluded === 1 ? 'its card' : 'their cards'}.`;
-    if (unknownStrand) effect += ` ${plural(unknownStrand, 'record')} ${unknownStrand === 1 ? 'keeps its' : 'keep their'} direction; the reason is in ${unknownStrand === 1 ? 'its card' : 'their cards'}.`;
+    // Verb agreement lives in the two forms of one key.
+    if (excluded) {
+      effect = joinSentences(effect, tn(excluded, '{count} record stays unchanged; the reason is in its card.',
+        '{count} records stay unchanged; the reason is in their cards.'));
+    }
+    if (unknownStrand) {
+      effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
+        '{count} records keep their direction; the reason is in their cards.'));
+    }
     // D-11: the reference feature centre stays fixed; its record's left edge may move.
     const shift = Math.round(projected.reference.deltaX);
     const referenceShift = shift
-      ? `${reference.name} stays where it is; the record's left edge moves ${Math.abs(shift).toLocaleString('en-US')} px (at 100% zoom) to the ${shift > 0 ? 'right' : 'left'}.`
+      ? (shift > 0
+        ? t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the right.', { name: reference.name, px: Math.abs(shift).toLocaleString('en-US') })
+        : t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the left.', { name: reference.name, px: Math.abs(shift).toLocaleString('en-US') }))
       : '';
     return { ...projected, effect, referenceShift, records };
   });
@@ -2276,12 +2297,12 @@ export const createSimilarityAlignmentActions = ({
   const unresolvedCount = computed(() => recordsNeedingChoice(draft.value?.rows || []).length);
 
   const applyDisabledReason = computed(() => {
-    if (status.value === 'applying') return 'Applying the alignment plan.';
-    if (status.value === 'resolving') return 'Resolving the current alignment.';
+    if (status.value === 'applying') return t('Applying the alignment plan.');
+    if (status.value === 'resolving') return t('Resolving the current alignment.');
     if (unresolvedCount.value > 0) {
-      return `Choose a candidate or Skip for ${unresolvedCount.value} record${unresolvedCount.value === 1 ? '' : 's'}.`;
+      return tn(unresolvedCount.value, 'Choose a candidate or Skip for {count} record.', 'Choose a candidate or Skip for {count} records.');
     }
-    if (status.value !== 'reviewing') return 'Open an alignment review before applying.';
+    if (status.value !== 'reviewing') return t('Open an alignment review before applying.');
     return '';
   });
 

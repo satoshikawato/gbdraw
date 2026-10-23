@@ -844,7 +844,7 @@ test('beside the rail alone Generate is compact and a layout warning is a tip th
 
     // Five uploaded tables for Circular pairwise rings, with GC content and skew on: the warning shows.
     await entry(page, 'Pairwise Comparisons').click();
-    await page.getByLabel('Upload BLAST', { exact: true }).check();
+    await page.getByLabel('Upload BLAST TSV', { exact: true }).check();
     await page.locator('[data-settings-section="pairwise-comparisons"] input[type="file"]').first().setInputFiles(
       ['LvMJNV.TrcuMJNV', 'MeenMJNV.MejoMJNV', 'MelaMJNV.PemoMJNVA', 'MellatMJNV.MeenMJNV', 'MjeNMV.MelaMJNV']
         .map((pair) => join(process.cwd(), 'examples', `${pair}.tblastx.out`)));

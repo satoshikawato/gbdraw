@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `63`
+- Contract revision: `80`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -40,7 +40,7 @@ Status: active Product authority
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
-  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, and `PD-OI-105`
+  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, and `PD-OI-106`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1574,6 +1574,1234 @@ Status: active Product authority
     the Review is `REQUIRED`. The runtime that implements it follows in
     DRAWINGS-A (the project steps of History), which cites this authority on
     its base.
+- Revision 64 changes: `PD-OI-044` is replaced for scenario revision `4`
+  (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS` is kept) and `PD-OI-090`
+  for scenario revision `4` (`A / PROJECT-WITH-DRAWINGS` is kept), and
+  `OIC-030` is amended to match; `PD-OI-103` and `PD-OI-104` are replaced for
+  scenario revision `2`, `PD-OI-066` and `PD-OI-059` for scenario revision
+  `3`, and `PD-OI-060` for scenario revision `2`. They come from replies of
+  the Product Decision Owner `satoshikawato` of `2026-10-18` in campaign
+  `incremental-render-20261013` (`DECISIONS.md` `D-128` to `D-134`), asked
+  after the Owner invited questions (「質問して」). Each quotation below is the
+  part of a reply that carries the answer; each question is given as
+  `DECISIONS.md` records it.
+  - Session version (`D-129`, OV-1178): the reply to the question "re-read
+    Contract revision 62's Session numbers now (0.14.0 = Session 48,
+    drawings 49, the Python-free preview Load covers 46-49; Contract-only PR
+    before the tag) or leave it to the drawings campaign":
+    「A 読み替える（推奨）」. It accepts that reading of the drawings record.
+    Session version `48` is the format the 0.14.0 runtime writes, which
+    stores protein comparison results in the search frame (OV-1145, D-124).
+    So the project and drawing format is Session version `49`, and version
+    `48` Sessions are an earlier format that moves to it without Python, as
+    version `46` and `47` Sessions do. Every Session version in the two
+    receipts that named the drawings format reads accordingly; every other
+    number is unchanged.
+  - Load conversion (`D-128`, OV-1179): D-126 (`2026-10-18`) replied
+    「A. Python Worker 経由」 to a question that said "no authority PR". The
+    reply to Q-O2, "B-LOAD (keep D-126; a Session 46/47 with protein results
+    stored on a reversed record shows its stored figure at once, the Python
+    Worker converts once at Load; PD-OI-044 rev 4 / PD-OI-090 rev 3 rows) or
+    A-SAVE (Load stays Python-free; conversion at the first Generate or
+    Save)", is: 「B-LOAD（推奨）」.
+    `PD-OI-044` and `PD-OI-090` therefore let a Session up to 47 start
+    Python once at Load, but only when it holds protein comparison results
+    stored on a reversed record. The figure shows first, as revision 3
+    requires for version 27-44. The replies state no rationale, and the
+    receipts add none.
+  - Step 5 (`D-130` to `D-133`): the questions of the decision packet
+    `design/STEP5-G2GT-DECISION-PACKET.md` revision 3 of that campaign (base
+    `332e3ad5f`); each question and the reply:
+    - `S5-Q1` (`web.settings.live-sections` revision 2), how G2 sections go
+      live (A evidence rule / B wave receipts / C all after SW1 / D stay on
+      Generate), with the reading (MARGIN / SENSITIVITY) and the evidence
+      unit (U1 / U2): 「A・MARGIN・U2（推奨）」
+    - `S5-Q2` (`web.layout.track-toggle-application` revision 2), GC / skew
+      / Depth toggles (A redraw when within target / B redraw now), reading
+      (MARGIN / SENSITIVITY / AS S5-Q1), set (TOGETHER / PER-TOGGLE):
+      「A・S5-Q1 と同じ読み方・まとめて（推奨）」
+    - `S5-Q3` (`web.live-edit.regeneration-parity` revision 3), how long an
+      editor edit may wait for live applies (A about two applies within the
+      rule / B the measured cost): 「A 目標内の 2 回分（推奨）」
+    - the packet's conditional receipts `web.circular.definition-application`
+      revision 3 (A live with S5-Q1 / B keep revision 2) and
+      `web.stroke.application` revision 2 (A live with S5-Q1 / B keep
+      revision 1): 「A / A（推奨）」
+  - Receipt text (`D-134`): the reply to the question of the Rationale, Must
+    preserve, May retire, and Accepted residual risk fields of `D-128` to
+    `D-133`: 「下書きをそのまま採用」. It adopts the drafts as written:
+    `OWNER-RECEIPTS-S18-DRAFT.md` revision 2.1 for `PD-OI-044` and
+    `PD-OI-090` (its rows for both variants and for B-LOAD; no A-SAVE row),
+    and for the five step 5 receipts the packet's text of the chosen option:
+    Must preserve, May retire, and Accepted residual risk are the option's
+    Preserved, Retired, and Residual risk text, the `S5-Q1` and `S5-Q2`
+    receipts add to Must preserve the packet's "Evidence rule" text, and each
+    Rationale quotes the packet's stated reason for the option. Where the
+    packet states a field as "as S5-Q1 A for the unit", the receipt says so.
+    The serialized receipts are shown to the Owner for review before this
+    change merges.
+  - Numbering: `PD-OI-090` scenario revision `3` (Revision 63) reached the
+    base after the draft was written against scenario revision `2`. The
+    drafted scenario revision `3` is recorded as scenario revision `4`,
+    superseding scenario revision `3`; its text changes are applied to
+    scenario revision `3`'s text, whose 〔Undo と削除〕 is kept.
+  - Receipt mapping: `S5-Q1` → `PD-OI-103` scenario revision `2`; `S5-Q2` →
+    `PD-OI-104` scenario revision `2`, which supersedes the `S4-Q3` outcome;
+    `S5-Q3` → `PD-OI-066` scenario revision `3`;
+    `web.circular.definition-application` revision 3 → `PD-OI-059` scenario
+    revision `3`; `web.stroke.application` revision 2 → `PD-OI-060`
+    scenario revision `2`. Each Choice names the packet's option of that ID.
+    The receipts name the setting groups (G1, G2, G3, GT) as `PD-OI-103`
+    lists them and the stage work as the packet does (SW1, SW2, SW3).
+  - New receipt SHA-256 values; every receipt carries the decision date
+    `2026-10-18`:
+    - `PD-OI-044` scenario revision `4`:
+      `896078be8ce11203eedaddae8d048ae312bceb46f4f89f63f19ff14baadcb398`
+    - `PD-OI-090` scenario revision `4`:
+      `dbc29cc437fd62eb2aad80cbbe7872f7ab701896b9a7ccf54609ca5b9c168f81`
+    - `PD-OI-103` scenario revision `2`:
+      `95f13d32a53bccd0b4997663e78ff5acb731971220cc3fa36e8ba426267ab6ca`
+    - `PD-OI-104` scenario revision `2`:
+      `55b1a9d81c4eada55480cc440f892fb6d4058e6ead85dcbbf681cf67ccfcbaaa`
+    - `PD-OI-066` scenario revision `3`:
+      `d051f8b4a669d2be36d0f91c06867d8c4079fdd5605451583d3029ccd3b150a7`
+    - `PD-OI-059` scenario revision `3`:
+      `9d9f749fff0f9a8f24a74d912b707a21712649d674c0a06f183cb0ef90ffc4cf`
+    - `PD-OI-060` scenario revision `2`:
+      `c11a661c2922c3bda0a37c77a94dc0015dc4a9323bad86ef78f4c9aefb20ae0a`
+  - `OIC-030` reads 「each Session 46, 47, and 48 fixture」 and 「a Session 46,
+    47, 48, or 49 preview-only Load starts no Python Worker, except that a
+    Session 46 or 47 holding protein comparison results stored on a reversed
+    record shows its stored figure first and then starts it once to convert
+    them」.
+  - `PD-OI-091` cites 「PD-OI-044 revision 2 の May retire」. Scenario
+    revision `4` keeps that May retire byte for byte, as revision `3` did, so
+    the citation keeps its meaning.
+  - Scope: `PD-OI-044` and `PD-OI-090` keep only their new receipts; Git
+    history retains the former ones. `PD-OI-103`, `PD-OI-104`, `PD-OI-059`,
+    and `PD-OI-060` keep their former receipt, which holds for each unit or
+    toggle until it goes live, and `PD-OI-066` keeps its scenario revision
+    `1` and `2` receipts. The titles of `PD-OI-060` and `PD-OI-104` change
+    to state when the settings apply (no link targets their anchors).
+    `PD-OI-102`, `OIC-024`, `OIC-027`, and every other record keep their
+    text, and no other record is amended or retired. The R1 exception
+    sentence of `gbdraw/web/CLAUDE.md` that cites `PD-OI-104` is unchanged
+    here; the packet drops it in a later authority-only pull request after
+    the GT runtime change.
+  - This change is Contract-only: the Contract is the only changed path, and
+    the Review is `REQUIRED`. The runtime that implements it follows in
+    separate pull requests, which cite this authority on their base: the
+    Web Load conversion of OV-1145 (its step 2), and the step 5 work after
+    the 0.14.0 tag and DRAWINGS A1.
+- Revision 65 change: `PD-OI-104` is replaced for scenario revision `3`
+  (`A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`, reading `AS S5-Q1`, set
+  `TOGETHER`, is kept). It comes from the Product Decision Owner
+  `satoshikawato`'s reply of `2026-10-18` (campaign
+  `incremental-render-20261013`, `DECISIONS.md` `D-135`) after Revision 64
+  merged in pull request #1193.
+  - The reply, to the question whether the May retire of `PD-OI-104`
+    scenario revision `2`, serialized from the packet's "Retired" text only,
+    also holds the "Lost" text of `S5-Q2` A in
+    `design/STEP5-G2GT-DECISION-PACKET.md` revision 3 (the instant hide and
+    show, replaced by a redraw within the rule; Show Depth turned on after a
+    Depth source change no longer shows the old drawn track at once):
+    「足す（推奨）」.
+  - Receipt change: May retire
+    「`applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence.」
+    reads
+    「`applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once.」.
+    Every other field of the scenario revision `2` receipt is unchanged; the
+    scenario revision `1` receipt stays in the record, as before.
+  - The reply states no rationale or accepted risk for this change, and the
+    receipt adds none.
+  - New receipt SHA-256: `PD-OI-104` scenario revision `3`
+    `8d2096e0ea8236387807688b956388ce96e13f005ada0a8e08f130364137e3cd`.
+    The receipt keeps the decision date `2026-10-18`.
+  - No other record is amended or retired.
+  - This change is Contract-only: the Contract is the only changed path, and
+    the Review is `REQUIRED`.
+- Revision 66 changes: `PD-OI-097` is replaced for scenario revision `9`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-18` and `2026-10-19`
+  on Linear region (annotation) labels that the placer cannot move clear of
+  feature labels and leader lines (OV-1155). Each quotation below is the part
+  of a reply that carries the answer; Replies 1 to 12 are those of the
+  Revision 50 and 53 entries.
+  - Reply 13 (scenario revision `9`, `2026-10-18`), to the question
+    「OV-1155: Linear の領域(annotation)ラベルを、自分の範囲の中でどこへ動かしても引き出し線や feature ラベルを避けられないとき、今は重ねたまま、警告なしで描いています。どうしますか？」
+    the selected option and its description:
+    「警告に載せる (推奨)」
+    「図は今のまま描き、既存の Linear の収まり警告(CLI の警告、Web の通知帯)に「領域ラベルの重なり N 件」を加え、直し方の選択肢も出します。利点: LP-D42・LP-D48 の「収まらなければ警告して選んでもらう」と同じ扱いになり、図が勝手に変わらない。欠点: 通知文と選択肢を足す必要がある(Contract の変更を伴うかもしれない)。重なり自体は残る。」
+    (`REGION-WARN`)
+  - Reply 14 (`2026-10-18`), the message
+    「cli-hmmtdna-20.png てかこれ"rRNA genes"のラベル下に置けばよくね？紫で塗られた空白の領域が空いてるじゃん。ここにうまく配置すれば、unambiguousだしきれいだしフォントサイズも変えなくていい。」
+  - Reply 15 (`2026-10-18`), to the question
+    「crowded のように、2行にしても重なりが残る（別のラベルにかぶる）とき、どうしますか？」
+    the selected option and its description:
+    「全部解消するときだけ (推奨)」
+    「そのラベルの重なりが 0 になるときだけ枠の中や 2 行を使う。解消しなければ今の 1 行のままにして警告と「領域ラベルを小さく」に任せる。予測しやすく、重なりを新しく作らない。」
+  - Reply 16 (`2026-10-18`), the message
+    「二行とフォントサイズ小さくするのやめたい。ほかのラベルに動いてもらうのも考えたら？」
+  - Reply 17 (`2026-10-18`), the message
+    「ラベルの背景を半透明の塗りつぶしにして、レイヤーの前後関係を明確にすれば，フィーチャーラベルのリーダー線の前にregion labelが来れるんじゃないかな」
+  - Reply 18 (scenario revision `9`, `2026-10-19`), to the question
+    「OV-1155：領域ラベルとほかのラベルが重なるとき、どう直しますか？（上の画像。どの案でも領域ラベル同士の重なりは直らず、警告が残ります）」
+    the selected option and its description:
+    「(e')+(b) (推奨)」
+    「リーダー線とだけ重なる領域ラベルは、白背景つきで線の前に出す。文字同士が重なるときは、そのフィーチャーラベルを同じ側の別の段へ移す（空き段がなければ1段足す）。ラベルは今の側のまま、線はまっすぐ。left_end__e / hmmtdna20__b / combo20__eb」
+    (`RGN-FRONT`, `RGN-YIELD-ROW`)
+  - Reply 19 (`2026-10-19`), to the question
+    「背景の裏を通るリーダー線を「重なり」として数えますか？」
+    the selected option and its description:
+    「数えない (推奨)」
+    「背景で線が隠れるなら重なりとしない。left_end は警告が消える。文字と文字、文字とフィーチャーの図形は、これまでどおり重なりとして数える。」
+  - Reply 20 (`2026-10-19`), to the question
+    「領域ラベルの背景の見た目はどれにしますか？（backing__left_end / backing__crowded / backing__combo14）」
+    the selected option and its description:
+    「白の角丸ボックス 70%」
+    「背景が薄く、裏の線が透けて見える。」
+  - Reply 21 (`2026-10-19`), to the question
+    「ほかのラベルを動かすのは自動にしますか？」
+    the selected option and its description:
+    「自動 (推奨)」
+    「重なりが全部消えるときだけ自動で動かす（LP-D77）。消えないときは今の位置のまま警告。2行と「小さく」をやめるので、警告に直し方の候補は出ない（領域ラベル同士の重なりは位置を手で直す）。」
+  - Replies the Owner gave on `2026-10-18` that chose region labels on two
+    lines and a row that makes region labels smaller were withdrawn by
+    Reply 16 before they reached `dev`; they are not part of this record.
+  - Replies 13 to 21 state no rationale, preserved or retired effect, or
+    accepted risk for these choices, and the change receipt below adds none.
+    Replies 14, 15, 17, and 19 to 21 say how the choices are realized (the
+    label inside its own filled box; a place used only when it clears every
+    conflict of the label; a leader line behind the backing not counted; a
+    white rounded box at 70 % opacity; automatic); they add no choice token.
+  - Reply 22 (`2026-10-19`), approving the receipt texts below, to the
+    question
+    「PD-OI-097 rev 9 の受領文（作り直し）：Choice に REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW を加え、Rationale の末尾に「ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。」、May retire の末尾に「（Linear の領域ラベルの重なりを除く）」を足し、Decision date を 2026-10-19 にします。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract に記録し、承認の返答を Reply 22 として引用して SHA-256 を計算する。そのあと PR を開く（マージは Owner）。」
+    The record's scenario revision `9` receipt and the change receipt below
+    are the approved texts.
+    So the record's scenario revision `9` receipt appends
+    「ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。」 to the Rationale and 「（Linear の領域ラベルの重なりを除く）」 to the May retire of scenario
+    revision `8`; its other fields are those of scenario revision `8`.
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `133d121c2a05096bfa6ed961d40991dba56bac8f41b412e1039d0921539ca27b`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 9
+    Choice: REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Scope: the record's receipt for scenario revision `9` is recorded below;
+    the scenario revision `7` and `8` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 67 changes: `PD-OI-097` is replaced for scenario revision `10`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-19` on Circular region
+  (annotation) labels drawn along their circle that are longer than the
+  circle allows (OV-1210). Each quotation below is the part of a reply that
+  carries the answer; Replies 1 to 22 are those of the Revision 50, 53, and 66
+  entries.
+  - Reply 23 (scenario revision `10`, `2026-10-19`), to the question
+    「Q2（OV-1210）：円のかなりの部分を回るほど長いラベルはどう描きますか？（ページの f2, f3）」
+    the selected option and its description:
+    「常に曲線＋欠けたら警告」
+    「常に曲線で描き、円周に収まらない分は欠ける。欠けたときは警告を出す。」
+    and the answer:
+    「常に曲線＋欠けたら警告」
+    (`RGN-CUT-WARN`)
+  - Reply 23 states no rationale, preserved or retired effect, or accepted
+    risk for this choice, and the change receipt below adds none.
+  - Reply 24 (`2026-10-19`), approving the receipt texts below, to the
+    question
+    「Q5（OV-1210）：PD-OI-097 rev 10 の受領文です。Choice に RGN-CUT-WARN を加え、Rationale の末尾に「Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。」を足し、Decision date を 2026-10-19 にします。ほかの欄（Must preserve を含む）は rev 9 のままです。この受領文を承認しますか？（ページの「実装と受領文の確認」）」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract rev 67 に記録し、この返答を Reply 24 として引用して SHA-256 を計算する。そのあと review を経て PR を開く（merge は Owner）。末尾の「…」もこのまま。」
+    and the answer:
+    「承認 (推奨)」
+    The record's scenario revision `10` receipt and the change receipt below
+    are the approved texts.
+    So the record's scenario revision `10` receipt appends
+    「Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。」 to the Rationale of scenario revision `9`; its other
+    fields are those of scenario revision `9`, with the decision date of the
+    last reply.
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `6192643855d405eb55379ad7f92cae6f12745c54938f4ae9355ccc495219c81e`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 10
+    Choice: RGN-CUT-WARN
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Scope: the record's receipt for scenario revision `10` is recorded below;
+    the scenario revision `7`, `8`, and `9` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 68 changes: `PD-OI-097` is replaced for scenario revision `11`
+  (concern `product.circular-outer-label-fit`), and `PD-OI-098` for scenario
+  revision `2` (concern `diagram-generation.diagram-font`; the outcome
+  `A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED` is kept). They come from the
+  Product Decision Owner `satoshikawato`'s replies of `2026-10-19` on the
+  style of feature labels: what keeps the leader lines that pass behind a
+  label off its letters, a Linear underline joined to the leader line, the
+  width of leader lines, and a minimum gap between labels in one Linear row
+  (OV-1355). Each quotation below is the part of a reply that carries the
+  answer; Replies 1 to 24 are those of the Revision 50, 53, 66, and 67
+  entries.
+  - Reply 25 (scenario revision `11`, `2026-10-19`), to the question
+    「Q9: フィーチャーラベルを、後ろを通るリーダー線からどう守りますか？（ページの図1・2・6・8）」
+    the selected option and its description:
+    「ハロー 0.08-0.12em (推奨)」
+    「文字の形に沿った白い縁取り。リーダー線は文字の間で元の濃さのまま残る。領域ラベルの背景 0.7 は今のまま」
+    and the answer:
+    「ハロー 0.08-0.12em (推奨)」
+    (`LBL-HALO`)
+  - Reply 26 (scenario revision `11`, `2026-10-19`), to the question
+    「Q10: Linear のデフォルトはどれにしますか？（図1・3・4）」
+    the selected option and its description:
+    「下線+ハロー (推奨)」
+    「LP-D93 の「下線+半透明背景」と同じ目的を、リーダー線を隠さないハローで果たす」
+    and the answer:
+    「下線+ハロー (推奨)」
+    (`LIN-UNDER`)
+  - Reply 27 (scenario revision `11`, `2026-10-19`), to the question
+    「Q11: Circular のデフォルトはどれにしますか？（図6・7）」
+    the selected option and its description:
+    「ハロー、下線なし (推奨)」
+    「Circular でリーダー線が文字を通る所は少なく（lambda で3か所）、違いは小さい」
+    and the answer:
+    「ハロー、下線なし (推奨)」
+    (`CIR-NO-UNDER`)
+  - Reply 28 (scenario revision `11`, `2026-10-19`), to the question
+    「Q12: 上から来るリーダー線（ラベルがトラックの下にあるときなど）はどう終えますか？（図5）」
+    the selected option and its description:
+    「0.20em 上で止める (推奨)」
+    「文字の 0.20 em 上で止める。線の交差も折れ点も増えない（LP-D90 と両立）」
+    and the answer:
+    「0.20em 上で止める (推奨)」
+    (`GAP-STOP`)
+  - Reply 29 (scenario revision `11`, `2026-10-19`), to the question
+    「Q13: リーダー線（と下線）の太さをどうしますか？（図4・7・9・10）」
+    the selected option and its description:
+    「両モード 0.07倍・≧1px (推奨)」
+    「文字サイズの 0.07 倍、ただし 1.0 px 以上。Linear と長い配列の Circular は 0.5→1.0 px 以上に太く、短い配列の Circular（14 pt）は 1.5→1.0 px に細くなる。下線と文字の間は線の縁から測る」
+    and the answer:
+    「両モード 0.07倍・≧1px (推奨)」
+    (`LEADER-007`)
+  - Reply 30 (scenario revision `11`, `2026-10-19`), to the question
+    「Q14: 選べるようにするオプションの形は？」
+    the selected option and its description:
+    「2つに分ける (推奨)」
+    「label_line（none / under）と label_protection（none / halo / box）。下線と守りを独立に選べ、「下線+背景」も選べる」
+    and the answer:
+    「2つに分ける (推奨)」
+    (`LBL-OPTS-2`)
+  - Reply 31 (scenario revision `11`, `2026-10-19`), to the question
+    「Q15: この変更（Q9〜Q14）をいつ入れますか？」
+    the selected option and its description:
+    「0.14.0 に入れる」
+    「タグの前に入れる（P-03 の凍結の例外になる）」
+    and the answer:
+    「0.14.0 に入れる」
+    (`LBL-0140`)
+  - Reply 32 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-A: フィーチャーラベルのハローの幅は？（ページ https://claude.ai/artifact/NN3ZELDPbp3u6pFqP8TsTz Version 6 の図 Q-A 1・2）」
+    the selected option and its description:
+    「0.08 em (推奨)」
+    「読む大きさでは差が見えず、リーダー線を一番多く残す（ラベル内で見える割合 89 %、dev 83 %）」
+    and the answer:
+    「0.08 em (推奨)」
+    (`HALO-008`)
+  - Reply 33 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-B: 名前と置き場所はこれでよいですか？ CLI --label_line {none,under} / --label_protection {none,halo,box}（両モード）、config [labels.linear]/[labels.circular] の line / protection、Python は config_overrides のみ、GUI は Labels の Label Rendering の後に Label Line（None/Underline）と Label Protection（None/Halo/Box）。ハローの幅と箱の不透明度は固定。」
+    the selected option and its description:
+    「このまま (推奨)」
+    「上の名前と置き場所。GUI の画面は PR でスクリーンショットをお見せします」
+    and the answer:
+    「このまま (推奨)」
+    (`OPT-NAMES`)
+  - Reply 34 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-D: この変更より前に保存した Session の見た目は？（図 Q-D 1・2）」
+    the selected option and its description:
+    「A 次の Generate で新しく (推奨)」
+    「保存された図は Generate までそのまま。Python で labels.stroke_width を指定するとエラー（CHANGELOG に書く）」
+    and the answer:
+    「A 次の Generate で新しく (推奨)」
+    (`SESS-NEXT-GEN`)
+  - Reply 35 (`2026-10-19`), to the question
+    「Q-F: 全体の図（図 Q-D 2）を見て、Linear のリーダー線の太さは Q13 のままでよいですか？ 24 pt で 0.5 → 1.68 px になり、下線とあわせて灰色の格子が目立ちます。」
+    the selected option and its description:
+    「Q13 のまま」
+    「文字サイズの 0.07 倍、1.0 px 以上。24 pt で 1.68 px、50 % に縮めてもコントラスト 2.49:1」
+    and the answer:
+    「Q13 のまま」
+    Reply 35 confirms the width of Reply 29 and adds no choice token.
+  - Reply 36 (scenario revision `11`, `2026-10-19`), to the question
+    「S1 Web PDF のハロー：Web の PDF 書き出し（svg2pdf）は、ハローを黒い文字の重複として描き、ラベルを 2 回取り出してしまいます（ページの図 S1）。どうしますか？」
+    the selected option and its description:
+    「B ハローを描かない (推奨)」
+    「Web PDF だけハローを外す。SVG・PNG・CLI の PDF にはハローがある。Web PDF の見た目は今と同じで、ラベルは 1 回ずつ取り出せる。」
+    and the answer:
+    「B ハローを描かない (推奨)」
+    (`WEBPDF-NO-HALO`)
+  - Reply 37 (scenario revision `11`, `2026-10-19`), to the question
+    「S2 Linear の段と下線：計画 (a) では全ラベルが動いて図が高くなり、BGC で段が変わり、HmmtDNA 20 pt で警告なしの重なりが出ました。(b') なら実データは dev と同じ位置・大きさです（ページの図 S2 1〜6）。どうしますか？」
+    the selected option and its description:
+    「(b') 段に数えない (推奨)」
+    「下線は段の高さに数えず、領域名だけが下線をよける。実データの図は dev と同じ。領域名が下線に当たるときだけ、ラベルが新しい段に移るか警告。背景で下線を隠さない。」
+    and the answer:
+    「(b') 段に数えない (推奨)」
+    (`UNDER-NOT-IN-ROW`)
+  - Reply 38 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-G 下線の白い縁：上の段へ伸びるリーダー線が、ほかのラベルの下線を横切るとつなぎ目に見えます（lambda で 293 か所）。下線に白い縁を付けると、横切る線は下線の所で途切れます（新しいページの図 G 1〜3）。どうしますか？」
+    the selected option and its description:
+    「付ける (推奨)」
+    「ほかのラベルのリーダー線は下線の所で途切れ、後ろを通るように見える。自分のリーダー線はつながったまま。文字や形は隠れない。PDF +0.5 %。」
+    and the answer:
+    「付ける (推奨)」
+    (`UNDER-CASING`)
+  - Reply 39 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-H 下線の端：同じ段で隣り合うラベルの下線が、密な所では 1 本につながって見えます（tobacco IR 5 pt で 0.43 px）。下線の両端を 0.12 em ずつ短くしますか（図 H 1〜3）？」
+    the selected option and its description:
+    「両端を 0.12 em 短く (推奨)」
+    「隣どうしの下線が離れる（0.43 → 1.63 px、24 pt で 1.07 → 6.83 px）。どの下線も文字より少し短くなる（24 pt で片側 2.9 px）。ラベルの位置は変わらない。」
+    and the answer:
+    「両端を 0.12 em 短く (推奨)」
+    (`UNDER-TRIM`)
+  - Reply 40 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-I 同じ段の最小のすき間：Linear では、同じ段の隣どうしのラベルがすき間なしで並び、1 語に見えることがあります（HmmtDNA 24 pt の "tRNA-SertRNA-Lys"。dev にもある不具合 OV-1355）。すき間を入れると、詰まった段のラベルが別の段に移ります（新しいページの図 I 1〜3）。どうしますか？」
+    the selected option and its description:
+    「0.25 em、LS の PR で (推奨)」
+    「ほぼ単語 1 つ分の空白。近すぎる組はどの図でもなくなる。lambda 21、tobacco IR 22、HmmtDNA 4 ラベルが別の段へ。図の高さは変わらない。出力の作り直しは 1 回で済む。」
+    and the answer:
+    「0.25 em、LS の PR で (推奨)」
+    (`ROW-GAP-025`)
+  - Reply 41 (`2026-10-19`), the message on figure E1 of the page that showed
+    the built figures:
+    「実装した図の確認: やっぱ塗りつぶし前の方がいいかも。Lambda,ラベルの背景のリーダー線目立ちすぎ。下線＋塗りつぶしがいいかな。Thoughts?」
+  - Reply 42 (scenario revision `11`, `2026-10-19`), to the question
+    「Q-K1：Linear のフィーチャーラベルの既定をどれにしますか？白い背景は文字の外 0.18 em までで、ラベルの位置・段・図の大きさはどの案でも変わりません。白い背景なら PDF はほとんど大きくならず（lambda 24 pt でハロー 355 KB → 27 KB）、Web の PDF も SVG と同じ見た目になります。背景の濃さは Linear と Circular の Box で共通の 1 つの値です。（ページの図 K 1〜K 5）」
+    the selected option and its description:
+    「下線＋白い背景 0.8」
+    「文字の上でも線が 2 割の濃さで続いて見える。」
+    and the answer:
+    「下線＋白い背景 0.8」
+    (`LIN-BOX-080`)
+  - Reply 43 (`2026-10-19`), to the question
+    「Q-K2：Circular の既定はどうしますか？白い背景にすると、タバコ葉緑体のように色の付いた帯の上で、ラベルごとに白い四角が見えます（ページの図 K 6）。」
+    the selected option and its description:
+    「ハローのまま (推奨)」
+    「Circular でリーダー線が文字を通る所は少ない（lambda で 3 か所）。帯の上に白い四角が出ない。」
+    and the answer:
+    「ハローのまま (推奨)」
+  - Reply 42 did not select the recommended option. For Linear it replaces
+    the halo of Replies 25 and 26 with a white box behind the letters at
+    opacity `0.8`, the one fixed Box opacity of Reply 33 for both modes. Reply 43
+    keeps the halo of Reply 27 for Circular and adds no choice token.
+  - Approvals the Owner gave on `2026-10-19` of an earlier wording of both
+    receipts, with a halo as the Linear default, were made void by Reply 42
+    before they reached `dev`; they are not part of this record.
+  - Replies 25 to 43 state no rationale, preserved or retired effect, or
+    accepted risk as a receipt field; the descriptions of their options say
+    how each choice is realized. The approved receipts of Replies 44 to 46
+    word those fields, and the change receipt below adds none.
+  - Reply 44 (`2026-10-19`), approving the `PD-OI-097` receipt texts below,
+    to the question
+    「Q-E1（書き直し）：PD-OI-097 rev 11 の受領文です。前の文面から、Linear の守りを白い背景（不透明度 0.8）、Circular をハローにし、Choice に LIN-BOX-080 を足し、Must preserve に「領域ラベルは下線か白い背景にかかるとき別の段に移すか警告する」「Linear の白い背景はほかのラベルの文字と下線を覆わない」を入れ、Accepted residual risk の PDF/EPS の数字を測り直した値にしました。Decision date は 2026-10-19 です。足す文と全文はページの一番上の節にあります。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract rev 68 に記録し、この返答を Reply として引用して SHA-256 を計算する。そのあと出力の作り直しとレビューを経て PR を開く（merge は Owner）。」
+    and the answer:
+    「承認 (推奨)」
+    The change receipt below is the approved text. Reply 46 corrected one
+    Must preserve sentence of the record's receipt that Reply 44 approved,
+    before that wording reached `dev`.
+    So the record's scenario revision `11` receipt appends the choices of
+    Replies 25 to 34, 36 to 40, and 42 to the Choice; the sentences from
+    「フィーチャーラベルは、後ろを通るリーダー線から守る。」 to the end to the Rationale;
+    the sentences from 「0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。」
+    to the end to the May retire; and the sentences from
+    「Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。」
+    to the end to the Accepted residual risk of scenario revision `10`. In
+    its Must preserve, 「重なりも交差もない図は 0.13.0 と同じに描く。」 reads the
+    sentences from 「重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。」 to
+    「Linear の白い背景は、ほかのラベルの文字と下線を覆わない。」. Its other fields
+    are those of scenario revision `10`, with the decision date of the last
+    reply.
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `09af42ad585ac8add25662150d394b6e45b4ea647fa325a261d773c650fcf5a5`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 11
+    Choice: LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Reply 45 (`2026-10-19`), approving the `PD-OI-098` receipt text recorded
+    under that record below, to the question
+    「Q-E2（書き直し）：PD-OI-098 rev 2 の受領文です。〔変えないもの〕の「font を選ばない図の文字の配置と出力」の後に「（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）」を足し、Scenario revision 2、Decision date 2026-10-19 にします。ほかの欄は rev 1 のままです。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract rev 68 に記録する。」
+    and the answer:
+    「承認 (推奨)」
+  - Receipt change (`PD-OI-098`): in 〔変えないもの〕 of the Must preserve,
+    「font を選ばない図の文字の配置と出力、」
+    reads
+    「font を選ばない図の文字の配置と出力（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）、」.
+    Every other field of the scenario revision `1` receipt is unchanged,
+    with Scenario revision `2` and the decision date of Reply 45; the
+    scenario revision `1` receipt stays in the record.
+  - Reply 45 states no rationale, preserved or retired effect, or accepted
+    risk for this change, and the receipt adds none.
+  - New receipt SHA-256: `PD-OI-098` scenario revision `2`
+    `a305e5d6eefb69914e20e1397cca98298c3050315dff6d488638c2dff5160cc8`.
+  - Reply 46 (`2026-10-19`), approving the corrected `PD-OI-097` receipt text
+    recorded under that record below, to the question
+    「Q-E1（訂正）：PR 前のレビューで、承認いただいた PD-OI-097 rev 11 の Must preserve の 1 文が動きと合っていませんでした（「領域ラベルを別の段に移す」と書いたが、実際は文字にかかるときと同じくフィーチャーラベルの方を別の段へ移し、解消しなければ描いて警告する）。動きは変えず、その 1 文を「Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。」に直します。ほかの文と PD-OI-098 rev 2 はそのままです（ページの一番上の節）。この訂正した受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (推奨)」
+    「訂正した文面を Contract rev 68 に記録し、この返答を Reply として引用して SHA-256 を計算し直す。そのあと PR を開く（merge は Owner）。」
+    and the answer:
+    「承認 (推奨)」
+    The record's scenario revision `11` receipt is the approved text. In its
+    Must preserve, the sentence that Reply 44 approved as
+    「ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときはそのラベルを別の段に移し、Linear の領域ラベルがフィーチャーラベルの下線か白い背景にかかるときは領域ラベルを別の段に移すか警告する。」
+    reads
+    「ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。」.
+    The behavior is unchanged, and every other sentence is as Reply 44
+    approved it. The wording that Reply 44 approved was corrected by Reply 46
+    before it reached `dev`; it is not part of this record.
+  - Reply 46 states no rationale, preserved or retired effect, or accepted
+    risk beyond the corrected sentence, and the change receipt above is
+    unchanged.
+  - Scope: the record receipts for `PD-OI-097` scenario revision `11` and
+    `PD-OI-098` scenario revision `2` are recorded below; the `PD-OI-097`
+    scenario revision `7`, `8`, `9`, and `10` receipts and the `PD-OI-098`
+    scenario revision `1` receipt keep their text and their SHA-256.
+    `PD-OI-088` applies unchanged. No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 69 changes: `PD-OI-097` is replaced for scenario revision `12`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-19` on Circular region
+  (annotation) labels left with no room because track radii are set
+  (OV-1208). Each quotation below is the part of a reply that carries the
+  answer; Replies 1 to 46 are those of the Revision 50, 53, 66, 67, and 68
+  entries.
+  - Reply 47 (scenario revision `12`, `2026-10-19`), the message:
+    「OV-1208：Circular で半径を明示した結果、ラベルを置く場所がなくなるとき、警告を出す」
+    (`RGN-ROOM-WARN`)
+  - Reply 48 (`2026-10-19`), to the question
+    「Q-R1：Owner ページ #ov1208 の図 R1〜R4 にある警告の形と文言（CLI の WARNING 行と Web の通知帯。修正ボタンはなく、図は変わりません）をこのまま入れますか？」
+    the selected option and its description:
+    「このまま入れる (Recommended)」
+    「CLI: 「4 region labels do not fit at 14 pt (4 region labels on other tracks). Drawn anyway.」 / Web: 「Region labels lie on other tracks: the set track radii leave them no room (4).」」
+    and the answer:
+    「このまま入れる (Recommended)」
+  - Replies 47 and 48 state no rationale, preserved or retired effect, or
+    accepted risk for this choice, and the change receipt below adds none.
+  - Reply 49 (`2026-10-19`), approving the record's receipt text below, to the
+    question
+    「Q-R2：PD-OI-097 rev 12 の受領文（ページ #ov1208 に全文があります）です。Choice に RGN-ROOM-WARN を加え、Rationale の末尾に「Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。」を足し、Decision date を返答の日にします。ほかの欄（Must preserve を含む）は rev 11 のままです。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (Recommended)」
+    「Contract rev 69 に記録します。レビューを経て PR を dev に開きます（Review REQUIRED、merge は Owner）。」
+    and the answer:
+    「承認 (Recommended)」
+    The record's scenario revision `12` receipt is the approved text: it
+    appends 「Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。」 to the Rationale and `RGN-ROOM-WARN` to the
+    Choice of scenario revision `11`; its other fields are those of scenario
+    revision `11`, with the decision date of the last reply.
+  - The receipt of this change, which serializes the choice of Reply 47
+    (SHA-256, UTF-8, excluding the final newline: `5e997e38b43bdabfd803e61b078795971a14950b211ba94f5835e031c6c881b8`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 12
+    Choice: RGN-ROOM-WARN
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Scope: the record's receipt for scenario revision `12` is recorded below;
+    the scenario revision `7`, `8`, `9`, `10`, and `11` receipts keep their
+    text and their SHA-256. `PD-OI-088` applies unchanged. No other record is
+    amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 70 changes: `PD-OI-106` is added
+  (`WEB-UI-LANGUAGE-MANUAL`, concern `product.web-ui-language`). It comes from
+  the Product Decision Owner `satoshikawato`'s answers of `2026-10-19` on the
+  language of the Web UI text (a header Language menu with English, Japanese,
+  Simplified Chinese, and Traditional Chinese). The record serializes the
+  approved receipt without translation or additional terms.
+  - It narrows `PD-OI-093`: where that record limits browser storage to one
+    display choice, storage now holds that choice and the UI language. The
+    `PD-OI-093` record keeps its text and its SHA-256; its stored display
+    choice is preserved.
+  - Names fixed in English by `PD-OI-093` and `PD-OI-105` keep that English in
+    the English UI; the other languages translate them.
+  - Scope: only `PD-OI-106` is added; no other record is amended or retired.
+  - This change is authority only: it adds a stored browser preference and
+    expands authority. The runtime that implements it follows in later pull
+    requests; this record supplies no runtime acceptance evidence.
+- Revision 71 changes: `PD-OI-097` is replaced for scenario revision `13`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-19` on
+  the feature label style: no halo around Circular feature labels by default,
+  and no underline under turned feature labels, whose leaders stay vertical.
+  Each quotation below is the part of a reply that carries the answer;
+  Replies 1 to 49 are those of the Revision 50, 53, 66, 67, 68, and 69
+  entries.
+  - Reply 50 (scenario revision `13`, `2026-10-19`), the message:
+    「ごめんCircularのHaloやっぱなしで。黒背景だと汚い。」
+    (`CIR-NO-HALO`)
+  - Reply 51 (`2026-10-19`), the next message:
+    「オプショナルにするのはありかも。けどデフォルトはないな。」
+  - Reply 52 (`2026-10-19`), to the question
+    「Q-H1：PD-OI-097 rev 13 の受領文（ページ #halo に変える所と全文があります）です。Choice に CIR-NO-HALO を加えます。Rationale は「Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。」に、Must preserve は「守りは Linear が白い背景、Circular はなしを既定とする」に書き換えます。Accepted residual risk には「Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）」を足し、PDF/EPS が大きくなるのはハローを選んだときだけにします。Decision date は返答の日で、ほかの欄は rev 12 のままです。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (Recommended)」
+    「OV-1208 の PR が merge されたあと、Contract rev 70 に記録します。レビューを経て PR を dev に開きます（Review REQUIRED、merge は Owner）。」
+    and the answer:
+    「承認 (Recommended)」
+    The receipt text it approved was rewritten to add Replies 53 to 55 before
+    it was recorded; Reply 56 approves the rewritten text, which keeps every
+    sentence that Reply 52 approved.
+  - Reply 53 (scenario revision `13`, `2026-10-19`), the message on a figure
+    with turned labels:
+    「これ斜めのとき下線やめてほしい。今までのままでいい。」
+    (`TURNED-NO-UNDER`)
+  - Reply 54 (`2026-10-19`), the next message:
+    「あと斜めの時リーダー線まで斜めになってるよね？マジでやめてこれ。」
+  - Reply 55 (`2026-10-19`), the next message:
+    「斜めのラベル：もし下線をつくるとしても、リーダー線を斜めにしてはだめ。水平ラベル同様常に垂直に。そのうえで、斜めのラベルに下線を付けるなら、ラベル自体をデフォルトとは異なる位置にdisplaceする必要があろう。いずれにせよ下線は斜めラベルではデフォルトではいらない。」
+  - Replies 50, 51, and 53 to 55 state no preserved or retired effect or
+    accepted risk beyond the choices, and the change receipt below adds none.
+    Reply 50 gives the reason that the record's Rationale carries.
+  - Reply 56 (`2026-10-19`), approving the record's receipt text below, to the
+    question
+    「Q-T1：書き直した受領文 PD-OI-097 rev 13（ページ #turned に足す所と全文があります）です。ハローの分（Q-H1 で承認済み）に、次のものを足します。Choice に TURNED-NO-UNDER。Rationale に「斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。」。Must preserve に「ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。」。Accepted residual risk に「斜めのラベルの垂直なリーダー線は、隣の斜めのラベルの文字を横切ることがある（0.13.0 と同じ、OV-1361）。」。この受領文を承認しますか？」
+    the selected option and its description:
+    「承認 (Recommended)」
+    「ハローと斜めのラベルを 1 本の PR にします。#1230 が merge されたあと、Contract rev 70 に記録し、レビューを経て PR を開きます（merge は Owner）。」
+    and the answer:
+    「承認 (Recommended)」
+    The record's scenario revision `13` receipt is the approved text. Against
+    scenario revision `12` it appends `CIR-NO-HALO` and `TURNED-NO-UNDER` to
+    the Choice; in the Rationale it replaces the sentence on protecting
+    feature labels with the Linear white box and the Circular default without
+    protection, and adds the sentence on turned labels after
+    「Circular は下線を引かない。」; it adds the turned-label sentence to the
+    Must preserve and replaces its sentence on the default protection; and it
+    adds the Circular leaders and the turned-label leaders to the Accepted
+    residual risk, where the halo's PDF and EPS sizes now apply when a halo
+    is chosen. Its May retire is that of scenario revision `12`, with the
+    decision date of the last reply.
+  - The option descriptions of Replies 52 and 56 name Contract revision
+    `70`; `PD-OI-106` took that revision first, so this change is revision
+    `71`.
+  - The receipt of this change, which serializes the choices of Replies 50
+    and 53 (SHA-256, UTF-8, excluding the final newline: `dabbe9cc770be46b7eaa703caf57a3ea059d772414003ec6a9c1dee705d89907`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 13
+    Choice: CIR-NO-HALO ; TURNED-NO-UNDER
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Scope: the record's receipt for scenario revision `13` is recorded below;
+    the scenario revision `7` to `12` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 72 changes: `PD-OI-097` is replaced for scenario revision `14`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-20` on the order of
+  Circular feature labels: they keep the features' angular order across the
+  origin, for outer and inner labels. Each quotation below is the part of a
+  reply that carries the answer; Replies 1 to 56 are those of the Revision 50,
+  53, 66, 67, 68, 69, and 71 entries.
+  - Reply 57 (scenario revision `14`, `2026-10-20`), the message on the choice
+    between keeping the angular order everywhere (A) and fixing only the figures
+    that cross (B):
+    「OV-1366 を A」
+    (`CIR-ANGLE-ORDER`)
+  - Reply 58 (`2026-10-20`), approving the record's receipt text below, to the
+    question
+    「Q-O1：PD-OI-097 rev 14 の受領文です（「OV-1366 を A」を Contract に書きます）。Choice に CIR-ANGLE-ORDER を加えます。Rationale に「Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。」を足します。Must preserve の「重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。」のあとに「ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。」を足します。Decision date は返答の日で、ほかの欄は rev 13 のままです。この受領文を承認しますか？」
+    the answer:
+    「この受領文を承認します」
+    The record's scenario revision `14` receipt is the approved text. Against
+    scenario revision `13` it appends `CIR-ANGLE-ORDER` to the Choice; it adds
+    the sentence on the order of Circular labels to the end of the Rationale
+    and the exception for Circular labels that differ from the features'
+    angular order to the Must preserve, after the sentence on 0.13.0 positions.
+    Its May retire and Accepted residual risk are those of scenario revision
+    `13`, with the decision date of the reply.
+  - Replies 57 and 58 state no retired effect or accepted risk beyond the
+    choice, and the change receipt below adds none.
+  - The receipt of this change, which serializes the choice of Reply 57
+    (SHA-256, UTF-8, excluding the final newline: `dcac0f27ce42dae3cc0238542ee898c281143f0f816fe075948da5d2f6de1022`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 14
+    Choice: CIR-ANGLE-ORDER
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-20
+    ```
+
+  - Scope: the record's receipt for scenario revision `14` is recorded below;
+    the scenario revision `7` to `13` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 73 changes: `PD-OI-097` is replaced for scenario revision `15`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-20` on the labels of
+  Linear diagrams: a turned label that sits on its feature gets the white
+  background too; a horizontal label in `above_feature` keeps the same row-1
+  gap from the features as in `auto` and draws its leader, underline, and white
+  background like `auto`; and a label moves up a row to clear the definition
+  text. Each quotation below is the part of a reply that carries the answer;
+  Replies 1 to 58 are those of the Revision 50, 53, 66, 67, 68, 69, 71, and 72
+  entries.
+  - Reply 59 (scenario revision `15`, `2026-10-20`), after the session
+    explained OV-1361 (a turned label's vertical leader runs through a
+    neighbouring turned label's letters):
+    「警告は出す必要ない気がする。ラベル背景の半透明塗を出せば？」
+    (`LEADERLESS-BOX`)
+  - Reply 60 (`2026-10-20`), after the OV-1361 study report and OV-1395 and
+    OV-1396 (the horizontal `above_feature` row 1 over the definition text and
+    too low on the features):
+    「ラベルが傾斜してるときは今まで通り。ラベルが傾斜していない場合は、above featureでも通常通り一定のスペースを取る、ということでどうか。」
+    (`AF-AUTO-ROW`)
+  - Reply 61 (`2026-10-20`), on the lambda image of the prototype:
+    「"terminase small unit head decoration"にリーダー線と下線と背景半透明塗がない。ほかのラベルと統一して」
+  - Reply 62 (`2026-10-20`), approving the record's receipt changes, to the
+    question
+    「Q-A1 PD-OI-097 の受領文：ラベルの角度順の修正（OV-1366）が merge された後の最新の受領文に、次の変更を加えた改訂（その次の scenario revision）を承認しますか？Choice に LEADERLESS-BOX（LP-D119）と AF-AUTO-ROW（LP-D120）を加える。Rationale の「文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。」の後に、「リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。」を足す。Must preserve の「重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。」の後に、「ただし Linear の above_feature の水平のラベルは、auto の 1 段目と同じ間をフィーチャーから取る（LP-D120）。」を足す。May retire に「Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。」を足す。Accepted residual risk の「斜めのラベルの垂直なリーダー線は、隣の斜めのラベルの文字を横切ることがある（0.13.0 と同じ、OV-1361）。」を、「Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。」に置き換える。Decision date はお答えの日。ほかの欄はそのままです。」
+    the answer:
+    「Q-A1 PD-OI-097 の受領文の変更:承認」
+    and on timing
+    「Q-A2 入れる時期:  0.14.0 のタグの前」
+    The record's scenario revision `15` receipt is the approved text. Against
+    scenario revision `14` it appends `LEADERLESS-BOX ; AF-AUTO-ROW` to the
+    Choice; it adds to the Rationale the sentences on the white background of
+    turned labels without a leader, on the horizontal `above_feature` labels,
+    and on labels clearing the definition text; it adds to the Must preserve
+    the exception for the first row of horizontal `above_feature` labels,
+    right after the sentence on 0.13.0 positions; it appends to the May retire
+    the plain placement of horizontal `above_feature` labels; and it replaces
+    the Accepted residual risk sentence on the leaders of turned labels with
+    the sentences on dotted-looking leaders and on the taller `above_feature`
+    figures. Its decision date is that of the reply.
+  - The Linear fit count now also reports, in `auto`, the labels that lie over
+    the definition text (the record already says that definition overlaps are
+    drawn and reported).
+  - The receipt of this change, which serializes the choices of Replies 59 and
+    60 (SHA-256, UTF-8, excluding the final newline: `d9fdd8504d6855244b2946c3d4c917afd3726511e605626dc3f79b052d51d732`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 15
+    Choice: LEADERLESS-BOX ; AF-AUTO-ROW
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-20
+    ```
+
+  - Scope: the record's receipt for scenario revision `15` is recorded below;
+    the scenario revision `7` to `14` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 74 changes: `PD-OI-021` is replaced for scenario revision `2`
+  (concern `diagram-generation.collinear-optional-orthogroup-inference`). Only
+  the Web label of the Collinear checkbox changes, from **Infer orthogroups
+  with self-comparisons** to **Build similarity groups with within-record
+  searches**; the outcome does not change. It comes from the Product Decision
+  Owner `satoshikawato`'s reply of `2026-10-21` to the session's questions on
+  the English text that translation round 4 raised.
+  - The question, under the heading
+    「1. 「Infer orthogroups with self-comparisons」と Similarity group の不一致」,
+    offered option B as:
+    「**B. Web の表示名だけ直す（おすすめ）** チェックボックスとヘルプ文を「Build similarity groups with within-record searches」の方向に変えます。CLI の `--collinear_infer_orthogroups`、型付きリクエストのキー、Session の値は変えないので、互換性への影響はありません。直す必要があるもの：このラベル名を固定している Playwright spec 3件とキャプチャ契約テスト、チュートリアルとリファレンスの文言、Gallery の画面写真（次回の再生成時）。」
+    and closed with
+    「おすすめどおり（1＝B、2＝B、3＝A、4＝B）でよければ、1・2・4を1つのPRにまとめます。」
+  - The answer (`2026-10-21`): 「おすすめどおり」
+  - The receipt below serializes that choice. Its Choice ID
+    `WEB-LABEL-SIMILARITY-GROUPS` names option B, and its Must preserve
+    quotes option B's sentence on what stays the same. The reply states no
+    rationale, retirement intent, or accepted residual risk, so those fields
+    say `not stated`. The Product Decision Owner approved this receipt text on
+    `2026-10-21` (「どちらも承認します。」, in reply to the session's report
+    that named the draft receipt).
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `299ba5ed4c44c9c5814b8efff4ecb14c8281145e5c6d284662240f838d363e02`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: diagram-generation.collinear-optional-orthogroup-inference
+    Scenario revision: 2
+    Supersedes: PD-OI-021, scenario revision 1
+    Choice: B / WEB-LABEL-SIMILARITY-GROUPS
+    Rationale: not stated
+    Must preserve: CLI の `--collinear_infer_orthogroups`、型付きリクエストのキー、Session の値は変えないので、互換性への影響はありません。
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: in `PD-OI-021`, only the checkbox label in the Normative outcome
+    changes. Item 4 of the retained scenario revision `3` outcome of
+    `PD-OI-018` now names the checkbox as the Collinear checkbox of
+    `PD-OI-021` instead of repeating its label; its outcome does not change.
+    No other record is amended or retired.
+  - The runtime, tests, and documentation that show the new label merged
+    before this record, in `#1254` at
+    `3979094e2ed57a046c3eb11c0229a38b93e4f0bb`. This authority-only change
+    brings the Contract in line with them.
+- Revision 75 changes: `PD-OI-106` is replaced for scenario revision `2`
+  (concern `product.web-ui-language`). The header Language menu gains Español,
+  Français, Português, and 한국어, which ship together in 0.15.0 after the
+  0.14.0 tag; Portuguese is one catalog written to the Brazilian norm; a
+  language with singular and plural forms shows the form its own plural rule
+  selects for the count. The other outcomes of scenario revision `1` do not
+  change. It comes from the Product Decision Owner `satoshikawato`'s replies
+  of `2026-10-21` in the Claude Code session.
+  - The session had reported that the translation runtime takes any catalog,
+    that `PD-OI-106` fixes the Language menu list, and that a new language is
+    therefore a Contract revision. The replies:
+    「0.15.0に入れよう。」 (on Korean), then
+    「0.15.0にポルトガル語とスペイン語、フランス語も入れよう。」
+  - The receipt's wording on the Portuguese norm, the menu order, and the
+    plural rule follows the session's Owner-delegated choices (standing
+    instruction of `2026-09-29`, restated `2026-10-07`; campaign
+    `web-i18n-0150-20261021`, D-03 to D-06), which the session listed with
+    the receipt. The Product Decision Owner approved the receipt text on
+    `2026-10-21` (「承認します。」, in reply to the full receipt shown with its
+    changes against scenario revision `1`).
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `4e7da4443562184f466f4def8f01f68d12ede65645d1699dbc3c5520404ebb4a`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.web-ui-language (language of the Web UI text)
+    Scenario revision: 2
+    Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+      (English, Español, Français, Português, 日本語, 简体中文, 繁體中文,
+      한국어) switches the Web UI text at once, without reload, and
+      without changing the Result, the settings or the History;
+      switching is not a History step. English is shown on a first
+      visit; the browser language never chooses. The chosen language
+      is remembered per browser and is not part of the Session,
+      History or any export. Names fixed in English by PD-OI-093 and
+      PD-OI-105 keep that English in the English UI and are translated
+      in the other languages. ja, zh-Hans and zh-Hant ship together in
+      0.14.0; the 0.14.0 tag waits for all three. es, fr, pt and ko
+      ship together in 0.15.0, after the 0.14.0 tag. pt follows the
+      Brazilian norm; one Portuguese catalog. A language with singular
+      and plural forms shows the form its own plural rule selects for
+      the count. No text states that the translations are reviewed.
+      ja writes Default as 既定; zh reviewers decide the open zh terms.
+    Rationale: Let users work in their own language while every
+      scientific output stays identical in all languages.
+    Must preserve: the English UI text and accessible names; the
+      figure, every export, the Session, CLI / Source recipe / Exact
+      replay text and diagnostics are identical in every language;
+      the stored settings-pane display choice of PD-OI-093.
+    May retire: PD-OI-093's limit of browser storage to one display
+      choice; storage now holds that choice and the UI language.
+    Accepted residual risk: Python-produced warnings, Gallery
+      tutorials and the docs stay English inside a translated UI;
+      translated wording may contain errors until corrected; the es,
+      fr, pt and ko wording is drafted and checked without a native
+      reviewer until one corrects it.
+    Owner: satoshikawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: only `PD-OI-106` is replaced; no other record is amended or
+    retired. `PD-OI-093` and `PD-OI-105` keep their text.
+  - This change is authority only. The runtime (the four locales, their
+    catalogs, and the plural selection) follows in a later pull request after
+    the 0.14.0 tag; this record supplies no runtime acceptance evidence.
+- Revision 76 changes: `PD-OI-106` is replaced for scenario revision `3`
+  (concern `product.web-ui-language`). The header Language menu gains Bahasa
+  Indonesia, Tiếng Việt, and ไทย, which ship together in 0.15.0 after the
+  0.14.0 tag with Español, Français, Português, and 한국어; numbers keep the
+  English decimal point and digit grouping in every language; Thai text is
+  shown in the system's Thai typeface and Vietnamese letters in the bundled
+  Latin typeface; the Indonesian software words on which vendors differ are
+  provisional. The other outcomes of scenario revision `2` do not change. It
+  comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-21` in the Claude Code session.
+  - The session had assessed the Owner's feasibility study of the three
+    languages. The replies: 「th/id/vi を 0.15.0 に入れる。」,
+    「タイ語フォントを同梱する」 and later the same day 「タイ語はOS スタックに任せる」
+    (which replaced it), 「メニュー順と自称名は推奨」,
+    「数値書式を en-US のままにする」, and
+    「id のベンダー分裂語 10 件: 今後再検討してください」.
+  - The receipt's wording follows the session's Owner-delegated choices
+    (standing instruction of `2026-09-29`, restated `2026-10-07`; campaign
+    `web-i18n-thidvi-20261021`, D-03 menu order detail, D-06, D-07, D-09, D-10,
+    D-11, D-12), which the session listed with the receipt. The Product
+    Decision Owner approved the receipt text on `2026-10-21` (「OK」, in reply
+    to the full receipt shown with its changes against scenario revision `2`
+    and the request to open the Contract pull request on approval).
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `78512e94582a1d37bf15db556e086d6354f7bb31ab7d7530b4a193c8df559c9a`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.web-ui-language (language of the Web UI text)
+    Scenario revision: 3
+    Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+      (English, Bahasa Indonesia, Español, Français, Português,
+      Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the
+      Web UI text at once, without reload, and without changing the
+      Result, the settings or the History; switching is not a History
+      step. English is shown on a first visit; the browser language
+      never chooses. The chosen language is remembered per browser and
+      is not part of the Session, History or any export. Names fixed
+      in English by PD-OI-093 and PD-OI-105 keep that English in the
+      English UI and are translated in the other languages. ja,
+      zh-Hans and zh-Hant ship together in 0.14.0; the 0.14.0 tag
+      waits for all three. es, fr, pt, ko, id, vi and th ship together
+      in 0.15.0, after the 0.14.0 tag. pt follows the Brazilian norm;
+      one Portuguese catalog. A language with singular and plural
+      forms shows the form its own plural rule selects for the count.
+      Numbers keep the English decimal point and digit grouping in
+      every language. Thai text is shown in the Thai typeface of the
+      user's system and Vietnamese letters in the bundled Latin
+      typeface, at the sizes the script needs; the figure is
+      unchanged. No text states that the translations are reviewed.
+      ja writes Default as 既定; zh reviewers decide the open zh terms.
+    Rationale: Let users work in their own language while every
+      scientific output stays identical in all languages.
+    Must preserve: the English UI text and accessible names; the
+      figure, every export, the Session, CLI / Source recipe / Exact
+      replay text and diagnostics are identical in every language;
+      the stored settings-pane display choice of PD-OI-093.
+    May retire: PD-OI-093's limit of browser storage to one display
+      choice; storage now holds that choice and the UI language.
+    Accepted residual risk: Python-produced warnings, Gallery
+      tutorials and the docs stay English inside a translated UI;
+      translated wording may contain errors until corrected; the es,
+      fr, pt, ko, id, vi and th wording is drafted and checked without
+      a native reviewer until one corrects it; the Indonesian software
+      words on which vendors differ (Settings, Default, File,
+      Download / Upload, Undo, Reset, Advanced, alignment, strain,
+      sequence) are provisional until reconsidered; id and vi readers
+      see the English number format (1,000.5) where their convention
+      writes 1.000,5.
+    Owner: satoshikawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: only `PD-OI-106` is replaced; no other record is amended or
+    retired. `PD-OI-093` and `PD-OI-105` keep their text.
+  - This change is authority only. The runtime (the three locales, their
+    catalogs, the Thai and Vietnamese type handling) follows in a later pull
+    request after the 0.14.0 tag; this record supplies no runtime acceptance
+    evidence.
+- Revision 77 changes: `PD-OI-097` is replaced for scenario revision `16`
+  (concern `product.circular-outer-label-fit`). In Linear `above_feature`, a
+  horizontal label that has to move off another label now stacks in the rows of
+  `auto`, counted from its own feature at the `auto` row pitch (the tallest
+  label plus `labels.spacing.linear`), instead of just above the label it
+  clears; turned labels stack as before. It comes from the Product Decision
+  Owner `satoshikawato`'s replies of `2026-10-21` on an Owner page that showed
+  the rows above the first. Each quotation below is the part of a reply that
+  carries the answer; Replies 1 to 62 are those of the Revision 50, 53, 66, 67,
+  68, 69, 71, 72, and 73 entries.
+  - Reply 63 (scenario revision `16`, `2026-10-21`), to the question
+    「Q-G3　2 段目から上の間隔をどうしますか」
+    with the options
+    「P おすすめ。auto と同じ段に置きます。上の受領文の改訂を、整理の PR（refactor/linear-label-cleanup）と一緒に出します。」
+    and
+    「K 今のままにします。下線と白い背景が下の文字にかかることは残ります。」:
+    「Q-G3：P にする」
+    (`AF-ROW-PITCH`)
+  - Reply 64 (`2026-10-21`), approving the record's receipt changes, to the
+    question
+    「Q-G3r　P の場合、この受領文の改訂を承認しますか」
+    with the receipt text
+    「PD-OI-097 の受領文：最新の受領文（scenario revision 15）に、次の変更を加えた改訂（その次の scenario revision）を承認しますか？Choice に AF-ROW-PITCH を加える。Rationale の「Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。」の後に、「2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。」を足す。Must preserve の「ただし Linear の above_feature の水平のラベルは、auto の 1 段目と同じ間をフィーチャーから取る（LP-D120）。」を、「ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。」に置き換える。May retire に「Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。」を足す。Accepted residual risk の「Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。」の後に、「2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。」を足す。Decision date はお答えの日。ほかの欄はそのままです。」
+    the answer:
+    「Q-G3r：承認する」
+    The record's scenario revision `16` receipt is the approved text. Against
+    scenario revision `15` it appends `AF-ROW-PITCH` to the Choice; it adds to
+    the Rationale the sentence on the rows above the first, right after the
+    sentence on the first row of horizontal `above_feature` labels; it replaces
+    the Must preserve exception for the first row of horizontal
+    `above_feature` labels with the exception for all their rows, which keeps
+    the stacking of turned labels; it appends to the May retire the stacking of
+    horizontal `above_feature` labels just above the label they clear; and it
+    adds to the Accepted residual risk, after the sentence on the first row,
+    the sentences on the height of figures with several rows and on figures
+    that become lower. Its decision date is that of the reply.
+  - The receipt of this change, which serializes the choice of Reply 63
+    (SHA-256, UTF-8, excluding the final newline: `963e44911eea4ec5de63dab040cc7581adad8f0556ebc8b22b15f0dc5cb1ddc5`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 16
+    Choice: AF-ROW-PITCH
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-21
+    ```
+
+  - Scope: the record's receipt for scenario revision `16` is recorded below;
+    the scenario revision `7` to `15` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 78 changes: `PD-OI-106` is replaced for scenario revision `4`
+  (concern `product.web-ui-language`). The receipt keeps every product outcome
+  of scenario revision `3` and drops text that is not one: the release in
+  which each language ships and what the 0.14.0 tag waits for, the Japanese
+  term for Default, who decides the open Chinese terms, and the list of
+  provisional Indonesian terms. It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-22` in the Claude Code session.
+  - The session had pointed out that ko, es, fr, pt (scenario revision `2`)
+    and th, id, vi (scenario revision `3`) were recorded as 0.15.0 while
+    their runtime was already in `dev` (pull requests 1261, 1265, 1266, 1268).
+    The Owner replied 「v0.14.0に入れてください」, then asked
+    「これproduct decisionにするレベルの話なの？Product decisionの在り方もう一度考えた方がいいのでは」.
+    The session proposed that a Product decision record only user-visible
+    outcomes and that this revision remove the release and terminology text
+    instead of moving the release to 0.14.0; the Owner replied
+    「1 と 2 で進めてよい」.
+  - Where the removed text is kept: the release scope in
+    `docs/RELEASE_NOTES_0.14.0.md` and `CHANGELOG.md` (all ten languages ship
+    in 0.14.0); the Japanese term for Default and the provisional Indonesian
+    terms in `docs/internal/I18N_STYLE.md` and
+    `docs/internal/I18N_GLOSSARY.tsv`.
+    The general residual risk "translated wording may contain errors until
+    corrected" still covers the provisional terms.
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `2080b4640e76cfe74281c11d7a03bce5fc563ddebb66f1113365949a10af2b71`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.web-ui-language (language of the Web UI text)
+    Scenario revision: 4
+    Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+      (English, Bahasa Indonesia, Español, Français, Português,
+      Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the
+      Web UI text at once, without reload, and without changing the
+      Result, the settings or the History; switching is not a History
+      step. English is shown on a first visit; the browser language
+      never chooses. The chosen language is remembered per browser and
+      is not part of the Session, History or any export. Names fixed
+      in English by PD-OI-093 and PD-OI-105 keep that English in the
+      English UI and are translated in the other languages. pt follows
+      the Brazilian norm; one Portuguese catalog. A language with
+      singular and plural forms shows the form its own plural rule
+      selects for the count. Numbers keep the English decimal point
+      and digit grouping in every language. Thai text is shown in the
+      Thai typeface of the user's system and Vietnamese letters in the
+      bundled Latin typeface, at the sizes the script needs; the
+      figure is unchanged. No text states that the translations are
+      reviewed.
+    Rationale: Let users work in their own language while every
+      scientific output stays identical in all languages.
+    Must preserve: the English UI text and accessible names; the
+      figure, every export, the Session, CLI / Source recipe / Exact
+      replay text and diagnostics are identical in every language;
+      the stored settings-pane display choice of PD-OI-093.
+    May retire: PD-OI-093's limit of browser storage to one display
+      choice; storage now holds that choice and the UI language.
+    Accepted residual risk: Python-produced warnings, Gallery
+      tutorials and the docs stay English inside a translated UI;
+      translated wording may contain errors until corrected; the es,
+      fr, pt, ko, id, vi and th wording is drafted and checked without
+      a native reviewer until one corrects it; id and vi readers see
+      the English number format (1,000.5) where their convention
+      writes 1.000,5.
+    Owner: satoshikawato
+    Decision date: 2026-10-22
+    ```
+
+  - Scope: only `PD-OI-106` is replaced; no other record is amended or
+    retired. `PD-OI-093` and `PD-OI-105` keep their text.
+  - This change is authority only: it removes text and changes no runtime
+    obligation, and the Review is `REQUIRED`; this record supplies no runtime
+    acceptance evidence.
+- Revision 79 changes: `PD-OI-106` is replaced for scenario revision `5`
+  (concern `product.web-ui-language`). The receipt keeps every product outcome
+  of scenario revision `4` and adds two pieces of text: at the end of the
+  Choice, the sentence "Beside the Language menu, in every language, a link
+  named "Suggest a translation fix" opens the GitHub translation feedback
+  issue form in a new tab with the shown language and the gbdraw version
+  filled in; no file, setting, Result or Session content is put in the link."
+  and, at the end of the Accepted residual risk, the clause "a translation
+  report needs a GitHub account and is public". It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-22` in the Claude Code
+  session.
+  - The session asked whether the translation feedback route is a GitHub issue
+    template, an in-app link, or both. The Owner replied 「2:両方。進めてください。」.
+    The Owner then asked 「これリンクから飛んでもイシュー作れるのはGitHubのアカウント持ってるひとでいいんだよね？スパムで爆撃とかされないよね？」;
+    the session answered that a GitHub account is needed, and the residual-risk
+    clause records it. The placement beside the Language menu and the wording
+    of the link sentence are the session's wording; the Owner confirms them by
+    merging this change.
+  - The receipt (SHA-256, UTF-8, excluding the final newline:
+    `b8ea7ea8de68208e2d46805f2d854cc092580670ac9411138cae0dbbfd0a8d5c`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.web-ui-language (language of the Web UI text)
+    Scenario revision: 5
+    Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+      (English, Bahasa Indonesia, Español, Français, Português,
+      Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the
+      Web UI text at once, without reload, and without changing the
+      Result, the settings or the History; switching is not a History
+      step. English is shown on a first visit; the browser language
+      never chooses. The chosen language is remembered per browser and
+      is not part of the Session, History or any export. Names fixed
+      in English by PD-OI-093 and PD-OI-105 keep that English in the
+      English UI and are translated in the other languages. pt follows
+      the Brazilian norm; one Portuguese catalog. A language with
+      singular and plural forms shows the form its own plural rule
+      selects for the count. Numbers keep the English decimal point
+      and digit grouping in every language. Thai text is shown in the
+      Thai typeface of the user's system and Vietnamese letters in the
+      bundled Latin typeface, at the sizes the script needs; the
+      figure is unchanged. No text states that the translations are
+      reviewed. Beside the Language menu, in every language, a link
+      named "Suggest a translation fix" opens the GitHub translation
+      feedback issue form in a new tab with the shown language and
+      the gbdraw version filled in; no file, setting, Result or
+      Session content is put in the link.
+    Rationale: Let users work in their own language while every
+      scientific output stays identical in all languages.
+    Must preserve: the English UI text and accessible names; the
+      figure, every export, the Session, CLI / Source recipe / Exact
+      replay text and diagnostics are identical in every language;
+      the stored settings-pane display choice of PD-OI-093.
+    May retire: PD-OI-093's limit of browser storage to one display
+      choice; storage now holds that choice and the UI language.
+    Accepted residual risk: Python-produced warnings, Gallery
+      tutorials and the docs stay English inside a translated UI;
+      translated wording may contain errors until corrected; the es,
+      fr, pt, ko, id, vi and th wording is drafted and checked without
+      a native reviewer until one corrects it; id and vi readers see
+      the English number format (1,000.5) where their convention
+      writes 1.000,5; a translation report needs a GitHub account and
+      is public.
+    Owner: satoshikawato
+    Decision date: 2026-10-22
+    ```
+
+  - Scope: only `PD-OI-106` is replaced; no other record is amended or
+    retired. `PD-OI-093` and `PD-OI-105` keep their text.
+  - This change is authority for the later runtime change that adds the link:
+    this record changes no runtime by itself and supplies no runtime
+    acceptance evidence, and the Review is `REQUIRED`.
+- Revision 80 changes: `PD-OI-002` gains scenario revision `3` and
+  `PD-OI-004` gains scenario revision `4`. Each renames the visible label of
+  the LOSATP member limit from **Member hits per protein** to
+  **Max hits per protein for groups** and changes no behavior. They come from
+  the Product Decision Owner `satoshikawato`'s replies of `2026-10-22` in the
+  Claude Code session that fixed the Web UI wording found by the cross-locale
+  translation check.
+  - Reply 1. The session reported as remaining work that the Product Contract
+    still named the setting **Member hits per protein**, and the Owner asked
+    「これらは何？」. The session answered that `PD-OI-002` and `PD-OI-004`
+    name the setting by its old label in three places, that the same pull
+    request renames the label in the Web UI to
+    **Max hits per protein for groups**, that behavior does not change, and
+    that the Contract is the Owner's text and changes only on the Owner's word.
+    The Owner replied: 「Product Contract の "Member hits per protein": 直して。」
+  - Reply 2, to the request to confirm the receipt fields recorded below,
+    shown in full with the two records and their scenario revisions, and with
+    the note that the `PD-OI-004` decision source keeps the old name as
+    "the member limit (then labelled Member hits per protein)": 「承認します」
+  - The two receipts share the choice, rationale, retirement scope, accepted
+    residual risk, owner and decision date; their preservation fields differ
+    as shown. They name no choice code. No character of a confirmed field
+    differs.
+  - Where an earlier term or revision entry names **Member hits per protein**,
+    it means the control now labelled **Max hits per protein for groups**.
+    The record titles and the concern keys keep their wording.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that show the new label are in the same pull request,
+    and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1716,11 +2944,15 @@ so placement remains the writer of the slot inputs.
 ### PD-OI-002: LOSATP mode-specific limit retention and GUI placement
 
 - Concern key: `diagram-generation.losatp-candidate-limit-scope`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-002`, scenario revision `1`.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-002`, scenario revision `2`, only by renaming the
+  visible label of the member limit; every scenario-2 term stays in force.
+  Scenario revision `2` superseded scenario revision `1`.
 - Status: `ACCEPTED`
+- Selected outcomes: the scenario-2 terms below and the label change of
+  scenario revision `3`, whose receipt names no choice code
 - Normative outcome: **Max target seqs** is directly editable in LOSATP
-  Settings, alongside **Member hits per protein** when member selection applies.
+  Settings, alongside **Max hits per protein for groups** when member selection applies.
   Each mode remembers its own raw and member limits. The first visit to
   Collinear uses `5`/`5`; the first visit to Similarity groups uses unbounded/
   unbounded. After editing either mode, switching away and back restores its
@@ -1739,9 +2971,42 @@ so placement remains the writer of the slot inputs.
   changes caused by selecting a different saved raw limit remain visible;
   matching raw evidence remains reusable.
 - Acceptance contracts: `OIC-001`, `OIC-002`, `OIC-006`, `OIC-017`.
-- Decision source: Explicit maintainer correction to remember each mode's
+- Decision source (scenario revision `2`): Explicit maintainer correction to remember each mode's
   settings, superseding the earlier same-session request to reset on every switch.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Owner and decision date (scenario revision `2`): `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-10-22`
+  quoted in the Revision 80 entry above. The receipt and JSON below reproduce
+  the confirmed fields. The runtime that shows the new label merges with it
+  (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `b5445af26261583651c638d02739d418d539a0d34db73c9a3b49fa6357d50ae2`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.losatp-candidate-limit-scope
+Scenario revision: 3
+Choice: The member limit of LOSATP Settings is labelled "Max hits per protein for groups" (was "Member hits per protein"), and messages that name its field say "Protein BLASTP max hits per protein for groups" (was "Protein BLASTP member hits per protein").
+Rationale: The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.
+Must preserve: Every scenario-2 term (each LOSATP mode remembers its own raw and member limits; first visit 5/5 in Collinear, unbounded/unbounded in Similarity groups; switching restores edited values and blanks; Save, fresh Load and Reset Settings keep their meaning; one control per active raw-search setting). The control, its Session field and its request field keep their identity; only the shown name changes.
+May retire: The old visible label "Member hits per protein" and the old field name in messages only; no behavior.
+Accepted residual risk: Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.
+Owner: satoshikawato
+Decision date: 2026-10-22
+```
+
+```json
+{
+  "concern": "diagram-generation.losatp-candidate-limit-scope",
+  "scenarioRevision": 3,
+  "choice": "The member limit of LOSATP Settings is labelled \"Max hits per protein for groups\" (was \"Member hits per protein\"), and messages that name its field say \"Protein BLASTP max hits per protein for groups\" (was \"Protein BLASTP member hits per protein\").",
+  "rationale": "The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.",
+  "mustPreserve": "Every scenario-2 term (each LOSATP mode remembers its own raw and member limits; first visit 5/5 in Collinear, unbounded/unbounded in Similarity groups; switching restores edited values and blanks; Save, fresh Load and Reset Settings keep their meaning; one control per active raw-search setting). The control, its Session field and its request field keep their identity; only the shown name changes.",
+  "mayRetire": "The old visible label \"Member hits per protein\" and the old field name in messages only; no behavior.",
+  "acceptedResidualRisk": "Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-22"
+}
+```
 
 ### PD-OI-003: Pairwise display max hits
 
@@ -1763,10 +3028,14 @@ so placement remains the writer of the slot inputs.
 ### PD-OI-004: Similarity/Collinear member hits per protein
 
 - Concern key: `diagram-generation.member-hits-per-protein`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-004`, scenario revision `2`.
+- Scenario revision: `4`
+- Supersedes: `PD-OI-004`, scenario revision `3`, only by renaming the
+  visible label of the member limit; every scenario-3 term stays in force.
+  Scenario revision `3` superseded scenario revision `2`.
 - Status: `ACCEPTED`
-- Normative outcome: Fresh and reset Web **Member hits per protein** starts at
+- Selected outcomes: the scenario-3 terms below and the label change of
+  scenario revision `4`, whose receipt names no choice code
+- Normative outcome: Fresh and reset Web **Max hits per protein for groups** starts at
   `5` in Collinear and unbounded (`None`) in Similarity groups. CLI/Python
   omission semantics remain unchanged. A blank Web control always means
   unbounded, including in Collinear; an explicit positive integer limits the
@@ -1785,9 +3054,43 @@ so placement remains the writer of the slot inputs.
   remains visible in provenance. The existing unbounded computation/memory
   allowance is unchanged; no additional waiver is recorded.
 - Acceptance contracts: `OIC-002`, `OIC-004`, `OIC-005`, `OIC-006`, `OIC-017`.
-- Decision source: Explicit maintainer instruction that Member hits per protein
-  receive the same mode defaults and remembered-value behavior as Max target seqs.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `3`): Explicit maintainer instruction that the member limit
+  (then labelled Member hits per protein) receive the same mode defaults and
+  remembered-value behavior as Max target seqs.
+- Owner and decision date (scenario revision `3`): `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `4`): the Owner replies of `2026-10-22`
+  quoted in the Revision 80 entry above. The receipt and JSON below reproduce
+  the confirmed fields. The runtime that shows the new label merges with it
+  (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `340a1bc12bc56c449e787f888856463723dd738fa8e99c031605e3f8d6128c8e`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.member-hits-per-protein
+Scenario revision: 4
+Choice: The member limit of LOSATP Settings is labelled "Max hits per protein for groups" (was "Member hits per protein"), and messages that name its field say "Protein BLASTP max hits per protein for groups" (was "Protein BLASTP member hits per protein").
+Rationale: The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.
+Must preserve: Every scenario-3 term (fresh and reset values 5 in Collinear, unbounded in Similarity groups; blank means unbounded; a positive integer limits the distinct directional subject candidates kept after result filtering; independent of Max target seqs and Pairwise display matches; Collinear uses it with inference OFF and ON; request, provenance and Session replay distinguish unbounded and finite). The control, its Session field and its request field keep their identity; only the shown name changes.
+May retire: The old visible label "Member hits per protein" and the old field name in messages only; no behavior.
+Accepted residual risk: Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.
+Owner: satoshikawato
+Decision date: 2026-10-22
+```
+
+```json
+{
+  "concern": "diagram-generation.member-hits-per-protein",
+  "scenarioRevision": 4,
+  "choice": "The member limit of LOSATP Settings is labelled \"Max hits per protein for groups\" (was \"Member hits per protein\"), and messages that name its field say \"Protein BLASTP max hits per protein for groups\" (was \"Protein BLASTP member hits per protein\").",
+  "rationale": "The old label did not say that the value is a maximum or that it limits the hits used to build similarity groups and collinear blocks, and translations misread it; the new label says both.",
+  "mustPreserve": "Every scenario-3 term (fresh and reset values 5 in Collinear, unbounded in Similarity groups; blank means unbounded; a positive integer limits the distinct directional subject candidates kept after result filtering; independent of Max target seqs and Pairwise display matches; Collinear uses it with inference OFF and ON; request, provenance and Session replay distinguish unbounded and finite). The control, its Session field and its request field keep their identity; only the shown name changes.",
+  "mayRetire": "The old visible label \"Member hits per protein\" and the old field name in messages only; no behavior.",
+  "acceptedResidualRisk": "Material written with the old label (release notes of earlier versions, recorded tutorial videos, screenshots) no longer matches the screen.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-22"
+}
+```
 
 ### PD-OI-005: Supported Collinear value domains
 
@@ -2185,8 +3488,8 @@ Decision date: 2026-09-30
   4. Similarity groups and Collinear with scope `all` retain every ordered
      between-record comparison, including same-row and non-adjacent pairs.
      Similarity groups always includes within-record evidence. Collinear
-     includes it only when **Infer orthogroups with self-comparisons** is ON,
-     as specified by `PD-OI-021`; OFF excludes it. Display placement, including
+     includes it only when the Collinear checkbox of `PD-OI-021` is ON;
+     OFF excludes it. Display placement, including
      a single occupied row, does not restrict the selected search scope.
   5. Explicit comparison endpoints stay explicit through decoding and
      rendering, including endpoints whose numeric indices are consecutive.
@@ -2400,10 +3703,12 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
 ### PD-OI-021: Optional Collinear self-search and orthogroup inference
 
 - Concern key: `diagram-generation.collinear-optional-orthogroup-inference`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-021`, scenario revision `1`, which labelled the checkbox
+  **Infer orthogroups with self-comparisons**.
 - Status: `ACCEPTED`
-- Normative outcome: Web Collinear exposes **Infer orthogroups with
-  self-comparisons** as a checkbox, OFF in fresh and reset state. OFF submits
+- Normative outcome: Web Collinear exposes **Build similarity groups with
+  within-record searches** as a checkbox, OFF in fresh and reset state. OFF submits
   only between-record searches and builds blocks without orthogroup or paralog
   inference. This exclusion applies even when query and subject records share
   one source file. The chosen anchor, unit, member-hit, threshold, scope, and
@@ -2425,9 +3730,28 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
 - Accepted residual risk: No additional risk waiver was supplied. ON retains
   the existing complete-evidence computation and memory allowance in `PD-OI-018`.
 - Acceptance contracts: `OIC-003`, `OIC-005`, `OIC-006`, `OIC-015`, `OIC-018`.
-- Decision source: Explicit maintainer request to make Collinear self-comparison
-  and orthogroup inference optional with default `false`/OFF.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Decision source (revision `1`): Explicit maintainer request to make Collinear
+  self-comparison and orthogroup inference optional with default `false`/OFF.
+- Owner and decision date (revision `1`): `satoshikawato`, `2026-09-14`.
+- Decision source (revision `2`): `satoshikawato`'s answer of `2026-10-21`,
+  quoted verbatim in the Revision 74 entry above. It changes only the
+  checkbox label; the rest of the record keeps its revision `1` text.
+- Receipt SHA-256 (revision `2`, UTF-8, excluding the final newline):
+  `299ba5ed4c44c9c5814b8efff4ecb14c8281145e5c6d284662240f838d363e02`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.collinear-optional-orthogroup-inference
+Scenario revision: 2
+Supersedes: PD-OI-021, scenario revision 1
+Choice: B / WEB-LABEL-SIMILARITY-GROUPS
+Rationale: not stated
+Must preserve: CLI の `--collinear_infer_orthogroups`、型付きリクエストのキー、Session の値は変えないので、互換性への影響はありません。
+May retire: not stated
+Accepted residual risk: not stated
+Owner: Satoshi Kawato
+Decision date: 2026-10-21
+```
 
 ### PD-OI-022: Reuse completed LOSAT searches after cancellation
 
@@ -3316,35 +4640,41 @@ Decision date: 2026-10-13
 ### PD-OI-044: Applicable Circular controls and truthful record discovery
 
 - Concern key: `diagram-generation.circular-transform-discoverability`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-044`, scenario revision `2` (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`).
-  Scenario revision `3` changes only the Session version of the project and
-  drawing format in its Rationale, from `47` to `48` (`PD-OI-090` scenario
-  revision `2`). Scenario revision `2` superseded scenario revision `1`.
+- Scenario revision: `4`
+- Supersedes: `PD-OI-044`, scenario revision `3` (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`).
+  Scenario revision `4` changes two things only: the Session version of the
+  project and drawing format in its Rationale, from `48` to `49` (`PD-OI-090`
+  scenario revision `4`), and a Session `46` or `47` that holds protein
+  comparison results stored on a reversed record, which shows its stored
+  figure at once and starts Python once at Load to move those results to the
+  search coordinates (Rationale, Must preserve, Accepted residual risk).
+  Scenario revision `3` superseded scenario revision `2`, which superseded
+  scenario revision `1`.
 - Status: `ACCEPTED`
 - Selected outcome: `A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
 - Decision source: the Owner replies quoted verbatim in the Revision 37 entry
   above (R1-4 and the receipt approval), and for scenario revision `3` those
-  quoted in the Revision 62 entry above. The Owner approved the receipt text
+  quoted in the Revision 62 entry above, and for scenario revision `4` those
+  quoted in the Revision 64 entry above. The Owner approved the receipt text
   below as written. Its two references to the drawings record carry the
   recorded ID `PD-OI-090` in place of the draft ID `PD-OI-087` (Revision 37).
   Dependent runtime requires this authority merged into its base; this record
   supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `5a26a1e530c80e9cfaa44c7f39f6971bcb95b90e94adea1b0ffd0ccaa6e0a813`.
+  `896078be8ce11203eedaddae8d048ae312bceb46f4f89f63f19ff14baadcb398`.
 
 ```text
 PRODUCT_DECISION
 Concern: diagram-generation.circular-transform-discoverability
-Scenario revision: 3
-Supersedes: PD-OI-044, scenario revision 2
+Scenario revision: 4
+Supersedes: PD-OI-044, scenario revision 3
 Choice: A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS
-Rationale: source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 27〜44 の Session は、Session を project と drawing の形式（version 48、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。
-Must preserve: valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。
+Rationale: source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものも、保存された図はすぐに示し、その結果は Python が読み込み時に一度だけ探索の座標に移す（D-124、D-126）。version 27〜44 の Session は、Session を project と drawing の形式（version 49、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。
+Must preserve: valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session と、その version 46 と 47 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。
 May retire: 適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。
-Accepted residual risk: applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。
+Accepted residual risk: applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）。その Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して結果を探索の座標に移し、その間（約 8 秒）は編集を待つ。どちらの座標にも合わない結果を持つ Session は、読み込みを取り消して理由を示す（PD-OI-046）。新しい形式で保存し直すと起こらない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。
 Owner: satoshikawato
 Decision date: 2026-10-18
 ```
@@ -3352,13 +4682,13 @@ Decision date: 2026-10-18
 ```json
 {
   "concern": "diagram-generation.circular-transform-discoverability",
-  "scenarioRevision": 3,
-  "supersedes": "PD-OI-044, scenario revision 2",
+  "scenarioRevision": 4,
+  "supersedes": "PD-OI-044, scenario revision 3",
   "choice": "A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS",
-  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 27〜44 の Session は、Session を project と drawing の形式（version 48、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。",
-  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。",
+  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものも、保存された図はすぐに示し、その結果は Python が読み込み時に一度だけ探索の座標に移す（D-124、D-126）。version 27〜44 の Session は、Session を project と drawing の形式（version 49、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。",
+  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session と、その version 46 と 47 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。",
   "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。",
-  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。",
+  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）。その Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して結果を探索の座標に移し、その間（約 8 秒）は編集を待つ。どちらの座標にも合わない結果を持つ Session は、読み込みを取り消して理由を示す（PD-OI-046）。新しい形式で保存し直すと起こらない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-18"
 }
@@ -4038,27 +5368,42 @@ Decision date: 2026-09-30
 ### PD-OI-059: When the definition settings apply
 
 - Concern key: `web.circular.definition-application`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-059`, scenario revision `1`
+- Scenario revision: `3`
+- Supersedes: `PD-OI-059`, scenario revision `2` (`A / TITLES-LIVE-BOTH-MODES`).
+  Scenario revision `3` changes only what its receipt states; in the decision
+  packet's words, Species, Strain, Default font size, the definition rows,
+  Keep Full Definition and the Circular record label go live "when the S5-Q1
+  outcome makes their unit live; until then on Generate with the note".
+  Scenario revision `2` superseded `PD-OI-059`, scenario revision `1`
   (`A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE`), in both diagram modes:
   Plot title, Title position, and Title font apply live (`PD-OI-102`,
   `PD-OI-103`), and Species, Strain, Default font size, and Keep Full
   Definition stay on Generate with an Applies on Generate note, as the
   receipt below states.
 - Status: `ACCEPTED`
-- Selected outcome: `A / TITLES-LIVE-BOTH-MODES`
-- Normative outcome: exactly the complete approved scenario revision `2`
-  `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
-- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
-  above. The receipt and JSON below reproduce all nine confirmed fields
-  without translation or additional terms. Dependent runtime requires this
-  authority merged into its base; this record supplies no runtime acceptance
-  evidence.
+- Selected outcomes: `A / TITLES-LIVE-BOTH-MODES` (scenario revision `2`)
+  and `A / DEFINITION-SETTINGS-LIVE-WITH-S5-Q1` (scenario revision `3`)
+- Normative outcome: exactly the complete approved scenario revision `3`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
+  with the effects of the scenario revision `2` receipt that it does not
+  change. The scenario revision `2` receipt is kept as it was approved.
+- Decision source (scenario revision `2`): the Owner replies quoted verbatim
+  in the Revision 57 entry above. The receipt and JSON below reproduce all
+  nine confirmed fields without translation or additional terms.
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `eaf258733eaaa93868f28d06b55f8fa7bf8d4ff7cd6afda8f38ac5b0c96c83a3`.
+- Decision source (scenario revision `3`): the Owner replies quoted
+  verbatim in the Revision 64 entry above. The scenario revision `3`
+  receipt and JSON below reproduce all nine fields without translation or
+  additional terms. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `9d9f749fff0f9a8f24a74d912b707a21712649d674c0a06f183cb0ef90ffc4cf`.
 - Acceptance contracts: `OIC-009`, `OIC-010`, `OIC-024`, `OIC-027`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
+
+Scenario revision `2` receipt, confirmed on `2026-10-17`:
 
 ```text
 PRODUCT_DECISION
@@ -4087,26 +5432,71 @@ Decision date: 2026-10-17
 }
 ```
 
-### PD-OI-060: Diagram-wide stroke settings apply on Generate
+Scenario revision `3` receipt, confirmed on `2026-10-18`:
+
+```text
+PRODUCT_DECISION
+Concern: web.circular.definition-application
+Scenario revision: 3
+Choice: A / DEFINITION-SETTINGS-LIVE-WITH-S5-Q1
+Rationale: they follow S5-Q1 without another round.
+Must preserve: the correct definition after each apply and Generate (region length and GC%, record label and subtitle, reverse complement, grid order); their editing, saving, History; rev 2's G1 titles.
+May retire: rev 2's "stay on Generate with an Applies on Generate note", per live unit.
+Accepted residual risk: as S5-Q1 A for the unit.
+Owner: satoshikawato
+Decision date: 2026-10-18
+```
+
+```json
+{
+  "concern": "web.circular.definition-application",
+  "scenarioRevision": 3,
+  "choice": "A / DEFINITION-SETTINGS-LIVE-WITH-S5-Q1",
+  "rationale": "they follow S5-Q1 without another round.",
+  "mustPreserve": "the correct definition after each apply and Generate (region length and GC%, record label and subtitle, reverse complement, grid order); their editing, saving, History; rev 2's G1 titles.",
+  "mayRetire": "rev 2's \"stay on Generate with an Applies on Generate note\", per live unit.",
+  "acceptedResidualRisk": "as S5-Q1 A for the unit.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-18"
+}
+```
+
+### PD-OI-060: When the diagram-wide stroke settings apply
 
 - Concern key: `web.stroke.application`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-060`, scenario revision `1`
+  (`C / STROKE-APPLIES-ON-GENERATE`). Scenario revision `2` changes only what
+  its receipt states; in the decision packet's words, the global block and
+  line strokes (Feature stroke) and the axis and scale strokes (Axis) go live
+  "when the S5-Q1 outcome makes their unit live; until then on Generate with
+  the note".
 - Status: `ACCEPTED`
-- Selected outcome: `C / STROKE-APPLIES-ON-GENERATE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-05` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+- Selected outcomes: `C / STROKE-APPLIES-ON-GENERATE` (scenario revision `1`)
+  and `A / GLOBAL-STROKES-LIVE-WITH-S5-Q1` (scenario revision `2`)
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
+  with the effects of the scenario revision `1` receipt that it does not
+  change. The scenario revision `1` receipt is kept as it was approved.
+- Decision source (scenario revision `1`): the complete `D-05` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
   JSON below reproduce all nine supplied fields without translation or
-  additional terms. This record does not supersede another decision.
-  Dependent runtime requires this authority merged into its base; this
-  amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+  additional terms.
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `f95d7c6e1b7354f805d186d2709637b246ef2f15d416bc1143e1c46816ef14af`.
+- Decision source (scenario revision `2`): the Owner replies quoted
+  verbatim in the Revision 64 entry above. The scenario revision `2`
+  receipt and JSON below reproduce all nine fields without translation or
+  additional terms. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `c11a661c2922c3bda0a37c77a94dc0015dc4a9323bad86ef78f4c9aefb20ae0a`.
 - Acceptance contracts: `OIC-024`, `OIC-027`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
+
+Scenario revision `1` receipt, approved by `satoshikawato` on `2026-09-30`:
 
 ```text
 PRODUCT_DECISION
@@ -4132,6 +5522,35 @@ Decision date: 2026-09-30
   "acceptedResidualRisk": "全体の stroke を変えたとき、Generate するまで preview が変わらない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-30"
+}
+```
+
+Scenario revision `2` receipt, confirmed on `2026-10-18`:
+
+```text
+PRODUCT_DECISION
+Concern: web.stroke.application
+Scenario revision: 2
+Choice: A / GLOBAL-STROKES-LIVE-WITH-S5-Q1
+Rationale: they follow S5-Q1 without another round.
+Must preserve: rev 1's reasons (a blank, invalid or Auto value fails the apply or draws as Generate does, through one projection); per-feature stroke edits stay instant with their Auto restore and are not overridden (editor intent applies after the rerender).
+May retire: rev 1's Generate-only timing per live unit.
+Accepted residual risk: as S5-Q1 A for the unit.
+Owner: satoshikawato
+Decision date: 2026-10-18
+```
+
+```json
+{
+  "concern": "web.stroke.application",
+  "scenarioRevision": 2,
+  "choice": "A / GLOBAL-STROKES-LIVE-WITH-S5-Q1",
+  "rationale": "they follow S5-Q1 without another round.",
+  "mustPreserve": "rev 1's reasons (a blank, invalid or Auto value fails the apply or draws as Generate does, through one projection); per-feature stroke edits stay instant with their Auto restore and are not overridden (editor intent applies after the rerender).",
+  "mayRetire": "rev 1's Generate-only timing per live unit.",
+  "acceptedResidualRisk": "as S5-Q1 A for the unit.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-18"
 }
 ```
 
@@ -4510,19 +5929,25 @@ Decision date: 2026-09-30
 ### PD-OI-066: Live-edit and regeneration parity
 
 - Concern key: `web.live-edit.regeneration-parity`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-066`, scenario revision `1`
-  (`A / LIVE-EDIT-EQUALS-REGENERATION`). Scenario revision `2` keeps every
+- Scenario revision: `3`
+- Supersedes: `PD-OI-066`, scenario revision `2` (`A / WAIT-FOR-G1-APPLIES`).
+  Scenario revision `3` keeps every effect of scenario revision `2` except
+  what its receipt states: the wait of an existing live edit is bounded by
+  the live applies within the rule of `PD-OI-103` scenario revision `2`, not
+  by the G1 applies only. Scenario revision `2` superseded `PD-OI-066`,
+  scenario revision `1` (`A / LIVE-EDIT-EQUALS-REGENERATION`), and kept every
   effect of scenario revision `1` except what its receipt states: "the
   response speed of each live edit" is no longer an unconditional rule, only
   for the wait for G1 applies (`PD-OI-103`), and the parity is stated with its
   condition on pending Applies on Generate values.
 - Status: `ACCEPTED`
-- Selected outcome: `A / WAIT-FOR-G1-APPLIES`
-- Normative outcome: exactly the complete approved scenario revision `2`
+- Selected outcome: `A / WAIT-FOR-LIVE-APPLIES-WITHIN-TARGET`
+- Normative outcome: exactly the complete approved scenario revision `3`
   `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
-  with the effects of the scenario revision `1` receipt that it does not
-  change. The scenario revision `1` receipt is kept as it was approved.
+  with the effects of the scenario revision `2` receipt that it does not
+  change, and those of the scenario revision `1` receipt that scenario
+  revision `2` does not change. The scenario revision `1` and `2` receipts
+  are kept as they were approved.
 - Decision source (scenario revision `1`): the complete `D-11` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
@@ -4533,10 +5958,15 @@ Decision date: 2026-09-30
 - Decision source (scenario revision `2`): the Owner replies quoted verbatim
   in the Revision 57 entry above. The second receipt and JSON below reproduce
   all nine confirmed fields without translation or additional terms.
-  Dependent runtime requires this authority merged into its base; this record
-  supplies no runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `8027018ef3be9188c563c3c8a122a9c01b6512a04cb71347a45542bd93e915c0`.
+- Decision source (scenario revision `3`): the Owner replies quoted
+  verbatim in the Revision 64 entry above. The scenario revision `3`
+  receipt and JSON below reproduce all nine fields without translation or
+  additional terms. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `d051f8b4a669d2be36d0f91c06867d8c4079fdd5605451583d3029ccd3b150a7`.
 - Acceptance contracts: `OIC-024`, `OIC-027`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -4596,6 +6026,35 @@ Decision date: 2026-10-17
   "acceptedResidualRisk": "a wait of up to about 0.9 s after a committed G1 value (about 0.5-0.6 s on tobacco), longer while values keep being committed.",
   "owner": "Satoshi Kawato",
   "decisionDate": "2026-10-17"
+}
+```
+
+Scenario revision `3` receipt, confirmed on `2026-10-18`:
+
+```text
+PRODUCT_DECISION
+Concern: web.live-edit.regeneration-parity
+Scenario revision: 3
+Choice: A / WAIT-FOR-LIVE-APPLIES-WITHIN-TARGET
+Rationale: the choice matching S5-Q1 / S5-Q2 (A with A / A).
+Must preserve: rev 2 (notes, PD-OI-052 delta, parity text).
+May retire: the G1-only bound.
+Accepted residual risk: an editor edit may wait about two live applies, each within the rule: up to 0.6 s (P2) or 1.5 s (P3) with the margin (0.8 s or 2 s without), longer while values keep coming.
+Owner: satoshikawato
+Decision date: 2026-10-18
+```
+
+```json
+{
+  "concern": "web.live-edit.regeneration-parity",
+  "scenarioRevision": 3,
+  "choice": "A / WAIT-FOR-LIVE-APPLIES-WITHIN-TARGET",
+  "rationale": "the choice matching S5-Q1 / S5-Q2 (A with A / A).",
+  "mustPreserve": "rev 2 (notes, PD-OI-052 delta, parity text).",
+  "mayRetire": "the G1-only bound.",
+  "acceptedResidualRisk": "an editor edit may wait about two live applies, each within the rule: up to 0.6 s (P2) or 1.5 s (P3) with the margin (0.8 s or 2 s without), longer while values keep coming.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-18"
 }
 ```
 
@@ -5765,10 +7224,18 @@ Decision date: 2026-10-11
 ### PD-OI-090: Project with drawings
 
 - Concern key: `session.project-drawings`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-090`, scenario revision `2` (`A / PROJECT-WITH-DRAWINGS`).
-  Scenario revision `3` keeps the outcome and every term of scenario
-  revision `2` except the first sentence of 〔Undo と削除〕: Undo/Redo also
+- Scenario revision: `4`
+- Supersedes: `PD-OI-090`, scenario revision `3` (`A / PROJECT-WITH-DRAWINGS`).
+  Scenario revision `4` keeps the outcome and every term of scenario
+  revision `3` except the Session versions of 〔Save と Load〕, 〔以前の Session
+  の移行〕, May retire, and Accepted residual risk (the drawings format is
+  Session version `49`; `48` is the 0.14.0 format, which moves to it without
+  Python), and one added sentence in 〔Save と Load〕: a Session `46` or `47`
+  that holds protein comparison results stored on a reversed record shows
+  its stored figure at once, and Python moves those results to the search
+  coordinates once at Load.
+  Scenario revision `3` kept every term of scenario revision `2` except the
+  first sentence of 〔Undo と削除〕: Undo/Redo also
   walks the project operations, which now include Reset all drawings and the
   edits that change only values that do not depend on a drawing, and turning
   Instant Preview on applies every drawing's queued palette in its one step.
@@ -5783,19 +7250,22 @@ Decision date: 2026-10-11
 - Selected outcome: `A / PROJECT-WITH-DRAWINGS`; at a drawing switch while a
   color rule table edit is being matched, `B / SWITCH-WAITS-FOR-RULE-COMMIT`
   of the OV-1100 question (Revision 62 entry); for the Undo/Redo of project
-  operations, the answers `A` to Q-DR-5 and Q-DR-8 (Revision 63 entry). The
-  receipt names the record's outcome only.
+  operations, the answers `A` to Q-DR-5 and Q-DR-8 (Revision 63 entry); for
+  the Load of a Session `46` or `47` with protein comparison results stored
+  on a reversed record, `B-LOAD` of Q-O2 (Revision 64 entry). The receipt
+  names the record's outcome only.
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
 - Decision source: the Owner replies quoted verbatim in the Revision 37 entry
   above, for scenario revision `2` those quoted in the Revision 62 entry
-  above, and for scenario revision `3` those quoted in the Revision 63 entry
+  above, for scenario revision `3` those quoted in the Revision 63 entry
+  above, and for scenario revision `4` those quoted in the Revision 64 entry
   above. The Owner approved the receipt text below as written. The receipt
   reproduces its fields without translation or additional terms. Dependent
   runtime requires this authority merged into its base; this record supplies
   no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `e3c534983538a18884e9e5e3400657ccdb14e6c0b75679b4e5eeaa4bc040e795`.
+  `dbc29cc437fd62eb2aad80cbbe7872f7ab701896b9a7ccf54609ca5b9c168f81`.
 - Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-013`,
   `OIC-027`, `OIC-030`. These obligations and the complete selected outcome
   are jointly required; their citation does not claim completed
@@ -5804,13 +7274,13 @@ Decision date: 2026-10-11
 ```text
 PRODUCT_DECISION
 Concern: session.project-drawings
-Scenario revision: 3
-Supersedes: PD-OI-090, scenario revision 2
+Scenario revision: 4
+Supersedes: PD-OI-090, scenario revision 3
 Choice: A / PROJECT-WITH-DRAWINGS
 Rationale: 1 つの Session（project）に、共有の入力ファイルと複数の drawing（図）を持たせる。PD-OI-086 が Circular と Linear に分けた設定、凡例の編集、History、Result を、drawing ごとに持つ形へ広げる。ある図の編集や Generate が別の図の設定や Result を変えたり失敗させたりしないようにし（OV-80、OV-82、OV-104）、同じ mode の drawing も複数持てるようにして、同じゲノムの全体図と遺伝子クラスターの拡大図のように、同じ入力から複数の図を作れるようにする。Session の形式は Python が定め（読み、検証し、移行し、書く）、Web、CLI、Python API が同じ形式を使う。
-Must preserve: 〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46、47 と 48 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 3）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46 と 47（0.14.0 は 47）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。
-May retire: 図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46 と 47 の modes と otherModeResult。読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。
-Accepted residual risk: 環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 48）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。
+Must preserve: 〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46、47、48 と 49 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 4）。ただし、version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものは、保存された図をすぐに示したうえで、読み込み時に Python が一度だけその結果を探索の座標に移す（PD-OI-044 revision 4）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46、47 と 48（0.14.0 は 48）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。
+May retire: 図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46、47 と 48 の modes と otherModeResult。読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。
+Accepted residual risk: 環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 49）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。
 Owner: satoshikawato
 Decision date: 2026-10-18
 ```
@@ -5818,13 +7288,13 @@ Decision date: 2026-10-18
 ```json
 {
   "concern": "session.project-drawings",
-  "scenarioRevision": 3,
-  "supersedes": "PD-OI-090, scenario revision 2",
+  "scenarioRevision": 4,
+  "supersedes": "PD-OI-090, scenario revision 3",
   "choice": "A / PROJECT-WITH-DRAWINGS",
   "rationale": "1 つの Session（project）に、共有の入力ファイルと複数の drawing（図）を持たせる。PD-OI-086 が Circular と Linear に分けた設定、凡例の編集、History、Result を、drawing ごとに持つ形へ広げる。ある図の編集や Generate が別の図の設定や Result を変えたり失敗させたりしないようにし（OV-80、OV-82、OV-104）、同じ mode の drawing も複数持てるようにして、同じゲノムの全体図と遺伝子クラスターの拡大図のように、同じ入力から複数の図を作れるようにする。Session の形式は Python が定め（読み、検証し、移行し、書く）、Web、CLI、Python API が同じ形式を使う。",
-  "mustPreserve": "〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46、47 と 48 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 3）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46 と 47（0.14.0 は 47）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。",
-  "mayRetire": "図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46 と 47 の modes と otherModeResult。読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。",
-  "acceptedResidualRisk": "環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 48）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。",
+  "mustPreserve": "〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46、47、48 と 49 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 4）。ただし、version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものは、保存された図をすぐに示したうえで、読み込み時に Python が一度だけその結果を探索の座標に移す（PD-OI-044 revision 4）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46、47 と 48（0.14.0 は 48）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。",
+  "mayRetire": "図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46、47 と 48 の modes と otherModeResult。読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。",
+  "acceptedResidualRisk": "環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 49）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-18"
 }
@@ -6106,15 +7576,50 @@ Decision date: 2026-10-16
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `8`
-- Supersedes: `PD-OI-097`, scenario revision `7`. Scenario revision `8`
-  keeps every outcome and field of scenario revision `7` and adds
-  `YIELD-REPAIRED-ONLY`.
+- Scenario revision: `16`
+- Supersedes: `PD-OI-097`, scenario revision `15`. Scenario revision `16`
+  keeps every outcome of scenario revision `15` except the rows above the
+  first of horizontal `above_feature` labels, and adds `AF-ROW-PITCH`; Reply 64
+  of the Revision 77 entry approves its changes to the Rationale, the Must
+  preserve, the May retire, and the Accepted residual risk. Scenario revision `15`
+  keeps every outcome and field of scenario revision `14` and adds
+  `LEADERLESS-BOX` and `AF-AUTO-ROW`; Reply 62 of the Revision 73 entry approves
+  its changes to the Rationale, the Must preserve, the May retire, and the
+  Accepted residual risk. Scenario revision `14`
+  keeps every outcome and field of scenario revision `13` and adds
+  `CIR-ANGLE-ORDER`; Reply 58 of the Revision 72 entry approves its additions to
+  the Rationale and the Must preserve. Scenario revision `13`
+  keeps every outcome of scenario revision `12` and adds `CIR-NO-HALO` and
+  `TURNED-NO-UNDER`; Reply 56 of the Revision 71 entry approves its changes
+  to the Rationale, the Must preserve, and the Accepted residual risk of
+  scenario revision `12`, and it keeps the May retire. Scenario revision `12`
+  keeps every outcome of scenario revision `11` and adds `RGN-ROOM-WARN`; it
+  keeps every field of scenario revision `11` except the Rationale, to which
+  Reply 49 of the Revision 69 entry appends the Circular region labels left
+  with no room by set track radii. Scenario revision `11`
+  keeps every outcome of scenario revision `10` and adds `LBL-HALO`,
+  `LIN-UNDER`, `CIR-NO-UNDER`, `GAP-STOP`, `LEADER-007`, `LBL-OPTS-2`,
+  `LBL-0140`, `HALO-008`, `OPT-NAMES`, `SESS-NEXT-GEN`, `WEBPDF-NO-HALO`,
+  `UNDER-NOT-IN-ROW`, `UNDER-CASING`, `UNDER-TRIM`, `ROW-GAP-025`, and
+  `LIN-BOX-080`; it keeps every field of scenario revision `10` except the
+  Rationale, the May retire, and the Accepted residual risk, to each of which
+  Replies 44 and 46 of the Revision 68 entry append the feature label
+  style, and the Must preserve, in which they replace the sentence on
+  figures without overlaps or crossings. Scenario revision `10`
+  keeps every outcome of scenario revision `9` and adds `RGN-CUT-WARN`; it
+  keeps every field of scenario revision `9` except the Rationale, to which
+  Reply 24 of the Revision 67 entry appends the Circular region labels cut to
+  fit their circle, and the decision date. Scenario revision `9`
+  keeps every outcome of scenario revision `8` and adds `REGION-WARN`,
+  `RGN-FRONT`, and `RGN-YIELD-ROW`; it keeps every field of scenario revision
+  `8` except the Rationale and the May retire, to each of which Reply 22 of
+  the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
+  and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY`
-- Normative outcome: exactly the complete approved scenario revision `8`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH`
+- Normative outcome: exactly the complete approved scenario revision `16`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7` receipt is kept as it was approved.
+  scenario revision `7` to `15` receipts are kept as they were approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -6131,6 +7636,76 @@ Decision date: 2026-10-16
   acceptance evidence.
 - Receipt SHA-256 (scenario revision `8`; UTF-8, excluding the final newline):
   `405597f512e865299b743d4307924a44955721a391917fa7360230ba4004417b`.
+- Decision source (scenario revision `9`): the Owner replies of `2026-10-18`
+  and `2026-10-19` quoted verbatim in the Revision 66 entry above; Reply 22
+  approves the third receipt and JSON below. They keep the fields of scenario
+  revision `8`, add the three choices and the two exceptions of Reply 22, and
+  carry the decision date of the last reply, without translation or additional terms. The runtime, tests, and documentation that implement it
+  merge with it (static Product Contract co-change); this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `9`; UTF-8, excluding the final newline):
+  `65994020bd2ce347daa2d39f5e7fb470b7fe1d3efdf5600fcd43a4201ad3065d`.
+- Decision source (scenario revision `10`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 67 entry above; Reply 24 approves the fourth
+  receipt and JSON below. They keep the fields of scenario revision `9`, add
+  the choice and the Rationale sentence of Reply 24, and carry the decision
+  date of the last reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `10`; UTF-8, excluding the final newline):
+  `ae0bca6a9a6e4778ebc0a1bc9b12976a34eb389d874eab7c8e8857d502d5ee16`.
+- Decision source (scenario revision `11`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 68 entry above; Reply 46 approves the fifth
+  receipt and JSON below, which correct one Must preserve sentence of the text
+  that Reply 44 approved. They keep the fields of scenario revision `10`, add
+  the choices and the sentences of Replies 44 and 46, replace its Must preserve
+  sentence on figures without overlaps or crossings, and carry the decision
+  date of the last reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `11`; UTF-8, excluding the final newline):
+  `21bb6008d55e26f39220929f1f0047a4a2dcdd5ee9b10610015c4b512bb5a6ef`.
+- Decision source (scenario revision `12`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 69 entry above; Reply 49 approves the sixth
+  receipt and JSON below. They keep the fields of scenario revision `11`, add
+  the choice and the Rationale sentence of Reply 49, and carry the decision
+  date of the last reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `12`; UTF-8, excluding the final newline):
+  `bb29233e87d753a81aafc50a8793ee2d38e3d1978f24e876d3609a40d018bf3c`.
+- Decision source (scenario revision `13`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 71 entry above; Reply 56
+  approves the seventh receipt and JSON below, without translation or
+  additional terms. The runtime, tests, and documentation that implement it
+  merge with it (static Product Contract co-change); this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `13`; UTF-8, excluding the final newline):
+  `c506898771b785df31d5234f9bbcdeb45f7c2688cdf3b7d322f5f8c8fbd9abcb`.
+- Decision source (scenario revision `14`): the Owner replies of `2026-10-20`
+  quoted verbatim in the Revision 72 entry above; Reply 58 approves the eighth
+  receipt and JSON below, without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `14`; UTF-8, excluding the final newline):
+  `75bdd3c70791109daf8fdb41deb89f3018fa44bfb0be09f3dd398cdbf1806989`.
+- Decision source (scenario revision `15`): the Owner replies of `2026-10-20`
+  quoted verbatim in the Revision 73 entry above; Reply 62 approves the ninth
+  receipt and JSON below, without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `15`; UTF-8, excluding the final newline):
+  `03dcf6b3fcf686508217fc697dc644118e5b186dd886185070ba926b060c534b`.
+- Decision source (scenario revision `16`): the Owner replies of `2026-10-21`
+  quoted verbatim in the Revision 77 entry above; Reply 64 approves the tenth
+  receipt and JSON below, without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `16`; UTF-8, excluding the final newline):
+  `e0fc664c2fc41f544337579f991c1997cd9508d5dbeb345d8f2f7e96e6226d01`.
 
 ```text
 PRODUCT_DECISION
@@ -6188,23 +7763,271 @@ Decision date: 2026-10-14
 }
 ```
 
+Scenario revision `9` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 22 of the Revision 66 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 9
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 9,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
+Scenario revision `10` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 24 of the Revision 67 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 10
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 10,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
+Scenario revision `11` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 46 of the Revision 68 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 11
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 11,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
+Scenario revision `12` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 49 of the Revision 69 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 12
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 12,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。フィーチャーラベルは、後ろを通るリーダー線から守る。Linear は文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷き、Circular は文字の形の白いハロー（0.08 em）で守る（LP-D98、LP-D106）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守り（Linear は白い背景、Circular はハロー）、下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の PDF と EPS はハローの分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
+Scenario revision `13` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 56 of the Revision 71 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 13
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。斜めのラベルの垂直なリーダー線は、隣の斜めのラベルの文字を横切ることがある（0.13.0 と同じ、OV-1361）。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 13,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。斜めのラベルの垂直なリーダー線は、隣の斜めのラベルの文字を横切ることがある（0.13.0 と同じ、OV-1361）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
+Scenario revision `14` receipt, approved by `satoshikawato` on `2026-10-20` (Reply 58 of the Revision 72 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 14
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。斜めのラベルの垂直なリーダー線は、隣の斜めのラベルの文字を横切ることがある（0.13.0 と同じ、OV-1361）。
+Owner: satoshikawato
+Decision date: 2026-10-20
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 14,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。斜めのラベルの垂直なリーダー線は、隣の斜めのラベルの文字を横切ることがある（0.13.0 と同じ、OV-1361）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-20"
+}
+```
+
+Scenario revision `15` receipt, approved by `satoshikawato` on `2026-10-20` (Reply 62 of the Revision 73 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 15
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto の 1 段目と同じ間をフィーチャーから取る（LP-D120）。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。
+Owner: satoshikawato
+Decision date: 2026-10-20
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 15,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto の 1 段目と同じ間をフィーチャーから取る（LP-D120）。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-20"
+}
+```
+
+Scenario revision `16` receipt, approved by `satoshikawato` on `2026-10-21` (Reply 64 of the Revision 77 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 16
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。
+Owner: satoshikawato
+Decision date: 2026-10-21
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 16,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-21"
+}
+```
+
 ### PD-OI-098: Font of the diagram text
 
 - Concern key: `diagram-generation.diagram-font`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-098`, scenario revision `1`. Scenario revision `2`
+  keeps the outcome and every field of scenario revision `1` except the Must
+  preserve, to whose 〔変えないもの〕 Reply 45 of the Revision 68 entry adds the
+  exception for the feature label style and the Web PDF text anchors
+  (OV-1303), and the decision date.
 - Status: `ACCEPTED`
 - Selected outcome: `A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
-- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The
+  scenario revision `1` receipt is kept as it was approved.
+- Decision source (scenario revision `1`): the Owner reply of `2026-10-13` quoted verbatim in the
   Revision 51 entry above. The Owner approved the receipt text below as
   written. The receipt reproduces its fields without translation or
   additional terms. This record does not supersede another decision. The
   runtime, tests, and documentation that implement it merge with it (static
   Product Contract co-change); this record supplies no runtime acceptance
   evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `14dc5e981573dce50e9815f4457d34de6786c819ae31a5b4672e178359af3675`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 68 entry above; Reply 45 approves the
+  second receipt and JSON below. They keep the fields of scenario revision
+  `1`, add the exception of Reply 45 to its Must preserve, and carry the
+  decision date of the reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `a305e5d6eefb69914e20e1397cca98298c3050315dff6d488638c2dff5160cc8`.
 
 ```text
 PRODUCT_DECISION
@@ -6230,6 +8053,35 @@ Decision date: 2026-10-13
   "acceptedResidualRisk": "別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-13"
+}
+```
+
+Scenario revision `2` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 45 of the Revision 68 entry):
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.diagram-font
+Scenario revision: 2
+Choice: A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED
+Rationale: 図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。
+Must preserve: 〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）、Session の保存と読み込みの手順、Gallery の Session。
+May retire: Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。
+Accepted residual risk: 別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "diagram-generation.diagram-font",
+  "scenarioRevision": 2,
+  "choice": "A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED",
+  "rationale": "図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。",
+  "mustPreserve": "〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力（ただし、フィーチャーラベルのハローと白い背景、下線とその白い縁、リーダー線の太さ、Linear の同じ段のすき間（LP-D98、LP-D100、LP-D102〜LP-D104、LP-D106）と、Web の PDF で中央揃えと右揃えの文字の位置を直したこと（OV-1303）は除く）、Session の保存と読み込みの手順、Gallery の Session。",
+  "mayRetire": "Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。",
+  "acceptedResidualRisk": "別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
 }
 ```
 
@@ -6412,18 +8264,33 @@ Decision date: 2026-10-17
 ### PD-OI-103: Settings sections that apply live
 
 - Concern key: `web.settings.live-sections`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-103`, scenario revision `1` (`A / G1-LIVE`). Scenario
+  revision `2` changes only what its receipt states, for the G2 units and GT;
+  in the decision packet's words: "the rule gates G2 units and GT only; G1
+  stays live under PD-OI-103 rev 1, whose Accepted residual risk covers Plot
+  Title over P1 (+54-85 ms). Under A it is a gate: PD-OI-103 rev 1's question
+  trigger becomes a go-live."
 - Status: `ACCEPTED`
-- Selected outcome: `A / G1-LIVE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
-  above. The receipt and JSON below reproduce all nine confirmed fields
-  without translation or additional terms. This record does not supersede
-  another decision. Dependent runtime requires this authority merged into its
-  base; this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcomes: `A / G1-LIVE` (scenario revision `1`) and
+  `A / LIVE-BY-EVIDENCE-RULE`, reading `MARGIN`, unit `U2 CONTROL GROUPS`
+  (scenario revision `2`)
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
+  with the effects of the scenario revision `1` receipt that it does not
+  change. The scenario revision `1` receipt is kept as it was approved.
+- Decision source (scenario revision `1`): the Owner replies quoted verbatim
+  in the Revision 57 entry above. The receipt and JSON below reproduce all
+  nine confirmed fields without translation or additional terms.
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `d30daa401717a284efa14fd6e9ba211617c3e51af15499371127b2bc71e87fe2`.
+- Decision source (scenario revision `2`): the Owner replies quoted
+  verbatim in the Revision 64 entry above. The scenario revision `2`
+  receipt and JSON below reproduce all nine fields without translation or
+  additional terms. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `95f13d32a53bccd0b4997663e78ff5acb731971220cc3fa36e8ba426267ab6ca`.
 - Setting groups the receipts name (G1, G2, G3, GT): the membership quoted
   from the packet's "Groups used below". It names the groups; it adds no
   outcome.
@@ -6440,6 +8307,8 @@ Decision date: 2026-10-17
     filters, Labels, Font, feature types, rendering, geometry and placement,
     layout presets, reverse, region, display start, depth and Circular
     conservation display settings.
+
+Scenario revision `1` receipt, confirmed on `2026-10-17`:
 
 ```text
 PRODUCT_DECISION
@@ -6468,21 +8337,70 @@ Decision date: 2026-10-17
 }
 ```
 
-### PD-OI-104: GC, skew and depth toggles of a drawn track apply at once
+Scenario revision `2` receipt, confirmed on `2026-10-18`:
+
+```text
+PRODUCT_DECISION
+Concern: web.settings.live-sections
+Scenario revision: 2
+Choice: A / LIVE-BY-EVIDENCE-RULE; reading MARGIN, unit U2 CONTROL GROUPS
+Rationale: D-116's order ("first those meeting the targets") in one receipt; MARGIN because the gate has no Owner round, so a unit near its target comes back to the Owner; cost: Axis stays on Generate unless stage work brings it under 192 ms. U2: U1 keeps a fast control (window, hepa 535 ms) behind the slowest; U2 adds no owner.
+Must preserve: every G2 setting's Generate-only timing and Session separation until its unit is live; G1, G3; GT per S5-Q2. Evidence rule: "A unit (a G2 unit, or the GT set or toggle as chosen in S5-Q2) is within the rule when its acceptance report shows, with the live mode of the step 4 spec (controls selected by CSS), the unit's representative change (U1: the section's slowest control; U2: each control group's representative change; GT: hide and show of each toggle), warm, at least 3 interleaved rounds with alternating Session order, each run started at a 1-minute load at or below 8 and a 5-minute load at or below 6, that in every round the median live apply (MARGIN: multiplied by 1.3; SENSITIVITY: itself, the x 1.3 result reported) is at or below its D-03 class target (P1 250, P2 400, P3 1000 ms) on each deciding Session. The deciding Sessions are the Gallery Vnig, hepatoplasmataceae orthogroup and vibrio collinear Sessions where the control is enabled and its change draws something different, with these cases fixed: hepa's record gap (one record) is left out; record names are judged on hepa and vibrio (Vnig's Multi-Record Canvas disables them); Dinucleotide controls on vibrio with Show GC Content turned on first; a toggle a Session has off is turned on first for its hide; Show Depth on all three Sessions, each with an added per-base Depth TSV (`samtools depth -a` text: one row per position of every record). The tobacco result, the stage D state and the stage work are reported. After SW1 is measured (and SW2 / SW3 where designed), every unit still over returns to the Owner as a 'stay on Generate (GT: stay instant) / accept the measured cost' question with its numbers."
+May retire: per unit at go-live, its Generate-only timing, its note, and staging its changes to see them only at Generate.
+Accepted residual risk: units may wait for the return question; MARGIN may hold back a unit under target (Axis).
+Owner: satoshikawato
+Decision date: 2026-10-18
+```
+
+```json
+{
+  "concern": "web.settings.live-sections",
+  "scenarioRevision": 2,
+  "choice": "A / LIVE-BY-EVIDENCE-RULE; reading MARGIN, unit U2 CONTROL GROUPS",
+  "rationale": "D-116's order (\"first those meeting the targets\") in one receipt; MARGIN because the gate has no Owner round, so a unit near its target comes back to the Owner; cost: Axis stays on Generate unless stage work brings it under 192 ms. U2: U1 keeps a fast control (window, hepa 535 ms) behind the slowest; U2 adds no owner.",
+  "mustPreserve": "every G2 setting's Generate-only timing and Session separation until its unit is live; G1, G3; GT per S5-Q2. Evidence rule: \"A unit (a G2 unit, or the GT set or toggle as chosen in S5-Q2) is within the rule when its acceptance report shows, with the live mode of the step 4 spec (controls selected by CSS), the unit's representative change (U1: the section's slowest control; U2: each control group's representative change; GT: hide and show of each toggle), warm, at least 3 interleaved rounds with alternating Session order, each run started at a 1-minute load at or below 8 and a 5-minute load at or below 6, that in every round the median live apply (MARGIN: multiplied by 1.3; SENSITIVITY: itself, the x 1.3 result reported) is at or below its D-03 class target (P1 250, P2 400, P3 1000 ms) on each deciding Session. The deciding Sessions are the Gallery Vnig, hepatoplasmataceae orthogroup and vibrio collinear Sessions where the control is enabled and its change draws something different, with these cases fixed: hepa's record gap (one record) is left out; record names are judged on hepa and vibrio (Vnig's Multi-Record Canvas disables them); Dinucleotide controls on vibrio with Show GC Content turned on first; a toggle a Session has off is turned on first for its hide; Show Depth on all three Sessions, each with an added per-base Depth TSV (`samtools depth -a` text: one row per position of every record). The tobacco result, the stage D state and the stage work are reported. After SW1 is measured (and SW2 / SW3 where designed), every unit still over returns to the Owner as a 'stay on Generate (GT: stay instant) / accept the measured cost' question with its numbers.\"",
+  "mayRetire": "per unit at go-live, its Generate-only timing, its note, and staging its changes to see them only at Generate.",
+  "acceptedResidualRisk": "units may wait for the return question; MARGIN may hold back a unit under target (Axis).",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-18"
+}
+```
+
+### PD-OI-104: When the GC, skew and depth toggles apply
 
 - Concern key: `web.layout.track-toggle-application`
-- Scenario revision: `1`
+- Scenario revision: `3`
+- Supersedes: `PD-OI-104`, scenario revision `2`
+  (`A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`). Scenario revision `3` keeps
+  every field of the scenario revision `2` receipt and adds to its May retire
+  the packet's "Lost" text of that option (Revision 65 entry). Scenario
+  revision `2` superseded scenario revision `1`
+  (`B / TOGGLE-HIDE-AT-ONCE-NOTED`, the outcome of `S4-Q3`) and changed only
+  what its receipt states; in the decision
+  packet's words, "PD-OI-104 rev 1 holds for a toggle until its redraw is
+  within the evidence rule (P3; reading and set as chosen) both ways".
 - Status: `ACCEPTED`
-- Selected outcome: `B / TOGGLE-HIDE-AT-ONCE-NOTED`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
-  above. The receipt and JSON below reproduce all nine confirmed fields
-  without translation or additional terms. This record does not supersede
-  another decision. Dependent runtime requires this authority merged into its
-  base; this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcomes: `B / TOGGLE-HIDE-AT-ONCE-NOTED` (scenario revision `1`)
+  and `A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`, reading `AS S5-Q1`, set
+  `TOGETHER` (scenario revision `3`)
+- Normative outcome: exactly the complete approved scenario revision `3`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
+  with the effects of the scenario revision `1` receipt that it does not
+  change. The scenario revision `1` receipt is kept as it was approved.
+- Decision source (scenario revision `1`): the Owner replies quoted verbatim
+  in the Revision 57 entry above. The receipt and JSON below reproduce all
+  nine confirmed fields without translation or additional terms.
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `23aa2302bfdbf219d08593e7e37f484ab039efb7b030bc53a98d916228883aec`.
+- Decision source (scenario revision `3`): the Owner replies quoted
+  verbatim in the Revision 64 and Revision 65 entries above. The scenario
+  revision `3` receipt and JSON below reproduce all nine fields without translation or
+  additional terms. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `8d2096e0ea8236387807688b956388ce96e13f005ada0a8e08f130364137e3cd`.
+
+Scenario revision `1` receipt, confirmed on `2026-10-17`:
 
 ```text
 PRODUCT_DECISION
@@ -6508,6 +8426,35 @@ Decision date: 2026-10-17
   "acceptedResidualRisk": "a gap where a hidden track was, until Generate.",
   "owner": "Satoshi Kawato",
   "decisionDate": "2026-10-17"
+}
+```
+
+Scenario revision `3` receipt, confirmed on `2026-10-18`:
+
+```text
+PRODUCT_DECISION
+Concern: web.layout.track-toggle-application
+Scenario revision: 3
+Choice: A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET; reading AS S5-Q1, set TOGETHER
+Rationale: the G2 rule, and the instant response until the redraw is within it. TOGETHER: one PR retires the second writer and its exception whole; no state where one toggle redraws and its neighbour is patched.
+Must preserve: R1 (c) parity; hiding stays live (Show Depth off after a removal too); OV-1043; Depth display settings (G3). Evidence rule: "A unit (a G2 unit, or the GT set or toggle as chosen in S5-Q2) is within the rule when its acceptance report shows, with the live mode of the step 4 spec (controls selected by CSS), the unit's representative change (U1: the section's slowest control; U2: each control group's representative change; GT: hide and show of each toggle), warm, at least 3 interleaved rounds with alternating Session order, each run started at a 1-minute load at or below 8 and a 5-minute load at or below 6, that in every round the median live apply (MARGIN: multiplied by 1.3; SENSITIVITY: itself, the x 1.3 result reported) is at or below its D-03 class target (P1 250, P2 400, P3 1000 ms) on each deciding Session. The deciding Sessions are the Gallery Vnig, hepatoplasmataceae orthogroup and vibrio collinear Sessions where the control is enabled and its change draws something different, with these cases fixed: hepa's record gap (one record) is left out; record names are judged on hepa and vibrio (Vnig's Multi-Record Canvas disables them); Dinucleotide controls on vibrio with Show GC Content turned on first; a toggle a Session has off is turned on first for its hide; Show Depth on all three Sessions, each with an added per-base Depth TSV (`samtools depth -a` text: one row per position of every record). The tobacco result, the stage D state and the stage work are reported. After SW1 is measured (and SW2 / SW3 where designed), every unit still over returns to the Owner as a 'stay on Generate (GT: stay instant) / accept the measured cost' question with its numbers."
+May retire: `applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once.
+Accepted residual risk: the gap after hiding until go-live (PD-OI-104's accepted risk); TOGETHER: GC waits.
+Owner: satoshikawato
+Decision date: 2026-10-18
+```
+
+```json
+{
+  "concern": "web.layout.track-toggle-application",
+  "scenarioRevision": 3,
+  "choice": "A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET; reading AS S5-Q1, set TOGETHER",
+  "rationale": "the G2 rule, and the instant response until the redraw is within it. TOGETHER: one PR retires the second writer and its exception whole; no state where one toggle redraws and its neighbour is patched.",
+  "mustPreserve": "R1 (c) parity; hiding stays live (Show Depth off after a removal too); OV-1043; Depth display settings (G3). Evidence rule: \"A unit (a G2 unit, or the GT set or toggle as chosen in S5-Q2) is within the rule when its acceptance report shows, with the live mode of the step 4 spec (controls selected by CSS), the unit's representative change (U1: the section's slowest control; U2: each control group's representative change; GT: hide and show of each toggle), warm, at least 3 interleaved rounds with alternating Session order, each run started at a 1-minute load at or below 8 and a 5-minute load at or below 6, that in every round the median live apply (MARGIN: multiplied by 1.3; SENSITIVITY: itself, the x 1.3 result reported) is at or below its D-03 class target (P1 250, P2 400, P3 1000 ms) on each deciding Session. The deciding Sessions are the Gallery Vnig, hepatoplasmataceae orthogroup and vibrio collinear Sessions where the control is enabled and its change draws something different, with these cases fixed: hepa's record gap (one record) is left out; record names are judged on hepa and vibrio (Vnig's Multi-Record Canvas disables them); Dinucleotide controls on vibrio with Show GC Content turned on first; a toggle a Session has off is turned on first for its hide; Show Depth on all three Sessions, each with an added per-base Depth TSV (`samtools depth -a` text: one row per position of every record). The tobacco result, the stage D state and the stage work are reported. After SW1 is measured (and SW2 / SW3 where designed), every unit still over returns to the Owner as a 'stay on Generate (GT: stay instant) / accept the measured cost' question with its numbers.\"",
+  "mayRetire": "`applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once.",
+  "acceptedResidualRisk": "the gap after hiding until go-live (PD-OI-104's accepted risk); TOGETHER: GC waits.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-18"
 }
 ```
 
@@ -6555,6 +8502,99 @@ Decision date: 2026-10-13
 }
 ```
 
+### PD-OI-106: Web UI language
+
+- Concern key: `product.web-ui-language`
+- Scenario revision: `5`
+- Supersedes: `PD-OI-106`, scenario revision `4`. Scenario revision `5` keeps
+  every outcome of scenario revision `4` and adds one sentence at the end of
+  the Choice, the "Suggest a translation fix" link beside the Language menu,
+  and one clause at the end of the Accepted residual risk, that a translation
+  report needs a GitHub account and is public. The Revision 79 entry quotes
+  the replies. As scenario revisions `1` to `4`, it narrows `PD-OI-093`: that
+  record's limit of browser storage to one display choice no longer holds (see
+  the receipt's May retire); `PD-OI-093` keeps its text and its stored display
+  choice.
+- Status: `ACCEPTED`
+- Selected outcome: `WEB-UI-LANGUAGE-MANUAL`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies of `2026-10-22` in the Claude Code
+  session, quoted in the Revision 79 entry above; scenario revision `4` came
+  from the Owner replies of the same day (Revision 78 entry), scenario revision
+  `3` from those of `2026-10-21` (Revision 76 entry), scenario revision `2`
+  from those of the same day (Revision 75 entry), and scenario revision `1`
+  from the Owner answers of `2026-10-19` (Revision 70 entry). The receipt text
+  below is the session's wording; the Owner confirms it by merging this
+  change. The receipt reproduces its
+  fields without translation or additional terms. Dependent runtime requires
+  this authority merged into its base, or merged together with it through the
+  reviewed static Product Contract co-change route; this record supplies no
+  runtime acceptance evidence. The JSON `concern` holds the concern key
+  without the receipt's parenthetical description.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `b8ea7ea8de68208e2d46805f2d854cc092580670ac9411138cae0dbbfd0a8d5c`.
+
+```text
+PRODUCT_DECISION
+Concern: product.web-ui-language (language of the Web UI text)
+Scenario revision: 5
+Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+  (English, Bahasa Indonesia, Español, Français, Português,
+  Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the
+  Web UI text at once, without reload, and without changing the
+  Result, the settings or the History; switching is not a History
+  step. English is shown on a first visit; the browser language
+  never chooses. The chosen language is remembered per browser and
+  is not part of the Session, History or any export. Names fixed
+  in English by PD-OI-093 and PD-OI-105 keep that English in the
+  English UI and are translated in the other languages. pt follows
+  the Brazilian norm; one Portuguese catalog. A language with
+  singular and plural forms shows the form its own plural rule
+  selects for the count. Numbers keep the English decimal point
+  and digit grouping in every language. Thai text is shown in the
+  Thai typeface of the user's system and Vietnamese letters in the
+  bundled Latin typeface, at the sizes the script needs; the
+  figure is unchanged. No text states that the translations are
+  reviewed. Beside the Language menu, in every language, a link
+  named "Suggest a translation fix" opens the GitHub translation
+  feedback issue form in a new tab with the shown language and
+  the gbdraw version filled in; no file, setting, Result or
+  Session content is put in the link.
+Rationale: Let users work in their own language while every
+  scientific output stays identical in all languages.
+Must preserve: the English UI text and accessible names; the
+  figure, every export, the Session, CLI / Source recipe / Exact
+  replay text and diagnostics are identical in every language;
+  the stored settings-pane display choice of PD-OI-093.
+May retire: PD-OI-093's limit of browser storage to one display
+  choice; storage now holds that choice and the UI language.
+Accepted residual risk: Python-produced warnings, Gallery
+  tutorials and the docs stay English inside a translated UI;
+  translated wording may contain errors until corrected; the es,
+  fr, pt, ko, id, vi and th wording is drafted and checked without
+  a native reviewer until one corrects it; id and vi readers see
+  the English number format (1,000.5) where their convention
+  writes 1.000,5; a translation report needs a GitHub account and
+  is public.
+Owner: satoshikawato
+Decision date: 2026-10-22
+```
+
+```json
+{
+  "concern": "product.web-ui-language",
+  "scenarioRevision": 5,
+  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Español, Français, Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count. Numbers keep the English decimal point and digit grouping in every language. Thai text is shown in the Thai typeface of the user's system and Vietnamese letters in the bundled Latin typeface, at the sizes the script needs; the figure is unchanged. No text states that the translations are reviewed. Beside the Language menu, in every language, a link named \"Suggest a translation fix\" opens the GitHub translation feedback issue form in a new tab with the shown language and the gbdraw version filled in; no file, setting, Result or Session content is put in the link.",
+  "rationale": "Let users work in their own language while every scientific output stays identical in all languages.",
+  "mustPreserve": "the English UI text and accessible names; the figure, every export, the Session, CLI / Source recipe / Exact replay text and diagnostics are identical in every language; the stored settings-pane display choice of PD-OI-093.",
+  "mayRetire": "PD-OI-093's limit of browser storage to one display choice; storage now holds that choice and the UI language.",
+  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi and th wording is drafted and checked without a native reviewer until one corrects it; id and vi readers see the English number format (1,000.5) where their convention writes 1.000,5; a translation report needs a GitHub account and is public.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-22"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -6588,7 +8628,7 @@ Decision date: 2026-10-13
 | `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 | `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
-| `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo of a step in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; Undo/Redo in any drawing walks the shown drawing's steps and the project steps (drawing add, duplicate, rename, reorder, delete, Reset all drawings, and edits that change only the Session title, Auto Reflow, PNG DPI, palette Instant Preview, LOSAT execution and threads, or input drafts) newest first, one step per operation; an operation that also changes a drawing value is one step of that drawing; turning Instant Preview on applies every drawing's queued palette in that one step; a drawing switch writes no setting and is not an Undo step; a drawing switch is refused while a color rule table edit is being matched, and that edit becomes one History step of its drawing; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46 and 47 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46, 47, or 48 preview-only Load starts no Python Worker; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
+| `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo of a step in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; Undo/Redo in any drawing walks the shown drawing's steps and the project steps (drawing add, duplicate, rename, reorder, delete, Reset all drawings, and edits that change only the Session title, Auto Reflow, PNG DPI, palette Instant Preview, LOSAT execution and threads, or input drafts) newest first, one step per operation; an operation that also changes a drawing value is one step of that drawing; turning Instant Preview on applies every drawing's queued palette in that one step; a drawing switch writes no setting and is not an Undo step; a drawing switch is refused while a color rule table edit is being matched, and that edit becomes one History step of its drawing; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46, 47, and 48 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46, 47, 48, or 49 preview-only Load starts no Python Worker, except that a Session 46 or 47 holding protein comparison results stored on a reversed record shows its stored figure first and then starts it once to convert them; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
 | `OIC-031` | `PD-OI-099`: a Load of a file with something it cannot fully restore lists it in one dialog before any setting, Result, input file, History, or screen changes, and Cancel changes none of them. Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. A refusal of the Web Load comes before the dialog, never after [Load]. No file the Web loaded before the dialog existed is refused. The receipt's 〔拒否〕 classes are refused; once the interim of its Accepted residual risk ends, they are the only refusals of the Web Load. |
 
 These new acceptance entries are obligations for dependent runtime work, not

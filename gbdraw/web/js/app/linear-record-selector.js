@@ -2,18 +2,20 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
+import { msg, t, tm } from '../utils/i18n.js';
+import { errorText } from '../utils/error-text.js';
 /** @import { LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
-export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
-export const RECORDS_LOADING_LABEL = 'Loading records...';
+export const AUTOMATIC_RECORD_OPTION_LABEL = msg('Automatic (no explicit selector)');
+export const RECORDS_LOADING_LABEL = msg('Loading records...');
 // OV-379: a File whose records no read has started for (a loaded Session
 // defers discovery) is not inspected; it is not loading.
-export const RECORDS_NOT_INSPECTED_LABEL = 'Not inspected';
-export const RECORD_FILE_REQUIRED_LABEL = 'Upload a sequence file first';
-export const RECORD_READ_ERROR_LABEL = 'Records could not be loaded';
+export const RECORDS_NOT_INSPECTED_LABEL = msg('Not inspected');
+export const RECORD_FILE_REQUIRED_LABEL = msg('Upload a sequence file first');
+export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
 
 /**
  * One record-selector option. `synthetic` marks the entry for a selector the
@@ -68,11 +70,11 @@ export const buildRecordOptions = (records, currentValue = '') => {
   const selectedValue = String(currentValue ?? '').trim();
   const selectedIsMissing = Boolean(selectedValue) && !options.some((option) => option.value === selectedValue);
   return [
-    { value: '', label: AUTOMATIC_RECORD_OPTION_LABEL, synthetic: false },
+    { value: '', label: tm(AUTOMATIC_RECORD_OPTION_LABEL), synthetic: false },
     ...(selectedIsMissing
       ? [{
           value: selectedValue,
-          label: `${selectedValue} (not found in current file)`,
+          label: t('{value} (not found in current file)', { value: selectedValue }),
           synthetic: true
         }]
       : []),
@@ -253,10 +255,8 @@ export const createLinearRecordSelector = ({
     if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
 
-    if (state.mode.value !== 'linear') {
-      Object.keys(selectorStateByUid).forEach((uid) => delete selectorStateByUid[uid]);
-      return;
-    }
+    // An inactive Linear source keeps its records, as an inactive Circular one does.
+    if (state.mode.value !== 'linear') return;
 
     const inputType = state.lInputType.value;
     /** @type {{ uid: string, primaryFile: FileLike, pairedFile: FileLike | null }[]} */
@@ -363,7 +363,7 @@ export const createLinearRecordSelector = ({
           : RECORD_FILE_REQUIRED_LABEL;
     return [{
       value: currentValue,
-      label,
+      label: tm(label),
       synthetic: Boolean(currentValue)
     }];
   };
@@ -377,15 +377,18 @@ export const createLinearRecordSelector = ({
   /** @param {LinearSeqLike} seq */
   const errorModelFor = (seq) => stateFor(seq).error;
   /** @param {LinearSeqLike} seq */
-  // A stored '' (no error) has no `summary`: the read is undefined and `||` returns ''.
-  const errorFor = (seq) => /** @type {UserFacingError} */ (errorModelFor(seq))?.summary || errorModelFor(seq);
+  // A stored '' (no error) is no model: it is returned as is.
+  const errorFor = (seq) => {
+    const error = errorModelFor(seq);
+    return error && typeof error === 'object' ? errorText(error.summaryParts) : error;
+  };
   /** @param {LinearSeqLike} seq */
   const warningFor = (seq) => {
     const selectorState = stateFor(seq);
     const currentValue = currentSelectorValue(seq);
     if (selectorState.status !== 'ready' || !currentValue) return '';
     const available = buildRecordOptions(selectorState.records).some((option) => option.value === currentValue);
-    return available ? '' : 'Selected record was not found in the current file. Choose another record.';
+    return available ? '' : t('Selected record was not found in the current file. Choose another record.');
   };
 
   return {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   buildLegendStyleRetirement,
   trackDataLegendCaptions
@@ -8,6 +9,8 @@ import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 
 // A drawing whose paint is these members (the fixture's own objects).
 const paintDrawing = (members) => ({ slices: { paint: PAINT_SLICE.create(members).handle } });
+import { getDepthTrackFileBaseName, isDepthTrackAutoLabel } from '../../gbdraw/web/js/app/depth-tracks.js';
+import { depthSeriesLegendCaptions, ensureDepthTrackConfigCount } from '../../gbdraw/web/js/services/depth-track-state.js';
 
 test('track data names the legend labels of annotation sets and the sourced Depth series (OV-65)', () => {
   const captions = trackDataLegendCaptions({
@@ -26,8 +29,38 @@ test('track data names the legend labels of annotation sets and the sourced Dept
   assert.deepEqual([...captions].sort(), ['Coverage', 'Region X', 'Set', 'sample']);
 });
 
-test('a Depth series without a label is named by the fallback label', () => {
-  assert.deepEqual([...trackDataLegendCaptions({ sourcedDepthTrackIndexes: [0, 1] })], ['Depth', 'Depth 2']);
+// The Depth rows Python draws for series without a label: Depth for one,
+// Depth 1, Depth 2 ... for several (`_default_depth_track_labels`; the shared
+// vector's unnamed Circular cases). A series the Web adds keeps no label, so
+// its name follows the series count as the CLI draws it (OV-1508).
+const UNNAMED_DEPTH_CASES = JSON.parse(readFileSync(new URL('../fixtures/legend_track_slot_rows.json', import.meta.url), 'utf8'))
+  .cases.filter(({ mode, slots, depthTracks }) => mode === 'circular' && slots === null
+    && Array.isArray(depthTracks) && depthTracks.every(({ label }) => label === ''));
+
+test('a Depth series the Web adds without a name keeps no label and is named as Python names it (OV-1508)', () => {
+  assert.deepEqual(UNNAMED_DEPTH_CASES.map(({ depthTracks }) => depthTracks.length), [1, 3]);
+  for (const { name, depthTracks, rows } of UNNAMED_DEPTH_CASES) {
+    const pythonNames = rows.filter(([, slot]) => slot === 'depth').map(([key]) => key);
+    const configs = ensureDepthTrackConfigCount([], depthTracks.length);
+    assert.deepEqual(configs.map(({ label }) => label), depthTracks.map(() => ''), name);
+    const indexes = depthTracks.map((_, index) => index);
+    assert.deepEqual([...trackDataLegendCaptions({ depthTracks: configs, sourcedDepthTrackIndexes: indexes })], pythonNames, name);
+    assert.deepEqual([...trackDataLegendCaptions({ sourcedDepthTrackIndexes: indexes })], pythonNames, name);
+    assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: configs, slots: [] }), pythonNames, name);
+  }
+});
+
+test('a default name of its series, an empty label, or its file name is a label the next file may replace', () => {
+  assert.equal(getDepthTrackFileBaseName({ name: 'dir/reads.depth.tsv' }), 'reads.depth');
+  assert.equal(getDepthTrackFileBaseName(null), '');
+  // A Session saved before OV-1508 holds Depth for the first of several series.
+  for (const [label, index] of [['', 0], ['Depth', 0], ['Depth 1', 0], ['Depth 2', 1], ['Depth 3', 2]]) {
+    assert.equal(isDepthTrackAutoLabel(label, index), true, `${label} at ${index}`);
+  }
+  for (const [label, index] of [['Depth', 1], ['Depth 3', 1], ['Reads', 0]]) {
+    assert.equal(isDepthTrackAutoLabel(label, index), false, `${label} at ${index}`);
+  }
+  assert.equal(isDepthTrackAutoLabel('reads.depth', 0, { name: 'reads.depth.tsv' }), true);
 });
 
 test('styles follow the caption: a data change retires only the captions the data stops naming', () => {
@@ -124,4 +157,78 @@ test('a data change retires a waiting Legend rename of a caption it stops naming
   assert.deepEqual(dormantLegendEntries.value, [{ caption: 'Region Y', originalCaption: 'Region X', color: '#111111' }]);
   assert.deepEqual(legendColorOverrides, { 'Region X': '#111111' });
   assert.deepEqual(legendStrokeOverrides, {});
+});
+
+// OV-1198, OV-1215: the rows of a drawn track the draft hides leave the list
+// with the track and return with it. The port asks the Legend list owner to
+// list them (here a stand-in that, like `listLegendRows`, lists the Result's
+// rows except the hidden ones, named by the list's rename, else a dormant one).
+const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'GC content'] }) => {
+  const legendEntries = { value: entries };
+  const dormantLegendEntries = { value: dormant };
+  const state = { hidden };
+  let projections = 0;
+  const keyOf = (entry) => entry.originalCaption || entry.caption;
+  const renameOf = (key, list) => list.find((entry) => keyOf(entry) === key && entry.caption !== key)?.caption;
+  const run = buildLegendStyleRetirement({
+    drawing: paintDrawing({ legendColorOverrides: {}, legendStrokeOverrides: {}, legendEntries, dormantLegendEntries }),
+    namedCaptions: () => new Set(),
+    hiddenRows: () => (state.hidden ? ['depth'] : []),
+    relistLegendEntries: () => {
+      const listed = new Set(legendEntries.value.map(keyOf));
+      legendEntries.value = result.filter((key) => !(state.hidden && key === 'depth')).map((key) => ({
+        caption: (listed.has(key) ? renameOf(key, legendEntries.value) : renameOf(key, dormantLegendEntries.value)) || key,
+        originalCaption: key
+      }));
+    },
+    projectLegendEntries: () => { projections += 1; }
+  });
+  const captions = () => legendEntries.value.map((entry) => entry.caption);
+  return { legendEntries, dormantLegendEntries, state, run, captions, projections: () => projections };
+};
+
+test('a hidden track\'s row leaves the list, and a renamed one waits as after a Generate (OV-120)', () => {
+  const port = trackPort({
+    entries: [
+      { caption: 'CDS', originalCaption: 'CDS' },
+      { caption: 'Coverage', originalCaption: 'depth' },
+      { caption: 'GC content', originalCaption: 'GC content' }
+    ],
+    hidden: false
+  });
+  port.run(() => { port.state.hidden = true; });
+  assert.deepEqual(port.captions(), ['CDS', 'GC content']);
+  assert.deepEqual(port.dormantLegendEntries.value, [{ caption: 'Coverage', originalCaption: 'depth' }]);
+  assert.equal(port.projections(), 1);
+  // Nothing is left to move on a later port run that hides nothing more.
+  port.run(() => undefined);
+  assert.equal(port.projections(), 1);
+});
+
+test('a track shown again returns its renamed row and leaves no dormant copy (review H1)', () => {
+  const port = trackPort({
+    entries: [
+      { caption: 'CDS', originalCaption: 'CDS' },
+      { caption: 'Coverage', originalCaption: 'depth' },
+      { caption: 'GC content', originalCaption: 'GC content' }
+    ],
+    hidden: false
+  });
+  port.run(() => { port.state.hidden = true; });
+  port.run(() => { port.state.hidden = false; });
+  assert.deepEqual(port.captions(), ['CDS', 'Coverage', 'GC content']);
+  assert.deepEqual(port.dormantLegendEntries.value, [], 'a Session saved now holds the row once');
+  assert.equal(port.projections(), 2);
+  // The user's later rename back to the key is not undone by a stale dormant entry.
+  port.legendEntries.value = port.legendEntries.value.map((entry) => ({ ...entry, caption: entry.originalCaption }));
+  port.run(() => { port.state.hidden = true; });
+  port.run(() => { port.state.hidden = false; });
+  assert.deepEqual(port.captions(), ['CDS', 'depth', 'GC content']);
+});
+
+test('a change that hides no drawn track leaves the list as it was and projects nothing', () => {
+  const port = trackPort({ entries: [{ caption: 'depth', originalCaption: 'depth' }], hidden: false });
+  port.run(() => undefined);
+  assert.deepEqual(port.legendEntries.value, [{ caption: 'depth', originalCaption: 'depth' }]);
+  assert.equal(port.projections(), 0);
 });

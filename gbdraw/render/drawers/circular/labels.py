@@ -13,7 +13,7 @@ from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 from ....core.text import calculate_bbox_dimensions
-from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment
+from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment, rim_text_placement
 from ....labels.circular_types import CircularLabel
 from ...label_binding import bind_label_part
 
@@ -161,34 +161,11 @@ class LabelDrawer:
         return group
 
     def add_label_on_the_rim(self, group, label: CircularLabel, radius, record_length):
-        if label.get("placement") == "radial":
-            start_x = float(label.get("text_x", label["start_x"]))
-            start_y = float(label.get("text_y", label["start_y"]))
-            label_path = generate_text_path(
-                label["label_text"],
-                start_x,
-                start_y,
-                interval=0,
-                font_size=self.font_size,
-                font_weight="normal",
-                font=self.font_family,
-                dominant_baseline=str(label.get("dominant_baseline", "middle")),
-                text_anchor=str(label.get("text_anchor", "middle")),
-            )
-            rotation_deg = float(label.get("rotation_deg", 0.0))
-            label_path.rotate(rotation_deg, center=(start_x, start_y))
-            group.add(label_path)
-            return group
-
-        anchor_value, baseline_value = self.set_feature_label_anchor_value(
-            record_length, label["middle"], label["start_x"], label.get("is_inner", False)
-        )
-        start_x_1 = label["start_x"]
-        start_y_1 = label["start_y"]
+        (x, y), anchor_value, baseline_value, rotation_deg = rim_text_placement(label, record_length)
         label_path = generate_text_path(
             label["label_text"],
-            start_x_1,
-            start_y_1,
+            x,
+            y,
             interval=0,
             font_size=self.font_size,
             font_weight="normal",
@@ -196,6 +173,8 @@ class LabelDrawer:
             dominant_baseline=baseline_value,
             text_anchor=anchor_value,
         )
+        if label.get("placement") == "radial":
+            label_path.rotate(rotation_deg, center=(x, y))
         group.add(label_path)
         return group
 

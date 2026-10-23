@@ -11,6 +11,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+import functools
 from contextlib import contextmanager
 from contextvars import ContextVar
 from importlib import resources
@@ -314,18 +315,12 @@ def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
                 )
             user_df = user_df[~missing]
     except FileNotFoundError:
-        logger.error(
-            f"ERROR: override file '{user_defined_default_colors}' not found"
-        )
         raise InputFileError(
             f"Override file '{user_defined_default_colors}' not found"
         )
     except ParseError:
         raise
     except Exception as exc:
-        logger.error(
-            f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
-        )
         raise ParseError(
             f"Failed to read '{user_defined_default_colors}': {exc}"
         ) from exc
@@ -333,6 +328,41 @@ def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
     # Names the file in the errors of ``merge_default_colors``; not a key.
     user_df.attrs["source"] = user_defined_default_colors
     return user_df
+
+
+@functools.cache
+def packaged_color_palettes() -> Mapping[str, Mapping[str, str]]:
+    """The packaged palettes of ``gbdraw/data/color_palettes.toml`` by name."""
+
+    try:
+        toml_path = resources.files("gbdraw.data").joinpath("color_palettes.toml")
+        with toml_path.open("rb") as fh:
+            palettes_dict = tomllib.load(fh)
+    except Exception as exc:
+        raise ParseError(f"Failed to read color_palettes.toml: {exc}") from exc
+    return {
+        str(name): {str(key): str(value) for key, value in colors.items()}
+        for name, colors in palettes_dict.items()
+        if isinstance(colors, Mapping)
+    }
+
+
+def require_palette_name(palette: str) -> str:
+    """Return ``palette`` when it names a packaged palette; refuse it otherwise.
+
+    The CLI ``-p/--palette`` and ``FeatureOptions(palette=...)`` read a palette
+    name here. A stored request keeps the render-time fallback of
+    ``merge_default_colors``, so a saved Session that names a palette gbdraw
+    does not ship still draws.
+    """
+
+    palettes = packaged_color_palettes()
+    if palette not in palettes:
+        raise ValidationError(
+            f"Unknown palette {palette!r}; choose from: {', '.join(palettes)}.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    return palette
 
 
 def merge_default_colors(
@@ -345,15 +375,8 @@ def merge_default_colors(
     With ``load_comparison`` the override colors become hex codes.
     """
 
-    # ── 1) Load TOML
-    try:
-        toml_path = resources.files("gbdraw.data").joinpath("color_palettes.toml")
-        with toml_path.open("rb") as fh:
-            palettes_dict = tomllib.load(fh)
-    except Exception as exc:
-        logger.error(f"ERROR: failed to read colour_palettes.toml – {exc}")
-        raise ParseError(f"Failed to read color_palettes.toml: {exc}") from exc
-
+    # ── 1) The packaged palette
+    palettes_dict = packaged_color_palettes()
     if palette not in palettes_dict:
         logger.warning(f"Palette '{palette}' not found; using [default]")
         palette_dict = palettes_dict.get("default", {})
@@ -378,7 +401,6 @@ def merge_default_colors(
                         first_hex[feature_type] = resolve_color_to_hex(color)
                 user_df = user_df.assign(color=[first_hex[feature_type] for feature_type in user_df.index])
             except Exception as exc:
-                logger.error(f"ERROR: failed to read '{source}' – {exc}")
                 raise ParseError(f"Failed to read '{source}': {exc}") from exc
         default_colors = user_df.combine_first(default_colors)
 
@@ -456,13 +478,10 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
         raise ParseError(f"Malformed line in '{color_table_file}': {e}") from e
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Color table file not found: {e}")
         raise InputFileError(f"Color table file not found: {e}") from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
         raise ParseError(f"Failed to read '{color_table_file}': {e}") from e
 
     df["caption"] = df["caption"].fillna("")

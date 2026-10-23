@@ -14,7 +14,7 @@ const vectors = JSON.parse(readFileSync(new URL('../fixtures/sessions/legend-row
 
 test('the vectors read Session 46, the version before the row-keyed Legend', () => {
   assert.equal(vectors.readsSessionVersion, MODE_SCOPED_SESSION_VERSION);
-  assert.equal(ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION);
+  assert.equal(ROW_KEYED_LEGEND_SESSION_VERSION, vectors.readsSessionVersion + 1);
 });
 
 for (const { name, legend, expected, outcomes } of vectors.cases) {

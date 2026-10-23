@@ -5,12 +5,12 @@
 import argparse
 import copy
 import logging
-import math
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal, Optional, Sequence, cast
 from .config.toml import load_config_toml
+from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
@@ -23,6 +23,7 @@ from .api.session_compat import render_session_compatible_request
 from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
     depth_track_inputs_from_cli,
+    parse_cli_bool,
     record_input_manifest_from_paths,
     record_input_manifest_from_table,
 )
@@ -103,6 +104,7 @@ from .cli_utils.common import (
     setup_logging,
     validate_input_args,
     validate_label_args,
+    validate_output_choice_args,
     handle_output_formats,
 )
 from .cli_utils.session import (
@@ -114,13 +116,19 @@ from .cli_utils.session import (
     preflight_session_sidecar_if_requested,
     render_canonical_session_if_present,
     save_session_sidecar_if_requested,
+    read_stored_font_size_options,
 )
 from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
 from .render.output_paths import preflight_output_paths
-from .session import SessionDocument, load_session_document, session_drawing_artifacts
+from .session import (
+    SessionDocument,
+    load_session_document,
+    require_search_frame_protein_results,
+    session_drawing_artifacts,
+)
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
 from .cli_utils.losat_output import (
@@ -128,7 +136,7 @@ from .cli_utils.losat_output import (
     write_losat_output_files,
 )
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, ascii_float, parse_ascii_integer
+from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float, parse_ascii_integer
 
 
 # ``--losat`` choices (design 3.2).
@@ -203,12 +211,11 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
     normalized = str(value).strip().lower()
     if normalized in {"", "auto"}:
         return None
-    try:
-        axis_gap = ascii_float(normalized)
-    except ValueError as exc:
+    axis_gap = parse_ascii_finite_float(normalized)
+    if axis_gap is None:
         raise argparse.ArgumentTypeError(
             "track axis gap must be a non-negative number or 'auto'"
-        ) from exc
+        )
     if axis_gap < 0:
         raise argparse.ArgumentTypeError("track axis gap must be >= 0")
     return axis_gap
@@ -681,7 +688,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=argparse_float)
     parser.add_argument(
         '--label_placement',
-        help='Linear label placement mode ("auto" or "above_feature"; default: "auto"). "above_feature" draws labels above features (or below negative-strand features when --separate_strands is used).',
+        help='Linear label placement mode ("auto" or "above_feature"; default: "auto"). "above_feature" draws each label over its own feature (below negative-strand features when --separate_strands is used): a horizontal label starts one row off its feature with a leader, as in "auto"; a turned label (--label_rotation) sits on its feature.',
         type=_parse_linear_label_placement,
         metavar="{auto,above_feature}",
     )
@@ -690,6 +697,19 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Cannot be combined with --label_placement above_feature except as "auto". Default: "auto".',
         choices=['auto', 'embedded_only', 'external_only'],
         default='auto',
+        type=str)
+    parser.add_argument(
+        '--label_line',
+        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
+        '(a turned label gets none); "none" draws none. '
+        f'Default: "{DEFAULT_LABEL_LINE["linear"]}".',
+        choices=LABEL_LINES,
+        type=str)
+    parser.add_argument(
+        '--label_protection',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
+        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["linear"]}".',
+        choices=LABEL_PROTECTIONS,
         type=str)
     parser.add_argument(
         '--label_rotation',
@@ -851,8 +871,12 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
 
     args_list = [str(token) for token in (args or [])]
     args = parser.parse_args(args)
+    if _legacy_session:
+        read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if not _legacy_session:
+        validate_output_choice_args(args)
     if args.records_table:
         for option_name in (
             "record_label",
@@ -873,11 +897,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         )
     if args.comparisons_table and args.blast:
         parser.error("--comparisons_table cannot be combined with -b/--blast")
-    if not math.isfinite(args.linear_record_gap) or args.linear_record_gap < 0:
+    if args.linear_record_gap < 0:
         parser.error("--linear_record_gap must be a finite non-negative number")
-    if args.comparison_height is not None and (
-        not math.isfinite(args.comparison_height) or args.comparison_height <= 0
-    ):
+    if args.comparison_height is not None and args.comparison_height <= 0:
         parser.error("--comparison_height must be a positive finite number")
     if args.losat and args.blast:
         parser.error("--losat cannot be used with -b/--blast")
@@ -935,16 +957,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
-            try:
-                numeric_option_value = ascii_float(option_value)
-            except (TypeError, ValueError):
+            numeric_option_value = parse_ascii_finite_float(str(option_value))
+            if numeric_option_value is None:
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
                 parser.error(f"--{option_name} values must be > 0")
-    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
-        option_value = getattr(args, option_name)
-        if option_value is not None and not math.isfinite(float(option_value)):
-            parser.error(f"--{option_name} must be a finite number")
     if (
         args.gc_content_min_percent is not None
         and args.gc_content_max_percent is not None
@@ -1029,6 +1046,17 @@ def replay_legacy_session(
             format_override=session_request.format,
         )
         args = _get_args(list(run_spec.args), _legacy_session=True)
+        if (
+            args.region
+            and any(parse_cli_bool(flag) for flag in args.reverse_complement)
+            and (args.blast or args.comparisons_table)
+        ):
+            logger.warning(
+                "WARNING: This Session crops and reverse-complements a record that has comparisons. "
+                "Since 0.14.0 the region is cropped before it is reverse-complemented, so the drawn "
+                "window can differ from the one the stored comparison was searched on; re-run the "
+                "comparison if its matches look misplaced."
+            )
         args.overwrite = session_request.overwrite
         args.embed_fonts = session_request.embed_fonts
         args.save_session = session_request.save_session
@@ -1447,6 +1475,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.definition.linear.show_length": definition_show_length,
         "labels.spacing.linear": args.linear_label_spacing,
         "labels.rendering": label_rendering,
+        "labels.linear.line": args.label_line,
+        "labels.linear.protection": args.label_protection,
         "labels.linear.placement": label_placement,
         "labels.linear.rotation": label_rotation,
         "objects.features.line_stroke_color": line_stroke_color,
@@ -1730,6 +1760,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         legacy_protein_derived_evidence = (
             render_result.migration_report.protein_derived_evidence
         )
+        if writes_session:
+            require_search_frame_protein_results(render_result.migration_report)
     else:
         try:
             # A Linear request renders to one result, never a batch.

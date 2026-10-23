@@ -56,7 +56,10 @@ test('History prepares cold rules once, skips warm config preparation, and reche
     expect(await prepareCalls()).toBe(0);
     expect(await visibleRuleColor(page, '#00662c')).toEqual(baseGreen);
     const warm = await getDiagramWorkerActivity(page);
-    expect(warm.constructions).toBe(before.constructions);
+    // The Session has only managed `configOverrides`, so `checkUnmanagedConfigOverrides`
+    // (`config.js`) returns before starting the Worker: the Load builds none.
+    expect(before.constructions).toBe(0);
+    expect(warm.constructions).toBe(1);
     expect(warm.helpers - before.helpers).toBe(1);
     expect(warm.runs).toBe(before.runs);
     await edit(page, 'Rule color', 'color');

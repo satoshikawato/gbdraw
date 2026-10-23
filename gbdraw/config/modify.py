@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from collections.abc import Iterable, Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import asdict, fields, is_dataclass, replace
@@ -16,7 +17,11 @@ from typing import Any, Literal, Mapping, Union, cast, get_args, get_origin, get
 from gbdraw.exceptions import ValidationError
 
 from .models import GbdrawConfig
-from .models.canvas import linear_axis_ruler_applies
+from .models.canvas import (
+    FEATURE_OVERLAP_TOLERANCE_PATH,
+    linear_axis_ruler_applies,
+    validate_feature_overlap_tolerance,
+)
 from .models.objects import UNSET_NUMBER_SPELLINGS, circular_definition_interval_for_font
 from .models.root import validate_style_leaf
 
@@ -221,6 +226,13 @@ def _literal_domain_values(annotation: object) -> tuple[object, ...]:
     return ()
 
 
+def _is_finite_real(value: Real) -> bool:
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # an int beyond the float range
+        return False
+
+
 def _matches_annotation(annotation: object, value: object) -> bool:
     if annotation is Any:
         return True
@@ -237,7 +249,8 @@ def _matches_annotation(annotation: object, value: object) -> bool:
     if annotation is int:
         return not isinstance(value, bool) and isinstance(value, Integral)
     if annotation is float:
-        return not isinstance(value, bool) and isinstance(value, Real)
+        # A float leaf holds a finite number (its reason is ``FINITE``).
+        return not isinstance(value, bool) and isinstance(value, Real) and _is_finite_real(value)
     if annotation is str:
         return isinstance(value, str)
     if origin in {dict, Mapping, MappingABC}:
@@ -382,6 +395,9 @@ def validate_config_overrides(
                 diagnostic=_invalid_leaf(path, annotation),
             )
         validate_style_leaf(path, value, prefix="Invalid value for config override")
+        if path == FEATURE_OVERLAP_TOLERANCE_PATH:
+            # The canvas model owns the domain; a request is refused before it renders (OV-1248).
+            validate_feature_overlap_tolerance(value)
         validated.append((path, value))
     return tuple(validated)
 

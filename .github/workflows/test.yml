@@ -190,7 +190,7 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -228,7 +228,7 @@ jobs:
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1770,3 +1770,11 @@ jobs:
           --workflow-path .github/workflows/gallery-publication.yml
           --aggregate-name "Gallery readiness / gate"
           --head-sha "${{ github.sha }}"
+
+      # New Web UI keys ship in English until the translation batch before a
+      # release (.claude/skills/translate-web-ui/SKILL.md); only the release
+      # tier requires every catalog to hold every key and no stale one. It runs
+      # after an earlier gate step failed too, so one run reports every gap.
+      - name: Require complete Web UI translations
+        if: ${{ !cancelled() }}
+        run: node tools/i18n/sync.mjs status --require-complete

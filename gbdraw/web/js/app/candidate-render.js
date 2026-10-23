@@ -75,12 +75,16 @@ import {
  * @property {ReturnType<typeof import('../services/feature-visibility.js').featureDrawnContext> | null} drawnContext
  *   `featureDrawnContext` of the drawing; read when `domains` has featureVisibility.
  * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
+ * @property {readonly string[]} [hiddenTrackRows] The keys of the displayed Result's Legend rows whose drawn
+ *   track the draft hides (Show Depth off): each leaves with its track (OV-1198, PD-OI-104).
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's Legend rows of the
  *   displayed Result (`pythonLegendRows`), by which the draft allocates a rule's row (N-06).
  * @property {LegendRowContext['features']} [features] The features the displayed Result draws
  *   (`displayedLegendRowContext`), whose rule matches decide the rows Python leaves out.
  * @property {readonly DrawnTrack[]} drawnTracks The tracks of the request that drew the displayed Result
  *   (`drawnTracks`), which give a track's row its fill.
+ * @property {ReadonlySet<PythonLegendKey>} [sharedLegendKeys] Python's keys of the displayed Result that no
+ *   row draws (`displayedLegendRowContext`), by which a track's row is told from a row it shares.
  */
 
 /**
@@ -261,13 +265,14 @@ const paletteLegendColor = (key, palette, trackRows) => {
 /**
  * @param {{ rules: readonly Partial<SpecificColorRule>[], pythonRows?: ReadonlyMap<PythonLegendKey, PythonLegendRow>,
  *   features?: LegendRowContext['features'], originalLegendOrder: readonly string[], paletteColors: Record<string, string>,
- *   drawnTracks: readonly DrawnTrack[] }} draft
+ *   drawnTracks: readonly DrawnTrack[], sharedLegendKeys?: ReadonlySet<PythonLegendKey> }} draft
  *   `features`: the features the displayed Result draws, whose rule matches decide the rows Python leaves out (OV-306).
+ *   `sharedLegendKeys`: `trackLegendRows`'s, of the displayed Result.
  * @returns {{ ruleCaptions: PythonLegendKey[], rowOf: ReturnType<typeof ruleLegendCaptions>,
  *   colorOf: (key: PythonLegendKey) => SwatchColor | null }} `rowOf`: the key of the row a rule is drawn in.
  */
-export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors, drawnTracks }) => {
-  const trackRows = trackLegendRows(drawnTracks, pythonRows);
+export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors, drawnTracks, sharedLegendKeys }) => {
+  const trackRows = trackLegendRows(drawnTracks, pythonRows, sharedLegendKeys);
   const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] });
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
@@ -335,12 +340,14 @@ export const draftLegendRows = ({
  * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>
  *   & { legendColorOverrides: Readonly<Record<string, unknown>>, rules: readonly Partial<SpecificColorRule>[],
  *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, features?: LegendRowContext['features'], paletteColors: Record<string, string>,
- *   drawnTracks: readonly DrawnTrack[] }} draft
+ *   drawnTracks: readonly DrawnTrack[], sharedLegendKeys?: ReadonlySet<PythonLegendKey> }} draft
  * @returns {{ listed: Map<PythonLegendKey, SwatchColor>, deleted: Map<PythonLegendKey, SwatchColor> }}
  */
-export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, features, paletteColors, drawnTracks, ...legend }) => {
+export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, features, paletteColors, drawnTracks, sharedLegendKeys, ...legend }) => {
   const rows = draftLegendRows(legend);
-  const draft = draftLegendRowColors({ rules, pythonRows, features, originalLegendOrder: [...rows.originalCaptions], paletteColors, drawnTracks });
+  const draft = draftLegendRowColors({
+    rules, pythonRows, features, originalLegendOrder: [...rows.originalCaptions], paletteColors, drawnTracks, sharedLegendKeys
+  });
   const ruleRows = new Set(draft.ruleCaptions);
   /** @param {PythonLegendKey} key */
   const paletteColor = (key) => (
@@ -659,7 +666,8 @@ const compilePlanBundle = ({
     features: livePreview.features,
     originalLegendOrder: [...originalCaptions],
     paletteColors: livePreview.paletteColors,
-    drawnTracks: livePreview.drawnTracks
+    drawnTracks: livePreview.drawnTracks,
+    sharedLegendKeys: livePreview.sharedLegendKeys
   });
   /** @param {PythonLegendKey} key */
   const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);
@@ -753,6 +761,12 @@ const compilePlanBundle = ({
     });
     (ruleRows?.retire || []).forEach((caption) => {
       addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true, retire: true });
+    });
+    // The row of a drawn track the draft hides leaves with the track; the
+    // recorded deletion returns the row once the track shows again. Generate
+    // compiles none: Python draws no row for a hidden track.
+    (livePreview?.hiddenTrackRows || []).forEach((caption) => {
+      if (!deletedCaptions.has(caption)) addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
     });
   });
 
