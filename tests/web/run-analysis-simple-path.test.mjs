@@ -254,7 +254,7 @@ const {
 const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+const { createDrawingState, normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
 const { registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 // A binding holds refs of the project's file store, as the app's writers bind them.
 const bound = (value) => registerInputFileTree(state.inputFiles, value);
@@ -3641,4 +3641,44 @@ test('Circular Generate gives a Depth series without settings its default color'
     [drawing.adv.depth_tracks.map((track) => track.color), request.diagramOptions.depthTracks.map((track) => track.color)],
     [['#AA0000', '#E45756'], ['#AA0000', '#E45756']]
   );
+});
+
+// The Circular record refresh reads into the drawing its caller gives
+// (Generate: the drawing it pinned), not the drawing named by the mode, and
+// shares an in-flight read only with calls for the same drawing.
+test('the Circular record refresh writes the drawing it reads and keys its read by drawing ID', async () => {
+  installShownDrawing('circular');
+  const named = state.activeDrawing();
+  const second = createDrawingState('circular-2', 'circular');
+  state.addDrawing(second, 'Circular 2', 2);
+  try {
+    installShownDrawing(second.id);
+    state.cInputType.value = 'gb';
+    state.files.c_gb = bound(new AuditFile(['LOCUS refresh 10 bp DNA circular\n//\n'], 'refresh-owner.gb'));
+    state.circularRecordList.value = [];
+    Object.assign(state.circularRecordDiscovery, {
+      status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: []
+    });
+    named.adv.multi_record_positions.splice(0, named.adv.multi_record_positions.length);
+    const runner = createRunAnalysis({ ...generatedArtifactHandleOptions, state, resetPreviewViewport: () => {} });
+    const reply = { ok: true, result: { records: [{ selector: '#1', record_id: 'refresh', record_length: 10 }] } };
+    workerHelperResponses.splice(0, workerHelperResponses.length, reply);
+    await runner.refreshCircularRecordOrder({}, second);
+    assert.deepEqual(
+      [second.adv.multi_record_positions.map((position) => position.selector), named.adv.multi_record_positions],
+      [['#1'], []]
+    );
+
+    let release;
+    workerHelperResponses.splice(0, workerHelperResponses.length, new Promise((resolve) => { release = () => resolve(reply); }), reply);
+    state.circularRecordDiscovery.status = 'idle';
+    const pinned = runner.refreshCircularRecordOrder({}, second);
+    assert.equal(runner.refreshCircularRecordOrder({ automatic: true }, second), pinned, 'a call for the same drawing shares the read');
+    assert.notEqual(runner.refreshCircularRecordOrder({}, named), pinned, 'another drawing of the mode reads on its own');
+    release();
+    await pinned;
+  } finally {
+    installShownDrawing('circular');
+    state.removeDrawing(second.id, { deleteSlot: () => {} });
+  }
 });

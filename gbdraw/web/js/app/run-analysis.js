@@ -1470,8 +1470,10 @@ export const executeCanonicalRenderCandidate = async ({
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {(drawing: DrawingState) => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact, with the edits of `drawing`.
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
- * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
- * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(drawing: DrawingState) => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
+ *   The artifact owners' values, with the color rules and queued palette of `drawing`.
+ * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ *   Installs an owner set as the displayed artifact, its color rules and queued palette into `drawing`.
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: unknown[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
@@ -1628,15 +1630,16 @@ export const createRunAnalysis = ({
    * Generate, a committed rerender and a label reflow render the shown
    * drawing: they name its feature catalog, so a reused build keeps it, and
    * the children texts its Results keep sanitized, so Python omits them.
+   * @param {DrawingState} drawing The drawing the run renders, given by its caller.
    * @param {CanonicalRenderCandidateExecutionOptions} options
    */
-  const executeShownDrawingCandidate = (options) => {
-    const shown = captureGeneratedArtifactOwnerSet();
+  const executeShownDrawingCandidate = (drawing, options) => {
+    const shown = captureGeneratedArtifactOwnerSet(drawing);
     return executeCanonicalRenderCandidate({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
       heldResults: shown.results ?? null,
-      drawingId: state.activeDrawingId.value
+      drawingId: drawing.id
     });
   };
   /**
@@ -1774,11 +1777,12 @@ export const createRunAnalysis = ({
     },
     /**
      * @param {GeneratedArtifactCandidate} candidate
-     * @param {{ selectedResultIndex?: number }} [options]
+     * @param {{ drawing: DrawingState, selectedResultIndex?: number }} options `drawing`: the run's drawing.
      */
-    activate(candidate, { selectedResultIndex = 0 } = {}) {
+    activate(candidate, { drawing, selectedResultIndex = 0 }) {
       recordSessionLifecycleEvent('artifact.activation-started', { selectedResultIndex });
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
+        drawing,
         selectedResultIndex,
         installResults(nextResults) {
           results.value = nextResults;
@@ -1929,7 +1933,7 @@ export const createRunAnalysis = ({
     if (!recovery) {
       try {
         const restored = restore ? await restore() : false;
-        const currentResults = captureGeneratedArtifactOwnerSet().results;
+        const currentResults = captureGeneratedArtifactOwnerSet(displayedArtifactDrawing()).results;
         const unchanged = currentResults.length === previousResults.length
           && currentResults.every((result, index) => result === previousResults[index]);
         recovery = !handle ? (results.value.length ? 'restore-failed' : 'no-result')
@@ -2325,11 +2329,18 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawing = state.drawingOfMode('circular');
+  /**
+   * Reads the Circular records of `drawing`'s inputs into its Multi-Record
+   * Canvas order. A drawing that is not shown keeps its records and order; its
+   * read goes stale when the drawing stops being shown.
+   * @param {DrawingState} drawing
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
+   */
+  const runCircularRecordRefresh = async (drawing, { suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+    const drawingLeft = () => state.activeDrawingId.value !== drawing.id;
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
-    if (mode.value !== 'circular') {
+    if (drawing.mode !== 'circular' || drawingLeft()) {
       if (circularRecordDiscovery.status === 'loading') {
         circularRecordRefreshGeneration += 1;
         circularRecordDiscovery.status = 'idle';
@@ -2387,7 +2398,7 @@ export const createRunAnalysis = ({
     if (
       refreshGeneration !== circularRecordRefreshGeneration ||
       recordDiscoverySuppressed() ||
-      mode.value !== 'circular' ||
+      drawingLeft() ||
       cInputType.value !== inputType ||
       (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
       (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
@@ -2400,7 +2411,7 @@ export const createRunAnalysis = ({
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
-        mode.value !== 'circular' ||
+        drawingLeft() ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
@@ -2437,7 +2448,7 @@ export const createRunAnalysis = ({
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
-        mode.value !== 'circular' ||
+        drawingLeft() ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
@@ -2458,14 +2469,22 @@ export const createRunAnalysis = ({
     }
   };
 
-  /** @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options] */
-  const refreshCircularRecordOrder = (options = {}) => {
+  /**
+   * The owner of the Circular record refresh: it reads the drawing its caller
+   * gives (Generate: the drawing it pinned) and shares a read still running
+   * for the same drawing and inputs. Callers without a drawing (the File card,
+   * the watcher, the record editor) read the Circular drawing until they pass
+   * the shown one.
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
+   * @param {DrawingState} [drawing]
+   */
+  const refreshCircularRecordOrder = (options = {}, drawing = state.drawingOfMode('circular')) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const inputType = cInputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
-      mode.value,
+      drawing.id,
       inputType,
       inputType === 'gff' ? files.c_gff : files.c_gb,
       inputType === 'gff' ? files.c_fasta : null
@@ -2482,7 +2501,7 @@ export const createRunAnalysis = ({
       return /** @type {NonNullable<typeof inflightRefresh.promise>} */ (inflightRefresh.promise);
     }
     const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
-    entry.promise = runCircularRecordRefresh(options).finally(() => {
+    entry.promise = runCircularRecordRefresh(drawing, options).finally(() => {
       if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
     });
     activeCircularRecordRefresh = entry;
@@ -2637,7 +2656,7 @@ export const createRunAnalysis = ({
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
       if (!committedArtifactHandle || !activatedGeneratedArtifactCandidate) return false;
-      if (captureGeneratedArtifactOwnerSet().results !== activatedGeneratedArtifactCandidate.ownerSet.results) return false;
+      if (captureGeneratedArtifactOwnerSet(drawing).results !== activatedGeneratedArtifactCandidate.ownerSet.results) return false;
       if (acceptedCandidateReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedCandidateReadyReceipt,
@@ -2734,7 +2753,7 @@ export const createRunAnalysis = ({
       ) {
         processingStatus.value = t('Reading input records...');
         try {
-          await refreshCircularRecordOrder({ reuseFinalError: true });
+          await refreshCircularRecordOrder({ reuseFinalError: true }, drawing);
         } finally {
           if (generationToken === latestGenerationToken) {
             processingStatus.value = t('Preparing input files...');
@@ -5017,7 +5036,7 @@ export const createRunAnalysis = ({
       /** @type {TimingEntry[]} */
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
-      const canonicalExecution = await executeShownDrawingCandidate({
+      const canonicalExecution = await executeShownDrawingCandidate(drawing, {
         canonical,
         decorationContinuity,
         mode: mode.value,
@@ -5130,7 +5149,7 @@ export const createRunAnalysis = ({
       const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
       const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
       const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
-      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet(drawing);
       /** @type {Record<string, any>} */
       let candidateOwnerSet = {
         ...currentOwnerSet,
@@ -5164,7 +5183,7 @@ export const createRunAnalysis = ({
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
         generatedLegendPosition: drawing.form.legend,
-        generatedMode: mode.value,
+        generatedMode: drawing.mode,
         generatedMultiRecordCanvas:
           mode.value === 'circular' ? Boolean(drawing.form.multi_record_canvas) : false,
         generatedCircularPlotTitlePosition: mode.value === 'circular'
@@ -5234,6 +5253,7 @@ export const createRunAnalysis = ({
       activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
       const previousOrthogroups = orthogroups.value;
       generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
+        drawing,
         selectedResultIndex: nextSelectedResultIndex
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
@@ -5571,7 +5591,7 @@ export const createRunAnalysis = ({
     let acceptedReadyReceipt = null;
     const restoreCommittedArtifact = async () => {
       if (!activatedCandidate) return false;
-      if (captureGeneratedArtifactOwnerSet().results !== activatedCandidate.ownerSet.results) return false;
+      if (captureGeneratedArtifactOwnerSet(drawing).results !== activatedCandidate.ownerSet.results) return false;
       if (acceptedReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedReadyReceipt,
@@ -5609,7 +5629,7 @@ export const createRunAnalysis = ({
       const { canonical, drawnPaint } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeShownDrawingCandidate({
+      const execution = await executeShownDrawingCandidate(drawing, {
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
@@ -5665,7 +5685,7 @@ export const createRunAnalysis = ({
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
           : alignmentResetReceipt;
       await validateSimilarityAlignmentResetReceipt(receipt, /** @type {AlignmentResetCanonical} */ (canonical));
-      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet(drawing);
       const candidateOwnerSet = {
         ...currentOwnerSet,
         similarityAlignmentPlan: canonical.renderRequest.layout?.similarityAlignment ?? null,
@@ -5726,6 +5746,7 @@ export const createRunAnalysis = ({
       });
       activatedCandidate = generatedCandidate;
       generatedArtifactTransactionOwner.activate(generatedCandidate, {
+        drawing,
         selectedResultIndex: nextSelectedResultIndex
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
@@ -5997,7 +6018,7 @@ export const createRunAnalysis = ({
       const { canonical, drawnPaint, rules: candidateRules } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeShownDrawingCandidate({
+      const execution = await executeShownDrawingCandidate(drawing, {
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
