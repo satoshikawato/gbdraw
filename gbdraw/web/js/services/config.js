@@ -6,9 +6,7 @@ import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import {
-  state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList
-} from '../state.js';
+import { state, sessionOperationAvailability } from '../state.js';
 import { normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
   captureRightDrawerState,
@@ -16,7 +14,9 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
-import { bindCanonicalComparisons, bindLoadedInputs, registerInputFiles } from './drawing/inputs.js';
+import {
+  bindCanonicalComparisons, bindLoadedInputs, collapseEmptyLinearSeqList, normalizeLinearSeqList, registerInputFiles
+} from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';

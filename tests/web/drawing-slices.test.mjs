@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
-import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
+import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, UNJOINED_DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
 import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
@@ -64,7 +64,8 @@ const SLICES = Object.entries(DRAWING_SLICES);
 
 test('each slice view holds its members, every drawing shows it, and no member is in two slices', async () => {
   const sliceOf = new Map();
-  for (const [name, slice] of SLICES) {
+  const unjoined = Object.entries(UNJOINED_DRAWING_SLICES);
+  for (const [name, slice] of [...SLICES, ...unjoined]) {
     const { handle, view } = slice.create();
     assert.ok(Object.isFrozen(handle) && Object.isFrozen(view), `${name}: the handle and the view are frozen`);
     assert.deepEqual(Object.keys(view), [...slice.members], `${name}: the view holds the slice's members`);
@@ -77,9 +78,14 @@ test('each slice view holds its members, every drawing shows it, and no member i
   const exported = await Promise.all(modules.map((file) => import(join(SLICE_DIRECTORY, file))));
   const descriptors = new Set(exported.flatMap((module) => Object.values(module)
     .filter((value) => value && typeof value === 'object' && Array.isArray(value.members))));
-  assert.deepEqual(new Set(SLICES.map(([, slice]) => slice)), descriptors, 'DRAWING_SLICES names each slice module once');
+  assert.deepEqual(new Set([...SLICES, ...unjoined].map(([, slice]) => slice)), descriptors,
+    'DRAWING_SLICES (or the unjoined list) names each slice module once');
   for (const mode of MODES) {
     const drawing = modeDrawing(state, mode);
+    for (const [name, slice] of unjoined) {
+      assert.ok(!(name in drawing.slices) && slice.members.every((member) => !(member in drawing)),
+        `${mode}: the unjoined ${name} slice has no handle or member on the drawing`);
+    }
     assert.deepEqual(Object.keys(drawing.slices), SLICES.map(([name]) => name), `${mode}: one handle per slice`);
     for (const [name, slice] of SLICES) {
       const captured = slice.capture(drawing.slices[name]);

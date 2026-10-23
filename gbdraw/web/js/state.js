@@ -2,8 +2,7 @@
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports } from './services/file-imports.js' */
 /** @import { InputFiles } from './services/drawing/inputs.js' */
-/** @import { DepthFileSlots } from './services/depth-track-state.js' */
-/** @import { InputFileRef } from './services/history-files.js' */
+/** @typedef {import('./services/drawing/inputs.js').LinearSeq} LinearSeq */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
@@ -21,6 +20,7 @@ import {
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import { createInputFileStore } from './services/history-files.js';
+import { normalizeLinearSeqList } from './services/drawing/inputs.js';
 import { sessionResourceSource } from './services/session-resource-backing.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -146,107 +146,6 @@ const files = /** @type {InputFiles} */ (reactive({
   whitelist: null,
   qualifier_priority: null
 }));
-
-let linearSeqUidCounter = 0;
-
-const generateLinearSeqUid = () => {
-  linearSeqUidCounter += 1;
-  if (globalThis.crypto?.randomUUID) {
-    return `linear-seq-${globalThis.crypto.randomUUID()}`;
-  }
-  return `linear-seq-${Date.now()}-${linearSeqUidCounter}`;
-};
-
-/** @param {unknown} value */
-const normalizeLinearSeqNumber = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-};
-
-/**
- * One linear record slot as `createLinearSeq` builds it. The file fields hold
- * `InputFileRef`s of `state.inputFiles`, or null.
- * @typedef {object} LinearSeq
- * @property {string} uid
- * @property {InputFileRef | null} gb
- * @property {InputFileRef | null} gff
- * @property {InputFileRef | null} fasta
- * @property {DepthFileSlots<InputFileRef>} depth one file, or a list indexed by series
- * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
- * @property {string} definition
- * @property {string} record_subtitle
- * @property {string} file_definition
- * @property {string} file_subtitle
- * @property {string} inferred_definition
- * @property {string} region_record_id
- * @property {unknown} region_start a draft: `createLinearSeq` and the crop control write a number or null,
- *   a Session load stores the saved value as it is; the request projection validates it (R7)
- * @property {unknown} region_end a draft, as `region_start`
- * @property {boolean} region_reverse
- */
-
-/**
- * @param {Partial<LinearSeq> | Record<string, any> | null} [overrides] a slot,
- *   or unvalidated data (a session, an import) that is normalized here
- * @returns {LinearSeq}
- */
-export const createLinearSeq = (overrides = {}) => {
-  const source = overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {};
-  const rawUid = String(source.uid ?? '').trim();
-  const rawLosatGencode = Number(source.losat_gencode);
-  return {
-    uid: rawUid || generateLinearSeqUid(),
-    gb: source.gb ?? null,
-    gff: source.gff ?? null,
-    fasta: source.fasta ?? null,
-    depth: source.depth ?? null,
-    losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
-    definition: String(source.definition ?? ''),
-    record_subtitle: String(source.record_subtitle ?? ''),
-    file_definition: String(source.file_definition ?? ''),
-    file_subtitle: String(source.file_subtitle ?? ''),
-    inferred_definition: String(source.inferred_definition ?? ''),
-    region_record_id: String(source.region_record_id ?? ''),
-    region_start: normalizeLinearSeqNumber(source.region_start),
-    region_end: normalizeLinearSeqNumber(source.region_end),
-    region_reverse: Boolean(source.region_reverse)
-  };
-};
-
-/**
- * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
- *   slots, or unvalidated data (a session, an import), as `createLinearSeq` takes them
- * @returns {LinearSeq[]}
- */
-export const normalizeLinearSeqList = (items) => {
-  const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
-  const seenUids = new Set();
-  const normalized = baseItems.map((item) => {
-    const next = createLinearSeq(item);
-    if (!next.uid || seenUids.has(next.uid)) {
-      next.uid = generateLinearSeqUid();
-    }
-    seenUids.add(next.uid);
-    return next;
-  });
-  return normalized;
-};
-
-/** @param {LinearSeq | null | undefined} seq */
-const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
-
-/**
- * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
- * @returns {LinearSeq[]}
- */
-export const collapseEmptyLinearSeqList = (items) => {
-  const previous = normalizeLinearSeqList(items);
-  if (previous.length <= 1) return previous;
-  const collapsed = previous.filter((seq) => hasLinearSeqPrimaryInput(seq));
-  if (collapsed.length === previous.length) return previous;
-  return normalizeLinearSeqList(collapsed);
-};
 
 const linearSeqs = /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([])));
 const selectedAnnotation = ref(null);
