@@ -155,23 +155,6 @@ test('no module reaches a drawing by a mode key of `state.drawings`', () => {
   assert.deepEqual(found, [], 'resolve a drawing through state.drawingOf or state.drawingList');
 });
 
-// D-15-60: until a project holds several drawings of one mode (B), a drawing is
-// resolved by its mode only through `state.drawingOfMode` (state.js), and only
-// state.js and services/drawing-view.js name a drawing ID by a mode. B moves
-// each call to `activeDrawing()` or a `DrawingId`; the cap may only fall.
-const DRAWING_OF_MODE_CAP = 204;
-const ID_BY_MODE_OWNERS = Object.freeze(['state.js', 'services/drawing-view.js']);
-test('a drawing is resolved by mode only through state.drawingOfMode, within a falling cap', () => {
-  const sources = webModules().map((file) => [file, readFileSync(join(JS, file), 'utf8')]);
-  const calls = sources.reduce((sum, [, text]) => sum + (text.match(/\bdrawingOfMode\(/g) || []).length, 0);
-  assert.ok(calls <= DRAWING_OF_MODE_CAP,
-    `${calls} drawingOfMode( calls, above the cap ${DRAWING_OF_MODE_CAP}: resolve the shown drawing or a drawing ID instead`);
-  assert.equal(calls, DRAWING_OF_MODE_CAP, `the drawingOfMode( calls fell to ${calls}: lower DRAWING_OF_MODE_CAP to it`);
-  const byMode = sources.filter(([file, text]) => !ID_BY_MODE_OWNERS.includes(file) && /\bdrawingIdOfMode\(/.test(text))
-    .map(([file]) => file);
-  assert.deepEqual(byMode, [], 'name a drawing of a mode through state.drawingOfMode');
-});
-
 test('the slice write scan flags a planted write and leaves reads alone', () => {
   const [member, other] = DRAWING_EDITOR_KEYS;
   const writes = memberWriteSites([

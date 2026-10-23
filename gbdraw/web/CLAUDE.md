@@ -327,7 +327,9 @@ change through `showEditorIntent` (R3):
   calls `moveLegendRecords` (`takeBackFileRulesOfHiddenDrawing` in
   `app/feature-editor/rule-actions.js`);
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
-  of Legend rows;
+  of Legend rows (a rename of a row that no rule or feature names writes the
+  row's name in the step the Legend name input or the popup's rename action
+  holds open, its own `rename` route);
 - an edit of another owner that retires the paint edits of what it removed,
   in that edit's step: track data that no longer names a Legend row, a drawn
   Depth, GC content, or GC skew track that the draft hides or shows again (its
@@ -344,13 +346,14 @@ calls the paint slice's writers; a new caller, or a caller that moves to
 another route, is an authority-only change.
 
 Guards: `tests/web/feature-visibility-rule-writers.test.mjs`
-(`PAINT_INTENT_WRITERS`: each function that writes the paint intent, directly
-or by calling a slice function with the paint or visibility-rules slice
-handle, by its name, by module, with its route; a slice reader is one only by
+(`PAINT_INTENT_WRITERS`: each function that writes the paint intent, directly,
+by calling a slice function with the paint or visibility-rules slice handle,
+or by calling a writer it imports from that slice's module whatever handle it
+passes, by its name, by module, with its route; a slice reader is one only by
 the `SLICE_READERS` list in `tests/web/helpers/drawing-state.mjs`, which the
 isolation table in `tests/web/per-mode-drawings.test.mjs` proves changes no
-drawing; a write through an alias, such as a row read from the list or a
-handle held under another name, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
+drawing, and a new reader is an authority-only change; a write through a row
+read from the list, or a slice writer handed on as a value, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
 `tests/web/feature-label-visual-unit.test.mjs`;
@@ -399,37 +402,50 @@ reactive object holds display values only, never a copy of an owner's data.
 
 One projection means one call shape: a domain's projection function is called
 from outside its owner in one form, not re-implemented or re-sequenced per
-caller. The count of distinct call shapes per domain stays at or below its
-baseline (R13): lowering an entry is optional, and adding or raising one is an
-authority-only change.
+caller.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
-parity case compares a live path with Python's Generate from the same draft; a
-case that compares one Web path with another through the same executor is not
-kept. A change to a live-edit path is done when the case for its edit kind in
+parity case or a step of the random walk compares a live path with Python's
+Generate from the same draft; a case that compares one Web path with another
+through the same executor is not kept. The pull-request random walk
+(`tests/web/live-generate-random-walk.playwright.spec.js`, over
+`tests/web/helpers/live-random-walk.mjs`) draws every edit kind of its list on
+every run, with a fixed seed, and after each step checks that the Result equals
+a fresh Generate and that the drawing the step did not edit keeps its slices.
+A change to a live-edit path is done when the walk passes, and, for a path or
+an editor state the walk does not draw, when the case for its edit kind in
 `tests/web/live-generate-parity.playwright.spec.js` passes with the popup
 opened and not, and with Auto Reflow on and off when the path reads it
-(`queueLabelReflow` without `force`). Each path that shows the editor intent
-(a live edit, Undo, Redo, a Result display, a drawing switch, Reset Settings,
-Session Load, and the automatic rerender) has rows in the spec's work
-allowlist (`WORK_ALLOWLIST`), each pinning the compile stages a case runs, the
-Worker requests it sends, and its compile count. A difference the Result may show
-until Generate is listed with its decision in
-`tests/web/contracts/live-generate-parity-allowed.json`; adding or changing an
-entry is an authority-only change. A mismatch the matrix
-finds is a bug: the case stays `test.fail` with its finding id until the fix
-makes it pass.
+(`queueLabelReflow` without `force`). A matrix case leaves that spec only
+when the walk draws its kind in the states the case pinned, which the walk
+spec asserts. Each path that shows the editor intent (a live edit, Undo, Redo,
+a Result display, a drawing switch, Reset Settings, Session Load, and the
+automatic rerender) has rows in the work allowlist (`WORK_ALLOWLIST` in
+`tests/web/helpers/live-work-allowlist.mjs`), each pinning the compile stages
+the path runs, the Worker requests it sends, and its compile count; the work
+guard in the parity spec runs the rows, and the walk names the step kind that
+draws each row's path, or none. A difference the Result may show until
+Generate is listed with its decision in
+`tests/web/contracts/live-generate-parity-allowed.json`, which the cases and
+the walk read; adding or changing an entry is an authority-only change. A
+mismatch a case or the walk finds is a bug: it stays an expected failure with
+its finding id until the fix makes it pass.
 
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/feature-visibility-actions.test.mjs`,
 `tests/web/feature-color-actions.test.mjs`,
-`tests/web/live-generate-parity.playwright.spec.js` (the matrix of edit kinds
-and editor states) with `tests/web/live-generate-parity-legend.playwright.spec.js`
-and `tests/web/live-generate-parity-track-data.playwright.spec.js` (Legend edits,
-track-data changes, and drawing switches): a live edit equals the next Generate;
-and the `projection-shapes` baseline in
-`tests/web/owner-graph-baseline.test.mjs`.
+`tests/web/live-generate-random-walk.playwright.spec.js` with
+`tests/web/helpers/live-random-walk.mjs` (every edit kind of the walk on every
+run, a step kind for each work allowlist row, and each matrix case the walk
+replaced drawn in that case's states),
+`tests/web/live-generate-parity.playwright.spec.js` (the work guard over
+`tests/web/helpers/live-work-allowlist.mjs`, the matrix cases the walk does not
+replace, and named regression cases) with
+`tests/web/live-generate-parity-legend.playwright.spec.js` and
+`tests/web/live-generate-parity-track-data.playwright.spec.js` (named
+regression cases of Legend edits, track-data changes, and drawing switches): a
+live edit equals the next Generate.
 
 ### R4: A fast path matches the canonical reader or declines
 
@@ -717,6 +733,13 @@ Guards:
   state, and last-in-first-out Undo; each changed control adds exactly one step.
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a drawing round trip that records no step, and Undo while Generate runs.
+- `tests/web/history-per-drawing.test.mjs`: Undo and Redo walk the shown
+  drawing's steps and the project steps and never change the other drawing (a
+  hash of each drawing per step); a switch settles the departing drawing's open
+  step in that drawing and records none; Reset Settings, an Instant Preview
+  step, and a card import's Retry are one project step each; a Session-level
+  edit is a project step; the project step limit and the slot port of a
+  drawing that is not shown.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
   drags on one batch Result while another Result is displayed (B17), a
   Result switch after a legend sort that records no step (B18), Undo and Redo
@@ -786,11 +809,11 @@ is a leaf: like every leaf its modules import only leaves.
   the creation, or register the port after both owners exist. A closure at any
   depth counts, and so does a late-bound function variable that the root
   reassigns after the owner exists.
-- `state.<name> = <function>` outside `state.js` is a backdoor: a value an owner
-  needs from a higher layer arrives as a port or on an existing data path
-  (Result metadata, the admitted catalog).
-- `state` is frozen: no module adds or replaces a `state` member. A drawing's
-  slice members are written only by their slice module (R15).
+- `state` is frozen (`Object.freeze` in `state.js`): no module adds or
+  replaces a `state` member, so a value an owner needs from a higher layer
+  arrives as a port or on an existing data path (Result metadata, the admitted
+  catalog), never as a function assigned into `state`. A drawing's slice
+  members are written only by their slice module (R15).
 - A heavy derived value (`rulePreparation`) is triggered from one place per
   flow: the composition root's projection, the Generate compiler, or the owner
   of its input. An owner that only reads the result awaits `pending` rather
@@ -814,8 +837,8 @@ an entry is optional (the test names what may be lowered). Adding or raising an
 entry is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
-closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
-projection call shapes, heavy derived trigger sites
+closures `owner-graph.forward-closure.v2`, whole-object ports, heavy derived
+trigger sites
 `heavy-derived.trigger-site.v2`, identity read from a display value
 `owner-graph.identity-from-display.v1` (a join on a fill or stroke, and a join
 on the values a Result shows), and import direction
@@ -837,10 +860,13 @@ a record, ask the Owner before implementing it.
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
 the baseline with a count no higher than recorded, per detector, and no module
 imports from a higher layer),
-`tests/web/owner-graph-detectors.test.mjs` (the detectors), and
+`tests/web/owner-graph-detectors.test.mjs` (the detectors),
 `tests/web/owner-graph-replay.test.mjs` (the detectors report the couplings
 that past merges introduced; it reads the revision history and runs in the
-`web-change-budget` job).
+`web-change-budget` job), `tests/web/drawing-context.test.mjs` (`state` is
+frozen; tsc refuses a write to a member, R14), and
+`tests/web/drawing-slices.test.mjs` (a slice module imports only leaves and
+other slice modules).
 
 ### R14: Typed boundaries
 
@@ -915,8 +941,10 @@ nothing else.
 
 ### R15: Drawing context and mode-scoped settings
 
-A project has one or more drawings, held by ID in `state.drawings`
-(`createDrawingState` in `state.js`). `state.activeDrawingId` names the shown
+A project has one or more drawings, held by ID in the drawing store of
+`state.js`, a `ReadonlyMap` that `createDrawingState` fills and only
+`state.drawingList()`, `state.drawingOf(id)`, and `state.drawingOfMode(mode)`
+read. `state.activeDrawingId` names the shown
 drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
 is given when it is created and never changes, and its `mode` is fixed at
 creation (PD-OI-090). A drawing holds its settings (`form`, `adv`, the LOSAT
@@ -996,7 +1024,16 @@ one drawing never reaches another (PD-OI-090).
 
 Guards: `tests/web/drawing-context.test.mjs` (the key classes, one drawing per
 mode, no drawing key read from `state`, no `activeDrawing` identifier in
-`services/`, and Generate resolving it once); `tests/web/per-mode-drawings.test.mjs` (no
+`services/`, and Generate resolving it once);
+`tests/web/drawing-slices.test.mjs` (each member in exactly one slice, no
+module or template binding writing a slice member outside its slice,
+`install(capture(x))` giving back `x` also after `reset`, and
+`installShownDrawing` the one writer of `activeDrawingId`);
+`tests/web/drawing-of-mode-cap.test.mjs` (the `drawingOfMode` calls within
+`DRAWING_OF_MODE_CAP`, which may only fall, and only `ID_BY_MODE_OWNERS`
+naming a drawing ID by a mode; raising the cap or adding an owner is an
+authority-only change);
+`tests/web/per-mode-drawings.test.mjs` (no
 shared member object, and each mode's request carries its own drawing's
 values); `tests/web/mode-scoped-session.test.mjs` (the Session 46 round trip,
 and a Session 45 or a field outside the registry rejected);

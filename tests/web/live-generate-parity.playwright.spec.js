@@ -263,12 +263,6 @@ const CASES = [
     run: (page) => history(page, 'redo')
   },
   {
-    kind: 'color rule add',
-    edit: 'Specific color rule add',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
-    run: (page) => addColorRule(page, FL1_ALPHA)
-  },
-  {
     kind: 'color rule delete',
     edit: 'Specific color rule delete of a rule Generate drew',
     states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
