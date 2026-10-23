@@ -313,11 +313,13 @@ LOSATP entries, stored as `main`'s Web Session writer lays it out;
 `150d26706` (command in its `.provenance.json`). Both are the positive fixtures of the
 Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.py`
 replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
-`e8b460772` drew (equal to `main`'s replay); the BGC replay was redrawn after the
+`e8b460772` drew (equal to `main`'s replay) with the Linear scale bounds since added to its composition
+metadata; the BGC replay was redrawn after the
 Linear label packing changed its record rows and again after the label boxes
 added white boxes to its turned labels, whose text is unchanged, once more for float last bits when one
 owner placed the Linear records, when `above_feature` labels kept their row gap, and when the
-gradient Legend block took its title's width and the plot title its painted width
+gradient Legend block took its title's width and the plot title its painted width, and both
+replays when the composition metadata recorded the Linear scale bounds
 (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
