@@ -226,7 +226,7 @@ from gbdraw.render.group_content import (
     place_content,
 )
 from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
-from gbdraw.render.groups.circular.definition import definition_record_facts
+from gbdraw.render.groups.circular.definition import CircularDefinitionProfile, definition_record_facts
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
@@ -2482,8 +2482,8 @@ def assemble_circular_diagram_from_record(
     bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore,
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
-    _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
-    _layout_definition_profile: Literal["full", "record_summary", "shared_common"] | None = None,
+    _definition_profile: CircularDefinitionProfile = "full",
+    _layout_definition_profile: CircularDefinitionProfile | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
@@ -2588,7 +2588,7 @@ def assemble_circular_diagram_from_record(
     )
     normalized_plot_title = _normalize_plot_title(plot_title)
     show_plot_title = False
-    effective_definition_profile: Literal["full", "record_summary", "shared_common"] = (
+    effective_definition_profile: CircularDefinitionProfile = (
         _definition_profile
     )
     if _definition_profile == "full":

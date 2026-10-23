@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "다이어그램을 생성하는 중입니다. 생성이 끝난 후 다시 시도하십시오.",
   "Generation Error": "생성 오류",
   "Genes": "유전자",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "링마다 BLAST 표 없이 비교 서열 파일을 하나씩 지정하고, 표시된 레코드를 대상 서열로 사용하십시오.",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "링마다 BLAST 표 없이 비교 서열 파일을 하나씩 지정하고, 기준 파일을 대상 서열로 사용하십시오.",
   "Global title shown once for the whole linear plot.": "선형 다이어그램 전체에 한 번만 표시되는 공통 제목입니다.",
   "Go to {section}": "{section}(으)로 이동",
   "Group path ID": "그룹 경로 ID",

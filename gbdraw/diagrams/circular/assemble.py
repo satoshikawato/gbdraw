@@ -160,7 +160,7 @@ from .builders import (
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
 )
-from ...render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
+from ...render.groups.circular.definition import CircularDefinitionProfile, CircularDefinitionStyle, DefinitionGroup
 from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout, track_layout_reason
 from .presets import (
     CircularPresetContext,
@@ -1389,7 +1389,7 @@ def _definition_reserved_radius_px(
     *,
     cfg: GbdrawConfig,
     plot_title: str | None,
-    definition_profile: str,
+    definition_profile: CircularDefinitionProfile,
     species_line_count: int = 1,
     record_presentation: RecordPresentation | None = None,
 ) -> float:
@@ -1461,8 +1461,8 @@ def _resolve_radial_layout_fitting_definition(
     species: str | None,
     strain: str | None,
     plot_title: str | None,
-    definition_profile: str,
-    layout_definition_profile: str,
+    definition_profile: CircularDefinitionProfile,
+    layout_definition_profile: CircularDefinitionProfile,
     definition_position: str,
     center_reserved_radius: float | None,
     record_presentation: RecordPresentation | None,
@@ -1491,7 +1491,7 @@ def _resolve_radial_layout_fitting_definition(
     if str(definition_position).strip().lower() != "center":
         return resolve_layout(None), None, 1
 
-    def fit(profile: str) -> tuple[CircularRadialLayout, float, int]:
+    def fit(profile: CircularDefinitionProfile) -> tuple[CircularRadialLayout, float, int]:
         def reserved_for(line_count: int) -> float:
             return _definition_reserved_radius_px(
                 gb_record,
@@ -1512,7 +1512,7 @@ def _resolve_radial_layout_fitting_definition(
             font_size = float(cfg.objects.definition.circular.font_size)
             if (
                 track_layout_reason(error) != "DEFINITION_RESERVED"
-                or str(profile) != "full"
+                or profile != "full"
                 or not math.isclose(font_size, _packaged_circular_definition_font_size())
             ):
                 raise
@@ -1531,7 +1531,7 @@ def _resolve_radial_layout_fitting_definition(
                     break
         raise definition_error
 
-    if str(definition_profile) == "record_summary" and str(layout_definition_profile) == "full":
+    if definition_profile == "record_summary" and layout_definition_profile == "full":
         try:
             layout, reserved, _untitled_line_count = fit(layout_definition_profile)
             # The drawn record summary has no species line to wrap.
@@ -2562,8 +2562,8 @@ def add_record_on_circular_canvas(
     dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
-    definition_profile: str = "full",
-    layout_definition_profile: str | None = None,
+    definition_profile: CircularDefinitionProfile = "full",
+    layout_definition_profile: CircularDefinitionProfile | None = None,
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: ResolvedAnnotationBundle,
@@ -3407,8 +3407,8 @@ def _assemble_circular_diagram_result(
     dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
-    definition_profile: str = "full",
-    layout_definition_profile: str | None = None,
+    definition_profile: CircularDefinitionProfile = "full",
+    layout_definition_profile: CircularDefinitionProfile | None = None,
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
@@ -3555,7 +3555,7 @@ def assemble_circular_diagram(
     dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
-    definition_profile: str = "full",
+    definition_profile: CircularDefinitionProfile = "full",
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
