@@ -940,10 +940,11 @@ const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
       reads++;
       await Promise.resolve();
       if (failure === 'error' && reads >= 3) throw new Error('sequence preparation failed');
-      return {sequenceKey: 'sequence', fasta: 'data'};
+      return {fasta: 'data'};
     },
     proteinCacheKeys: ['0', '1', '2'],
     async getSeqHash() { return 'hash'; },
+    losatSequenceKey: (hash) => `protein:${hash}`,
     sequenceEntriesByKey: new Map(), cacheMap,
     getReusableLosatCacheEntry(map, key, metadata, identity) {
       return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity);
@@ -1023,10 +1024,11 @@ await exercisePairLoop({failure: 'cancel'});
     })),
     workingProteinIdentityManifest: null, proteinCacheKeys: null,
     throwIfGenerationCanceled() {},
-    async getSeqEntry(index) { return { sequenceKey: `sequence-${index}`, fasta: '' }; },
+    async getSeqEntry() { return { fasta: '' }; },
     buildLosatCachePayload: (metadata) => metadata,
     async hashText(text) { return JSON.parse(text).search; },
-    async getSeqHash() { return 'hash'; },
+    async getSeqHash(index) { return `hash-${index}`; },
+    losatSequenceKey: (hash) => `seq:${hash}`,
     sequenceEntriesByKey: new Map(), cacheMap: new Map(),
     getReusableLosatCacheEntry() { return { text: '' }; },
     tryPromoteLegacyProteinEntry() { throw new Error('nucleotide-keyed run'); },

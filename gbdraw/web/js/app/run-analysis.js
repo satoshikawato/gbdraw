@@ -135,6 +135,7 @@ import {
   requireCurrentProteinBlastpMode
 } from '../services/current-option-values.js';
 import {
+  browserReaderText,
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
@@ -301,8 +302,7 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @property {string} [runtimeBindingHash]
  * @property {string} [displayBindingHash]
  * @property {unknown} [identityManifest]
- * @property {string} [sequenceKey]
- * @property {string} [hash]
+ * @property {string} [hash] The SHA-256 of `fasta`, which a protein extraction carries.
  */
 /**
  * Values kept per owner object (an admitted, frozen manifest) and the settings of the call that built them.
@@ -310,11 +310,12 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @typedef {{ byOwner: WeakMap<object, Map<string, T>>, limit: number }} FileReadCache
  */
 // What Generate reads from an input File is kept per File in `services/record-discovery.js` (`readOncePerFile`,
-// OV-1587): each sequence file parsed once by format (OV-1556), the LOSAT FASTA of a record and region, the
-// blastp protein extraction, and the Circular similarity ring reference with its SHA-256 (OV-1545, OV-1565).
+// OV-1587): each sequence file parsed once by format (OV-1556), the LOSAT FASTA of a record and region and,
+// once a search needs it, its SHA-256, the blastp protein extraction, and the Circular similarity ring reference
+// with its SHA-256 (OV-1545, OV-1565). Each held value is frozen: its readers never write to it (OV-1594).
 /** The blastp protein extractions kept per source File (or GFF3 and FASTA pair). */
 const PROTEIN_EXTRACTIONS_PER_FILE = 16;
-/** The LOSAT FASTA texts kept per source File: one per record and region a card names. */
+/** The LOSAT FASTA texts, and their digests, kept per source File: one per record and region a card names. */
 const LOSAT_FASTA_READS_PER_FILE = 64;
 /**
  * The checked BUILD_PROTEIN_LOSAT_CACHE_KEYS replies of an admitted merged manifest, by the rest of the request
@@ -953,9 +954,16 @@ const wrapFastaSequence = (sequence) => {
   return lines.join('\n');
 };
 /**
- * @typedef {{ id: string, sequence: string }} ParsedSequenceRecord
+ * A record's sequence as the LOSAT search reads it.
+ * @typedef {{ id: string, sequence: string }} LosatSequence
  */
-/** @param {ParsedSequenceRecord} record */
+/**
+ * A record of a sequence file, in file order. `sequence` is null for a GenBank record without one (a CON record):
+ * it keeps its place, so `#N` and the automatic first record name the records Python reads, and only the
+ * Python reader reports its FASTA.
+ * @typedef {{ id: string, sequence: string | null }} ParsedSequenceRecord
+ */
+/** @param {LosatSequence} record */
 const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
 /** @param {unknown} fasta */
 const getFastaSequenceLength = (fasta) =>
@@ -1007,19 +1015,21 @@ const parseGenbankRecordsFast = (text) => {
   const records = [];
   const recordChunks = String(text || '').split(/^\/\/\s*$/m);
   recordChunks.forEach((chunk) => {
+    const header = genbankHeaderIds(chunk);
+    if (!header) return;
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    const header = originMatch ? genbankHeaderIds(chunk) : null;
-    if (!header || !originMatch) return;
-    const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
-    if (sequence) records.push({ id: header.recordId, sequence });
+    const sequence = originMatch ? originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase() : '';
+    records.push({ id: header.recordId, sequence: sequence || null });
   });
   return records;
 };
 /**
  * @param {ParsedSequenceRecord} record
  * @param {unknown} regionSpec
+ * @returns {LosatSequence}
  */
 const applyLosatSequenceTransforms = (record, regionSpec) => {
+  if (record.sequence === null) throw new Error(`Record ${record.id} has no sequence for the browser reader.`);
   const region = parseRegionText(regionSpec);
   let sequence = record.sequence;
   if (region) {
@@ -1092,18 +1102,21 @@ const parseSequenceRecordsFast = (text, fmt) => (
   fmt === 'genbank' ? parseGenbankRecordsFast(text) : parseFastaRecordsFast(text)
 );
 /**
- * A file's records, parsed once per file and format; `parsed` says whether this call read the file.
+ * A file's records, parsed once per file and format, or null when only the Python reader reads the file
+ * (`browserReaderText`); `parsed` says whether this call read the file.
  * @param {FileLike} file
  * @param {string} fmt
- * @returns {Promise<{ records: readonly ParsedSequenceRecord[], parsed: boolean }>}
+ * @returns {Promise<{ records: readonly ParsedSequenceRecord[] | null, parsed: boolean }>}
  */
 const readParsedSequenceRecords = async (file, fmt) => {
   let parsed = false;
   const records = await readOncePerFile([file], `sequence-records:${fmt}`, async () => {
     parsed = true;
     // Decoded from the bytes Generate already read: a Session resource view would keep a text read beside them.
-    const text = bytesToText(await readFileBytes(file));
-    return Object.freeze(parseSequenceRecordsFast(text, fmt).map((record) => Object.freeze(record)));
+    const text = browserReaderText(await readFileBytes(file));
+    return text === null
+      ? null
+      : Object.freeze(parseSequenceRecordsFast(text, fmt).map((record) => Object.freeze(record)));
   });
   return { records, parsed };
 };
@@ -1160,7 +1173,8 @@ export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelec
 /** @param {{ file?: any, text?: string | null, fmt: string }} options */
 const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
-  const records = parseSequenceRecordsFast(sourceText, fmt);
+  const records = parseSequenceRecordsFast(sourceText, fmt)
+    .filter(/** @returns {record is LosatSequence} */ (record) => record.sequence !== null);
   if (!records.length) throw new Error('No records found for circular conservation reference.');
   return {
     fasta: records.map((record) => buildFastaText(record)).join(''),
@@ -3556,8 +3570,11 @@ export const createRunAnalysis = ({
         // `losatSearch.drawnCount` is a position in the drawn list.
         const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
         const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
+        /**
+         * Each record's LOSAT FASTA in this Generate, and the read of its SHA-256 (OV-1594).
+         * @type {Map<number, { entry: LosatSeqEntry, readDigest: () => Promise<string> }>}
+         */
         const fastaCache = new Map();
-        const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
         if (!reuseResolvedProteinArtifacts) {
           if (useOrthogroupBlastp) {
@@ -3652,7 +3669,8 @@ export const createRunAnalysis = ({
          */
         const getSeqEntry = async (idx) => {
           throwIfGenerationCanceled();
-          if (fastaCache.has(idx)) return fastaCache.get(idx);
+          const held = fastaCache.get(idx);
+          if (held) return held.entry;
           const startedAt = getNow();
           const fmt = lInputType.value === 'gb'
             ? 'genbank'
@@ -3729,8 +3747,7 @@ export const createRunAnalysis = ({
               );
               const res = response.result;
               if (res.error) throw res.error;
-              const fastaHash = await hashText(res.fasta || '');
-              return {
+              return Object.freeze({
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
                 canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
@@ -3742,9 +3759,8 @@ export const createRunAnalysis = ({
                 runtimeBindingHash: String(res.runtime_binding_hash || ''),
                 displayBindingHash: String(res.display_binding_hash || ''),
                 identityManifest: res.identity_manifest || null,
-                sequenceKey: `protein:${fastaHash}`,
-                hash: fastaHash
-              };
+                hash: await hashText(res.fasta || '')
+              });
             }, PROTEIN_EXTRACTIONS_PER_FILE);
             if (losatTiming) {
               if (extracted) losatTiming.fastaWorkerFallbacks += 1;
@@ -3756,8 +3772,9 @@ export const createRunAnalysis = ({
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
                 const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
+                if (!records) throw new Error('This file needs the Python reader.');
                 if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
-                return losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec);
+                return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
               } catch (fastError) {
                 const response = await runDiagramHelperOperation(
                   DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA,
@@ -3778,16 +3795,34 @@ export const createRunAnalysis = ({
                   losatTiming.fastaWorkerFallbacks += 1;
                   console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', formatError(fastError));
                 }
-                return {
+                return Object.freeze({
                   fasta: res.fasta,
                   recordId: res.record_id || `seq_${idx + 1}`,
                   canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
-                };
+                });
               }
             }, LOSAT_FASTA_READS_PER_FILE);
             if (!extracted && losatTiming) losatTiming.fastaCacheHits += 1;
           }
-          fastaCache.set(idx, entry);
+          const fasta = entry.fasta;
+          const proteinHash = entry.hash;
+          fastaCache.set(idx, {
+            entry,
+            // A protein extraction carries its digest. A nucleotide FASTA is digested on first need, once per File
+            // and key beside its entry: the records of a searched database that no pair names are never digested.
+            readDigest: proteinHash ? async () => proteinHash : async () => {
+              let digested = false;
+              const hash = await readOncePerFile(readFiles, `losat-fasta-sha256:${persistentCacheKey}`, async () => {
+                digested = true;
+                const digestStartedAt = getNow();
+                const digest = await hashText(fasta);
+                if (losatTiming) losatTiming.cacheHashMs += getNow() - digestStartedAt;
+                return digest;
+              }, LOSAT_FASTA_READS_PER_FILE);
+              if (!digested && losatTiming) losatTiming.cacheHashHits += 1;
+              return hash;
+            }
+          });
           if (losatTiming) {
             losatTiming.fastaExtractionMs += getNow() - startedAt;
             losatTiming.totalFastaChars += entry.fasta.length;
@@ -3795,24 +3830,20 @@ export const createRunAnalysis = ({
           return entry;
         };
 
-        /** @param {number} idx */
+        /**
+         * The SHA-256 of a record's LOSAT FASTA.
+         * @param {number} idx
+         * @returns {Promise<string>}
+         */
         const getSeqHash = async (idx) => {
-          if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
-          const entry = await getSeqEntry(idx);
-          if (entry.hash) {
-            if (losatTiming) losatTiming.cacheHashHits += 1;
-            if (!entry.sequenceKey) entry.sequenceKey = `seq:${entry.hash}`;
-            fastaHashCache.set(idx, entry.hash);
-            return entry.hash;
-          }
-          const startedAt = getNow();
-          const hash = await hashText(entry.fasta);
-          if (losatTiming) losatTiming.cacheHashMs += getNow() - startedAt;
-          entry.hash = hash;
-          if (!entry.sequenceKey) entry.sequenceKey = `seq:${hash}`;
-          fastaHashCache.set(idx, hash);
-          return hash;
+          await getSeqEntry(idx);
+          return /** @type {{ readDigest: () => Promise<string> }} */ (fastaCache.get(idx)).readDigest();
         };
+        /**
+         * The key a record's FASTA is passed to the search under: its kind and SHA-256.
+         * @param {string} hash
+         */
+        const losatSequenceKey = (hash) => `${useProteinBlastp ? 'protein' : 'seq'}:${hash}`;
 
         /** @param {number} idx */
         const getViewTransform = async (idx) => {
@@ -4233,11 +4264,10 @@ export const createRunAnalysis = ({
             throwIfGenerationCanceled();
             const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
             throwIfGenerationCanceled();
-            if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
-              throw new Error('LOSAT sequence cache key was not prepared.');
-            }
-            sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
-            sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
+            const querySequenceKey = losatSequenceKey(queryCanonicalHash);
+            const subjectSequenceKey = losatSequenceKey(subjectCanonicalHash);
+            sequenceEntriesByKey.set(querySequenceKey, queryEntry.fasta);
+            sequenceEntriesByKey.set(subjectSequenceKey, subjectEntry.fasta);
             let cached = getReusableLosatCacheEntry(
               cacheMap,
               cacheKey,
@@ -4304,8 +4334,8 @@ export const createRunAnalysis = ({
                 subjectIndex: spec.subjectIndex,
                 cacheKey,
                 program: drawing.losatProgram.value,
-                querySequenceKey: queryEntry.sequenceKey,
-                subjectSequenceKey: subjectEntry.sequenceKey,
+                querySequenceKey,
+                subjectSequenceKey,
                 queryCanonicalHash,
                 subjectCanonicalHash,
                 outfmt: drawing.losat.outfmt || '6',

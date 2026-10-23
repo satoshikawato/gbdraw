@@ -1,4 +1,5 @@
 // @ts-check
+import { sha256Hex } from '../services/byte-utils.js';
 
 // The fonts registered in a diagram Worker's Python (custom fonts D-01): their
 // files stay in FONT_DIRECTORY for the Worker's life, and each identity is the
@@ -40,12 +41,6 @@ const fontBytes = (value) => {
   return null;
 };
 
-/** @param {Uint8Array} bytes */
-const hexDigest = async (bytes) => {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
-  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
-};
-
 /**
  * @param {object} options
  * @param {WorkerFontFileSystem} options.fs
@@ -73,7 +68,7 @@ export const createWorkerFontRegistry = ({ fs, registerInPython }) => {
         const file = /** @type {Partial<WorkerFontFile> | null} */ (font);
         const identity = String(file?.identity || '');
         const bytes = fontBytes(file?.bytes);
-        if (!FONT_IDENTITY_RE.test(identity) || !bytes || await hexDigest(bytes) !== identity) {
+        if (!FONT_IDENTITY_RE.test(identity) || !bytes || await sha256Hex(bytes) !== identity) {
           throw { code: 'RESOURCE_INVALID', stage: 'resource-staging', context: { field: 'font_family' } };
         }
         const path = `${FONT_DIRECTORY}/${identity}`;

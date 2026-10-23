@@ -1,4 +1,5 @@
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
+import { sha256Hex } from '../services/byte-utils.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
@@ -101,11 +102,6 @@ const bytesForDigest = (value) => {
   return null;
 };
 
-const hexDigest = async (bytes) => {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
-  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
-};
-
 const invalidGenerationReply = () => serializeError({
   code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
 });
@@ -133,7 +129,7 @@ const describeResultDocument = async (result, heldBytes, encoder) => {
     const { start, revision } = piece;
     if (piece.offset === undefined) {
       if (heldBytes.get(revision) !== piece.bytes) throw invalidGenerationReply();
-    } else if (await hexDigest(segments.subarray(piece.offset, piece.offset + piece.bytes)) !== revision) {
+    } else if (await sha256Hex(segments.subarray(piece.offset, piece.offset + piece.bytes)) !== revision) {
       throw invalidGenerationReply();
     }
     bytes += encoder.encode(start).byteLength + '</g>'.length + piece.bytes;
@@ -176,9 +172,9 @@ export const buildGeneratedArtifactTransportIdentity = async (
     resultManifest.push({
       index,
       nameBytes: nameBytes.byteLength,
-      nameSha256: await hexDigest(nameBytes),
+      nameSha256: await sha256Hex(nameBytes),
       documentBytes: document.bytes,
-      documentSha256: await hexDigest(encoder.encode(JSON.stringify(document.manifest)))
+      documentSha256: await sha256Hex(encoder.encode(JSON.stringify(document.manifest)))
     });
   }
 
@@ -191,14 +187,14 @@ export const buildGeneratedArtifactTransportIdentity = async (
     results: resultManifest,
     metadata: {
       bytes: metadataBytes.byteLength,
-      sha256: await hexDigest(metadataBytes)
+      sha256: await sha256Hex(metadataBytes)
     },
     featureCatalog: featureCatalogDigest
       ? { bytes: featureCatalogDigest.bytes, sha256: featureCatalogDigest.sha256 }
       : null
   };
   const catalogBytes = featureCatalogDigest?.bytes ?? 0;
-  const fingerprint = await hexDigest(encoder.encode(JSON.stringify(manifest)));
+  const fingerprint = await sha256Hex(encoder.encode(JSON.stringify(manifest)));
   return Object.freeze({
     schema: 1,
     algorithm: 'SHA-256',
@@ -228,7 +224,7 @@ export const buildGeneratedArtifactTransportIdentity = async (
 export const resolveGeneratedFeatureCatalog = async (outcome, held, heldSegments) => {
   const catalogBytes = bytesForDigest(outcome.featureCatalog);
   const digest = catalogBytes
-    ? { bytes: catalogBytes.byteLength, sha256: await hexDigest(catalogBytes) }
+    ? { bytes: catalogBytes.byteLength, sha256: await sha256Hex(catalogBytes) }
     : held
       ? { bytes: held.bytes, sha256: held.sha256 }
       : null;
