@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
-import { encodeAnnotationTable, parseAnnotationTable } from '../../gbdraw/web/js/app/annotations/table-codec.js';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -226,7 +225,9 @@ const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
-const { readComparisonSequence } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const {
+  readComparisonSequence, readComparisonSequenceDigest
+} = await import('../../gbdraw/web/js/services/record-discovery.js');
 
 const artifactSnapshots = createHistorySnapshotService({
   state,
@@ -1486,6 +1487,28 @@ test('a ring comparison file is read once, and a failed read is read again', asy
   assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence']);
 });
 
+// OV-1587: one per-File reading owner. Every reader gets the same frozen value,
+// and the ring FASTA's SHA-256 is kept beside it, digested once per File.
+test('a ring comparison read is frozen and its digest is kept with it', async () => {
+  const file = new File(['>ring\nacgt\n'], 'ring-digest.fasta', { type: 'text/plain' });
+  const operations = [];
+  const runHelperOperation = async (operation) => {
+    operations.push(operation);
+    return { result: { fasta: '>ring\nACGT\n', recordLabel: null } };
+  };
+  const read = await readComparisonSequence({ file, runHelperOperation });
+  assert.equal(Object.isFrozen(read), true);
+  assert.throws(() => { read.fasta = '>other\n'; }, TypeError);
+  assert.equal((await readComparisonSequence({ file, runHelperOperation })).fasta, '>ring\nACGT\n');
+  const expected = await sha256Text('>ring\nACGT\n');
+  const watched = await watchLosatPreparation(async () => {
+    assert.equal(await readComparisonSequenceDigest({ file, runHelperOperation }), expected);
+    assert.equal(await readComparisonSequenceDigest({ file, runHelperOperation }), expected);
+  });
+  assert.equal(watched.fastaDigests, 1);
+  assert.deepEqual(operations, ['readComparisonSequence']);
+});
+
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
   const resourceMetrics = [];
   const previousTestHooks = globalThis.__GBDRAW_TEST_HOOKS__;
@@ -2005,6 +2028,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     state.activeDrawing().losat.blastn.task = 'blastn';
     failLateArtifactAdoption = true;
+    resourceMetrics.splice(0);
     workerHelperResponses.push({
       ok: true,
       result: {
@@ -2017,6 +2041,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       validCatalog(failedLinearResult.name)
     ));
     assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
+    // OV-1589: the LOSAT FASTA comes from the records parsed once per File and the
+    // Worker holds the sources, so no input file is read again.
+    assert.deepEqual(
+      resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount'),
+      []
+    );
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.activeDrawing().losat.blastn.task = 'megablast';
@@ -2540,8 +2570,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const linearResult = result('linear-none.svg', 'linear-none');
   workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
-  // Observe the existing internal helper staging boundary. Run Info deliberately
-  // withholds annotation Source recipes because TSV cannot preserve inheritance.
+  // OV-1589: nothing reads a staged copy of the annotation table; a Source
+  // recipe writes its own from the request.
   const stagedAnnotationTables = [];
   const stagedColorTables = [];
   const NativeMap = globalThis.Map;
@@ -2573,12 +2603,10 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
   // OV-1573: once, and no color table copies: Run Info builds those from the request resources.
-  assert.equal(stagedAnnotationTables.length, 1, 'Generate stages the annotation helper once');
+  assert.deepEqual(stagedAnnotationTables, [], 'Generate stages no annotation table copy');
   assert.deepEqual(stagedColorTables, []);
-  for (const text of stagedAnnotationTables) {
-    assert.equal(text, encodeAnnotationTable(state.activeDrawing().annotationSets));
-    assert.equal(parseAnnotationTable(text)[0].annotations[0].style.fill, null);
-  }
+  // An inherited annotation fill has no lossless TSV form, so Run Info offers no Source recipe here.
+  assert.match(state.lastRunInfo.value.sourceRecipe.unavailableReason, /canonical annotation semantics/);
   const payload = workerRunMessages.at(-1).payload;
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);

@@ -49,7 +49,6 @@ import {
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
-  requestLabelTableTsv,
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
@@ -80,7 +79,6 @@ import {
   shapeDepthTracksForGenerate,
   syncDepthSlotLabels
 } from '../services/depth-track-state.js';
-import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   CustomTrackPlanValidationError,
   customTrackPlanIssues,
@@ -93,11 +91,7 @@ import {
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
-import {
-  serializeLabelWhitelistRules,
-  serializeQualifierPriorityRules,
-  specificRulesFileCaptions
-} from '../services/file-imports.js';
+import { specificRulesFileCaptions } from '../services/file-imports.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
@@ -143,7 +137,8 @@ import {
   discoverGffFastaRecords,
   discoverSequenceRecords,
   discoveryErrorIsFinal,
-  readComparisonSequence
+  readComparisonSequence,
+  readComparisonSequenceDigest
 } from '../services/record-discovery.js';
 import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
@@ -329,8 +324,9 @@ const fastaFallbackCache = { byOwner: new WeakMap(), limit: 12 };
 /** @type {FileReadCache<LosatSeqEntry>} */
 const proteinExtractionCache = { byOwner: new WeakMap(), limit: 16 };
 /**
- * A Circular similarity ring sequence as one FASTA text with its SHA-256: the reference by input format
- * (`subject:<format>`, OV-1545) and a comparison file's query (`query`), so Generate digests each once (OV-1565).
+ * The Circular similarity ring reference as one FASTA text with its SHA-256, by input format (`subject:<format>`,
+ * OV-1545), so Generate digests it once (OV-1565). A comparison file's query and its digest are read through
+ * `services/record-discovery.js`, which owns what is read from a File (OV-1587).
  * @type {FileReadCache<{ fasta: string, hash: string }>}
  */
 const ringSequenceCache = { byOwner: new WeakMap(), limit: 2 };
@@ -2815,21 +2811,6 @@ export const createRunAnalysis = ({
         const name = String(path || '').split('/').filter(Boolean).pop();
         return name || fallback;
       };
-      /** @param {unknown} path */
-      const generatedSlotForPath = (path) => {
-        const normalizedPath = String(path || '').trim();
-        if (normalizedPath === '/manual_wl.tsv') return 'generatedFiles.manual_wl';
-        if (normalizedPath === '/priority.tsv') return 'generatedFiles.priority';
-        if (normalizedPath === '/web_label_table.tsv') return 'generatedFiles.web_label_table';
-        if (normalizedPath === '/web_feature_visibility_table.tsv') return 'generatedFiles.web_feature_visibility_table';
-        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_visibility_table';
-        if (normalizedPath === '/web_annotations.tsv') return 'generatedFiles.web_annotations';
-        const conservationMatch = normalizedPath.match(/^\/conservation_blast_(\d+)\.txt$/);
-        if (conservationMatch) return `generatedFiles.circular_conservation_blasts[${Number(conservationMatch[1])}]`;
-        const blastMatch = normalizedPath.match(/^\/blast_(\d+)\.txt$/);
-        if (blastMatch) return `generatedFiles.losat_blasts[${Number(blastMatch[1])}]`;
-        return normalizedPath ? `generatedFiles.${getPayloadName(normalizedPath).replace(/[^\w]+/g, '_')}` : '';
-      };
       /**
        * @param {unknown} path
        * @param {{ name?: unknown, slot?: unknown, kind?: string }} [options]
@@ -2886,77 +2867,14 @@ export const createRunAnalysis = ({
           buildData
         });
       };
-      /**
-       * @param {string} path
-       * @param {unknown} text
-       * @param {{ name?: string, slot?: string }} [options]
-       */
-      const stageTextFile = (
-        path,
-        text,
-        { name = '', slot = '' } = {}
-      ) => {
-        throwIfGenerationCanceled();
-        const displayName = name || getPayloadName(path);
-        const resolvedSlot = slot || generatedSlotForPath(path);
-        registerRunInfoFile(path, {
-          name: displayName,
-          slot: resolvedSlot,
-          kind: 'generated'
-        });
-        recordGeneratedCliFile(path, text, {
-          name: displayName,
-          slot: resolvedSlot
-        });
-      };
-      /**
-       * @param {File | null | undefined} fileObj
-       * @param {string} path
-       * @param {{ slot?: string }} [options]
-       */
-      const stageUploadedFile = async (fileObj, path, { slot = '' } = {}) => {
-        if (!fileObj) return false;
-        throwIfGenerationCanceled();
-        await readFileBytes(fileObj);
-        throwIfGenerationCanceled();
-        registerRunInfoFile(path, {
-          name: fileObj.name || getPayloadName(path),
-          slot,
-          kind: 'uploaded'
-        });
-        return true;
-      };
-
       const normalizedOutputPrefix = String(drawing.form.prefix || '').trim();
 
-      // The color tables reach Run Info from the request resources (the source recipe), not from staged copies.
-      if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
-          name: 'annotations.tsv',
-          slot: 'generatedFiles.web_annotations'
-        });
-      }
-
-      if (drawing.filterMode.value === 'Whitelist') {
-        const wlContent = serializeLabelWhitelistRules(drawing.manualWhitelist);
-        if (wlContent) {
-          stageTextFile('/manual_wl.tsv', wlContent);
-        }
-      }
-
-      const pContent = serializeQualifierPriorityRules(drawing.manualPriorityRules);
-      if (pContent.trim() !== '') {
-        stageTextFile('/priority.tsv', pContent);
-      }
-
-      // The staged label table is the request's: label rules only; per-feature
-      // label edits travel as featureOverrides rows (design Q4). One projection
-      // per Generate serves the staged copy and the request (CW-02).
+      // The annotation, color, whitelist, priority, label and feature visibility tables reach Run Info from the
+      // request (the Source recipe writes its own copies), so Generate stages no copy of them (OV-1573, OV-1589).
+      // The request's label table holds label rules only; per-feature label
+      // edits travel as featureOverrides rows (design Q4). One projection per
+      // Generate serves the request (CW-02).
       generatedLabelProjection = requestLabelProjection(state, requestDrawing);
-      const labelTableTsv = requestLabelTableTsv(state, requestDrawing, generatedLabelProjection);
-      if (labelTableTsv) {
-        stageTextFile('/web_label_table.tsv', labelTableTsv);
-      }
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
       /** @param {string[]} recordKeys */
@@ -2964,15 +2882,9 @@ export const createRunAnalysis = ({
         drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
-      /** @type {string | null} */
-      let featureVisibilityTablePath = null;
-      let featureVisibilityCacheKey = '';
       const featureVisibilityTsv = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
-      if (featureVisibilityTsv.trim()) {
-        featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
-        featureVisibilityCacheKey = featureVisibilityTsv;
-        stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
-      }
+      // The rules table the protein helper reads, and part of its cache key; '' when there are no rules.
+      const featureVisibilityCacheKey = featureVisibilityTsv.trim() ? featureVisibilityTsv : '';
       const validateDepthStyleSettings = () => {
         if (
           drawing.adv.depth_min !== null &&
@@ -3261,13 +3173,8 @@ export const createRunAnalysis = ({
               const fileObj = comparisonEntry?.file || comparisonEntry;
               // One sequence reader (D12): the Python helper reads FASTA, GenBank
               // or DDBJ and returns the query FASTA that the CLI ring hashes.
-              let querySequence = getCachedFileRead(ringSequenceCache, fileObj, 'query');
-              if (querySequence === null) {
-                const { fasta } = await readComparisonSequence({ file: fileObj });
-                querySequence = Object.freeze({ fasta, hash: await hashText(fasta) });
-                setCachedFileRead(ringSequenceCache, fileObj, 'query', querySequence);
-              }
-              const { fasta: queryFasta, hash: queryHash } = querySequence;
+              const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
+              const queryHash = await readComparisonSequenceDigest({ file: fileObj });
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
@@ -3366,7 +3273,8 @@ export const createRunAnalysis = ({
               const cached = cacheMap.get(pair.cacheKey);
               const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
-              stageTextFile(blastPath, blastText, {
+              // Its name is the Source recipe's name for this ring's generated BLAST table.
+              recordGeneratedCliFile(blastPath, blastText, {
                 name: pair.filename,
                 slot: `generatedFiles.circular_conservation_blasts[${pair.sourceIndex}]`
               });
@@ -3679,7 +3587,6 @@ export const createRunAnalysis = ({
           : null;
         const losatTiming = useLosat
           ? {
-              inputWriteMs: 0,
               fastaExtractionMs: 0,
               cacheHashMs: 0,
               jobBuildMs: 0,
@@ -3808,7 +3715,7 @@ export const createRunAnalysis = ({
                   bytes: await cloneFileBytesForTransfer(pairedFastaFile)
                 });
               }
-              if (featureVisibilityTablePath && featureVisibilityCacheKey) {
+              if (featureVisibilityCacheKey) {
                 helperFiles.push({
                   role: 'visibility',
                   bytes: textEncoder.encode(featureVisibilityCacheKey).buffer
@@ -4123,35 +4030,6 @@ export const createRunAnalysis = ({
           }
           return args;
         };
-
-        {
-          const inputWriteStartedAt = getNow();
-          const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-            ? new Set(linearSeqs.map((_, index) => index))
-            : new Set(comparisonResolution.edges
-                .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
-                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex]));
-          for (let i = 0; i < linearSeqs.length; i++) {
-            const seq = linearSeqs[i];
-            if (lInputType.value === 'gb') {
-              if (useLosat && losatRecordIndexes.has(i)) {
-                await stageUploadedFile(seq.gb, `/seq_${i}.gb`, {
-                  slot: `files.linearSeqs[${i}].gb`
-                });
-              }
-            } else {
-              if (useLosat && losatRecordIndexes.has(i)) {
-                await stageUploadedFile(seq.gff, `/seq_${i}.gff`, {
-                  slot: `files.linearSeqs[${i}].gff`
-                });
-                await stageUploadedFile(seq.fasta, `/seq_${i}.fasta`, {
-                  slot: `files.linearSeqs[${i}].fasta`
-                });
-              }
-            }
-          }
-          if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
-        }
 
         regionSpecs = losatSeqs.map((seq) => buildRegionSpec(seq));
         if (useLosat && useProteinBlastp) {
@@ -4860,7 +4738,6 @@ export const createRunAnalysis = ({
               `cache hits=${losatTiming.cacheHits}`,
               `misses=${losatTiming.cacheMisses}`,
               `unique jobs=${losatTiming.uniqueJobs}`,
-              `input FS write=${formatDuration(losatTiming.inputWriteMs)}`,
               `FASTA extraction=${formatDuration(losatTiming.fastaExtractionMs)}`,
               `FASTA cache hits=${losatTiming.fastaCacheHits}`,
               `protein extraction cache hits=${losatTiming.proteinExtractionCacheHits}`,
