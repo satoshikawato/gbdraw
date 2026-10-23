@@ -153,6 +153,15 @@ def test_a_clip_with_a_frame_keeps_the_logged_rects_in_one_still_view() -> None:
     assert cx + height * PORTRAIT.aspect / 2 == pytest.approx(1920.0) and cx < 600 + 1290 / 2
 
 
+def test_the_titled_figure_keeps_its_full_center_definition() -> None:
+    # A plot title shortens the center label unless the title's checkbox is on; the font step turns it on before Generate.
+    tree = ast.parse((CAPTURE_ROOT / 'video' / 'promo.py').read_text(encoding='utf-8'))
+    step = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '_font_and_title')
+    source = ast.unparse(step)
+    assert 'Keep Full Definition with Plot Title' in source
+    assert source.index('Keep Full Definition') < source.index('_generate(rec)')
+
+
 def test_every_align_cut_is_at_the_previews_fit_zoom() -> None:
     # The align step presses the preview's Fit before its first demo and after every align, so the drawing keeps one
     # size from gene to gene; the generic zoom-out fit (which narrows the figure for the tall window) is not used there.

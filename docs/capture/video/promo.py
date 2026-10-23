@@ -280,8 +280,13 @@ def _font_and_title(rec: Recorder) -> None:
         rec.reveal(title)
         rec.focus(title, zoom=2.0, duration=0.6)
     rec.type(title, TITLE, skim_after=3)
+    # A plot title switches the center label to the short form; the video keeps the full definition (species and
+    # strain), which the app leaves as its default behavior (Owner PZ-D30).
+    keep = page.get_by_role("checkbox", name=rec.t("Keep Full Definition with Plot Title"), exact=True)
     with _skimmed(rec):
         _pick(rec, _label(rec, "Plot Title Position"), "top")
+        rec.reveal(keep)
+        rec.set_checked(keep, True, pause=0.3)
     _generate(rec)
     title_box = rec.text_bounds(f"^{TITLE}$")
     search = page.locator(".preview-feature-search")
