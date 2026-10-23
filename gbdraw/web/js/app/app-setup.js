@@ -6107,9 +6107,10 @@ export const createAppSetup = () => {
     )
   );
 
-  const circularDrawnRecordCount = computed(() => (
-    circularRecordsToDraw(circularRecordPresentationEntries(), state.drawingOfMode('circular').recordsOff).length
-  ));
+  const circularDrawnRecordCount = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? circularRecordsToDraw(circularRecordPresentationEntries(), drawing.recordsOff).length : 0;
+  });
   const circularRecordPresentationOptions = computed(() => {
     const drawing = state.activeDrawing();
     const entries = circularRecordPresentationEntries();
@@ -6240,7 +6241,8 @@ export const createAppSetup = () => {
    * @param {File | null} value
    */
   const setCircularSourceFile = (field, value) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const busy = sessionOperationAvailability();
     if (busy) return busy;
     const nextValue = value ?? null;
@@ -6262,7 +6264,8 @@ export const createAppSetup = () => {
   };
   /** @param {unknown} value */
   const setCircularRecordPresentationSelector = (value) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return { status: 'unavailable' };
     const busy = sessionOperationAvailability();
     if (busy) return busy;
     if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
@@ -6273,9 +6276,9 @@ export const createAppSetup = () => {
     return { status: 'ok' };
   };
   const showCircularCanvasSetting = async () => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
     const control = /** @type {HTMLElement | null} */ (document.querySelector('[data-circular-canvas-setting]'));
-    if (!control || mode.value !== 'circular' || !drawing.form.multi_record_canvas) {
+    if (!control || !drawing || !drawing.form.multi_record_canvas) {
       return { status: 'unavailable' };
     }
     await settingsPaneActions.revealSetting(control);
@@ -6311,17 +6314,25 @@ export const createAppSetup = () => {
       .map((/** @type {{ selector?: unknown }} */ entry) => entry?.selector)
   );
 
-  /** @param {MultiRecordPosition | null | undefined} position */
-  const getCircularRecordRow = (position) => {
-    const drawing = state.drawingOfMode('circular');
+  /**
+   * @param {DrawingState} drawing
+   * @param {MultiRecordPosition | null | undefined} position
+   */
+  const circularRecordRowOf = (drawing, position) => {
     const rowValue = Number(position?.row);
     const maxRow = Math.max(1, Array.isArray(drawing.adv.multi_record_positions) ? drawing.adv.multi_record_positions.length : 1);
     if (!Number.isInteger(rowValue) || rowValue <= 0) return 1;
     return Math.min(rowValue, maxRow);
   };
+  /** @param {MultiRecordPosition | null | undefined} position */
+  const getCircularRecordRow = (position) => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? circularRecordRowOf(drawing, position) : 1;
+  };
 
   const getCircularRecordRowOptions = () => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return [1];
     const count = Array.isArray(drawing.adv.multi_record_positions) ? drawing.adv.multi_record_positions.length : 0;
     const maxRow = Math.max(1, count);
     return Array.from({ length: maxRow }, (_unused, index) => index + 1);
@@ -6344,7 +6355,8 @@ export const createAppSetup = () => {
 
   /** @param {number} index @param {unknown} rowValue */
   const setCircularRecordRow = (index, rowValue) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
@@ -6358,33 +6370,42 @@ export const createAppSetup = () => {
     sortCircularRecordPositionsByRow(drawing);
   };
 
-  /** @param {number} index */
-  const canMoveCircularRecordOrderUp = (index) => {
-    const drawing = state.drawingOfMode('circular');
+  /** @param {DrawingState} drawing @param {number} index */
+  const canMoveCircularRecordOrderUpIn = (drawing, index) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx <= 0 || idx >= drawing.adv.multi_record_positions.length) return false;
-    const currentRow = getCircularRecordRow(drawing.adv.multi_record_positions[idx]);
-    const prevRow = getCircularRecordRow(drawing.adv.multi_record_positions[idx - 1]);
+    const currentRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx]);
+    const prevRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx - 1]);
     return currentRow === prevRow;
   };
-
   /** @param {number} index */
-  const canMoveCircularRecordOrderDown = (index) => {
-    const drawing = state.drawingOfMode('circular');
+  const canMoveCircularRecordOrderUp = (index) => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? canMoveCircularRecordOrderUpIn(drawing, index) : false;
+  };
+
+  /** @param {DrawingState} drawing @param {number} index */
+  const canMoveCircularRecordOrderDownIn = (drawing, index) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.multi_record_positions.length - 1) return false;
-    const currentRow = getCircularRecordRow(drawing.adv.multi_record_positions[idx]);
-    const nextRow = getCircularRecordRow(drawing.adv.multi_record_positions[idx + 1]);
+    const currentRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx]);
+    const nextRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx + 1]);
     return currentRow === nextRow;
+  };
+  /** @param {number} index */
+  const canMoveCircularRecordOrderDown = (index) => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? canMoveCircularRecordOrderDownIn(drawing, index) : false;
   };
 
   /** @param {number} index */
   const moveCircularRecordOrderUp = (index) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
-    if (!canMoveCircularRecordOrderUp(idx)) return;
+    if (!canMoveCircularRecordOrderUpIn(drawing, idx)) return;
     const next = [...drawing.adv.multi_record_positions];
     const temp = next[idx - 1];
     next[idx - 1] = next[idx];
@@ -6394,11 +6415,12 @@ export const createAppSetup = () => {
 
   /** @param {number} index */
   const moveCircularRecordOrderDown = (index) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
-    if (!canMoveCircularRecordOrderDown(idx)) return;
+    if (!canMoveCircularRecordOrderDownIn(drawing, idx)) return;
     const next = [...drawing.adv.multi_record_positions];
     const temp = next[idx + 1];
     next[idx + 1] = next[idx];
@@ -6407,7 +6429,8 @@ export const createAppSetup = () => {
   };
 
   const resetCircularRecordOrder = () => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const defaults = buildDefaultCircularRecordPositions();
@@ -6468,7 +6491,8 @@ export const createAppSetup = () => {
   };
 
   const addLinearSeq = () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     return applyLinearSeqMutation(drawing, [...linearSeqs, createLinearSeq()]);
   };
 
@@ -6538,16 +6562,19 @@ export const createAppSetup = () => {
   /**
    * Deletes a Linear File, or clears it to one blank File (`clear`), inside
    * the caller's History step: the removal dialog and Remove File (D-06).
+   * @param {DrawingState} drawing
    * @param {Extract<LinearSourceRemovalPlan, { allowed: true }>} plan
    * @param {'clear' | 'delete'} intent
    */
-  const removeLinearSource = (plan, intent) => {
+  const removeLinearSource = (drawing, plan, intent) => {
     const next = [...plan.retainedSequences];
     if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
-    return applyLinearSeqMutation(state.drawingOfMode('linear'), next);
+    return applyLinearSeqMutation(drawing, next);
   };
   /** @param {'clear' | 'delete'} intent */
   const applyLinearSourceRemoval = async (intent) => {
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return false;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (linearSourceRemovalDialog.origin === 'global' && intent !== 'delete') return false;
@@ -6562,7 +6589,7 @@ export const createAppSetup = () => {
     }
     const operation = await history.runUndoable(
       intent === 'clear' ? msg('Clear Linear File') : msg('Delete Linear File'),
-      () => removeLinearSource(plan, intent)
+      () => removeLinearSource(drawing, plan, intent)
     );
     closeLinearSourceRemovalDialog({ restoreFocus: false });
     await focusLinearSourceAfterRemoval(plan.sourceIndex);
@@ -6591,7 +6618,8 @@ export const createAppSetup = () => {
 
   /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
   const setLinearSeqPrimaryFile = (index, field, value) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
@@ -6664,16 +6692,18 @@ export const createAppSetup = () => {
     annotationSets: drawing.annotationSets,
     removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
-    comparisonEdges: drawing === state.drawingOfMode('linear') ? drawing.linearComparisonPlan.edges : [],
+    comparisonEdges: drawing.mode === 'linear' ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
   });
   /** @param {RecordSelectionMode} listMode @param {string} sourceKey @returns {RecordSource | null} */
   const recordSourceOf = (listMode, sourceKey) => {
+    const drawing = shownDrawingOfMode(listMode);
+    if (!drawing) return null;
     if (listMode === 'circular') {
       if (sourceKey !== 'circular' || getCircularRecordDiscoveryState().status !== 'ready') return null;
       const owners = circularRecordSettingsOwners();
       if (owners.length === 0) return null;
-      const edited = recordsWithEdits(owners, recordEditData(state.drawingOfMode('circular')));
+      const edited = recordsWithEdits(owners, recordEditData(drawing));
       const entries = circularRecordEntries();
       return {
         key: 'circular',
@@ -6688,7 +6718,7 @@ export const createAppSetup = () => {
     const group = linearSourceGroups.value.find((entry) => entry.uid === sourceKey);
     if (!group) return null;
     const cards = group.records.map(({ sequence }) => sequence);
-    const edited = recordsWithEdits(cards.map(linearRecordSettingsOwner), recordEditData(state.drawingOfMode('linear')));
+    const edited = recordsWithEdits(cards.map(linearRecordSettingsOwner), recordEditData(drawing));
     return {
       key: group.uid,
       name: linearSourceFileName(group),
@@ -6709,7 +6739,8 @@ export const createAppSetup = () => {
    * @param {RecordDrawKey[]} keys
    */
   const deleteRecordSettings = (listMode, keys) => {
-    const drawing = state.drawingOfMode(listMode);
+    const drawing = shownDrawingOfMode(listMode);
+    if (!drawing) return false;
     const deleted = new Set(keys);
     const owners = listMode === 'circular'
       ? circularRecordSettingsOwners().filter((owner) => deleted.has(owner.key))
@@ -6737,9 +6768,11 @@ export const createAppSetup = () => {
       }
       return setCircularSourceFile('c_gb', null);
     }
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return false;
     const intent = linearSourceGroups.value.length > 1 ? 'delete' : 'clear';
     const plan = planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent });
-    return plan.allowed ? removeLinearSource(plan, intent) : false;
+    return plan.allowed ? removeLinearSource(drawing, plan, intent) : false;
   };
   const recordSelection = createRecordSelection({
     reactive,
@@ -6753,7 +6786,8 @@ export const createAppSetup = () => {
     afterRecordSetChange: (listMode) => {
       rebindAnnotationRecords();
       if (listMode !== 'linear') return;
-      invalidateLinearComparisonArtifacts(state.drawingOfMode('linear'), { preserveLosatCacheInfo: true });
+      const drawing = shownDrawingOfMode('linear');
+      if (drawing) invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
       similarityAlignmentActions?.clearForMutation?.(msg('record drawing changed.'));
     },
     removeSource: removeRecordSource,
@@ -6783,15 +6817,14 @@ export const createAppSetup = () => {
   });
   /** @param {number} sourceIndex @param {number} direction */
   const canMoveLinearSource = (sourceIndex, direction) => {
-    const drawing = state.drawingOfMode('linear');
-    return (
-      linearSourceMovePlan(drawing, sourceIndex, direction).allowed
-    );
+    const drawing = shownDrawingOfMode('linear');
+    return drawing !== null && linearSourceMovePlan(drawing, sourceIndex, direction).allowed;
   };
 
   /** @param {number} sourceIndex @param {number} direction */
   const moveLinearSource = (sourceIndex, direction) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const plan = linearSourceMovePlan(drawing, sourceIndex, direction);
@@ -6825,13 +6858,14 @@ export const createAppSetup = () => {
 
   /** @param {unknown} value */
   const setCircularInputType = (value) => {
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return { status: 'unavailable' };
     const busy = sessionOperationAvailability();
     if (busy) return busy;
     const next = value === 'gff' ? 'gff' : 'gb';
     if (cInputType.value === next) return { status: 'ok' };
     changeRecordSources(() => { cInputType.value = next; });
     // The other input's records are not the ones the OFF list names.
-    const drawing = state.drawingOfMode('circular');
     if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
     return { status: 'ok' };
   };
