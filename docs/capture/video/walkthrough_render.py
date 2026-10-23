@@ -35,8 +35,8 @@ RADIUS = 18
 INTRO_SECONDS = 3.4
 OUTRO_SECONDS = 5.0
 FADE_SECONDS = 0.5
-FINALE_TEXT = ("Vector output stays sharp at any zoom", "The downloaded SVG, magnified 7×")
-MONTAGE_CAPTION = (None, "Genome diagrams for microbes and organelles",
+FINALE_TEXT = ("Vector stays sharp at any zoom", "The downloaded SVG, magnified 7×")
+MONTAGE_CAPTION = (None, "Microbial and organelle genomes",
                    "Highlights from a live session in the gbdraw web app, sped up")
 INTRO_LINES = ("From a GenBank file to a publication-ready genome map",
                "A live session in the gbdraw web app. Waits are fast-forwarded and marked.")
@@ -48,6 +48,8 @@ PORTRAIT_MAX_ZOOM = 2.6
 PORTRAIT_PAD = 1.2  # portrait: margin around a framed target
 PORTRAIT_ZOOM_SLACK = 1.35  # portrait: a zoomed tall target shows at most this much more height
 PROGRESS_GAP = 22  # portrait: step bar distance below the window
+INSET_MARGIN = 18  # overview inset: distance from the window's edges
+INSET_FADE = 0.5  # seconds for the inset to fade out and in at its other corner
 SLANT = 0.2  # synthetic oblique for <i> runs; the app vendors no italic face
 
 
@@ -64,16 +66,53 @@ class Layout:
     ui_scale: float                      # toasts and badges
     finale: str                          # directory of the vector-zoom frames
     audio: bool                          # add a silent track for social uploads
+    inset: int = 0                       # width of the whole-stage overview inset; 0 for none
 
     @property
     def aspect(self) -> float:
         return self.card[2] / self.card[3]
 
+    def inset_box(self, viewport: tuple[int, int], corner: str) -> tuple[int, int, int, int]:
+        """The overview inset in window pixels (x, y, width, height), at the ``"bottom"`` or ``"top"`` left corner."""
+
+        height = round(self.inset * viewport[1] / viewport[0])
+        y = INSET_MARGIN if corner == "top" else self.card[3] - INSET_MARGIN - height
+        return INSET_MARGIN, y, self.inset, height
+
+    def toast_origin(self, viewport: tuple[int, int], size: tuple[int, int], corner: str | None,
+                     shown: float) -> tuple[int, int]:
+        """Where a toast layer sits: centered at the window's foot, raised above the inset in the bottom corner."""
+
+        x, y, width, height = self.card
+        lift = 0
+        if corner == "bottom":
+            lift = round((height - self.inset_box(viewport, corner)[1] - INSET_MARGIN) * shown)
+        return x + (width - size[0]) // 2, y + height - size[1] - 32 - lift
+
+    def badge_origin(self, size: tuple[int, int]) -> tuple[int, int]:
+        """The fast-forward badge's top right corner, clear of the inset on the left."""
+
+        return self.card[0] + self.card[2] - size[0] - 22, self.card[1] + 20
+
+    def free_band(self, viewport: tuple[int, int], corner: str | None) -> tuple[float, float]:
+        """The window's rows, as fractions of its height, that the inset leaves free above or below it."""
+
+        if not self.inset or corner is None:
+            return 0.0, 1.0
+        _, y, _, height = self.inset_box(viewport, corner)
+        if corner == "top":
+            return (y + height + INSET_MARGIN) / self.card[3], 1.0
+        return 0.0, (y - INSET_MARGIN) / self.card[3]
+
 
 LANDSCAPE = Layout("landscape", (1920, 1080), (160, 34, 1600, 900), False, 40, 26, 1.0, "finale", False)
 # 9:16 for TikTok and RedNote. The window avoids the top 400 px and bottom
 # 430 px, where the apps draw their own navigation, captions, and buttons.
-PORTRAIT = Layout("portrait", (1080, 1920), (72, 430, 936, 1060), True, 54, 32, 1.3, "finale-portrait", True)
+# A tall window shows part of the app, so an inset of the whole stage marks
+# where that part is.
+PORTRAIT = Layout("portrait", (1080, 1920), (72, 430, 936, 1060), True, 54, 32, 1.3, "finale-portrait", True,
+                  inset=340)
+INSET_CORNERS = ("bottom", "top")   # the default corner first
 
 
 @dataclass(frozen=True)
@@ -306,43 +345,75 @@ class Camera:
 
     A state is ``(cx, cy, h)``: the visible page center and height in CSS px.
     Landscape output follows the logged zoom. Portrait output re-frames each
-    logged target (or the diagram, for whole-page shots) for a tall window.
+    logged target (or the diagram, for whole-page shots) for a tall window,
+    centered in the rows the overview inset leaves free. When the page edge
+    would push a target under the inset, the inset moves to the other corner
+    for that shot. While the stage shows only a smaller tab (a ``stage``
+    event, for example an exported file opened in a tall tab), the window
+    already shows that whole page, so the inset is hidden (corner None).
     """
 
-    def __init__(self, events: list[dict], timemap: TimeMap, viewport: tuple[int, int],
-                 aspect: float, portrait: bool) -> None:
+    def __init__(self, events: list[dict], timemap: TimeMap, viewport: tuple[int, int], layout: Layout) -> None:
         self.viewport = viewport
-        self.aspect = aspect
-        self.portrait = portrait
-        self.max_h = min(viewport[1], viewport[0] / aspect)
-        self.cues = [(timemap.out(e["t"]), self._target(e), e["duration"])
-                     for e in events if e["kind"] == "camera"]
+        self.layout = layout
+        self.aspect = layout.aspect
+        self.max_h = min(viewport[1], viewport[0] / self.aspect)
+        self.cues = []
+        overview = True
+        for event in events:
+            if event["kind"] == "stage":
+                overview = (event["rect"]["width"], event["rect"]["height"]) == tuple(viewport)
+            elif event["kind"] == "camera":
+                self.cues.append((timemap.out(event["t"]), *self._target(event, overview), event["duration"]))
+        self.starts = [cue[0] for cue in self.cues]
         self._states = []
         state = self._clamp(viewport[0] / 2, viewport[1] / 2, self.max_h)
-        for index, (start, target, duration) in enumerate(self.cues):
+        for index in range(len(self.cues)):
             if index:
-                state = self._at(index - 1, start)
+                state = self._at(index - 1, self.starts[index])
             self._states.append(state)
 
-    def _target(self, event: dict) -> tuple[float, float, float]:
-        if not self.portrait:
-            return self._clamp(event["cx"], event["cy"], self.viewport[1] / max(1.0, event["zoom"]))
+    def _target(self, event: dict, overview: bool) -> tuple[tuple[float, float, float], str | None]:
+        """The cue's framing and the inset corner it leaves the target clear of (None: no inset)."""
+
+        if not self.layout.portrait:
+            return self._clamp(event["cx"], event["cy"], self.viewport[1] / max(1.0, event["zoom"])), None
         rect = event.get("portrait") or event["rect"]
-        pad = PORTRAIT_PAD
         subject = event.get("subject")
         # An overview too wide for the tall window shows the diagram instead;
         # a shot of part of it, such as a feature and its popup, keeps its target.
-        if (rect["width"] * pad / self.aspect > self.max_h and subject and not event.get("portrait")
+        if (rect["width"] * PORTRAIT_PAD / self.aspect > self.max_h and subject and not event.get("portrait")
                 and _contains(rect, subject)):
             rect = subject
-        height = rect["height"] * pad
+        if not (self.layout.inset and overview):
+            return self._frame(event, rect, None), None
+        framings = [(self._frame(event, rect, corner), corner) for corner in INSET_CORNERS]
+        # A target too large to clear the inset anywhere keeps the default corner.
+        return next((row for row in framings if not self._covered(*row, rect)), framings[0])
+
+    def _frame(self, event: dict, rect: dict, corner: str | None) -> tuple[float, float, float]:
+        """Center the padded ``rect`` in the window rows that the inset at ``corner`` leaves free."""
+
+        top, bottom = self.layout.free_band(self.viewport, corner)
+        height = rect["height"] * PORTRAIT_PAD / (bottom - top)
         if event["zoom"] > 1 and not event.get("portrait"):
             # A tall target, such as the whole settings column, keeps close to
             # the logged zoom instead of shrinking to fit its full height.
             height = min(height, self.viewport[1] / event["zoom"] * PORTRAIT_ZOOM_SLACK)
-        height = max(height, rect["width"] * pad / self.aspect)
+        height = max(height, rect["width"] * PORTRAIT_PAD / self.aspect)
         height = min(max(height, self.max_h / PORTRAIT_MAX_ZOOM), self.max_h)
-        return self._clamp(rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2, height)
+        cy = rect["y"] + rect["height"] / 2 + height * (0.5 - (top + bottom) / 2)
+        return self._clamp(rect["x"] + rect["width"] / 2, cy, height)
+
+    def _covered(self, state: tuple[float, float, float], corner: str, rect: dict) -> bool:
+        """Whether the inset at ``corner`` hides part of ``rect`` in the view ``state``."""
+
+        cx, cy, height = state
+        scale = self.layout.card[3] / height          # window px per page px
+        left, top = cx - height * self.aspect / 2, cy - height / 2
+        x, y, width, inset_height = self.layout.inset_box(self.viewport, corner)
+        return ((rect["x"] - left) * scale < x + width and (rect["x"] + rect["width"] - left) * scale > x
+                and (rect["y"] - top) * scale < y + inset_height and (rect["y"] + rect["height"] - top) * scale > y)
 
     def _clamp(self, cx: float, cy: float, height: float) -> tuple[float, float, float]:
         height = min(height, self.max_h)
@@ -351,7 +422,7 @@ class Camera:
                 min(max(cy, half_h), self.viewport[1] - half_h), height)
 
     def _at(self, index: int, output: float) -> tuple[float, float, float]:
-        start, target, duration = self.cues[index]
+        start, target, _, duration = self.cues[index]
         origin = self._states[index]
         p = 1.0 if duration <= 0 else _ease((output - start) / duration)
         # Interpolate the visible height geometrically so zooming feels even.
@@ -359,11 +430,25 @@ class Camera:
         return (origin[0] + (target[0] - origin[0]) * p, origin[1] + (target[1] - origin[1]) * p, height)
 
     def at(self, output: float) -> tuple[float, float, float]:
-        starts = [cue[0] for cue in self.cues]
-        index = bisect.bisect_right(starts, output) - 1
+        index = bisect.bisect_right(self.starts, output) - 1
         if index < 0:
             return self._clamp(self.viewport[0] / 2, self.viewport[1] / 2, self.max_h)
         return self._clamp(*self._at(index, output))
+
+    def inset_at(self, output: float) -> tuple[str | None, float]:
+        """The inset's corner at ``output`` and its opacity: it fades out and back in when the corner changes."""
+
+        index = bisect.bisect_right(self.starts, output) - 1
+        if index < 0:
+            return (INSET_CORNERS[0], 1.0) if self.layout.inset else (None, 0.0)
+        start, _, corner, duration = self.cues[index]
+        previous = self.cues[index - 1][2] if index else corner
+        p = (output - start) / max(duration, INSET_FADE)
+        if previous == corner or p >= 1:
+            return corner, 1.0 if corner else 0.0
+        if corner is None or previous is None:
+            return (previous, 1 - p) if corner is None else (corner, p)
+        return (previous, 1 - 2 * p) if p < 0.5 else (corner, 2 * p - 1)
 
 
 class Pointer:
@@ -481,18 +566,17 @@ class Overlay:
         draw.text(((logo.width - text_width) / 2 + 2, logo.height + 6), text, font=font, fill=MUTED + (255,))
         return layer
 
-    # Latin runs wrap as words; any other character (for example CJK) may
-    # break on its own, except closing punctuation, which stays on its line.
+    # Intro titles: Latin runs wrap as words; any other character (for example
+    # CJK) may break on its own, except closing punctuation, which stays on its line.
     _TOKENS = re.compile(r"[(\[]?[A-Za-z0-9][\w.,:/()%+\-–'’]*\s*|\s+|.")
     # Titles also keep a short full-width parenthetical, such as （烟草）, whole.
     _PHRASES = re.compile(r"（[^（）]{1,8}）|" + _TOKENS.pattern)
     _NO_LINE_START = set("，。、；：？！）」』》〉”’·…")
 
-    def _wrap(self, text: str, font: ImageFont.FreeTypeFont, width: float,
-              tokens: re.Pattern | None = None) -> list[str]:
+    def _wrap(self, text: str, font: ImageFont.FreeTypeFont, width: float) -> list[str]:
         draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
         lines, line = [], ""
-        for token in (tokens or self._TOKENS).findall(text):
+        for token in self._PHRASES.findall(text):
             trial = line + token
             if (line.strip() and token.strip() and token not in self._NO_LINE_START
                     and draw.textlength(trial.rstrip(), font=font) > width):
@@ -502,6 +586,22 @@ class Overlay:
                 line = trial
         line = line.rstrip()
         return lines + [line] if line else lines
+
+    def caption_lines(self, step: int | None, title: str, subtitle: str) -> tuple[list[str], list[str]]:
+        """The caption's title and subtitle lines; raises ValueError when one needs a forbidden break."""
+
+        layout = self.layout
+        width = (layout.card[2] if layout.portrait else 1440) - (76 if step is not None else 0)
+        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        lines = []
+        for text, font in ((title, self.type.font(600, layout.title_size)),
+                           (subtitle, self.type.font(400, layout.subtitle_size))):
+            try:
+                lines.append(wrap_clauses(text, functools.partial(probe.textlength, font=font), width)
+                             if text else [])
+            except ValueError as error:
+                raise ValueError(f"{self.lang.code} {layout.name} caption: {error}") from None
+        return lines[0], lines[1]
 
     def caption(self, step: int | None, title: str, subtitle: str) -> Image.Image:
         key = ("caption", step, title, subtitle)
@@ -513,8 +613,7 @@ class Overlay:
         indent = 76 if step is not None else 0
         title_font = self.type.font(600, layout.title_size)
         subtitle_font = self.type.font(400, layout.subtitle_size)
-        title_lines = self._wrap(title, title_font, width - indent)
-        subtitle_lines = self._wrap(subtitle, subtitle_font, width - indent) if subtitle else []
+        title_lines, subtitle_lines = self.caption_lines(step, title, subtitle)
         title_step, subtitle_step = round(layout.title_size * 1.18), round(layout.subtitle_size * 1.35)
         if layout.portrait:
             height = title_step * len(title_lines) + subtitle_step * len(subtitle_lines) + 12
@@ -613,9 +712,40 @@ def _runs(text: str) -> list[tuple[str, bool]]:
     return [run for run in runs if run[0]]
 
 
-# Chinese has no spaces, so a break between two Han characters is kept only
-# after punctuation or the particle 的, where it cannot split a word.
+# Chinese has no spaces, so a break between two Han characters in an intro
+# title is kept only after punctuation or the particle 的, where it cannot
+# split a word. Captions are stricter (``wrap_clauses``).
 _SOFT_BREAK = set("，。、；：？！）」』》〉”’的")
+
+# A caption line ends only at a clause or sentence boundary (Owner rule of
+# 2026-10-11, VR-D09): after ". ; : , ? !" and a space, after "· › —", or after
+# their CJK forms. A word or a clause is never split, and 的 is no boundary.
+_CLAUSE_BREAK = re.compile(r"(?<=[.;:,?!])\s+|(?<=[·›—])\s*|(?<=[，。；：、？！])(?![」』》〉”’）])\s*")
+
+
+def wrap_clauses(text: str, measure, width: float) -> list[str]:
+    """Fill lines of at most ``width`` with whole clauses of ``text``.
+
+    ``measure`` returns a string's width. A clause wider than ``width`` raises
+    ValueError naming the caption, so its author shortens it.
+    """
+
+    cuts = sorted({match.end() for match in _CLAUSE_BREAK.finditer(text)} - {0, len(text)})
+    edges = [0, *cuts, len(text)]
+    lines, line = [], ""
+    for clause in (text[a:b] for a, b in zip(edges, edges[1:])):
+        if line and measure((line + clause).rstrip()) > width:
+            lines.append(line.rstrip())
+            line = clause
+        else:
+            line += clause
+    lines.append(line.rstrip())
+    for line in lines:
+        if measure(line) > width:
+            raise ValueError(f"{text!r} needs a line break inside {line!r} ({measure(line):.0f} px, "
+                             f"room for {width:.0f} px); shorten it, or end a clause earlier with "
+                             ". ; : , · › — or their CJK forms")
+    return lines
 
 
 def _clean_breaks(plain: str, lines: list[str]) -> bool:
@@ -710,8 +840,11 @@ class Recording:
     def duration(self) -> float:
         return self.timemap.duration
 
+    def source_index(self, moment: float) -> int:
+        return max(0, bisect.bisect_right(self.frame_times, self.timemap.source(moment)) - 1)
+
     def source_frame(self, moment: float) -> Image.Image:
-        index = max(0, bisect.bisect_right(self.frame_times, self.timemap.source(moment)) - 1)
+        index = self.source_index(moment)
         if self._decoded is None or self._decoded[0] != index:
             with Image.open(self.raw / "frames" / self.frames[index][1]) as image:
                 self._decoded = (index, image.convert("RGB"))
@@ -842,7 +975,8 @@ class Composer:
         self.lang = lang
         self.type = type_
         self.overlay = Overlay(type_, layout, lang)
-        self.camera = Camera(recording.events, recording.timemap, recording.viewport, layout.aspect, layout.portrait)
+        self.camera = Camera(recording.events, recording.timemap, recording.viewport, layout)
+        self._thumbnail: tuple[int, Image.Image] | None = None
         self.background = _background(layout.size)
         self.base, self.mask = _card_layers(self.background, layout.card)
         self.cursor, self.hotspot = _cursor()
@@ -854,12 +988,19 @@ class Composer:
                         for row in recording.meta.get("gallery", [])]
         self.edits = {name: EDITS[name](recording, len(self.finale)) for name in edits}
         self._static: dict = {}
+        # Lay out every caption first: one that needs a forbidden line break
+        # fails the render before anything is encoded.
+        for edit in self.edits.values():
+            shown = [caption for _, caption in recording.captions]
+            shown += [edit.finale_caption] if any(piece.kind == "finale" for piece in edit.pieces) else []
+            for step, title, subtitle in shown + ([MONTAGE_CAPTION] if edit.name == "highlights" else []):
+                self.overlay.caption(step if edit.numbered else None, lang(title), lang(subtitle))
 
     # recording ------------------------------------------------------------
-    def _screen(self, moment: float) -> Image.Image:
+    def _screen(self, moment: float, view: tuple[float, float, float]) -> Image.Image:
         rec = self.recording
         frame = rec.source_frame(moment)
-        cx, cy, vh = self.camera.at(moment)
+        cx, cy, vh = view
         vw = vh * self.layout.aspect
         left, top = cx - vw / 2, cy - vh / 2
         s = rec.scale
@@ -871,6 +1012,7 @@ class Composer:
         def to_screen(x: float, y: float) -> tuple[float, float]:
             return (x - left) * scale, (y - top) * scale
 
+        self._inset(screen, moment, view)
         draw = ImageDraw.Draw(screen, "RGBA")
         for start, stop, event in rec.popovers:
             if start <= moment < stop + 0.15:
@@ -889,6 +1031,57 @@ class Composer:
         hy = self.hotspot[1] * cursor.height / self.cursor.height
         screen.paste(cursor, (round(sx - hx), round(sy - hy)), cursor)
         return screen
+
+    def _inset_chrome(self, size: tuple[int, int]) -> tuple[Image.Image, Image.Image, Image.Image, int]:
+        """The inset's shadow, rounded mask, and border, made once per size."""
+
+        key = ("inset", size)
+        if key not in self._static:
+            width, height = size
+            pad, radius, ss = 16, 9, 4
+            outer = (width + 2 * pad, height + 2 * pad)
+            shadow = Image.new("L", outer, 0)
+            ImageDraw.Draw(shadow).rounded_rectangle((pad, pad + 5, pad + width, pad + height + 5), radius, fill=150)
+            shadow_layer = Image.new("RGBA", outer, (2, 6, 23, 0))
+            shadow_layer.putalpha(shadow.filter(ImageFilter.GaussianBlur(8)))
+            mask = Image.new("L", (width * ss, height * ss), 0)
+            ImageDraw.Draw(mask).rounded_rectangle((0, 0, width * ss - 1, height * ss - 1), radius * ss, fill=255)
+            border = Image.new("RGBA", (outer[0] * ss, outer[1] * ss), (0, 0, 0, 0))
+            ImageDraw.Draw(border).rounded_rectangle(
+                (pad * ss, pad * ss, (pad + width) * ss - 1, (pad + height) * ss - 1), radius * ss,
+                outline=(226, 232, 240, 255), width=2 * ss)
+            self._static[key] = (shadow_layer, mask.resize(size, Image.Resampling.LANCZOS),
+                                 border.resize(outer, Image.Resampling.LANCZOS), pad)
+        return self._static[key]
+
+    def _inset(self, screen: Image.Image, moment: float, view: tuple[float, float, float]) -> None:
+        """Draw the whole stage, small, with the part the window shows marked."""
+
+        corner, alpha = self.camera.inset_at(moment)
+        if corner is None or alpha <= 0:
+            return
+        rec = self.recording
+        x, y, width, height = self.layout.inset_box(rec.viewport, corner)
+        index = rec.source_index(moment)
+        if self._thumbnail is None or self._thumbnail[0] != index:
+            stage = rec.source_frame(moment).reduce(2)
+            self._thumbnail = (index, stage.resize((width, height), Image.Resampling.LANCZOS))
+        thumbnail = self._thumbnail[1].convert("RGBA")
+        cx, cy, vh = view
+        vw, scale = vh * self.layout.aspect, width / rec.viewport[0]
+        visible = ((cx - vw / 2) * scale, (cy - vh / 2) * scale, (cx + vw / 2) * scale - 1, (cy + vh / 2) * scale - 1)
+        shade = Image.new("RGBA", thumbnail.size, (15, 23, 42, 85))
+        ImageDraw.Draw(shade).rectangle(visible, fill=(0, 0, 0, 0))
+        thumbnail.alpha_composite(shade)
+        ImageDraw.Draw(thumbnail).rectangle(visible, outline=ACCENT + (255,), width=3)
+        shadow, mask, border, pad = self._inset_chrome((width, height))
+        thumbnail.putalpha(mask)
+        area = (x - pad, y - pad, x + width + pad, y + height + pad)
+        under = screen.crop(area).convert("RGBA")
+        inset = Image.alpha_composite(under, shadow)
+        inset.alpha_composite(thumbnail, (pad, pad))
+        inset.alpha_composite(border)
+        screen.paste(Image.blend(under, inset, alpha).convert("RGB") if alpha < 1 else inset.convert("RGB"), area[:2])
 
     def _progress(self, canvas: Image.Image, step: int | None) -> None:
         steps = self.recording.steps
@@ -949,22 +1142,21 @@ class Composer:
         rec = self.recording
         moment = piece.moment(local)
         extras = []
+        inset = self.camera.inset_at(moment)
         for start, (text, icon) in rec.toasts:
             age = moment - start
             if 0 <= age < 2.8:
                 alpha = min(_ease(age / 0.3), _ease((2.8 - age) / 0.4))
                 layer = self.overlay.toast(self.lang(text), icon)
-                card = self.layout.card
-                x = card[0] + (card[2] - layer.width) // 2
-                y = card[1] + card[3] - layer.height - 32
+                x, y = self.layout.toast_origin(rec.viewport, layer.size, *inset)
                 extras.append((_fade(layer, alpha), (x, y + round((1 - alpha) * 16))))
         factor = rec.timemap.factor(moment) * piece.rate(local)
         if factor >= edit.badge_from:
             badge = self.overlay.badge(factor)
-            card = self.layout.card
-            extras.append((badge, (card[0] + card[2] - badge.width - 22, card[1] + 20)))
+            extras.append((badge, self.layout.badge_origin(badge.size)))
         caption, caption_in, previous = rec.caption_at(moment, piece.start)
-        return self._compose_card(self._screen(moment), caption, caption_in, previous, extras, edit)
+        return self._compose_card(self._screen(moment, self.camera.at(moment)), caption, caption_in, previous,
+                                  extras, edit)
 
     def _finale_frame(self, piece: Piece, local: int, edit: Edit) -> Image.Image:
         index = min(len(self.finale) - 1, round(local * piece.speed))
@@ -1033,7 +1225,7 @@ class Composer:
         plain = "".join(run for run, _ in runs)
         slanted = [italic for run, italic in runs for _ in run]
         font = self.type.font(weight, size)
-        wrap = functools.partial(self.overlay._wrap, font=font, tokens=self.overlay._PHRASES)
+        wrap = functools.partial(self.overlay._wrap, font=font)
         sentences = [part.strip() for part in re.split(r"(?<=[。！？])|(?<=[.!?])\s+", plain) if part.strip()]
         if len(sentences) > 1 and all(len(wrap(part, width=width)) == 1 for part in sentences):
             wrapped = sentences
