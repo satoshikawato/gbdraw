@@ -753,16 +753,17 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page, { waitForPalette: false });
 
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
     app.addLinearSeq();
     app.addLinearSeq();
     const multiRecordFile = new File(['LOCUS       MULTI\n'], 'multi.gbk', { type: 'text/plain' });
     const singleRecordFile = new File(['LOCUS       SINGLE\n'], 'single.gbk', { type: 'text/plain' });
-    app.linearSeqs[0].gb = multiRecordFile;
-    app.linearSeqs[1].gb = multiRecordFile;
-    app.linearSeqs[2].gb = singleRecordFile;
+    app.linearSeqs[0].gb = bound(multiRecordFile);
+    app.linearSeqs[1].gb = bound(multiRecordFile);
+    app.linearSeqs[2].gb = bound(singleRecordFile);
   });
 
   const firstSource = page.locator('[data-linear-source-depth]').first();
@@ -1962,6 +1963,7 @@ ORIGIN
 
   await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ genbankText }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
     app.form.multi_record_canvas = false;
@@ -1985,10 +1987,10 @@ ORIGIN
     await window.Vue.nextTick();
 
     app.cInputType = 'gb';
-    app.files.c_gb = new File([genbankText], 'layout-preferences.gbk', {
+    app.files.c_gb = bound(new File([genbankText], 'layout-preferences.gbk', {
       type: 'text/plain',
       lastModified: 1
-    });
+    }));
     app.sessionTitle = 'layout-preferences-v40';
   }, { genbankText: recordText });
 
@@ -1999,14 +2001,15 @@ ORIGIN
 
   await activeProjection('circular', false);
   await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     state.biologicalFeatures.value = [{ nucleotide_sequence: 'ATGC' }];
-    state.linearSeqs[0].gb = new File(
-      [await app.files.c_gb.arrayBuffer()],
+    state.linearSeqs[0].gb = bound(new File(
+      [await state.inputFiles.fileOf(app.files.c_gb).arrayBuffer()],
       'inactive-linear-layout.gbk',
       { type: 'application/genbank', lastModified: 22 }
-    );
+    ));
     state.linearSeqs[0].definition = 'Inactive Linear draft';
     // The Linear drawing's stack, edited while Circular is shown.
     const linearAdv = state.drawingOf('linear').adv;
@@ -2220,16 +2223,17 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
 
   await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ genbankText, nestedStyle }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     // The Linear stack belongs to the Linear drawing (PR-1); it uses its own
     // copy of the review annotation set.
     const linearDrawing = (await import('./js/state.js')).state.drawingOf('linear');
     app.selectDrawing('circular');
     app.cInputType = 'gb';
-    app.files.c_gb = new File([genbankText], 'p3-session.gbk', {
+    app.files.c_gb = bound(new File([genbankText], 'p3-session.gbk', {
       type: 'application/genbank',
       lastModified: 31
-    });
+    }));
     app.annotationSets.splice(0, app.annotationSets.length);
     const annotationSet = app.addAnnotationSet('review');
     const annotation = app.addCoordinateAnnotation(annotationSet, { start: 1, end: 20 });
@@ -2672,12 +2676,13 @@ for (const mode of ['circular', 'linear']) {
     const Mode = mode === 'circular' ? 'Circular' : 'Linear';
     await openApp(page);
     await page.evaluate(async ({ diagramMode, genbankText }) => {
+      const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
       const app = window.__GBDRAW_APP__;
       app.selectDrawing(diagramMode);
       const file = new File([genbankText], 'extend-to.gbk', { type: 'text/plain', lastModified: 41 });
       if (diagramMode === 'circular') {
         app.cInputType = 'gb';
-        app.files.c_gb = file;
+        app.files.c_gb = bound(file);
       } else {
         app.lInputType = 'gb';
         app.setLinearSeqPrimaryFile(0, 'gb', file);
@@ -3280,7 +3285,8 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   const depthB = makeDepthTsv('BGC0000709', 50466, 50);
 
   await openApp(page, { waitForPalette: false });
-  await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
+  await page.evaluate(async ({ genbankAText, genbankBText, depthAText, depthBText }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
     app.cInputType = 'gb';
@@ -3296,15 +3302,15 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
       }
     });
     window.__GBDRAW_PRIMARY_READ_COUNT__ = () => primaryReadCount;
-    app.files.c_gb = combinedFile;
-    app.files.c_depth = [
+    app.files.c_gb = bound(combinedFile);
+    app.files.c_depth = bound([
       [new File([depthAText], 'sample-a.tsv', {
         type: 'text/tab-separated-values', lastModified: 2
       }), null],
       [null, new File([depthBText], 'sample-b.tsv', {
         type: 'text/tab-separated-values', lastModified: 3
       })]
-    ];
+    ]);
     Object.assign(app.form, {
       multi_record_canvas: true,
       show_depth: true,

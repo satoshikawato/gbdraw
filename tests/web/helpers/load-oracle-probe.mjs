@@ -128,6 +128,10 @@ function canon(value, stack = new Set()) {
   if (typeof value === 'string') return value.length > LONG ? { '#string': sha256(value), length: value.length } : value;
   if (typeof value === 'function' || typeof value === 'symbol') return { '#function': true };
   if (stack.has(value)) return { '#cycle': true };
+  // A ref the state's store knows stands for its file: dump the bytes' digest, not the ref.
+  if (value && typeof value === 'object' && 'fileId' in value && state.inputFiles.has(value.fileId)) {
+    return canon(state.inputFiles.fileOf(value), stack);
+  }
   if (value instanceof Blob || value instanceof File) {
     const entry = { '#file': value.name ?? null, size: value.size, type: value.type || '', sha256: null };
     fileDigests.push([entry, value]);

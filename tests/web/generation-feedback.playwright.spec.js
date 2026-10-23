@@ -95,8 +95,9 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   test.setTimeout(180_000);
   const external = await prepare(page, baseURL);
   const setInput = text => page.evaluate(async content => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, text);
   await setInput(source);
@@ -293,8 +294,9 @@ const cancelByQueuedClick = async (page, testInfo, target) => {
 const warmReady = async (page, baseURL) => {
   const external = await prepare(page, baseURL);
   await page.evaluate(async content => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, source);
   await generate(page).click();

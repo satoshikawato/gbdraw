@@ -327,8 +327,9 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#2468ac'; });
   // Empty input rows can carry auxiliary depth files and retain their identity.
   await page.getByRole('button', { name: 'Add sequence', exact: true }).first().click();
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.linearSeqs[1].depth = new File(['chr1\t1\t10\n'], 'depth.tsv', { lastModified: 123 });
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+    window.__GBDRAW_APP__.linearSeqs[1].depth = bound(new File(['chr1\t1\t10\n'], 'depth.tsv', { lastModified: 123 }));
   });
   const bytes = Buffer.from('CDS\tgene,product,locus_tag\r\n');
   await page.getByLabel('Priority File (TSV)', { exact: true }).setInputFiles({

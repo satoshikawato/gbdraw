@@ -51,7 +51,7 @@ const load = async (browser, file, contexts, viewport = { width: 1600, height: 1
   const genomeReads = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     const { getSessionResourceSource } = await import('./js/services/file-content-cache.js');
-    const source = getSessionResourceSource(state.files.c_gb);
+    const source = getSessionResourceSource(state.inputFiles.fileOf(state.files.c_gb));
     const ids = (source?.descriptors || (source?.descriptor ? [source] : [])).map(part => part.resourceId);
     // The later definition-preview helper legitimately consumes source bytes.
     // Observe metadata projection at its boundary, independent of trace overhead.
@@ -69,7 +69,7 @@ const snapshot = page => page.evaluate(async () => {
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
   const identity = async descriptor => ({ size: descriptor.size,
     sha256: await digest(Uint8Array.from(atob(descriptor.data), char => char.charCodeAt(0))) });
-  const source = getSessionResourceSource(state.files.c_gb);
+  const source = getSessionResourceSource(state.inputFiles.fileOf(state.files.c_gb));
   const components = source?.descriptors || (source?.descriptor ? [source] : []);
   const committed = getCommittedCanonicalSession();
   return {
@@ -79,7 +79,7 @@ const snapshot = page => page.evaluate(async () => {
     source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
       type: state.files.c_gb.type, lastModified: state.files.c_gb.lastModified,
       isArray: Array.isArray(state.files.c_gb),
-      sha256: await digest(await readFileBytes(state.files.c_gb)) },
+      sha256: await digest(await readFileBytes(state.inputFiles.fileOf(state.files.c_gb))) },
     records: state.circularRecordList.value.map(record => ({ id: record.id, recordKey: record.recordKey })),
     request: committed.renderRequest,
     resources: Object.fromEntries(await Promise.all(Object.entries(committed.resources)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { boundState } from './helpers/input-files.mjs';
 
 globalThis.window = {
   Vue: {
@@ -15,7 +16,12 @@ const { serializeActiveRenderFiles: serializeDrawingFiles } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
 // A fixture state is its own drawing.
-const serializeActiveRenderFiles = (mode, fixture, ...rest) => serializeDrawingFiles(mode, fixture, fixture, ...rest);
+// Its input files are registered in a store and named by ref, as the app binds them.
+const serializeActiveRenderFiles = (mode, fixture, snapshot, ...rest) => {
+  const bound = boundState(fixture);
+  const edges = snapshot?.edges?.map((edge) => ({ ...edge, file: bound.inputFiles.registerFile(edge.file) }));
+  return serializeDrawingFiles(mode, bound, bound, ...(snapshot ? [edges ? { ...snapshot, edges } : snapshot] : []), ...rest);
+};
 const {
   adoptCurrentSessionResources,
   createSessionResourceFileView

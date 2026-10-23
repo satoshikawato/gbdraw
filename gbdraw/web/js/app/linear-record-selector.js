@@ -5,7 +5,7 @@ import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
-/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
@@ -32,8 +32,8 @@ export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
  * @property {SequenceRecord[]} records
  * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
  * @property {string} inputType
- * @property {FileLike | null} primaryFile
- * @property {FileLike | null} pairedFile
+ * @property {InputFileRef | null} primaryFile
+ * @property {InputFileRef | null} pairedFile
  */
 
 /**
@@ -99,8 +99,8 @@ const sanitizePathSegment = (value) =>
 /**
  * @typedef {Object} LinearRecordReadRequest
  * @property {string} inputType
- * @property {FileLike | null} primaryFile
- * @property {FileLike | null} pairedFile
+ * @property {InputFileRef | null} primaryFile
+ * @property {InputFileRef | null} pairedFile
  * @property {string} temporaryPathPrefix
  */
 
@@ -149,7 +149,7 @@ export const createLinearRecordSelector = ({
   /**
    * @param {LinearSeqLike} seq
    * @param {string} [inputType]
-   * @returns {{ primaryFile: FileLike | null, pairedFile: FileLike | null }}
+   * @returns {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }}
    */
   const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
     inputType === 'gff'
@@ -201,8 +201,8 @@ export const createLinearRecordSelector = ({
   // an error the reader reported for those bytes. A refresh reuses it.
   /**
    * @param {string} inputType
-   * @param {FileLike | null} primaryFile
-   * @param {FileLike | null} pairedFile
+   * @param {InputFileRef | null} primaryFile
+   * @param {InputFileRef | null} pairedFile
    */
   const settledStateFor = (inputType, primaryFile, pairedFile) => Object.values(selectorStateByUid)
     .find((stored) => (
@@ -217,7 +217,7 @@ export const createLinearRecordSelector = ({
     });
   };
 
-  /** @param {{ generation: number, uid: string, primaryFile: FileLike | null, pairedFile: FileLike | null, inputType: string }} request */
+  /** @param {{ generation: number, uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, inputType: string }} request */
   const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
     if (recordDiscoverySuppressed()) return false;
@@ -259,7 +259,7 @@ export const createLinearRecordSelector = ({
     if (state.mode.value !== 'linear') return;
 
     const inputType = state.lInputType.value;
-    /** @type {{ uid: string, primaryFile: FileLike, pairedFile: FileLike | null }[]} */
+    /** @type {{ uid: string, primaryFile: InputFileRef, pairedFile: InputFileRef | null }[]} */
     const targets = [];
     for (const seq of state.linearSeqs) {
       const uid = uidFor(seq);

@@ -4,6 +4,7 @@
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
+/** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -96,7 +97,12 @@ import {
 } from '../services/main-session-comparison-frame.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
-import { retainHistoryAndBoundFiles } from '../services/drawing/inputs.js';
+import {
+  bindInputFile,
+  bindInputFileList,
+  registerInputFiles,
+  retainHistoryAndBoundFiles
+} from '../services/drawing/inputs.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
   groupLinearSourceRecords,
@@ -827,8 +833,8 @@ export const createAppSetup = () => {
     linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
   ));
   const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
-  /** @param {{ name?: string }} file */
-  const chosenFileName = (file) => String(file.name || t('Unnamed file'));
+  /** @param {{ name?: string } | null} file */
+  const chosenFileName = (file) => String(file?.name || t('Unnamed file'));
   /**
    * The file names of a Linear File, as its dialogs name it: every file the
    * row holds, which a removal takes, also one of the other input type.
@@ -1205,7 +1211,7 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   };
-  /** @param {string} id @param {File | null} file */
+  /** @param {string} id @param {InputFileCandidate} file */
   const setLinearComparisonFile = (id, file) => {
     const drawing = state.drawingOfMode('linear');
     const sessionBusy = sessionOperationAvailability();
@@ -1213,9 +1219,10 @@ export const createAppSetup = () => {
     const next = selectedPlanForEdit(drawing);
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
-    setComparisonEdgeFile(edge, file);
+    const ref = state.inputFiles.registerFile(file);
+    setComparisonEdgeFile(edge, ref);
     edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
-    edge.included = Boolean(file) || edge.included;
+    edge.included = Boolean(ref) || edge.included;
     replaceLinearComparisonPlan(drawing, next);
   };
   /** @param {string} id */
@@ -1404,7 +1411,7 @@ export const createAppSetup = () => {
   // History step never add one.
   /** @type {Set<string>} */
   const pendingLinearUploads = new Set();
-  /** @type {File | null} */
+  /** @type {InputFileRef | null} */
   let pendingCircularUpload = null;
   /** @type {RecordListRequest[]} */
   const recordListRequests = reactive([]);
@@ -1473,7 +1480,7 @@ export const createAppSetup = () => {
   };
   /**
    * The Circular input's first discovery after its upload (success or error).
-   * @param {{ primaryFile: File | null, pairedFile: File | null, recordCount: number }} discovered
+   * @param {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, recordCount: number }} discovered
    */
   const handleCircularRecordsDiscovered = ({ primaryFile, pairedFile, recordCount }) => {
     rebindAnnotationRecords();
@@ -1492,16 +1499,24 @@ export const createAppSetup = () => {
     });
     await linearRecordSelector.refresh();
   };
+  /**
+   * The records of one input: a GenBank file, or a GFF3 file with its FASTA.
+   * The bindings name the files by ref; their bytes come from the store.
+   * @param {string} inputType
+   * @param {InputFileRef | null} primaryFile
+   * @param {InputFileRef | null} pairedFile
+   */
+  const readInputRecords = (inputType, primaryFile, pairedFile) => (
+    inputType === 'gff'
+      ? discoverGffFastaRecords({ gffFile: state.inputFiles.fileOf(primaryFile), fastaFile: state.inputFiles.fileOf(pairedFile) })
+      : discoverSequenceRecords({ file: state.inputFiles.fileOf(primaryFile), format: 'genbank' })
+  );
   const paletteLoader = createPaletteLoader({ state });
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
     onRecordsDiscovered: handleLinearRecordsDiscovered,
-    recordReader: ({ inputType, primaryFile, pairedFile }) => (
-      inputType === 'gff'
-        ? discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
-        : discoverSequenceRecords({ file: primaryFile, format: 'genbank' })
-    )
+    recordReader: ({ inputType, primaryFile, pairedFile }) => readInputRecords(inputType, primaryFile, pairedFile)
   });
   const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
   const circularAnnotationSourceKey = () => annotationSourceKey({
@@ -2683,8 +2698,8 @@ export const createAppSetup = () => {
   /**
    * @param {DrawingState} drawing
    * @param {number} index
-   * @param {FileLike | null} file
-   * @param {FileLike | null} [previousFile]
+   * @param {InputFileRef | null} file
+   * @param {InputFileRef | null} [previousFile]
    */
   const updateDepthTrackLabelFromFile = (drawing, index, file, previousFile = null) => {
     if (!file) return;
@@ -2706,6 +2721,7 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
+    const ref = state.inputFiles.registerFile(file);
     ensureDepthTrackConfigCount(drawing, idx + 1);
     depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
     const rows = circularDepthRows();
@@ -2714,12 +2730,12 @@ export const createAppSetup = () => {
     retireLegendStylesOfUnnamedCaptions(() => {
       circularTrackSlotEditor.changeCircularDepthSources(() => {
         rows.forEach((row) => {
-          row[idx] = file || null;
+          row[idx] = ref;
         });
         files.c_depth = rows.map((row) => compactDepthFileSlots(row));
       });
-      if (file) {
-        updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
+      if (ref) {
+        updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
         drawing.form.show_depth = true;
       }
     });
@@ -2733,6 +2749,7 @@ export const createAppSetup = () => {
     const targets = Array.from(sequences || []).filter(Boolean);
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
+    const ref = state.inputFiles.registerFile(file);
     const logicalWidth = Math.max(linearDepthLogicalWidth(), idx + 1);
     padLinearDepthRows(logicalWidth);
     ensureDepthTrackConfigCount(drawing, logicalWidth);
@@ -2741,16 +2758,16 @@ export const createAppSetup = () => {
       linearTrackSlotEditor.changeLinearDepthSources(() => {
         targets.forEach((seq) => {
           const slots = depthFileSlotsFromValue(seq.depth);
-          if (file) {
-            slots[idx] = file;
+          if (ref) {
+            slots[idx] = ref;
             seq.depth = slots;
           } else {
             seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
           }
         });
       });
-      if (file) {
-        updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
+      if (ref) {
+        updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
         drawing.form.show_depth = true;
       }
     });
@@ -2915,26 +2932,25 @@ export const createAppSetup = () => {
     files.c_conservation_blasts = [];
     files.c_conservation_blasts_source = null;
   };
-  /** @param {DrawingState} drawing @param {FileLike | FileLike[] | null | undefined} nextFiles */
+  /** @param {DrawingState} drawing @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles Files, or refs kept */
   const setCircularConservationSourceFiles = (drawing, nextFiles) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const normalized = normalizeFileList(nextFiles);
     if (isCircularConservationUploadSource(drawing)) {
-      files.c_conservation_blasts = normalized;
+      bindInputFileList(state.inputFiles, files, 'c_conservation_blasts', nextFiles);
       files.c_conservation_blasts_source = null;
     } else {
       clearDerivedCircularConservationBlasts();
-      files.c_conservation_fastas = normalized;
+      bindInputFileList(state.inputFiles, files, 'c_conservation_fastas', nextFiles);
     }
     losatCacheInfo.value = [];
     reconcileCircularConservation(drawing);
   };
-  /** @param {FileLike | FileLike[] | null | undefined} nextFiles */
+  /** @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles */
   const setCircularConservationUploadFiles = (nextFiles) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    files.c_conservation_blasts = normalizeFileList(nextFiles);
+    bindInputFileList(state.inputFiles, files, 'c_conservation_blasts', nextFiles);
     files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
     losatCacheInfo.value = [];
@@ -3056,6 +3072,7 @@ export const createAppSetup = () => {
     const target = event?.target || null;
     const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
     if (!selectedFile) return;
+    const selectedRef = /** @type {InputFileRef} */ (state.inputFiles.registerFile(selectedFile));
     // D12: the Python ring reader names a GenBank or DDBJ row after it is added
     // (a read failure keeps the file-name default; Generate reports it).
     // Generate waits for these reads before it reads the row labels.
@@ -3064,7 +3081,7 @@ export const createAppSetup = () => {
         const applied = applyComparisonSequenceRecordLabel({
           series: drawing.circularConservation.series,
           sourceFiles: getCircularConservationSourceFiles(drawing),
-          file: selectedFile,
+          file: selectedRef,
           recordLabel
         });
         refreshCircularConservationSlots(drawing);
@@ -3078,7 +3095,7 @@ export const createAppSetup = () => {
     // after the label read, so Undo and Redo restore the label.
     const step = history.runUndoable(msg('Change uploaded file'), settleComparisonRecordLabels);
     clearDerivedCircularConservationBlasts();
-    files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
+    files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedRef];
     losatCacheInfo.value = [];
     reconcileCircularConservation(drawing);
     if (target) target.value = '';
@@ -3095,7 +3112,7 @@ export const createAppSetup = () => {
       ? [...files.c_conservation_sequence_sources]
       : [];
     while (next.length <= index) next.push(null);
-    next[index] = selectedFile;
+    next[index] = state.inputFiles.registerFile(selectedFile);
     files.c_conservation_sequence_sources = next;
     if (event?.target) event.target.value = '';
   };
@@ -3127,9 +3144,9 @@ export const createAppSetup = () => {
       }, idx);
       drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
       drawing.circularConservation.labels = kept.labels;
-      files.c_conservation_blasts = kept.blasts;
-      files.c_conservation_fastas = kept.fastas;
-      files.c_conservation_sequence_sources = kept.sequenceSources;
+      bindInputFileList(state.inputFiles, files, 'c_conservation_blasts', kept.blasts);
+      files.c_conservation_fastas = registerInputFiles(state.inputFiles, kept.fastas);
+      files.c_conservation_sequence_sources = registerInputFiles(state.inputFiles, kept.sequenceSources);
       files.c_conservation_blasts_source = kept.blasts.length > 0
         ? 'losat-cache'
         : null;
@@ -4759,9 +4776,7 @@ export const createAppSetup = () => {
         const pairedFile = inputType === 'gff' ? seq.fasta : null;
         const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
         try {
-          const records = inputType === 'gff'
-            ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
-            : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
+          const records = await readInputRecords(inputType, primaryFile, pairedFile);
           return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'ready', records };
         } catch (error) {
           return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
@@ -6178,9 +6193,10 @@ export const createAppSetup = () => {
     if (busy) return busy;
     const nextValue = value ?? null;
     const previous = files[field];
-    if (previous === nextValue) return;
-    changeRecordSources(() => { files[field] = nextValue; });
-    if (nextValue) pendingCircularUpload = nextValue;
+    const nextRef = state.inputFiles.registerFile(nextValue);
+    if (previous === nextRef) return;
+    changeRecordSources(() => { bindInputFile(state.inputFiles, files, field, nextValue); });
+    if (nextRef) pendingCircularUpload = nextRef;
     // An upload into an empty slot starts reading another input (after an
     // Input switch), whose records the OFF list does not name.
     if (!previous) {
@@ -6530,7 +6546,7 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
     if (!['gb', 'gff', 'fasta'].includes(field)) return;
 
-    const nextValue = value ?? null;
+    const nextValue = state.inputFiles.registerFile(value);
     const seq = linearSeqs[idx];
     if (seq[field] === nextValue) return;
     // `groupLinearSourceRecords` puts every record card of `linearSeqs` in a group, and `seq` is one of them.

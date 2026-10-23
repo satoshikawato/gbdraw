@@ -17,6 +17,18 @@ await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { bindLoadedInputs } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+// A state as the app binds it: each input file is registered in the store and named by its ref.
+const boundState = (source, store = createHistoryFileStore()) => {
+  const bound = bindLoadedInputs(store, {
+    files: source.files || {}, linearSeqs: source.linearSeqs || [],
+    linearComparisonPlan: source.linearComparisonPlan || { edges: [] }, circularRecordDiscovery: {}
+  });
+  return {
+    ...source, inputFiles: store, files: bound.files, linearSeqs: bound.linearSeqs,
+    ...(source.linearComparisonPlan ? { linearComparisonPlan: bound.linearComparisonPlan } : {})
+  };
+};
 const { buildSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resources.js'))
 );
@@ -138,8 +150,7 @@ const committed = {
 
 // The table cards name their files by ref of the input file store.
 const inputFiles = createHistoryFileStore();
-const state = {
-  inputFiles,
+const state = boundState({
   files: {
     c_gb: activeFile,
     c_gff: sameMetadataDifferentA,
@@ -193,7 +204,7 @@ const state = {
       losatFilename: ''
     }]
   }
-};
+}, inputFiles);
 
 const built = await buildSessionResources(state, committed, fixtureDrawing(state));
 const bindings = built.webFiles.bindings;
@@ -316,7 +327,7 @@ dormantComparisonFile.arrayBuffer = async () => {
   dormantComparisonReads += 1;
   return dormantComparisonArrayBuffer();
 };
-const dormantSaveState = {
+const dormantSaveState = boundState({
   ...state,
   linearComparisonPlan: {
     mode: 'none',
@@ -333,7 +344,7 @@ const dormantSaveState = {
       losatFilename: 'retained.raw.tsv'
     }]
   }
-};
+}, inputFiles);
 const dormantCommitted = structuredClone(committed);
 dormantCommitted.renderRequest.mode = 'linear';
 dormantCommitted.renderRequest.comparisons = [];
@@ -371,7 +382,7 @@ const frozen = JSON.parse(frozenBytes);
 const frozenLeaf = frozen.webFiles.bindings.c_gb;
 const frozenTable = backing.adoptCurrentSessionResources(frozen.resources);
 const oldFile = backing.createSessionResourceFileView(frozenTable, frozenLeaf.resourceId, frozenLeaf);
-const promoted = await buildSessionResources({ files: { c_gb: oldFile } }, authority.adoptRuntimeCanonicalSession(frozen));
+const promoted = await buildSessionResources(boundState({ files: { c_gb: oldFile } }), authority.adoptRuntimeCanonicalSession(frozen));
 assert.equal(promoted.webFiles.bindings.schema, 2);
 assert.deepEqual(promoted.webFiles.bindings.c_gb, frozenLeaf);
 
@@ -390,7 +401,7 @@ for (const adopted of [false, true]) {
   const file = backing.createCombinedSessionResourceFileView(table, components, {
     name: '', type: '', lastModified: 0.25
   });
-  const state = { files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } };
+  const state = boundState({ files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } });
   const canonical = adopted ? authority.adoptRuntimeCanonicalSession(committed) : committed;
   const first = await buildSessionResources(state, canonical, fixtureDrawing(state));
   const binding = first.webFiles.bindings.c_gb;
@@ -409,9 +420,9 @@ for (const adopted of [false, true]) {
   const loaded = backing.createCombinedSessionResourceFileView(
     backing.adoptCurrentSessionResources(first.resources), binding.components, binding
   );
-  const second = await buildSessionResources({ files: { c_gb: loaded } }, authority.adoptRuntimeCanonicalSession(first));
+  const second = await buildSessionResources(boundState({ files: { c_gb: loaded } }), authority.adoptRuntimeCanonicalSession(first));
   assert.deepEqual(second.webFiles.bindings.c_gb, binding);
-  state.files.c_gb = makeFile('native replacement\n', 'replacement.gb');
+  state.files.c_gb = state.inputFiles.registerFile(makeFile('native replacement\n', 'replacement.gb'));
   const replaced = await buildSessionResources(state, canonical, fixtureDrawing(state));
   assert.equal(replaced.webFiles.bindings.c_gb.kind, undefined);
   assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
@@ -447,7 +458,7 @@ for (const adopted of [false, true]) {
     resources: { 'record-1-genbank': genbank('LINEAR', 'record-1.gb'), 'record-2-genbank': genbank('SHARED', 'record-2.gb') },
     webFiles: { resourceOriginalNames: { 'record-1-genbank': 'linear.gb' }, linearRecordMetadata: [{ recordKey: 'record-1' }] }
   };
-  const noInputs = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const noInputs = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
   const recordResource = (built, renderRequest, index) => built.resources[renderRequest.records[index].source.resourceId];
   const text = (descriptor) => Buffer.from(descriptor.data, 'base64').toString();
 
@@ -510,7 +521,7 @@ for (const adopted of [false, true]) {
     resources: { 'record-1-genbank': genbank('NEW LINEAR', 'new.gb') },
     webFiles: {}
   };
-  const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const draft = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
   const built = await buildSessionResources(draft, loadedCircular, fixtureDrawing(draft), freshLinear);
   const written = Object.values(built.resources).map((descriptor) => Buffer.from(descriptor.data, 'base64').toString()).sort();
   assert.deepEqual(written, ['CIRCULAR', 'NEW LINEAR']);
@@ -543,7 +554,7 @@ for (const adopted of [false, true]) {
     resources: { 'record-1-genbank': genbank('CIRCULAR', 'circular.gb') },
     webFiles: { circularInputOriginalName: 'genome.gbk', conservationBlastSource: 'losat-cache' }
   };
-  const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const draft = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
   const saved = await buildSessionResources(draft, shownLinear, fixtureDrawing(draft), keptCircular);
   assert.equal(saved.webFiles.circularInputOriginalName, 'genome.gbk');
   assert.equal(saved.webFiles.conservationBlastSource, 'losat-cache');

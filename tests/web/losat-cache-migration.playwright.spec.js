@@ -684,14 +684,15 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await importSession(page, fixturePath);
 
   const renamed = await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     for (let index = 0; index < app.linearSeqs.length; index += 1) {
       const source = app.linearSeqs[index].gb;
-      app.linearSeqs[index].gb = new File(
+      app.linearSeqs[index].gb = bound(new File(
         [await source.arrayBuffer()],
         `renamed-cache-input-${index + 1}.gbk`,
         { type: source.type || 'text/plain', lastModified: 0 }
-      );
+      ));
     }
     return app.linearSeqs.map((record) => ({
       name: record.gb.name,

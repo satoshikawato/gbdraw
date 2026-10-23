@@ -257,10 +257,11 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   await inputAddAction(page).click();
   await expect(page.locator('[data-linear-record-card]')).toHaveCount(2);
   await expectInside(firstUploader, settingsPane);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
-    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = bound(new File(['first'], 'first.gbk', { type: 'text/plain' }));
+    app.linearSeqs[1].gb = bound(new File(['second'], 'second.gbk', { type: 'text/plain' }));
   });
   await expect(commands.getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs', exact: true
@@ -487,10 +488,11 @@ test('imported comparison resolutions are explicit and create one History entry 
   test.setTimeout(300000);
   await openLinear(page);
   await inputAddAction(page).click();
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
-    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = bound(new File(['first'], 'first.gbk', { type: 'text/plain' }));
+    app.linearSeqs[1].gb = bound(new File(['second'], 'second.gbk', { type: 'text/plain' }));
   });
   await comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs'
@@ -1799,10 +1801,11 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   await page.setViewportSize({ width: 390, height: 844 });
   await openLinear(page);
   await inputAddAction(page).click();
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
-    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = bound(new File(['first'], 'first.gbk', { type: 'text/plain' }));
+    app.linearSeqs[1].gb = bound(new File(['second'], 'second.gbk', { type: 'text/plain' }));
   });
   await comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs'

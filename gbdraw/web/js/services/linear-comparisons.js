@@ -2,14 +2,16 @@
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
 import { msg } from '../utils/i18n.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
+/** @import { InputFileRef } from './history-files.js' */
 /** @typedef {(leaf: FieldLeaf) => void} PlanLossCollector Told each stored value the plan does not use as stored. */
 /**
  * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
  * @typedef {'losat' | 'upload'} LinearComparisonSource
  */
 /**
- * One draft pair of the Linear comparison plan. `file` is the uploaded BLAST
- * TSV File (a Web File object, or null).
+ * One draft pair of the Linear comparison plan. `file` names the uploaded
+ * BLAST TSV by ref (`state.inputFiles`), or is null. A Load candidate's edge
+ * holds its loaded file until `bindLoadedInputs` registers it at install.
  * @typedef {object} LinearComparisonEdge
  * @property {string} id
  * @property {string} queryUid
@@ -18,7 +20,7 @@ import { msg } from '../utils/i18n.js';
  * @property {boolean} fileActive
  * @property {boolean} losatFilenameActive
  * @property {LinearComparisonSource} source
- * @property {any} file
+ * @property {InputFileRef | null} file
  * @property {string} losatFilename
  */
 /**
@@ -53,7 +55,7 @@ import { msg } from '../utils/i18n.js';
  * @property {number} ordinal
  * @property {LinearComparisonSource} source
  * @property {boolean} included
- * @property {any} file
+ * @property {InputFileRef | null} file
  * @property {boolean} fileActive
  * @property {string} losatFilename
  * @property {boolean} losatFilenameActive
@@ -201,7 +203,8 @@ export const createLinearComparisonEdge = ({
   fileActive: fileActive === true,
   losatFilenameActive: losatFilenameActive === true,
   source: normalizeSource(source, LINEAR_COMPARISON_SOURCES.UPLOAD),
-  file: file || null,
+  // A binding's ref, or the loaded file of a Load candidate (see the typedef).
+  file: /** @type {InputFileRef | null} */ (file || null),
   losatFilename: String(losatFilename || '')
 });
 
@@ -211,7 +214,7 @@ export const createLinearComparisonEdge = ({
  * The pair card's file input and its Remove set it, and so does Load where it
  * drops the edge's file binding (OV-899).
  * @param {LinearComparisonEdge} edge Changed in place.
- * @param {File | null} file
+ * @param {InputFileRef | null} file The ref of the file (`state.inputFiles.registerFile`).
  */
 export const setComparisonEdgeFile = (edge, file) => {
   edge.file = file || null;
@@ -476,7 +479,8 @@ export const validateLinearComparisonEdges = ({
 
 /**
  * @param {{
- *   edge: LinearComparisonEdgeInit | null | undefined, queryUid: string, subjectUid: string,
+ *   edge: (Omit<LinearComparisonEdgeInit, 'file'> & { file?: InputFileRef | null }) | null | undefined,
+ *   queryUid: string, subjectUid: string,
  *   queryIndex: number | undefined, subjectIndex: number | undefined, source: LinearComparisonSource, ordinal: number
  * }} input
  */

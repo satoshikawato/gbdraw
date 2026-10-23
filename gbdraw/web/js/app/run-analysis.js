@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
@@ -1171,7 +1172,7 @@ const readAllLosatFasta = async (file, fmt) => {
   return records.map((record) => buildFastaText(record)).join('');
 };
 /**
- * @param {FileLike | FileLike[] | null | undefined} sourceFiles
+ * @param {InputFileRef | InputFileRef[] | null | undefined} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
  */
 const buildConservationSeries = (sourceFiles, circularConservation) => {
@@ -1486,7 +1487,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
- * @property {((discovered: { primaryFile: File | null, pairedFile: File | null, recordCount: number }) => void) | null}
+ * @property {((discovered: { primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, recordCount: number }) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of the Circular input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
@@ -1591,6 +1592,7 @@ export const createRunAnalysis = ({
     circularRecordList,
     circularRecordDiscovery,
     files,
+    inputFiles,
     // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
     linearSeqs: allLinearSeqs,
     extractedFeatures,
@@ -2393,8 +2395,8 @@ export const createRunAnalysis = ({
 
     try {
       const records = inputType === 'gff'
-        ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
-        : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
+        ? await discoverGffFastaRecords({ gffFile: inputFiles.fileOf(primaryFile), fastaFile: inputFiles.fileOf(pairedFile) })
+        : await discoverSequenceRecords({ file: inputFiles.fileOf(primaryFile), format: 'genbank' });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
@@ -2934,7 +2936,7 @@ export const createRunAnalysis = ({
         const numeric = Number(value);
         return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
       };
-      /** @param {(FileLike | null)[][]} rows */
+      /** @param {(InputFileRef | null)[][]} rows */
       const depthTrackEntriesFromRows = (rows) => Array.from(
         { length: depthTrackMatrixWidth(rows) },
         (_, index) => {
@@ -3133,7 +3135,7 @@ export const createRunAnalysis = ({
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
 
-          /** @param {OrderedConservationSource[]} comparisonEntries */
+          /** @param {OrderedConservationSource<InputFileRef>[]} comparisonEntries */
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
               drawing.circularConservation.losat_program
@@ -3154,11 +3156,12 @@ export const createRunAnalysis = ({
               return ['--task', normalizedTask];
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
-            const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
+            // Generate checked above that the Circular input is complete.
+            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(cInputType.value === 'gb' ? files.c_gb : files.c_fasta));
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
             const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
               [subjectFile], `ring-subject:${subjectFmt}`, async () => {
-                const fasta = await readAllLosatFasta(/** @type {FileLike} */ (subjectFile), subjectFmt);
+                const fasta = await readAllLosatFasta(subjectFile, subjectFmt);
                 return Object.freeze({ fasta, hash: await hashText(fasta) });
               }
             );
@@ -3176,7 +3179,8 @@ export const createRunAnalysis = ({
             for (let index = 0; index < comparisonEntries.length; index += 1) {
               throwIfGenerationCanceled();
               const comparisonEntry = comparisonEntries[index];
-              const fileObj = comparisonEntry?.file || comparisonEntry;
+              // A ring source names its bound file.
+              const fileObj = /** @type {FileLike} */ (inputFiles.fileOf(comparisonEntry.file));
               // One sequence reader (D12): the Python helper reads FASTA, GenBank
               // or DDBJ and returns the query FASTA that the CLI ring hashes.
               const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
@@ -3658,7 +3662,15 @@ export const createRunAnalysis = ({
         let nextResources;
         // The record sources this Generate's request will name, read once (OV-1595).
         const nextRecordResources = () => {
-          if (nextResources === undefined) nextResources = linearRecordSourceResources(linearSeqs, lInputType.value);
+          // The descriptors' payload owners are the cards' files (the store's), not their refs.
+          if (nextResources === undefined) {
+            nextResources = linearRecordSourceResources(linearSeqs.map((seq) => ({
+              ...seq,
+              gb: inputFiles.fileOf(seq.gb),
+              gff: inputFiles.fileOf(seq.gff),
+              fasta: inputFiles.fileOf(seq.fasta)
+            })), lInputType.value);
+          }
           return nextResources;
         };
 
@@ -3693,15 +3705,18 @@ export const createRunAnalysis = ({
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
           const recordSelector = !useProteinBlastp && lInputType.value === 'gff'
             ? await gffFastaReaderSelector({
-                gffFile: losatSeqs[idx]?.gff, fastaFile: losatSeqs[idx]?.fasta, selector: recordSelectors[idx] ?? ''
+                gffFile: inputFiles.fileOf(losatSeqs[idx]?.gff), fastaFile: inputFiles.fileOf(losatSeqs[idx]?.fasta),
+                selector: recordSelectors[idx] ?? ''
               })
             : (recordSelectors[idx] ?? '');
           const reverseFlag = /** @type {string} */ ('0');
-          const sourceFile = lInputType.value === 'gb'
+          // The bytes of the card's files (the card names them by ref); a
+          // searched card holds its source file (Generate checked each card).
+          const sourceFile = /** @type {FileLike} */ (inputFiles.fileOf(lInputType.value === 'gb'
             ? losatSeqs[idx]?.gb
-            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta);
+            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta)));
           const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
-            ? losatSeqs[idx]?.fasta
+            ? inputFiles.fileOf(losatSeqs[idx]?.fasta)
             : null;
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
@@ -3739,7 +3754,7 @@ export const createRunAnalysis = ({
                 nextRecordResources() ?? (
                   typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
                 ),
-                /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null
+                sourceFile, pairedFastaFile ?? null
               );
               /** @type {{ role: string, bytes: ArrayBuffer }[]} */
               const helperFiles = [];
@@ -3822,7 +3837,7 @@ export const createRunAnalysis = ({
               };
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
-                const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
+                const { records, parsed } = await readParsedSequenceRecords(sourceFile, fmt);
                 if (records) {
                   if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
                   return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
@@ -4895,7 +4910,9 @@ export const createRunAnalysis = ({
           throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
         }
         const converted = await convertRingTablesOncePerFrame(
-          /** @type {[FileLike] | [FileLike, FileLike]} */ (cInputType.value === 'gb' ? [files.c_gb] : [files.c_gff, files.c_fasta]),
+          /** @type {[FileLike] | [FileLike, FileLike]} */ (cInputType.value === 'gb'
+            ? [inputFiles.fileOf(files.c_gb)]
+            : [inputFiles.fileOf(files.c_gff), inputFiles.fileOf(files.c_fasta)]),
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.

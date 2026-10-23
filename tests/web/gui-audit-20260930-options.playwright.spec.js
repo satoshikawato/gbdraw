@@ -59,6 +59,7 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
   await openFresh(page);
   const examples = path.join(root, 'examples');
   await page.evaluate(async ({ first, second, table }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
     await window.Vue.nextTick();
@@ -70,7 +71,7 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
     app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
       id: 'audit-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
       included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-      file: new File([table], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' }), losatFilename: ''
+      file: bound(new File([table], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' })), losatFilename: ''
     });
     await window.Vue.nextTick();
   }, {

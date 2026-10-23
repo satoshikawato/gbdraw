@@ -25,9 +25,10 @@ import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
-/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from '../services/record-display-model.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
@@ -133,7 +134,7 @@ export const createRecordDisplayControls = ({
   /** @param {string} kind @returns {DrawingId} */
   const drawingIdOfSource = (kind) => {
     const drawing = state.drawingList().find((/** @type {DrawingState} */ entry) => entry.mode === kind);
-    if (!drawing) throw new Error(`No ${kind} drawing holds a record source.`);
+    if (!drawing) throw diagnosticError('INPUT_INVALID', { field: 'drawing', reason: 'RECORD_SOURCE' });
     return drawing.id;
   };
   const sources = computed(() => {
@@ -309,7 +310,8 @@ export const createRecordDisplayControls = ({
   const matchesSavedSource = (file, resourceId) => {
     // A resource id is Session data: only an own key of the table names a saved resource.
     const expected = ownEntry(getCommittedSession()?.resources, String(resourceId));
-    return matchesSessionResourceDescriptor(/** @type {FileLike | null | undefined} */ (file), expected); // a File card's source is a File or null
+    // A File card's source is its binding's ref (or null); its bytes are the store's.
+    return matchesSessionResourceDescriptor(state.inputFiles.fileOf(/** @type {InputFileRef | null} */ (file)), expected);
   };
   const refreshCommittedRows = () => {
     if (state.semanticFileWatchersSuppressed?.value || state.sessionImportPending?.value) return;

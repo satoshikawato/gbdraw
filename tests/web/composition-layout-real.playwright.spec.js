@@ -41,6 +41,7 @@ const renderRealDiagram = async (
   { legendSide = 'right' } = {}
 ) => {
   const outcome = await evaluateWithRetainedPromise(page, async ({ diagramMode, source, requestedLegendSide }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing(diagramMode);
     await window.Vue.nextTick();
@@ -65,7 +66,7 @@ const renderRealDiagram = async (
     });
     if (diagramMode === 'circular') {
       app.cInputType = 'gb';
-      app.files.c_gb = input;
+      app.files.c_gb = bound(input);
       app.setCircularTrackSlotsEnabled(false);
     } else {
       app.lInputType = 'gb';

@@ -2,9 +2,9 @@
 
 import { defaultDepthSeriesLabel } from '../services/depth-track-state.js';
 
-/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { DepthSlotFile } from '../services/depth-track-state.js' */
 
-/** @param {FileLike | null | undefined} file */
+/** @param {DepthSlotFile | null | undefined} file */
 export const getDepthTrackFileBaseName = (file) => {
   // split always returns at least one element, so pop is not undefined.
   const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
@@ -16,7 +16,7 @@ export const getDepthTrackFileBaseName = (file) => {
 /**
  * @param {unknown} label
  * @param {number} index
- * @param {FileLike | null} [file]
+ * @param {DepthSlotFile | null} [file]
  */
 export const isDepthTrackAutoLabel = (label, index, file = null) => {
   const normalized = String(label ?? '').trim();

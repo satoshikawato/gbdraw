@@ -46,7 +46,8 @@ const { exportSession } = callerSession(sessionConfig, state);
 let inputReads = 0;
 installShownDrawing('circular');
 state.cInputType.value = 'gb';
-state.files.c_gb = {
+// The bindings hold the store's refs, as the app's writers bind them.
+state.files.c_gb = state.inputFiles.registerFile({
   name: 'legacy.gbk',
   type: 'application/genbank',
   size: 12,
@@ -55,7 +56,7 @@ state.files.c_gb = {
     inputReads += 1;
     return new TextEncoder().encode('LOCUS legacy').buffer;
   }
-};
+});
 state.results.value = [{
   name: 'legacy.svg',
   content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
@@ -108,10 +109,11 @@ const committed = buildCanonicalRenderRequest({
 adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true });
 state.activeDrawing().adv.circular_track_slots[0].width = '16px';
 
+const retainedRef = (name) => state.inputFiles.registerFile({ name, size: 1 });
 const retainedCircularFiles = {
-  blasts: [{ name: 'retained-blast.tsv' }],
-  fastas: [{ name: 'retained-subject.fa' }],
-  sources: [{ name: 'retained-source.fa' }]
+  blasts: [retainedRef('retained-blast.tsv')],
+  fastas: [retainedRef('retained-subject.fa')],
+  sources: [retainedRef('retained-source.fa')]
 };
 state.files.c_conservation_blasts = retainedCircularFiles.blasts;
 state.files.c_conservation_fastas = retainedCircularFiles.fastas;

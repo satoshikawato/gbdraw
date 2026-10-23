@@ -67,7 +67,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/results.js': 1,
   'app/right-drawer.js': 2,
   'app/rule-matching.js': 15,
-  'app/run-analysis.js': 97,
+  'app/run-analysis.js': 96,
   'app/run-info.js': 5,
   'app/similarity-alignment.js': 35,
   'app/svg-styles.js': 6,
@@ -88,9 +88,8 @@ const EXPLICIT_ANY_BASELINE = {
   'services/file-imports.js': 1,
   'services/gallery-session-migration.js': 12,
   'services/gallery-session-publication.js': 10,
-  'services/history-snapshot.js': 26,
+  'services/history-snapshot.js': 22,
   'services/history.js': 9,
-  'services/linear-comparisons.js': 2,
   'services/losat-cache.js': 8,
   'services/losat.js': 2,
   'services/match-sequences.js': 11,
@@ -105,7 +104,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/session-resources.js': 4,
   'services/specific-color-rules.js': 1,
   'services/svg-result-ingestion.js': 3,
-  'state.js': 5,
+  'state.js': 1,
   'utils/error-normalization.js': 4
 };
 

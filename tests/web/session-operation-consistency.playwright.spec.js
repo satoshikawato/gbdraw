@@ -315,10 +315,11 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   const text = readFileSync('tests/fixtures/sessions/cli-web-mito.gb', 'utf8');
   const download = page.waitForEvent('download');
   await page.evaluate(async text => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
     app.sessionTitle = 'Private draft';
-    app.linearSeqs[0].gb = new File([text, text], 'two-records.gb');
+    app.linearSeqs[0].gb = bound(new File([text, text], 'two-records.gb'));
     window.draftSource = app.linearSeqs[0];
     window.privateSaveEvents = [];
     window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: event => {

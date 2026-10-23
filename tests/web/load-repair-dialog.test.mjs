@@ -1699,7 +1699,7 @@ test('a Session 39 with a protein table of a reversed record installs the conver
     assert.equal(resourceText(committed.resources[tableId]), converted, 'the committed copy holds the converted bytes');
     assert.equal(committed.resources[tableId].size, Buffer.byteLength(converted));
     const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
-    assert.equal(await draft.file.text(), converted, 'the Linear draft holds the converted bytes');
+    assert.equal(await state.inputFiles.fileOf(draft.file).text(), converted, 'the Linear draft holds the converted bytes');
   } finally {
     setStoredProteinResultFrameConverter(null);
   }
@@ -1727,7 +1727,7 @@ test('a Collinear Session 47 with a reversed record installs the converted bytes
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual(calls, [{ version: 47, resources: Object.keys(session.resources).sort() }]);
     const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'collinearityResult');
-    assert.equal(await readSessionResourceText(draft.file), converted, 'the Linear draft holds the converted bytes');
+    assert.equal(await readSessionResourceText(state.inputFiles.fileOf(draft.file)), converted, 'the Linear draft holds the converted bytes');
     const saved = await savedSession('collinear rc');
     assert.equal(resourceText(saved.resources[COLLINEARITY_ID]), converted, 'Save writes the converted bytes');
     assert.equal(saved.resources[COLLINEARITY_ID].size, Buffer.byteLength(converted));

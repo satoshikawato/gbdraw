@@ -184,7 +184,7 @@ for (const operation of ['replacement', 'removal']) {
         const { state } = await import('./js/state.js');
         window.__MODE_SOURCE__ = state.files.c_gb;
         window.__MODE_FEATURE__ = state.extractedFeatures.value[0];
-        return (await import('./js/services/file-content-cache.js')).readFileText(state.files.c_gb);
+        return (await import('./js/services/file-content-cache.js')).readFileText(state.inputFiles.fileOf(state.files.c_gb));
       });
       await switchMode(page, 'linear');
       await switchMode(page, 'circular');

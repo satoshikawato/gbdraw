@@ -12,6 +12,7 @@ import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/service
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
+import { createHistoryFileStore } from '../../gbdraw/web/js/services/history-files.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 // The drawings a record source belongs to, found by kind: the Circular file card is the Circular drawing's, the
@@ -158,13 +159,15 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
   const components = Object.keys(resources).map((resourceId) => ({ resourceId }));
-  const makeFile = () => createCombinedSessionResourceFileView(table, components);
+  // The bindings hold the store's refs, as the app's writers bind them.
+  const inputFiles = createHistoryFileStore();
+  const makeFile = () => inputFiles.registerFile(createCombinedSessionResourceFileView(table, components));
   const file = makeFile();
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
   const state = { mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
-    lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
+    lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
     circularRecordList: { value: discovered ? components.map(({ resourceId }, i) => ({
@@ -176,7 +179,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
   state.form.track_type = 'middle';
   if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
-    uid:`record-${index+1}`,gb:createSessionResourceFileView(table,resourceId),region_record_id:'',region_reverse:false
+    uid:`record-${index+1}`,gb:inputFiles.registerFile(createSessionResourceFileView(table,resourceId)),region_record_id:'',region_reverse:false
   }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
@@ -198,7 +201,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
         records: committed.renderRequest.records.map((record) => ({ ...record, source: { kind: 'genbank', resourceId } })) } };
     },
     commitCombined: async () => {
-      const bytes = await readFileBytes(file);
+      const bytes = await readFileBytes(inputFiles.fileOf(file));
       const combined = { ...descriptor(file.name, ''), size: bytes.byteLength,
         data: Buffer.from(bytes).toString('base64') };
       committed = { resources: { combined }, renderRequest: { ...committed.renderRequest,
@@ -533,7 +536,7 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
   model.state.linearSeqs[0].region_reverse = false;
   model.controls.restoreAlignmentOrientationIntent(checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
-  model.state.linearSeqs[0].gb = new Blob(['replacement']);
+  model.state.linearSeqs[0].gb = model.state.inputFiles.registerFile(new File(['replacement'], 'replacement.gb'));
   assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
 });
 
@@ -582,8 +585,9 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const table = adoptCurrentSessionResources(resources);
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
-  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
-    linearSeqs: [{ uid: 'record-1', gb: createSessionResourceFileView(table, 'both'), region_record_id: 'second', region_reverse: false }],
+  const inputFiles = createHistoryFileStore();
+  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
+    linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
       startCoordinate: 25, reverseComplementOverride: true, anchorIntent: null }],
@@ -652,9 +656,11 @@ const sourceControls = () => {
     startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')] };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')] };
+  const inputFiles = createHistoryFileStore();
   const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
-    files: { c_gb: new Blob(['c']) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
-    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: new Blob([uid]), region_record_id: '', region_reverse: false })) },
+    files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
+    inputFiles,
+    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) },
   { circular, linear });
   withSourceDrawings(state);
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),

@@ -193,11 +193,12 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await openApp(page);
   const delay = async () => {
     await page.evaluate(async text => {
+      const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
       const { state } = await import('./js/state.js');
       const source = new File([text], 'slow.gb');
       const pending = new Promise(resolve => { window.__releaseSlow = () => resolve(new TextEncoder().encode(text).buffer); });
       source.arrayBuffer = () => pending;
-      state.files.c_gb = source;
+      state.files.c_gb = bound(source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.getByLabel('Circular record', { exact: true })).toBeDisabled();
@@ -241,6 +242,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
   await openApp(page);
   const helperSource = async () => {
     await page.evaluate(async text => {
+      const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
       const { state } = await import('./js/state.js');
       const source = new File([text], 'helper.gb');
       const read = source.arrayBuffer.bind(source);
@@ -250,7 +252,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
         return read();
       };
       window.__holdHelper = true;
-      state.files.c_gb = source;
+      state.files.c_gb = bound(source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.locator('[data-circular-inspect]')).toHaveAttribute('aria-disabled', 'true');

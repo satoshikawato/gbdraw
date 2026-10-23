@@ -145,20 +145,21 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   await page.setViewportSize({ width: 390, height: 844 });
   await preparePage(page);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     const first = new File(['LOCUS A\n'], 'first.gbk', { type: 'text/plain', lastModified: 1 });
     const last = new File(['LOCUS B\n'], 'last.gbk', { type: 'text/plain', lastModified: 2 });
-    app.linearSeqs[0].gb = first;
+    app.linearSeqs[0].gb = bound(first);
     app.linearSeqs[0].region_record_id = 'A1';
     app.linearSeqs[0].definition = 'First one';
-    app.linearSeqs[0].depth = [new File(['1\t10\n'], 'first.tsv')];
+    app.linearSeqs[0].depth = bound([new File(['1\t10\n'], 'first.tsv')]);
     app.addLinearSeq();
-    app.linearSeqs[1].gb = first;
+    app.linearSeqs[1].gb = bound(first);
     app.linearSeqs[1].region_record_id = 'A2';
     app.linearSeqs[1].definition = 'First two';
     app.addLinearSeq();
-    app.linearSeqs[2].gb = last;
+    app.linearSeqs[2].gb = bound(last);
     app.linearSeqs[2].region_record_id = 'B1';
   });
 

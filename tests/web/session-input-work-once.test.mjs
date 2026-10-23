@@ -10,6 +10,7 @@ import { webcrypto } from 'node:crypto';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { boundState } from './helpers/input-files.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 
@@ -48,7 +49,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   const read = file.arrayBuffer.bind(file);
   file.arrayBuffer = async () => { reads += 1; return read(); };
   // Generate: the request encodes the File once and stages its bytes (the transfer releases the byte cache).
-  const sourceState = { files: { c_gb: file }, linearSeqs: [] };
+  const sourceState = boundState({ files: { c_gb: file }, linearSeqs: [] });
   const encoded = (await serializeActiveRenderFiles('circular', sourceState, modeDrawing(state, 'circular'))).c_gb;
   await takeFileBytesForTransfer(file);
   const committed = adoptRuntimeCanonicalSession({
@@ -84,10 +85,10 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   // A File the committed request does not name keeps the payload Generate encoded.
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
-  await serializeActiveRenderFiles('circular', { files: { c_gb: other }, linearSeqs: [] }, modeDrawing(state, 'circular'));
+  await serializeActiveRenderFiles('circular', boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles), modeDrawing(state, 'circular'));
   metrics.length = 0;
   const saved = await buildSessionResources({
-    inputFiles: state.inputFiles, files: { c_gb: file, d_color: state.inputFiles.registerFile(other) }, linearSeqs: []
+    inputFiles: state.inputFiles, files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }, linearSeqs: []
   }, committed, modeDrawing(state, 'circular'));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
   assert.notEqual(otherId, 'src');

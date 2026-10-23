@@ -76,19 +76,20 @@ import {
 } from '../services/circular-track-slot-model.js';
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { OverlaySlotReference, TrackSlotRow } from '../services/track-slot-validation.js' */
-/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { DepthFileSlots } from '../services/depth-track-state.js' */
 
 /**
  * What the slot helpers read of the Web state (`state.js`): the Depth and
- * Conservation inputs and the shown mode.
+ * Conservation inputs (refs; the helpers read names and presence only) and
+ * the shown mode.
  * @typedef {object} TrackSlotStateView
  * @property {{ value?: string }} [mode]
  * @property {{
- *   c_depth?: DepthFileSlots | DepthFileSlots[],
- *   c_conservation_blasts?: FileLike | FileLike[] | null,
+ *   c_depth?: DepthFileSlots<InputFileRef> | DepthFileSlots<InputFileRef>[],
+ *   c_conservation_blasts?: InputFileRef | InputFileRef[] | null,
  *   c_conservation_blasts_source?: unknown,
- *   c_conservation_fastas?: FileLike | FileLike[] | null
+ *   c_conservation_fastas?: InputFileRef | (InputFileRef | null)[] | null
  * }} [files]
  */
 

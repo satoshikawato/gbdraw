@@ -36,7 +36,7 @@ const drawing = modeDrawing(state, 'circular');
 const circularState = (form) => {
   installShownDrawing('circular');
   state.cInputType.value = 'gb';
-  state.files.c_gb = genbank;
+  state.files.c_gb = state.inputFiles.registerFile(genbank);
   state.circularRecordList.value = [];
   Object.assign(drawing.form, {
     labels_mode: 'none', circular_record_selector: '', multi_record_canvas: false,
@@ -47,7 +47,7 @@ const buildWithFiles = async () => buildCanonicalRenderRequest({
   state, drawing, comparisonPlanSnapshot: null, recordDisplayRows: [],
   filesData: await serializeActiveRenderFiles('circular', state, drawing, null)
 });
-const emptyRecordFiles = () => ({ c_gb: state.files.c_gb, circularRecords: [] });
+const emptyRecordFiles = () => ({ c_gb: state.inputFiles.fileOf(state.files.c_gb), circularRecords: [] });
 
 test('OV-563: a Labels mode outside the table writes the scope none', async () => {
   circularState({ labels_mode: 'toString' });

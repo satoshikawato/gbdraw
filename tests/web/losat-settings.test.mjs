@@ -1,3 +1,4 @@
+import { createTestInputStore } from './helpers/input-files.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -199,7 +200,8 @@ assert.equal(offSettings.losatEstimatedJobCount.value, 9);
 
 console.log('losat-settings tests passed');
 
-const sourceFiles = [{ name: 'upper.gb' }, { name: 'lower.gb' }];
+const inputFiles = createTestInputStore();
+const sourceFiles = ['upper.gb', 'lower.gb'].map((name) => inputFiles.registerFile({ name, size: 0 }));
 expansionState.linearComparisonResolution.value.valid = true;
 expansionState.linearSeqs.forEach((sequence, index) => { sequence.gb = sourceFiles[index < 2 ? 0 : 1]; });
 expansionState.losat.blastp.mode = 'orthogroup';

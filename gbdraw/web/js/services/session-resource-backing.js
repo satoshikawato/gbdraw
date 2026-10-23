@@ -36,10 +36,13 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @typedef {Readonly<{ name: string, type: string, size: number, lastModified: number }>} SessionResourceFileView
  */
 /**
- * A `File` or a Session resource view, the two things a file slot holds.
+ * A `File` or a Session resource view: the bytes an input file names. An
+ * `InputFileRef` is not one (`fileId` is never set), so a byte reader that is
+ * handed a ref fails type checking; resolve it with `state.inputFiles.fileOf`.
  * @typedef {{
  *   name?: string, type?: string, size?: number, lastModified?: number,
- *   arrayBuffer?: () => Promise<ArrayBuffer>, text?: () => Promise<string>
+ *   arrayBuffer?: () => Promise<ArrayBuffer>, text?: () => Promise<string>,
+ *   fileId?: never
  * }} FileLike
  */
 /**

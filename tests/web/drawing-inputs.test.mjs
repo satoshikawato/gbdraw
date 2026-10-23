@@ -10,7 +10,10 @@ globalThis.window = { Vue: {
   computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { bindInputFile, bindInputFileList, registerInputFiles, retainHistoryAndBoundFiles } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const {
+  bindInputFile, bindInputFileList, bindLoadedInputs, boundInputFileIds, registerInputFiles, retainHistoryAndBoundFiles
+} = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 
 const fileNamed = (name) => new File([`>${name}\nACGT\n`], name, { type: 'text/plain', lastModified: 7 });
 
@@ -45,7 +48,7 @@ test('registering one File twice gives one frozen ref, and a ref is not a Blob',
   assert.equal(store.registerFile(file), ref, 'one ref per stored file');
   assert.ok(Object.isFrozen(ref));
   assert.deepEqual({ ...ref }, {
-    fileId: ref.fileId, name: 'genome.fasta', type: 'text/plain', size: file.size, lastModified: 7
+    fileId: ref.fileId, sourceId: ref.fileId, name: 'genome.fasta', type: 'text/plain', size: file.size, lastModified: 7
   });
   assert.equal(ref instanceof Blob, false);
   assert.equal(typeof ref.arrayBuffer, 'undefined', 'a byte reader must resolve the ref with fileOf');
@@ -71,4 +74,51 @@ test('the binding writers store each file once and hold refs, dropping places wi
   assert.equal(files.c_conservation_blasts, refs);
   assert.deepEqual(registerInputFiles(store, [first, null]).map((entry) => entry && entry.name), ['a.tsv', null]);
   assert.equal(bindInputFileList(store, files, 'c_conservation_fastas', first)[0], refs[0], 'one ref per File');
+});
+
+test('the refs of two views of one stored resource share its source; other files keep their own', () => {
+  const descriptor = {};
+  const store = createHistoryFileStore({ sourceOf: (file) => file.backing || null });
+  const first = store.registerFile({ name: 'two-records.gb', size: 9, backing: descriptor });
+  const second = store.registerFile({ name: 'two-records.gb', size: 9, backing: descriptor });
+  const other = store.registerFile(fileNamed('other.gb'));
+  assert.notEqual(first.fileId, second.fileId, 'each view is stored once, as itself');
+  assert.equal(second.sourceId, first.sourceId, 'one File card groups the views of one resource');
+  assert.equal(other.sourceId, other.fileId);
+});
+
+test('a Load installs its Files as refs at install, and a rolled-back ref stays bound', () => {
+  const store = createHistoryFileStore();
+  const kept = store.registerFile(fileNamed('kept.gb'));
+  const genome = fileNamed('genome.gb');
+  const depth = fileNamed('depth.tsv');
+  const edgeFile = fileNamed('pair.tsv');
+  const view = fileNamed('comparison.tsv');
+  const bound = bindLoadedInputs(store, {
+    files: {
+      c_gb: genome, c_depth: [[depth, null]], c_conservation_blasts: [kept], c_conservation_blasts_source: 'losat-cache',
+      linearCanonicalComparisons: [{ kind: 'collinearityResult', file: view }, { kind: 'generatedProteinComparison' }]
+    },
+    linearSeqs: [{ uid: 'a', gb: genome, gff: null, fasta: null, depth: [depth] }],
+    linearComparisonPlan: { mode: 'selected', defaultSource: 'upload', edges: [{ id: 'e', file: edgeFile }] },
+    circularRecordDiscovery: { primaryFile: genome, pairedFile: null }
+  });
+  const genomeRef = store.registerFile(genome);
+  assert.equal(bound.files.c_gb, genomeRef, 'the loaded File is registered and the field holds its ref');
+  assert.deepEqual(bound.files.c_depth, [[store.registerFile(depth), null]], 'a Depth matrix keeps its places');
+  assert.deepEqual(bound.files.c_conservation_blasts, [kept], 'a ref of the rollback stays bound as it is');
+  assert.equal(bound.files.c_conservation_blasts_source, 'losat-cache', 'a flag is not a file');
+  assert.equal(store.fileOf(bound.files.linearCanonicalComparisons[0].file), view);
+  assert.equal(Object.hasOwn(bound.files.linearCanonicalComparisons[1], 'file'), false, 'a generated entry has no file');
+  assert.equal(bound.linearSeqs[0].gb, genomeRef, 'one ref per File across fields');
+  assert.deepEqual(bound.linearSeqs[0].depth, [store.registerFile(depth)]);
+  assert.equal(store.fileOf(bound.linearComparisonPlan.edges[0].file), edgeFile);
+  assert.equal(bound.circularRecordDiscovery.primaryFile, genomeRef, 'the discovery names the field\'s ref');
+  const ids = boundInputFileIds({
+    files: bound.files, linearSeqs: bound.linearSeqs,
+    drawingList: () => [{ linearComparisonPlan: bound.linearComparisonPlan }]
+  });
+  assert.equal(ids.size, 5, 'every bound ref is named (genome, depth, kept, comparison, edge)');
+  assert.equal(boundInputFileIds({ files: { c_gb: fileNamed('raw.gb') }, linearSeqs: [], drawingList: () => [] }).size, 0,
+    'a binding holds refs only: a File in a field names nothing');
 });

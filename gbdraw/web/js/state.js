@@ -1,6 +1,9 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports } from './services/file-imports.js' */
+/** @import { InputFiles } from './services/drawing/inputs.js' */
+/** @import { DepthFileSlots } from './services/depth-track-state.js' */
+/** @import { InputFileRef } from './services/history-files.js' */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
@@ -18,6 +21,7 @@ import {
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import { createHistoryFileStore } from './services/history-files.js';
+import { sessionResourceSource } from './services/session-resource-backing.js';
 import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
@@ -126,7 +130,7 @@ const activeDrawingId = typedRef(drawingIdOfMode('circular'));
 const mode = typedComputed(() => activeDrawing().mode);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const files = reactive({
+const files = /** @type {InputFiles} */ (reactive({
   c_gb: null,
   c_gff: null,
   c_fasta: null,
@@ -141,7 +145,7 @@ const files = reactive({
   blacklist: null,
   whitelist: null,
   qualifier_priority: null
-});
+}));
 
 let linearSeqUidCounter = 0;
 
@@ -162,13 +166,13 @@ const normalizeLinearSeqNumber = (value) => {
 
 /**
  * One linear record slot as `createLinearSeq` builds it. The file fields hold
- * browser `File` objects or null.
+ * `InputFileRef`s of `state.inputFiles`, or null.
  * @typedef {object} LinearSeq
  * @property {string} uid
- * @property {any} gb
- * @property {any} gff
- * @property {any} fasta
- * @property {any} depth
+ * @property {InputFileRef | null} gb
+ * @property {InputFileRef | null} gff
+ * @property {InputFileRef | null} fasta
+ * @property {DepthFileSlots<InputFileRef>} depth one file, or a list indexed by series
  * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
  * @property {string} definition
  * @property {string} record_subtitle
@@ -294,8 +298,11 @@ const losatThreadingStatus = ref({
   message: ''
 });
 // The project's input file store: History steps and the input bindings name
-// its files by `InputFileRef` (services/history-files.js).
-const inputFiles = createHistoryFileStore();
+// its files by `InputFileRef` (services/history-files.js). The views of one
+// Session resource share its descriptor, so their refs share a `sourceId`.
+const inputFiles = createHistoryFileStore({
+  sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor
+});
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
 const proteinIdentityManifest = ref({

@@ -156,8 +156,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         }
         const projectedFiles = mode === 'linear' ? state.linearSeqs.map(seq => seq.gb)
           : label === 'gff' ? [] : [state.files.c_gb];
-        const sources = projectedFiles.filter(Boolean).flatMap(file => {
-          const source = getSessionResourceSource(file);
+        const sources = projectedFiles.filter(Boolean).flatMap(ref => {
+          const source = getSessionResourceSource(state.inputFiles.fileOf(ref));
           return source.descriptors || [source];
         });
         assert.equal(sources.length, sourcePaths.length);
@@ -166,8 +166,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.ok(session.resources[source.resourceId]);
         }
         if (label === 'gff') {
-          assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
-          assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(state.files.c_gff))), hash(await readFile(args[1])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(state.files.c_fasta))), hash(await readFile(args[3])));
         }
         // A draft in its retired home outside `modes` is dropped with no row
         // (A7f, E-OD03: the slice fills its place); Save still refuses it.
@@ -250,7 +250,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.deepEqual(records.map(record => [record.cardinality, record.selector]),
       session.renderRequest.records.map(record => ['exactly_one', record.selector]));
     assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
-    const [first, second] = state.linearSeqs.map(seq => getSessionResourceSource(seq.gb));
+    const [first, second] = state.linearSeqs.map(seq => getSessionResourceSource(state.inputFiles.fileOf(seq.gb)));
     assert.equal(first.resourceId, second.resourceId);
     assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
       hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));

@@ -1045,31 +1045,31 @@ const createLayoutPreferences = () => ({
       ]
     },
     files: {
-      c_gb: file,
+      c_gb: fileStore.registerFile(file),
       c_gff: null,
       c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [null, makeFile('comparison-2.fa', 30)],
+      c_conservation_fastas: [null, fileStore.registerFile(makeFile('comparison-2.fa', 30))],
       linearCanonicalComparisons: [
         {
           kind: 'precomputedProteinComparison',
           encoding: 'canonicalTsv',
           queryRecordIndex: 0,
           subjectRecordIndex: 2,
-          file: proteinTable
+          file: fileStore.registerFile(proteinTable)
         },
         {
           kind: 'orthogroupResult',
           encoding: 'canonicalJson',
-          file: orthogroupsJson
+          file: fileStore.registerFile(orthogroupsJson)
         },
         {
           kind: 'collinearityResult',
           encoding: 'canonicalJson',
           valueKind: 'blocks',
-          file: collinearityJson
+          file: fileStore.registerFile(collinearityJson)
         },
         {
           kind: 'generatedProteinComparison',
@@ -1099,7 +1099,7 @@ const createLayoutPreferences = () => ({
         fileActive: true,
         losatFilenameActive: true,
         source: 'upload',
-        file: comparisonUpload,
+        file: fileStore.registerFile(comparisonUpload),
         losatFilename: 'custom-query.fna'
       }]
     },
@@ -1252,30 +1252,30 @@ const createLayoutPreferences = () => ({
   assert.equal(state.form.show_scale, true);
   assert.equal(state.results.value, stableResults);
   assert.equal(state.extractedFeatures.value, stableExtractedFeatures);
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
   const serializedAfterConfigUndo = await snapshots.drawingHistory('linear').buildCheckpoint();
   assert.equal(
-    fileStore.restoreValue(serializedAfterConfigUndo.files.linearComparisons[0].file),
+    fileStore.fileOf(serializedAfterConfigUndo.files.linearComparisons[0].file),
     comparisonUpload
   );
   await history.redo();
   assert.equal(state.form.show_scale, false);
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
   await history.undo();
   assert.equal(state.form.show_scale, true);
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
 
   const replacementComparisonUpload = makeFile('replacement-comparison.tsv', 39);
   await history.runUndoable('Replace comparison upload', () => {
-    state.linearComparisonPlan.edges[0].file = replacementComparisonUpload;
+    state.linearComparisonPlan.edges[0].file = fileStore.registerFile(replacementComparisonUpload);
   });
-  assert.equal(state.linearComparisonPlan.edges[0].file, replacementComparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), replacementComparisonUpload);
   await history.undo();
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
   await history.redo();
-  assert.equal(state.linearComparisonPlan.edges[0].file, replacementComparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), replacementComparisonUpload);
   await history.undo();
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
 
   await history.runUndoable('Edit arrow geometry', () => {
     state.adv.arrow_head_length_ratio = 2;
@@ -1550,7 +1550,7 @@ const createLayoutPreferences = () => ({
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
       c_conservation_fastas: [],
-      c_conservation_sequence_sources: [makeFile('generated-source.fa', 9_000_000)],
+      c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
       linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }],
       d_color: null,
       t_color: null,
@@ -1642,7 +1642,7 @@ const createLayoutPreferences = () => ({
   assert.deepEqual(intent.files.c_conservation_blasts, []);
   assert.deepEqual(
     Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
-    ['fileId', 'lastModified', 'name', 'size', 'type']
+    ['fileId', 'lastModified', 'name', 'size', 'sourceId', 'type']
   );
 
   // B21: with uploaded BLAST rows, the optional comparison sequence is a user
@@ -1657,9 +1657,10 @@ const createLayoutPreferences = () => ({
   // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
   // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
   // and their comparison sequences with the ring files.
-  const derivedBlasts = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.losatn.tsv`, 60));
-  const derivedSources = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
-  const ringFastas = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
+  // The bindings hold refs of the store, as the app's writers bind them.
+  const derivedBlasts = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.losatn.tsv`, 60)));
+  const derivedSources = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.fasta`, 1234)));
+  const ringFastas = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.fasta`, 1234)));
   Object.assign(state.files, {
     c_conservation_blasts: [...derivedBlasts],
     c_conservation_blasts_source: 'losat-cache',
@@ -1727,20 +1728,22 @@ const createLayoutPreferences = () => ({
   ];
   const retainedIds = retainedFiles.map((file) => fileStore.registerFile(file).fileId);
   const unreferencedId = fileStore.registerFile(unreferenced).fileId;
+  // The bindings hold the store's refs, as the app's writers bind them.
+  const ref = (file) => fileStore.registerFile(file);
   const state = {
     files: {
-      c_gb: circularPrimary,
+      c_gb: ref(circularPrimary),
       c_gff: null,
       c_fasta: null,
-      c_depth: [circularDepth],
-      c_conservation_blasts: [conservationBlast],
+      c_depth: [ref(circularDepth)],
+      c_conservation_blasts: [ref(conservationBlast)],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [conservationFasta],
-      c_conservation_sequence_sources: [conservationSequenceSource],
+      c_conservation_fastas: [ref(conservationFasta)],
+      c_conservation_sequence_sources: [ref(conservationSequenceSource)],
       linearCanonicalComparisons: [
-        { kind: 'precomputedProteinComparison', file: canonicalProtein },
-        { kind: 'orthogroupResult', file: canonicalOrthogroups },
-        { kind: 'collinearityResult', file: canonicalCollinearity }
+        { kind: 'precomputedProteinComparison', file: ref(canonicalProtein) },
+        { kind: 'orthogroupResult', file: ref(canonicalOrthogroups) },
+        { kind: 'collinearityResult', file: ref(canonicalCollinearity) }
       ],
       d_color: null,
       t_color: null,
@@ -1750,15 +1753,15 @@ const createLayoutPreferences = () => ({
     },
     linearSeqs: [{
       uid: 'linear-a',
-      gb: linearPrimary,
+      gb: ref(linearPrimary),
       gff: null,
       fasta: null,
-      depth: [linearDepth]
+      depth: [ref(linearDepth)]
     }],
     linearComparisonPlan: {
       mode: 'selected',
       defaultSource: 'upload',
-      edges: [{ id: 'edge-a-b', file: linearComparison }]
+      edges: [{ id: 'edge-a-b', file: ref(linearComparison) }]
     }
   };
   let setting = 'loaded';

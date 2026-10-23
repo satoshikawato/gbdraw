@@ -25,13 +25,15 @@ const genbank = (name) => {
   const bytes = new TextEncoder().encode(`LOCUS ${name}\n//\n`);
   return { name, type: 'text/plain', size: bytes.byteLength, lastModified: 1, arrayBuffer: async () => bytes.slice().buffer };
 };
-const blast = genbank('a-to-c.tsv');
+// The cards name their files by ref of the state's input file store.
+const bind = (file) => state.inputFiles.registerFile(genbank(file));
+const blast = bind('a-to-c.tsv');
 
 installShownDrawing('linear');
 state.lInputType.value = 'gb';
 const drawing = modeDrawing(state, 'linear');
 state.linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({
-  uid, gb: genbank(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',
+  uid, gb: bind(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',
   record_subtitle: '', file_definition: '', file_subtitle: '', inferred_definition: '', region_record_id: '',
   region_start: null, region_end: null, region_reverse: false
 })));

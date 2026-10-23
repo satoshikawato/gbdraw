@@ -255,6 +255,12 @@ const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+const { registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+// A binding holds refs of the project's file store, as the app's writers bind them.
+const bound = (value) => registerInputFileTree(state.inputFiles, value);
+const BOUND_FIELDS = ['c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'];
+const boundFiles = (fields) => Object.fromEntries(Object.entries(fields)
+  .map(([key, value]) => [key, BOUND_FIELDS.includes(key) ? bound(value) : value]));
 const {
   readComparisonSequence, readComparisonSequenceDigest, readOncePerFile
 } = await import('../../gbdraw/web/js/services/record-discovery.js');
@@ -623,13 +629,13 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 const installSimpleCircularInput = (primary, inactive) => {
   installShownDrawing('circular');
   state.cInputType.value = 'gb';
-  state.files.c_gb = primary;
-  state.files.c_gff = null;
-  state.files.c_fasta = null;
-  state.files.c_depth = inactive;
-  state.files.c_conservation_blasts = [];
-  state.files.c_conservation_fastas = [];
-  state.files.c_conservation_sequence_sources = [];
+  state.files.c_gb = bound(primary);
+  state.files.c_gff = bound(null);
+  state.files.c_fasta = bound(null);
+  state.files.c_depth = bound(inactive);
+  state.files.c_conservation_blasts = bound([]);
+  state.files.c_conservation_fastas = bound([]);
+  state.files.c_conservation_sequence_sources = bound([]);
   state.files.d_color = inactive;
   state.files.t_color = inactive;
   state.files.blacklist = inactive;
@@ -647,15 +653,15 @@ const installSimpleCircularInput = (primary, inactive) => {
     status: 'ready',
     error: '',
     inputType: 'gb',
-    primaryFile: primary,
+    primaryFile: bound(primary),
     pairedFile: null
   });
   state.linearSeqs.splice(0, state.linearSeqs.length, {
     uid: 'inactive-linear-row',
-    gb: inactive,
+    gb: bound(inactive),
     gff: null,
     fasta: null,
-    depth: inactive,
+    depth: bound(inactive),
     blast: null,
     losat_gencode: 1,
     losat_filename: '',
@@ -1222,7 +1228,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     status: 'ready',
     error: '',
     inputType: 'gb',
-    primaryFile: primary,
+    primaryFile: bound(primary),
     pairedFile: null
   });
   const readyResult = result('ready.svg', 'ready');
@@ -1287,7 +1293,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
-  state.files.c_gb = fallbackPrimary;
+  state.files.c_gb = bound(fallbackPrimary);
   const workerRunCountBeforeDiscoveryFailure = workerMessages
     .filter(({ type }) => type === 'run')
     .length;
@@ -1318,7 +1324,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   state.activeDrawing().form.multi_record_canvas = false;
   state.activeDrawing().form.show_depth = false;
-  state.files.c_depth = [[inactive]];
+  state.files.c_depth = bound([[inactive]]);
   state.activeDrawing().adv.circular_track_slots_enabled = true;
   state.activeDrawing().adv.circular_track_slots = [{
     id: 'custom-depth',
@@ -1354,12 +1360,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     });
   }));
   state.circularRecordList.value = [];
-  state.files.c_gb = coalescedPrimary;
+  state.files.c_gb = bound(coalescedPrimary);
   Object.assign(state.circularRecordDiscovery, {
     status: 'loading',
     error: '',
     inputType: 'gb',
-    primaryFile: coalescedPrimary,
+    primaryFile: bound(coalescedPrimary),
     pairedFile: null,
     canonicalRecordIdentities: [{
       selector: '#1',
@@ -1410,7 +1416,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
   installShownDrawing('linear');
-  state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
+  state.files.c_gb = bound(new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb'));
   await runner.refreshCircularRecordOrder();
   installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
@@ -1418,7 +1424,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   installShownDrawing('linear');
-  state.files.c_gb = null;
+  state.files.c_gb = bound(null);
   await runner.refreshCircularRecordOrder();
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   installShownDrawing('circular');
@@ -1426,10 +1432,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
-  state.files.c_gb = fallbackPrimary;
+  state.files.c_gb = bound(fallbackPrimary);
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.files.c_depth = null;
+  state.files.c_depth = bound(null);
   state.activeDrawing().adv.circular_track_slots_enabled = false;
   state.activeDrawing().adv.circular_track_slots = [];
   state.circularRecordList.value = [];
@@ -1440,7 +1446,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
-  state.files.c_gb = fallbackPrimary;
+  state.files.c_gb = bound(fallbackPrimary);
   let releaseDiscovery;
   workerHelperResponses.push(new Promise((resolve) => {
     releaseDiscovery = () => resolve({
@@ -1470,7 +1476,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.files.c_gb = stalePrimary;
+  state.files.c_gb = bound(stalePrimary);
   state.activeDrawing().adv.multi_record_positions.splice(
     0,
     state.activeDrawing().adv.multi_record_positions.length,
@@ -1649,13 +1655,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losat_gencode: 1
     }))
   );
-  state.files.c_gb = referenceView;
-  state.files.c_gff = null;
-  state.files.c_fasta = null;
-  state.files.c_depth = null;
-  state.files.c_conservation_blasts = [];
-  state.files.c_conservation_fastas = comparisonViews;
-  state.files.c_conservation_sequence_sources = [];
+  state.files.c_gb = bound(referenceView);
+  state.files.c_gff = bound(null);
+  state.files.c_fasta = bound(null);
+  state.files.c_depth = bound(null);
+  state.files.c_conservation_blasts = bound([]);
+  state.files.c_conservation_fastas = bound(comparisonViews);
+  state.files.c_conservation_sequence_sources = bound([]);
   state.activeDrawing().annotationSets.splice(0);
   state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
@@ -1837,7 +1843,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
-    state.files.c_gb = bomReference;
+    state.files.c_gb = bound(bomReference);
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
     // The record list of the new reference, then the subject database.
     workerHelperResponses.push(
@@ -1860,12 +1866,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // The new subject searched once; the Linear section below counts its own searches.
     assert.equal(losatCalls, 1);
     losatCalls = 0;
-    state.files.c_gb = referenceView;
+    state.files.c_gb = bound(referenceView);
 
     const invalidFile = Object.freeze({
       name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
     });
-    state.files.c_gb = invalidFile;
+    state.files.c_gb = bound(invalidFile);
     state.circularRecordList.value = [
       { selector: '#1', record_id: 'missing', record_length: 1 }
     ];
@@ -1873,7 +1879,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       status: 'ready',
       error: '',
       inputType: 'gb',
-      primaryFile: invalidFile,
+      primaryFile: bound(invalidFile),
       pairedFile: null
     });
     assert.equal((await runner.runAnalysis()).status, 'error');
@@ -1925,7 +1931,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearRecordRows.splice(0);
     state.linearSeqs.splice(0, state.linearSeqs.length, {
       uid: 'multi',
-      gb: multiView,
+      gb: bound(multiView),
       gff: null,
       fasta: null,
       depth: null,
@@ -1940,7 +1946,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_reverse: true
     }, {
       uid: 'middle',
-      gb: middleView,
+      gb: bound(middleView),
       gff: null,
       fasta: null,
       depth: null,
@@ -1955,7 +1961,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_reverse: false
     }, {
       uid: 'third',
-      gb: thirdView,
+      gb: bound(thirdView),
       gff: null,
       fasta: null,
       depth: null,
@@ -2381,7 +2387,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       '//'
     ].join('\n')).join('\n') + '\n'], 'thirteen.gb');
     state.linearSeqs.splice(0, state.linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
-      uid: `card-${index + 1}`, gb: thirteenFile, gff: null, fasta: null, depth: null, blast: null,
+      uid: `card-${index + 1}`, gb: bound(thirteenFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
     })));
@@ -2485,7 +2491,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'upload.gb', { lastModified: 7 });
     state.linearSeqs.splice(0, state.linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
-      uid: `upload-${index + 1}`, gb: uploadFile, gff: null, fasta: null, depth: null, blast: null,
+      uid: `upload-${index + 1}`, gb: bound(uploadFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
     })));
@@ -2543,7 +2549,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
     ], 'inserted.gb', { lastModified: 9 });
     state.linearSeqs.unshift({
-      uid: 'inserted-1', gb: insertedFile, gff: null, fasta: null, depth: null, blast: null,
+      uid: 'inserted-1', gb: bound(insertedFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
       region_start: null, region_end: null, region_reverse: false
     });
@@ -2581,7 +2587,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'bom.gb');
-    state.linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bomFile, region_record_id: `BOM${index + 1}` }));
+    state.linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bound(bomFile), region_record_id: `BOM${index + 1}` }));
     ['BOM1', 'BOM2'].forEach((id) => workerHelperResponses.push({ ok: true, result: {
       fasta: `>${id}\nACGTACGT\n`, record_id: id, record_length: 8
     } }));
@@ -2602,7 +2608,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const pairedFasta = new AuditFile(['>G1\nATGAAATAA\n'], 'pair.fasta');
     state.lInputType.value = 'gff';
     state.activeDrawing().losatProgram.value = 'blastn';
-    state.linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: gffFile, fasta: pairedFasta, region_record_id: 'G1' }));
+    state.linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: bound(gffFile), fasta: bound(pairedFasta), region_record_id: 'G1' }));
     const pairResult = result('gff-pair.svg', 'gff-pair');
     workerResponses.push(response(pairResult, validCatalog(pairResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
@@ -2643,7 +2649,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ], 'named.gff');
     const extraFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n'], 'extra.fasta');
     state.linearSeqs.forEach((seq, index) => Object.assign(seq, {
-      gff: namedGff, fasta: extraFasta, region_record_id: `#${index + 1}`
+      gff: bound(namedGff), fasta: bound(extraFasta), region_record_id: `#${index + 1}`
     }));
     let searched = [];
     globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
@@ -2658,7 +2664,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // entry X has no GFF3 feature draws G1, so LOSAT searches G1 (OV-1681).
     const g1Gff = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'g1-only.gff');
     const xFirstFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n'], 'x-first.fasta');
-    Object.assign(state.linearSeqs[0], { gff: g1Gff, fasta: xFirstFasta, region_record_id: '' });
+    Object.assign(state.linearSeqs[0], { gff: bound(g1Gff), fasta: bound(xFirstFasta), region_record_id: '' });
     const autoResult = result('gff-auto.svg', 'gff-auto');
     workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
@@ -2716,10 +2722,10 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     label: 'query', color: '#4e79a7', losat_gencode: 1
   });
   drawing.annotationSets.splice(0);
-  Object.assign(state.files, {
+  Object.assign(state.files, boundFiles({
     c_depth: null, c_conservation_blasts: [], c_conservation_fastas: [queryFile],
     c_conservation_sequence_sources: []
-  });
+  }));
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
@@ -2772,15 +2778,15 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       ]));
       const gff = Boolean(files.fasta);
       state.cInputType.value = gff ? 'gff' : 'gb';
-      Object.assign(state.files, {
+      Object.assign(state.files, boundFiles({
         c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
-      });
+      }));
       state.circularRecordList.value = testCase.recordList.map(({ id, length }, recordIndex) => ({
         selector: `#${recordIndex + 1}`, record_id: id, record_length: length
       }));
       Object.assign(state.circularRecordDiscovery, {
         status: 'ready', error: '', inputType: gff ? 'gff' : 'gb',
-        primaryFile: files.source, pairedFile: gff ? files.fasta : null
+        primaryFile: bound(files.source), pairedFile: bound(gff ? files.fasta : null)
       });
       Object.assign(drawing.form, {
         circular_record_selector: webState.selector, multi_record_canvas: webState.multi,
@@ -2850,7 +2856,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       circular_record_selector: '', multi_record_canvas: false, circular_region_start: null, circular_region_end: null
     });
     drawing.circularConservation.enabled = false;
-    state.files.c_conservation_fastas = [];
+    state.files.c_conservation_fastas = bound([]);
     if (previousLosatExecutor === undefined) {
       delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     } else {
@@ -2889,10 +2895,10 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   state.linearSeqs.splice(0, state.linearSeqs.length,
     {
       uid: 'linear-none-first',
-      gb: first,
+      gb: bound(first),
       gff: null,
       fasta: null,
-      depth,
+      depth: bound(depth),
       blast: dormantUpload,
       losat_gencode: 1,
       definition: '',
@@ -2904,7 +2910,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     },
     {
       uid: 'linear-none-second',
-      gb: second,
+      gb: bound(second),
       gff: null,
       fasta: null,
       depth: null,
@@ -3505,10 +3511,10 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   drawing.annotationSets.splice(0);
   state.linearSeqs.splice(0, state.linearSeqs.length, {
     uid: 'row-height',
-    gb: genbank,
+    gb: bound(genbank),
     gff: null,
     fasta: null,
-    depth: [depthFile(1), depthFile(2)],
+    depth: bound([depthFile(1), depthFile(2)]),
     blast: null,
     losat_gencode: 1,
     definition: '',
@@ -3581,7 +3587,7 @@ test('Circular Generate gives a Depth series without settings its default color'
   drawing.annotationSets.splice(0);
   drawing.circularConservation.enabled = false;
   drawing.circularConservation.series.splice(0);
-  Object.assign(state.files, {
+  Object.assign(state.files, boundFiles({
     c_gb: new AuditFile(['LOCUS circularseries\nORIGIN\n        1 acgtacgt\n//\n'], 'circular-series.gb'),
     c_gff: null,
     c_fasta: null,
@@ -3589,7 +3595,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     c_conservation_blasts: [],
     c_conservation_fastas: [],
     c_conservation_sequence_sources: []
-  });
+  }));
   state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null

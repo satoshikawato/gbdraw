@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { createHash, webcrypto } from 'node:crypto';
 import test from 'node:test';
+import { boundState } from './helpers/input-files.mjs';
 import { fixtureDrawing } from './helpers/drawing-state.mjs';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
@@ -32,9 +33,11 @@ const { adoptRuntimeCanonicalSession } = await import(
   '../../gbdraw/web/js/services/session-authority.js'
 );
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
-const { buildSessionResources } = await import(
+const { buildSessionResources: buildBoundSessionResources } = await import(
   '../../gbdraw/web/js/services/session-resources.js'
 );
+// A fixture state registers its input files in a store and names them by ref, as the app does.
+const buildSessionResources = (state, ...rest) => buildBoundSessionResources(state.inputFiles ? state : boundState(state), ...rest);
 
 const encodedDescriptor = (name, text, overrides = {}) => {
   const bytes = new TextEncoder().encode(text);

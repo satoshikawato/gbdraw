@@ -16,8 +16,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
-import { FILE_IMPORT_CARDS } from './file-imports.js';
-import { bindInputFile } from './drawing/inputs.js';
+import { bindCanonicalComparisons, bindLoadedInputs, registerInputFiles } from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
@@ -308,7 +307,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { StoredDrawing } from './main-session-comparison-frame.js' */
-/** @import { CommittedCanonicalSession, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
+/** @import { CommittedCanonicalSession, LiveSettingWrite, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
@@ -320,7 +319,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId } from './drawing-view.js' */
-/** @import { InputFileCandidate } from './history-files.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, LoadedInputs } from './drawing/inputs.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -338,7 +338,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
-/** @import { DepthFileSlots } from './depth-track-state.js' */
+/** @import { DepthFileSlots, DepthSlotFile } from './depth-track-state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
@@ -3050,13 +3050,15 @@ const serializeFile = async (file) => {
  * @typedef {RawSessionResourceDescriptor | null | SerializedFileValue[]} SerializedFileValue
  */
 /**
- * @param {DeserializedFile | undefined} value A file slot's value.
+ * The descriptors of a binding's files: each ref is read through the store that names it.
+ * @param {Pick<InputFileStore, 'fileOf'>} store
+ * @param {BoundFileValue} value
  * @returns {Promise<SerializedFileValue>}
  */
-const serializeFileValue = async (value) => (
+const serializeFileValue = async (store, value) => (
   Array.isArray(value)
-    ? Promise.all(value.map((item) => serializeFileValue(item)))
-    : serializeFile(value)
+    ? Promise.all(value.map((item) => serializeFileValue(store, item)))
+    : serializeFile(store.fileOf(/** @type {InputFileRef | null | undefined} */ (value)))
 );
 
 /**
@@ -3640,6 +3642,8 @@ export const serializeActiveRenderFiles = async (
     throw new Error(`Unsupported render mode: ${String(mode)}.`);
   }
   const sourceFiles = sourceState.files || {};
+  /** @type {InputFileStore} */
+  const store = sourceState.inputFiles;
   // The request holds the drawn records only (record-selection D-02).
   const normalizedLinearSeqs = mode === 'linear'
     ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
@@ -3648,10 +3652,10 @@ export const serializeActiveRenderFiles = async (
   const serializedLinearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq) => ({
       uid: seq.uid,
-      gb: await serializeFile(seq.gb),
-      gff: await serializeFile(seq.gff),
-      fasta: await serializeFile(seq.fasta),
-      depth: depthRequested ? await serializeFileValue(seq.depth) : null,
+      gb: await serializeFileValue(store, seq.gb),
+      gff: await serializeFileValue(store, seq.gff),
+      fasta: await serializeFileValue(store, seq.fasta),
+      depth: depthRequested ? await serializeFileValue(store, seq.depth) : null,
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
@@ -3698,7 +3702,7 @@ export const serializeActiveRenderFiles = async (
       .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'upload' && edge.fileActive && edge.file)
       .map(async (/** @type {LinearComparisonResolvedEdge} */ edge) => ({
       id: String(edge.id || ''),
-      file: await serializeFile(edge.file)
+      file: await serializeFileValue(store, edge.file)
     }))
   ) : [];
   const linearCanonicalComparisons = mode === 'linear'
@@ -3708,11 +3712,11 @@ export const serializeActiveRenderFiles = async (
     (Array.isArray(sourceFiles.linearCanonicalComparisons)
       ? sourceFiles.linearCanonicalComparisons
       : []
-    ).map(async (/** @type {ResourceBackedComparison} */ comparison) => (
+    ).map(async (/** @type {BoundCanonicalComparison} */ comparison) => (
       isResourceBackedCanonicalComparison(comparison)
         ? {
             ...mapResourceBackedCanonicalComparison(comparison),
-            file: await serializeFile(comparison.file)
+            file: await serializeFileValue(store, comparison.file)
           }
         : cloneJsonData(comparison)
     ))
@@ -3729,24 +3733,24 @@ export const serializeActiveRenderFiles = async (
     conservationEnabled && conservationSource === 'losat';
 
   return {
-    c_gb: mode === 'circular' ? await serializeFile(sourceFiles.c_gb) : null,
-    c_gff: mode === 'circular' ? await serializeFile(sourceFiles.c_gff) : null,
-    c_fasta: mode === 'circular' ? await serializeFile(sourceFiles.c_fasta) : null,
+    c_gb: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_gb) : null,
+    c_gff: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_gff) : null,
+    c_fasta: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_fasta) : null,
     c_depth: mode === 'circular' && depthRequested
-      ? await serializeFileValue(sourceFiles.c_depth)
+      ? await serializeFileValue(store, sourceFiles.c_depth)
       : null,
     c_conservation_blasts: includeConservationBlasts
-      ? await serializeFileValue(sourceFiles.c_conservation_blasts)
+      ? await serializeFileValue(store, sourceFiles.c_conservation_blasts)
       : [],
     c_conservation_blasts_source: includeConservationBlasts
       && sourceFiles.c_conservation_blasts_source === 'losat-cache'
       ? 'losat-cache'
       : null,
     c_conservation_fastas: includeConservationFastas
-      ? await serializeFileValue(sourceFiles.c_conservation_fastas)
+      ? await serializeFileValue(store, sourceFiles.c_conservation_fastas)
       : [],
     c_conservation_sequence_sources: includeConservationBlasts
-      ? await serializeFileValue(sourceFiles.c_conservation_sequence_sources)
+      ? await serializeFileValue(store, sourceFiles.c_conservation_sequence_sources)
       : [],
     d_color: null,
     t_color: null,
@@ -3784,7 +3788,9 @@ const deserializeCanonicalComparisons = (
   }
   return read.map((comparison) => (
     isResourceBackedCanonicalComparison(comparison)
-      ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
+      // A resource-backed entry maps to an entry, never null.
+      ? /** @type {NonNullable<ReturnType<typeof mapResourceBackedCanonicalComparison>>} */ (
+        mapResourceBackedCanonicalComparison(comparison, deserializeFile))
       : adoptCanonicalPayloads ? comparison : cloneJsonData(comparison)
   ));
 };
@@ -3862,13 +3868,14 @@ export const adoptCanonicalRenderArtifacts = (
   activeSessionResourceTable = sessionResourceTable;
   setCommittedCanonicalSession(nextCommittedCanonicalSession);
   if (nextLinearComparisons) {
-    state.files.linearCanonicalComparisons = nextLinearComparisons;
+    state.files.linearCanonicalComparisons = bindCanonicalComparisons(state.inputFiles, nextLinearComparisons);
   }
   if (nextCircularState) {
-    state.files.c_conservation_blasts = nextCircularState.blasts;
+    state.files.c_conservation_blasts = registerInputFiles(state.inputFiles, nextCircularState.blasts)
+      .filter((ref) => ref !== null);
     state.files.c_conservation_blasts_source = 'losat-cache';
-    state.files.c_conservation_fastas = nextCircularState.fastas;
-    state.files.c_conservation_sequence_sources = nextCircularState.sequenceSources;
+    state.files.c_conservation_fastas = registerInputFiles(state.inputFiles, nextCircularState.fastas);
+    state.files.c_conservation_sequence_sources = registerInputFiles(state.inputFiles, nextCircularState.sequenceSources);
     if (nextCircularState.projectedConservation) {
       drawing.circularConservation.enabled = true;
       drawing.circularConservation.source = 'losat';
@@ -4008,13 +4015,13 @@ const convertLoadedProteinResultFrames = async (version, keptSlot) => {
   const linearTable = [nextShown, nextKept]
     .find((holder) => holder?.committedCanonicalSession?.renderRequest?.mode === 'linear')?.activeSessionResourceTable;
   if (linearTable) {
-    /** @type {RequestCanonicalComparison[]} */
     const comparisons = state.files.linearCanonicalComparisons;
     state.files.linearCanonicalComparisons = comparisons.map((comparison) => {
-      const view = /** @type {SessionResourceFileView | undefined} */ (comparison?.file);
+      const view = /** @type {SessionResourceFileView | null} */ (state.inputFiles.fileOf(comparison?.file));
       const resourceId = /** @type {{ resourceId?: string } | null} */ (getSessionResourceSource(view))?.resourceId;
       return view && resourceId !== undefined && converted.has(resourceId)
-        ? { ...comparison, file: createSessionResourceFileView(linearTable, resourceId, view) } : comparison;
+        ? { ...comparison, file: state.inputFiles.registerFile(createSessionResourceFileView(linearTable, resourceId, view)) }
+        : comparison;
     });
   }
   return keptSlot && nextKept && nextKept !== kept
@@ -4041,11 +4048,11 @@ const convertDetachedProteinResultFrames = async (version, committed, projection
   const resources = await withConvertedResources(/** @type {Record<string, unknown>} */ (committed.resources), converted);
   const mode = /** @type {UnvalidatedFields<'mode'> | undefined} */ (committed.renderRequest)?.mode;
   if (projectionInput && mode === 'linear') {
-    state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+    state.files.linearCanonicalComparisons = bindCanonicalComparisons(state.inputFiles, deserializeCanonicalComparisons(
       projectCanonicalSessionRequest({ ...projectionInput, resources }).files.linearCanonicalComparisons,
       // Load listed the repairs of these entries when it first read them.
       { repairs: [] }
-    );
+    ));
   }
   return { ...committed, resources };
 };
@@ -4331,7 +4338,7 @@ const applyFiles = (filesData, {
  * @param {SettingsContainers} installed The drawing's settings as Load installs them (`configFieldRepairs`).
  * @param {unknown} storedAdv The `adv` the file holds of it.
  * @param {{ at: string, resolveTrackPlacements: boolean, circularFiles: DepthFileSlots | DepthFileSlots[],
- *   linearRows: (FileLike | null)[][] }} options `at`: where `adv` is in the file.
+ *   linearRows: (DepthSlotFile | null)[][] }} options `at`: where `adv` is in the file.
  * @returns {LoadRepair[]}
  */
 const depthFitRepairs = (mode, installed, storedAdv, { at, resolveTrackPlacements, circularFiles, linearRows }) => {
@@ -4437,27 +4444,22 @@ const cloneLiveFileState = (drawing) => ({
 
 /**
  * @param {DrawingState} drawing
- * @param {{
- *   files: Record<string, unknown>, circularRecordList: unknown, circularRecordDiscovery: object,
- *   linearSeqs: LinearSeq[], linearRecordRows: LinearRecordRow[], linearComparisonPlan: LinearComparisonPlan
- * }} snapshot The project inputs `cloneLiveFileState` captured, or those a Load installs.
+ * @param {LoadedInputs & { circularRecordList: unknown, linearRecordRows: LinearRecordRow[] }} snapshot
+ *   The project inputs `cloneLiveFileState` captured (refs), or those a Load installs (its Files, which
+ *   `bindLoadedInputs` registers here).
  */
 const restoreLiveFileState = (drawing, snapshot) => {
   state.matchSequenceRegistry?.reset?.();
+  const bound = bindLoadedInputs(state.inputFiles, snapshot);
   Object.keys(state.files).forEach((key) => {
-    state.files[key] = snapshot.files[key] ?? null;
-  });
-  // A table card names its file by ref: a loaded file is registered here, a
-  // rolled-back ref stays bound.
-  FILE_IMPORT_CARDS.forEach((key) => {
-    bindInputFile(state.inputFiles, state.files, key, /** @type {InputFileCandidate} */ (snapshot.files[key]));
+    /** @type {Record<string, unknown>} */ (state.files)[key] = bound.files[key] ?? null;
   });
   state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
-  Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);
-  state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
+  Object.assign(state.circularRecordDiscovery, bound.circularRecordDiscovery);
+  state.linearSeqs.splice(0, state.linearSeqs.length, ...bound.linearSeqs);
   SETTINGS_SLICE.install(drawing.slices.settings, {
     linearRecordRows: snapshot.linearRecordRows,
-    linearComparisonPlan: normalizeLinearComparisonPlan(snapshot.linearComparisonPlan)
+    linearComparisonPlan: normalizeLinearComparisonPlan(bound.linearComparisonPlan)
   });
 };
 

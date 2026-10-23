@@ -100,7 +100,7 @@ for (const composite of [false, true]) {
         const config = await import('./js/services/config.js');
         const { getSessionResourceSource } = await import('./js/services/file-content-cache.js');
         const session = config.getCommittedCanonicalSession();
-        const binding = getSessionResourceSource(state.files.c_gb);
+        const binding = getSessionResourceSource(state.inputFiles.fileOf(state.files.c_gb));
         return { records: state.circularRecordList.value, request: session.renderRequest,
           resources: Object.fromEntries(Object.entries(session.resources).map(([id, descriptor]) => [id, { size: descriptor.size, name: descriptor.name }])),
           source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
@@ -176,7 +176,7 @@ for (const composite of [false, true]) {
         const source = await page.evaluate(async () => {
           const { state } = await import('./js/state.js');
           return { name: state.files.c_gb.name, mimeType: state.files.c_gb.type,
-            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.files.c_gb)] };
+            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.inputFiles.fileOf(state.files.c_gb))] };
         });
         await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
           name: source.name, mimeType: source.mimeType, buffer: Buffer.from(source.bytes) });

@@ -26,7 +26,9 @@ const {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } = await import('../../gbdraw/web/js/services/linear-sources.js');
-const { createLinearSeq } = await import('../../gbdraw/web/js/state.js');
+const { createLinearSeq, state } = await import('../../gbdraw/web/js/state.js');
+// A record card names its File by the store's ref, as the app's writers bind it.
+const fileRef = (name) => state.inputFiles.registerFile(new File(['LOCUS'], name));
 
 test('createLinearSeq handles file_definition and file_subtitle', () => {
   const seq = createLinearSeq({
@@ -44,10 +46,10 @@ test('createLinearSeq handles file_definition and file_subtitle', () => {
 });
 
 test('linear sources default getters and setters operate on grouped records', () => {
-  const sharedFile = { name: 'multi_record.gb' };
+  const sharedFile = fileRef('multi_record.gb');
   const seq1 = createLinearSeq({ uid: 'seq-1', gb: sharedFile });
   const seq2 = createLinearSeq({ uid: 'seq-2', gb: sharedFile });
-  const seq3 = createLinearSeq({ uid: 'seq-3', gb: { name: 'other.gb' } });
+  const seq3 = createLinearSeq({ uid: 'seq-3', gb: fileRef('other.gb') });
 
   const groups = groupLinearSourceRecords([seq1, seq2, seq3]);
   assert.equal(groups.length, 2);
@@ -73,7 +75,7 @@ test('linear sources default getters and setters operate on grouped records', ()
 });
 
 test('resolveLinearRecordEffectiveDefinition falls back to file default when record definition is empty', () => {
-  const sharedFile = { name: 'multi_record.gb' };
+  const sharedFile = fileRef('multi_record.gb');
   const seq1 = createLinearSeq({
     uid: 'seq-1',
     gb: sharedFile,
@@ -98,7 +100,7 @@ test('resolveLinearRecordEffectiveDefinition falls back to file default when rec
 // IN-06 (D-12, PD-OI-067): a record draws its own Definition, else the File
 // default the user entered, else the definition inferred from that record.
 test('each record falls back to its own inferred definition after the File default', () => {
-  const file = { name: 'two_organisms.gb' };
+  const file = fileRef('two_organisms.gb');
   const recordA = createLinearSeq({ uid: 'a', gb: file, inferred_definition: '<i>Escherichia coli</i> K-12' });
   const recordB = createLinearSeq({ uid: 'b', gb: file, inferred_definition: '<i>Bacillus subtilis</i> 168' });
   assert.equal(resolveLinearRecordEffectiveDefinition(recordA), '<i>Escherichia coli</i> K-12');
@@ -127,7 +129,7 @@ test('the inferred definition belongs to the record a row selects', () => {
 });
 
 test('resolveLinearRecordEffectiveSubtitle falls back to file default when record subtitle is empty', () => {
-  const sharedFile = { name: 'multi_record.gb' };
+  const sharedFile = fileRef('multi_record.gb');
   const seq1 = createLinearSeq({
     uid: 'seq-1',
     gb: sharedFile,
@@ -260,7 +262,7 @@ test('an explicit override equal to the file default survives a save and reload'
 // Which name fields a File card shows is one decision of the File's records
 // and stored File values (web.linear.file-default-definition).
 test('a one-record File shows its record names on the card and no empty File names block', () => {
-  const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, inferred_definition: 'Inferred' });
+  const record = createLinearSeq({ uid: 'only', gb: fileRef('one.gb'), inferred_definition: 'Inferred' });
   const [source] = groupLinearSourceRecords([record]);
   const cardRecord = linearFileCardRecord(source);
   assert.equal(cardRecord, source.records[0], 'the record entry itself, found by identity');
@@ -269,7 +271,7 @@ test('a one-record File shows its record names on the card and no empty File nam
 
 test('a one-record File that holds a File-level value keeps the File names block alone', () => {
   for (const stored of [{ file_definition: 'File organism' }, { file_subtitle: 'File subtitle' }]) {
-    const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, definition: 'Own', ...stored });
+    const record = createLinearSeq({ uid: 'only', gb: fileRef('one.gb'), definition: 'Own', ...stored });
     const [source] = groupLinearSourceRecords([record]);
     // One names block: the record's names stay in Record options.
     assert.equal(linearFileCardRecord(source), null, JSON.stringify(stored));
@@ -281,7 +283,7 @@ test('a one-record File that holds a File-level value keeps the File names block
 });
 
 test('a File with two or more records keeps the File names block and per-record names', () => {
-  const file = { name: 'two.gb' };
+  const file = fileRef('two.gb');
   const records = [createLinearSeq({ uid: 'a', gb: file }), createLinearSeq({ uid: 'b', gb: file })];
   const [source] = groupLinearSourceRecords(records);
   assert.equal(linearFileCardRecord(source), null);

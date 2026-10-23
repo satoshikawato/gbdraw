@@ -52,14 +52,15 @@ test('Circular single-record presentation selects, transforms, titles, and round
   });
   await openApp(page, { waitForPalette: false });
 
-  await page.evaluate(({ first, second }) => {
+  await page.evaluate(async ({ first, second }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
     app.cInputType = 'gb';
-    app.files.c_gb = new File([`${first}\n${second}`], 'two-records.gbk', {
+    app.files.c_gb = bound(new File([`${first}\n${second}`], 'two-records.gbk', {
       type: 'text/plain',
       lastModified: 1
-    });
+    }));
     Object.assign(app.form, {
       multi_record_canvas: false,
       suppress_gc: true,

@@ -6,7 +6,11 @@
 // file through one owner. The bound IDs keep their files stored: the store
 // releases a file only when no History step and no binding names it.
 
-/** @import { HistoryFile, InputFileCandidate, InputFileRef, InputFileStore } from '../history-files.js' */
+/** @import { InputFileCandidate, InputFileRef, InputFileStore } from '../history-files.js' */
+/** @import { RequestCanonicalComparison } from '../session-request.js' */
+/** @import { LinearComparisonEdge, LinearComparisonPlan } from '../linear-comparisons.js' */
+/** @import { LinearSeq } from '../../state.js' */
+/** @import { DepthFileSlots } from '../depth-track-state.js' */
 import { isInputFileRef } from '../history-files.js';
 
 /**
@@ -20,8 +24,13 @@ import { isInputFileRef } from '../history-files.js';
 
 
 /**
- * A comparison file a Linear diagram uploaded for one edge, by ref.
- * @typedef {{ file?: InputFileRef | null }} InputComparisonFile
+ * A Linear comparison a Session committed, as the bindings hold it: the
+ * request entry's fields, with a resource-backed entry's file by ref.
+ * @typedef {Omit<RequestCanonicalComparison, 'file'> & { file?: InputFileRef | null }} BoundCanonicalComparison
+ */
+/**
+ * A binding's value: one ref, or a list of them (a Depth matrix nests lists).
+ * @typedef {InputFileRef | null | undefined | readonly BoundFileValue[]} BoundFileValue
  */
 
 /**
@@ -34,9 +43,9 @@ import { isInputFileRef } from '../history-files.js';
  * @property {InputFileRef | (InputFileRef | null)[] | (InputFileRef | null)[][] | null} c_depth one record's series, or a record-major matrix
  * @property {InputFileRef[]} c_conservation_blasts
  * @property {string | null} c_conservation_blasts_source a flag (`'losat-cache'`), not a file
- * @property {InputFileRef[]} c_conservation_fastas
+ * @property {(InputFileRef | null)[]} c_conservation_fastas
  * @property {(InputFileRef | null)[]} c_conservation_sequence_sources
- * @property {InputComparisonFile[]} linearCanonicalComparisons
+ * @property {BoundCanonicalComparison[]} linearCanonicalComparisons
  * @property {InputFileRef | null} d_color
  * @property {InputFileRef | null} t_color
  * @property {InputFileRef | null} blacklist
@@ -96,13 +105,11 @@ const BOUND_FILE_KEYS = Object.freeze([
 const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
 
 /**
- * The IDs of every file a binding names. A field that still holds a File is
- * registered, so its ID is the one History records.
+ * The IDs of every file a binding names.
  * @param {InputBindings} bindings
- * @param {Pick<InputFileStore, 'registerFile'>} store
  * @returns {Set<string>}
  */
-export const boundInputFileIds = (bindings, store) => {
+export const boundInputFileIds = (bindings) => {
   /** @type {Set<string>} */
   const fileIds = new Set();
   /** @param {unknown} value */
@@ -111,8 +118,7 @@ export const boundInputFileIds = (bindings, store) => {
       value.forEach(add);
       return;
     }
-    const ref = isInputFileRef(value) ? value : store.registerFile(/** @type {HistoryFile | null} */ (value));
-    if (ref) fileIds.add(ref.fileId);
+    if (isInputFileRef(value)) fileIds.add(value.fileId);
   };
   const files = bindings.files;
   BOUND_FILE_KEYS.forEach((key) => add(files[key]));
@@ -129,11 +135,109 @@ export const boundInputFileIds = (bindings, store) => {
  * The store's release for History's budget: it keeps the files History names
  * and every bound file.
  * @param {InputBindings} bindings
- * @param {Pick<InputFileStore, 'registerFile' | 'retainOnly'>} store
+ * @param {Pick<InputFileStore, 'retainOnly'>} store
  * @returns {(historyFileIds: Iterable<string>) => void}
  */
 export const retainHistoryAndBoundFiles = (bindings, store) => (historyFileIds) => {
-  const retained = boundInputFileIds(bindings, store);
+  const retained = boundInputFileIds(bindings);
   for (const fileId of historyFileIds) retained.add(fileId);
   store.retainOnly(retained);
+};
+
+/**
+ * A loaded value of a binding: a File or Session resource view (a Load
+ * candidate), a ref (a rolled-back snapshot), or a list of them.
+ * @typedef {InputFileCandidate | InputFileRef | readonly LoadedFileValue[]} LoadedFileValue
+ */
+
+/**
+ * The refs of a loaded value, each place and each nested list kept.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {LoadedFileValue} value
+ * @returns {BoundFileValue}
+ */
+export const registerInputFileTree = (store, value) => (
+  Array.isArray(value)
+    ? value.map((entry) => registerInputFileTree(store, entry))
+    : store.registerFile(/** @type {InputFileCandidate} */ (value))
+);
+
+/**
+ * The comparisons a Session committed, as the bindings hold them: a
+ * resource-backed entry's loaded file is registered and named by its ref.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {readonly (Omit<BoundCanonicalComparison, 'file'> & { file?: unknown })[]} comparisons
+ * @returns {BoundCanonicalComparison[]}
+ */
+export const bindCanonicalComparisons = (store, comparisons) => comparisons.map((comparison) => (
+  Object.hasOwn(comparison, 'file')
+    ? { ...comparison, file: store.registerFile(/** @type {InputFileCandidate} */ (comparison.file)) }
+    : /** @type {BoundCanonicalComparison} */ (comparison)
+));
+
+/**
+ * A Linear record row as a Load candidate or a rolled-back snapshot holds it.
+ * @typedef {Omit<LinearSeq, 'gb' | 'gff' | 'fasta' | 'depth'> & {
+ *   gb: LoadedFileValue, gff: LoadedFileValue, fasta: LoadedFileValue, depth: LoadedFileValue
+ * }} LoadedLinearSeq
+ */
+/**
+ * A comparison plan as a Load candidate or a rolled-back snapshot holds it.
+ * @typedef {Omit<LinearComparisonPlan, 'edges'> & {
+ *   edges: (Omit<LinearComparisonEdge, 'file'> & { file: LoadedFileValue })[]
+ * }} LoadedComparisonPlan
+ */
+/**
+ * The project inputs a Load installs (its candidate, which holds the loaded
+ * Files) or a rollback restores (refs).
+ * @typedef {object} LoadedInputs
+ * @property {Readonly<Record<string, unknown>>} files
+ * @property {readonly LoadedLinearSeq[]} linearSeqs
+ * @property {LoadedComparisonPlan} linearComparisonPlan
+ * @property {{ primaryFile?: LoadedFileValue, pairedFile?: LoadedFileValue }} circularRecordDiscovery
+ */
+/**
+ * The bindings a Load installs: every file it holds is registered here, at
+ * install, and each field holds its ref (a ref of a rollback stays bound).
+ * The Load candidate's own reads before the commit read its Files directly.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {LoadedInputs} loaded
+ */
+export const bindLoadedInputs = (store, loaded) => {
+  /** @param {unknown} value */
+  const tree = (value) => registerInputFileTree(store, /** @type {LoadedFileValue} */ (value));
+  /** @param {unknown} value */
+  const one = (value) => store.registerFile(/** @type {InputFileCandidate} */ (value));
+  /** @type {Record<string, unknown>} */
+  const files = { ...loaded.files };
+  BOUND_FILE_KEYS.forEach((key) => {
+    if (Object.hasOwn(files, key)) files[key] = tree(files[key]);
+  });
+  if (Array.isArray(files.linearCanonicalComparisons)) {
+    files.linearCanonicalComparisons = bindCanonicalComparisons(store, files.linearCanonicalComparisons);
+  }
+  /** @type {LinearSeq[]} */
+  const linearSeqs = loaded.linearSeqs.map((seq) => ({
+    ...seq,
+    gb: one(seq.gb),
+    gff: one(seq.gff),
+    fasta: one(seq.fasta),
+    depth: /** @type {DepthFileSlots<InputFileRef>} */ (tree(seq.depth))
+  }));
+  /** @type {LinearComparisonPlan} */
+  const linearComparisonPlan = {
+    ...loaded.linearComparisonPlan,
+    edges: loaded.linearComparisonPlan.edges.map((edge) => ({ ...edge, file: one(edge.file) }))
+  };
+  const discovery = loaded.circularRecordDiscovery;
+  return {
+    files,
+    linearSeqs,
+    linearComparisonPlan,
+    circularRecordDiscovery: {
+      ...discovery,
+      ...(Object.hasOwn(discovery, 'primaryFile') ? { primaryFile: one(discovery.primaryFile) } : {}),
+      ...(Object.hasOwn(discovery, 'pairedFile') ? { pairedFile: one(discovery.pairedFile) } : {})
+    }
+  };
 };

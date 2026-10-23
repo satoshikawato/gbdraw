@@ -14,6 +14,7 @@ import {
 } from './file-content-cache.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
@@ -24,8 +25,8 @@ import {
  * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
  * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
  * @property {'' | 'gb' | 'gff'} inputType
- * @property {FileLike | null} primaryFile
- * @property {FileLike | null} pairedFile
+ * @property {InputFileRef | null} primaryFile
+ * @property {InputFileRef | null} pairedFile
  * @property {{ selector: string, record_id: string, recordKey: string }[]} canonicalRecordIdentities
  */
 
@@ -77,7 +78,7 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
  * @template Entry
  * @typedef {{
  *   cInputType: { value: string },
- *   files: { c_gb: FileLike | null, c_gff: FileLike | null, c_fasta: FileLike | null },
+ *   files: { c_gb: InputFileRef | null, c_gff: InputFileRef | null, c_fasta: InputFileRef | null },
  *   circularRecordDiscovery: CircularRecordDiscovery,
  *   circularRecordList: { value: Entry[] }
  * }} CircularDiscoveryState

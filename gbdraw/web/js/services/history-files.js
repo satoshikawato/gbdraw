@@ -1,15 +1,16 @@
 // @ts-check
+/** @import { FileLike } from './session-resource-backing.js' */
 /** A File, or any object the History keeps as one. */
 /** @typedef {{ name: string, size: number, type?: string, lastModified?: number }} HistoryFile */
 /** What `registerFile` accepts: a File, a Session resource view, or anything else (which is not registered). @typedef {{ name?: string, size?: number, type?: string, lastModified?: number } | null | undefined} InputFileCandidate */
 /**
  * A file binding: the frozen name of one stored file (`InputFileStore.registerFile`).
- * It is not a `Blob`; its bytes are `InputFileStore.fileOf(ref)`.
- * @typedef {Readonly<{ fileId: string, name: string, type: string, size: number, lastModified: number }>} InputFileRef
+ * It is not a `Blob`; its bytes are `InputFileStore.fileOf(ref)`. `sourceId`
+ * names where the bytes come from: the refs of two Session resource views of
+ * one stored resource share it (a Linear File card groups its records by it);
+ * any other file's is its `fileId`.
+ * @typedef {Readonly<{ fileId: string, sourceId: string, name: string, type: string, size: number, lastModified: number }>} InputFileRef
  */
-/** @typedef {InputFileRef} HistoryFileDescriptor */
-/** @typedef {HistoryFile | null | undefined | HistoryFileValue[]} HistoryFileValue */
-/** @typedef {HistoryFileDescriptor | null | HistoryFileDescriptorValue[]} HistoryFileDescriptorValue */
 
 /**
  * @param {unknown} value
@@ -60,21 +61,26 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
 /**
  * @typedef {object} InputFileStore
  * @property {(file: InputFileCandidate) => InputFileRef | null} registerFile
- * @property {(ref: InputFileRef | null | undefined) => HistoryFile | null} fileOf
- * @property {(value: HistoryFileValue) => HistoryFileDescriptorValue} describeValue
- * @property {(value: HistoryDescriptorTree) => HistoryFileValue} restoreValue
+ * @property {(ref: InputFileRef | null | undefined) => FileLike | null} fileOf
  * @property {(fileIds: Iterable<string> | null | undefined) => void} retainOnly
  * @property {(fileIds: Iterable<string> | null | undefined) => number} estimateBytes
  * @property {(fileId: string) => boolean} has
  * @property {typeof collectHistoryFileIds} collectIds
  */
-/** @typedef {InputFileRef | null | undefined | HistoryDescriptorTree[]} HistoryDescriptorTree */
-/** @returns {InputFileStore} */
-export const createHistoryFileStore = () => {
+/**
+ * @param {{ sourceOf?: (file: HistoryFile) => object | null | undefined }} [options] `sourceOf`: the
+ *   object a file's bytes come from when other files share them (a Session resource view's descriptor);
+ *   refs of files with one source share `sourceId`. The project's store is given the Session's
+ *   (`state.js`), so this module imports nothing.
+ * @returns {InputFileStore}
+ */
+export const createHistoryFileStore = ({ sourceOf = () => null } = {}) => {
   /** @type {Map<string, { file: HistoryFile, ref: InputFileRef }>} */
   const files = new Map();
   /** @type {WeakMap<HistoryFile, string>} */
   const idsByFile = new WeakMap();
+  /** @type {WeakMap<object, string>} The source of each stored resource's views, by its descriptor. */
+  const sourceIdsByDescriptor = new WeakMap();
   let nextId = 1;
 
   /**
@@ -92,9 +98,13 @@ export const createHistoryFileStore = () => {
     const fileId = `file-${nextId}`;
     nextId += 1;
     idsByFile.set(file, fileId);
+    const descriptor = sourceOf(file);
+    const sourceId = descriptor ? (sourceIdsByDescriptor.get(descriptor) || fileId) : fileId;
+    if (descriptor && !sourceIdsByDescriptor.has(descriptor)) sourceIdsByDescriptor.set(descriptor, sourceId);
     /** @type {InputFileRef} */
     const ref = Object.freeze({
       fileId,
+      sourceId,
       name: file.name || 'file',
       type: file.type || '',
       size: file.size || 0,
@@ -107,27 +117,9 @@ export const createHistoryFileStore = () => {
   /**
    * The bytes a ref names: the registered File, or null once released.
    * @param {InputFileRef | null | undefined} ref
-   * @returns {HistoryFile | null}
+   * @returns {FileLike | null}
    */
   const fileOf = (ref) => (ref ? files.get(ref.fileId)?.file || null : null);
-
-  /**
-   * @param {HistoryFileValue} value
-   * @returns {HistoryFileDescriptorValue}
-   */
-  const describeValue = (value) => {
-    if (Array.isArray(value)) return value.map((entry) => describeValue(entry));
-    return registerFile(value);
-  };
-
-  /**
-   * @param {HistoryDescriptorTree} value
-   * @returns {HistoryFileValue}
-   */
-  const restoreValue = (value) => {
-    if (Array.isArray(value)) return value.map((entry) => restoreValue(entry));
-    return fileOf(value);
-  };
 
   /** @param {Iterable<string> | null | undefined} fileIds */
   const retainOnly = (fileIds) => {
@@ -152,12 +144,10 @@ export const createHistoryFileStore = () => {
 
   return {
     collectIds: collectHistoryFileIds,
-    describeValue,
     estimateBytes,
     fileOf,
     has,
     registerFile,
-    restoreValue,
     retainOnly
   };
 };

@@ -1,13 +1,13 @@
 // @ts-check
-/** @import { InputFileStore } from './history-files.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
-import { boundInputFileIds } from './drawing/inputs.js';
+import { boundInputFileIds, registerInputFileTree } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
-/** @import { InputBindings } from './drawing/inputs.js' */
+/** @import { BoundFileValue, InputBindings, LoadedFileValue } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
@@ -163,7 +163,7 @@ const editedIntentPartOf = (path, value) => (
  * }} FilesDataSequence
  */
 /**
- * The files of an intent or checkpoint: File descriptors (`fileStore.describeValue`) by input.
+ * The files of an intent or checkpoint: the refs (`InputFileRef`) each input binds, copied (`refsOf`).
  * @typedef {{
  *   c_gb?: unknown, c_gff?: unknown, c_fasta?: unknown, c_depth?: unknown,
  *   c_conservation_blasts?: unknown, c_conservation_blasts_source?: unknown,
@@ -737,25 +737,33 @@ const applyFallbackResultsData = (state, results = []) => {
 // comparison files. The five table files stay shared until each drawing binds
 // its own; every drawing's intent holds them.
 /**
+ * A binding's refs as a step holds them: each list copied, each ref as is.
+ * @param {unknown} value
+ * @returns {BoundFileValue}
+ */
+const refsOf = (value) => (
+  Array.isArray(value) ? value.map(refsOf) : (isInputFileRef(value) ? value : null)
+);
+
+/**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
- * @param {HistorySnapshotFileStore} fileStore
  * @returns {FilesData}
  */
-const buildIntentFilesData = (state, drawing, fileStore) => {
-  const shared = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, fileStore.describeValue(state.files?.[key])]));
+const buildIntentFilesData = (state, drawing) => {
+  const shared = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, refsOf(state.files?.[key])]));
   if (drawing.mode !== 'linear') {
     return {
-      c_gb: fileStore.describeValue(state.files?.c_gb),
-      c_gff: fileStore.describeValue(state.files?.c_gff),
-      c_fasta: fileStore.describeValue(state.files?.c_fasta),
-      c_depth: fileStore.describeValue(state.files?.c_depth),
-      c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
+      c_gb: refsOf(state.files?.c_gb),
+      c_gff: refsOf(state.files?.c_gff),
+      c_fasta: refsOf(state.files?.c_fasta),
+      c_depth: refsOf(state.files?.c_depth),
+      c_conservation_blasts: refsOf(state.files?.c_conservation_blasts || []),
       c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
         ? 'losat-cache'
         : null,
-      c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
-      c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
+      c_conservation_fastas: refsOf(state.files?.c_conservation_fastas || []),
+      c_conservation_sequence_sources: refsOf(state.files?.c_conservation_sequence_sources || []),
       ...shared
     };
   }
@@ -763,10 +771,10 @@ const buildIntentFilesData = (state, drawing, fileStore) => {
     ...shared,
     linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
       uid: seq.uid,
-      gb: fileStore.describeValue(seq.gb),
-      gff: fileStore.describeValue(seq.gff),
-      fasta: fileStore.describeValue(seq.fasta),
-      depth: fileStore.describeValue(seq.depth),
+      gb: refsOf(seq.gb),
+      gff: refsOf(seq.gff),
+      fasta: refsOf(seq.fasta),
+      depth: refsOf(seq.depth),
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
@@ -780,7 +788,7 @@ const buildIntentFilesData = (state, drawing, fileStore) => {
     })),
     linearComparisons: Array.from(drawing.linearComparisonPlan?.edges || []).map((edge) => ({
       id: String(edge?.id || ''),
-      file: fileStore.describeValue(edge?.file)
+      file: refsOf(edge?.file)
     }))
   };
 };
@@ -789,11 +797,10 @@ const buildIntentFilesData = (state, drawing, fileStore) => {
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
- * @param {HistorySnapshotFileStore} fileStore
  * @returns {FilesData}
  */
-const buildFilesData = (state, drawing, fileStore) => {
-  const files = buildIntentFilesData(state, drawing, fileStore);
+const buildFilesData = (state, drawing) => {
+  const files = buildIntentFilesData(state, drawing);
   if (drawing.mode !== 'linear') return files;
   return {
     ...files,
@@ -805,7 +812,7 @@ const buildFilesData = (state, drawing, fileStore) => {
       isResourceBackedCanonicalComparison(comparison)
         ? {
             ...mapResourceBackedCanonicalComparison(comparison),
-            file: fileStore.describeValue(comparison.file)
+            file: refsOf(comparison.file)
           }
         : cloneJsonData(comparison)
     ))
@@ -829,12 +836,14 @@ const inputBindingsOf = (state) => ({ files: state.files, linearSeqs: state.line
 const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeqList = null) => {
   if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
+  // A binding holds the step's refs, which History keeps stored (a ref whose
+  // file was released binds nothing).
   /** @param {unknown} value */
-  const restore = (value) => fileStore.restoreValue(value);
-  // A table card holds its file's ref: the step's ref, kept bound by History.
+  const restore = (value) => registerInputFileTree(fileStore, /** @type {LoadedFileValue} */ (value));
+  /** @param {unknown} value */
+  const restoreOne = (value) => fileStore.registerFile(isInputFileRef(value) ? value : null);
   FILE_IMPORT_CARDS.forEach((key) => {
-    const value = filesData?.[/** @type {keyof FilesData} */ (key)];
-    state.files[key] = isInputFileRef(value) ? fileStore.registerFile(value) : null;
+    state.files[key] = restore(filesData?.[/** @type {keyof FilesData} */ (key)]);
   });
   if (drawing.mode !== 'linear') {
     state.files.c_gb = restore(filesData?.c_gb);
@@ -842,7 +851,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
     state.files.c_fasta = restore(filesData?.c_fasta);
     state.files.c_depth = restore(filesData?.c_depth);
     state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-      ? restore(filesData.c_conservation_blasts).filter(Boolean)
+      ? /** @type {(InputFileRef | null)[]} */ (restore(filesData.c_conservation_blasts)).filter(Boolean)
       : [];
     state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
       ? 'losat-cache'
@@ -892,7 +901,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
       (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
-        .map((comparison) => [String(comparison?.id || ''), restore(comparison?.file)])
+        .map((comparison) => [String(comparison?.id || ''), restoreOne(comparison?.file)])
     );
     drawing.linearComparisonPlan.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(String(edge?.id || '')) || null;
@@ -904,12 +913,8 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @typedef {object} HistorySnapshotFileStore
  *   The functions of the project's input file store (`state.inputFiles`)
  *   that the snapshot service calls (F-05).
- * @property {(value: any) => any} describeValue
- *   A file, or an array of files, as the refs an intent holds (`null` for a non-file).
  * @property {InputFileStore['registerFile']} registerFile
- *   Stores a file by reference and returns its one ref; `null` for a non-file.
- * @property {(value: any) => any} restoreValue
- *   The stored file, or an array of them, that the refs name (`null` when none).
+ *   A step's ref, while its file is stored; `null` once released.
  *
  * @typedef {object} HistorySnapshotRuntimeOwner
  *   The generated-artifact runtime owner that the composition root registers (`app/app-setup.js`).
@@ -1515,7 +1520,7 @@ export const createHistorySnapshotService = ({
       runtimeState,
       transportIdentity,
       baseRetainedBytes: currentGeneratedArtifactRetainedBytes,
-      fileIds: Object.freeze([...boundInputFileIds(inputBindingsOf(state), fileStore)]),
+      fileIds: Object.freeze([...boundInputFileIds(inputBindingsOf(state))]),
       identity: Object.freeze({
         fingerprint: transportIdentity?.fingerprint || '',
         compactSignature
@@ -1841,7 +1846,7 @@ export const createHistorySnapshotService = ({
       }),
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
       groupNames: buildGroupNameIntentData(drawing),
-      files: buildIntentFilesData(state, drawing, fileStore),
+      files: buildIntentFilesData(state, drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
@@ -1895,7 +1900,7 @@ export const createHistorySnapshotService = ({
             ? drawing.linearComparisonPlan.edges
             : []
           )
-            .map((edge) => /** @type {[string, unknown]} */ ([String(edge?.id || ''), edge?.file ?? null]))
+            .map((edge) => /** @type {[string, InputFileRef | null]} */ ([String(edge?.id || ''), edge?.file ?? null]))
             .filter(([edgeId]) => edgeId)
         )
       : null;
@@ -1926,7 +1931,7 @@ export const createHistorySnapshotService = ({
         (drawing.linearComparisonPlan?.edges || []).forEach((edge) => {
           const edgeId = String(edge?.id || '');
           if (edgeId && retainedComparisonFiles.has(edgeId)) {
-            edge.file = retainedComparisonFiles.get(edgeId);
+            edge.file = retainedComparisonFiles.get(edgeId) ?? null;
           }
         });
       }
@@ -1976,7 +1981,7 @@ export const createHistorySnapshotService = ({
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
-      files: buildFilesData(state, drawing, fileStore),
+      files: buildFilesData(state, drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       ...generated,
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
@@ -2085,7 +2090,7 @@ export const createHistorySnapshotService = ({
     captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet,
     clearGeneratedArtifactIdentity,
-    collectCurrentFileIds: () => boundInputFileIds(inputBindingsOf(state), fileStore),
+    collectCurrentFileIds: () => boundInputFileIds(inputBindingsOf(state)),
     compareGeneratedArtifactHandles,
     drawingHistory,
     sessionHistory,

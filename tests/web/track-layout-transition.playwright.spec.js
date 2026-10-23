@@ -294,10 +294,11 @@ test('removing a Circular Depth series outside the Axis keeps the feature row in
     const axis = app.adv.circular_track_slots_axis_index;
     return slots.map((slot, index) => `${slot.id}:${index < axis ? 'outside' : 'inside'}:${slot.params?.lane_direction || ''}`);
   });
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     const depth = (name) => new File(['position\tdepth\n1\t5\n'], name, { type: 'text/tab-separated-values' });
-    app.files.c_depth = [[depth('a.tsv'), depth('b.tsv')]];
+    app.files.c_depth = bound([[depth('a.tsv'), depth('b.tsv')]]);
     Object.assign(app.form, { show_depth: true, track_type: 'tuckin' });
     app.resetCircularTrackSlotsFromSimpleControls();
     app.setCircularTrackSlotsEnabled(true);
