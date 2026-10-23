@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from svgwrite.container import Group
 
+from ....layout.record_labels import record_length_label
 from ....svg.text_path import generate_name_path, generate_text_path
 
 
@@ -56,7 +57,7 @@ class DefinitionDrawer:
             lines.append({"kind": "plain", "text": accession})
 
         if show_length:
-            length_text = "{:,} bp".format(record_length)
+            length_text = record_length_label(record_length)
             lines.append({"kind": "plain", "text": length_text})
 
         if show_gc:

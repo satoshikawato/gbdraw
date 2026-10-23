@@ -19,6 +19,7 @@ from ....core.text import (
     measure_mixed_text_line,
     parse_mixed_content_text,
 )
+from ....layout.record_labels import record_length_label
 from ....layout.spatial import Aabb, union_aabbs
 from ...group_content import DefinitionMeasurement
 from ....svg.ids import definition_group_svg_id
@@ -226,7 +227,7 @@ class DefinitionGroup:
         if self._is_region_applied():
             self.length_label = self._format_coordinate_span()
         else:
-            self.length_label = "{:,} bp".format(self.record_length)
+            self.length_label = record_length_label(self.record_length)
 
     def _measure_text(
         self,

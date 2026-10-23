@@ -112,6 +112,16 @@ def test_source_tick_text_position_and_record_length_definition(mode, reverse, s
     assert plan.transforms[0].start_coordinate == start
 
 
+@pytest.mark.parametrize("start", [None, 4001])
+def test_circular_and_linear_definitions_read_the_same_length(start):
+    """Both modes take the length line from one owner (OV-1694)."""
+    def length(mode):
+        _, root = _svg(_request(mode, _record(), start))
+        definition = next(n for n in root.iter() if n.get("data-gbdraw-role") == "record-definition")
+        return [t for t in definition.itertext() if t.strip().endswith(" bp")]
+    assert length("circular") == length("linear") == ["10,000 bp"]
+
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 @pytest.mark.parametrize("reverse", [False, True])
 def test_rotated_record_definition_matches_unrotated(mode, reverse):
