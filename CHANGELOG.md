@@ -28,6 +28,10 @@ write-up of a release.
   - Generate no longer stages tables that nothing reads, and the blastp protein
     extraction reads the GenBank records the Worker already holds instead of
     receiving and parsing the file again (#1296, #1299).
+- Fixed: a Circular legend at a corner (`upper_left`, `upper_right`,
+  `lower_left`, `lower_right`) on a Multi-Record Canvas, which the web app
+  uses by default, was drawn over the records; it now clears them and the
+  canvas grows as on a single-record canvas.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
