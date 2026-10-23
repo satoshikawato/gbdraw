@@ -1,7 +1,10 @@
 // @ts-check
 /** @import { PaletteColorsDialog } from '../state.js' */
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
-import { clearQueuedPalette, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette, setDefaultColors } from '../services/drawing/palette.js';
+import {
+  clearQueuedPalette, editDefaultColor as editDefaultColorField, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette,
+  setDefaultColors
+} from '../services/drawing/palette.js';
 /** @import { PaletteDrawing } from '../services/drawing/palette.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 import { listText, t } from '../utils/i18n.js';
@@ -275,12 +278,15 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   };
 
   /**
-   * An edit in the Default colors list (the field, Add, a colors file, a
-   * preset).
+   * A field edit in the Default colors list; its row keeps its grid.
    * @param {string} key
    * @param {string} color
    */
-  const editDefaultColor = (key, color) => editDefaultColors(state.activeDrawing(), { [key]: color });
+  const editDefaultColor = (key, color) => {
+    const drawing = state.activeDrawing();
+    editDefaultColorField(drawing.slices.palette, key, color);
+    syncPaletteDraftState();
+  };
   // OV-1280 (D-19): a Default colors file's colors over the drawing's, and
   // their Remove: each type takes back its user color, else the palette's.
   /**

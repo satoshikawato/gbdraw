@@ -2238,7 +2238,6 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     linearDrawing.annotationSets.splice(0, linearDrawing.annotationSets.length,
       JSON.parse(JSON.stringify(annotationSet)));
 
-    app.adv.circular_track_slots_enabled = true;
     app.adv.circular_track_slots_axis_index = 1;
     app.adv.circular_track_slots.splice(
       0,
@@ -2324,6 +2323,10 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
         }
       }
     );
+    // The Custom Track checkbox's writer turns the stack on and reconciles
+    // it (its comparison ring rows and its normalized slots), as the
+    // checkbox does.
+    app.setCircularTrackSlotsEnabled(true);
 
     linearDrawing.adv.linear_track_slots_enabled = false;
     linearDrawing.adv.linear_track_slots_axis_index = 2;

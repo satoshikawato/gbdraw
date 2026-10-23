@@ -2345,8 +2345,20 @@ export const createHistoryRouter = ({
     touchProject();
     return true;
   };
+  // OV-1339: an Undo or Redo is pending from its call, before the shown
+  // drawing settles its open step, so the drawing switch waits for it.
+  const projectTraversals = makeRef(0);
   /** @param {'undo' | 'redo'} direction */
   const traverse = async (direction) => {
+    projectTraversals.value += 1;
+    try {
+      return await traverseShown(direction);
+    } finally {
+      projectTraversals.value -= 1;
+    }
+  };
+  /** @param {'undo' | 'redo'} direction */
+  const traverseShown = async (direction) => {
     const shown = managerOf(activeDrawingId());
     const busy = await shown.settleBeforeTraversal();
     if (busy) return busy;
@@ -2504,7 +2516,7 @@ export const createHistoryRouter = ({
       (changes) => { if (drawingId === activeDrawingId()) listener(changes); }
     )),
     mutationPending: () => every().some((manager) => manager.mutationPending()),
-    traversalPending: () => every().some((manager) => manager.traversalPending())
+    traversalPending: () => projectTraversals.value > 0 || every().some((manager) => manager.traversalPending())
   };
 
   /** @type {WeakMap<object, DrawingHistory>} The manager that opened each step. */

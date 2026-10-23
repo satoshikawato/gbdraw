@@ -270,6 +270,7 @@ const WRITES = {
     selectPalette: (h) => modules.palette.selectPalette(h, 'other', { CDS: '#000001' }),
     replaceDefaultColors: (h) => modules.palette.replaceDefaultColors(h, { tRNA: '#000002' }),
     setDefaultColors: (h) => modules.palette.setDefaultColors(h, { rRNA: '#000003' }),
+    editDefaultColor: (h) => modules.palette.editDefaultColor(h, 'CDS', '#000006'),
     queuePalette: (h) => modules.palette.queuePalette(h, 'next', { CDS: '#000004' }),
     restoreArtifactQueuedPalette: (h) => modules.palette.restoreArtifactQueuedPalette(h, 'artifact', { CDS: '#000005' }),
     clearQueuedPalette: (h) => modules.palette.clearQueuedPalette(h)

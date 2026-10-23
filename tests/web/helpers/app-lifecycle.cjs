@@ -662,6 +662,7 @@ const readWarmBaseline = async (page) => ({
     const { state } = await import('/gbdraw/web/js/state.js');
     const config = await import('/gbdraw/web/js/services/config.js');
     return JSON.parse(JSON.stringify({
+      shownDrawing: state.activeDrawing().id,
       drawings: Object.fromEntries(['circular', 'linear'].map((mode) => [mode, {
         config: config.buildConfigData(state.drawingOf(mode)),
         ui: config.buildUiStateData(state.drawingOf(mode), { includePreviewNavigation: false })
@@ -681,12 +682,23 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
   await page.evaluate(() => document.activeElement?.blur?.());
   await settleLive(page, { timeout: WARM_RESTORE_TIMEOUT_MS });
   // History takes back the inputs, Results and edits its steps recorded.
-  for (let undone = 0; undone < WARM_RESTORE_MAX_UNDO; undone += 1) {
-    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-    if (steps === 0) break;
-    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  // Each drawing has its own History and a drawing switch is no step
+  // (PD-OI-090), so the restore walks each drawing's History, the drawing
+  // shown at boot last, which stays shown.
+  const drawingIds = await page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state
+    .drawingList().map((drawing) => drawing.id));
+  const shownAtBoot = restorePoint.shownDrawing;
+  for (const drawingId of [...drawingIds.filter((id) => id !== shownAtBoot), shownAtBoot]) {
+    const switched = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
+    if (switched && switched.status !== 'ok') return [`the restore could not show the drawing ${drawingId}`];
     await settleLive(page);
-    if (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) >= steps) break;
+    for (let undone = 0; undone < WARM_RESTORE_MAX_UNDO; undone += 1) {
+      const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+      if (steps === 0) break;
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settleLive(page);
+      if (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) >= steps) break;
+    }
   }
   // What a case set outside History: Linear sources set through their setter,
   // drafts and settings (Reset Settings), and the settings of both drawings as

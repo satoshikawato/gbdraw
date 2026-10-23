@@ -125,6 +125,24 @@ export const setDefaultColors = (slice, colors) => {
 };
 
 /**
+ * A field edit in the Default colors list: the color of a key the table holds
+ * is set in that table, so the list's grouping, which follows the table's keys
+ * and its replacement, does not move the edited row; a new key is
+ * `setDefaultColors`.
+ * @param {PaletteSlice} slice
+ * @param {string} key
+ * @param {string} color
+ */
+export const editDefaultColor = (slice, key, color) => {
+  const { currentColors } = membersOf(slice);
+  if (!Object.hasOwn(currentColors.value, key)) {
+    setDefaultColors(slice, { [key]: color });
+    return;
+  }
+  currentColors.value[key] = color;
+};
+
+/**
  * Queues `name` with `colors` for the next Generate.
  * @param {PaletteSlice} slice
  * @param {string} name

@@ -3631,3 +3631,35 @@ for (const previousSuppressed of [false, true]) {
   assert.deepEqual(held(), ['L1', 'R2'], 'the dropped steps release R1');
   console.log('history held identity tests passed');
 }
+
+// OV-1339 (per-drawing History): the router's Undo or Redo is pending from its
+// call, before the shown drawing settles its open step, to its end; the
+// drawing switch reads `traversalPending` and waits for it.
+{
+  const { createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
+  const shown = ref('circular');
+  const values = { circular: 0, linear: 0 };
+  const router = createHistoryRouter({
+    drawingIds: ['circular', 'linear'],
+    activeDrawingId: () => shown.value,
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (drawingId) => {
+      const build = () => ({ value: values[drawingId] });
+      const apply = (snapshot) => { values[drawingId] = snapshot.value; };
+      return { buildIntent: build, applyIntent: apply, buildCheckpoint: build, applyCheckpoint: apply };
+    }
+  });
+  await router.captureBaseline();
+  await router.runUndoable('Increment', () => { values.circular = 1; });
+  assert.equal(router.traversalPending(), false);
+  const undoing = router.undo();
+  assert.equal(router.traversalPending(), true, 'pending from the Undo call');
+  await undoing;
+  assert.equal(values.circular, 0);
+  assert.equal(router.traversalPending(), false);
+  const redoing = router.redo();
+  assert.equal(router.traversalPending(), true, 'pending from the Redo call');
+  await redoing;
+  assert.equal(router.traversalPending(), false);
+  console.log('history router traversal pending tests passed');
+}

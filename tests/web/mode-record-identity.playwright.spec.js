@@ -106,16 +106,23 @@ for (const committed of [false, true]) {
       await checkReturned();
       await page.screenshot({ path: testInfo.outputPath('returned-circular.png') });
 
-      // Each mode control remains one undoable operation; the placement is not rewritten.
-      for (const mode of ['linear', 'circular']) {
-        await page.getByRole('button', { name: /^Undo/ }).first().click();
-        await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
-      }
-      await checkReturned();
-      for (const mode of ['linear', 'circular']) {
-        await page.getByRole('button', { name: /^Redo/ }).first().click();
-        await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
-      }
+      // PD-OI-090: a drawing switch is no History step. Undo and Redo after it
+      // walk the Circular drawing's own last step (the placement, or the
+      // Generate that committed it) and keep the Circular drawing shown; the
+      // placement keeps its source identity.
+      const walk = async (action) => {
+        await page.getByRole('button', { name: new RegExp(`^${action}`) }).first().click();
+        await expect.poll(() => page.evaluate((undone) => {
+          const history = window.__GBDRAW_HISTORY__;
+          return !history.restoring.value && !history.traversalPending() && history.canRedo() === undone;
+        }, action === 'Undo')).toBe(true);
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+      };
+      await walk('Undo');
+      // An Undo of the Generate keeps the placement draft; an Undo of the
+      // placement removes it.
+      expect((await snapshot(page)).placements).toEqual(committed ? before.placements : {});
+      await walk('Redo');
       await checkReturned();
 
       const pending = page.waitForEvent('download');

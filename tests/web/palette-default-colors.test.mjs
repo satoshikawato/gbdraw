@@ -228,6 +228,21 @@ test('the dialog names three keys and counts the rest', () => {
   assert.equal(paletteColorsDialog.keysText, 'CDS, tRNA, rRNA, and 2 more');
 });
 
+// A field edit in the Default colors list sets the color in the table it
+// edits: the table stays the same object, so the list's grouping (which reads
+// the table's keys) never moves the edited row to the other grid. A new key or
+// a whole-table change gives a new table, which the grouping follows.
+test('a Default colors field edit keeps the table object; a new key replaces it', () => {
+  const { drawing, manager } = setup();
+  const table = drawing.currentColors.value;
+  manager.editDefaultColor('tRNA', 'none');
+  assert.equal(drawing.currentColors.value, table);
+  assert.equal(drawing.currentColors.value.tRNA, 'none');
+  manager.editDefaultColor('tmRNA', '#010203');
+  assert.notEqual(drawing.currentColors.value, table);
+  assert.equal(drawing.currentColors.value.tmRNA, '#010203');
+});
+
 test('setDefaultColor writes the default color and applies it to the Result', () => {
   const { drawing, state, manager } = setup();
   manager.setDefaultColor(drawing, 'CDS', '#123456');
