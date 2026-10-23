@@ -1364,19 +1364,27 @@ def _resolve_radial_layout_fitting_definition(
     strain: str | None,
     plot_title: str | None,
     definition_profile: str,
+    layout_definition_profile: str,
     definition_position: str,
     center_reserved_radius: float | None,
     record_presentation: RecordPresentation | None,
 ) -> tuple[CircularRadialLayout, float | None, int]:
     """Place the slots around the center definition (PD-OI-078).
 
-    Returns the layout, the reserved definition radius and the species line
-    count. Only a placement that fails because of the definition band wraps
-    the species line at word boundaries and places again, with the fewest
-    lines that fit. An explicit ``center_reserved_radius`` keeps the single
-    line. ``definition_font_size`` 18 is the packaged default, so 18 counts as
-    not explicit and may wrap; any other value is explicit and never wraps. A
-    failure the wrap cannot fix raises the original definition-band error.
+    Returns the layout, the reserved definition radius the layout used and the
+    species line count of the drawn definition. Only a placement that fails
+    because of the definition band wraps the species line at word boundaries
+    and places again, with the fewest lines that fit. An explicit
+    ``center_reserved_radius`` keeps the single line. ``definition_font_size``
+    18 is the packaged default, so 18 counts as not explicit and may wrap; any
+    other value is explicit and never wraps. A failure the wrap cannot fix
+    raises the original definition-band error.
+
+    A plot title changes only the center text (OV-1710): when it replaces the
+    full definition the record draws without it (``layout_definition_profile``)
+    with the record summary (``definition_profile``), the slots are placed
+    around the full definition, which is never smaller. When the full
+    definition cannot fit, the slots are placed around the drawn one.
     """
 
     if center_reserved_radius is not None:
@@ -1385,44 +1393,55 @@ def _resolve_radial_layout_fitting_definition(
     if str(definition_position).strip().lower() != "center":
         return resolve_layout(None), None, 1
 
-    def reserved_for(line_count: int) -> float:
-        return _definition_reserved_radius_px(
-            gb_record,
-            geometry,
-            species,
-            strain,
-            cfg=cfg,
-            plot_title=plot_title,
-            definition_profile=definition_profile,
-            species_line_count=line_count,
-            record_presentation=record_presentation,
-        )
+    def fit(profile: str) -> tuple[CircularRadialLayout, float, int]:
+        def reserved_for(line_count: int) -> float:
+            return _definition_reserved_radius_px(
+                gb_record,
+                geometry,
+                species,
+                strain,
+                cfg=cfg,
+                plot_title=plot_title,
+                definition_profile=profile,
+                species_line_count=line_count,
+                record_presentation=record_presentation,
+            )
 
-    reserved = reserved_for(1)
-    try:
-        return resolve_layout(reserved), reserved, 1
-    except ValidationError as error:
-        font_size = float(cfg.objects.definition.circular.font_size)
-        if (
-            track_layout_reason(error) != "DEFINITION_RESERVED"
-            or str(definition_profile) != "full"
-            or not math.isclose(font_size, _packaged_circular_definition_font_size())
-        ):
-            raise
-        definition_error = error
-
-    previous = reserved
-    for line_count in range(2, MAX_WRAPPED_SPECIES_LINES + 1):
-        wrapped = reserved_for(line_count)
-        if wrapped >= previous - FEATURE_BAND_EPSILON:
-            break
-        previous = wrapped
+        reserved = reserved_for(1)
         try:
-            return resolve_layout(wrapped), wrapped, line_count
-        except ValidationError as retry_error:
-            if track_layout_reason(retry_error) != "DEFINITION_RESERVED":
+            return resolve_layout(reserved), reserved, 1
+        except ValidationError as error:
+            font_size = float(cfg.objects.definition.circular.font_size)
+            if (
+                track_layout_reason(error) != "DEFINITION_RESERVED"
+                or str(profile) != "full"
+                or not math.isclose(font_size, _packaged_circular_definition_font_size())
+            ):
+                raise
+            definition_error = error
+
+        previous = reserved
+        for line_count in range(2, MAX_WRAPPED_SPECIES_LINES + 1):
+            wrapped = reserved_for(line_count)
+            if wrapped >= previous - FEATURE_BAND_EPSILON:
                 break
-    raise definition_error
+            previous = wrapped
+            try:
+                return resolve_layout(wrapped), wrapped, line_count
+            except ValidationError as retry_error:
+                if track_layout_reason(retry_error) != "DEFINITION_RESERVED":
+                    break
+        raise definition_error
+
+    if str(definition_profile) == "record_summary" and str(layout_definition_profile) == "full":
+        try:
+            layout, reserved, _untitled_line_count = fit(layout_definition_profile)
+            # The drawn record summary has no species line to wrap.
+            return layout, reserved, 1
+        except ValidationError as error:
+            if track_layout_reason(error) != "DEFINITION_RESERVED":
+                raise
+    return fit(definition_profile)
 
 
 def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
@@ -2408,6 +2427,7 @@ def add_record_on_circular_canvas(
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
+    layout_definition_profile: str | None = None,
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: ResolvedAnnotationBundle,
@@ -2610,6 +2630,9 @@ def add_record_on_circular_canvas(
             strain=strain,
             plot_title=plot_title,
             definition_profile=definition_profile,
+            layout_definition_profile=(
+                definition_profile if layout_definition_profile is None else layout_definition_profile
+            ),
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,
@@ -3217,6 +3240,7 @@ def _assemble_circular_diagram_result(
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
+    layout_definition_profile: str | None = None,
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
@@ -3323,6 +3347,7 @@ def _assemble_circular_diagram_result(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position=definition_position,
         definition_profile=definition_profile,
+        layout_definition_profile=layout_definition_profile,
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
         annotations=resolved_annotations,
