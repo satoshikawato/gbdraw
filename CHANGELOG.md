@@ -28,6 +28,17 @@ write-up of a release.
   - Generate no longer stages tables that nothing reads, and the blastp protein
     extraction reads the GenBank records the Worker already holds instead of
     receiving and parsing the file again (#1296, #1299).
+  - The Generate after a failed one (for example after the Label fit choice)
+    reuses the sources the failed Generate already parsed: about 2.9 s instead
+    of 4.0 s on a 5.5 Mb GenBank file (#1301).
+  - LOSAT hashes each record's FASTA once per file (#1302, #1304), and the
+    first blastp Generate after an upload sends and parses each new file once
+    for all File cards and the diagram: about 4.4-5.1 s instead of 7.6-8.0 s
+    for six cards of a 17.5 MB GenBank file (#1307).
+- Fixed: LOSAT, the Circular conservation database, and restored match
+  sequences now read the same records as the drawing when a GenBank file holds
+  a record without a sequence, a file starts with a UTF-8 byte order mark, or a
+  GFF3 `#N` selector names a record (#1302, #1304, #1307).
 - Fixed: a Circular legend at a corner (`upper_left`, `upper_right`,
   `lower_left`, `lower_right`) on a Multi-Record Canvas, which the web app
   uses by default, was drawn over the records; it now clears them and the
