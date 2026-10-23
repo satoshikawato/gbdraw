@@ -280,9 +280,8 @@ export const createRecordDisplayControls = ({
         sequence: state.linearSeqs.find((/** @type {LinearSeq} */ sequence) => sequence.uid === input.sourceUid) };
     });
   };
-  /** @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
-  const captureAlignmentOrientationIntent = (orientations) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing the Linear drawing the alignment run pinned @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
+  const captureAlignmentOrientationIntent = (drawing, orientations) => {
     // A draft names no mode (PD-OI-086): these are the Linear drawing's (OV-579).
     // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
     settleDrafts(drawing);
@@ -290,17 +289,15 @@ export const createRecordDisplayControls = ({
       .map(({recordKey, sequence, drafts}) => ({ recordKey, reverseComplement: Boolean(sequence.region_reverse),
         drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear', drawingId: drawing.id })) }));
   };
-  /** @param {AlignmentOrientationCheckpoint[]} checkpoints */
-  const restoreAlignmentOrientationIntent = (checkpoints) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {AlignmentOrientationCheckpoint[]} checkpoints */
+  const restoreAlignmentOrientationIntent = (drawing, checkpoints) => {
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
       sequence.region_reverse = checkpoints[index].reverseComplement;
       checkpoints[index].drafts.forEach(restoreTargetDraft);
     });
   };
-  /** @param {AlignmentOrientation[]} orientations */
-  const commitAlignmentOrientations = (orientations) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {AlignmentOrientation[]} orientations */
+  const commitAlignmentOrientations = (drawing, orientations) => {
     alignmentRows(drawing, orientations).forEach(({sequence, orientation, drafts}) => {
       sequence.region_reverse = orientation.reverseComplement;
       drafts.forEach((/** @type {RecordDisplayDraft} */ draft) => { draft.reverseComplementOverride = null; });

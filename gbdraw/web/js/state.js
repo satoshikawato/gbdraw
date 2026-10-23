@@ -1251,7 +1251,7 @@ const renameDrawing = (id, name) => {
  * mode, each mode has one, named by the mode. The one mode lookup; like
  * `drawingOf`, it throws for a value that names no drawing. B replaces each
  * call with `activeDrawing()` or the drawing's `DrawingId`
- * (`tests/web/drawing-slices.test.mjs` caps the calls).
+ * (`tests/web/drawing-of-mode-cap.test.mjs` caps the calls).
  * @param {ModeProfileName} mode
  * @returns {DrawingState}
  */

@@ -1150,9 +1150,8 @@ export const createCircularTrackSlotEditor = ({
   // The only entry for Depth source changes: run the change, then reconcile.
   // The Circular drawing's Show Depth goes off with its last Depth
   // source; the other mode's drawing is not touched (OV-82, OV-101).
-  /** @param {() => unknown} mutate */
-  const changeCircularDepthSources = (mutate) => {
-    const drawing = state.drawingOfMode('circular');
+  /** @param {DrawingState} drawing @param {() => unknown} mutate */
+  const changeCircularDepthSources = (drawing, mutate) => {
     const previousSourced = circularSourcedDepthTrackIndexesForState(state);
     mutate();
     reconcileCircularDepthSlots(drawing, previousSourced);
@@ -1209,8 +1208,6 @@ export const createCircularTrackSlotEditor = ({
       preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
     });
   };
-
-  const syncCircularConservationSlots = () => syncConservationSlots(state.drawingOfMode('circular'));
 
   /** @param {DrawingState} drawing @param {unknown} preset */
   const resetSlotsToPreset = (drawing, preset) => {
@@ -2033,10 +2030,9 @@ export const createCircularTrackSlotEditor = ({
     circularTrackSlotOptionsSummary,
     circularDrawingDinucleotide,
     circularTrackRendererLabel,
-    // The three entries below take no drawing yet: app-setup.js calls them from
-    // handlers that hold one (B2d).
-    normalizeCircularTrackSlots: () => normalizeSlots(state.drawingOfMode('circular')),
-    syncCircularConservationSlots,
+    // The three entries below take the drawing their caller holds.
+    normalizeCircularTrackSlots: normalizeSlots,
+    syncCircularConservationSlots: syncConservationSlots,
     changeCircularDepthSources,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,

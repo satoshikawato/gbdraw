@@ -189,7 +189,7 @@ const featureWidthEstimate = (records, drawing, shownRequest = null, resultIndex
     state,
     estimateRecordLengths: () => circularEstimateLengths(circularRequestDiagrams(records, drawing), shownRequest, resultIndex)
   });
-  editor.normalizeCircularTrackSlots();
+  editor.normalizeCircularTrackSlots(state);
   const features = state.adv.circular_track_slots.findIndex((/** @type {{ renderer: string }} */ slot) => slot.renderer === 'features');
   return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[features], features, 'width');
 };

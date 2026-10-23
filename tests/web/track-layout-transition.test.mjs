@@ -54,7 +54,7 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   const placement = createFeaturePlacementActions({ state: store, getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
   const editor = createCircularTrackSlotEditor({ state: store, changeTrackLayout: placement.changeTrackLayout });
-  editor.normalizeCircularTrackSlots();
+  editor.normalizeCircularTrackSlots(state);
   Object.assign(state.featurePlacementOverrides, { c: lane('circular', 'outward'),
     m: { recordKey: 'circular-record', biologicalFeatureId: 'main-cds', placement: { kind: 'main' } } });
   const features = () => state.adv.circular_track_slots.findIndex((slot) => slot.renderer === 'features');
@@ -162,7 +162,7 @@ for (const mode of MODES) {
         const entry = project(state);
         try { return apply(); } finally { windows.push([entry, project(state)]); }
       } });
-      editor[STACK[mode].normalize]();
+      editor[STACK[mode].normalize](state);
       if (offAxis) editor[STACK[mode].offAxis](state.adv[`${mode}_track_slots`].indexOf(slotOf(state, mode)));
       // The simple controls now differ from the stack, so Reset changes it.
       Object.assign(state.form, { track_type: 'tuckin', linear_track_layout: 'below' });
