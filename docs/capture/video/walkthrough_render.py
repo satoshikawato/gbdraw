@@ -42,7 +42,12 @@ MONTAGE_CAPTION = (None, "Microbial and organelle genomes",
                    "Highlights from a live session in the gbdraw web app, sped up")
 INTRO_LINES = ("From a GenBank file to a publication-ready genome map",
                "A live session in the gbdraw web app. Waits are fast-forwarded and marked.")
-TUTORIAL_NOTE = "A Gallery tutorial, recorded live in the gbdraw web app. Waits are fast-forwarded and marked."
+TUTORIAL_NOTE = ("A Gallery tutorial, recorded live in the gbdraw web app. "
+                 "Waits, navigation, typing, and repeats are fast-forwarded and marked.")
+# A tutorial opens on its finished figure: the journey sets this mark at the end
+# of 2.5 s of the camera's still hold on it (``tutorials._show_figure``).
+FINISHED_MARK = "finished"
+TUTORIAL_OPENING_LABEL = "The figure you will make"
 INK = (241, 245, 249)
 MUTED = (148, 170, 196)
 ACCENT = (59, 130, 246)
@@ -223,7 +228,8 @@ def _tutorial(example_id: str, *, vertical: bool = False, language: str = "en") 
     title = next(row["title"] for row in examples if row["id"] == example_id)
     stem = f"gbdraw-tutorial-{example_id}"
     output = ("walkthrough", PORTRAIT, stem + VERTICAL) if vertical else ("walkthrough", LANDSCAPE, stem)
-    return Story((title, TUTORIAL_NOTE), (output,), language)
+    opening = (Clip(FINISHED_MARK, -2.5, FINISHED_MARK, 0.0, TUTORIAL_OPENING_LABEL),)
+    return Story((title, TUTORIAL_NOTE), (output,), language, opening=opening)
 
 
 # The 0.14.0 promotion: one tall take in Simplified Chinese, without a sound track
@@ -1721,7 +1727,11 @@ class Composer:
         for line in self._wrapped(self.lang(title), 600, 46, self.layout.size[0] - 320):
             self._text(canvas, line, 600, 46, INK, _ease((t - 0.6) / 0.6), (middle, y), center=True)
             y += 60
-        self._text(canvas, self.lang(note), 400, 28, MUTED, _ease((t - 0.9) / 0.6), (middle, y - 60 + 76), center=True)
+        y += 16
+        size, _ = self._note_measure()
+        for line in self._note_lines(self.lang(note)):
+            self._text(canvas, line, 400, size, MUTED, _ease((t - 0.9) / 0.6), (middle, y), center=True)
+            y += 42
         return canvas.convert("RGB")
 
     def _intro_logo(self, canvas: Image.Image, width: int, middle: float, top: int, t: float) -> None:
@@ -1731,6 +1741,22 @@ class Composer:
         origin = (round(middle - width / 2), top)
         canvas.alpha_composite(curl.mark(curl.loader.drawn(t)), origin)
         canvas.alpha_composite(_fade(curl.word, _ease((t - 0.45) / 0.45)), origin)
+
+    def _note_measure(self) -> tuple[int, float]:
+        """The intro note's type size and line width in this layout."""
+
+        if self.layout.portrait:
+            return self.layout.subtitle_size, self.layout.card[2]
+        return 28, self.layout.size[0] - 320
+
+    def _note_lines(self, note: str) -> list[str]:
+        """The intro note, each sentence from a new line, broken only after a clause as captions are."""
+
+        self.type.check(note)
+        size, width = self._note_measure()
+        measure = functools.partial(ImageDraw.Draw(Image.new("RGBA", (1, 1))).textlength, font=self.type.font(400, size))
+        sentences = [part.strip() for part in re.split(r"(?<=[。！？])|(?<=[.!?])\s+", note) if part.strip()]
+        return [line for sentence in sentences for line in wrap_clauses(sentence, measure, width)]
 
     def _wrapped(self, text: str, weight: int, size: int, width: float) -> list[str]:
         """Wrap ``text`` to ``width`` in even lines, keeping its ``<i>`` runs on each line they reach."""
@@ -1773,9 +1799,9 @@ class Composer:
         card = self.layout.card
         middle = self.layout.size[0] / 2
         logo = _white_logo(760)
-        title_size, note_size = self.layout.title_size, self.layout.subtitle_size
+        title_size, (note_size, _) = self.layout.title_size, self._note_measure()
         title_lines = self._wrapped(title, 600, title_size, card[2])
-        note_lines = self._wrapped(note, 400, note_size, card[2])
+        note_lines = self._note_lines(note)
         title_step, note_step = round(title_size * 1.3), round(note_size * 1.5)
         height = logo.height + 110 + title_step * len(title_lines) + 30 + note_step * len(note_lines)
         y = card[1] + (card[3] - height) / 2

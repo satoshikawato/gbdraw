@@ -15,6 +15,8 @@ import json
 import math
 import re
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -57,6 +59,8 @@ GALLERY_SOURCES = REPO_ROOT / "gbdraw/web/gallery/sources"
 FINALE_SIZE = (1600, 900)
 FINALE_PORTRAIT_SIZE = (936, 1060)
 MENU_ROWS = 8
+SKIM = 3.0             # fast-forward factor for navigation and repeats
+STAGES_SECONDS = 2.0   # how long a Generate's stage line plays at normal speed before its wait skims
 FINALE_FRAMES = 105
 FINALE_ZOOM = 7.0
 # A portrait take opens the exported file in a tab shaped like the tall video
@@ -183,6 +187,7 @@ class Recorder:
         self.x, self.y = 1240.0, 640.0
         self._cdp = None
         self._origin = 0.0
+        self._skims = 0                     # open fast-forwards; the outermost sets the speed
 
     # -- log ---------------------------------------------------------------
     def event(self, kind: str, **data) -> None:
@@ -330,10 +335,18 @@ class Recorder:
         self.event("mark", name=name)
 
     def fast_forward(self, *, factor: float | None = None, target: float | None = None) -> None:
-        self.event("speed_start", factor=factor, target=target)
+        """Start a fast-forward; one started inside another plays at the outer one's speed."""
+
+        if not self._skims:
+            self.event("speed_start", factor=factor, target=target)
+        self._skims += 1
 
     def normal_speed(self) -> None:
-        self.event("speed_end")
+        """End the innermost fast-forward; normal speed returns when the outermost ends."""
+
+        self._skims = max(0, self._skims - 1)
+        if not self._skims:
+            self.event("speed_end")
 
     def hold(self, seconds: float) -> None:
         self.page.wait_for_timeout(seconds * 1000)
@@ -608,6 +621,22 @@ class Recorder:
         if not bounds:
             raise AssertionError(f"No preview text matches {pattern!r}")
         return bounds
+
+
+@contextmanager
+def _skimmed(rec: Recorder, *, target: float | None = None) -> Iterator[None]:
+    """Play what the viewer need not watch under the fast-forward badge: at ``SKIM``, or in about ``target`` s.
+
+    Navigation (scrolling, opening sections and popups, pointer travel),
+    waits, and repeats of an operation already shown. The first use of each
+    feature's key control and every result play at normal speed.
+    """
+
+    rec.fast_forward(factor=None if target else SKIM, target=target)
+    try:
+        yield
+    finally:
+        rec.normal_speed()
 
 
 def _meet_gbdraw(rec: Recorder, downloads: Path) -> Path:

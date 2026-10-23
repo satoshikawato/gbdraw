@@ -14,8 +14,6 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 
 from playwright.sync_api import Locator, expect
@@ -23,7 +21,7 @@ from playwright.sync_api import Locator, expect
 from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS
 from video.tutorials import (_button, _close_feature, _feature_point, _fit_preview, _frame_box, _frame_figure,
                              _label, _look, _open_feature, _pick, _summary, _svg_id)
-from video.walkthrough import PREVIEW_REGION, Journey, Recorder, _center
+from video.walkthrough import PREVIEW_REGION, SKIM, STAGES_SECONDS, Journey, Recorder, _center, _skimmed
 from video.walkthrough_render import FONT_CACHE, PORTRAIT_PAD, PROMO_ID
 
 HMMT_EXAMPLE = "HmmtDNA_ATskew"   # the map with AT content and AT skew tracks
@@ -33,9 +31,7 @@ TITLE = "人类线粒体基因组"
 LANGUAGES = 11          # English and the ten translations
 LANE_GENE = "ATP8"      # a short gene whose outside label and leader line show the move
 LANE_LABEL = "ATP8"
-STAGES_SECONDS = 2.0   # how long Generate's stage line plays at normal speed
 MENU_ROW = 22
-SKIM = 3.0             # fast-forward factor for navigation and repeats
 
 _FONT_READY = """
 () => (document.querySelector('select[data-font-select]')?.selectedOptions[0]?.label || '') === 'Noto Sans SC'
@@ -129,22 +125,6 @@ def _settle(rec: Recorder) -> None:
 
     with _skimmed(rec, target=0.2):
         rec.page.evaluate(_IDLE)
-
-
-@contextmanager
-def _skimmed(rec: Recorder, *, target: float | None = None) -> Iterator[None]:
-    """Play what the viewer need not watch under the fast-forward badge: at ``SKIM``, or in about ``target`` s.
-
-    Navigation (scrolling, opening sections and popups, pointer travel),
-    waits, and repeats of an operation already shown. The first use of each
-    feature's key control and every result play at normal speed.
-    """
-
-    rec.fast_forward(factor=None if target else SKIM, target=target)
-    try:
-        yield
-    finally:
-        rec.normal_speed()
 
 
 def _generate(rec: Recorder, *, stages: bool = False) -> None:

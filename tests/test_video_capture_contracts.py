@@ -46,8 +46,49 @@ def test_highlights_cut_only_at_marks_the_journey_records() -> None:
     wanted = {name for clip in HIGHLIGHTS for name in (clip.first, clip.last)}
     assert wanted <= _marks('walkthrough.py'), sorted(wanted - _marks('walkthrough.py'))
     # A story's opening cuts its own journey's recording; the promotion records its marks in promo.py.
-    opening = {name for story in STORIES.values() for clip in story.opening for name in (clip.first, clip.last)}
+    opening = {name for clip in STORIES[walkthrough_render.PROMO_ID].opening for name in (clip.first, clip.last)}
     assert opening <= _marks('promo.py'), sorted(opening - _marks('promo.py'))
+
+
+def test_tutorials_open_on_their_finished_figure() -> None:
+    finished = walkthrough_render.FINISHED_MARK
+    for name in TUTORIAL_IDS:
+        for language in TUTORIAL_LANGUAGES[name]:
+            for vertical in (False, True):
+                (clip,) = STORIES[take_name(name, vertical=vertical, language=language)].opening
+                # The clip ends at its mark: the result stays on screen to the end of the clip.
+                assert (clip.first, clip.last, clip.after) == (finished, finished, 0.0)
+                assert 2.0 <= -clip.before <= 3.0 and clip.label
+    # The paced journeys set the mark on their finished figure's hold, once each.
+    tree = ast.parse((CAPTURE_ROOT / 'video' / 'tutorials.py').read_text(encoding='utf-8'))
+    journeys_ = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    for journey in ('_bgc_aminoglycosides', '_vibrio_harveyi_group_collinear'):
+        calls = [node for node in ast.walk(journeys_[journey]) if isinstance(node, ast.Call)
+                 and getattr(node.func, 'id', '') == '_show_figure'
+                 and any(k.arg == 'finished' and getattr(k.value, 'value', False) is True for k in node.keywords)]
+        assert len(calls) == 1, journey
+
+
+def test_skimming_has_one_owner_and_nests(tmp_path: Path) -> None:
+    # The fast-forward helper and its pacing constants live in walkthrough.py; the journeys import them.
+    for module in ('promo.py', 'tutorials.py', 'walkthrough_render.py'):
+        tree = ast.parse((CAPTURE_ROOT / 'video' / module).read_text(encoding='utf-8'))
+        defined = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+        assigned = {target.id for node in tree.body if isinstance(node, ast.Assign)
+                    for target in node.targets if isinstance(target, ast.Name)}
+        assert '_skimmed' not in defined and not {'SKIM', 'STAGES_SECONDS'} & assigned, module
+    from video.walkthrough import SKIM, _skimmed
+    rec = Recorder(_StubPage(1920, 1080), tmp_path)
+    with _skimmed(rec, target=1.2):
+        # A skimmed field or section inside a skimmed repeat plays at the outer speed.
+        with _skimmed(rec):
+            rec.fast_forward(factor=4.0)
+            rec.normal_speed()
+    with _skimmed(rec):
+        pass
+    speeds = [(event['kind'], event.get('factor'), event.get('target')) for event in rec.events]
+    assert speeds == [('speed_start', None, 1.2), ('speed_end', None, None),
+                      ('speed_start', SKIM, None), ('speed_end', None, None)]
 
 
 def test_an_opening_plays_labeled_clips_before_a_short_title_card() -> None:
@@ -631,3 +672,15 @@ def test_the_finished_curl_is_the_static_logo_mark(width: int) -> None:
     assert curl.mark(0.0).getchannel('A').getbbox() is None
     half = sum(curl.mark(0.5).getchannel('A').getdata())
     assert 0.2 * sum(drawn.getdata()) < half < 0.8 * sum(drawn.getdata())
+
+
+def test_every_intro_note_breaks_only_after_a_clause(caption_types) -> None:
+    for story in STORIES.values():
+        if story.language not in caption_types:
+            continue
+        lang = Language(story.language)
+        for _, layout, _ in story.outputs:
+            composer = walkthrough_render.Composer.__new__(walkthrough_render.Composer)
+            composer.type, composer.layout = caption_types[story.language], layout
+            lines = composer._note_lines(lang(story.intro[1]))
+            assert ''.join(lines).replace(' ', '') == lang(story.intro[1]).replace(' ', '')
