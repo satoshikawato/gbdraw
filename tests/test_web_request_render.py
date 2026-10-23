@@ -699,9 +699,11 @@ def test_web_warning_metadata_reuses_one_resolution_and_one_load_per_source(
 
 _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Recorded at the base (a86dd2d74), where the Web build still built the
-    # derived LOSAT entries: the reply does not change when it stops.
-    "similarity_groups": "792d9df04ff550752e8dba45dc4736d6a3f734ac1ec3cdf9536cdd5023ed6314",
-    "collinear": "7352e92ec139027815db50e00d2866cea8fc582f99e25095e67cb67b297b6244",
+    # derived LOSAT entries: the reply does not change when it stops. Updated
+    # when the composition metadata recorded the Linear scale bounds: the
+    # reply differs from the earlier one only by that key.
+    "similarity_groups": "ab2c349578abd3a2f692a9ef1e701a797ff12563468ec9f41385ebd7f1c787ed",
+    "collinear": "27213005ab0036f968f1d37acbda9f16c9317f3caad56a2431a5149a8f9509de",
 }
 
 
