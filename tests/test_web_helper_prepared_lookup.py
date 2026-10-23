@@ -196,10 +196,14 @@ def test_a_cold_alignment_projection_parses_each_source_once_and_stores_nothing(
     assert all(not entries for entries in cache._layers.values())
 
 
-def test_alignment_without_orientations_plans_the_flipped_records_once(
+def test_an_alignment_plans_before_and_after_and_only_resolves_the_flipped_records(
     helpers: dict[str, object], alignment: dict[str, object], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With no orientations (the stale-target repair), the projected records are the flipped ones (OV-1585)."""
+    """The flipped records give anchor facts only; they are never planned (OV-1585).
+
+    With no orientations (the stale-target repair) the requested records are
+    the flipped ones, so the after plan supplies them.
+    """
 
     import gbdraw.web_support.similarity_alignment as alignment_module
 
@@ -213,13 +217,13 @@ def test_alignment_without_orientations_plans_the_flipped_records_once(
     monkeypatch.setattr(alignment_module, "plan_linear_request", counting)
     reset = _align(helpers, alignment)
     assert len(plans) == 2
-    # Orientations that are not the flipped ones still plan the flipped records.
+    # The Align click sends the current orientations: still the before and after plans only.
     plans.clear()
     current = {
         key: not value for key, value in reset["projection"]["geometryOrientations"].items()
     }
     _align(helpers, {**alignment, "context": {**alignment["context"], "orientations": current}})  # type: ignore[dict-item]
-    assert len(plans) == 3
+    assert len(plans) == 2
 
 
 def test_alignment_identities_must_match_the_staged_manifest(
