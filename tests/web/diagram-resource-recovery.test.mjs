@@ -102,7 +102,8 @@ class StagingWorker {
   latestRun() { return this.messages.filter(m => m.type === 'run').at(-1); }
 }
 globalThis.Worker = StagingWorker;
-const { runDiagramGeneration, runDiagramHelperOperation, runFeatureExtraction, cancelDiagramGeneration, disposeDiagramGenerationWorker } = await import(
+const { runDiagramGeneration, runDiagramHelperOperation, runFeatureExtraction, cancelDiagramGeneration, disposeDiagramGenerationWorker,
+  setDiagramResourceRetainSource } = await import(
   '../../gbdraw/web/js/services/diagram-generation.js'
 );
 const payload = values => ({
@@ -115,7 +116,7 @@ const run = values => runDiagramGeneration(payload(values));
 const transferred = worker => worker.latestRun().payload.stagedResources.map(r => r.resourceId);
 const content = response => JSON.parse(response.results[0].content);
 const current = () => StagingWorker.instances.at(-1);
-test.afterEach(() => { disposeDiagramGenerationWorker(); delete globalThis.__GBDRAW_TEST_HOOKS__; });
+test.afterEach(() => { disposeDiagramGenerationWorker(); setDiagramResourceRetainSource(null); delete globalThis.__GBDRAW_TEST_HOOKS__; });
 
 test('W2/W4/W5: structured Python rejection acknowledges changed bytes, and A recovers once', async () => {
   const a = await run({ source: 'AAAA' });
@@ -247,6 +248,41 @@ test('cancel during response handling cannot republish disposed Worker cache kno
   await Promise.resolve();
   await run({ source: 'A' });
   assert.deepEqual(transferred(current()), []);
+});
+
+// A4 (IN-A): the Worker keeps every committed drawing's resources by content token.
+const cachedTexts = worker => worker.fs.cacheFiles().map(([, bytes]) => Buffer.from(bytes).toString()).sort();
+test('alternating drawings transfer nothing again, and a resource no drawing names is released', async () => {
+  const committed = [];
+  setDiagramResourceRetainSource(() => committed);
+  const circular = payload({ 'circular-source': 'CIRCULAR' });
+  const linear = payload({ 'linear-first': 'LINEAR 1', 'linear-second': 'LINEAR 2' });
+  assert.deepEqual(content(await runDiagramGeneration(circular)), { 'circular-source': 'CIRCULAR' });
+  const worker = current();
+  committed.push(circular);
+  await runDiagramGeneration(linear);
+  assert.deepEqual(transferred(worker), ['linear-first', 'linear-second']);
+  committed.push(linear);
+  assert.deepEqual(content(await runDiagramGeneration(circular)), { 'circular-source': 'CIRCULAR' });
+  assert.deepEqual(transferred(worker), [], 'Circular again reuses its resource');
+  assert.deepEqual(content(await runDiagramGeneration(linear)), { 'linear-first': 'LINEAR 1', 'linear-second': 'LINEAR 2' });
+  assert.deepEqual(transferred(worker), [], 'Linear again reuses its resources');
+  assert.deepEqual(cachedTexts(worker), ['CIRCULAR', 'LINEAR 1', 'LINEAR 2']);
+  committed.splice(0, 1);
+  await runDiagramGeneration(linear);
+  assert.deepEqual(cachedTexts(worker), ['LINEAR 1', 'LINEAR 2'], 'no drawing names the Circular resource');
+  await runDiagramGeneration(circular);
+  assert.deepEqual(transferred(worker), ['circular-source']);
+});
+
+test('equal bytes under two resource IDs travel once and share one cache file', async () => {
+  const response = await run({ first: 'SAME', second: 'SAME' });
+  assert.deepEqual(content(response), { first: 'SAME', second: 'SAME' });
+  const manifest = current().latestRun().payload.resourceManifest;
+  assert.equal(manifest[0].cacheToken, manifest[1].cacheToken);
+  assert.match(manifest[0].cacheToken, /^[0-9a-f]{64}$/);
+  assert.deepEqual(transferred(current()), ['first']);
+  assert.deepEqual(cachedTexts(current()), ['SAME']);
 });
 
 const helperLeavesCaches = async (operation, helperPayload) => {

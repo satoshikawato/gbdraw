@@ -28,6 +28,50 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
 );
 
 /**
+ * The payload fields a staging helper reads its resource references from.
+ * @typedef {object} StagingHelperPayload
+ * @property {unknown} [canonicalRequest]
+ * @property {{ canonicalRequest?: unknown } | null} [projection]
+ * @property {unknown} [recordSource]
+ */
+
+/**
+ * The helpers that read records of the drawing, each with the references it
+ * names: the page stages those resources as a Generate does and adds the
+ * staged payload keys; the Worker accepts those keys from these helpers only.
+ * A helper's references come from the committed request, from the request of
+ * a projection, or (blastp extraction, OV-1555) from the one record source it reads.
+ * @type {Readonly<Record<string, (payload: StagingHelperPayload) => unknown>>}
+ */
+const STAGED_HELPER_REFERENCES = Object.freeze({
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
+});
+
+/** @type {readonly string[]} */
+export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));
+
+/**
+ * The references a helper call stages, or `null` when it stages nothing.
+ * @param {string} operation
+ * @param {StagingHelperPayload} payload
+ * @returns {unknown}
+ */
+export const stagedHelperReferences = (operation, payload) => (
+  Object.hasOwn(STAGED_HELPER_REFERENCES, operation) ? STAGED_HELPER_REFERENCES[operation](payload) ?? null : null
+);
+
+/**
+ * The payload keys a resource staging adds (`PreparedResources` without `commit`).
+ * @type {readonly ['resourceManifest', 'stagedResources', 'retainedResourceTokens']}
+ */
+export const STAGED_RESOURCE_PAYLOAD_KEYS = Object.freeze(
+  /** @type {const} */ (['resourceManifest', 'stagedResources', 'retainedResourceTokens'])
+);
+
+/**
  * One feature catalog build in one Worker lifetime: the cache epoch and the
  * build numbers of its items (gbdraw/web/CLAUDE.md, Runtime data flow). Opaque;
  * compared for equality only.

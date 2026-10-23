@@ -12,6 +12,7 @@ import {
   splitLegacyVisibilityRules,
   upsertEditorQualifierFeatureVisibilityRule
 } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 
 assert.deepEqual(
   parseFeatureVisibilityRules('*\tCDS\tgene\t^geneA$\toff\n').rules.map((rule) => ({
@@ -73,8 +74,9 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
   });
   const key = (biologicalFeatureId) => JSON.stringify(['rec', biologicalFeatureId]);
   const overrides = {};
+  const edits = FEATURE_EDITS_SLICE.create({ featureOverrides: overrides }).handle;
   assert.equal(getFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1')), 'default');
-  setFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1'), 'off');
+  setFeatureVisibilityOverride(edits, feature('f.1_record_1', 'b1'), 'off');
   assert.deepEqual(overrides, { [key('b1')]: {
     recordKey: 'rec', biologicalFeatureId: 'b1', featureVisibility: 'off',
     labelVisibility: null, labelText: null, labelSourceText: null
@@ -83,10 +85,10 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
   assert.equal(getFeatureVisibilityOverride(overrides, feature('f.1_record_2', 'b1')), 'off');
   // The same identity in a Result of the other mode reads that mode's drawing.
   assert.equal(getFeatureVisibilityOverride({}, { ...feature('f.1', 'b1'), scope: 'linear' }), 'default');
-  setFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1'), 'default');
+  setFeatureVisibilityOverride(edits, feature('f.1_record_1', 'b1'), 'default');
   assert.deepEqual(overrides, {});
 
-  setFeatureVisibilityOverride(overrides, feature('f.1', 'b1'), 'off');
+  setFeatureVisibilityOverride(edits, feature('f.1', 'b1'), 'off');
   const changes = buildFeatureVisibilityChanges(
     [feature('f.1', 'b1'), feature('f.2', 'b2'), feature('f.2', 'b2')],
     'exclude_matching',
@@ -97,7 +99,7 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
     { recordKey: 'rec', biologicalFeatureId: 'b2', featureId: 'f.2', before: 'default',
       after: 'exclude_matching' }
   ]);
-  applyFeatureVisibilityOverrideChanges(overrides, changes.map((change) => ({ ...change, mode: change.after })));
+  applyFeatureVisibilityOverrideChanges(edits, changes.map((change) => ({ ...change, mode: change.after })));
   assert.deepEqual(Object.values(overrides).map((row) => [row.biologicalFeatureId, row.featureVisibility]), [
     ['b1', 'exclude_matching'], ['b2', 'exclude_matching']
   ]);

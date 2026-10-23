@@ -1,7 +1,8 @@
 // @ts-check
 import { getFeatureCaption } from './feature-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { cloneJsonData } from './json-clone.js';
+import { featureEditsOf, setFeatureOverrideRow } from './drawing/feature-edits.js';
+/** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
 // per-feature edits (design Q4). Each diagram mode's drawing holds its own
@@ -222,23 +223,11 @@ export const requestFeaturePlacements = (overrides, mode, records = []) => canon
   mode
 );
 
-// Replaces the Feature placement draft with copies of a checkpoint's draft rows:
-// Undo, Redo, and the rollback of a Generate restore the placements it removed
-// (Q3 = A).
-/**
- * @param {FeaturePlacementDraft} overrides The draft, replaced in place.
- * @param {FeaturePlacementDraft | null | undefined} placements
- * @returns {void}
- */
-export const restorePlacements = (overrides, placements) => {
-  Object.keys(overrides).forEach((key) => delete overrides[key]);
-  Object.assign(overrides, cloneJsonData(placements) || {});
-};
-
 // Per-feature edits (request schema 9 `featureOverrides`). A null field keeps
 // the rule-based result; the draft row adds the Web-only `labelSourceText`,
 // the label's text before any edit, which a bulk label edit and the label
 // projection read (B6). A draft row may hold only that source text.
+/** @type {readonly ('featureVisibility' | 'labelVisibility' | 'labelText')[]} */
 export const FEATURE_OVERRIDE_EDIT_FIELDS = Object.freeze(['featureVisibility', 'labelVisibility', 'labelText']);
 const REQUEST_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelText,labelVisibility,recordKey';
 const DRAFT_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelSourceText,labelText,labelVisibility,recordKey';
@@ -374,17 +363,18 @@ export const featureOverrideValue = (overrides, feature, field) => {
 };
 
 // Sets fields of one feature's (or draft row's) draft row and deletes a row
-// that no longer holds an edit or a label source text. Returns whether the
-// draft changed.
+// that no longer holds an edit or a label source text, through the drawing's
+// feature-edits slice. Returns whether the draft changed.
 /**
- * @param {FeatureOverrideDraft | null | undefined} overrides The draft, edited in place.
+ * @param {FeatureEditsSlice} slice `drawing.slices.featureEdits`.
  * @param {Record<string, any> | null | undefined} feature
  * @param {Record<string, any> | null | undefined} patch
  * @returns {boolean}
  */
-export const updateFeatureOverride = (overrides, feature, patch) => {
+export const updateFeatureOverride = (slice, feature, patch) => {
   const key = featureIdentityKeyOf(feature);
-  if (!key || !overrides) return false;
+  if (!key) return false;
+  const overrides = featureEditsOf(slice).featureOverrides;
   // A non-empty key is the JSON of a valid identity, so it parses back.
   const next = { ...(overrides[key] || emptyOverrideRow(/** @type {FeatureIdentity} */ (parseFeatureIdentityKey(key)))) };
   Object.entries(patch || {}).forEach(([field, value]) => {
@@ -394,8 +384,7 @@ export const updateFeatureOverride = (overrides, feature, patch) => {
   });
   const keep = hasEdit(next) || next.labelSourceText !== null;
   if (JSON.stringify(overrides[key] || null) === JSON.stringify(keep ? next : null)) return false;
-  if (keep) overrides[key] = next;
-  else delete overrides[key];
+  setFeatureOverrideRow(slice, key, keep ? next : null);
   return true;
 };
 

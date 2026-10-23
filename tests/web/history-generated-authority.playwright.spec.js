@@ -137,7 +137,7 @@ test('Live palette and its History keep the scale draft out of the committed req
       await window.__GBDRAW_HISTORY__.runUndoable('Change scale', () => { state.activeDrawing().adv.scale_interval = 12345; });
       state.paletteInstantPreviewEnabled.value = true;
       await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
-        state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS:'#123456' };
+        window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
         await window.Vue.nextTick();
       });
     });
@@ -177,7 +177,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     await noDerivedStatus(page);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
     await page.evaluate(async()=>{
-      const {state}=await import('./js/state.js');state.activeDrawing().currentColors.value={...state.activeDrawing().currentColors.value,CDS:'#345678'};
+      window.__GBDRAW_APP__.editDefaultColor('CDS', '#345678');
       await window.Vue.nextTick();
     });
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
@@ -353,7 +353,7 @@ for (const mode of ['circular', 'linear']) {
         state.autoLabelReflowEnabled.value = false;
         state.paletteInstantPreviewEnabled.value = true;
         await window.__GBDRAW_HISTORY__.runUndoable('Live color', async () => {
-          state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS:'#123456' };
+          window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
           await window.Vue.nextTick();
         });
       });
@@ -533,7 +533,7 @@ for (const mode of ['linear', 'circular']) {
       expect(await committedScaleInterval(fresh)).not.toBe(12345);
       expect((await snapshot(fresh)).request).toEqual(before.request);
       const rollback = await evaluateWithRetainedPromise(fresh, async () => {
-        const config = await import('./js/services/config.js');
+        const config = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
         const { state } = await import('./js/state.js');
         const prior = config.canonicalRenderArtifactOwner.capture();
         const catalog = window.Vue.toRaw(state.featureCatalog.value);
@@ -594,7 +594,7 @@ test('Unedited Circular Save and fresh Load keeps the committed request without 
 
 // SE-01, N-19, N-20 (R11): checkpoint Undo and Redo restore the admitted feature
 // catalog by reference; the checkpoint JSON neither copies nor signs it.
-test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode round trip', async ({ browser }, info) => {
+test('Checkpoint Undo and Redo keep the admitted feature catalog through a drawing round trip that records no step', async ({ browser }, info) => {
   test.setTimeout(300000);
   const page = await load(browser);
   const errors = [];
@@ -650,7 +650,7 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
     }
     // A step that comes while the color's automatic rerender (OV-43) draws
     // makes it draw again (D-24 (OV-731)); its Results come with their own
-    // catalog (R-5), and the mode switch waits for it (OIPC-C07), where dev's
+    // catalog (R-5), and the drawing switch waits for it (OIPC-C07), where dev's
     // switch dropped it. The catalog the settled Result holds is kept by reference
     // through the round trip, and nothing replaces it once the shown Result
     // settles again.
@@ -663,8 +663,12 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
     });
     expect(await roundTripCatalog()).toBe(true);
     expect(await catalogState()).toMatchObject({ adopted: true, features: 37 });
+    // PD-OI-090: each drawing has its own History; a switch records no step.
+    const tripCounts = (await history()).counts;
     await switchMode(page, 'linear');
+    expect((await history()).counts, 'the Linear drawing\'s own History').toEqual([0, 0]);
     await switchMode(page, 'circular');
+    expect((await history()).counts, 'a drawing round trip records no step').toEqual(tripCounts);
     expect(await roundTripCatalog(), 'the same catalog across the round trip').toBe(true);
     await settleLive(page);
     expect(await roundTripCatalog(), 'the same catalog once the Result settles').toBe(true);

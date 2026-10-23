@@ -45,7 +45,7 @@ const CIRCULAR = [
   ['label blacklist', (page) => setApp(page, () => {
     const app = window.__GBDRAW_APP__;
     app.setLabelFilterMode('Blacklist');
-    app.manualBlacklist = 'duplicate';
+    app.setBlacklistText('duplicate');
   })],
   ['feature color rule', (page) => setApp(page, async () => {
     const app = window.__GBDRAW_APP__;

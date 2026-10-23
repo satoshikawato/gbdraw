@@ -209,7 +209,8 @@ const {
   buildUiStateData,
   serializeActiveRenderFiles,
   serializeResults,
-  SESSION_VERSION
+  SESSION_VERSION,
+  installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
 const { createHistoryFileStore } = await import(
@@ -327,6 +328,8 @@ const generatedArtifactHandleOptions = {
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
+  installRedrawnArtifact: artifactSnapshots.installRedrawnArtifact,
+  displayedArtifactDrawing: artifactSnapshots.displayedArtifactDrawing,
   restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity,
   previewRuntime: immediatePreviewRuntime,
@@ -591,7 +594,7 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 // One Circular GenBank input whose other slots hold files no run may read.
 /** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
 const installSimpleCircularInput = (primary, inactive) => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.files.c_gb = primary;
   state.files.c_gff = null;
@@ -683,7 +686,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     assert.equal(state.processing.value, true);
     assert.notEqual(state.processingStatus.value, '');
     lifecycleEvents.push('test.before-handle-capture');
-    return artifactSnapshots.captureGeneratedArtifactHandle(...args);
+    return artifactSnapshots.captureGeneratedArtifactHandle(args[0] ?? state.activeDrawing());
   };
   const generationHistory = createHistoryManager({
     buildIntent: async () => ({}),
@@ -756,6 +759,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       return serializeActiveRenderFiles(state.mode.value, state, drawing);
     },
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
         throw new Error('forced late canonical artifact adoption failure');
@@ -1133,7 +1137,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   // A failed readiness restoration must retain the initiating cause, and must
   // never advertise completed rollback merely because the old Results exist.
   const originalRestore = readinessRuntime.restorePreviousSelectedResult;
-  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle();
+  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   readinessRuntime.restorePreviousSelectedResult = async () => { throw new Error('PRIVATE_ROLLBACK_SENTINEL'); };
   failArtifactAdoption = true;
   const restoreFailureResult = result('restore-failure.svg', 'restore-failure');
@@ -1359,10 +1363,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     discovery: { ...state.circularRecordDiscovery }
   });
   const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   await runner.refreshCircularRecordOrder();
   await runner.refreshCircularRecordOrder({ automatic: true });
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(structuredClone({
     records: state.circularRecordList.value,
@@ -1378,19 +1382,19 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
   await runner.refreshCircularRecordOrder();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.files.c_gb = null;
   await runner.refreshCircularRecordOrder();
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(state.circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
@@ -1583,7 +1587,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     lazyFields.forEach((field) => assert.equal(Object.hasOwn(file, field), false));
   }
 
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.activeDrawing().form.prefix = 'lazy-circular';
   state.activeDrawing().form.show_depth = false;
@@ -1677,6 +1681,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     recordDisplayRows,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
         throw new Error('injected LOSAT late artifact adoption failure');
@@ -1877,7 +1882,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const multiView = createSessionResourceFileView(linearTable, 'multi');
     const middleView = createSessionResourceFileView(linearTable, 'middle');
     const thirdView = createSessionResourceFileView(linearTable, 'third');
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     state.lInputType.value = 'gb';
     state.activeDrawing().form.prefix = 'lazy-linear';
     state.activeDrawing().form.show_depth = false;
@@ -2501,7 +2506,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(uploadBytesSent, uploadFile.size);
 
     // A new file inserted before the committed one: the next request names it record-1 and the committed file
-    // record-2, so each is staged under its new id once and the render sends neither again.
+    // record-2. The new file is staged once; the committed file's bytes stay held under their content token, so
+    // its new id sends nothing, and the render sends neither again.
     const insertedFile = new AuditFile([
       'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
     ], 'inserted.gb', { lastModified: 9 });
@@ -2522,7 +2528,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta')
       .map(({ payload }) => [payload.recordSource.resourceId, payload.stagedResources.map(({ resourceId }) => resourceId)]), [
       ['record-1-genbank', ['record-1-genbank']],
-      ['record-2-genbank', ['record-2-genbank']],
+      ['record-2-genbank', []],
       ['record-2-genbank', []],
       ['record-2-genbank', []]
     ]);
@@ -2535,7 +2541,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .flatMap(({ payload }) => payload?.stagedResources ?? [])
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
       .reduce((total, { bytes }) => total + bytes.byteLength, 0);
-    assert.equal(recordBytesSent, insertedFile.size + uploadFile.size);
+    assert.equal(recordBytesSent, insertedFile.size);
     state.linearSeqs.splice(2);
 
     // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
@@ -2664,8 +2670,8 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
   assert.deepEqual(cases.map(({ name }) => name), Object.keys(webStates));
 
   const queryFile = new AuditFile([query], 'ring-query.fasta');
+  installShownDrawing('circular');
   const drawing = state.activeDrawing();
-  state.mode.value = 'circular';
   drawing.form.prefix = 'ring-subject';
   drawing.form.show_depth = false;
   drawing.adv.circular_track_slots_enabled = false;
@@ -2687,6 +2693,7 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
     state,
     recordDisplayRows: { value: [] },
     serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
@@ -2773,7 +2780,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const dormantUpload = new AuditInactiveFile(['unused upload'], 'dormant-upload.tsv');
   const staleCanonical = new AuditInactiveFile(['unused canonical'], 'stale-canonical.tsv');
 
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.lInputType.value = 'gb';
   state.activeDrawing().form.prefix = 'linear-none';
   state.activeDrawing().form.show_depth = true;
@@ -2954,6 +2961,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => {
       annotationValidationCalls += 1;
@@ -3326,6 +3334,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
       results: structuredClone(generationResponse.results),
@@ -3394,7 +3403,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
 test('two Linear Generates from one state draw a Depth row at the same height', async () => {
   const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.lInputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'row-height';
@@ -3474,7 +3483,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
 // Depth color of series 1 (OV-1510).
 test('Circular Generate gives a Depth series without settings its default color', async () => {
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'circular-series';
@@ -3510,6 +3519,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
     ),

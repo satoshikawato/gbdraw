@@ -132,6 +132,7 @@ def _render(
     token_numbers: dict[str, int] | None = None,
     held_revision: str | None = None,
     held_segments: frozenset[str] = frozenset(),
+    retention: dict[str, object] | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     resources = document["resources"]
     assert isinstance(resources, dict)
@@ -150,7 +151,8 @@ def _render(
             resource_id,
             token_generation * 100 + index,
         )
-        cache_token = f"render-resource-{token_number}"
+        # A distinct stand-in for the sha256 hex token the Worker sends.
+        cache_token = f"{token_number:064x}"
         cache_path = cache_directory / f"{cache_token}.bin"
         if cache_path.exists():
             assert cache_path.read_bytes() == content
@@ -173,6 +175,7 @@ def _render(
         _resource_identities=identities if cache is not None else None,
         _held_feature_catalog_revision=held_revision,
         _held_segments=held_segments,
+        _prepared_input_retention=retention,
     )
     return dict(result), diagnostics
 
@@ -882,6 +885,87 @@ def test_source_token_replacement_invalidates_every_layer(tmp_path: Path) -> Non
     assert "cache target" not in replacement_payload
 
 
+def _token(number: int) -> str:
+    return f"{number:064x}"
+
+
+def test_each_drawing_keeps_the_prepared_inputs_of_its_last_request(tmp_path: Path) -> None:
+    # A4b: two drawings alternate in one Worker. Each keeps the parsed and
+    # resolved inputs of its own last request while the page retains its
+    # resources; the render stages stay the last successful render's.
+    first = tmp_path / "first.gbk"
+    second = tmp_path / "second.gbk"
+    _write_genbank(first, (_record("first-record"),))
+    _write_genbank(second, (_record("second-record"),))
+    cache = PreparedBiologicalInputCache()
+    first_token, second_token = _token(101), _token(201)
+
+    def render(
+        document: dict[str, object],
+        request_id: int,
+        drawing: str,
+        retained: tuple[str, ...],
+    ) -> dict[str, int]:
+        _result, diagnostics = _render(
+            tmp_path,
+            cache,
+            document,
+            request_id=request_id,
+            # The first drawing's file has token 101, the second's 201.
+            token_generation=1 if drawing == "circular" else 2,
+            retention={"drawing": drawing, "resourceTokens": list(retained)},
+        )
+        return _metrics(diagnostics)
+
+    first_document = _document(first)
+    render(_document(first, region="20-400"), 1, "circular", ())
+    render(first_document, 2, "circular", ())
+    second_metrics = render(_document(second), 3, "linear", (first_token,))
+    assert second_metrics["parsedSourceParseCount"] == 1
+    returned = render(first_document, 4, "circular", (second_token,))
+    assert returned["parsedSourceCacheHitCount"] == 1
+    assert returned["parsedSourceParseCount"] == 0
+    assert returned["resolvedRecordCacheHitCount"] == 1
+    assert returned["resolvedRecordBuildCount"] == 0
+    # The render stages of the other drawing's request were not kept.
+    assert returned["renderStageBuild:interactive_context"] == 1
+    # A drawing keeps only its last request's inputs: its earlier region
+    # variant was dropped when its next request committed.
+    variant = render(_document(first, region="20-400"), 5, "circular", (second_token,))
+    assert variant["parsedSourceCacheHitCount"] == 1
+    assert variant["resolvedRecordBuildCount"] == 1
+    # A token no request retains any more releases its drawing's inputs.
+    render(_document(second), 6, "linear", ())
+    released = render(first_document, 7, "circular", ())
+    assert released["parsedSourceParseCount"] == 1
+
+
+@pytest.mark.parametrize(
+    "retention",
+    [
+        {"drawing": "circular"},
+        {"drawing": "Circular!", "resourceTokens": []},
+        {"drawing": "circular", "resourceTokens": ["render-resource-1"]},
+        {"drawing": "circular", "resourceTokens": "f" * 64},
+        {"drawing": "circular", "resourceTokens": [], "extra": True},
+    ],
+)
+def test_a_malformed_retention_is_rejected(
+    tmp_path: Path,
+    retention: dict[str, object],
+) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("cache-record"),))
+    with pytest.raises(ValidationError, match="retention"):
+        _render(
+            tmp_path,
+            PreparedBiologicalInputCache(),
+            _document(source),
+            request_id=1,
+            retention=retention,
+        )
+
+
 def test_identity_validation_rejects_paths_and_size_mismatches(tmp_path: Path) -> None:
     source = tmp_path / "records.gbk"
     _write_genbank(source, (_record("cache-record"),))
@@ -901,7 +985,7 @@ def test_identity_validation_rejects_paths_and_size_mismatches(tmp_path: Path) -
         path.write_bytes(content)
         resource_paths[resource_id] = path
         identities[resource_id] = {
-            "cacheToken": f"render-resource-{index}",
+            "cacheToken": f"{index:064x}",
             "size": len(content) + 1,
             "path": str(path),
         }

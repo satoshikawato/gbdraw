@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -44,8 +45,8 @@ const genbank = (ids) => {
 
 // The request a Generate of `mode` builds from that mode's drawing now.
 const generate = (mode) => {
-  const drawing = state.drawings[mode];
-  state.mode.value = mode;
+  const drawing = modeDrawing(state, mode);
+  config.installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   const filesData = mode === 'circular'
@@ -98,38 +99,35 @@ test('the G1 rows are the live setting rows, and each request path has its proje
 });
 
 test('a History step names the live request paths of the shown drawing it changed', () => {
+  // Each drawing has its own History (PD-OI-090): a step's paths are relative to its drawing.
   const step = (...paths) => paths.map((path) => ({ path }));
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config', 'adv', 'legend_font_size']), 'linear'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'legend_font_size'])),
     ['diagramOptions.configOverrides.objects.legends.font_size']);
   // Layout preferences are keyed by mode, and Circular ones by single or
   // multi-record canvas (`createDefaultLayoutPreferences`).
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'ui', 'layoutPreferences', 'circular', 'multi', 'plotTitlePosition']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['ui', 'layoutPreferences', 'circular', 'multi', 'plotTitlePosition'])),
     ['diagramOptions.output.plotTitlePosition']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'ui', 'layoutPreferences', 'circular', 'single', 'legend']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['ui', 'layoutPreferences', 'circular', 'single', 'legend'])),
     ['diagramOptions.output.legend']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'ui', 'layoutPreferences', 'linear', 'legend']), 'linear'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['ui', 'layoutPreferences', 'linear', 'legend'])),
     ['diagramOptions.output.legend']);
-  // An Undo passes the shown drawing's paths without the mode prefix.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'multi_record_positions', 0, 'row']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'multi_record_positions', 0, 'row'])),
     ['layout.multiRecordPositions']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'plot_title']), 'linear'), ['diagramOptions.plotTitle']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config', 'form', 'keep_definition_left_aligned']), 'linear'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'plot_title'])), ['diagramOptions.plotTitle']);
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'keep_definition_left_aligned'])),
     ['diagramOptions.configOverrides.canvas.linear.keep_definition_left_aligned']);
   // OV-1078: Multi-Record Canvas decides which canvas's positions the draft
   // draws, so its change requests them again.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'config', 'form', 'multi_record_canvas']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'multi_record_canvas'])),
     ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
-  // The other drawing, and settings that apply on Generate, name none.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'config', 'adv', 'legend_font_size']), 'linear'), []);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(
-    ['modes', 'linear', 'config', 'form', 'species'], ['modes', 'linear', 'config', 'adv', 'def_font_size']
-  ), 'linear'), []);
+  // Settings that apply on Generate name none.
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'species'], ['config', 'adv', 'def_font_size'])), []);
   // A step that replaced the whole drawing config names every live config field.
-  assert.ok(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config']), 'linear').includes('diagramOptions.plotTitle'));
+  assert.ok(owner.liveSettingRequestPaths(step(['config'])).includes('diagramOptions.plotTitle'));
 });
 
 test('a Linear live apply draws the G1 values as Generate does and keeps every other committed value', () => {
-  const drawing = state.drawings.linear;
+  const drawing = modeDrawing(state, 'linear');
   const committed = generate('linear');
   drawing.form.legend = 'top';
   Object.assign(drawing.adv, { legend_font_size: 21, legend_box_size: 13, plot_title_font_size: 27, def_font_size: 30 });
@@ -171,7 +169,7 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
 });
 
 test('a Circular live apply writes the plot title font override and the grid layout as Generate does', () => {
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   state.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
   drawing.form.multi_record_canvas = true;
   drawing.recordsOff.splice(0, drawing.recordsOff.length, '#2');
@@ -204,7 +202,7 @@ test('a Circular live apply writes the plot title font override and the grid lay
 });
 
 test('Lock Definition Column OFF on a CLI-shaped request that locks yields the request a Generate builds', () => {
-  const drawing = state.drawings.linear;
+  const drawing = modeDrawing(state, 'linear');
   const initialLock = drawing.form.keep_definition_left_aligned;
   drawing.form.keep_definition_left_aligned = true;
   const generated = generate('linear');
@@ -229,7 +227,7 @@ test('Lock Definition Column OFF on a CLI-shaped request that locks yields the r
 
 test('Lock Definition Column applies only to a Linear Result', () => {
   const lock = `diagramOptions.configOverrides.${LOCK_KEY}`;
-  const circular = state.drawings.circular;
+  const circular = modeDrawing(state, 'circular');
   circular.form.multi_record_canvas = false;
   const committed = generate('circular');
   circular.form.keep_definition_left_aligned = !circular.form.keep_definition_left_aligned;
@@ -241,7 +239,7 @@ test('Lock Definition Column applies only to a Linear Result', () => {
 // OV-1072: a grid of one ON record (others OFF) keeps its file position in
 // its request key; a live Row for record maps `#N` as Generate does.
 test('a live Row for record of a grid of one maps the record selector as Generate does', () => {
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   state.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
   drawing.form.multi_record_canvas = true;
   drawing.recordsOff.splice(0, drawing.recordsOff.length, '#1', '#2');
@@ -264,7 +262,7 @@ test('a live Row for record of a grid of one maps the record selector as Generat
 // the multi-record positions; while that change is pending, the Result keeps
 // its positions and any position change applies on Generate.
 test('a live position applies only while the draft draws the canvas of the committed request', () => {
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   const positions = ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition'];
   drawing.form.multi_record_canvas = false;
   drawing.recordsOff.splice(0);
@@ -301,7 +299,7 @@ test('a live apply onto a committed request without configOverrides creates them
     delete renderRequest.diagramOptions.configOverrides;
     return { ...committed, renderRequest };
   };
-  const linear = state.drawings.linear;
+  const linear = modeDrawing(state, 'linear');
   Object.assign(linear.adv, { legend_font_size: '', legend_box_size: '' });
   const linearCommitted = withoutOverrides(generate('linear'));
   assert.equal(request.projectCommittedEditorIntent({ committed: linearCommitted, state, drawing: linear })
@@ -316,7 +314,7 @@ test('a live apply onto a committed request without configOverrides creates them
   assert.deepEqual(request.projectLiveSettingWrites({ committed: linearCommitted, drawing: linear, requestPaths: allPaths() })
     .filter(([path]) => path.includes('configOverrides')), []);
 
-  const circular = state.drawings.circular;
+  const circular = modeDrawing(state, 'circular');
   circular.form.multi_record_canvas = false;
   circular.adv.plot_title_font_size = '';
   const circularCommitted = withoutOverrides(generate('circular'));
@@ -327,7 +325,7 @@ test('a live apply onto a committed request without configOverrides creates them
 });
 
 test('a successful apply commits only its paths, as a new committed Session', () => {
-  const drawing = state.drawings.linear;
+  const drawing = modeDrawing(state, 'linear');
   drawing.adv.legend_font_size = 12;
   const committed = generate('linear');
   config.canonicalRenderArtifactOwner.restore({ committedCanonicalSession: committed, activeSessionResourceTable: null });

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createPreviewItemPopup, defaultColorScopeLine, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
-import { legendEntryKey } from '../../gbdraw/web/js/services/legend-svg.js';
+import { legendEntryKey } from '../../gbdraw/web/js/services/drawing/paint.js';
 import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 

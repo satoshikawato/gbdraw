@@ -164,6 +164,7 @@ def run_canonical_request_wrapper(
     resource_identities_json=None,
     held_feature_catalog_revision=None,
     held_segments_json=None,
+    retention_json=None,
 ):
     try:
         with web_error_stage("request-validation"):
@@ -180,6 +181,8 @@ def run_canonical_request_wrapper(
                 identity_text = str(resource_identities_json).strip()
                 if identity_text and identity_text.lower() not in {"null", "undefined", "none"}:
                     resource_identities = json.loads(identity_text)
+            # A4b: the drawing it renders and the tokens the page retains ("null": none).
+            retention = None if _is_blank_or_js_nullish(retention_json) else json.loads(str(retention_json))
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
         result = render_staged_canonical_web_request(
             payload,
@@ -192,6 +195,7 @@ def run_canonical_request_wrapper(
                 else None
             ),
             _resource_identities=resource_identities,
+            _prepared_input_retention=retention,
             _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
             _held_feature_catalog_revision=held_revision,
             _held_segments=held_segments,

@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
+/** @import { DrawingState, LinearSeq } from '../state.js' */
+/** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
@@ -7,7 +8,8 @@
 // displayed Result and the current settings. It holds no edit of its own: the
 // template calls the Legend panel's operations, and a record edit writes the
 // setting the sidebar field writes, as one History step.
-import { COMPARISON_LEGEND_SELECTOR, legendEntryKey, pythonLegendKey } from '../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR, pythonLegendKey } from '../services/legend-svg.js';
+import { legendEntryKey } from '../services/drawing/paint.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import {
   resolveLinearRecordEffectiveDefinition,
@@ -68,17 +70,17 @@ import { msg, t, tn, tm } from '../utils/i18n.js';
  * @property {PreviewItemState} state
  * @property {<T>(getter: () => T) => { readonly value: T }} computed Vue `computed`
  * @property {RevealSetting} revealSetting
- * @property {(entry: LegendEntry) => string} readLegendEntryColor
+ * @property {(entry: LegendRow) => string} readLegendEntryColor
  *   The color the Legend panel shows for a row.
  * @property {(caption: string) => string} [readShownLegendName]
  *   The name the Legend draws for the row that shows the key `caption` (never the key).
- * @property {(entry: LegendEntry) => readonly ColorRuleLike[]} readLegendRowRules
+ * @property {(entry: LegendRow) => readonly ColorRuleLike[]} readLegendRowRules
  *   The color rules that draw a row of the displayed Result.
  * @property {(caption: string) => number} countLegendCaptionFeatures
  *   The number of features whose legend entry is `caption`.
- * @property {(entry: LegendEntry) => DrawnTrack['kind'] | null} readLegendTrackKind
+ * @property {(entry: LegendRow) => DrawnTrack['kind'] | null} readLegendTrackKind
  *   The kind of the track whose row this is in the displayed Result (`trackLegendRows`); null: a feature row.
- * @property {(entry: LegendEntry) => string | null} readLegendRowDefaultColorType
+ * @property {(entry: LegendRow) => string | null} readLegendRowDefaultColorType
  *   The type whose default color draws the row and its Color sets (OV-1281), once the matches are ready.
  * @property {(type: string) => string | null} readUserDefaultColor
  *   The user default color of a feature type, or null when the user set none.
@@ -166,7 +168,7 @@ export const defaultColorScopeLine = (type, replacedColor) => (
 
 /**
  * The legend-entry popup view.
- * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
+ * @param {{ entry: LegendRow, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
  *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null,
  *   defaultColorType: string | null, replacedDefaultColor: string | null, pickerFallback: string }} input
  *   `name`: the name the Legend draws. `trackKind`: the kind of the track whose row it is; null: a feature row.
@@ -324,7 +326,7 @@ export const createPreviewItemPopup = ({
   readLegendTrackKind, readLegendRowDefaultColorType, readUserDefaultColor, getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
-  /** @returns {LegendEntry[]} */
+  /** @returns {readonly LegendRow[]} */
   const legendEntries = () => state.activeDrawing().legendEntries.value || [];
 
   /** @param {string} key @param {boolean} matchesReady */

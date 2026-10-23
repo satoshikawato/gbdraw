@@ -12,7 +12,6 @@ const create = (features) => {
     extractedFeatures,
     manualSpecificRules: [],
     featureColorOverrides: {},
-    fileLegendCaptions: ref(new Set()),
     addedLegendCaptions: ref(new Set()),
     legendEntries: ref([]),
     results: ref([]),

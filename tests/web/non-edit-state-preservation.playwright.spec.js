@@ -95,10 +95,14 @@ const historyCounts = (page) => page.evaluate(() => [
 
 // Returning to Circular refreshes the record list; wait until it holds the
 // records it held before, so the snapshot does not race the refresh.
-const modeRoundTrip = async (page) => {
+// R11, PD-OI-090: a drawing switch writes no setting and records no step in
+// either drawing's History.
+const drawingRoundTrip = async (page) => {
   const records = await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length);
+  const counts = await historyCounts(page);
   await switchMode(page, 'linear');
   await switchMode(page, 'circular');
+  expect(await historyCounts(page), 'a drawing round trip records no step').toEqual(counts);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(records);
   await settle(page);
 };
@@ -166,16 +170,16 @@ const ROWS = [
     check: (observation) => expect(observation.after.history).toEqual(observation.before.history)
   },
   {
-    name: 'a mode round trip leaves user-owned state unchanged',
+    name: 'a drawing round trip that records no step leaves user-owned state unchanged',
     setup: async (page) => {
       await openWithGenBank(page, HMMT);
       await generateAndWaitForResult(page);
       await settle(page);
     },
-    operation: modeRoundTrip
+    operation: drawingRoundTrip
   },
   {
-    name: 'a mode round trip keeps the Multi-Record Canvas record order',
+    name: 'a drawing round trip that records no step keeps the Multi-Record Canvas record order',
     setup: async (page) => {
       await openWithGenBank(page, BATCH_FIXTURE, () => {
         Object.assign(window.__GBDRAW_APP__.form, { multi_record_canvas: true });
@@ -188,7 +192,7 @@ const ROWS = [
       await generateAndWaitForResult(page);
       await settle(page);
     },
-    operation: modeRoundTrip
+    operation: drawingRoundTrip
   },
   {
     name: 'an unrelated toggle pair leaves the custom stack unchanged',
@@ -216,8 +220,8 @@ const ROWS = [
   },
   {
     // G-H (R11): Undo^n then Redo^n through edits of three kinds returns to
-    // the edited state and History position, and a mode round trip keeps it.
-    name: 'Undo and Redo through mixed edits, then a mode round trip, restore the edited state',
+    // the edited state and History position, and a drawing round trip keeps it.
+    name: 'Undo and Redo through mixed edits, then a drawing round trip that records no step, restore the edited state',
     setup: async (page) => {
       await openWithGenBank(page, HMMT, labelsOut);
       await generateAndWaitForResult(page);
@@ -250,7 +254,7 @@ const ROWS = [
         expect(padded, `${action} to position ${position} restores the canvas padding`).toBe(position >= 2);
       }
       expect(await historyCounts(page), 'Redo returns to the last History position').toEqual([undo, redo]);
-      await modeRoundTrip(page);
+      await drawingRoundTrip(page);
     }
   },
   {

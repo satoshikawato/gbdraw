@@ -171,7 +171,7 @@ def test_the_running_total_follows_evictions_and_commits(tmp_path: Path) -> None
     assert first["metrics"]["preparedInputCacheRetainedBytes"] == _all_entries_bytes(cache) > 0
     # A new token for one table evicts the entries that name the old one.
     table_id = next(item.resource_id for item in encoded.resources if item.source_path and item.source_path.name == "pair.tsv")
-    stage.identities[table_id] = {**stage.identities[table_id], "cacheToken": "render-resource-99"}
+    stage.identities[table_id] = {**stage.identities[table_id], "cacheToken": f"{99:064x}"}
     second = stage.render(cache, encoded.payload)
     assert second["metrics"]["preparedInputCacheEvictionCount"] > 0
     assert second["metrics"]["preparedInputCacheRetainedBytes"] == _all_entries_bytes(cache) == cache._retained_total

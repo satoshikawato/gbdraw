@@ -9,6 +9,8 @@ import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -24,11 +26,13 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const fixture = (name) => {
@@ -95,14 +99,14 @@ const CASES = [
   // RL-D: a drawing's feature color edits and label rows read per entry.
   ['g47L', 'modes.linear.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
     ['setting-entries-dropped modes.linear.features.featureColorOverrides'],
-    () => assert.deepEqual(state.drawings.linear.featureColorOverrides, { c: { color: '#ff0000', caption: 'x' } })],
+    () => assert.deepEqual(modeDrawing(state, 'linear').featureColorOverrides, { c: { color: '#ff0000', caption: 'x' } })],
   // OV-866: an edit map of another kind (a list) is dropped as its row says, not read by index.
   ['g47L', 'modes.linear.features.featureColorOverrides', ['#ff0000'],
     ['setting-replaced modes.linear.features.featureColorOverrides'],
-    () => assert.deepEqual(state.drawings.linear.featureColorOverrides, {})],
+    () => assert.deepEqual(modeDrawing(state, 'linear').featureColorOverrides, {})],
   ['g47L', 'modes.linear.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
     ['setting-entries-dropped modes.linear.features.labelOverrideRows'],
-    () => assert.equal(state.drawings.linear.canonicalLabelOverrideRows.value.length, 1)],
+    () => assert.equal(modeDrawing(state, 'linear').canonicalLabelOverrideRows.value.length, 1)],
   // OV-578: the alignment plan and record translations of a settings-only file.
   ['so46', 'modes.linear.config.linearRecordLayout.similarityAlignment', 'junk',
     ['setting-replaced modes.linear.config.linearRecordLayout.similarityAlignment'], () => assert.equal(state.similarityAlignmentPlan.value, null)],
@@ -113,21 +117,21 @@ const CASES = [
     () => assert.equal(state.losatExecution.executionMode, 'auto')],
   // An older Linear visibility that is no boolean is dropped with a row on every path.
   ['v30', 'config.adv.linear_show_accession', 'yes', ['setting-replaced config.adv.linear_show_accession'],
-    () => assert.equal(state.drawings.linear.adv.linear_accession_visibility, 'show')],
+    () => assert.equal(modeDrawing(state, 'linear').adv.linear_accession_visibility, 'show')],
   ['v44', 'config.adv.linear_show_length', 'yes', ['setting-replaced config.adv.linear_show_length']],
   // Unknown fields of a qualifier priority row, an annotation set and a comparison edge (E-OD03, E-OD12).
   ['v44', 'config.qualifierPriorityRules', [{ feat: 'CDS', order: 'product', zzz: 1 }], ['setting-replaced config.qualifierPriorityRules[0].zzz']],
   ['v44', 'config.annotationSets', [{ id: 'a', annotations: [], zzz: 1 }], ['setting-replaced config.annotationSets[0].zzz']],
   // The two Linear font sizes are read as settings (a positive number or unset).
   ['g47L', 'modes.linear.config.adv.scale_font_size', 'big', ['setting-replaced modes.linear.config.adv.scale_font_size'],
-    () => assert.equal(state.drawings.linear.adv.scale_font_size, null)],
-  ['g47L', 'modes.linear.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(state.drawings.linear.adv.ruler_label_font_size), 14)],
+    () => assert.equal(modeDrawing(state, 'linear').adv.scale_font_size, null)],
+  ['g47L', 'modes.linear.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(modeDrawing(state, 'linear').adv.ruler_label_font_size), 14)],
   // A7i at a Session 46: recordsOff of another kind, an entry of no key, an unbound uid.
   ['g47L', 'modes.linear.config.recordsOff', 'x', ['setting-replaced modes.linear.config.recordsOff']],
   ['so46', 'modes.linear.config.recordsOff', [5], ['setting-entries-dropped modes.linear.config.recordsOff']],
-  ['so46', 'modes.linear.config.recordsOff', ['unbound'], [], () => assert.deepEqual([...state.drawings.linear.recordsOff], [])],
+  ['so46', 'modes.linear.config.recordsOff', ['unbound'], [], () => assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], [])],
   // OV-822: a null over a settings group merges nothing (E-OD06), and the group keeps its defaults.
-  ['g47L', 'modes.linear.config.losat.blastp', null, [], () => assert.equal(typeof state.drawings.linear.losat.blastp, 'object')],
+  ['g47L', 'modes.linear.config.losat.blastp', null, [], () => assert.equal(typeof modeDrawing(state, 'linear').losat.blastp, 'object')],
   ['so46', 'modes.circular.config.losat.blastp', null, []]
 ];
 
@@ -145,7 +149,7 @@ for (const [base, path, value, rows, check] of CASES) {
 test('K14: record display drafts of no list are listed before the dialog and applied as listed', async () => {
   const configFile = () => {
     const config = structuredClone(BASES.g47L().modes.linear.config);
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     return config;
   };
   const cases = [
@@ -156,7 +160,7 @@ test('K14: record display drafts of no list are listed before the dialog and app
   await load(BASES.g47L());
   for (const [name, base, path, mode] of cases) {
     for (const value of [{}, 'x', 5, true]) {
-      const drawing = state.drawings[mode];
+      const drawing = modeDrawing(state, mode);
       drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, {
         sourceUid: 'held', selector: '#1', recordId: 'held', topologyOverride: null, startCoordinate: null,
         reverseComplementOverride: null, anchorIntent: null
@@ -183,7 +187,7 @@ test('K14: record display drafts of no list are listed before the dialog and app
 test('OV-892: a Label blacklist that is no text is listed and keeps its text', async () => {
   const configFile = () => {
     const config = structuredClone(BASES.g47L().modes.linear.config);
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     return config;
   };
   const cases = [
@@ -205,7 +209,7 @@ test('OV-892: a Label blacklist that is no text is listed and keeps its text', a
       assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
       assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), listed ? [`setting-replaced ${path}`] : [], label);
       assert.deepEqual(dialogs, listed ? [describeLoadRepairs(loaded.repairs)?.items] : [], label);
-      assert.equal(state.drawings[mode].manualBlacklist.value, text, label);
+      assert.equal(modeDrawing(state, mode).manualBlacklist.value, text, label);
     }
   }
 });
@@ -217,7 +221,7 @@ test('E1b: an unknown field of a stored comparison edge is dropped with a row (E
     source: 'losat', losatFilename: '', zzz: 1
   }];
   assert.deepEqual(await load(session), ['setting-replaced modes.linear.config.linearComparisonPlan.edges[0].zzz']);
-  assert.equal(Object.hasOwn(state.drawings.linear.linearComparisonPlan.edges[0], 'zzz'), false);
+  assert.equal(Object.hasOwn(modeDrawing(state, 'linear').linearComparisonPlan.edges[0], 'zzz'), false);
   await saved();
 });
 
@@ -273,9 +277,9 @@ test('OV-822: a configuration file\'s null LOSAT group loads with no row, and sa
   assert.deepEqual(await load(BASES.g47L()), []);
   const config = structuredClone(BASES.g47L().modes.linear.config);
   config.losat = { blastp: null };
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.deepEqual(await load(config), []);
-  assert.equal(typeof state.drawings.linear.losat.blastp, 'object');
+  assert.equal(typeof modeDrawing(state, 'linear').losat.blastp, 'object');
   await saved();
 });
 
@@ -324,7 +328,7 @@ test('OV-893: a dropped comparison table binding drops its series with its files
     ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
   assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
   assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
-  const conservation = state.drawings.circular.circularConservation;
+  const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
   assert.deepEqual(orderedConservationSources(state.files.c_conservation_blasts, conservation)
     .map(({ label, file, sourceIndex }) => [label, file.name, state.files.c_conservation_sequence_sources[sourceIndex]?.name]), [
@@ -359,14 +363,14 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
     session.config.circularConservation.labels = 'a,b';
     return session;
   };
-  const drawn = () => orderedConservationSources(state.files.c_conservation_blasts, state.drawings.circular.circularConservation)
+  const drawn = () => orderedConservationSources(state.files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
     .map(({ label, file }) => [label, file.name]);
   for (const entry of [5, null, {}]) {
     const result = await importSession(input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
       [['files.c_conservation_blasts[0]', 'a']], JSON.stringify(entry));
     assert.deepEqual(drawn(), [['b', 'second.tsv']], JSON.stringify(entry));
-    assert.equal(state.drawings.circular.circularConservation.labels, 'b');
+    assert.equal(modeDrawing(state, 'circular').circularConservation.labels, 'b');
   }
   // An empty place with no label is no row; the labels are kept by place.
   const unlabelled = rings(null);
@@ -393,7 +397,7 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
   const result = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path }) => path),
     [2, 1, 0].map((index) => `config.circularConservation.series[${index}]`));
-  const conservation = state.drawings.circular.circularConservation;
+  const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual([conservation.series.length, state.files.c_conservation_blasts.length], [0, 0]);
   assert.equal(conservation.enabled, false);
 });
@@ -421,7 +425,7 @@ test('OV-899: a dropped comparison file binding loads as a removed file; Save an
       ], []]
     ]) {
       assert.deepEqual(await load(session), rows, name);
-      assert.deepEqual(state.drawings.linear.linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
+      assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
         { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
       const document = await saved();
       assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);

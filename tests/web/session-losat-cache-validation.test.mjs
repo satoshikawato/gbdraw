@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -64,14 +65,16 @@ globalThis.alert = (message) => alerts.push(String(message));
 
 installSessionImportWorker();
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalSession,
-  importSession,
   serializeActiveRenderFiles,
-  validateSessionLosatArtifacts
-} = await import('../../gbdraw/web/js/services/config.js');
+  validateSessionLosatArtifacts,
+  installShownDrawing
+} = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
@@ -990,7 +993,7 @@ ORIGIN
   assert.equal(state.activeDrawing().circularConservation.series[1].sourceIndex, 1);
   assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
   assert.equal(serialized.c_conservation_fastas[0], null);

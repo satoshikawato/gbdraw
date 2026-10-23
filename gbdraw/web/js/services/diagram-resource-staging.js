@@ -2,7 +2,9 @@
 import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
-import { takeFileBytesForTransfer } from './file-content-cache.js';
+import {
+  readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
+} from './file-content-cache.js';
 import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
@@ -10,6 +12,7 @@ import {
 } from './runtime-test-hooks.js';
 
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
+/** @import { ResourceContentToken } from './file-content-cache.js' */
 /** @import { ResourcePayloadOwner } from './resource-payload-owner.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
 
@@ -106,21 +109,64 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
   }) ?? null;
 };
 
-export const createDiagramResourceTransport = () => {
-  let cachedResources = new Map();
-  let nextCacheToken = 1;
+/**
+ * A request a drawing has committed, with the resources it names.
+ * @typedef {{ request: unknown, resources: Readonly<Record<string, unknown>> | null | undefined }} CommittedResourceSet
+ */
+/**
+ * The committed request of every drawing; the Worker keeps the resources they
+ * name. The composition root supplies it.
+ * @callback ReadCommittedResourceSets
+ * @returns {Iterable<CommittedResourceSet>}
+ */
+
+/**
+ * What names a payload's bytes until they change: the base64 text, or the
+ * object that owns them (the File the user chose, a Session resource view, or
+ * the descriptor itself).
+ * @param {ResourceDescriptor} descriptor
+ * @returns {string | ResourcePayloadOwner}
+ */
+const payloadIdentityOf = (descriptor) => (
+  typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadOwner(descriptor) ?? descriptor
+);
+
+/** @param {{ readCommittedResourceSets?: ReadCommittedResourceSets }} [ports] */
+export const createDiagramResourceTransport = ({ readCommittedResourceSets = () => [] } = {}) => {
+  // The tokens the Worker holds after the last acknowledged request.
+  /** @type {ReadonlySet<ResourceContentToken>} */
+  let heldTokens = new Set();
+  // The token of each payload identity seen whose bytes the Worker holds.
+  /** @type {Map<string | ResourcePayloadOwner, ResourceContentToken>} */
+  let knownTokens = new Map();
   // A new Worker holds nothing: a helper staging prepared before the reset records nothing.
   let workerEpoch = 0;
 
   const reset = () => {
-    cachedResources = new Map();
-    nextCacheToken = 1;
+    heldTokens = new Set();
+    knownTokens = new Map();
     workerEpoch += 1;
+  };
+
+  // The held tokens a drawing's committed request names. Only tokens already
+  // known count: hashing a payload here would read bytes the Worker may not hold.
+  const committedHeldTokens = () => {
+    /** @type {Set<ResourceContentToken>} */
+    const retained = new Set();
+    for (const { request, resources } of readCommittedResourceSets()) {
+      for (const resourceId of collectCanonicalResourceIds(request)) {
+        const descriptor = resources && Object.hasOwn(resources, resourceId) ? resources[resourceId] : null;
+        if (!descriptor || typeof descriptor !== 'object') continue;
+        const token = knownTokens.get(payloadIdentityOf(/** @type {ResourceDescriptor} */ (descriptor)));
+        if (token && heldTokens.has(token)) retained.add(token);
+      }
+    }
+    return retained;
   };
 
   // A render stages what its request names, and the Worker then holds only that.
   // A helper (`retain`) stages the resources it reads, and the Worker keeps the
-  // rest for the next Generate (OV-1590), so the cache keeps them too.
+  // rest for the next Generate (OV-1590), so the held tokens keep them too.
   /**
    * @param {{
    *   request?: unknown,
@@ -129,12 +175,15 @@ export const createDiagramResourceTransport = () => {
    * }} [payload]
    */
   const prepare = async ({ request, resources, retain = false } = {}) => {
-    const previousCachedResources = cachedResources;
+    const previousHeldTokens = heldTokens;
     const preparedEpoch = workerEpoch;
+    const retained = committedHeldTokens();
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
+    /** @type {{ resourceId: string, cacheToken: ResourceContentToken, bytes: ArrayBuffer }[]} */
     const stagedResources = [];
-    const nextCachedResources = new Map();
+    /** @type {Set<ResourceContentToken>} */
+    const manifestTokens = new Set();
     let referencedDeclaredBytes = 0;
     let bytesTransferred = 0;
     let materializationCount = 0;
@@ -145,21 +194,22 @@ export const createDiagramResourceTransport = () => {
     for (const resourceId of referencedIds) {
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
-      // The Worker holds these bytes when the object they stand for (the File, the
-      // Session resource, as `addFile` keys them) or their base64 text is the same:
-      // a helper stages a File before the Generate that encodes it (OV-1595).
-      const payloadIdentity = getResourcePayloadIdentity(descriptor);
-      const payloadText = typeof descriptor.data === 'string' ? descriptor.data : null;
-      const previous = previousCachedResources.get(resourceId);
-      const cacheHit = Boolean(
-        previous
-        && previous.size === descriptor.size
-        && (previous.payloadIdentity === payloadIdentity
-          || (payloadText !== null && previous.payloadText === payloadText))
-      );
-      const cacheToken = cacheHit
-        ? previous.cacheToken
-        : `render-resource-${nextCacheToken++}`;
+      const identity = payloadIdentityOf(descriptor);
+      /** @type {ArrayBufferLike | null} */
+      let bytes = null;
+      let cacheToken = knownTokens.get(identity);
+      let hashedFile = false;
+      if (!cacheToken) {
+        if (owner && owner !== descriptor) {
+          hashedFile = true;
+          // The File's digest, cached on it: its bytes stay cached until the transfer below takes them.
+          cacheToken = await readFileContentToken(/** @type {FileLike} */ (owner));
+        } else {
+          bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
+          cacheToken = await resourceContentToken(new Uint8Array(bytes));
+        }
+        knownTokens.set(identity, cacheToken);
+      }
       referencedDeclaredBytes += descriptor.size;
       resourceManifest.push({
         resourceId,
@@ -170,18 +220,18 @@ export const createDiagramResourceTransport = () => {
         size: descriptor.size,
         lastModified: Number(descriptor.lastModified) || 0
       });
-      nextCachedResources.set(resourceId, {
-        cacheToken,
-        payloadIdentity,
-        payloadText,
-        size: descriptor.size
-      });
+      // Equal bytes under another resource ID of this request travel once, and bytes a helper
+      // staged from a File stay held for the Generate that encodes that File (OV-1595).
+      const cacheHit = previousHeldTokens.has(cacheToken) || manifestTokens.has(cacheToken);
+      manifestTokens.add(cacheToken);
       if (cacheHit) {
+        // A File read for its digest alone gives its bytes back, as a transfer would.
+        if (hashedFile) releaseFileContentCache(/** @type {FileLike} */ (owner));
         recordStructuralMetric('workerResourceCacheHitCount', 1, { resourceId });
         continue;
       }
 
-      const bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
+      bytes ??= await descriptorTransferBuffer(resourceId, descriptor, owner);
       if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== descriptor.size) {
         throw new Error(`Canonical render resource ${resourceId} byte size does not match.`);
       }
@@ -191,7 +241,6 @@ export const createDiagramResourceTransport = () => {
       recordStructuralMetric('transferredResourceBytes', bytes.byteLength, { resourceId });
       stagedResources.push({ resourceId, cacheToken, bytes });
     }
-    const stagedResourceIds = stagedResources.map(({ resourceId }) => resourceId);
     recordSessionLifecycleEvent('resource-stage-end', {
       referencedResourceCount: referencedIds.length,
       referencedDeclaredBytes,
@@ -202,17 +251,18 @@ export const createDiagramResourceTransport = () => {
     return {
       resourceManifest,
       stagedResources,
+      // The held tokens the Worker keeps besides this request's: it releases the rest.
+      retainedResourceTokens: [...retained].filter((token) => !manifestTokens.has(token)),
       commit() {
         if (retain) {
           if (workerEpoch !== preparedEpoch) return false;
-          stagedResourceIds.forEach((resourceId) => {
-            cachedResources.set(resourceId, nextCachedResources.get(resourceId));
-          });
+          heldTokens = new Set([...heldTokens, ...stagedResources.map(({ cacheToken }) => cacheToken)]);
           return true;
         }
         // A reset or another acknowledged request supersedes this preparation.
-        if (cachedResources !== previousCachedResources) return false;
-        cachedResources = nextCachedResources;
+        if (heldTokens !== previousHeldTokens) return false;
+        heldTokens = new Set([...manifestTokens, ...retained]);
+        knownTokens = new Map([...knownTokens].filter(([, token]) => heldTokens.has(token)));
         return true;
       }
     };

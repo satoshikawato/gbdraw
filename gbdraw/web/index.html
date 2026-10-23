@@ -2192,8 +2192,8 @@
                 </div>
 
                 <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button type="button" :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
-                    <button type="button" :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!diagramModeSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
+                    <button type="button" data-history-ignore :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="selectDrawing('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!drawingSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
+                    <button type="button" data-history-ignore :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="selectDrawing('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!drawingSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
                 </div>
                 <!-- PD-OI-106: the UI language. A globe and each language's own name keep it findable in any language; a choice is no History step. The link beside it opens the translation feedback form in a new tab. -->
                 <div class="app-language flex items-center gap-1 text-slate-500" :title="t('Language')">
@@ -3543,19 +3543,19 @@
                                     <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_1.5rem_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.5rem_1.5rem]': item.target.kind === 'featureIdentity' }">
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" :aria-label="t('Annotation id')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Name')" :disabled="!semanticMutationAvailable">
                                         <template v-if="item.target.kind === 'coordinateSpan'">
-                                            <input type="number" min="1" v-model.number="item.target.start" :aria-label="t('Annotation start (1-based)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Start')" :disabled="!semanticMutationAvailable">
-                                            <input type="number" min="1" v-model.number="item.target.end" :aria-label="t('Annotation end (inclusive)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('End')" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="item.target.start" @input="setAnnotationField(set, item, 'start', $event.target.value)" :aria-label="t('Annotation start (1-based)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Start')" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="item.target.end" @input="setAnnotationField(set, item, 'end', $event.target.value)" :aria-label="t('Annotation end (inclusive)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('End')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <template v-else-if="item.target.kind === 'featureSpan'">
-                                            <input v-model.trim="item.target.selectors[0].key" :aria-label="t('Annotation qualifier')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Qualifier')" :disabled="!semanticMutationAvailable">
-                                            <input v-model.trim="item.target.selectors[0].value" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
+                                            <input :value="item.target.selectors[0].key" @input="setAnnotationField(set, item, 'selectorKey', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Qualifier')" :disabled="!semanticMutationAvailable">
+                                            <input :value="item.target.selectors[0].value" @input="setAnnotationField(set, item, 'selectorValue', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
                                         <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :disabled="!semanticMutationAvailable">
                                         <button :aria-label="t('Delete annotation')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" :title="t('Delete annotation')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                     <div class="flex min-w-0 items-center gap-2">
-                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" :aria-label="t('Annotation target kind')" class="form-input w-auto shrink-0 px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(set, item, $event.target.value)" :aria-label="t('Annotation target kind')" class="form-input w-auto shrink-0 px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                             <option value="coordinateSpan">{{ t('Coordinates') }}</option><option value="featureSpan">{{ t('Feature') }}</option>
                                             <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>{{ t('Selected feature') }}</option>
                                         </select>
@@ -3586,12 +3586,12 @@
                                         <summary class="cursor-pointer text-[10px] text-slate-500"><span><i18n-text :text="t('Style: {mark}')"><template #mark><span class="capitalize">{{ item.mark }}</span></template></i18n-text><template v-if="item.label"> · {{ item.label }}</template></span></summary>
                                         <div class="mt-1 space-y-1">
                                             <div class="grid grid-cols-2 gap-1">
-                                                <select v-model="item.mark" :aria-label="t('Annotation mark')" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">{{ t('Highlight (behind features)') }}</option><option value="band">{{ t('Band (annotation lane)') }}</option><option value="line">{{ t('Line') }}</option><option value="bracket">{{ t('Bracket') }}</option></select>
-                                                <input v-model="item.label" :aria-label="t('Annotation label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Label')" :disabled="!semanticMutationAvailable">
+                                                <select :value="item.mark" @change="setAnnotationField(set, item, 'mark', $event.target.value)" :aria-label="t('Annotation mark')" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">{{ t('Highlight (behind features)') }}</option><option value="band">{{ t('Band (annotation lane)') }}</option><option value="line">{{ t('Line') }}</option><option value="bracket">{{ t('Bracket') }}</option></select>
+                                                <input :value="item.label" @input="setAnnotationField(set, item, 'label', $event.target.value)" :aria-label="t('Annotation label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Label')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <div class="flex items-center gap-0.5">
-                                                    <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" :placeholder="t('Auto')" :aria-label="t('Annotation lane')" :aria-describedby="`help-annotation-lane-${item.id}`">
+                                                    <input type="number" min="0" :value="item.lane" @input="setAnnotationField(set, item, 'lane', $event.target.value)" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" :placeholder="t('Auto')" :aria-label="t('Annotation lane')" :aria-describedby="`help-annotation-lane-${item.id}`">
                                                     <help-tip :id="`help-annotation-lane-${item.id}`" :label="t('Help: Annotation lane')" :text="t('Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band.')"></help-tip>
                                                 </div>
                                                 <label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label>
@@ -3615,8 +3615,8 @@
                         <setting-note setting="pairwise-comparisons" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Run LOSAT') }}</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Upload BLAST TSV') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Run LOSAT') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Upload BLAST TSV') }}</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -3722,9 +3722,9 @@
                                 <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add one comparison sequence file (FASTA, GenBank, or DDBJ) per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <span v-else class="text-[9px] flex items-center">{{ t('Series') }} <help-tip :text="t('Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
-                                    <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
+                                    <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
-                                        <input type="text" v-model="circularConservation.series[row.index].label" :aria-label="t('Comparison ring label {n}', { n: row.index + 1 })" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="text" v-model="circularConservation.series[row.index].label" @input="refreshCircularConservationSlots()" :aria-label="t('Comparison ring label {n}', { n: row.index + 1 })" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
                                         <label v-if="circularConservation.source === 'upload'"
                                                class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
@@ -4220,7 +4220,7 @@
                                     </label>
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Place multiple records on one shared circular canvas.')">
-                                        <input type="checkbox" v-model="form.multi_record_canvas" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <input type="checkbox" v-model="form.multi_record_canvas" @change="changeCircularMultiRecordCanvas()" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>{{ t('Multi-Record Canvas') }}</span>
                                     </label>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
@@ -4861,7 +4861,7 @@
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
                                     <div class="flex items-center gap-2 text-[10px]">
                                         <label class="flex items-center gap-2 text-[10px] font-medium text-slate-600 cursor-pointer">
-                                            <input v-model="paletteInstantPreviewEnabled" type="checkbox" aria-describedby="help-colors-palette-instant-preview" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
+                                            <input data-history-managed :checked="paletteInstantPreviewEnabled" @change="setPaletteInstantPreview($event.target.checked)" type="checkbox" aria-describedby="help-colors-palette-instant-preview" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
                                             <span>{{ t('Palette instant preview') }}</span>
                                         </label>
                                         <help-tip id="help-colors-palette-instant-preview" :text="t('When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram.')"></help-tip>
@@ -4885,7 +4885,7 @@
                                     <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0 self-end">
                                         <span class="text-[9px] text-slate-500 break-words block mb-0.5">{{ feat }}</span>
                                         <color-value-control
-                                            v-model="currentColors[feat]"
+                                            :model-value="currentColors[feat]" @update:model-value="editDefaultColor(feat, $event)"
                                             :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
                                             :aria-label="t('{type} feature color', { type: feat })">
                                         </color-value-control>
@@ -4897,7 +4897,7 @@
                                         <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0 self-end">
                                             <span class="text-[9px] text-slate-500 break-words block mb-0.5">{{ feat }}</span>
                                             <color-value-control
-                                                v-model="currentColors[feat]"
+                                                :model-value="currentColors[feat]" @update:model-value="editDefaultColor(feat, $event)"
                                                 :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
                                                 :aria-label="t('{type} feature color', { type: feat })">
                                             </color-value-control>
@@ -4921,7 +4921,7 @@
                                     </button>
                                 </div>
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Default colors file')" v-model="files.d_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Default colors file')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')"></help-tip>
                                         {{ t('Optional TSV of default colors.') }}
@@ -4967,7 +4967,7 @@
                                     @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
 
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Specific rules file')" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Specific rules file')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')"></help-tip>
                                         {{ t('Optional TSV of specific rules.') }}
@@ -5225,22 +5225,22 @@
 
                                     <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
                                         <p class="ui-hint">{{ t('Exclude labels containing these keywords.') }}</p>
-                                        <textarea v-model="manualBlacklist" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
+                                        <textarea :value="manualBlacklist" @input="setBlacklistText($event.target.value)" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
                                         <div class="ui-hint text-center">{{ t('- OR -') }}</div>
-                                        <file-uploader :label="t('Blacklist File')" v-model="files.blacklist" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
                                         <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span class="font-mono">NADH|ATPase</span></template><template #second><span class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span class="font-mono">^...$</span></template></i18n-text></p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
-                                            <input :value="row.feat" @input="editWhitelistRule(i, 'feat', $event.target.value)" :placeholder="t('Feat')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input :value="row.qual" @input="editWhitelistRule(i, 'qual', $event.target.value)" :placeholder="t('Qual')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input :value="row.key" @input="editWhitelistRule(i, 'key', $event.target.value)" :placeholder="t('Pattern')" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.feat" @input="setWhitelistRuleField(row, 'feat', $event.target.value)" :placeholder="t('Feat')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.qual" @input="setWhitelistRuleField(row, 'qual', $event.target.value)" :placeholder="t('Qual')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.key" @input="setWhitelistRuleField(row, 'key', $event.target.value)" :placeholder="t('Pattern')" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
                                             <button @click="removeWhitelistRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1">×</button>
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">{{ t('+ Add Rule') }}</button>
                                         <div class="ui-hint text-center mt-2">{{ t('- OR -') }}</div>
-                                        <file-uploader :label="t('Whitelist File')" v-model="files.whitelist" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     </div>
                                 </div>
 
@@ -5267,7 +5267,7 @@
                                     </div>
 
                                     <div class="ui-hint text-center mb-1">{{ t('- OR UPLOAD FILE -') }}</div>
-                                    <file-uploader :label="t('Priority File (TSV)')" v-model="files.qualifier_priority" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
@@ -6281,24 +6281,24 @@
                             <div></div>
                             <div>
                                 <label for="canvas-padding-top" class="text-[10px] text-slate-500 block">{{ t('Top') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" v-model.number="canvasPadding.top" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" :value="canvasPadding.top" @input="setCanvasPaddingSide('top', $event.target.value)" @change="setCanvasPaddingSide('top', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-left" class="text-[10px] text-slate-500 block">{{ t('Left') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" v-model.number="canvasPadding.left" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" :value="canvasPadding.left" @input="setCanvasPaddingSide('left', $event.target.value)" @change="setCanvasPaddingSide('left', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg" aria-hidden="true"></i>
                             </div>
                             <div>
                                 <label for="canvas-padding-right" class="text-[10px] text-slate-500 block">{{ t('Right') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" v-model.number="canvasPadding.right" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" :value="canvasPadding.right" @input="setCanvasPaddingSide('right', $event.target.value)" @change="setCanvasPaddingSide('right', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-bottom" class="text-[10px] text-slate-500 block">{{ t('Bottom') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" :value="canvasPadding.bottom" @input="setCanvasPaddingSide('bottom', $event.target.value)" @change="setCanvasPaddingSide('bottom', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                         </div>

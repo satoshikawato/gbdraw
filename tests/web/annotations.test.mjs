@@ -31,6 +31,12 @@ const {
   setAnnotationRecordValue
 } = await load('app/annotations/record-selector.js');
 const { validateAnnotationRecordTargets } = await load('app/annotations/validation.js');
+const { ANNOTATION_SETS_SLICE } = await load('services/drawing/annotation-sets.js');
+// A drawing over `sets` (the slice keeps the list and its row objects).
+const drawingOf = (sets) => {
+  const { handle, view } = ANNOTATION_SETS_SLICE.create({ annotationSets: sets });
+  return { ...view, slices: { annotationSets: handle } };
+};
 const {
   encodeAnnotationTable, encodeAnnotationTableWithNotice, parseAnnotationTable, parseAnnotationTableWithNotice
 } = await load('app/annotations/table-codec.js');
@@ -407,7 +413,8 @@ assert.deepEqual(
   annotationRecordOptions(linearCatalog, targetSet.annotations[0]).map((option) => option.value),
   ['', linearCatalog.records[0].key, linearCatalog.records[1].key]
 );
-setAnnotationRecordValue(linearCatalog, targetSet.annotations[0], linearCatalog.records[1].key);
+const targetDrawing = drawingOf([targetSet]);
+setAnnotationRecordValue(linearCatalog, targetDrawing.slices.annotationSets, targetSet.annotations[0], linearCatalog.records[1].key);
 assert.deepEqual(targetSet.annotations[0].target.record, { kind: 'recordId', value: 'RecB' });
 assert.equal(validateAnnotationRecordTargets([targetSet], linearCatalog), null);
 assert.equal(encodeAnnotationTable([targetSet]).trim().split('\n')[1].split('\t')[3], 'RecB');
@@ -416,7 +423,7 @@ targetSet.annotations[0].target.record = { kind: 'recordIndex', index: 2 };
 assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'OUT_OF_RANGE' } });
 targetSet.annotations[0].target.record = { kind: 'recordId', value: 'missing' };
 assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'NO_MATCH' } });
-setAnnotationRecordValue(duplicateCatalog, targetSet.annotations[0], duplicateCatalog.records[0].key);
+setAnnotationRecordValue(duplicateCatalog, targetDrawing.slices.annotationSets, targetSet.annotations[0], duplicateCatalog.records[0].key);
 assert.equal(validateAnnotationRecordTargets([targetSet], duplicateCatalog), null);
 targetSet.annotations[0].target.record = { kind: 'recordIndex', index: -1 };
 delete targetSet.annotations[0].metadata._gbdraw_web_target_record_key;
@@ -506,7 +513,8 @@ const duplicateTargetSet = createAnnotationSet({
   id: 'duplicates',
   annotations: [{ id: 'same', target: coordinateTarget({ start: 1, end: 2 }), mark: 'band' }]
 });
-setAnnotationRecordValue(duplicateCatalog, duplicateTargetSet.annotations[0], duplicateCatalog.records[1].key);
+const duplicateDrawing = drawingOf([duplicateTargetSet]);
+setAnnotationRecordValue(duplicateCatalog, duplicateDrawing.slices.annotationSets, duplicateTargetSet.annotations[0], duplicateCatalog.records[1].key);
 assert.deepEqual(duplicateTargetSet.annotations[0].target.record, { kind: 'recordIndex', index: 1 });
 const reorderedDuplicateCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
@@ -515,7 +523,7 @@ const reorderedDuplicateCatalog = buildAnnotationRecordCatalog({
     { sourceKey: 'dup-a', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'dup', recordLength: 10 }] }
   ]
 });
-reconcileAnnotationRecordBindings([duplicateTargetSet], reorderedDuplicateCatalog);
+reconcileAnnotationRecordBindings(duplicateDrawing, reorderedDuplicateCatalog);
 assert.deepEqual(duplicateTargetSet.annotations[0].target.record, { kind: 'recordIndex', index: 0 });
 assert.equal(validateAnnotationRecordTargets([duplicateTargetSet], reorderedDuplicateCatalog), null);
 const replacedSourceCatalog = buildAnnotationRecordCatalog({
@@ -864,10 +872,11 @@ test('an annotation bound to an OFF record stays in the draft and leaves the req
   const sets = [createAnnotationSet({
     id: 'off', annotations: [{ id: 'on-b', target: coordinateTarget({ start: 1, end: 5 }), label: '', mark: 'band' }]
   })];
-  setAnnotationRecordValue(allOn, sets[0].annotations[0], allOn.records[1].key);
+  const offDrawing = drawingOf(sets);
+  setAnnotationRecordValue(allOn, offDrawing.slices.annotationSets, sets[0].annotations[0], allOn.records[1].key);
   const before = structuredClone(sets);
   assert.equal(validateAnnotationRecordTargets(sets, offB), null);
-  reconcileAnnotationRecordBindings(sets, offB);
+  reconcileAnnotationRecordBindings(offDrawing, offB);
   assert.deepEqual(sets, before, 'the binding to the OFF record is kept');
   assert.deepEqual(annotationOptionsPayload(sets, [], offB.omittedRecordKeys).sets[0].annotations, []);
   assert.equal(annotationOptionsPayload(sets, [], allOn.omittedRecordKeys).sets[0].annotations.length, 1);

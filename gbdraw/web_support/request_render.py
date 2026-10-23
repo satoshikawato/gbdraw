@@ -19,6 +19,7 @@ from gbdraw.api.request_render import (
 from gbdraw.api.requests import DiagramRequest, LinearDiagramRequest
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
+    PreparedInputRetention,
     PreparedResourceIdentity,
 )
 from gbdraw.exceptions import ExportError, LabelsDoNotFitError, ValidationError
@@ -100,7 +101,8 @@ def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-_RESOURCE_CACHE_TOKEN_RE = re.compile(r"^render-resource-[1-9][0-9]*$")
+# The sha256 hex of the resource bytes (gbdraw/web/js/services/file-content-cache.js).
+_RESOURCE_CACHE_TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
 _STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
 _STAGED_WORKSPACE_MARKER = ".gbdraw-worker-render-workspace"
 
@@ -199,6 +201,7 @@ def render_canonical_web_request(
         _diagnostics=_diagnostics,
         _prepared_input_cache=None,
         _resource_identities=None,
+        _retention=None,
         _label_fit_searches=_label_fit_searches,
         _held_feature_catalog_revision=None,
         _held_segments=frozenset(),
@@ -213,6 +216,7 @@ def _render_canonical_web_request_with_prepared_inputs(
     _diagnostics: MutableMapping[str, Any] | None,
     _prepared_input_cache: PreparedBiologicalInputCache | None,
     _resource_identities: Mapping[str, PreparedResourceIdentity] | None,
+    _retention: PreparedInputRetention | None,
     _label_fit_searches: LabelFitRowSearches | None,
     _held_feature_catalog_revision: str | None,
     _held_segments: AbstractSet[str],
@@ -252,6 +256,7 @@ def _render_canonical_web_request_with_prepared_inputs(
     with _prepared_input_cache.transaction(
         resource_paths=cache_paths,
         diagnostics=_diagnostics,
+        retention=_retention,
     ):
         return render()
 
@@ -552,6 +557,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _diagnostics: MutableMapping[str, Any] | None = None,
     _prepared_input_cache: PreparedBiologicalInputCache | None = None,
     _resource_identities: Mapping[str, Mapping[str, Any]] | None = None,
+    _prepared_input_retention: Mapping[str, Any] | None = None,
     _label_fit_searches: LabelFitRowSearches | None = None,
     _held_feature_catalog_revision: str | None = None,
     _held_segments: AbstractSet[str] = frozenset(),
@@ -608,6 +614,10 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             resource_paths=validated_paths,
             cache_requested=_prepared_input_cache is not None,
         )
+        retention = _validate_prepared_input_retention(
+            _prepared_input_retention,
+            cache_requested=_prepared_input_cache is not None,
+        )
         if output_directory.exists():
             raise ValidationError("The staged Web render output directory already exists.")
         output_directory.mkdir()
@@ -620,6 +630,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             _diagnostics=_diagnostics,
             _prepared_input_cache=_prepared_input_cache,
             _resource_identities=validated_identities,
+            _retention=retention,
             _label_fit_searches=_label_fit_searches,
             _held_feature_catalog_revision=_held_feature_catalog_revision,
             _held_segments=_held_segments,
@@ -740,6 +751,39 @@ def _validate_prepared_resource_identities(
             size=size,
         )
     return identities
+
+
+def _validate_prepared_input_retention(
+    value: Mapping[str, Any] | None,
+    *,
+    cache_requested: bool,
+) -> PreparedInputRetention | None:
+    """Read the drawing a staged render renders and the tokens the page retains (A4b)."""
+
+    if value is None:
+        return None
+    if not cache_requested:
+        raise ValidationError(
+            "A prepared input retention requires a prepared input cache.",
+            diagnostic={"code": "HELPER_PROTOCOL"},
+        )
+    drawing = value.get("drawing") if isinstance(value, Mapping) else None
+    tokens = value.get("resourceTokens") if isinstance(value, Mapping) else None
+    if (
+        not isinstance(value, Mapping)
+        or set(value) != {"drawing", "resourceTokens"}
+        or not isinstance(drawing, str)
+        or not _RESOURCE_ID_RE.fullmatch(drawing)
+        or not isinstance(tokens, list)
+        or not all(
+            isinstance(token, str) and _RESOURCE_CACHE_TOKEN_RE.fullmatch(token)
+            for token in tokens
+        )
+    ):
+        raise ValidationError(
+            "Invalid prepared input retention.", diagnostic={"code": "HELPER_PROTOCOL"}
+        )
+    return PreparedInputRetention(drawing=drawing, resource_tokens=frozenset(tokens))
 
 
 __all__ = [

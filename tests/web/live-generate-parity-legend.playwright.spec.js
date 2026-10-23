@@ -534,8 +534,8 @@ for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null } of O
     expect(await page.evaluate(async ({ caption, own, shown }) => {
       const { state } = await import('/gbdraw/web/js/state.js');
       return {
-        stored: state.drawings[own].legendColorOverrides[caption] ?? null,
-        other: state.drawings[shown].legendColorOverrides[caption] ?? null
+        stored: state.drawingOf(own).legendColorOverrides[caption] ?? null,
+        other: state.drawingOf(shown).legendColorOverrides[caption] ?? null
       };
     }, { caption: row, own: from, shown: other }), `the color stays stored in ${from} only`).toEqual({ stored: '#7b2cbf', other: null });
     await switchMode(page, from);

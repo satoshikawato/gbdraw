@@ -415,7 +415,7 @@ test('same label text in two Linear records changes only the selected exact iden
     await openApp(page);
     await page.evaluate(async ({ first, second }) => {
       const app = window.__GBDRAW_APP__;
-      app.setDiagramMode('linear');
+      app.selectDrawing('linear');
       app.lInputType = 'gb';
       app.addLinearSeq();
       [first, second].forEach((content, index) => app.setLinearSeqPrimaryFile(

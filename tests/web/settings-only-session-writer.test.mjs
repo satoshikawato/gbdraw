@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -17,8 +18,10 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-const { SESSION_VERSION, exportSession, buildConfigData, importSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, buildConfigData, installShownDrawing } = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 globalThis.alert = () => {};
 installSessionImportWorker();
 const { adoptCurrentSessionDocument, validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
@@ -119,7 +122,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
     [writeCircularMeasureValue('65%', 'px'), { value: 0.65, unit: 'factor' }]
   );
   for (const [mode, enabled] of [['circular', true], ['circular', false], ['linear', false]]) {
-    state.mode.value = mode;
+    installShownDrawing(mode);
     const slot = state.activeDrawing().adv.circular_track_slots[0];
     slot.enabled = enabled;
     for (const [index, [scalar, expected]] of cases.entries()) {
@@ -144,7 +147,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
 });
 
 test('writer and current admission reject invalid scalar drafts without altering them', async () => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const slot = state.activeDrawing().adv.circular_track_slots[0];
   slot.enabled = true;
   slot.width = writeCircularMeasureValue('1.', 'px');

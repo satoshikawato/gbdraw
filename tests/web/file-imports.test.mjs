@@ -28,6 +28,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'card-row-marks.js'),
+  await readFile(join(sourceDir, 'card-row-marks.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'file-imports.js'),
   await readFile(join(sourceDir, 'file-imports.js'), 'utf8'),
   'utf8'

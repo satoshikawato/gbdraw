@@ -133,7 +133,7 @@ test('Linear GUI Generate vs. Source recipe sweep', async ({ page }) => {
     await A.helpers().openApp(page);
     await page.evaluate(async ({ a1, a2, b }) => {
       const app = window.__GBDRAW_APP__;
-      app.setDiagramMode('linear');
+      app.selectDrawing('linear');
       await window.Vue.nextTick();
       if (app.linearSeqs.length < 2) app.addLinearSeq();
       app.setLinearSeqPrimaryFile(0, 'gb', new File([a1], 'MjeNMV.gb', { type: 'text/plain' }));

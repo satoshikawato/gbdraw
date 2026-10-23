@@ -202,7 +202,7 @@ const editorLegendRows = async (page, rows) => {
 const switchPalette = async (page, name) => {
   await page.evaluate((palette) => {
     const app = window.__GBDRAW_APP__;
-    app.paletteInstantPreviewEnabled = true;
+    app.setPaletteInstantPreview(true);
     return app.selectPalette(palette);
   }, name);
   await settleLive(page);
@@ -216,6 +216,68 @@ const deleteLegendRow = async (page, caption) => {
   }, caption);
   await settleLive(page);
 };
+
+const BATCH_0004_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
+
+// A Legend row renamed in the Legend editor (`renameRow`), settled.
+const renameLegendRow = async (page, caption, name) => {
+  await renameRow(page, caption, name);
+  await settleLive(page);
+};
+
+// Reset Settings, settled.
+const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); })
+  .then(() => settleLive(page));
+
+// A Save started while a batch Result is displayed, declining that display.
+// The Save is held (its own `beforeExport`) until the Result it raced is mounted.
+const displayWhileSaveHeld = async (page, resultIndex) => {
+  await page.evaluate(async (index) => {
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    window.releaseSave = release;
+    window.__GBDRAW_APP__.selectResult(index);
+    window.pendingSave = service.exportSession('declined-display', { beforeExport: () => gate });
+  }, resultIndex);
+  await expect.poll(() => page.evaluate(async (index) => {
+    const { isCommittedSvgResultMounted } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+    const app = window.__GBDRAW_APP__;
+    return app.sessionSavePending && app.selectedResultIndex === index && isCommittedSvgResultMounted(app.results[index]);
+  }, resultIndex)).toBe(true);
+  await settleLive(page);
+  await evaluateWithRetainedPromise(page, async () => { window.releaseSave(); await window.pendingSave; });
+  await settleLive(page);
+};
+
+// Save Session while `resultIndex` is displayed. The Session has a title
+// while it saves, so Save asks for none: the title dialog would wait for its
+// answer while the display paints, and the Save would no longer run while the
+// displayed Result lacks paint. The title is restored after it, so a later
+// Save asks as before.
+const saveWhileDisplaying = (page, resultIndex) => evaluateWithRetainedPromise(page, async (index) => {
+  const app = window.__GBDRAW_APP__;
+  const title = app.sessionTitle;
+  app.sessionTitle = 'save-while-displaying';
+  try {
+    const saved = app.saveSessionWithTitle();
+    app.selectResult(index);
+    await saved;
+  } finally {
+    app.sessionTitle = title;
+  }
+}, resultIndex);
+
+// Load Feature Edits TSV with one row per [locus_tag, label_visibility,
+// label_text] of the first record.
+const loadFeatureEdits = (page, rows) => evaluateWithRetainedPromise(page, async (edits) => {
+  const app = window.__GBDRAW_APP__;
+  const lines = edits.map(([tag, visibility, text]) => (
+    `#1\thash=${app.extractedFeatures.find((item) => item.locus_tag === tag).svg_id}\t\t${visibility}\t${text}`
+  ));
+  const table = ['record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text', ...lines, ''].join('\n');
+  await app.loadFeatureEditTable({ target: { files: [new File([table], 'edits.tsv', { type: 'text/plain' })], value: '' } });
+}, rows).then(() => settleLive(page));
 
 module.exports = {
   SINGLE_FIXTURE,
@@ -236,5 +298,11 @@ module.exports = {
   legendRowStrokeColor,
   editorLegendRows,
   switchPalette,
-  deleteLegendRow
+  deleteLegendRow,
+  BATCH_0004_OFF,
+  renameLegendRow,
+  resetSettings,
+  displayWhileSaveHeld,
+  saveWhileDisplaying,
+  loadFeatureEdits
 };

@@ -3,6 +3,7 @@ import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const semanticParity = JSON.parse(await readFile(
@@ -161,6 +162,7 @@ globalThis.window = {
 const { createDefaultAdv, createDefaultForm, createDefaultLosat, state } = await import(
   pathToFileURL(join(tempDir, 'js', 'state.js'))
 );
+const { installShownDrawing } = await import(pathToFileURL(join(tempDir, 'js', 'services', 'config.js')));
 assert.equal(
   createDefaultLosat().blastp.collinearSearchScope,
   'adjacent',
@@ -169,7 +171,8 @@ assert.equal(
 // Each mode has its own drawing (PR-1). A drawing starts from its mode's
 // profile, and its `form.legend` and `adv.plot_title_position` read and write
 // its own mode's layout slot, whichever mode is shown.
-const { circular: circularDrawing, linear: linearDrawing } = state.drawings;
+const circularDrawing = modeDrawing(state, 'circular');
+const linearDrawing = modeDrawing(state, 'linear');
 assert.notEqual(circularDrawing, linearDrawing);
 for (const drawing of [circularDrawing, linearDrawing]) {
   assert.equal(Object.keys(drawing.form).includes('legend'), false);
@@ -185,7 +188,7 @@ for (const [drawing, modeName] of [[circularDrawing, 'circular'], [linearDrawing
     `the ${modeName} drawing starts from its mode's profile`
   );
 }
-state.mode.value = 'linear';
+installShownDrawing('linear');
 circularDrawing.form.multi_record_canvas = false;
 circularDrawing.form.legend = 'right';
 circularDrawing.adv.plot_title_position = 'top';
@@ -193,7 +196,7 @@ assert.deepEqual(circularDrawing.layoutPreferences.circular.single, {
   legend: 'right',
   plotTitlePosition: 'top'
 });
-state.mode.value = 'circular';
+installShownDrawing('circular');
 linearDrawing.form.legend = 'left';
 linearDrawing.adv.plot_title_position = 'center';
 assert.deepEqual(linearDrawing.layoutPreferences.linear, {
@@ -208,8 +211,8 @@ assert.deepEqual(circularDrawing.layoutPreferences.circular.single, {
 // nothing between them.
 circularDrawing.adv.identity = 88;
 linearDrawing.adv.identity = 77;
-state.mode.value = 'linear';
-state.mode.value = 'circular';
+installShownDrawing('linear');
+installShownDrawing('circular');
 assert.deepEqual([circularDrawing.adv.identity, linearDrawing.adv.identity], [88, 77]);
 assert.equal(state.activeDrawing(), circularDrawing);
 const formDefaults = createDefaultForm();
@@ -260,10 +263,10 @@ assert.deepEqual(
   const { resetSettings } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
   );
-  state.mode.value = 'circular';
-  state.drawings.circular.adv.identity = 88;
-  state.drawings.circular.form.plot_title = 'Circular title';
-  state.mode.value = 'linear';
+  installShownDrawing('circular');
+  modeDrawing(state, 'circular').adv.identity = 88;
+  modeDrawing(state, 'circular').form.plot_title = 'Circular title';
+  installShownDrawing('linear');
   state.activeDrawing().adv.identity = 77;
   state.activeDrawing().form.show_scale = false;
   state.activeDrawing().linearTypographyLinked.value = false;
@@ -355,7 +358,7 @@ assert.deepEqual(
   const resetAdvDefaults = createDefaultAdv('linear');
   // Reset returns both drawings to their own mode's defaults.
   for (const modeName of ['circular', 'linear']) {
-    const drawing = state.drawings[modeName];
+    const drawing = modeDrawing(state, modeName);
     const managed = managedAdvStateForMode(modeName);
     assert.deepEqual(Object.fromEntries(Object.keys(managed).map((key) => [key, drawing.adv[key]])), managed);
     assert.equal(drawing.form.plot_title, '');
@@ -411,10 +414,10 @@ assert.deepEqual(
   const { applyCapturedConfigData, buildConfigData } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
   state.activeDrawing().adv.identity = 88;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.activeDrawing().adv.identity = 77;
   state.activeDrawing().form.show_scale = false;
   state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
@@ -425,7 +428,7 @@ assert.deepEqual(
   assert.equal(savedConfig.form.show_scale, false);
   assert.equal(Object.hasOwn(savedConfig, 'modeProfiles'), false);
   assert.equal(savedConfig.adv.identity, 77);
-  assert.equal(buildConfigData(state.drawings.circular).adv.identity, 88);
+  assert.equal(buildConfigData(modeDrawing(state, 'circular')).adv.identity, 88);
   assert.equal(savedConfig.losat.blastp.collinearSearchScope, 'adjacent');
   assert.deepEqual(savedConfig.unmanagedConfigOverrides, {
     'objects.blast_match.curve_tension': 0.25
@@ -445,7 +448,7 @@ assert.deepEqual(
     'adjacent',
     'an explicit saved-session adjacent scope must survive current-reader loading'
   );
-  assert.equal(state.drawings.circular.adv.identity, 88, 'applying the Linear drawing leaves the Circular one');
+  assert.equal(modeDrawing(state, 'circular').adv.identity, 88, 'applying the Linear drawing leaves the Circular one');
 
   // Arrange in rows: omission takes the fresh default; explicit false is kept.
   for (const [layout, expected] of [[undefined, true], [{ rows: [] }, true], [{ enabled: false, rows: [] }, false]]) {
@@ -501,7 +504,7 @@ const genbank = {
 };
 
 for (const modeName of ['circular', 'linear']) {
-  state.mode.value = modeName;
+  installShownDrawing(modeName);
   Object.assign(state.activeDrawing().form, createDefaultForm());
   Object.assign(state.activeDrawing().adv, createDefaultAdv(modeName));
   state.cInputType.value = 'gb';
@@ -572,7 +575,7 @@ for (const modeName of ['circular', 'linear']) {
   }
 }
 
-state.mode.value = 'linear';
+installShownDrawing('linear');
 Object.assign(state.activeDrawing().form, createDefaultForm());
 Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
 Object.assign(state.activeDrawing().losat, createDefaultLosat());
@@ -624,7 +627,7 @@ assert.equal(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
   const { buildSourceRecipe } = await import(pathToFileURL(join(tempDir, 'js', 'app', 'run-info.js')));
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   Object.assign(state.activeDrawing().form, createDefaultForm());
   Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
   state.cInputType.value = 'gb';

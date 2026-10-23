@@ -11,6 +11,8 @@ import { gunzipSync } from 'node:zlib';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -36,10 +38,15 @@ globalThis.alert = () => {};
 
 installSessionImportWorker();
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
-  SESSION_VERSION, exportSession, importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
-  serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
-} = await import('../../gbdraw/web/js/services/config.js');
+  SESSION_VERSION,
+  getCommittedCanonicalRenderRequest,
+  getCommittedCanonicalSession,
+  serializeActiveRenderFiles,
+  setUnmanagedConfigOverrideValidator,
+  installShownDrawing
+} = sessionConfig;
 const {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -47,6 +54,7 @@ const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/s
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -424,7 +432,7 @@ await test('a request whose Circular slot objects name a renderer by alias loads
   delete session.config;
   const result = await load(Buffer.from(JSON.stringify(session)));
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
-  assert.deepEqual(state.drawings.circular.adv.circular_track_slots.map(({ id, renderer }) => [id, renderer]),
+  assert.deepEqual(modeDrawing(state, 'circular').adv.circular_track_slots.map(({ id, renderer }) => [id, renderer]),
     [['features', 'features'], ['c', 'dinucleotide_content'], ['g', 'dinucleotide_content'], ['s', 'dinucleotide_skew']]);
   const { getCommittedCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/config.js');
   const { drawnTracks } = await import('../../gbdraw/web/js/services/track-legend-rows.js');
@@ -440,8 +448,8 @@ for (const [version, file] of [[44, 'font-family-preserved.v44.gbdraw-session.js
   await test(`a Session ${version} of main that preserved objects.text.font_family loads it into the Font setting`, async () => {
     const result = await load(gunzipSync(await readFile(path.join(root, 'tests/fixtures/sessions', file))));
     assert.equal(result.status, 'ok', JSON.stringify(result.error));
-    assert.equal(state.drawings.circular.adv.font_family, "'DejaVu Serif', serif");
-    assert.deepEqual({ ...state.drawings.circular.unmanagedConfigOverrides }, {});
+    assert.equal(modeDrawing(state, 'circular').adv.font_family, "'DejaVu Serif', serif");
+    assert.deepEqual({ ...modeDrawing(state, 'circular').unmanagedConfigOverrides }, {});
   });
 }
 
@@ -454,9 +462,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
   assert.equal(getCommittedCanonicalRenderRequest(), null);
   assert.deepEqual(getLoadedTrackSettings(), { mode: 'circular', dinucleotide: 'GC', slots: null });
   // The record is the shown mode's Result: the other mode has none.
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.equal(getLoadedTrackSettings(), null);
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   // Linear Custom Track Slots of a Session 30 load (the schema 1 slots are
   // migrated). This file's Result was drawn with the slots off, so the record
   // is the saved draft: a slot added after the last Generate (the owner gives
@@ -520,7 +528,7 @@ await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without t
     } }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', label);
     assert.deepEqual(loaded.repairs.map(({ code, path, effect }) => [code, path, effect]), rows, label);
-    const { adv } = state.drawings.circular;
+    const { adv } = modeDrawing(state, 'circular');
     assert.equal(adv.circular_track_slots_enabled, enabled, label);
     assert.equal(adv.circular_track_slots.length, session.config.adv.circular_track_slots.length, label);
     assert.ok(adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')), label);

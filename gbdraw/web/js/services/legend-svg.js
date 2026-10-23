@@ -4,6 +4,7 @@ import { isAutoFeatureUnderlay } from './feature-dom.js';
 import { legendSwatch, sameLegendLine } from './legend-row-names.js';
 /** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
+import { legendEntryKey } from './drawing/paint.js';
 
 export { parseTransform };
 
@@ -320,10 +321,6 @@ export const setsFeatureStroke = (override) => {
  *   `pythonLegendRows` gives it.
  */
 
-// The key of a listed Legend row: its key record (`originalCaption`), else
-// its caption (a row saved before U3a has no record).
-/** @param {{ caption?: unknown, originalCaption?: unknown }} entry @returns {PythonLegendKey} */
-export const legendEntryKey = (entry) => /** @type {PythonLegendKey} */ (String(entry.originalCaption || entry.caption || '').trim());
 
 /**
  * A drawing's Legend records stored under a row's key, in the form Load reads

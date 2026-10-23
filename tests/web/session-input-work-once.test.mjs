@@ -10,6 +10,8 @@ import { webcrypto } from 'node:crypto';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 globalThis.window = {
@@ -30,13 +32,14 @@ const metrics = [];
 globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric) };
 const count = (name) => metrics.filter((metric) => metric.name === name).length;
 
-const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state);
 
 test('Save binds a File Generate already encoded with no read, hash or decode (OV-1559)', async () => {
   const text = `>x\n${'ACGT'.repeat(250_000)}\n`;
@@ -46,7 +49,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   file.arrayBuffer = async () => { reads += 1; return read(); };
   // Generate: the request encodes the File once and stages its bytes (the transfer releases the byte cache).
   const sourceState = { files: { c_gb: file }, linearSeqs: [] };
-  const encoded = (await serializeActiveRenderFiles('circular', sourceState, state.drawings.circular)).c_gb;
+  const encoded = (await serializeActiveRenderFiles('circular', sourceState, modeDrawing(state, 'circular'))).c_gb;
   await takeFileBytesForTransfer(file);
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
@@ -66,7 +69,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   assert.equal(reads, 1);
   for (const save of [1, 2]) {
     metrics.length = 0;
-    const saved = await buildSessionResources(sourceState, committed, state.drawings.circular);
+    const saved = await buildSessionResources(sourceState, committed, modeDrawing(state, 'circular'));
     assert.deepEqual({
       reads,
       hashes: count('resourceIdentityHashCount'),
@@ -81,9 +84,9 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   // A File the committed request does not name keeps the payload Generate encoded.
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
-  await serializeActiveRenderFiles('circular', { files: { c_gb: other }, linearSeqs: [] }, state.drawings.circular);
+  await serializeActiveRenderFiles('circular', { files: { c_gb: other }, linearSeqs: [] }, modeDrawing(state, 'circular'));
   metrics.length = 0;
-  const saved = await buildSessionResources({ files: { c_gb: file, d_color: other }, linearSeqs: [] }, committed, state.drawings.circular);
+  const saved = await buildSessionResources({ files: { c_gb: file, d_color: other }, linearSeqs: [] }, committed, modeDrawing(state, 'circular'));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
   assert.notEqual(otherId, 'src');
   assert.deepEqual(saved.resources[otherId], {
