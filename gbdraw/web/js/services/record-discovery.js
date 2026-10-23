@@ -4,6 +4,7 @@ import {
   runDiagramHelperOperation
 } from './diagram-generation.js';
 import { scanGenBankHeader } from './genbank-header.js';
+import { sha256Hex, textToBytes } from './byte-utils.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
@@ -368,34 +369,51 @@ const fastPathRecords = async (files, parse) => {
   }
 };
 
-// Every reader of a source's records (the Linear cards, the Circular refresh,
-// a draft Save, the comparison frame) shares one discovery per File object and
-// format, or per GFF3 and FASTA pair: an uploaded File and a Session resource
-// view never change their bytes. A failed read is not kept; each reader keeps
-// an error it treats as final in its own state. Each call returns its own copy
-// of the records.
-/** @type {WeakMap<FileLike, Map<string, Promise<SequenceRecord[]>>>} */
-const sequenceRecordReads = new WeakMap();
-/** @type {WeakMap<FileLike, WeakMap<FileLike, Promise<SequenceRecord[]>>>} */
-const gffFastaRecordReads = new WeakMap();
+// The one owner of what is read from a source File (OV-1587): the record lists
+// of the Linear cards, the Circular refresh, a draft Save and the comparison
+// frame, and the ring comparison sequence with its digest. Each read is kept
+// once per File object (or per GFF3 and FASTA pair) and key: an uploaded File and
+// a Session resource view never change their bytes. A failed read is not kept;
+// each reader keeps an error it treats as final in its own state.
+/**
+ * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<FileLike, FileReads> }} FileReads
+ */
+/** @type {WeakMap<FileLike, FileReads>} */
+const fileReads = new WeakMap();
 
 /**
- * @template K
- * @param {{ get: (key: K) => Promise<SequenceRecord[]> | undefined, set: (key: K, read: Promise<SequenceRecord[]>) => unknown, delete: (key: K) => unknown }} reads
- * @param {K} key
- * @param {() => Promise<SequenceRecord[]>} read
- * @returns {Promise<SequenceRecord[]>}
+ * @param {WeakMap<FileLike, FileReads>} byFile
+ * @param {FileLike} file
+ * @returns {FileReads}
  */
-const sharedRecordRead = (reads, key, read) => {
-  let held = reads.get(key);
-  if (!held) {
-    const started = read();
-    held = started;
-    reads.set(key, started);
-    started.catch(() => { if (reads.get(key) === started) reads.delete(key); });
-  }
-  return held.then((records) => records.map((record) => ({ ...record })));
+const fileReadsOf = (byFile, file) => {
+  let held = byFile.get(file);
+  if (!held) byFile.set(file, held = { reads: new Map(), paired: new WeakMap() });
+  return held;
 };
+
+/**
+ * @template T
+ * @param {readonly [FileLike] | readonly [FileLike, FileLike]} files The File, or a GFF3 File and its FASTA File.
+ * @param {string} key What is read from them.
+ * @param {() => Promise<T>} read
+ * @returns {Promise<T>}
+ */
+const readOncePerFile = (files, key, read) => {
+  const [file, pairedFile] = files;
+  const owner = fileReadsOf(fileReads, file);
+  const { reads } = pairedFile ? fileReadsOf(owner.paired, pairedFile) : owner;
+  const held = /** @type {Promise<T> | undefined} */ (reads.get(key));
+  if (held) return held;
+  const started = read();
+  reads.set(key, started);
+  started.catch(() => { if (reads.get(key) === started) reads.delete(key); });
+  return started;
+};
+
+// Each caller of a record list gets its own copy of the records.
+/** @param {Promise<SequenceRecord[]>} read */
+const copiedRecords = (read) => read.then((records) => records.map((record) => ({ ...record })));
 
 /**
  * @param {{
@@ -409,9 +427,7 @@ export const discoverSequenceRecords = async ({
   runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!file) throw new Error('A sequence file is required.');
-  let byFormat = sequenceRecordReads.get(file);
-  if (!byFormat) sequenceRecordReads.set(file, byFormat = new Map());
-  return sharedRecordRead(byFormat, format, async () => {
+  return copiedRecords(readOncePerFile([file], `records:${format}`, async () => {
     const records = await fastPathRecords([file], (text) => parseSequenceRecordText(text, format));
     if (records) return records;
     const response = await runHelperOperation(
@@ -422,7 +438,7 @@ export const discoverSequenceRecords = async ({
       }
     );
     return normalizeSequenceRecords(response.result);
-  });
+  }));
 };
 
 /**
@@ -431,12 +447,8 @@ export const discoverSequenceRecords = async ({
  * record's DEFINITION, then organism), or null (FASTA).
  * @typedef {{ fasta: string, recordLabel: string | null }} ComparisonSequence
  */
-/** @type {WeakMap<FileLike, Promise<ComparisonSequence>>} */
-const comparisonSequenceReads = new WeakMap();
-
 // Only the Python ring reader reads the file; there is no fast path. Add Seq and
-// every Generate share one read per file (OV-1545): an uploaded File and a
-// Session resource view never change their bytes. A failed read is not kept.
+// every Generate share one read per file (OV-1545), frozen, as every reader gets it.
 /**
  * @param {{
  *   file: FileLike,
@@ -447,21 +459,27 @@ const comparisonSequenceReads = new WeakMap();
 export const readComparisonSequence = ({
   file,
   runHelperOperation = runDiagramHelperOperation
-}) => {
-  const held = comparisonSequenceReads.get(file);
-  if (held) return held;
-  const read = (async () => {
-    const response = await runHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
-      { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
-    );
-    if (response.result?.error) throw response.result.error;
-    return { fasta: String(response.result?.fasta || ''), recordLabel: response.result?.recordLabel ?? null };
-  })();
-  comparisonSequenceReads.set(file, read);
-  read.catch(() => comparisonSequenceReads.delete(file));
-  return read;
-};
+}) => readOncePerFile([file], 'comparison-sequence', async () => {
+  const response = await runHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
+    { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
+  );
+  if (response.result?.error) throw response.result.error;
+  return Object.freeze({
+    fasta: String(response.result?.fasta || ''), recordLabel: response.result?.recordLabel ?? null
+  });
+});
+
+// The SHA-256 of a ring file's FASTA, the LOSAT cache key Generate builds from
+// it (OV-1565): digested once per File, beside its FASTA. Only Generate asks.
+/**
+ * @param {Parameters<typeof readComparisonSequence>[0]} options
+ * @returns {Promise<string>}
+ */
+export const readComparisonSequenceDigest = (options) => readOncePerFile(
+  [options.file], 'comparison-sequence-sha256',
+  async () => sha256Hex(textToBytes((await readComparisonSequence(options)).fasta))
+);
 
 /**
  * @param {{
@@ -475,9 +493,7 @@ export const discoverGffFastaRecords = async ({
   runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
-  let byFasta = gffFastaRecordReads.get(gffFile);
-  if (!byFasta) gffFastaRecordReads.set(gffFile, byFasta = new WeakMap());
-  return sharedRecordRead(byFasta, fastaFile, async () => {
+  return copiedRecords(readOncePerFile([gffFile, fastaFile], 'records:gff-fasta', async () => {
     const records = await fastPathRecords([gffFile, fastaFile], parseGffFastaRecordText);
     if (records) return records;
     const response = await runHelperOperation(
@@ -490,5 +506,5 @@ export const discoverGffFastaRecords = async ({
       }
     );
     return normalizeSequenceRecords(response.result);
-  });
+  }));
 };
