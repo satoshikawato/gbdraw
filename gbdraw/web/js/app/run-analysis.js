@@ -2325,11 +2325,18 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawing = state.drawingOfMode('circular');
+  /**
+   * Reads the Circular records of `drawing`'s inputs into its Multi-Record
+   * Canvas order. A drawing that is not shown keeps its records and order; its
+   * read goes stale when the drawing stops being shown.
+   * @param {DrawingState} drawing
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
+   */
+  const runCircularRecordRefresh = async (drawing, { suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+    const drawingLeft = () => state.activeDrawingId.value !== drawing.id;
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
-    if (mode.value !== 'circular') {
+    if (drawing.mode !== 'circular' || drawingLeft()) {
       if (circularRecordDiscovery.status === 'loading') {
         circularRecordRefreshGeneration += 1;
         circularRecordDiscovery.status = 'idle';
@@ -2387,7 +2394,7 @@ export const createRunAnalysis = ({
     if (
       refreshGeneration !== circularRecordRefreshGeneration ||
       recordDiscoverySuppressed() ||
-      mode.value !== 'circular' ||
+      drawingLeft() ||
       cInputType.value !== inputType ||
       (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
       (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
@@ -2400,7 +2407,7 @@ export const createRunAnalysis = ({
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
-        mode.value !== 'circular' ||
+        drawingLeft() ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
@@ -2437,7 +2444,7 @@ export const createRunAnalysis = ({
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
-        mode.value !== 'circular' ||
+        drawingLeft() ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
@@ -2458,14 +2465,22 @@ export const createRunAnalysis = ({
     }
   };
 
-  /** @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options] */
-  const refreshCircularRecordOrder = (options = {}) => {
+  /**
+   * The owner of the Circular record refresh: it reads the drawing its caller
+   * gives (Generate: the drawing it pinned) and shares a read still running
+   * for the same drawing and inputs. Callers without a drawing (the File card,
+   * the watcher, the record editor) read the Circular drawing until they pass
+   * the shown one.
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
+   * @param {DrawingState} [drawing]
+   */
+  const refreshCircularRecordOrder = (options = {}, drawing = state.drawingOfMode('circular')) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const inputType = cInputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
-      mode.value,
+      drawing.id,
       inputType,
       inputType === 'gff' ? files.c_gff : files.c_gb,
       inputType === 'gff' ? files.c_fasta : null
@@ -2482,7 +2497,7 @@ export const createRunAnalysis = ({
       return /** @type {NonNullable<typeof inflightRefresh.promise>} */ (inflightRefresh.promise);
     }
     const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
-    entry.promise = runCircularRecordRefresh(options).finally(() => {
+    entry.promise = runCircularRecordRefresh(drawing, options).finally(() => {
       if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
     });
     activeCircularRecordRefresh = entry;
@@ -2734,7 +2749,7 @@ export const createRunAnalysis = ({
       ) {
         processingStatus.value = t('Reading input records...');
         try {
-          await refreshCircularRecordOrder({ reuseFinalError: true });
+          await refreshCircularRecordOrder({ reuseFinalError: true }, drawing);
         } finally {
           if (generationToken === latestGenerationToken) {
             processingStatus.value = t('Preparing input files...');
