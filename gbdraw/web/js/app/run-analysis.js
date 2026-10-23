@@ -3660,14 +3660,17 @@ export const createRunAnalysis = ({
           if (useProteinBlastp) {
             entry = await readOncePerFile(readFiles, `protein-fasta:${persistentCacheKey}`, async () => {
               extracted = true;
-              // A source of the committed drawing is staged under its resource ids: the Worker holds its bytes
-              // and the records the last Generate parsed (OV-1555). A source this Generate draws for the first
-              // time is staged under the ids its request names, so it crosses once and is parsed once for every
-              // card and the render (OV-1595). Another file (of a record turned off only) is sent.
+              // A source is staged under the resource ids this Generate's request names, so it crosses once and
+              // is parsed once for every card and the render (OV-1595); when the request repeats the last one, the
+              // Worker already holds its bytes and the records the last Generate parsed (OV-1555). Only when the
+              // request cannot be named (a card lacks a file) are the committed drawing's ids used. Another file
+              // (of a record turned off only) is sent.
               const committed = requestRecordSource(
-                typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null,
+                nextRecordResources() ?? (
+                  typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
+                ),
                 /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null
-              ) ?? requestRecordSource(nextRecordResources(), /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null);
+              );
               /** @type {{ role: string, bytes: ArrayBuffer }[]} */
               const helperFiles = [];
               if (!committed) {

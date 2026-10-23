@@ -163,6 +163,8 @@ from .prepared import (
     register_prepared_value_identity,
 )
 from .record_planning import (
+    GenBankLoader,
+    GffFastaLoader,
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
     ResolvedRecordProvenance,
@@ -196,6 +198,7 @@ from .requests import (
     RecordCardinality,
     RecordCollectionOptions,
     RecordInput,
+    RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
 )
@@ -1420,18 +1423,37 @@ def _load_request_records(
     )))
 
 
+def _render_source_loaders() -> tuple[GenBankLoader, GffFastaLoader]:
+    """The loaders a request render reads its record sources with (read when called).
+
+    The prepared parsed-source key names no loader, so every build under it
+    takes them from here: the render, its warm-up, and a Worker helper's
+    lookup (:func:`load_render_source_records`).
+    """
+
+    return load_gbks, parse_gff_fasta
+
+
+def load_render_source_records(source: RecordInputSource) -> ParsedRecordInputs:
+    """Parse one record source as a request render does, under its prepared key when staged."""
+
+    genbank_loader, gff_loader = _render_source_loaders()
+    return _load_source_records(source, genbank_loader=genbank_loader, gff_loader=gff_loader)
+
+
 def _normalize_request_records(
     request: DiagramRequest,
     inputs: PreparedDiagramInputs,
 ) -> ResolvedRecordCollection:
     def resolve() -> ResolvedRecordCollection:
+        genbank_loader, gff_loader = _render_source_loaders()
         return resolve_record_inputs(
             request.records,
             record_options=request.record_options,
             gff_candidate_features=inputs.gff_candidate_features,
             gff_keep_all_features=inputs.gff_keep_all_features,
-            genbank_loader=load_gbks,
-            gff_loader=parse_gff_fasta,
+            genbank_loader=genbank_loader,
+            gff_loader=gff_loader,
             parsed_sources=inputs.parsed_sources,
         )
 
@@ -1455,11 +1477,7 @@ def _normalize_request_records(
         if source_key in seen_source_keys:
             continue
         seen_source_keys.add(source_key)
-        _load_source_records(
-            record_input.source,
-            genbank_loader=load_gbks,
-            gff_loader=parse_gff_fasta,
-        )
+        load_render_source_records(record_input.source)
     resource_identities = frozenset(
         identity
         for _key, identities in typed_source_specs

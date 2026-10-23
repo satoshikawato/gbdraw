@@ -205,3 +205,72 @@ def test_extractions_before_the_first_generate_parse_the_upload_once_for_all_car
     assert "error" not in rendered["reply"], rendered["reply"]
     assert len(parses) == 1
     assert rendered["metrics"].get("parsedSourceParseCount", 0) == 0  # type: ignore[attr-defined]
+
+
+def test_an_extraction_lookup_does_not_publish_a_parsed_source_it_changed(
+    helpers: dict[str, object], drawn: dict[str, object],
+) -> None:
+    """The extraction's lookup publishes what it built unless it changed it: the lookup's end checks it in full."""
+
+    from gbdraw.api.record_planning import prepared_parsed_source
+    from gbdraw.api.request_render import load_render_source_records
+    from gbdraw.exceptions import ValidationError
+
+    cache = helpers["_WEB_PREPARED_INPUT_CACHE"]
+    assert isinstance(cache, PreparedBiologicalInputCache)
+    stage = drawn["stage"]
+    assert isinstance(stage, _Stage)
+    _workspace, paths = stage.workspace("helper")
+    (path,) = paths.values()
+    with pytest.raises(ValidationError, match="ownership was mutated"):
+        with prepared_input_lookup(
+            cache, resource_paths=paths, resource_identities=stage.identities, publish_inputs=True,
+        ):
+            parsed = prepared_parsed_source(GenBankInputSource(Path(path)), load_render_source_records)
+            assert parsed is not None
+            parsed.records[0].features[1].qualifiers["note"] = ["changed by a helper"]
+    assert all(not entries for entries in cache._layers.values())
+
+
+def test_an_extraction_that_replies_with_an_error_still_publishes_the_parse(
+    helpers: dict[str, object], drawn: dict[str, object], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A selector the file does not have is the extraction's own error; the file it parsed is kept for the Generate."""
+
+    cache = helpers["_WEB_PREPARED_INPUT_CACHE"]
+    assert isinstance(cache, PreparedBiologicalInputCache)
+    stage = drawn["stage"]
+    assert isinstance(stage, _Stage)
+    call = helpers["call_web_json_helper"]
+    assert callable(call)
+    parses = _count_parses(monkeypatch)
+    _workspace, paths = stage.workspace("helper")
+    (path,) = paths.values()
+    arguments = _arguments(drawn, path, CASES[0])
+    arguments[4] = "#9"
+    reply = json.loads(call("extract_cds_protein_fasta", *arguments, json.dumps(paths), json.dumps(stage.identities)))
+    assert "error" in reply, reply
+    assert len(cache._layers["parsed"]) == 1
+    rendered = stage.render(cache, drawn["payload"])  # type: ignore[arg-type]
+    assert "error" not in rendered["reply"], rendered["reply"]
+    assert rendered["metrics"].get("parsedSourceParseCount", 0) == 0  # type: ignore[attr-defined]
+    assert len(parses) == 1
+
+
+def test_an_extraction_of_a_file_that_does_not_load_publishes_nothing(
+    helpers: dict[str, object], tmp_path: Path, drawn: dict[str, object],
+) -> None:
+    """A failed load is never kept: the helper's own reader reports the error, and the cache stays empty."""
+
+    cache = helpers["_WEB_PREPARED_INPUT_CACHE"]
+    assert isinstance(cache, PreparedBiologicalInputCache)
+    stage = _Stage(tmp_path / "broken", {"record-1-genbank": b"LOCUS       broken\nnot a flat file\n"})
+    call = helpers["call_web_json_helper"]
+    assert callable(call)
+    _workspace, paths = stage.workspace("helper")
+    (path,) = paths.values()
+    reply = json.loads(call(
+        "extract_cds_protein_fasta", *_arguments(drawn, path, CASES[0]), json.dumps(paths), json.dumps(stage.identities),
+    ))
+    assert "error" in reply, reply
+    assert all(not entries for entries in cache._layers.values())

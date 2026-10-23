@@ -10,11 +10,72 @@ import {
   reverseComplementNucleotide
 } from '../../gbdraw/web/js/services/match-sequences.js';
 import { readRecordSourceSpan, recordSourceInterval } from '../../gbdraw/web/js/services/record-source-coordinates.js';
+import { parseSequenceRecordsFast } from '../../gbdraw/web/js/services/record-discovery.js';
+import { EXPECTED_WEB_RUNTIME_CAPABILITIES } from '../../gbdraw/web/js/services/runtime-capabilities.js';
 
-// The restore reads files through the shared browser sequence reader (`readParsedSequenceRecords`), which reads a
-// File's bytes once per File object.
+// The restore reads Linear record files and the Circular reference through the shared browser sequence reader
+// (`readParsedSequenceRecords`, once per File object) or, when it declines, the Worker's loader reader; comparison
+// genomes through the Worker's comparison reader, as the drawing does. This Worker stands for the two Python
+// readers: `read_comparison_sequence_file` opens the file as utf-8-sig (a byte order mark is dropped) and writes
+// `>ID` and the sequence; the loader reads the mark as content, so Biopython skips the first record.
+const helperCalls = [];
+const bytesOf = (payload) => new Uint8Array(payload.files[0].bytes);
+const hasByteOrderMark = (bytes) => bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+const formatOf = (text) => (text.trimStart().startsWith('LOCUS') ? 'genbank' : 'fasta');
+const pythonReplies = {
+  readComparisonSequence: (payload) => {
+    const text = new TextDecoder().decode(bytesOf(payload));
+    const records = parseSequenceRecordsFast(text, formatOf(text));
+    if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
+    return {
+      fasta: records.map(({ id, sequence }) => `>${id}\n${sequence}\n`).join(''),
+      format: formatOf(text), recordLabel: null, recordIds: records.map(({ id }) => id)
+    };
+  },
+  readAllSequenceRecords: (payload) => {
+    const bytes = bytesOf(payload);
+    const records = parseSequenceRecordsFast(
+      new TextDecoder().decode(hasByteOrderMark(bytes) ? bytes.slice(3) : bytes), payload.format
+    ).slice(hasByteOrderMark(bytes) ? 1 : 0);
+    if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
+    // Biopython names a FASTA entry without an ID '' (the browser reader says record_N).
+    return { records: records.map(({ id, aliases, sequence }) => ({
+      id: aliases.length === 1 && /^record_\d+$/.test(id) ? '' : id, aliases: [...aliases], sequence
+    })) };
+  }
+};
+class PythonReadersWorker {
+  constructor() { this.listeners = new Set(); }
+  addEventListener(type, listener) { if (type === 'message') this.listeners.add(listener); }
+  removeEventListener(type, listener) { this.listeners.delete(listener); }
+  emit(data) { this.listeners.forEach((listener) => listener({ data })); }
+  terminate() {}
+  postMessage(message) {
+    if (message.type === 'init') {
+      queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true,
+        capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
+    } else if (message.type === 'helper') {
+      helperCalls.push(message.operation);
+      const result = pythonReplies[message.operation](message.payload);
+      queueMicrotask(() => this.emit({ type: 'helper', requestId: message.requestId, ok: true, result }));
+    }
+  }
+}
+globalThis.Worker = PythonReadersWorker;
+// The Worker client resolves its runtime assets against the page location.
+globalThis.location = { href: 'https://example.test/gbdraw/web/' };
+
 const textFile = (value) => new File([value], 'input.txt');
 const namedTextFile = (name, value) => new File([value], name);
+const byteOrderMarkFile = (name, value) => new File([new Uint8Array([0xef, 0xbb, 0xbf]), value], name);
+const REFERENCE_GB = `LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`;
+const restoredComparisons = (comparisonFiles) => buildRestoredMatchSequenceSources({
+  mode: 'circular',
+  cInputType: 'gb',
+  files: { c_gb: textFile(REFERENCE_GB), c_conservation_fastas: comparisonFiles },
+  circularConservation: { source: 'losat', series: comparisonFiles.map((_file, sourceIndex) => ({ sourceIndex })) }
+});
+const sourceRows = (sources) => sources.map(({ key, recordId, sequence }) => ({ key, recordId, sequence }));
 
 const analyzeCircularHomologyCoverage = ({
   comparisonSource,
@@ -635,44 +696,60 @@ test('a restored GFF3 automatic record is the first record the GFF3 names (OV-16
 // skips its first record), so a restored `#1` names the record the drawing reads, not the one the browser's text
 // decoder would read.
 test('a restored byte-order-mark file names the records the Python loader reads (OV-1599)', async () => {
-  const { disposeDiagramGenerationWorker } = await import('../../gbdraw/web/js/services/diagram-generation.js');
-  const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import('../../gbdraw/web/js/services/runtime-capabilities.js');
-  const helperCalls = [];
-  class RecordsWorker {
-    constructor() { this.listeners = new Set(); }
-    addEventListener(type, listener) { if (type === 'message') this.listeners.add(listener); }
-    removeEventListener(type, listener) { this.listeners.delete(listener); }
-    emit(data) { this.listeners.forEach((listener) => listener({ data })); }
-    terminate() {}
-    postMessage(message) {
-      if (message.type === 'init') {
-        queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true,
-          capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
-      } else if (message.type === 'helper') {
-        helperCalls.push([message.operation, message.payload.format]);
-        queueMicrotask(() => this.emit({ type: 'helper', requestId: message.requestId, ok: true,
-          result: { records: [{ id: 'BOM2', aliases: ['BOM2'], sequence: 'CCCCGGGG' }] } }));
-      }
-    }
-  }
-  const previous = { Worker: globalThis.Worker, location: globalThis.location };
-  globalThis.Worker = RecordsWorker;
-  // The Worker client resolves its runtime assets against the page location.
-  globalThis.location = { href: 'https://example.test/gbdraw/web/' };
-  try {
-    const gb = new File([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id, index) => [
-      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['aaaaaaaa', 'cccccccc'][index]}`, '//'
-    ].join('\n')).join('\n') + '\n'], 'bom.gb');
-    const sources = await buildRestoredMatchSequenceSources({
-      mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb, region_record_id: '#1' }]
-    });
-    assert.deepEqual(helperCalls, [['readAllSequenceRecords', 'genbank']]);
-    assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
-      { recordId: 'BOM2', sequence: 'CCCCGGGG' }
-    ]);
-  } finally {
-    disposeDiagramGenerationWorker();
-    globalThis.Worker = previous.Worker;
-    globalThis.location = previous.location;
-  }
+  helperCalls.splice(0);
+  const gb = byteOrderMarkFile('bom.gb', ['BOM1', 'BOM2'].map((id, index) => [
+    `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['aaaaaaaa', 'cccccccc'][index]}`, '//'
+  ].join('\n')).join('\n') + '\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb, region_record_id: '#1' }]
+  });
+  assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
+  assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'BOM2', sequence: 'CCCCCCCC' }
+  ]);
+});
+
+// The comparison genomes of a Circular drawing are read by the comparison reader the ring search uses, which keeps
+// the first record of a byte-order-mark file and reads GenBank too, so a restore names the records the rings drew.
+test('restored comparison genomes are the records the ring search read, byte order mark or not (OV-1599)', async () => {
+  helperCalls.splice(0);
+  const single = await restoredComparisons([byteOrderMarkFile('one.fasta', '>seq1\nACGTACGT\n')]);
+  assert.deepEqual(sourceRows(single), [
+    { key: 'circular:record:0', recordId: 'REF.1', sequence: 'AACCGGTT' },
+    { key: 'homology:comparison:0:seq1', recordId: 'seq1', sequence: 'ACGTACGT' }
+  ]);
+  assert.deepEqual(helperCalls, ['readComparisonSequence']);
+
+  const multiple = await restoredComparisons([byteOrderMarkFile('two.fasta', '>seq1\nACGTACGT\n>seq2\nTTTTCCCC\n')]);
+  assert.deepEqual(sourceRows(multiple).slice(1), [
+    { key: 'homology:comparison:0:seq1', recordId: 'seq1', sequence: 'ACGTACGT' },
+    { key: 'homology:comparison:0:seq2', recordId: 'seq2', sequence: 'TTTTCCCC' }
+  ]);
+
+  const genbank = await restoredComparisons([byteOrderMarkFile('cmp.gbk', [
+    'LOCUS       CMP 8 bp DNA', 'ACCESSION   CMP', 'VERSION     CMP.1', 'ORIGIN', '        1 ggggaaaa', '//', ''
+  ].join('\n'))]);
+  assert.deepEqual(sourceRows(genbank).slice(1), [
+    { key: 'homology:comparison:0:CMP.1', recordId: 'CMP.1', sequence: 'GGGGAAAA' }
+  ]);
+});
+
+// A comparison file the comparison reader refuses gives no sources; the reference keeps its own.
+test('a comparison file the reader refuses leaves the other restored sources', async () => {
+  const sources = await restoredComparisons([textFile('not a sequence file\n'), textFile('>kept\nAAAATTTT\n')]);
+  assert.deepEqual(sourceRows(sources), [
+    { key: 'circular:record:0', recordId: 'REF.1', sequence: 'AACCGGTT' },
+    { key: 'homology:comparison:1:kept', recordId: 'kept', sequence: 'AAAATTTT' }
+  ]);
+});
+
+// The browser reader names a FASTA entry without an ID record_N; Python names it ''. Such a file goes to the Worker.
+test('a FASTA entry without an ID is read by the Python loader (OV-1599)', async () => {
+  helperCalls.splice(0);
+  const fasta = namedTextFile('bare.fasta', '>A\nAAAA\n>\nCCCC\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'circular', cInputType: 'gff', files: { c_fasta: fasta }
+  });
+  assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
+  assert.deepEqual(sources.map(({ recordId }) => recordId), ['A', '']);
 });

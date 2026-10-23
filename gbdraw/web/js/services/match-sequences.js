@@ -5,7 +5,12 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
-import { gffFastaReaderSelector, readAllSequenceRecords } from './record-discovery.js';
+import {
+  gffFastaReaderSelector,
+  parseSequenceRecordsFast,
+  readAllSequenceRecords,
+  readComparisonSequence
+} from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
 import { t } from '../utils/i18n.js';
 
@@ -1098,9 +1103,9 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 };
 
 /**
- * A file's records as the CLI loader reads them, once per File (OV-1680): the browser reader's, or the Worker's
- * for a file that reader declines (one that starts with a UTF-8 byte order mark), so `#N` and the first record
- * name the records the drawing reads (OV-1599).
+ * A Linear record file's or the Circular reference's records as the CLI loader reads them, once per File (OV-1680):
+ * the browser reader's, or the Worker's for a file that reader declines (one that starts with a UTF-8 byte order
+ * mark), so `#N` and the first record name the records the drawing reads (OV-1599).
  * @param {FileLike | null | undefined} file
  * @param {unknown} inputType
  * @returns {Promise<InputSequenceRecord[]>}
@@ -1110,6 +1115,32 @@ const readInputSequenceRecords = async (file, inputType) => {
   const fmt = text(inputType).toLowerCase() === 'gb' ? 'genbank' : 'fasta';
   return (await readAllSequenceRecords(file, fmt))
     .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
+};
+
+/** @param {unknown} error */
+const isUnreadableInput = (error) => (
+  typeof error === 'object' && error !== null && /** @type {{ code?: unknown }} */ (error).code === 'INPUT_UNREADABLE'
+);
+
+/**
+ * A comparison genome's records as the drawing reads them: the comparison reader (`read_comparison_sequence_file`,
+ * through `readComparisonSequence`, once per File) writes its LOSAT query FASTA as `>ID` and the sequence, so its
+ * records are the ones the ring searched, for a FASTA, GenBank or DDBJ file, with or without a byte order mark.
+ * A file the reader refuses as unreadable gives no sources, and the other sources stay.
+ * @param {FileLike | null} file null for a comparison file that was never supplied.
+ * @returns {Promise<InputSequenceRecord[]>}
+ */
+const readComparisonRecords = async (file) => {
+  if (!file) return [];
+  let fasta;
+  try {
+    ({ fasta } = await readComparisonSequence({ file }));
+  } catch (error) {
+    if (isUnreadableInput(error)) return [];
+    throw error;
+  }
+  return parseSequenceRecordsFast(fasta, 'fasta')
+    .map(({ id, sequence }) => ({ recordId: id, aliases: [id], sequence }));
 };
 
 /**
@@ -1182,10 +1213,7 @@ export const buildRestoredMatchSequenceSources = async ({
     circularConservation
   });
   for (const { sourceIndex: displayIndex, file } of comparisonSourceAvailability) {
-    const records = await readInputSequenceRecords(
-      file,
-      'fasta'
-    );
+    const records = await readComparisonRecords(file);
     records.forEach((record) => {
       if (!record.sequence) return;
       sources.push({

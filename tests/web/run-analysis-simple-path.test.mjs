@@ -2491,6 +2491,43 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
       .reduce((total, { bytes }) => total + bytes.byteLength, 0);
     assert.equal(uploadBytesSent, uploadFile.size);
+
+    // A new file inserted before the committed one: the next request names it record-1 and the committed file
+    // record-2, so each is staged under its new id once and the render sends neither again.
+    const insertedFile = new AuditFile([
+      'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
+    ], 'inserted.gb', { lastModified: 9 });
+    state.linearSeqs.unshift({
+      uid: 'inserted-1', gb: insertedFile, gff: null, fasta: null, depth: null, blast: null,
+      losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
+      region_start: null, region_end: null, region_reverse: false
+    });
+    state.activeDrawing().losatProgram.value = 'blastp';
+    const messagesBeforeInsert = workerMessages.length;
+    ['NEW1', 'UP1', 'UP2', 'UP3'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${recordId}_p1\nMK\n`, record_id: recordId, record_length: 8, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-i-${recordId}`, record_analysis_id: `i-${recordId}`, record_instance_key: `i-${recordId}`,
+      runtime_binding_hash: `rt-i-${recordId}`, display_binding_hash: `dp-i-${recordId}`, identity_manifest: null
+    } }));
+    assert.equal((await runner.runAnalysis(uploadPlan('blastp'))).status, 'error');
+    assert.deepEqual(workerMessages.slice(messagesBeforeInsert)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta')
+      .map(({ payload }) => [payload.recordSource.resourceId, payload.stagedResources.map(({ resourceId }) => resourceId)]), [
+      ['record-1-genbank', ['record-1-genbank']],
+      ['record-2-genbank', ['record-2-genbank']],
+      ['record-2-genbank', []],
+      ['record-2-genbank', []]
+    ]);
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    const insertedResult = result('inserted.svg', 'inserted');
+    workerResponses.push(response(insertedResult, validCatalog(insertedResult.name)));
+    assert.deepEqual(await runner.runAnalysis(uploadPlan('blastn')), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const recordBytesSent = workerMessages.slice(messagesBeforeInsert)
+      .flatMap(({ payload }) => payload?.stagedResources ?? [])
+      .filter(({ resourceId }) => resourceId.startsWith('record-'))
+      .reduce((total, { bytes }) => total + bytes.byteLength, 0);
+    assert.equal(recordBytesSent, insertedFile.size + uploadFile.size);
     state.linearSeqs.splice(2);
 
     // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then

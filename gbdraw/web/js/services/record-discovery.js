@@ -5,6 +5,7 @@ import {
 } from './diagram-generation.js';
 import { genbankHeaderIds, scanGenBankHeader } from './genbank-header.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
@@ -501,40 +502,61 @@ export const readParsedSequenceRecords = async (file, fmt) => {
 };
 
 /**
- * The Worker's reply for every record of a file: `id`, `aliases`, and `sequence` (null for a record without
- * one), as the CLI loader reads them; or the error it raised.
- * @typedef {{ error?: unknown, records?: unknown }} AllSequenceRecordsPayload
+ * One record of the Worker's `readAllSequenceRecords` reply, as `read_all_sequence_records` writes it: the ID, the
+ * names a match may give the record (the ID first), and the sequence (null for a record without one).
+ * @typedef {{ id: string, aliases: string[], sequence: string | null }} AllSequenceRecordReply
  */
 /**
- * Every record of a sequence file, in file order, as the CLI loader reads it: the browser records
- * (`readParsedSequenceRecords`), or the Worker's when the browser reader declines the file (one that starts with a
- * UTF-8 byte order mark, whose first record Python skips; OV-1599). Frozen, read once per File and format. The
- * Circular conservation reference and the restored match sequences read it.
+ * The Worker's `readAllSequenceRecords` reply: every record of the file, or the error the reader raised.
+ * @typedef {{ records: AllSequenceRecordReply[] } | { error: unknown }} AllSequenceRecordsPayload
+ */
+/** @param {unknown} entry @returns {entry is AllSequenceRecordReply} */
+const isAllSequenceRecordReply = (entry) => {
+  if (typeof entry !== 'object' || entry === null) return false;
+  const { id, aliases, sequence } = /** @type {Record<string, unknown>} */ (entry);
+  return typeof id === 'string'
+    && Array.isArray(aliases) && aliases.every((alias) => typeof alias === 'string')
+    && (sequence === null || typeof sequence === 'string');
+};
+/**
+ * The records of a `readAllSequenceRecords` reply, frozen. A reply that is not one fails as a helper protocol error,
+ * as an invalid record list does; it is not kept.
+ * @param {AllSequenceRecordsPayload | undefined} payload
+ * @returns {readonly ParsedSequenceRecord[]}
+ */
+const allSequenceRecordsFromReply = (payload) => {
+  if (payload && 'error' in payload) throw payload.error;
+  if (!payload || !Array.isArray(payload.records) || !payload.records.every(isAllSequenceRecordReply)) {
+    throw diagnosticError('HELPER_PROTOCOL', {}, {
+      stage: 'helper', operation: DIAGRAM_HELPER_OPERATIONS.READ_ALL_SEQUENCE_RECORDS
+    });
+  }
+  return Object.freeze(payload.records.map(({ id, aliases, sequence }) => Object.freeze({
+    id, aliases: Object.freeze([...aliases]), sequence
+  })));
+};
+/**
+ * Every record of a sequence file, in file order, as the CLI loader reads it. The browser records
+ * (`readParsedSequenceRecords`) serve when the browser reader and the record-list rules (`parseSequenceRecordText`)
+ * both take the file; otherwise the Worker reads it (OV-1599): a file that starts with a UTF-8 byte order mark,
+ * whose first record Python skips, or a FASTA entry without an ID, which Python names '' and the browser record_N.
+ * Frozen, read once per File and format. The Circular conservation reference and the restored Linear and reference
+ * match sequences read it.
  * @param {FileLike} file
  * @param {string} fmt `genbank` or `fasta`.
  * @param {HelperOperationRunner<AllSequenceRecordsPayload>} [runHelperOperation]
  * @returns {Promise<readonly ParsedSequenceRecord[]>}
  */
-export const readAllSequenceRecords = async (file, fmt, runHelperOperation = runDiagramHelperOperation) => {
-  const { records } = await readParsedSequenceRecords(file, fmt);
-  if (records) return records;
-  return readOncePerFile([file], `python-sequence-records:${fmt}`, async () => {
+export const readAllSequenceRecords = (file, fmt, runHelperOperation = runDiagramHelperOperation) => (
+  readOncePerFile([file], `all-sequence-records:${fmt}`, async () => {
+    const { records } = await readParsedSequenceRecords(file, fmt);
+    if (records && await fastPathRecords([file], (text) => parseSequenceRecordText(text, fmt))) return records;
     const { result } = await runHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_ALL_SEQUENCE_RECORDS, {
       format: fmt, files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
     });
-    if (result?.error) throw result.error;
-    const entries = Array.isArray(result?.records) ? result.records : [];
-    return Object.freeze(entries.map((/** @type {{ id?: unknown, aliases?: unknown, sequence?: unknown }} */ entry) => {
-      const id = String(entry?.id ?? '');
-      return Object.freeze({
-        id,
-        aliases: Object.freeze([...new Set([id, ...(Array.isArray(entry?.aliases) ? entry.aliases : []).map(String)])]
-          .filter(Boolean)),
-        sequence: typeof entry?.sequence === 'string' ? entry.sequence : null
-      });
-    }));
-  });
-};
+    return allSequenceRecordsFromReply(result);
+  })
+);
 
 // Each caller of a record list gets its own copy of the records.
 /** @param {Promise<SequenceRecord[]>} read */

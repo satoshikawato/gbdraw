@@ -15,6 +15,7 @@ from gbdraw.web_support.request_render import (
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.api import GenBankInputSource
 from gbdraw.api.record_planning import prepared_parsed_source
+from gbdraw.api.request_render import load_render_source_records
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
@@ -511,7 +512,7 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
     if fmt == "genbank":
         # The records a Generate parses from this staged file (OV-1555, OV-1595),
         # shared and read only; for a file sent as is, this reader's own parse.
-        prepared = prepared_parsed_source(GenBankInputSource(path))
+        prepared = prepared_parsed_source(GenBankInputSource(path), load_render_source_records)
         source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
         if not source_records:
             raise ValueError("No records found")
