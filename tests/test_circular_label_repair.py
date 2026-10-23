@@ -24,7 +24,6 @@ from gbdraw.labels.circular import _current_half_from_x, _label_bbox_min_radius,
 from gbdraw.labels.circular_leaders import arrival_contact, chosen_contact_end, label_ink_box
 from gbdraw.labels.circular_repair import defect_count, repair_circular_labels
 from gbdraw.layout.spatial import Aabb
-from tests.utils.label_fit_warnings import assert_no_label_warning
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
 FIXTURES = TEST_INPUTS / "label_repair"
@@ -92,10 +91,9 @@ def _result(name: str) -> list[dict] | None:
 
 def _draw(tmp_path: Path, args: list[str]) -> Path:
     output = tmp_path / "out"
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", LabelLeadersCrossWarning)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
         circular_main([*args, "-o", str(output), "-f", "svg"])
-    assert_no_label_warning(caught)
     return output.with_suffix(".svg")
 
 

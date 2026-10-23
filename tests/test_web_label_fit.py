@@ -267,9 +267,7 @@ def test_overprinted_embedded_labels_offer_only_the_resolve_overlaps_control(tmp
     assert found[0]["settings"] == [{"name": "Resolve Overlaps", "unit": "", "value": "On"}]
 
     fitted = _web_render(_sars_request({SEPARATE_FEATURES_PATH: True}), tmp_path / "fitted")
-    # The labels fit; the definition's first line still reaches into a track, which the row does not fix (D-12).
-    (report,) = fitted["metadata"]["labelFitReports"]
-    assert [record["labelKind"] for record in report["report"]["records"]] == ["circular_definition"]
+    assert fitted["metadata"]["labelFitReports"] == []
 
 
 def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_draws_with_the_notice(tmp_path) -> None:

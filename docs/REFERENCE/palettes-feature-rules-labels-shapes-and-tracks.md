@@ -355,16 +355,19 @@ on other tracks get no row.
 
 The definition text in the centre of a Circular record (not a plot title)
 overlaps a track when the box of one of its lines, as drawn (bold first line
-included), reaches more than 0.5 px into the band a track takes, measured to
-the box's corners; the bands are those of region labels on other tracks,
-below. Each such line counts once (`1 line overlaps a track`), and the Web app
+included), reaches more than 0.5 px into what a track paints: the GC content
+and GC skew areas at the angles the box covers, the feature blocks, and the
+axis circle. Text that enters a track's ring but stays clear of its paint does
+not count. Depth, conservation, annotation, and tick tracks still count their
+whole band. Each such line counts once (`1 line overlaps a track`), and the Web app
 shows "The definition text overlaps a track (N lines)." with **Choose a fix**.
 The smaller definition font is the first size, going down from the current
 one, at which no definition line overlaps a track, checked by drawing the whole
 figure again; the inner tracks may then widen, because they make room for the
 definition text. Each row is checked for what it fixes: the label rows for the
 labels and the definition row for the definition text, and neither may stop the
-figure. A font you set stays as it is: the row only suggests a value. The rows
+figure. A font you set stays as it is: the row only suggests a value, and a
+definition line interval you set is kept while the row is checked. The rows
 do not include narrower GC content or GC skew tracks or a wrapped species name.
 
 A Circular region label with `label_orientation` `auto` or `arc` is drawn

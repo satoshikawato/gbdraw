@@ -155,7 +155,7 @@ def test_cli_draws_ap027131_with_the_warning_and_the_suggested_font_clears_it(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """OV-1606: the bold first line's corners reach into the GC skew ring of the default AP027131 figure."""
+    """OV-1606: the bold first line's corners touch the GC skew area of the default AP027131 figure (D-18)."""
 
     from gbdraw import cli
 
@@ -168,14 +168,14 @@ def test_cli_draws_ap027131_with_the_warning_and_the_suggested_font_clears_it(
     assert capsys.readouterr().err == (
         "WARNING: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 16.5   (smaller definition font)\n"
+        "  --definition_font_size 17.5   (smaller definition font)\n"
     )
 
     fixed = tmp_path / "ap_fixed"
     monkeypatch.setattr(
         sys,
         "argv",
-        ["gbdraw", "circular", "--gbk", str(AP027131), "--definition_font_size", "16.5", "-o", str(fixed), "-f", "svg"],
+        ["gbdraw", "circular", "--gbk", str(AP027131), "--definition_font_size", "17.5", "-o", str(fixed), "-f", "svg"],
     )
     cli.main()
     assert fixed.with_suffix(".svg").is_file()
@@ -194,14 +194,14 @@ def test_python_warns_with_the_report_and_a_figure_without_the_overlap_does_not(
     assert report is not None and report.drawn
     assert [(item.label_kind, item.fit) for item in report.records] == [("circular_definition", DEFINITION)]
     row = label_fit_row(drawing, "smaller_definition_font")
-    assert row is not None and row.values == {DEFINITION_FONT_PATH: 16.5}
+    assert row is not None and row.values == {DEFINITION_FONT_PATH: 17.5}
 
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
 
     cfg = with_config_overrides(
-        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 16.5}
+        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 17.5}
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error", LabelLeadersCrossWarning)
@@ -315,3 +315,54 @@ def test_the_row_keeps_a_set_definition_interval_as_a_run_again_does() -> None:
         build_circular_diagram(
             record, options=CircularDiagramOptions(config=with_config_overrides(base, {**interval, **row.values}))
         )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [("MjeNMV.gbk", ["--separate_strands", "--legend", "none"]), ("EDL933.gbk", [])],
+    ids=["mjenmv-circular-basic", "edl933-default"],
+)
+def test_a_definition_clear_of_the_drawn_tracks_does_not_warn(
+    name: str, args: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """D-18: the text enters the GC skew ring's band but stays a few pixels clear of its paint: no warning."""
+
+    from gbdraw import cli
+
+    output = tmp_path / "out"
+    monkeypatch.setattr(
+        sys, "argv", ["gbdraw", "circular", "--gbk", str(TEST_INPUTS / name), *args, "-o", str(output), "-f", "svg"]
+    )
+    cli.main()
+
+    assert output.with_suffix(".svg").is_file()
+    assert "definition" not in capsys.readouterr().err
+
+
+def test_a_box_in_a_track_band_meets_only_its_paint() -> None:
+    """D-18: the band a track takes is not its paint. A GC area drawn outward from the circle at 100 px leaves the
+    band's inner part bare: a box reaching to 98 px misses it, one reaching to 101 px meets it, and 0.5 px is the
+    threshold."""
+
+    from gbdraw.layout.circular import RadialBand
+    from gbdraw.layout.circular_ink import CircularInkProfile, CircularInkRing, box_meets_ink
+    from gbdraw.layout.spatial import Aabb
+
+    outward = CircularInkProfile.between([0, 250, 500, 750], [110.0, 104.0, 110.0, 104.0], record_length=1000,
+                                         base_px=100.0)
+    band = CircularInkRing(RadialBand(90.0, 120.0))
+
+    def box(reach: float) -> Aabb:
+        """A narrow box from the centre up to ``reach`` (its corners reach no farther than 0.1 px past it)."""
+
+        return Aabb(-2.0, -reach, 2.0, 0.0)
+
+    assert box_meets_ink(box(95.0), [band], threshold_px=0.5)
+    assert not box_meets_ink(box(98.0), [outward], threshold_px=0.5)
+    assert not box_meets_ink(box(100.4), [outward], threshold_px=0.5)
+    assert box_meets_ink(box(101.0), [outward], threshold_px=0.5)
+    # A ring over part of the circle: a box under its gap misses it.
+    arc = CircularInkRing(RadialBand(100.0, 110.0), start_turn=0.25, end_turn=0.75)
+    assert not box_meets_ink(box(105.0), [arc], threshold_px=0.5)
+    assert box_meets_ink(Aabb(-2.0, 0.0, 2.0, 105.0), [arc], threshold_px=0.5)

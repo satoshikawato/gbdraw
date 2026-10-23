@@ -5,7 +5,13 @@ from pandas import DataFrame
 from gbdraw.svg.elements import ClipPath, Group, Path
 
 from ....configurators import GcSkewConfigurator
-from ....svg.circular_tracks import generate_circle_path_desc, generate_circular_gc_skew_path_desc
+from ....layout.circular import RadialBand
+from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, stroke_pad_px
+from ....svg.circular_tracks import (
+    circular_gc_skew_line,
+    generate_circle_path_desc,
+    generate_circular_gc_skew_path_desc,
+)
 from ....svg.ids import stable_svg_id
 
 
@@ -22,6 +28,27 @@ class SkewDrawer:
         self.skew_stroke_color: str = skew_config.stroke_color
         self.skew_stroke_width: float = skew_config.stroke_width
         self.skew_fill_opacity: float = skew_config.fill_opacity
+
+    def ink(
+        self,
+        radius: float,
+        gc_df: DataFrame,
+        record_len: int,
+        track_width: float,
+        norm_factor: float,
+        dinucleotide: str,
+        record_transform: RecordDisplayTransform | None = None,
+    ) -> tuple[CircularInk, ...]:
+        """What ``draw`` paints with the same arguments: the areas between the baseline circle and the skew line,
+        with half the stroke."""
+
+        line = circular_gc_skew_line(radius, gc_df, record_len, track_width, norm_factor, dinucleotide, record_transform)
+        if line is None:
+            return ()
+        base = float(radius) * float(norm_factor)
+        pad = stroke_pad_px(self.skew_stroke_color, self.skew_stroke_width)
+        area = CircularInkProfile.between(*line, record_length=record_len, base_px=base, pad_px=pad)
+        return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
 
     def draw(
         self,

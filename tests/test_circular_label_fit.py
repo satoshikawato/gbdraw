@@ -787,10 +787,7 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """LP-D46 CROSS-WARN: lambda at 14 pt has 2 crossing leader pairs and no overlaps (with the repair off).
-
-    Its definition's first line also reaches into the GC content ring (D-12): one report names both.
-    """
+    """LP-D46 CROSS-WARN: lambda at 14 pt has 2 crossing leader pairs and no overlaps (with the repair off)."""
 
     from gbdraw import cli
 
@@ -807,12 +804,10 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     assert output.with_suffix(".svg").is_file()
     stderr = capsys.readouterr().err
     assert stderr.startswith(
-        "WARNING: Labels do not fit: NC_001416.1: 71 outer labels at 14 pt (0 label pairs overlap, "
-        "2 leader pairs cross); NC_001416.1: 1 definition line at 18 pt (1 line overlaps a track). "
+        "WARNING: 71 outer labels do not fit at 14 pt (0 label pairs overlap, 2 leader pairs cross). "
         "Drawn anyway.\nRun again with one of:\n"
     )
     assert "--outer_label_y_radius_offset 1.025" in stderr
-    assert "--definition_font_size 15.5" in stderr
 
 
 @pytest.mark.circular

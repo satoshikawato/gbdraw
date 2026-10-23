@@ -144,7 +144,7 @@ with one of the settings the message lists, for example
 inner labels outside. If only leader lines cross, labels cover the definition
 text, or the Circular definition text overlaps a track, the figure is drawn and
 the same settings are shown as a warning (for the definition text, for example
-`--definition_font_size 16.5`). See
+`--definition_font_size 17.5`). See
 [Labels that do not
 fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
