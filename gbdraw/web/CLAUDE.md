@@ -65,9 +65,11 @@ Generate rebuilds every part whose inputs changed. A Generate publishes the
 decoded resources and parsed sources it built (they depend only on the
 resource bytes and their key) when it ends, also when its render fails, unless
 the request changed them; it publishes resolved records and render-stage
-results only after the full render succeeds. A helper's read-only lookup
-publishes nothing. A build that failed is never kept. Release every cache fill
-with the Worker; never reuse a final reply.
+results only after the full render succeeds. The blastp protein extraction
+helper also publishes the decoded resources and parsed sources it built for the
+files it staged; any other helper lookup publishes nothing. A build that failed
+is never kept. Release every cache fill with the Worker; never reuse a final
+reply.
 
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page
