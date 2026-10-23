@@ -24,7 +24,7 @@ import {
   ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
-import { joinSentences, t, tm, tn } from '../../utils/i18n.js';
+import { joinSentences, msg, t, tm, tn } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -163,37 +163,40 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
 // table of reasons, as the sentence the Label Not Shown dialog renders and the
-// few words of the popup note. The reason is read as `string` (it is ''
+// popup note sentence that names it. The reason is read as `string` (it is ''
 // when none applies), so a lookup is `undefined` for what the table lacks.
-/** @type {Readonly<Record<string, { sentence: string, cause: string } | undefined>>} */
+// The texts are marked with `msg` and shown with `tm` (OV-1679).
+/** @type {Readonly<Record<string, { sentence: string, note: string } | undefined>>} */
 export const LABEL_ABSENCE_REASONS = Object.freeze({
-  hidden: { sentence: ' The feature is hidden.', cause: 'the feature is hidden' },
-  underlay: { sentence: ' Labels are not drawn for features drawn as "Underlay".', cause: 'drawn as Underlay' },
+  hidden: { sentence: msg('The feature is hidden.'), note: msg('No label shown (the feature is hidden).') },
+  underlay: { sentence: msg('Labels are not drawn for features drawn as "Underlay".'), note: msg('No label shown (drawn as Underlay).') },
   scope_none: {
-    sentence: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
-    cause: 'Show Labels = None'
+    sentence: msg('Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.'),
+    note: msg('No label shown (Show Labels = None).')
   },
   scope_first: {
-    sentence: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
-    cause: 'Show Labels = First Record Only'
+    sentence: msg('"Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".'),
+    note: msg('No label shown (Show Labels = First Record Only).')
   },
   scope_orthogroup_top: {
-    sentence: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
-    cause: 'Show Labels = Top Similarity Group Record'
+    sentence: msg('"Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".'),
+    note: msg('No label shown (Show Labels = Top Similarity Group Record).')
   },
-  whitelist: { sentence: ' A label whitelist is set, and labels are drawn only for the features it lists.', cause: 'not in the label whitelist' },
+  whitelist: {
+    sentence: msg('A label whitelist is set, and labels are drawn only for the features it lists.'),
+    note: msg('No label shown (not in the label whitelist).')
+  },
   blacklist: {
-    sentence: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
-    cause: 'matches the label blacklist'
+    sentence: msg('A label blacklist is set, and a label whose text contains one of its keywords is not drawn.'),
+    note: msg('No label shown (matches the label blacklist).')
   },
   embedded_only: {
-    sentence: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.',
-    cause: 'does not fit; Label Rendering = Embedded Only'
+    sentence: msg('With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'),
+    note: msg('No label shown (does not fit; Label Rendering = Embedded Only).')
   }
 });
-const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
 // No reason found: the Show Labels scope and the label filters decide the rest.
-const LABEL_ABSENCE_UNKNOWN = ' The current Show Labels and label filter settings draw none.';
+const LABEL_ABSENCE_UNKNOWN = msg('The current Show Labels and label filter settings draw none.');
 
 // The label display scope and filters of a render request that leave a feature
 // with Default label visibility unlabeled: '' or a LABEL_ABSENCE_REASONS key.
@@ -1490,22 +1493,24 @@ export const createFeatureLabelActions = ({
     const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     // A hidden feature's label is hidden with it (F-3).
     if (clicked.labelKey && blocker !== 'hidden') return '';
-    let next = '';
+    /** @type {string[]} */
+    const next = [];
     if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
-      next = ` On applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
+      next.push(blocker === 'hidden' ? t('On applies when the feature is shown.') : t('On applies when the label can be drawn.'));
     } else if (!blocker && draft === 'default') {
-      next = ' Choose On to show it.';
+      next.push(t('Choose On to show it.'));
     } else if (!blocker) {
       return '';
     }
-    const cause = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.cause;
-    return `No label shown${cause ? ` (${cause})` : ''}.${next}`;
+    const note = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.note;
+    return joinSentences(note ? tm(note) : t('No label shown.'), ...next);
   });
 
   // The Label Not Shown dialog: the same reason sentence as the popup note.
-  const hiddenLabelTextMessage = computed(() => (
-    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence || LABEL_ABSENCE_UNKNOWN}`
-    + ' The edited text will not appear unless you show this label.'
+  const hiddenLabelTextMessage = computed(() => joinSentences(
+    t('This feature has no label in the current Result.'),
+    tm(LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence ?? LABEL_ABSENCE_UNKNOWN),
+    t('The edited text will not appear unless you show this label.')
   ));
 
   // A label list edit: one line of text, or an empty text, which hides the

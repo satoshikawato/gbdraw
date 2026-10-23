@@ -12,6 +12,7 @@ import {
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { errorText } from '../../utils/error-text.js';
 import { joinSentences, t, tn } from '../../utils/i18n.js';
 /** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from '../../services/feature-placement.js' */
@@ -102,8 +103,8 @@ export const createFeatureEditTableActions = ({
     const { text, reason } = await buildFeatureOverrideTable({
       renderRequest: committed.renderRequest, resources: committed.resources, rows, readResourceRecordCount
     });
-    if (!text) {
-      showNotice({ text: t('Cannot export feature edits: {reason}', { reason: String(reason) }), tone: 'warning' });
+    if (reason) {
+      showNotice({ text: t('Cannot export feature edits: {reason}', { reason: errorText([reason]) }), tone: 'warning' });
       return false;
     }
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
