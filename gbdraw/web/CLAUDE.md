@@ -588,7 +588,10 @@ bindings at the end of a record discovery and a drawing switch
 (`rebindAnnotationRecords` in `app/app-setup.js`). An auxiliary table import
 (default colors, color table, qualifier priority, whitelist, blacklist) is a
 transition of its file input (`importAuxiliaryTable` in `app/watchers.js`)
-that writes the drawing it resolved, through that drawing's slices.
+that writes through the slices of each drawing it changes. Until each drawing
+binds its own auxiliary file cards, a card's file is shared by every drawing:
+choosing, replacing, or removing it takes the earlier file's rows out of every
+drawing, and the new file's rows go into the shown drawing.
 
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
 Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
@@ -614,7 +617,9 @@ or Reset Settings).
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is an operation
-  on every drawing (Reset Settings, which resets all drawings, in one step) or
+  on every drawing (Reset Settings, which resets all drawings, in one step;
+  until each drawing binds its own auxiliary file cards, a card's import,
+  Remove, and Retry, R10) or
   a step that changes only Session-level values (the Session title, Auto
   Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
   Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
@@ -645,10 +650,13 @@ or Reset Settings).
   and a file picker opened by another button record the same one step
   (`app/history-inputs.js`).
 - A file input whose change ends with asynchronous work is
-  `data-history-managed` and owns one `runUndoable` step that commits after
-  that work: a `file-uploader` `afterChange` import, and **Add Seq**
+  `data-history-managed` and owns one step that commits after that work: a
+  `file-uploader` `afterChange` import, and **Add Seq**
   (`addCircularConservationComparisonFile`), whose step holds the ring record
-  label read by the Python reader.
+  label read by the Python reader. Add Seq is a step of its drawing
+  (`runUndoable`); an auxiliary file card's import and its Retry are one
+  project step (`runProjectStep`) while the card's file is shared by every
+  drawing (R10).
 - An undoable action started while another action still runs on the open step
   applies at once and names that step (`runUndoable`); nothing waits. What an
   action writes after another caller committed its step is a step of its own
