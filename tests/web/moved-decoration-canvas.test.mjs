@@ -40,10 +40,14 @@ const target = (role, automaticTranslation, boundsKey, bounds) => ({
 
 // The automatic layout: primary 100 x 80, Legend on the right, title on top,
 // 16 px edge padding: the automatic canvas is 186 x 152.
-const resultSvg = ({ legendSide = 'right', titleSide = 'top' } = {}) => {
+// A Linear scale (`scale`) is a second primary group, drawn at its own
+// translate (10,70) after the leading one: its painted box 16..76 x 106..116.
+const SCALE_BOUNDS = { x: 10, y: 70, width: 60, height: 10 };
+const resultSvg = ({ legendSide = 'right', titleSide = 'top', scale = false, scaleBounds = true } = {}) => {
   const svg = new DOMParser().parseFromString([
     '<svg viewBox="0 0 186 152" width="186px" height="152px">',
     '<g data-gbdraw-composition-role="primary" id="record_a" transform="translate(6,36)"></g>',
+    scale ? '<g data-gbdraw-composition-role="primary" id="length_bar" transform="translate(6,36) translate(10,70)"></g>' : '',
     '<g data-gbdraw-composition-role="legend" id="legend" transform="translate(142,91)"></g>',
     '<g data-gbdraw-composition-role="title" id="plot_title" transform="translate(41,26) scale(1)"></g>',
     '</svg>'
@@ -53,6 +57,8 @@ const resultSvg = ({ legendSide = 'right', titleSide = 'top' } = {}) => {
     legend: target('legend', [142, 91], 'localBounds', { x: -2, y: -5, width: 30, height: 20 }),
     legendReflow: { colorRectSize: 14, lineHeight: 24, textXOffset: 22 },
     legendSide,
+    // A Result written before the scale's bounds were recorded has none.
+    ...(scale && scaleBounds ? { lengthBar: { localBounds: SCALE_BOUNDS } } : {}),
     overlayObstacles: [],
     overlayPolicy,
     primary: target('primary', [6, 36], 'finalBounds', { x: 16, y: 56, width: 100, height: 80 }),
@@ -279,4 +285,101 @@ test('Undo and Redo of a Legend offset refit the canvas, and Undo restores the r
   assert.equal(rootMarkup(svg), before, 'Undo writes no canvas record onto the restored Result');
   layout.reconcileCompositionUserDeltas({ r1: { primary: [[0, 0]], legend: [-200, 10], title: [0, 0] } }, identities);
   assert.deepEqual(root(svg), { viewBox: '-76 0 262 152', width: '262px', height: '152px', base: '0.0 0.0 186.0 152.0' }, 'Redo grows it again');
+});
+
+// PD-OI-052 scenario revision 2 (Owner, 2026-10-23): a moved Linear scale grows
+// the canvas as a moved Legend or title does, by the bounds Python records.
+const SCALE_DELTA = (dy) => ({ primary: [[0, 0], [0, dy]], legend: [0, 0], title: [0, 0] });
+
+test('a Linear scale moved past the bottom edge grows the canvas; inside it, nothing changes', () => {
+  const inside = resultSvg({ scale: true });
+  const before = rootMarkup(inside);
+  applyCompositionUserDeltas(inside, SCALE_DELTA(10));
+  assert.equal(applyCanvasToSvg(inside, {}), false);
+  assert.equal(rootMarkup(inside), before);
+
+  const svg = resultSvg({ scale: true });
+  applyCompositionUserDeltas(svg, SCALE_DELTA(40));
+  assert.equal(applyCanvasToSvg(svg, {}), true);
+  // Scale box y 146..156; with the 16 px edge padding the canvas ends at 172.
+  assert.deepEqual(root(svg), { viewBox: '0 0 186 172', width: '186px', height: '172px', base: '0 0 186 152' });
+  assert.deepEqual(compositionUserDeltas(svg).primary, [[0, 0], [0, 40]]);
+  resetCompositionUserDeltas(svg);
+  assert.equal(applyCanvasToSvg(svg, {}), true);
+  assert.equal(rootMarkup(svg), before, 'reset returns the automatic root byte for byte');
+});
+
+test('Undo and Redo of a Linear scale offset refit the canvas, and Undo restores the root byte for byte', () => {
+  const svg = resultSvg({ scale: true });
+  const before = rootMarkup(svg);
+  const layout = createLegendLayout({
+    state: appState(svg),
+    layOutLegend: () => null,
+    previewRuntime: {
+      commitActiveResultEdit: () => true,
+      getResultIdentity: (result) => result.id,
+      getActiveRuntime: () => null,
+      commitResultEdit: (_index, edit) => edit(svg, { mounted: false })
+    }
+  });
+  const identities = new Set(['r1']);
+  layout.reconcileCompositionUserDeltas({ r1: SCALE_DELTA(40) }, identities);
+  assert.equal(root(svg).viewBox, '0 0 186 172');
+  layout.reconcileCompositionUserDeltas({ r1: SCALE_DELTA(0) }, identities);
+  assert.equal(rootMarkup(svg), before);
+  layout.reconcileCompositionUserDeltas({ r1: SCALE_DELTA(40) }, identities);
+  assert.equal(root(svg).viewBox, '0 0 186 172', 'Redo grows it again');
+});
+
+test('a stored Result without the scale bounds takes no growth for a moved scale, and no error', () => {
+  const svg = resultSvg({ scale: true, scaleBounds: false });
+  const before = rootMarkup(svg);
+  applyCompositionUserDeltas(svg, SCALE_DELTA(40));
+  assert.deepEqual(compositionUserDeltas(svg).primary, [[0, 0], [0, 40]]);
+  assert.equal(applyCanvasToSvg(svg, {}), false);
+  assert.equal(rootMarkup(svg), before);
+});
+
+test('showing a stored Result with a moved scale changes nothing; a Legend side change keeps the scale bounds', () => {
+  // Saved before the canvas grew (an off-canvas scale) and with its grown canvas.
+  const old = resultSvg({ scale: true });
+  applyCompositionUserDeltas(old, SCALE_DELTA(40));
+  const grown = resultSvg({ scale: true });
+  applyCompositionUserDeltas(grown, SCALE_DELTA(40));
+  applyCanvasToSvg(grown, {});
+  for (const svg of [old, grown]) {
+    const saved = rootMarkup(svg);
+    const commits = [];
+    const actions = createLegendCanvasActions({ state: appState(svg), commitActiveResultEdit: (reason) => Boolean(commits.push(reason)) });
+    assert.equal(actions.applyCanvasPadding(), false);
+    assert.equal(rootMarkup(svg), saved);
+    assert.deepEqual(commits, []);
+  }
+  const edited = resultSvg({ scale: true });
+  applyCompositionUserDeltas(edited, SCALE_DELTA(40));
+  applyCompositionEdit(edited, { legendSide: 'none' });
+  assert.deepEqual(JSON.parse(edited.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).lengthBar, { localBounds: SCALE_BOUNDS });
+  // The canvas holds the moved scale with the edge padding after the edit.
+  const [, lx, ly] = /translate\(([^,]+),([^)]+)\)/.exec(edited.querySelector('#length_bar').getAttribute('transform')).map(Number);
+  const [vx, vy, vw, vh] = root(edited).viewBox.split(' ').map(Number);
+  assert.ok(SCALE_BOUNDS.x + lx - 16 >= vx && SCALE_BOUNDS.y + ly + SCALE_BOUNDS.height + 16 <= vy + vh + 1e-9
+    && SCALE_BOUNDS.x + lx + SCALE_BOUNDS.width + 16 <= vx + vw + 1e-9, root(edited).viewBox);
+});
+
+// A whole-diagram drag moves the scale with the records: the scale has not
+// moved relative to the diagram, so the canvas does not grow (as for any
+// diagram drag). A scale moved on its own still counts after a diagram drag.
+test('a diagram drag that carries the Linear scale grows nothing; the scale\'s own offset still counts', () => {
+  for (const dy of [40, -60]) {
+    const svg = resultSvg({ scale: true });
+    const before = rootMarkup(svg);
+    applyCompositionUserDeltas(svg, { primary: [[0, dy], [0, dy]], legend: [0, 0], title: [0, 0] });
+    assert.equal(applyCanvasToSvg(svg, {}), false, `diagram dragged by ${dy}`);
+    assert.equal(rootMarkup(svg), before);
+  }
+  const svg = resultSvg({ scale: true });
+  // The scale moved down 40 on its own, then the diagram down 40: box y 186..196.
+  applyCompositionUserDeltas(svg, { primary: [[0, 40], [0, 80]], legend: [0, 0], title: [0, 0] });
+  assert.equal(applyCanvasToSvg(svg, {}), true);
+  assert.equal(root(svg).viewBox, '0 0 186 212');
 });

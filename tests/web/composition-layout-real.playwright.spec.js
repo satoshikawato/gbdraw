@@ -962,3 +962,91 @@ test('real Circular render: the live canvas of a moved Legend equals Generate af
   live.delta.forEach((value, index) => expect(generated.delta[index]).toBeCloseTo(value, 6));
   expect(externalRequests).toEqual([]);
 });
+
+// PD-OI-052 scenario revision 2 (Owner, 2026-10-23): a Linear scale dragged
+// past the bottom edge grows the canvas on the drop, by the bounds Python
+// records for it; Generate of the same draft draws the same canvas and keeps
+// the offset, and Undo restores the stored Result byte for byte.
+const scaleState = (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const composition = await import('./js/app/legend-layout/composition-actions.js');
+  const svg = app.svgContainer.querySelector('svg');
+  const binding = composition.bindCompositionMetadata(svg);
+  const scale = svg.querySelector('#length_bar');
+  const [, lx, ly] = /translate\(\s*([^,\s)]+)[\s,]+([^)\s]+)\s*\)/.exec(scale.getAttribute('transform')).map(Number);
+  const local = binding.metadata.lengthBar.localBounds;
+  const index = binding.primary.targets.indexOf(scale);
+  return {
+    root: { viewBox: svg.getAttribute('viewBox'), width: svg.getAttribute('width'), height: svg.getAttribute('height') },
+    stored: app.results[0].content,
+    scaleBox: { x: local.x + lx, y: local.y + ly, width: local.width, height: local.height },
+    delta: composition.compositionUserDeltas(svg).primary[index],
+    edge: binding.metadata.spacing.edgePaddingPx,
+    screenBelow: svg.getBoundingClientRect().bottom - scale.getBoundingClientRect().top
+  };
+});
+const dragLengthBar = async (page, dy) => {
+  await page.evaluate(async (deltaY) => {
+    const app = window.__GBDRAW_APP__;
+    app.layoutRepositionMode = true;
+    await window.Vue.nextTick();
+    const target = app.svgContainer.querySelector('svg #length_bar');
+    const bounds = target.getBoundingClientRect();
+    const x = bounds.left + Math.min(bounds.width / 2, 8);
+    const y = bounds.top + Math.min(bounds.height / 2, 8);
+    const event = (type, clientY, buttons) => new MouseEvent(type, {
+      bubbles: true, cancelable: true, clientX: x, clientY, buttons, view: window
+    });
+    target.dispatchEvent(event('mousedown', y, 1));
+    await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+    document.dispatchEvent(event('mousemove', y + deltaY, 1));
+    await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+    document.dispatchEvent(event('mouseup', y + deltaY, 0));
+  }, dy);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.undoLabel?.() || ''), { timeout: 30000 })
+    .toBe('Move length bar');
+};
+const expectHoldsScale = (state) => {
+  const [x, y, width, height] = state.root.viewBox.split(' ').map(Number);
+  const box = state.scaleBox;
+  expect(box.x - state.edge, JSON.stringify(state.root)).toBeGreaterThanOrEqual(x - 1e-6);
+  expect(box.y - state.edge).toBeGreaterThanOrEqual(y - 1e-6);
+  expect(box.x + box.width + state.edge).toBeLessThanOrEqual(x + width + 1e-6);
+  expect(box.y + box.height + state.edge).toBeLessThanOrEqual(y + height + 1e-6);
+};
+
+test('real Linear render grows the canvas to hold a scale dragged past the bottom edge; live equals Generate; Undo restores it', async ({ page, baseURL }) => {
+  test.setTimeout(600000);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
+  await openApp(page);
+  await renderRealDiagram(page, 'linear', readFileSync(genbankPath, 'utf8'), { legendSide: 'right' });
+  // The first edit of a Result replaces Python's serialization with the
+  // browser's, so the byte comparison starts from an edited Result.
+  await dragLengthBar(page, -4);
+  await page.evaluate(async () => { await window.__GBDRAW_APP__.undoHistory(); });
+  await expect.poll(async () => (await scaleState(page)).delta[1], { timeout: 30000 }).toBe(0);
+  const fresh = await scaleState(page);
+  await dragLengthBar(page, fresh.screenBelow + 40);
+  const dropped = await scaleState(page);
+  expect(Number(dropped.root.viewBox.split(' ')[3]), 'the canvas grew downward')
+    .toBeGreaterThan(Number(fresh.root.viewBox.split(' ')[3]));
+  expect(dropped.delta[1]).toBeGreaterThan(0);
+  expectHoldsScale(dropped);
+
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const generated = await scaleState(page);
+  const numbers = (state) => [
+    ...state.root.viewBox.split(' ').map(Number), Number.parseFloat(state.root.width), Number.parseFloat(state.root.height),
+    state.scaleBox.x, state.scaleBox.y, ...state.delta
+  ];
+  numbers(generated).forEach((value, index) => {
+    expect(value, `canvas/scale value ${index}: live equals Generate`).toBeCloseTo(numbers(dropped)[index], 6);
+  });
+
+  await page.evaluate(async () => { await window.__GBDRAW_APP__.undoHistory(); });
+  await expect.poll(async () => (await scaleState(page)).delta[1], { timeout: 30000 }).toBeGreaterThan(0);
+  await page.evaluate(async () => { await window.__GBDRAW_APP__.undoHistory(); });
+  await expect.poll(async () => (await scaleState(page)).stored === fresh.stored, { timeout: 30000 })
+    .toBe(true);
+  expect(externalRequests).toEqual([]);
+});

@@ -517,7 +517,7 @@ export const createDiagramDragActions = ({
       similarityAlignmentLifecycle?.afterRecordDrag?.({ moved });
     }
     if (moved) {
-      // The drop places a moved plot title: the canvas grows to hold it (Owner, 2026-10-23).
+      // The drop places a moved plot title or Linear scale: the canvas grows to hold it (Owner, 2026-10-23).
       const svg = svgContainer.value?.querySelector?.('svg') || null;
       if (svg) applyCanvasToSvg(svg, state.activeDrawing().canvasPadding);
       commitActiveResultEdit?.('diagram-drag');

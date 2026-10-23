@@ -25,6 +25,11 @@ import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 /** @typedef {CompositionTargetBase & { finalBounds: CompositionBounds }} CompositionPrimaryTarget */
 /** @typedef {CompositionTargetBase & { localBounds: CompositionBounds }} CompositionLocalTarget */
 /**
+ * The painted bounds of the Linear scale (`#length_bar`, a primary group)
+ * before its leading translate, as Python drew it.
+ * @typedef {{ localBounds: CompositionBounds }} CompositionLengthBar
+ */
+/**
  * The inputs Python laid the Legend out with exist together or not at all.
  * @typedef {object} CompositionLegendReflow
  * @property {number} colorRectSize
@@ -41,6 +46,8 @@ import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
  * @property {CompositionLocalTarget | null} legend
  * @property {CompositionLegendReflow | null} legendReflow
  * @property {string} legendSide
+ * @property {CompositionLengthBar | null} lengthBar Null for a Result without
+ *   a drawn scale, and for one written before the scale's bounds were recorded.
  * @property {CompositionBounds[]} overlayObstacles
  * @property {CompositionOverlayPolicy} overlayPolicy
  * @property {CompositionPrimaryTarget} primary
@@ -315,6 +322,20 @@ const validateOptionalTarget = (value, role) => (
 );
 
 /**
+ * The Linear scale's bounds: absent or null (an older Result, or no drawn
+ * scale) or exactly `{ localBounds }`.
+ * @param {unknown} value
+ * @returns {CompositionLengthBar | null}
+ */
+const validateLengthBar = (value) => {
+  if (value === undefined || value === null) return null;
+  if (!isPlainObject(value) || Object.keys(value).join() !== 'localBounds') {
+    fail('composition.lengthBar must be an object with localBounds only.');
+  }
+  return { localBounds: validateBounds(value.localBounds, 'composition.lengthBar.localBounds', { positive: true }) };
+};
+
+/**
  * @param {unknown} value
  * @returns {CompositionSpacingPx}
  */
@@ -498,6 +519,7 @@ export const parseCompositionMetadata = (svg) => {
       required: legend !== null
     }),
     legendSide: /** @type {string} */ (source.legendSide), // a member of LEGEND_SIDES
+    lengthBar: validateLengthBar(source.lengthBar),
     overlayObstacles: source.overlayObstacles.map((bounds, index) => (
       validateBounds(bounds, `composition.overlayObstacles[${index}]`)
     )),
@@ -983,13 +1005,14 @@ const setRootAttribute = (svg, name, value) => {
 };
 
 /**
- * The bounds, widened by the edge padding, of each Legend or plot title the
- * user moved: a moved item keeps its offset and the canvas grows to hold it
- * (Owner, 2026-10-23). An unmoved or hidden item adds nothing. The bounds are
- * Python's (`localBounds`) at the item's current translate, so a detached
- * candidate needs no browser measurement. A legacy-normalized binding records
- * the whole root as the Legend's and title's bounds, not the item's, so it
- * adds nothing and keeps its canvas.
+ * The bounds, widened by the edge padding, of each Legend, plot title, or
+ * Linear scale the user moved: a moved item keeps its offset and the canvas
+ * grows to hold it (Owner, 2026-10-23; PD-OI-052 scenario revision 2). An
+ * unmoved or hidden item adds nothing. The bounds are Python's (`localBounds`)
+ * at the item's current translate, so a detached candidate needs no browser
+ * measurement. A legacy-normalized binding records the whole root as the
+ * Legend's and title's bounds, not the item's, so it adds nothing and keeps
+ * its canvas; a Result without recorded scale bounds takes no scale growth.
  * @param {CompositionBinding | null} binding Null for a root without composition metadata.
  * @returns {CompositionBounds[]}
  */
@@ -997,10 +1020,26 @@ const movedDecorationBounds = (binding) => {
   if (!binding || binding.metadata.legacyNormalized) return [];
   const { metadata } = binding;
   const edge = metadata.spacing.edgePaddingPx;
-  /** @type {Array<{ role: 'legend' | 'title', side: string, target: CompositionLocalTarget | null, element: SVGGraphicsElement | undefined }>} */
+  const scale = binding.primary.targets.find((element) => element.id === LENGTH_BAR_ID);
+  // A diagram drag moves the scale with the records, and a moved diagram does
+  // not grow the canvas: the scale counts as moved only by its offset from the
+  // diagram's (another primary group's) leading translate.
+  const diagram = binding.primary.targets.find((element) => element !== scale);
+  const diagramTranslate = diagram
+    ? targetLeadingTranslate(diagram, 'primary')
+    : { x: metadata.primary.automaticTranslation[0], y: metadata.primary.automaticTranslation[1] };
+  /** @type {Array<{ role: CompositionRole, side: string, target: { automaticTranslation: number[], localBounds: CompositionBounds } | null, element: SVGGraphicsElement | undefined }>} */
   const items = [
     { role: 'legend', side: metadata.legendSide, target: metadata.legend, element: binding.legend.targets[0] },
-    { role: 'title', side: metadata.titleSide, target: metadata.title, element: binding.title.targets[0] }
+    { role: 'title', side: metadata.titleSide, target: metadata.title, element: binding.title.targets[0] },
+    {
+      role: 'primary',
+      side: 'shown',
+      target: metadata.lengthBar
+        ? { automaticTranslation: [diagramTranslate.x, diagramTranslate.y], localBounds: metadata.lengthBar.localBounds }
+        : null,
+      element: scale
+    }
   ];
   return items.flatMap(({ role, side, target, element }) => {
     if (!target || !element || side === 'none') return [];
@@ -1225,6 +1264,8 @@ export const applyCompositionEdit = (svg, options = {}) => {
     legend: legendPayload,
     legendReflow: metadata.legendReflow,
     legendSide,
+    // The scale's bounds precede its leading translate, so a replan keeps them.
+    ...(metadata.lengthBar ? { lengthBar: { localBounds: wireBounds(metadata.lengthBar.localBounds) } } : {}),
     overlayObstacles: plan.overlayObstacles.map(wireBounds),
     overlayPolicy: plan.overlayPolicy,
     primary: targetPayload(

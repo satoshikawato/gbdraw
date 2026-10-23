@@ -63,11 +63,12 @@
   "requestSchema": 9,
   "replay": {
     "svg": "majanivirus_collinear-rc.v47.replay.svg",
-    "code": "e8b460772 (dev base of the PR)",
+    "code": "fix/moved-scale-canvas-growth, from the commit that recorded the Linear scale bounds in the composition metadata (e8b460772 before)",
     "command": "python -c 'from gbdraw.cli import main; main()' linear --session majanivirus_collinear-rc.v47.gbdraw-session.json.gz -o majanivirus_collinear-rc.v47.replay -f svg",
-    "sha256": "b306e5b637a4e920ccd2eab4665c8879220130b10a0d114f3a62ea15f9e886c9",
+    "sha256": "a554864afa01f70082145ee51bc5791cbde064888f16bddcd991501876b7634c",
     "mainReplaySha256": "b306e5b637a4e920ccd2eab4665c8879220130b10a0d114f3a62ea15f9e886c9",
-    "mainReplayEqualsBaseReplay": true
+    "mainReplayEqualsBaseReplay": false,
+    "differenceFromMainReplay": "the composition metadata gains the Linear scale bounds (lengthBar), which paint nothing; the drawing is the same"
   },
   "reversedRecordItemsInV": {
     "counts": {
