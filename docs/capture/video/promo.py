@@ -23,7 +23,7 @@ from playwright.sync_api import Locator, expect
 
 from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS
 from video.tutorials import (_button, _close_feature, _feature_point, _fit_preview, _frame_box, _frame_figure,
-                             _label, _look, _open_feature, _pick, _summary)
+                             _label, _open_feature, _pick, _summary)
 from video.walkthrough import (PREVIEW_REGION, SKIM, STAGES_SECONDS, VIEWPORT, Journey, Recorder, _center,
                                _skimmed, switch_language)
 from video.walkthrough_render import FONT_CACHE, PORTRAIT, PORTRAIT_PAD, PROMO_ID
@@ -41,6 +41,12 @@ ROTATE_MARKS = ("hl-rotate-1", "hl-rotate-2", "hl-rotate-3", "hl-rotate-4")
 LANE_GENES = ("ATP8", "COX3", "ND3", "ND4L")
 LANE_MARKS = ("hl-lane-1", "hl-lane-2", "hl-lane-3", "hl-lane-4")
 LANE_SIDE = "outward"
+# Genes of BGC0000708 clicked and aligned in turn, one per similarity group (one member in each of the five records,
+# so Align… applies at once), spread along the cluster so the rows shift differently each time.
+ALIGN_GENES = (("livU", "og_6"), ("livE", "og_1"), ("livL", "og_12"))
+ALIGN_CLICK_MARKS = ("hl-align-click-1", "hl-align-click-2", "hl-align-click-3")
+ALIGN_MARKS = ("hl-align-1", "hl-align-2", "hl-align-3")
+ALIGN_REPEAT_SECONDS = 1.0   # a fast-forwarded repeat of click and Align…, as the viewer sees it
 REPEAT_SECONDS = 1.5    # one fast-forwarded repeat of a rotation or a lane move, as the viewer sees it
 FONT_VIEW_HEIGHT = 470      # page px the Chinese title's view shows, from just below the search box
 LANE_ROOM = 45          # page px around the arc for an outward lane and its labels
@@ -93,6 +99,7 @@ _ANCHOR = """
 _LEGEND_RIGHT = """
 () => document.querySelector('$REGION svg #legend')?.getBoundingClientRect().right ?? null
 """.replace("$REGION", PREVIEW_REGION)
+
 
 
 _GROUP_BOUNDS = """
@@ -364,7 +371,7 @@ def _rotate_to(rec: Recorder, gene: str, *, repeat: bool) -> None:
 
 
 def _rotate(rec: Recorder) -> None:
-    """Step rotate: the record starts at COX1 (normal speed), then at three more genes in fast-forwarded repeats."""
+    """Step rotate: the record starts at COX1 (normal speed), then at two more genes in fast-forwarded repeats."""
 
     rec.caption(4, "Start a circular record at any base",
                 "Rotate record using this feature; the sequence and its coordinates stay the same")
@@ -436,7 +443,7 @@ def _place(rec: Recorder, relative: dict) -> dict:
 
 
 def _lane(rec: Recorder) -> None:
-    """Steps lane and stages: ATP8 › Outward lane 1 with the Generate stages, then three more genes out, one by one."""
+    """Steps lane and stages: ATP8 › Outward lane 1 with the Generate stages, then two more genes out, one by one."""
 
     rec.caption(5, "Put a feature on the lane you choose", "Its label and leader line move with it")
     # The arc is framed before any move; every version keeps this framing.
@@ -475,10 +482,56 @@ def _reset_alignment(rec: Recorder) -> None:
     _fit(rec)
 
 
-def _align(rec: Recorder) -> None:
-    """Step align: livU of BGC0000708 › Similarity group og_6 › Align…"""
+def _show_rows(rec: Recorder, group_id: str, seconds: float, mark: str) -> None:
+    """Hold the column the group's genes now share across the five rows, then mark: an opening clip ends here.
+
+    The camera settles 0.6 s before the mark, so the clip (its last 0.6 s) holds still.
+    """
+
+    box = rec.page.evaluate(_GROUP_BOUNDS, group_id)
+    rec.camera(box, zoom=2.4, duration=min(1.0, seconds - 0.6), portrait=box)
+    rec.hold(seconds)
+    rec.mark(mark)
+
+
+def _align_to(rec: Recorder, gene: str, group_id: str, click_mark: str, *, repeat: bool) -> None:
+    """``gene`` of BGC0000708 › Similarity group › Align…: the popup with the pointer on Align…, then the click.
+
+    The first align plays at normal speed where it teaches; a repeat plays in about ``ALIGN_REPEAT_SECONDS``
+    around its popup moment (held, then marked for the opening) and its result.
+    """
 
     page = rec.page
+    point = _feature_point(rec, f"(item) => item.gene === arg && item.orthogroupId === '{group_id}'", gene)
+    popup = page.locator(".feature-popup")
+    group = popup.locator("[data-feature-popup-group='similarity']")
+    align = group.locator("button").filter(has_text=rec.t("Align…")).first
+    with _skimmed(rec, target=ALIGN_REPEAT_SECONDS if repeat else None):
+        page.evaluate(_IDLE)
+        rec.click_point(point["x"], point["y"], pause=0.4)
+        expect(popup).to_be_visible()
+        group.evaluate("node => node.scrollIntoView({block: 'center'})")
+        page.wait_for_timeout(300)
+        expect(group).to_contain_text(group_id)
+        _frame_parts(rec, group.locator("[data-similarity-summary]"), align.locator("xpath=../.."), zoom=2.4,
+                     max_width=640)
+        rec.move_to(*_center(align.bounding_box()))
+    # The popup with the pointer on Align…; an opening clip ends at this mark.
+    rec.hold(0.7 if repeat else 1.2)
+    rec.mark(click_mark)
+    before = _content(rec)
+    rec.click(align, pause=0.2)
+    with _skimmed(rec, target=0.8):
+        page.wait_for_function(_RESULT_CHANGED, arg=before, timeout=GENERATION_TIMEOUT_MS)
+        rec.hold(0.3)
+        if popup.is_visible():
+            _close_feature(rec)
+        _fit(rec)
+
+
+def _align(rec: Recorder) -> None:
+    """Step align: livU › Similarity group og_6 › Align… at normal speed, then two more genes in fast repeats."""
+
     rec.caption(7, "Align records by a similarity group",
                 "Click a gene, choose Align…, and the clusters line up in one step")
     # The header's Load example; the empty preview's button left with the first example.
@@ -486,34 +539,11 @@ def _align(rec: Recorder) -> None:
     _reset_alignment(rec)
     _frame_figure(rec)
     rec.hold(1.0)
-    # livU of the first record (BGC0000708), in the group the example was aligned on.
-    livu = _feature_point(rec, "(item) => item.gene === arg && item.orthogroupId === 'og_6'", "livU")
-    popup = page.locator(".feature-popup")
-    group = popup.locator("[data-feature-popup-group='similarity']")
-    with _skimmed(rec):
-        rec.page.evaluate(_IDLE)
-        rec.click_point(livu["x"], livu["y"], pause=0.4)
-        expect(popup).to_be_visible()
-        group.evaluate("node => node.scrollIntoView({block: 'center'})")
-        page.wait_for_timeout(300)
-        expect(group).to_contain_text("og_6")
-        before = _content(rec)
-        _frame_parts(rec, group.get_by_text("og_6").first, zoom=2.4)
-    rec.hold(1.0)
-    align = group.locator("button").filter(has_text=rec.t("Align…")).first
-    rec.focus(align, zoom=2.4, duration=0.5)
-    rec.click(align, pause=0.2)
-    with _skimmed(rec, target=0.8):
-        page.wait_for_function(_RESULT_CHANGED, arg=before, timeout=GENERATION_TIMEOUT_MS)
-        rec.hold(0.3)
-        if popup.is_visible():
-            _close_feature(rec)
-    _fit(rec)
-    _frame_figure(rec)
-    rec.hold(2.4)
-    # The og_6 genes now share one column across the five clusters.
-    _look(rec, page.evaluate(_GROUP_BOUNDS, "og_6"), zoom=2.4, seconds=2.4)
-    rec.mark("hl-align")
+    for index, ((gene, group_id), click_mark, mark) in enumerate(zip(ALIGN_GENES, ALIGN_CLICK_MARKS, ALIGN_MARKS,
+                                                                       strict=True)):
+        _align_to(rec, gene, group_id, click_mark, repeat=bool(index))
+        # The rows re-aligned on the gene: the first result is held long enough to read.
+        _show_rows(rec, group_id, 2.4 if index == 0 else VERSION_HOLD, mark)
 
 
 _TEXT_BOX = """

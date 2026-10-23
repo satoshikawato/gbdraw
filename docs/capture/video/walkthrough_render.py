@@ -238,17 +238,19 @@ PROMO_ID = "promo-zh-0140-vertical"
 PROMO_STORY = Story(
     ("gbdraw 0.14.0: what is new", "Microbial and organelle genome maps · now with a Simplified Chinese interface"),
     (("walkthrough", replace(PORTRAIT, audio=False), "gbdraw-0.14.0-vertical"),), "zh-Hans",
-    outro=("gbdraw.app", "Command line: pip install gbdraw"),
+    outro=("Visit gbdraw.app", "Open it in your browser, no installation needed"),
     # The marks ``video.promo`` sets at the end of each result's hold. Clips of one label play as one highlight:
     # the Language menu's before, pick, and after; a record started at four genes in turn (hl-rotate-1..4);
-    # and four genes put on lanes one after another (hl-lane-1..4).
+    # four genes put on lanes one after another (hl-lane-1..4); and three genes clicked and aligned in turn: each
+    # the gene's popup with the pointer on Align (hl-align-click-n), then the rows re-aligned on it (hl-align-n).
     opening=(Clip("hl-lang-en", -0.6, "hl-lang-en", 0.0, "Simplified Chinese interface"),
              Clip("hl-lang-pick", -0.7, "hl-lang-pick", 0.0, "Simplified Chinese interface"),
              Clip("hl-lang-zh", -0.9, "hl-lang-zh", 0.0, "Simplified Chinese interface"),
              Clip("hl-font", -1.0, "hl-font", 0.0, "Chinese text in the figure"),
              *(Clip(f"hl-rotate-{n}", -0.5, f"hl-rotate-{n}", 0.0, "Start at any base") for n in range(1, 5)),
              *(Clip(f"hl-lane-{n}", -0.5, f"hl-lane-{n}", 0.0, "Features on lanes you choose") for n in range(1, 5)),
-             Clip("hl-align", -1.0, "hl-align", 0.0, "Similarity-group alignment")))
+             *(Clip(mark, before, mark, 0.0, "Similarity-group alignment") for n in range(1, 4)
+               for mark, before in ((f"hl-align-click-{n}", -0.4), (f"hl-align-{n}", -0.6)))))
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
 STORIES = {

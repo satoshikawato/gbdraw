@@ -140,10 +140,20 @@ def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> N
         assert all(clip.first == clip.last and clip.after == 0.0 and -0.6 <= clip.before <= -0.4 for clip in clips)
         indexes = [opening.index(clip) for clip in clips]
         assert indexes == list(range(indexes[0], indexes[0] + len(clips)))
+    # Align: a click on each gene (its popup, the pointer on Align…), then the rows aligned on it, under one label.
+    clips = [clip for clip in opening if clip.label == 'Similarity-group alignment']
+    assert [clip.last for clip in clips] == [mark for pair in zip(promo.ALIGN_CLICK_MARKS, promo.ALIGN_MARKS)
+                                              for mark in pair]
+    groups = [group for _, group in promo.ALIGN_GENES]
+    assert len(set(groups)) == len(groups) >= 3 and len(promo.ALIGN_GENES) == len(promo.ALIGN_MARKS)
+    assert all(clip.first == clip.last and clip.after == 0.0 for clip in clips)
+    assert [-clip.before for clip in clips] == [0.4, 0.6] * len(promo.ALIGN_MARKS)
+    indexes = [opening.index(clip) for clip in clips]
+    assert indexes == list(range(indexes[0], indexes[0] + len(clips)))
     # The language highlight shows the pane before, the menu pick, and the pane after; the opening stays short.
     assert [clip.last for clip in opening if clip.label == 'Simplified Chinese interface'] == [
         'hl-lang-en', 'hl-lang-pick', 'hl-lang-zh']
-    assert sum(-clip.before + clip.after for clip in opening) <= 10.0
+    assert sum(-clip.before + clip.after for clip in opening) <= 12.0
 
 
 def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
