@@ -922,7 +922,11 @@ def test_ring_rows_conversion_stops_when_one_id_has_two_frames() -> None:
 def test_cli_session_with_a_crop_and_a_search_frame_ring_table_replays_its_hits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A 0.14.0 CLI Session stored crop-frame ring rows; they draw on the crop, as before #1314 (PD-OI-073)."""
+    """A CLI Session with crop-frame ring rows draws them on the crop, as before #1314 (PD-OI-073).
+
+    The Session is written by this branch from a precomputed table; 0.14.0 CLI Sessions have the same format
+    (SESSION_VERSION 48) and the same crop-frame rows.
+    """
 
     records = tmp_path / "records.tsv"
     records.write_text(f"gbk\tregion\n{HUMAN}\t501-800\n", encoding="utf-8")
@@ -950,7 +954,10 @@ def test_cli_session_with_a_crop_and_a_search_frame_ring_table_replays_its_hits(
 def test_interactive_ring_popup_reference_span_of_a_crop_slices_the_hit_bases(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The popup slices the embedded cropped record at the row's span: the rows are crop-frame (review B3)."""
+    """The popup slices the embedded cropped record at the row's span: the rows are crop-frame (review B3).
+
+    The slice models the popup runtime's JavaScript slice in Python.
+    """
 
     import gbdraw.comparisons.circular_losat as circular_losat_module
     from Bio import SeqIO

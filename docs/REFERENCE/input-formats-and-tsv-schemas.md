@@ -86,8 +86,11 @@ after its crop, on its source strand, 1-based. This covers uploaded tables,
 `--conservation_table`, `conservation.tsv`, and a Session's ring tables. A ring
 row outside the drawn record is skipped with a warning. A ring LOSAT search
 reports positions on the whole reference file, and gbdraw converts its rows to
-this frame before the ring is drawn or saved; its raw rows (the raw LOSAT cache,
-**Save Raw LOSAT TSV**) stay in the whole-file positions. Ring rows find their
+this frame before the ring is drawn or saved. A row that crosses a crop edge
+keeps its part inside the crop; only its subject positions change, so its
+query columns, alignment length, and identity are those of the whole HSP. The
+raw rows of the search (the raw LOSAT cache, **Save Raw LOSAT TSV**) stay in the
+whole-file positions. Ring rows find their
 record by ID: records that share an ID in several reference files share their
 hits, so give them distinct IDs. A ring search that draws one ID with two
 different crops or orientations stops with a comparison-input error.

@@ -909,7 +909,7 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
 
 
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
-    """Per-ring raw TSVs and a ``--conservation_table`` manifest (design 3.7)."""
+    """Per-ring tables in the search frame and a ``--conservation_table`` manifest (design 3.7)."""
 
     # A Circular run result always carries its Circular request.
     request = cast(
@@ -919,7 +919,7 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
     rings = tuple(getattr(options, "conservation_search_results", None) or ())
     if not rings:
         raise ValidationError(
-            "LOSAT output requested, but no raw ring evidence was produced.",
+            "LOSAT output requested, but no ring table was produced.",
             diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
         )
     sequences = tuple(options.conservation_sequence_files or ())

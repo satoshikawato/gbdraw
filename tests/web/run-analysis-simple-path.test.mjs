@@ -1807,7 +1807,6 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const helperMessagesBeforeRepeat = workerMessages.filter(({ type }) => type === 'helper').length;
     resourceMetrics.splice(0);
     const repeatResult = result('lazy-circular-repeat.svg', 'lazy-circular-repeat');
-    workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(repeatResult, validCatalog(repeatResult.name)));
     const repeatWatch = await watchLosatPreparation(async () => assert.deepEqual(
       await runner.runAnalysis(),
@@ -1817,10 +1816,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // OV-1565: the ring sequences' digests are kept with their FASTA, so no ring FASTA is digested again.
     assert.equal(repeatWatch.fastaDigests, 0);
     assert.equal(losatCalls, 0);
-    assert.deepEqual(
-      workerMessages.filter(({ type }) => type === 'helper').slice(helperMessagesBeforeRepeat)
-        .map(({ operation }) => operation),
-      ['convertRingTablesToSearchFrame']
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'helper').length,
+      helperMessagesBeforeRepeat
     );
     assert.deepEqual(
       resourceMetrics.filter(({ name, resourceId }) => name === 'resourceTextReadCount'
@@ -2815,6 +2813,35 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       const ring = run.resourceManifest.find(({ resourceId }) => resourceId === 'conservation-resolved-blast-1');
       assert.equal(Buffer.from(stagedBytesByToken().get(ring.cacheToken)).toString('utf8'), testCase.cliRingRows, testCase.name);
       assert.deepEqual([...state.losatCache.value.values()].map(({ text }) => text), [testCase.rawRows], testCase.name);
+      if (testCase.name !== 'crop') continue;
+      /** @param {string} name */
+      const generateAgain = async (name) => {
+        const before = workerMessages.length;
+        const again = result(`${name}.svg`, name);
+        workerResponses.push(response(again, validCatalog(again.name)));
+        assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, `${name}: ${JSON.stringify(state.errorLog.value)}`);
+        const messages = workerMessages.slice(before);
+        const ringToken = messages.findLast(({ type }) => type === 'run').payload.resourceManifest
+          .find(({ resourceId }) => resourceId === 'conservation-resolved-blast-1').cacheToken;
+        return {
+          conversions: messages.filter(({ type, operation }) => type === 'helper'
+            && operation === 'convertRingTablesToSearchFrame').length,
+          helpers: messages.filter(({ type }) => type === 'helper').length,
+          rows: Buffer.from(stagedBytesByToken().get(ringToken)).toString('utf8')
+        };
+      };
+      // An identical Generate sends only `run`: the page holds the converted rows of this search and frame.
+      assert.deepEqual(await generateAgain('ring-subject-crop-again'), { conversions: 0, helpers: 0, rows: testCase.cliRingRows });
+      // A new crop is a new frame: Python converts the held search output again, without a new search.
+      drawing.form.circular_region_start = 21;
+      workerHelperResponses.push(ringTableConversion);
+      searched = null;
+      const newCrop = await generateAgain('ring-subject-new-crop');
+      assert.equal(newCrop.conversions, 1);
+      assert.equal(newCrop.helpers, 1);
+      assert.equal(searched, null);
+      assert.match(newCrop.rows, /^QUERY1\tSUBB\.1\t99\.0\t20\t0\t0\t1\t20\t1\t20\t/);
+      assert.equal(workerHelperResponses.length, 0);
     }
   } finally {
     workerHelperResponses.splice(0);

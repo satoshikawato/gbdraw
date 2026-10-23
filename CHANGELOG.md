@@ -55,8 +55,11 @@ write-up of a release.
     place: Generate converts the whole-file search rows to the search frame
     with the same Python code as the command line, and a Session stores the
     converted rows. A Session saved by 0.14.0 with a crop and ring LOSAT
-    draws as it did in 0.14.0 until the next Generate, which reuses the raw
-    LOSAT cache and converts the rows.
+    still holds unconverted rows: its ring draws as in 0.14.0 on a forward
+    crop, and at another unconverted place on a reverse-complemented crop,
+    until the next Generate, which reuses the raw LOSAT cache and converts
+    the rows. Without a crop its rows are already in the search frame, so a
+    reverse-complemented record now draws them at their place.
   - The web app's message for a ring LOSAT input error says to use the
     reference file as the subject.
 - Fixed: LOSAT, the Circular conservation database, and restored match

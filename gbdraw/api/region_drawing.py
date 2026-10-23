@@ -237,7 +237,7 @@ def derive_region_drawing(
                 values.update(dict.fromkeys(_RING_RESULTS))
                 if options.losat_search is None:
                     values.update(dict.fromkeys(_RING_PLAN))
-                    dropped.append("The conservation ring tables (they use the coordinates of the source records).")
+                    dropped.append("The conservation ring tables (they use the coordinates of the records of the source drawing).")
         elif _has_any(options, _LINEAR_COMPARISON_INPUTS) or getattr(options, "losat_search", None) is not None:
             dropped.append("The comparisons of the Linear drawing.")
         request = CircularDiagramRequest(
