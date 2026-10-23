@@ -1479,17 +1479,20 @@ test('a ring comparison file is read once, and a failed read is read again', asy
   const operations = [];
   const replies = [
     { result: { error: new Error('injected ring read failure') } },
-    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring' } }
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring' } },
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] } }
   ];
   const runHelperOperation = async (operation) => {
     operations.push(operation);
     return replies.shift();
   };
   await assert.rejects(readComparisonSequence({ file, runHelperOperation }), /injected ring read failure/);
+  // A reply without its record IDs is a protocol error, and it is not kept either.
+  await assert.rejects(readComparisonSequence({ file, runHelperOperation }), { code: 'HELPER_PROTOCOL' });
   const read = await readComparisonSequence({ file, runHelperOperation });
-  assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring' });
+  assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] });
   assert.equal(await readComparisonSequence({ file, runHelperOperation }), read);
-  assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence']);
+  assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']);
 });
 
 // OV-1587: one per-File reading owner. Every reader gets the same frozen value,
@@ -1499,7 +1502,7 @@ test('a ring comparison read is frozen and its digest is kept with it', async ()
   const operations = [];
   const runHelperOperation = async (operation) => {
     operations.push(operation);
-    return { result: { fasta: '>ring\nACGT\n', recordLabel: null } };
+    return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'] } };
   };
   const read = await readComparisonSequence({ file, runHelperOperation });
   assert.equal(Object.isFrozen(read), true);
@@ -1718,7 +1721,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       result: {
         fasta,
         format: index === 1 ? 'genbank' : 'fasta',
-        label: '',
+        recordLabel: null,
         recordIds: [fasta.slice(1).split('\n')[0]]
       }
     }));

@@ -590,16 +590,28 @@ export const discoverSequenceRecords = async ({
 
 /**
  * A ring comparison file as the Python ring reader reads it (D12): the LOSAT
- * query FASTA, and the label the file names itself (GenBank / DDBJ: first
- * record's DEFINITION, then organism), or null (FASTA).
- * @typedef {{ fasta: string, recordLabel: string | null }} ComparisonSequence
+ * query FASTA, the label the file names itself (GenBank / DDBJ: first
+ * record's DEFINITION, then organism) or null (FASTA), and the ID of each
+ * record of the FASTA, in its order ('' for a FASTA entry without an ID).
+ * @typedef {{ fasta: string, recordLabel: string | null, recordIds: readonly string[] }} ComparisonSequence
  */
+/**
+ * The Worker's `readComparisonSequence` reply, as `read_comparison_sequence_json` writes it, or the error it raised.
+ * @typedef {{ fasta: string, recordLabel: string | null, recordIds: string[] } | { error: unknown }} ComparisonSequencePayload
+ */
+/** @param {unknown} payload @returns {payload is { fasta: string, recordLabel: string | null, recordIds: string[] }} */
+const isComparisonSequenceReply = (payload) => {
+  if (typeof payload !== 'object' || payload === null) return false;
+  const { fasta, recordLabel, recordIds } = /** @type {Record<string, unknown>} */ (payload);
+  return typeof fasta === 'string' && (recordLabel === null || typeof recordLabel === 'string')
+    && Array.isArray(recordIds) && recordIds.every((recordId) => typeof recordId === 'string');
+};
 // Only the Python ring reader reads the file; there is no fast path. Add Seq and
 // every Generate share one read per file (OV-1545), frozen, as every reader gets it.
 /**
  * @param {{
  *   file: FileLike,
- *   runHelperOperation?: HelperOperationRunner<{ error?: unknown, fasta?: string, recordLabel?: string | null }>
+ *   runHelperOperation?: HelperOperationRunner<ComparisonSequencePayload>
  * }} options
  * @returns {Promise<ComparisonSequence>}
  */
@@ -607,15 +619,50 @@ export const readComparisonSequence = ({
   file,
   runHelperOperation = runDiagramHelperOperation
 }) => readOncePerFile([file], 'comparison-sequence', async () => {
-  const response = await runHelperOperation(
+  const { result } = await runHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
     { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
   );
-  if (response.result?.error) throw response.result.error;
-  return Object.freeze({
-    fasta: String(response.result?.fasta || ''), recordLabel: response.result?.recordLabel ?? null
-  });
+  if (result && 'error' in result) throw result.error;
+  if (!isComparisonSequenceReply(result)) {
+    throw diagnosticError('HELPER_PROTOCOL', {}, {
+      stage: 'helper', operation: DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE
+    });
+  }
+  const { fasta, recordLabel, recordIds } = result;
+  return Object.freeze({ fasta, recordLabel, recordIds: Object.freeze([...recordIds]) });
 });
+
+/**
+ * A ring comparison genome's records as the ring search read them, for the restored match sequences: the ID is
+ * the record's ID, its only alias, and the sequence is upper case. The browser reads a FASTA file the browser
+ * reader and the record-list rules take (no byte order mark, the first entry starts with '>', every entry has an
+ * ID) and whose every entry has a sequence, as the comparison reader would; the comparison reader
+ * (`readComparisonSequence`) reads every other file (a byte order mark, GenBank / DDBJ, an entry without an ID),
+ * with the IDs its reply names. Frozen, once per File.
+ * @param {FileLike} file
+ * @param {HelperOperationRunner<ComparisonSequencePayload>} [runHelperOperation]
+ * @returns {Promise<readonly ParsedSequenceRecord[]>}
+ */
+export const readComparisonSequenceRecords = (file, runHelperOperation = runDiagramHelperOperation) => (
+  readOncePerFile([file], 'comparison-records', async () => {
+    /** @param {string} id @param {string | null} sequence */
+    const record = (id, sequence) => Object.freeze({ id, aliases: Object.freeze([id]), sequence });
+    const { records } = await readParsedSequenceRecords(file, 'fasta');
+    if (records && records.every(({ sequence }) => sequence)
+      && await fastPathRecords([file], (text) => parseSequenceRecordText(text, 'fasta'))) {
+      return Object.freeze(records.map(({ id, sequence }) => record(id, sequence)));
+    }
+    const { fasta, recordIds } = await readComparisonSequence({ file, runHelperOperation });
+    const sequences = parseSequenceRecordsFast(fasta, 'fasta');
+    if (sequences.length !== recordIds.length) {
+      throw diagnosticError('HELPER_PROTOCOL', {}, {
+        stage: 'helper', operation: DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE
+      });
+    }
+    return Object.freeze(sequences.map(({ sequence }, index) => record(recordIds[index], sequence)));
+  })
+);
 
 // The SHA-256 of a ring file's FASTA, the LOSAT cache key Generate builds from
 // it (OV-1565): digested once per File, beside its FASTA. Only Generate asks.

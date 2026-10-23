@@ -7,9 +7,8 @@ import {
 } from './conservation-series.js';
 import {
   gffFastaReaderSelector,
-  parseSequenceRecordsFast,
   readAllSequenceRecords,
-  readComparisonSequence
+  readComparisonSequenceRecords
 } from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
 import { t } from '../utils/i18n.js';
@@ -1117,30 +1116,21 @@ const readInputSequenceRecords = async (file, inputType) => {
     .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
 };
 
-/** @param {unknown} error */
-const isUnreadableInput = (error) => (
-  typeof error === 'object' && error !== null && /** @type {{ code?: unknown }} */ (error).code === 'INPUT_UNREADABLE'
-);
-
 /**
- * A comparison genome's records as the drawing reads them: the comparison reader (`read_comparison_sequence_file`,
- * through `readComparisonSequence`, once per File) writes its LOSAT query FASTA as `>ID` and the sequence, so its
- * records are the ones the ring searched, for a FASTA, GenBank or DDBJ file, with or without a byte order mark.
- * A file the reader refuses as unreadable gives no sources, and the other sources stay.
+ * A comparison genome's records as the ring search read them (`readComparisonSequenceRecords`, once per File): the
+ * browser's for a FASTA file it reads exactly, the comparison reader's for the others. A file that cannot be read
+ * gives no sources, and the other sources stay.
  * @param {FileLike | null} file null for a comparison file that was never supplied.
  * @returns {Promise<InputSequenceRecord[]>}
  */
 const readComparisonRecords = async (file) => {
   if (!file) return [];
-  let fasta;
   try {
-    ({ fasta } = await readComparisonSequence({ file }));
-  } catch (error) {
-    if (isUnreadableInput(error)) return [];
-    throw error;
+    return (await readComparisonSequenceRecords(file))
+      .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
+  } catch {
+    return [];
   }
-  return parseSequenceRecordsFast(fasta, 'fasta')
-    .map(({ id, sequence }) => ({ recordId: id, aliases: [id], sequence }));
 };
 
 /**
