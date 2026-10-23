@@ -20,7 +20,7 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = { createElement: () => ({ click: () => {} }) };
+globalThis.document = { createElement: () => ({ click: () => {} }), querySelector: () => null };
 installFakeSvgDom();
 globalThis.File = File;
 

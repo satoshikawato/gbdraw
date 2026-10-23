@@ -3040,7 +3040,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
 test('two Linear Generates from one state draw a Depth row at the same height', async () => {
   const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.lInputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'row-height';
@@ -3120,7 +3120,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
 // Depth color of series 1 (OV-1510).
 test('Circular Generate gives a Depth series without settings its default color', async () => {
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'circular-series';
@@ -3156,6 +3156,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
     ),

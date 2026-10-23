@@ -300,7 +300,7 @@ test('hiding the only feature of one color of a caption written in several color
     prepareMatches(state, rules);
     const { biological: features } = resultCatalogFeatures(state);
     hidden.forEach((id) => setFeatureVisibilityOverride(
-      state.featureOverrides, features.find((feature) => feature.biological_feature_id === id), 'off'
+      editsOf(state.featureOverrides), features.find((feature) => feature.biological_feature_id === id), 'off'
     ));
     return resultLegendSources(state, {
       ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),

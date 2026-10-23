@@ -465,7 +465,7 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
   resetDrawings();
   const loaded = await load(fixture);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   const plain = (value) => JSON.parse(JSON.stringify(value));
   const read = () => ({
     rules: plain(drawing.manualSpecificRules), priority: plain(drawing.manualPriorityRules),
