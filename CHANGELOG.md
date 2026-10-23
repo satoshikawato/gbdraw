@@ -42,10 +42,23 @@ write-up of a release.
   filter) and LOSAT raw-cache keys change for runs that draw some records of
   a file, one record of it, or a crop; they now equal the web app's, so a
   Session saved from the command line opened in the web app reuses its ring
-  LOSAT results.
-- Fixed: Circular similarity ring hits on a cropped or reverse-complemented
-  record are drawn at their place in the record; they were drawn as if the
-  record were uncropped and on its source strand.
+  LOSAT results. The ring rows stay in the search frame of the drawn record,
+  so `--losat_output_dir`, `conservation.tsv`, and Sessions hold the same
+  frame as before; the raw-cache entries keep the whole-file search output.
+- Fixed: Circular similarity rings (PD-OI-073).
+  - Every ring table (an uploaded table, `--conservation_table`, the ring
+    tables of a Session) is read in the search frame of the drawn record: the
+    record after its crop, on its source strand, 1-based. On a
+    reverse-complemented record the hits are drawn at their place; they were
+    drawn mirrored. A row outside the drawn record is skipped with a warning.
+  - In the web app, ring LOSAT hits on a cropped record are drawn at their
+    place: Generate converts the whole-file search rows to the search frame
+    with the same Python code as the command line, and a Session stores the
+    converted rows. A Session saved by 0.14.0 with a crop and ring LOSAT
+    draws as it did in 0.14.0 until the next Generate, which reuses the raw
+    LOSAT cache and converts the rows.
+  - The web app's message for a ring LOSAT input error says to use the
+    reference file as the subject.
 - Fixed: LOSAT, the Circular conservation database, and restored match
   sequences now read the same records as the drawing when a GenBank file holds
   a record without a sequence, a file starts with a UTF-8 byte order mark, or a

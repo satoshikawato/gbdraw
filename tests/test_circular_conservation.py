@@ -282,37 +282,37 @@ def test_conservation_normalization_uses_subject_reverse_coordinates() -> None:
 @pytest.mark.parametrize(
     ("drawn", "length", "coord_base", "coord_step", "expected"),
     [
-        # Hits at source 101-150, 581-620 (crosses 601) and 601-700 of a 1000 bp record.
-        ("whole record", 1000, 1, 1, [(100.0, 150.0), (580.0, 620.0), (600.0, 700.0)]),
-        ("region 601-800", 200, 601, 1, [(0.0, 20.0), (0.0, 100.0)]),
-        ("reverse complement", 1000, 1000, -1, [(850.0, 900.0), (380.0, 420.0), (300.0, 400.0)]),
-        ("region 601-800 reverse complemented", 200, 800, -1, [(180.0, 200.0), (100.0, 200.0)]),
+        # Rows F 11-60, F 120-81 (reverse strand) and F 281-320 (crosses the end of a 300 bp record).
+        ("whole record", 300, 1, 1, [(10.0, 60.0), (80.0, 120.0), (280.0, 300.0)]),
+        # A crop to 501-800 of a 1000 bp record: the rows are in the cropped record's coordinates.
+        ("region 501-800", 300, 501, 1, [(10.0, 60.0), (80.0, 120.0), (280.0, 300.0)]),
+        ("reverse complement", 300, 300, -1, [(240.0, 290.0), (180.0, 220.0), (0.0, 20.0)]),
+        ("region 501-800 reverse complemented", 300, 800, -1, [(240.0, 290.0), (180.0, 220.0), (0.0, 20.0)]),
     ],
 )
-def test_conservation_hits_are_placed_through_the_record_coordinate_map(
+def test_conservation_hits_are_read_in_the_search_frame(
     drawn: str,
     length: int,
     coord_base: int,
     coord_step: int,
     expected: list[tuple[float, float]],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Ring rows are in the coordinates of the whole source record (OV-1683)."""
+    """Ring rows are in the drawn record after its crop, on its source strand (PD-OI-073)."""
 
     result = load_conservation_sources(
         blast_config=_BlastConfig(),
         conservation_dataframes=[
             _comparison_frame([
-                _hit(sstart=101, send=150),
-                _hit(sstart=620, send=581),
-                _hit(sstart=601, send=700),
+                _hit(sstart=11, send=60),
+                _hit(sstart=120, send=81),
+                _hit(sstart=281, send=320),
             ])
         ],
         labels=["subject hits"],
     )
     record = _record(length=length)
     record.annotations.update({"gbdraw_coord_base": coord_base, "gbdraw_coord_step": coord_step})
-    if length != 1000:
+    if coord_base not in {1, length}:
         record.annotations.update({"gbdraw_region_applied": True, "gbdraw_source_length": 1000})
 
     hits = normalize_conservation_tracks_for_record(
@@ -320,27 +320,33 @@ def test_conservation_hits_are_placed_through_the_record_coordinate_map(
     )[0].hits
 
     assert [(row.draw_start, row.draw_end) for row in hits.itertuples()] == expected, drawn
-    # A hit outside the drawn region is not an invalid hit.
-    assert "invalid conservation hit" not in caplog.text
-    # The source coordinates and the strand of each hit stay those of the search.
-    whole = {(101, 150): "forward", (581, 620): "reverse", (601, 700): "forward"}
-    assert all(whole[(row.start, row.end)] == row.orientation for row in hits.itertuples())
+    # The table coordinates and the strand of each hit stay those of the table.
+    table = {(11, 60): "forward", (81, 120): "reverse", (281, 320): "forward"}
+    assert all(table[(row.start, row.end)] == row.orientation for row in hits.itertuples())
 
 
-def test_conservation_hit_past_the_source_record_end_is_still_invalid(caplog: pytest.LogCaptureFixture) -> None:
+@pytest.mark.parametrize("coord_base, coord_step", [(501, 1), (800, -1)], ids=["crop", "crop reverse complemented"])
+def test_conservation_hit_outside_the_cropped_record_is_reported(
+    coord_base: int, coord_step: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A row past the end of the drawn record warns: a table made for the uncropped record (PD-OI-073)."""
+
     result = load_conservation_sources(
         blast_config=_BlastConfig(),
-        conservation_dataframes=[_comparison_frame([_hit(sstart=1201, send=1250)])],
+        conservation_dataframes=[_comparison_frame([_hit(sstart=601, send=700), _hit(sstart=101, send=200)])],
         labels=["subject hits"],
     )
-    record = _record(length=1000)
-    record.annotations.update({"gbdraw_coord_base": 1000, "gbdraw_coord_step": -1})
+    record = _record(length=300)
+    record.annotations.update({
+        "gbdraw_coord_base": coord_base, "gbdraw_coord_step": coord_step,
+        "gbdraw_region_applied": True, "gbdraw_source_length": 1000,
+    })
 
     hits = normalize_conservation_tracks_for_record(
         result, displayed_records=[record], record=record, conservation_reference="subject",
     )[0].hits
 
-    assert hits.empty
+    assert [(row.draw_start, row.draw_end) for row in hits.itertuples()] == [(100.0, 200.0)]
     assert "Dropped 1 invalid conservation hit(s)" in caplog.text
 
 

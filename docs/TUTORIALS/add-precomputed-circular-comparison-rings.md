@@ -238,9 +238,9 @@ actions of an `interactive_svg`; it does not change the static rings.
 
 With a LOSAT runtime, gbdraw can run the three searches itself instead of
 reading the frozen tables. `--losat tlosatx` searches each
-`--conservation_sequence` genome (the query) against the displayed human
-record (the subject), so every ring uses the reference genome as its E-value
-database. `--losat_gencode` sets the human table and
+`--conservation_sequence` genome (the query) against the reference file (the
+subject, here the one human record), so every ring uses the whole reference
+file as its E-value database. `--losat_gencode` sets the human table and
 `--conservation_losat_gencode` sets one table per comparison genome, in the
 same order; both default to 1. Drop `--conservation_blast` and
 `--conservation_reference`:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from contextlib import ExitStack
+from dataclasses import replace
 import json
 from pathlib import Path
 import re
@@ -771,3 +772,207 @@ def test_ring_database_without_a_sequence_stops_the_search() -> None:
     with pytest.raises(ValidationError, match="no record with a sequence") as excinfo:
         ring_subject_fasta([SeqRecord(Seq(None, length=20), id="SUBCON")])
     assert _diagnostic(excinfo)["reason"] == "SEQUENCE_MISSING"
+
+
+# Ring tables are in the search frame of the drawn record (PD-OI-073, Owner D-28).
+
+# Whole-file search rows: SUBB 21-40, SUBB 45-60 (crosses the end of a crop to 11-50),
+# SUBB 70-61 (outside it), SUBB 15-5 (reverse, crosses its start), and SUBA 1-20.
+_WHOLE_FILE_RING_ROWS = "".join(
+    f"QUERY1\t{subject}\t99.0\t20\t0\t0\t1\t20\t{sstart}\t{send}\t1e-30\t100\n"
+    for subject, sstart, send in (("SUBB", 21, 40), ("SUBB", 45, 60), ("SUBB", 70, 61), ("SUBB", 15, 5), ("SUBA", 1, 20))
+)
+
+
+def _rows_with_subject_spans(rows: str, spans: list[tuple[int, int] | None]) -> str:
+    """``rows`` with each row's subject span replaced, or left out where the span is None."""
+
+    kept = []
+    for line, span in zip(rows.splitlines(), spans):
+        if span is not None:
+            columns = line.split("\t")
+            columns[8], columns[9] = (str(value) for value in span)
+            kept.append("\t".join(columns) + "\n")
+    return "".join(kept)
+
+
+class _AllHits:
+    evalue = 1.0
+    bitscore = 0.0
+    identity = 0.0
+    alignment_length = 0
+
+
+def _ring_hit_spans(plan) -> list[tuple[float, float]]:
+    from gbdraw.analysis.conservation import (
+        load_conservation_sources,
+        normalize_conservation_tracks_for_record,
+        read_conservation_inputs,
+    )
+
+    loaded = load_conservation_sources(
+        blast_config=_AllHits(),
+        conservation_files=read_conservation_inputs(plan.request.options.conservation_search_results),
+        labels=["ring"],
+    )
+    (track,) = normalize_conservation_tracks_for_record(
+        loaded, displayed_records=plan.records, record=plan.records[0], conservation_reference="subject",
+    )
+    return sorted((row.draw_start, row.draw_end) for row in track.hits.itertuples())
+
+
+@pytest.fixture
+def whole_file_ring_search(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Each ring search returns ``_WHOLE_FILE_RING_ROWS``; the list holds the subject FASTA of each search."""
+
+    import gbdraw.comparisons.circular_losat as circular_losat_module
+
+    subjects: list[str] = []
+
+    def fake_search(_spec, _query_fasta, subject_fasta, **_kwargs):
+        subjects.append(subject_fasta)
+        return _WHOLE_FILE_RING_ROWS
+
+    monkeypatch.setattr(circular_losat_module, "run_losat_search", fake_search)
+    return subjects
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("reverse", [False, True], ids=["crop", "reverse complement crop"])
+def test_ring_rows_of_a_crop_are_a_table_of_the_cropped_record(
+    reverse: bool, tmp_path: Path, whole_file_ring_search: list[str]
+) -> None:
+    """The ring rows are what a search of the cropped record reports; the raw cache keeps the search output."""
+
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.api.requests import RecordPresentation
+    from gbdraw.io.regions import parse_region_spec
+
+    source = GenBankInputSource(path=str(_subject_file(tmp_path)))
+    plan = plan_circular_request(_ring_request(tmp_path, RecordInput(
+        source=source, region=parse_region_spec("SUBB:11-50"),
+        presentation=RecordPresentation(reverse_complement=reverse),
+    )))
+
+    (ring,) = plan.request.options.conservation_search_results
+    # SUBB 21-40 is 11-30 of the 40 bp crop; 45-60 is clipped to 35-40; 15-5 to 5-1; 70-61 and SUBA are left out.
+    assert ring.text == _rows_with_subject_spans(_WHOLE_FILE_RING_ROWS, [(11, 30), (35, 40), None, (5, 1), None])
+    (entry,) = plan.losat_cache_entries
+    assert entry["text"] == _WHOLE_FILE_RING_ROWS
+    expected = [(0.0, 5.0), (10.0, 30.0), (34.0, 40.0)] if not reverse else [(0.0, 6.0), (10.0, 30.0), (35.0, 40.0)]
+    assert _ring_hit_spans(plan) == expected
+
+
+@pytest.mark.circular
+def test_ring_rows_of_an_already_cropped_in_memory_record_planned_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, whole_file_ring_search: list[str]
+) -> None:
+    """A materialized crop is searched as given; its rows land where a search of the file puts them (review N3)."""
+
+    import gbdraw.comparisons.circular_losat as circular_losat_module
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.io.regions import parse_region_spec
+
+    first = plan_circular_request(_ring_request(tmp_path, RecordInput(
+        source=GenBankInputSource(path=str(_subject_file(tmp_path))), region=parse_region_spec("SUBB:11-50"),
+    )))
+    # The database is the 40 bp crop as given: the search reports SUBB 21-40 of the file as 11-30.
+    crop_rows = _rows_with_subject_spans(_WHOLE_FILE_RING_ROWS, [(11, 30), None, None, None, None])
+    monkeypatch.setattr(circular_losat_module, "run_losat_search", lambda *_args, **_kwargs: crop_rows)
+    ring_options = _ring_request(tmp_path, *first.request.records).options
+    again = plan_circular_request(replace(first.request, options=ring_options))
+
+    assert again.request.options.conservation_search_results[0].text == crop_rows
+    assert _ring_hit_spans(again) == [(10.0, 30.0)]
+
+
+def test_ring_rows_conversion_maps_in_memory_database_records_through_their_coordinate_map() -> None:
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.comparisons.circular_losat import ring_rows_in_search_frame
+
+    drawn = SeqRecord(Seq("A" * 40), id="SUBB", annotations={"gbdraw_coord_base": 50, "gbdraw_coord_step": -1})
+    # The database record is the same crop reverse complemented: its 1-20 is source 50-31.
+    database = SeqRecord(Seq("A" * 40), id="SUBB", annotations={"gbdraw_coord_base": 50, "gbdraw_coord_step": -1})
+    rows = "QUERY1\tSUBB\t99.0\t20\t0\t0\t1\t20\t1\t20\t1e-30\t100\n"
+
+    converted = ring_rows_in_search_frame(rows, drawn_records=[drawn], subject_records=[database])
+
+    # Source 50-31 is 40-21 of the crop on its source strand.
+    assert converted == "QUERY1\tSUBB\t99.0\t20\t0\t0\t1\t20\t40\t21\t1e-30\t100\n"
+
+
+def test_ring_rows_conversion_stops_when_one_id_has_two_frames() -> None:
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.comparisons.circular_losat import ring_rows_in_search_frame
+
+    crops = [
+        SeqRecord(Seq("A" * 40), id="SUBB", annotations={"gbdraw_coord_base": base, "gbdraw_coord_step": 1})
+        for base in (11, 31)
+    ]
+    with pytest.raises(ValidationError, match="two records with this ID") as excinfo:
+        ring_rows_in_search_frame(_WHOLE_FILE_RING_ROWS, drawn_records=crops)
+    assert _diagnostic(excinfo) == {"code": "COMPARISON_INPUT", "reason": "UNIQUE_IDS", "field": "records"}
+
+
+@pytest.mark.circular
+def test_cli_session_with_a_crop_and_a_search_frame_ring_table_replays_its_hits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 0.14.0 CLI Session stored crop-frame ring rows; they draw on the crop, as before #1314 (PD-OI-073)."""
+
+    records = tmp_path / "records.tsv"
+    records.write_text(f"gbk\tregion\n{HUMAN}\t501-800\n", encoding="utf-8")
+    table = tmp_path / "ring.tsv"
+    table.write_text("query1\tNC_012920.1\t99.0\t100\t0\t0\t1\t100\t101\t200\t1e-50\t500\n", encoding="utf-8")
+    prefix = tmp_path / "saved"
+    circular_main([
+        "--records_table", str(records), "--conservation_blast", str(table),
+        "--conservation_reference", "subject", "--save_session", "-o", str(prefix), "-f", "svg",
+    ])
+    hit = re.compile(r'<path d="([^"]+)"[^>]*data-sstart="([0-9]+)"')
+    (saved,) = hit.findall(prefix.with_suffix(".svg").read_text(encoding="utf-8"))
+    assert saved[1] == "101"
+
+    def no_runtime(*_args, **_kwargs):
+        raise AssertionError("Session replay resolved a LOSAT runtime.")
+
+    monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
+    replay = tmp_path / "replay"
+    circular_main(["--session", str(prefix.with_suffix(".gbdraw-session.json")), "-o", str(replay), "-f", "svg"])
+    assert hit.findall(replay.with_suffix(".svg").read_text(encoding="utf-8")) == [saved]
+
+
+@pytest.mark.circular
+def test_interactive_ring_popup_reference_span_of_a_crop_slices_the_hit_bases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The popup slices the embedded cropped record at the row's span: the rows are crop-frame (review B3)."""
+
+    import gbdraw.comparisons.circular_losat as circular_losat_module
+    from Bio import SeqIO
+
+    sequence = str(next(SeqIO.parse(str(HUMAN), "genbank")).seq).upper()
+    query = tmp_path / "query.fasta"
+    query.write_text(f">QUERY1\n{sequence[620:700]}\n", encoding="ascii")
+    monkeypatch.setattr(
+        circular_losat_module, "run_losat_search",
+        lambda *_args, **_kwargs: "QUERY1\tNC_012920.1\t100.0\t80\t0\t0\t1\t80\t621\t700\t1e-40\t300\n",
+    )
+    records = tmp_path / "records.tsv"
+    records.write_text(f"gbk\tregion\n{HUMAN}\t501-800\n", encoding="utf-8")
+    prefix = tmp_path / "crop"
+    circular_main([
+        "--records_table", str(records), "--losat", "losatn", "--losat_bin", "/bin/true",
+        "--conservation_sequence", str(query), "-o", str(prefix), "-f", "interactive_svg",
+    ])
+    svg = prefix.with_suffix(".interactive.svg").read_text(encoding="utf-8")
+
+    ((start, end),) = {(int(s), int(e)) for s, e in re.findall(r'"sstart":"(\d+)","send":"(\d+)"', svg)}
+    reference = re.findall(r'"sequence":"([ACGTN]+)"', svg)[0]
+    assert len(reference) == 300
+    # The interactive runtime slices the embedded reference at sstart..send (buildEmbeddedMatchEntry).
+    assert reference[start - 1:end] == sequence[620:700]

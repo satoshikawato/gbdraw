@@ -361,7 +361,7 @@ def _get_args(
         metavar='CODE',
         type=parse_positive_int,
         default=None,
-        help='TLOSATX genetic code of the displayed (reference) records with --losat tlosatx (default: 1).',
+        help='TLOSATX genetic code of the reference file with --losat tlosatx (default: 1).',
     )
     parser.add_argument(
         '--conservation_losat_gencode',
@@ -403,8 +403,9 @@ def _get_args(
         metavar='DIR',
         default=None,
         help=(
-            'Write the raw LOSAT evidence to DIR; requires --losat. One TSV per ring '
-            'and conservation.tsv, which --conservation_table accepts unchanged.'
+            'Write the ring tables of the LOSAT search to DIR; requires --losat. One TSV per ring, '
+            'in the search frame of the drawn records, and conservation.tsv, which '
+            '--conservation_table accepts unchanged.'
         ),
     )
     _add_comparison_filter_args(parser)

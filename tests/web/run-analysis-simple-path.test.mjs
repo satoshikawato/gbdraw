@@ -86,6 +86,33 @@ const workerResponses = [];
 const workerHelperResponses = [];
 const workerMessages = [];
 
+/** The bytes of every resource the page staged, by content token: a held resource is not staged again. */
+const stagedBytesByToken = () => new Map(workerMessages.flatMap(({ payload }) => (payload?.stagedResources || [])
+  .map(({ cacheToken, bytes }) => [cacheToken, bytes])));
+/** The latest ring table conversion message: its request, ring table IDs, and staged resources (base64 by ID). */
+const ringTableConversionInput = () => {
+  const { canonicalRequest, resourceIds, resourceManifest } = workerMessages
+    .findLast(({ type, operation }) => type === 'helper' && operation === 'convertRingTablesToSearchFrame').payload;
+  const bytes = stagedBytesByToken();
+  const resources = Object.fromEntries(resourceManifest.map(({ resourceId, cacheToken }) => [
+    resourceId, Buffer.from(bytes.get(cacheToken)).toString('base64')
+  ]));
+  return { canonicalRequest, resourceIds, resources };
+};
+/** The Worker's reply to a ring table conversion whose rows are already in the search frame. */
+const ringTablesUnchanged = {
+  then(resolve, reject) {
+    try {
+      const { resourceIds, resources } = ringTableConversionInput();
+      resolve({ ok: true, result: { resources: Object.fromEntries(resourceIds.map((resourceId) => [
+        resourceId, { data: resources[resourceId], size: Buffer.from(resources[resourceId], 'base64').length }
+      ])) } });
+    } catch (error) {
+      reject(error);
+    }
+  }
+};
+
 const assertDownloadedFilesMatchCommands = (runInfo, entries) => {
   const expected = runInfo.helperFiles.map(({ name }) => name).sort();
   const downloaded = entries.map(({ name }) => name).sort();
@@ -1735,6 +1762,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // Add Seq reads the first ring file with the same reader before Generate,
     // which reuses that read (OV-1545).
     assert.equal((await readComparisonSequence({ file: comparisonViews[0] })).fasta, comparisonTexts[0]);
+    workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(),
@@ -1742,11 +1770,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
-    // Every ring file goes through the one Python reader (no JavaScript reader), once.
+    // Every ring file goes through the one Python reader (no JavaScript reader), once; Python then puts the
+    // ring rows in the search frame.
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
         .map(({ operation }) => operation),
-      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence', 'convertRingTablesToSearchFrame']
     );
     assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
@@ -1778,6 +1807,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const helperMessagesBeforeRepeat = workerMessages.filter(({ type }) => type === 'helper').length;
     resourceMetrics.splice(0);
     const repeatResult = result('lazy-circular-repeat.svg', 'lazy-circular-repeat');
+    workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(repeatResult, validCatalog(repeatResult.name)));
     const repeatWatch = await watchLosatPreparation(async () => assert.deepEqual(
       await runner.runAnalysis(),
@@ -1787,9 +1817,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // OV-1565: the ring sequences' digests are kept with their FASTA, so no ring FASTA is digested again.
     assert.equal(repeatWatch.fastaDigests, 0);
     assert.equal(losatCalls, 0);
-    assert.equal(
-      workerMessages.filter(({ type }) => type === 'helper').length,
-      helperMessagesBeforeRepeat
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'helper').slice(helperMessagesBeforeRepeat)
+        .map(({ operation }) => operation),
+      ['convertRingTablesToSearchFrame']
     );
     assert.deepEqual(
       resourceMetrics.filter(({ name, resourceId }) => name === 'resourceTextReadCount'
@@ -1813,15 +1844,17 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // The record list of the new reference, then the subject database.
     workerHelperResponses.push(
       { ok: true, result: { records: [{ selector: '#1', record_id: 'BOMB', record_length: 8 }] } },
-      { ok: true, result: { records: [{ id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }] } }
+      { ok: true, result: { records: [{ id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }] } },
+      ringTablesUnchanged
     );
     const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
     workerResponses.push(response(bomReferenceResult, validCatalog(bomReferenceResult.name)));
     assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeBomReference)
-        .map(({ operation, payload }) => [operation, payload.format, payload.files.map(({ role }) => role)]),
-      [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']]]
+        .map(({ operation, payload }) => [operation, payload.format, payload.files?.map(({ role }) => role)]),
+      [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']],
+        ['convertRingTablesToSearchFrame', undefined, undefined]]
     );
     assert.equal(workerHelperResponses.length, 0);
     assert.ok(capturedSequences.includes('>BOMB\nCCCCGGGG\n'), JSON.stringify(capturedSequences));
@@ -2649,15 +2682,16 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   }
 });
 
-test('the Circular ring subject database and its raw cache key equal the CLI ones (D-25)', async () => {
+test('the Circular ring subject database, its raw cache key and the ring rows equal the CLI ones (D-25, D-28)', async () => {
   // The Python oracle plans the CLI request that draws what each Web state below draws (records OFF, a single
   // presentation, a crop, GFF3 with an unnamed FASTA entry, a byte order mark) and returns the subject FASTA its
-  // ring search reads, the raw cache key, and the Worker helper's reply for a file the browser reader declines.
-  const oracle = spawnSync(
-    process.env.PYTHON || 'python',
-    ['tests/web/circular-ring-subject-oracle.py'],
-    { cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }
-  );
+  // ring search reads, the raw cache key, the ring rows the CLI keeps for the same search output, and the Worker
+  // helper's reply for a file the browser reader declines.
+  const oracleOptions = {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: /** @type {const} */ ('utf8'),
+    maxBuffer: 16 * 1024 * 1024
+  };
+  const oracle = spawnSync(process.env.PYTHON || 'python', ['tests/web/circular-ring-subject-oracle.py'], oracleOptions);
   assert.equal(oracle.status, 0, `Python ring subject oracle failed:\n${oracle.stderr}`);
   const { query, cases } = JSON.parse(oracle.stdout);
   const webStates = {
@@ -2707,11 +2741,26 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
   }));
   /** @type {{ subject: string, cacheKeys: string[] } | null} */
   let searched = null;
+  let searchOutput = '';
   const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
   globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
     const subjectKey = [...options.sequences.keys()].find((key) => key.startsWith('circular-subject:'));
     searched = { subject: options.sequences.get(subjectKey), cacheKeys: jobs.map(({ cacheKey }) => cacheKey) };
-    return jobs.map(({ cacheKey }) => ({ cacheKey, text: '' }));
+    return jobs.map(({ cacheKey }) => ({ cacheKey, text: searchOutput }));
+  };
+  // The Worker's ring table conversion runs the Python helper on the request and the resources the page staged.
+  const ringTableConversion = {
+    then(resolve, reject) {
+      try {
+        const converted = spawnSync(process.env.PYTHON || 'python', ['tests/web/circular-ring-subject-oracle.py', '--convert'], {
+          ...oracleOptions, input: JSON.stringify(ringTableConversionInput())
+        });
+        assert.equal(converted.status, 0, `Python ring table conversion failed:\n${converted.stderr}`);
+        resolve({ ok: true, result: JSON.parse(converted.stdout) });
+      } catch (error) {
+        reject(error);
+      }
+    }
   };
   // The ring query is read once, by the Python reader, for every case.
   workerHelperResponses.push({
@@ -2728,8 +2777,8 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
       Object.assign(state.files, {
         c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
       });
-      state.circularRecordList.value = testCase.helperReply.records.map(({ id, sequence }, recordIndex) => ({
-        selector: `#${recordIndex + 1}`, record_id: id, record_length: sequence.length
+      state.circularRecordList.value = testCase.recordList.map(({ id, length }, recordIndex) => ({
+        selector: `#${recordIndex + 1}`, record_id: id, record_length: length
       }));
       Object.assign(state.circularRecordDiscovery, {
         status: 'ready', error: '', inputType: gff ? 'gff' : 'gb',
@@ -2746,13 +2795,26 @@ test('the Circular ring subject database and its raw cache key equal the CLI one
       if (testCase.name === 'byte order mark') {
         workerHelperResponses.push({ ok: true, result: testCase.helperReply });
       }
+      workerHelperResponses.push(ringTableConversion);
       searched = null;
+      searchOutput = testCase.rawRows;
+      const messagesBefore = workerMessages.length;
       const caseResult = result(`ring-subject-${index}.svg`, `ring-subject-${index}`);
       workerResponses.push(response(caseResult, validCatalog(caseResult.name)));
       assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, `${testCase.name}: ${JSON.stringify(state.errorLog.value)}`);
       assert.equal(workerHelperResponses.length, 0, testCase.name);
       assert.equal(searched?.subject, testCase.cliSubjectFasta, testCase.name);
       assert.deepEqual(searched?.cacheKeys, [testCase.cliCacheKey], testCase.name);
+      // One conversion per Generate; the request renders (and a Session saves) the CLI's ring rows, and the raw
+      // LOSAT cache keeps the search output.
+      const caseMessages = workerMessages.slice(messagesBefore);
+      assert.deepEqual(caseMessages.filter(({ type, operation }) => type === 'helper'
+        && operation === 'convertRingTablesToSearchFrame').map(({ payload }) => payload.resourceIds),
+      [['conservation-resolved-blast-1']], testCase.name);
+      const run = caseMessages.findLast(({ type }) => type === 'run').payload;
+      const ring = run.resourceManifest.find(({ resourceId }) => resourceId === 'conservation-resolved-blast-1');
+      assert.equal(Buffer.from(stagedBytesByToken().get(ring.cacheToken)).toString('utf8'), testCase.cliRingRows, testCase.name);
+      assert.deepEqual([...state.losatCache.value.values()].map(({ text }) => text), [testCase.rawRows], testCase.name);
     }
   } finally {
     workerHelperResponses.splice(0);

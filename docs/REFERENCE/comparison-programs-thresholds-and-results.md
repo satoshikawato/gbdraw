@@ -36,8 +36,14 @@ record) is left out. Turning records off, drawing one record of the file, or
 a crop does not change ring E-values, and the subject gets the web app's
 raw-cache key. With several reference files, each file is searched whole, in
 input order; records passed to the Python API in memory are searched as
-given. Ring rows are in the coordinates of the whole reference records, and a
-cropped or reverse-complemented record draws them at their place in it. A comparison
+given. The search reports positions on the whole reference file; gbdraw puts
+each row in the search frame of the record it draws (the record after its
+crop, on its source strand, 1-based), the frame of every ring table, and leaves
+out rows of records that are not drawn or wholly outside a crop. The web app
+converts the rows with the same Python code before Generate renders them. The
+ring tables of `--losat_output_dir`, `conservation.tsv`, and a Session hold
+these rows; the raw LOSAT cache and **Save Raw LOSAT TSV** keep the whole-file
+search output. A comparison
 FASTA with ID-only headers and 60-column uppercase lines, like the tutorial
 files, gets the web app's raw-cache key; other FASTA layouts and GenBank or
 DDBJ files give the same rows under a different key. Precomputed rings read
@@ -193,7 +199,10 @@ Inspect warnings and the raw search rows before relaxing thresholds.
 
 ## Raw results and cache identity
 
-**Save Raw LOSAT TSV** and `--losat_output_dir` preserve raw search rows.
+**Save Raw LOSAT TSV** and the Linear `--losat_output_dir` preserve raw search
+rows. For Circular rings, the raw rows are the search output on the whole
+reference file, and the ring tables are in the search frame of the drawn
+records.
 Generated protein results replace session-only runtime handles with stable
 percent-encoded protein or feature aliases. Export fails if a handle cannot be
 resolved safely. An uploaded comparison table is not rewritten.

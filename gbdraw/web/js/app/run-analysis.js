@@ -9,6 +9,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
@@ -108,7 +109,8 @@ import { requireLinearLabelVisibilityMode } from '../services/linear-label-visib
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
-import { bytesToBase64, bytesToText, sha256Hex, textToBytes } from '../services/byte-utils.js';
+import { base64ToBytes, bytesToBase64, bytesToText, sha256Hex, textToBytes } from '../services/byte-utils.js';
+import { readConvertedResources, withConvertedResources } from '../services/main-session-comparison-frame.js';
 import { askBeforeLargeDownload, downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -440,6 +442,9 @@ export const buildLosatCachePayload = ({
  *   recordPairs: number[][], members: LosatLinearJob[]
  * }} LosatSourceJob
  */
+
+// The Worker conversion of Generate's ring LOSAT rows (`circular_ring_tables_in_search_frame_json`).
+const RING_TABLE_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation: 'convertRingTablesToSearchFrame' });
 
 /**
  * One circular conservation comparison, resolved to the BLAST text the request carries.
@@ -2769,6 +2774,11 @@ export const createRunAnalysis = ({
       const resolvedComparisons = [];
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
+      /**
+       * The Source recipe's generated BLAST table of each ring LOSAT search, in ring order.
+       * @type {{ path: string, name: string, slot: string }[]}
+       */
+      const circularRingCliFiles = [];
       /** @type {Map<string, GeneratedCliFile>} */
       const generatedCliFileMap = new Map();
       const textEncoder = new TextEncoder();
@@ -3226,8 +3236,10 @@ export const createRunAnalysis = ({
               const cached = cacheMap.get(pair.cacheKey);
               const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
-              // Its name is the Source recipe's name for this ring's generated BLAST table.
-              recordGeneratedCliFile(blastPath, blastText, {
+              // Its name is the Source recipe's name for this ring's generated BLAST table, recorded once the
+              // request holds the table in the search frame.
+              circularRingCliFiles.push({
+                path: blastPath,
                 name: pair.filename,
                 slot: `generatedFiles.circular_conservation_blasts[${pair.sourceIndex}]`
               });
@@ -4826,6 +4838,27 @@ export const createRunAnalysis = ({
         inheritCommittedComparisonIntent({
           candidate: canonical,
           committed: getCommittedCanonicalSession()
+        });
+      }
+      // A ring LOSAT search reports positions on the whole reference file (D-25); Python puts its rows in the
+      // search frame of the records this request draws, as every ring table is (PD-OI-073), before the request
+      // renders or is saved. The raw LOSAT cache keeps the search output.
+      const ringTableIds = resolvedCircularConservation.length > 0 && canonical.renderRequest.mode === 'circular'
+        ? (canonical.renderRequest.diagramOptions.conservationBlastFiles ?? []).map(({ resourceId }) => resourceId)
+        : [];
+      if (ringTableIds.length > 0) {
+        const reply = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME, {
+          resourceIds: ringTableIds, canonicalRequest: canonical.renderRequest, resources: canonical.resources
+        });
+        throwIfGenerationCanceled();
+        const converted = readConvertedResources(reply, RING_TABLE_CONVERSION);
+        if (ringTableIds.some((resourceId) => !converted.has(resourceId))) {
+          throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
+        }
+        canonical.resources = await withConvertedResources(canonical.resources, converted);
+        ringTableIds.forEach((resourceId, index) => {
+          const { path, ...file } = circularRingCliFiles[index];
+          recordGeneratedCliFile(path, bytesToText(base64ToBytes(/** @type {ConvertedResource} */ (converted.get(resourceId)).data)), file);
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');

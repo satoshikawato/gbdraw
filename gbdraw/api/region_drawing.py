@@ -66,7 +66,7 @@ _LINEAR_COMPARISON_INPUTS = (
     "collinearity_blocks",
     "comparison_table_file",
 )
-# Ring results are in the coordinates of the whole record; the plan is ring-aligned.
+# Ring results are in the search frame of the source drawing's records; the plan is ring-aligned.
 _RING_RESULTS = (
     "conservation_blast_files",
     "conservation_dataframes",
@@ -237,7 +237,7 @@ def derive_region_drawing(
                 values.update(dict.fromkeys(_RING_RESULTS))
                 if options.losat_search is None:
                     values.update(dict.fromkeys(_RING_PLAN))
-                    dropped.append("The conservation ring tables (they use the coordinates of the whole record).")
+                    dropped.append("The conservation ring tables (they use the coordinates of the source records).")
         elif _has_any(options, _LINEAR_COMPARISON_INPUTS) or getattr(options, "losat_search", None) is not None:
             dropped.append("The comparisons of the Linear drawing.")
         request = CircularDiagramRequest(

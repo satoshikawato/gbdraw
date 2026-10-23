@@ -233,6 +233,17 @@ def _source_to_local_index(
     return (source - coord_base) * coord_step
 
 
+def _record_source_start(record: SeqRecord) -> int:
+    """The 1-based source position of a record's first base on its source strand.
+
+    It is where the record's search frame starts (PD-OI-073): the crop start of
+    a cropped record, also after a reverse complement, and 1 for a whole record.
+    """
+
+    coord_base, coord_step = _read_coord_map(record)
+    return coord_base if coord_step == 1 else coord_base - len(record.seq) + 1
+
+
 def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
