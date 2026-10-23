@@ -1040,6 +1040,27 @@ def test_a_failed_render_does_not_keep_an_input_it_changed(tmp_path: Path) -> No
         ) is rebuilt
 
 
+def test_an_input_the_commit_rejected_is_checked_and_counted_once(tmp_path: Path) -> None:
+    # The commit check rejects the changed input and fails the request; keeping
+    # the failed request's inputs does not check (or count) that input again.
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity("record-1", "render-resource-1", 8)
+    cache = PreparedBiologicalInputCache()
+    diagnostics: dict[str, object] = {"metrics": {}}
+    changed = (_record("changed"),)
+    with pytest.raises(ValidationError, match="ownership was mutated"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(("source", identity), frozenset({identity}), lambda: changed)
+            _replace_first_feature(changed)
+    metrics = diagnostics["metrics"]
+    assert isinstance(metrics, dict)
+    assert metrics["preparedInputCacheMutationViolationCount"] == 1
+    assert metrics["preparedInputCacheFullCheckCount"] == 1
+    assert not cache._layers["parsed"]
+    _assert_running_total_matches_a_recount(cache)
+
+
 def _label_fit_document(source: Path, overrides: dict[str, object]) -> dict[str, object]:
     return build_session_document(
         CircularDiagramRequest(

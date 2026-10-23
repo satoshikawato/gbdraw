@@ -603,6 +603,8 @@ class PreparedBiologicalInputCache:
         key: Hashable,
         transaction: _PreparedCacheTransaction,
     ) -> None:
+        # A rejected value this request built is not kept when it fails either.
+        transaction.pending[layer].pop(key, None)
         entry = self._layers[layer].pop(key, None)
         if entry is not None:
             self._retained_total -= entry.retained_bytes
