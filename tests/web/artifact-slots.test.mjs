@@ -16,10 +16,10 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { ARTIFACT_SLOT_KEYS, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { readFile } = await import('node:fs/promises');
 
-const snapshots = createHistorySnapshotService({ state, fileStore: createHistoryFileStore() });
+const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
 snapshots.setGeneratedArtifactRuntimeOwner({
   capture: () => ({ canonical: canonicalRenderArtifactOwner.capture(), cli: 'circular helper files' }),
   restore: (runtime) => { canonicalRenderArtifactOwner.restore(runtime?.canonical ?? null); }
@@ -201,7 +201,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
 // it does not fall back to the drawing's draft palette.
 test('a null applied palette restored in the shown drawing keeps the displayed palette', async () => {
   const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
-  const service = createHistorySnapshotService({ state, fileStore: createHistoryFileStore(), applyUiStateData });
+  const service = createHistorySnapshotService({ state, fileStore: createInputFileStore(), applyUiStateData });
   installShownDrawing('circular');
   const drawing = modeDrawing(state, 'circular');
   const draftPalette = drawing.selectedPalette.value;

@@ -47,7 +47,7 @@ for (const filename of [
 }
 
 const { createHistoryManager, createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
-const { createHistoryFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
+const { createInputFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
 const { createHistorySnapshotService } = await import(
   pathToFileURL(join(tempDir, 'services', 'history-snapshot.js'))
 );
@@ -775,7 +775,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const file = makeFile('a.gb', 100);
   const first = fileStore.registerFile(file);
   const second = fileStore.registerFile(file);
@@ -975,7 +975,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const file = makeFile('restore.gb', 25);
   const proteinTable = makeFile('resolved-protein.tsv', 40);
   const orthogroupsJson = makeFile('orthogroups.json', 50);
@@ -1354,7 +1354,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   let pendingModeReset = false;
   const mode = {
     _value: 'circular',
@@ -1537,7 +1537,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   let forbiddenArtifactBuilds = 0;
   const state = {
     form: { setting: 1 },
@@ -1700,7 +1700,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const circularPrimary = makeFile('circular-primary.gb', 101);
   const circularDepth = makeFile('circular-depth.tsv', 102);
   const conservationBlast = makeFile('derived-conservation.tsv', 103);
@@ -1798,7 +1798,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const state = {
     form: {},
     adv: {},
@@ -1897,7 +1897,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const resultA = { name: 'a.svg', content: '<svg id="a" />' };
   const extractedA = [{ svg_id: 'feature-a', payload: 'x'.repeat(100_000) }];
   const biologicalA = [{ biological_feature_id: 'bio-a', payload: 'y'.repeat(100_000) }];
@@ -2522,7 +2522,7 @@ for (const previousSuppressed of [false, true]) {
   const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore: createHistoryFileStore(),
+    fileStore: createInputFileStore(),
     nextTick: async () => {
       assert.equal(state.semanticFileWatchersSuppressed.value, true);
       throw new Error('restore did not settle');
@@ -3459,7 +3459,7 @@ for (const previousSuppressed of [false, true]) {
   };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore: createHistoryFileStore(),
+    fileStore: createInputFileStore(),
     nextTick: async () => {},
     buildConfigData: () => ({ form: state.form, adv: state.adv })
   });
@@ -3510,7 +3510,7 @@ for (const previousSuppressed of [false, true]) {
   const fileA = makeFile('a.gb', 10);
   const fileB = makeFile('b.gb', 10);
   const makeRouter = (maxBytes) => {
-    const fileStore = createHistoryFileStore();
+    const fileStore = createInputFileStore();
     const shown = ref('linear');
     const values = { circular: '', linear: '' };
     const files = { circular: null, linear: null };

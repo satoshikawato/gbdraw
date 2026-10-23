@@ -16,10 +16,10 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-resources-'));
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { bindLoadedInputs } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 // A state as the app binds it: each input file is registered in the store and named by its ref.
-const boundState = (source, store = createHistoryFileStore()) => {
+const boundState = (source, store = createInputFileStore()) => {
   const bound = bindLoadedInputs(store, {
     files: source.files || {}, linearSeqs: source.linearSeqs || [],
     linearComparisonPlan: source.linearComparisonPlan || { edges: [] }, circularRecordDiscovery: {}
@@ -149,7 +149,7 @@ const committed = {
 };
 
 // The table cards name their files by ref of the input file store.
-const inputFiles = createHistoryFileStore();
+const inputFiles = createInputFileStore();
 const state = boundState({
   files: {
     c_gb: activeFile,

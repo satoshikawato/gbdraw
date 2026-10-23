@@ -18,7 +18,7 @@ const { analyzeCatalogSequenceSourceCoverage } = await import(
 const { projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
-const { createHistoryFileStore } = await import(
+const { createInputFileStore } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'history-files.js'))
 );
 const { bindLoadedInputs } = await import(
@@ -76,7 +76,7 @@ test('real Vibrio session still projects its embedded records and presentation s
   // Two multi-record GenBank Files, one per row: File order can move and the
   // Record Layout is not custom.
   // The candidate holds Files until Load installs them: bind it as Load does.
-  const inputFiles = createHistoryFileStore({
+  const inputFiles = createInputFileStore({
     sourceOf: (file) => sessionResourceSource(file)?.descriptor
   });
   const { linearSeqs } = bindLoadedInputs(inputFiles, {

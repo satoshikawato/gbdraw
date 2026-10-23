@@ -240,7 +240,7 @@ const {
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
-const { createHistoryFileStore } = await import(
+const { createInputFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
@@ -267,7 +267,7 @@ const {
 
 const artifactSnapshots = createHistorySnapshotService({
   state,
-  fileStore: createHistoryFileStore(),
+  fileStore: createInputFileStore(),
   nextTick: window.Vue.nextTick,
   normalizeLinearSeqList,
   buildUiStateData,

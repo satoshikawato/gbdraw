@@ -74,7 +74,7 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
  *   (`state.js`), so this module imports nothing.
  * @returns {InputFileStore}
  */
-export const createHistoryFileStore = ({ sourceOf = () => null } = {}) => {
+export const createInputFileStore = ({ sourceOf = () => null } = {}) => {
   /** @type {Map<string, { file: HistoryFile, ref: InputFileRef }>} */
   const files = new Map();
   /** @type {WeakMap<HistoryFile, string>} */

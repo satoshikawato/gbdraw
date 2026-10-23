@@ -20,7 +20,7 @@ import {
   updateActiveLayoutPreference
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
-import { createHistoryFileStore } from './services/history-files.js';
+import { createInputFileStore } from './services/history-files.js';
 import { sessionResourceSource } from './services/session-resource-backing.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -300,7 +300,7 @@ const losatThreadingStatus = ref({
 // The project's input file store: History steps and the input bindings name
 // its files by `InputFileRef` (services/history-files.js). The views of one
 // Session resource share its descriptor, so their refs share a `sourceId`.
-const inputFiles = createHistoryFileStore({
+const inputFiles = createInputFileStore({
   sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor
 });
 const losatCache = ref(new Map());

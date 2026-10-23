@@ -13,7 +13,7 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const {
   bindInputFile, bindInputFileList, bindLoadedInputs, boundInputFileIds, registerInputFiles, retainHistoryAndBoundFiles
 } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 
 const fileNamed = (name) => new File([`>${name}\nACGT\n`], name, { type: 'text/plain', lastModified: 7 });
 
@@ -78,7 +78,7 @@ test('the binding writers store each file once and hold refs, dropping places wi
 
 test('the refs of two views of one stored resource share its source; other files keep their own', () => {
   const descriptor = {};
-  const store = createHistoryFileStore({ sourceOf: (file) => file.backing || null });
+  const store = createInputFileStore({ sourceOf: (file) => file.backing || null });
   const first = store.registerFile({ name: 'two-records.gb', size: 9, backing: descriptor });
   const second = store.registerFile({ name: 'two-records.gb', size: 9, backing: descriptor });
   const other = store.registerFile(fileNamed('other.gb'));
@@ -88,7 +88,7 @@ test('the refs of two views of one stored resource share its source; other files
 });
 
 test('a Load installs its Files as refs at install, and a rolled-back ref stays bound', () => {
-  const store = createHistoryFileStore();
+  const store = createInputFileStore();
   const kept = store.registerFile(fileNamed('kept.gb'));
   const genome = fileNamed('genome.gb');
   const depth = fileNamed('depth.tsv');

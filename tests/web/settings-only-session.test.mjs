@@ -8,7 +8,7 @@ import { buildSessionResources } from '../../gbdraw/web/js/services/session-reso
 import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { projectSettingsOnlySession } from '../../gbdraw/web/js/services/session-request.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
-import { createHistoryFileStore } from '../../gbdraw/web/js/services/history-files.js';
+import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
 import { unreadFieldRepairs } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 
@@ -33,7 +33,7 @@ test('auxiliary file bytes and metadata round trip through the existing resource
     name: 'priority.tsv', lastModified: 123456
   });
   // The card names its file by ref of the input file store.
-  const inputFiles = createHistoryFileStore();
+  const inputFiles = createInputFileStore();
   const resources = await buildSessionResources(
     { inputFiles, files: { qualifier_priority: inputFiles.registerFile(file) }, linearSeqs: [] }, null);
   const document = { ...structuredClone(settings), ...resources };

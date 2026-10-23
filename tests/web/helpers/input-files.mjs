@@ -1,9 +1,9 @@
-import { createHistoryFileStore } from '../../../gbdraw/web/js/services/history-files.js';
+import { createInputFileStore } from '../../../gbdraw/web/js/services/history-files.js';
 import { sessionResourceSource } from '../../../gbdraw/web/js/services/session-resource-backing.js';
 import { bindLoadedInputs } from '../../../gbdraw/web/js/services/drawing/inputs.js';
 
 /** An input-file store as state.js builds it: refs of one Session resource share a `sourceId`. */
-export const createTestInputStore = () => createHistoryFileStore({
+export const createTestInputStore = () => createInputFileStore({
   sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor
 });
 
