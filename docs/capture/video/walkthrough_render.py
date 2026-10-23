@@ -580,12 +580,16 @@ class Camera:
     def fixed(self, rect: dict) -> tuple[tuple[float, float, float], tuple[str | None, float]]:
         """The still view that keeps the whole ``rect`` centered, and its inset (corner, opacity).
 
-        It is not clamped to the page: a rect wider than the window shows at the page's height asks the view for
-        more height than the page has, and the composer extends the page's edges.
+        A rect wider than the window shows at the page's height asks the view for more height than the page has,
+        and the composer extends the page's top and bottom edges.
         """
 
         height = max(rect["width"] * FRAME_PAD / self.aspect, rect["height"] * FRAME_PAD)
-        view = (rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2, height)
+        width, page = height * self.aspect, self.viewport[0]
+        # Sideways the view stays inside the page (shifted when it would cross an edge); only up and down it extends.
+        cx = rect["x"] + rect["width"] / 2
+        cx = page / 2 if width >= page else min(max(cx, width / 2), page - width / 2)
+        view = (cx, rect["y"] + rect["height"] / 2, height)
         if not self.layout.inset:
             return view, (None, 0.0)
         # The first corner that leaves the rect clear; both covering it keeps the default corner.

@@ -147,6 +147,10 @@ def test_a_clip_with_a_frame_keeps_the_logged_rects_in_one_still_view() -> None:
     assert (cx, cy) == pytest.approx((789 + 1071 / 2, 627.0)) and height > 1080
     assert cx - width / 2 <= union['x'] and union['x'] + union['width'] <= cx + width / 2
     assert (corner is None) == (alpha == 0.0)
+    # Near the page's right edge the view shifts left instead of running past it.
+    edge = {'x': 600.0, 'y': 500.0, 'width': 1290.0, 'height': 254.0}
+    (cx, _, height), _ = camera.fixed(edge)
+    assert cx + height * PORTRAIT.aspect / 2 == pytest.approx(1920.0) and cx < 600 + 1290 / 2
 
 
 def test_every_align_cut_is_at_the_previews_fit_zoom() -> None:
