@@ -402,15 +402,27 @@ class Recorder:
         self.event("up", x=round(sx, 1), y=round(sy, 1))
 
     def click(self, locator: Locator, *, pause: float = 0.3, left: float | None = None) -> None:
-        """Click the center, or ``left`` CSS px from the left edge (for summaries)."""
+        """Click the center, or ``left`` CSS px from the left edge (for summaries).
+
+        On a busy page a smooth scroll or an opening card can still move the
+        target while the pointer travels to it: the press aims where it settles.
+        """
 
         expect(locator).to_be_visible()
-        box = locator.bounding_box()
-        x, y = _center(box)
-        if left is not None:
-            x = box["x"] + left
-        self._press(x, y, real=True)
+        self.move_to(*self._aim(locator, left))
+        self._press(*self._aim(locator, left, settle=True), real=True)
         self.hold(pause)
+
+    def _aim(self, locator: Locator, left: float | None, *, settle: bool = False) -> tuple[float, float]:
+        box = locator.bounding_box()
+        for _ in range(40 if settle else 0):
+            self.page.wait_for_timeout(40)
+            again = locator.bounding_box()
+            if again == box:
+                break
+            box = again
+        x, y = _center(box)
+        return (box["x"] + left if left is not None else x), y
 
     def click_point(self, x: float, y: float, *, pause: float = 0.3) -> None:
         self._press(x, y, real=True)
