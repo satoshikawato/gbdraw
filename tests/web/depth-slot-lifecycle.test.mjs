@@ -64,7 +64,7 @@ const MODES = {
   circular: {
     create: (rows, sourced, width) => {
       const state = {
-        mode: { value: 'circular' },
+        mode: 'circular',
         form: { track_type: 'tuckin', show_depth: true, suppress_gc: false, suppress_skew: true, show_scale: true, separate_strands: true },
         adv: {
           circular_track_slots_enabled: true,

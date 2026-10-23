@@ -35,7 +35,7 @@ const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot,
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
 
 const circularState = (slots, { showDepth = false, depthFiles = [] } = {}) => withDrawings({
-  mode: { value: 'circular' },
+  mode: 'circular',
   form: { track_type: 'tuckin', show_depth: showDepth, suppress_gc: false, suppress_skew: false, show_scale: true, separate_strands: true },
   adv: {
     circular_track_slots_enabled: true,

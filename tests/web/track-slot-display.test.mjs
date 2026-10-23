@@ -261,7 +261,7 @@ test('Circular editor requests resolved geometry with each public slot ID', () =
   };
   const circularEditor = createCircularTrackSlotEditor({
     state: withDrawings({
-      mode: { value: 'circular' },
+      mode: 'circular',
       form: {
         track_type: 'tuckin', show_depth: true, suppress_gc: false,
         suppress_skew: true, show_scale: true, separate_strands: true
@@ -325,7 +325,7 @@ test('an Overlay annotation row names the rows it follows until Generate resolve
   const geometry = { value: { mode: 'circular', records: [{ resultIndex: 0, recordIndex: 0, slots: resolvedRows }] } };
   const circularEditor = createCircularTrackSlotEditor({
     state: withDrawings({
-      mode: { value: 'circular' },
+      mode: 'circular',
       form: { track_type: 'tuckin', show_depth: false, suppress_gc: false, suppress_skew: true, show_scale: true },
       adv: { circular_track_slots: circularSlots, circular_track_slots_axis_index: 0, nt: 'GC', features: [],
         feature_shapes: {}, depth_tracks: [] },
@@ -404,7 +404,7 @@ test('disabled rows show their estimate in both editors', () => {
     }]
   };
   const circularState = (geometry) => ({
-    mode: { value: 'circular' },
+    mode: 'circular',
     form: {
       track_type: 'tuckin', show_depth: false, suppress_gc: false,
       suppress_skew: true, show_scale: true, separate_strands: true
@@ -510,7 +510,7 @@ const circularNoteEditor = (geometry) => {
   ];
   const editor = createCircularTrackSlotEditor({
     state: withDrawings({
-      mode: { value: 'circular' },
+      mode: 'circular',
       form: { track_type: 'tuckin', show_depth: false, suppress_gc: false, suppress_skew: true, show_scale: true, separate_strands: true },
       adv: {
         circular_track_slots: slots, circular_track_slots_axis_index: 0, nt: 'GC',
@@ -559,12 +559,12 @@ test('Circular notes mark estimates and show measured values after a render (TK-
 // that names it in the slot summary and the legend label placeholder.
 test('an empty slot dinucleotide field shows the dinucleotide of the drawing in both modes', () => {
   const circular = createCircularTrackSlotEditor({ state: withDrawings({
-    mode: { value: 'circular' }, form: { track_type: 'tuckin' },
+    mode: 'circular', form: { track_type: 'tuckin' },
     adv: { circular_track_slots: [], nt: ' at ', depth_tracks: [] },
     files: {}, annotationSets: []
   }) });
   const linear = createLinearTrackSlotEditor({ state: withDrawings({
-    mode: { value: 'linear' }, form: { linear_track_layout: 'middle' },
+    mode: 'linear', form: { linear_track_layout: 'middle' },
     adv: { linear_track_slots: [], nt: ' at ', depth_tracks: [] },
     files: { linearSeqs: [] }, annotationSets: []
   }) });
