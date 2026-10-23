@@ -1336,7 +1336,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 )
         if self.conservation_reference == "query":
             raise ring_input_error(
-                "A ring LOSAT search uses the displayed records as the subject; "
+                "A ring LOSAT search uses the reference file as the subject; "
                 "conservation_reference must be 'auto' or 'subject'.",
                 "conservation_reference",
             )
