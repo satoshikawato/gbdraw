@@ -1440,8 +1440,10 @@ When a moved legend or plot title would pass the canvas edge, the canvas grows
 to hold it with the usual edge margin. The item keeps its offset, nothing else
 moves, and an export has the grown size. The canvas is fitted when the item is
 placed: when you drop it, change the legend side or title position, Generate,
-or Undo or Redo the move. It is never smaller than the automatic canvas, and
-resetting the item's position or **Reset Layout** returns to that canvas. A
+or Undo or Redo the move. Loading a Session or showing another Result keeps
+each Result's canvas as it was saved. The canvas is never smaller than the
+automatic canvas, and resetting the item's position or **Reset Layout**
+returns to that canvas. A
 moved Linear scale does not grow the canvas. A moved item may still overlap
 another item, and a moved Linear scale may clip at an edge; adjust canvas
 padding, which Generate keeps, or reset its position. A Linear legend side

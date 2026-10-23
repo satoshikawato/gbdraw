@@ -1,8 +1,10 @@
 // Owner, 2026-10-23: 「キャンバスを適宜拡張などするのが好ましい。」 A moved Legend or
 // plot title keeps its offset and the canvas grows to hold it. The canvas
 // is the union of the automatic canvas and each moved item's bounds plus the
-// edge padding, never smaller than the automatic canvas, computed when the
-// item is placed (drop, position change, Generate, Session load).
+// edge padding, never smaller than the automatic canvas, computed when an
+// item is placed (drop, position change, Generate and rerenders, resets,
+// Undo/Redo). Loading a Session or showing a stored Result keeps the Result as
+// it was saved (PD-OI-052).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -14,9 +16,14 @@ import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas,
+  normalizeLegacyComposition,
   resetCompositionUserDeltas
 } from '../../gbdraw/web/js/app/legend-layout/composition-actions.js';
 import { captureDecorationContinuity } from '../../gbdraw/web/js/app/legend-layout/decoration-continuity.js';
+import { createLegendCanvasActions } from '../../gbdraw/web/js/app/legend-layout/canvas-actions.js';
+import { createDiagramDragActions } from '../../gbdraw/web/js/app/legend-layout/diagram-drag.js';
+import { createLegendDragActions } from '../../gbdraw/web/js/app/legend/drag-actions.js';
+import { createLegendLayout } from '../../gbdraw/web/js/app/legend-layout.js';
 
 installFakeSvgDom();
 
@@ -115,7 +122,7 @@ test('OV-1631: a Legend Position change keeps the drag offset and the canvas hol
   assert.equal(svg.getAttribute('height'), `${height}px`);
 });
 
-test('Generate gives the moved Legend the same canvas as the in-place edit (live == Generate)', () => {
+test('Generate fits the canvas of a carried Legend offset as the drop does', () => {
   const live = resultSvg();
   applyCompositionUserDeltas(live, { legend: [-200, 10] });
   applyCanvasToSvg(live, {});
@@ -132,4 +139,116 @@ test('Generate gives the moved Legend the same canvas as the in-place edit (live
   assert.deepEqual(root(candidate), root(live));
   assert.equal(root(candidate).viewBox, '-76 0 262 152', 'Generate grows the canvas without canvas padding');
   assert.equal(legendAt(candidate), legendAt(live));
+});
+
+test('a legacy-normalized Result keeps its canvas when its Legend moves', () => {
+  const svg = new DOMParser().parseFromString([
+    '<svg viewBox="0 0 200 100" width="200px" height="100px">',
+    '<g id="record" transform="translate(10,20)"></g>',
+    '<g id="legend" transform="translate(150,5)"></g>',
+    '</svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const binding = normalizeLegacyComposition(svg, { legendSide: 'right', titleSide: 'none' });
+  assert.equal(binding.metadata.legacyNormalized, true);
+  applyCompositionUserDeltas(svg, { legend: [5, 0] });
+  assert.equal(applyCanvasToSvg(svg, {}, { binding }), false);
+  assert.deepEqual(root(svg), { viewBox: '0 0 200 100', width: '200px', height: '100px', base: null });
+});
+
+const ref = (value) => ({ value });
+const appState = (svg, canvasPadding = {}) => {
+  const state = Object.fromEntries([
+    'results', 'selectedResultIndex', 'diagramElements', 'diagramElementIds', 'diagramElementOriginalTransforms',
+    'diagramDragging', 'lengthBarElement', 'lengthBarOriginalTransform', 'plotTitleElement', 'plotTitleDragging',
+    'plotTitleAutoTransform', 'generatedLegendPosition', 'legendDragging', 'legendOriginalTransform',
+    'legendInitialTransform', 'svgContent'
+  ].map((key) => [key, ref(null)]));
+  for (const key of ['diagramOffset', 'diagramDragStart', 'lengthBarUserOffset', 'plotTitleDragStart',
+    'plotTitleUserOffset', 'legendDragStart', 'legendCurrentOffset']) state[key] = { x: 0, y: 0 };
+  Object.assign(state, {
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
+    layoutRepositionMode: ref(true),
+    zoom: ref(1),
+    results: ref([{ id: 'r1' }]),
+    activeDrawing: () => ({ canvasPadding })
+  });
+  return state;
+};
+
+test('showing a stored Result with an off-canvas offset changes nothing and commits nothing', () => {
+  // A Result saved before the canvas grew, with this padding and with none.
+  for (const padding of [{}, { top: 0, right: 10, bottom: 0, left: 10 }]) {
+    const svg = resultSvg();
+    applyCanvasToSvg(svg, padding);
+    applyCompositionUserDeltas(svg, { legend: [-200, 10] });
+    const stored = root(svg);
+    const commits = [];
+    const actions = createLegendCanvasActions({ state: appState(svg, padding), commitActiveResultEdit: (reason) => Boolean(commits.push(reason)) });
+    assert.equal(actions.applyCanvasPadding(), false);
+    assert.deepEqual(root(svg), stored);
+    assert.deepEqual(commits, []);
+  }
+  // A Result saved with its grown canvas keeps it, and a padding edit keeps the growth.
+  const grown = resultSvg();
+  applyCompositionUserDeltas(grown, { legend: [-200, 10] });
+  applyCanvasToSvg(grown, {});
+  const commits = [];
+  const state = appState(grown);
+  const actions = createLegendCanvasActions({ state, commitActiveResultEdit: (reason) => Boolean(commits.push(reason)) });
+  assert.equal(actions.applyCanvasPadding(), false);
+  assert.deepEqual(root(grown), { viewBox: '-76 0 262 152', width: '262px', height: '152px', base: '0 0 186 152' });
+  state.activeDrawing = () => ({ canvasPadding: { top: 0, right: 0, bottom: 0, left: 10 } });
+  actions.applyCanvasPadding();
+  assert.equal(root(grown).viewBox, '-86 0 272 152');
+  assert.deepEqual(commits, ['canvas-padding']);
+});
+
+test('the plot title drop grows the canvas before it commits', async () => {
+  const svg = resultSvg();
+  svg.addEventListener = () => {};
+  svg.removeEventListener = () => {};
+  globalThis.document = { addEventListener: () => {}, removeEventListener: () => {} };
+  const commits = [];
+  const actions = createDiagramDragActions({
+    state: appState(svg),
+    commitActiveResultEdit: (reason) => Boolean(commits.push(`${reason} ${root(svg).viewBox}`))
+  });
+  actions.setupDiagramDrag(false);
+  const title = svg.querySelector('#plot_title');
+  actions.startDiagramDrag({ target: title, clientX: 0, clientY: 0, shiftKey: false, preventDefault: () => {} });
+  await actions.endDiagramDrag({ clientX: 0, clientY: 150 });
+  // Title box y 166..186; + 16 px edge padding ends at 202.
+  assert.deepEqual(commits, ['diagram-drag 0 0 186 202']);
+});
+
+test('the Legend position reset returns the automatic canvas', () => {
+  const svg = resultSvg();
+  applyCompositionUserDeltas(svg, { legend: [-200, 10] });
+  applyCanvasToSvg(svg, {});
+  const commits = [];
+  const actions = createLegendDragActions({ state: appState(svg), commitActiveResultEdit: (reason) => Boolean(commits.push(reason)) });
+  actions.resetLegendPosition();
+  assert.equal(legendAt(svg), 'translate(142,91)');
+  assert.equal(root(svg).viewBox, '0 0 186 152');
+  assert.deepEqual(commits, ['legend-position-reset']);
+});
+
+test('Undo and Redo of a Legend offset refit the canvas', () => {
+  const svg = resultSvg();
+  const state = appState(svg);
+  const layout = createLegendLayout({
+    state,
+    layOutLegend: () => null,
+    previewRuntime: {
+      commitActiveResultEdit: () => true,
+      getResultIdentity: (result) => result.id,
+      getActiveRuntime: () => null,
+      commitResultEdit: (_index, edit) => edit(svg, { mounted: false })
+    }
+  });
+  const identities = new Set(['r1']);
+  layout.reconcileCompositionUserDeltas({ r1: { primary: [[0, 0]], legend: [-200, 10], title: [0, 0] } }, identities);
+  assert.equal(root(svg).viewBox, '-76 0 262 152');
+  layout.reconcileCompositionUserDeltas({ r1: { primary: [[0, 0]], legend: [0, 0], title: [0, 0] } }, identities);
+  assert.equal(root(svg).viewBox, '0 0 186 152');
 });

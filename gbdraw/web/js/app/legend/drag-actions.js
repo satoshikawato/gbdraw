@@ -167,7 +167,7 @@ export const createLegendDragActions = ({
 
     if (moved && completedDragContext) { // only a bound drag moves the Legend
       // The drop places the Legend: the canvas grows to hold it (Owner, 2026-10-23).
-      applyCanvasToSvg(completedDragContext.svg, state.activeDrawing().canvasPadding, completedDragContext.binding);
+      applyCanvasToSvg(completedDragContext.svg, state.activeDrawing().canvasPadding, { binding: completedDragContext.binding });
       commitActiveResultEdit?.('legend-drag');
     }
 
@@ -207,7 +207,7 @@ export const createLegendDragActions = ({
     );
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
-    applyCanvasToSvg(svg, state.activeDrawing().canvasPadding, binding);
+    applyCanvasToSvg(svg, state.activeDrawing().canvasPadding, { binding });
 
     commitActiveResultEdit?.('legend-position-reset');
   };
