@@ -368,6 +368,12 @@ def _with_available_font_family(cfg: GbdrawConfig) -> GbdrawConfig:
     return replace(cfg, objects=replace(cfg.objects, text=text))
 
 
+def _set_config_paths(options: CircularDiagramOptions | LinearDiagramOptions) -> frozenset[str]:
+    """The config paths the caller's ``config_overrides`` set, which a label-fit row keeps."""
+
+    return frozenset(path for path, value in (options.config_overrides or {}).items() if value is not None)
+
+
 def _resolve_diagram_options_config(
     options: CircularDiagramOptions | LinearDiagramOptions,
 ) -> GbdrawConfig:
@@ -3732,7 +3738,7 @@ def build_circular_diagram(
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_record(
             gb_record,
-            cfg=with_fit_row_overrides(cfg, overrides),
+            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
             selected_features_set=options.selected_features_set,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
@@ -4077,7 +4083,7 @@ def build_circular_multi_diagram(
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_records(
             records,
-            cfg=with_fit_row_overrides(cfg, overrides),
+            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
             conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,

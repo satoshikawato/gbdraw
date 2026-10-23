@@ -15,7 +15,7 @@ import math
 import copy
 from dataclasses import dataclass, replace
 from functools import lru_cache, partial
-from typing import TYPE_CHECKING, Any, Callable, Collection, Optional, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Collection, Optional, Mapping, Sequence, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -130,7 +130,10 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
+from ...render.drawers.circular.depth import DepthDrawer
 from ...render.drawers.circular.gc_content import GcContentDrawer
+from ...render.groups.circular.conservation import conservation_ring_ink
+from ...render.groups.circular.ticks import TickGroup
 from ...render.drawers.circular.gc_skew import SkewDrawer
 from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
@@ -139,6 +142,7 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_label_room,
     circular_annotation_labels,
     circular_annotation_track_content,
+    circular_annotation_track_ink,
 )
 from ...render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
@@ -789,44 +793,59 @@ def _reaches_band(inner: float, outer: float, band: RadialBand) -> bool:
 def _record_track_ink(
     radial_layout: CircularRadialLayout,
     *,
-    canvas_radius: float,
-    record_length: int,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
     record_transform: RecordDisplayTransform | None,
     gc_df: DataFrame,
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
+    depth_df: DataFrame | None,
+    depth_config: DepthConfigurator | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
+    conservation_tracks: Sequence[ConservationTrack] | None,
+    conservation_min_identity: float,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
     dinucleotide_content_dataframes: dict[str, DataFrame] | None,
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None,
+    gc_content_tick_font_size_override: float | None,
     feature_dict: Mapping[str, FeatureObject],
     feature_config: FeatureDrawingConfigurator,
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
+    annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
+    annotation_record_index: int,
+    use_slot_tick_options: bool,
 ) -> tuple[CircularInk, ...]:
-    """What the record's tracks paint, from the owners that draw them (D-18).
+    """What the record's tracks paint, from the owners that draw them (D-18), read with the same slot sources
+    the drawing reads (``_draw_resolved_circular_slot``).
 
-    The GC content and skew areas come from their drawers, the feature blocks from the intervals the labels
-    clear (``feature_radius_intervals``), and the axis circle from its paint band. A track with no such owner
-    (depth, conservation, annotation and tick slots) counts its whole band, as before.
+    The GC content, GC skew and depth areas and their axes come from their drawers, the feature blocks from the
+    intervals the labels clear (``feature_radius_intervals``), the conservation hits and background from the
+    ring's owner, the annotation marks and labels from the annotation track's owner, the tick marks and labels
+    from the tick group, and the axis circle from its paint band. A spacer paints nothing.
     """
 
+    canvas_radius = float(canvas_config.radius)
+    record_length = len(gb_record.seq)
+    font_family = str(canvas_config.profile.config.objects.text.font_family)
     inks: list[CircularInk] = [CircularInkRing(radial_layout.axis.paint_band_px)]
     for slot in radial_layout.slots:
         renderer = str(slot.renderer)
-        if slot.draw_band_px is None or (renderer == "annotations" and slot.side == "overlay"):
+        if slot.draw_band_px is None:
             continue
-        norm_factor = float(slot.anchor_radius_px or 0.0) / float(canvas_radius)
+        norm_factor = _slot_norm_factor(slot, canvas_radius)
         if renderer == "dinucleotide_content":
             _, content_df, content_config = _slot_content_source(
                 slot,
                 gc_df=gc_df,
                 gc_config=gc_config,
                 dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
-                tick_font_size_override=None,
+                tick_font_size_override=gc_content_tick_font_size_override,
             )
             if content_df is not None:
                 inks.extend(
                     GcContentDrawer(content_config).ink(
                         canvas_radius, content_df, record_length, slot.draw_width_px, norm_factor,
-                        content_config.dinucleotide, record_transform,
+                        content_config.dinucleotide, record_transform, font_family=font_family,
                     )
                 )
         elif renderer == "dinucleotide_skew":
@@ -844,14 +863,63 @@ def _record_track_ink(
                         slot_skew_config.dinucleotide, record_transform,
                     )
                 )
+        elif renderer == "depth":
+            depth_source = _slot_depth_source(slot, depth_df, depth_config, depth_tracks_by_index)
+            if depth_source is not None and depth_source[0] is not None and depth_source[1] is not None:
+                inks.extend(
+                    DepthDrawer(depth_source[1]).ink(
+                        canvas_radius, depth_source[0], record_length, float(slot.draw_width_px), norm_factor,
+                        font_family=font_family, record_transform=record_transform,
+                    )
+                )
+        elif renderer == "sequence_conservation":
+            track = _slot_conservation_track(slot, conservation_tracks)
+            if track is not None:
+                inks.extend(
+                    conservation_ring_ink(
+                        track,
+                        total_length=record_length,
+                        inner_radius_px=float(slot.draw_inner_radius_px),
+                        outer_radius_px=float(slot.draw_outer_radius_px),
+                        min_identity=float(conservation_min_identity),
+                        cfg=canvas_config.profile.config,
+                        record_transform=record_transform,
+                    )
+                )
+        elif renderer == "annotations":
+            annotation_layout = (annotation_track_layouts or {}).get(slot.id)
+            if annotation_layout is not None:
+                inks.extend(
+                    circular_annotation_track_ink(
+                        annotation_layout,
+                        record_index=annotation_record_index,
+                        record_length=record_length,
+                        inner_radius_px=float(slot.draw_inner_radius_px),
+                        outer_radius_px=float(slot.draw_outer_radius_px),
+                        side=str(slot.side),
+                        params=annotation_track_params_from_mapping(slot.params),
+                        labels=annotation_labels.get(slot.id, ()),
+                    )
+                )
+        elif renderer == "ticks":
+            tick_options = _slot_tick_options(slot, use_slot_tick_options)
+            if tick_options is not None:
+                inks.extend(
+                    TickGroup(
+                        gb_record,
+                        canvas_config.geometry(),
+                        profile=canvas_config.profile,
+                        radius=float(slot.anchor_radius_px or 0.0),
+                        record_transform=record_transform,
+                        **tick_options,
+                    ).ink()
+                )
         elif renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
             pad = stroke_pad_px(feature_config.block_stroke_color, feature_config.block_stroke_width)
             inks.extend(
                 CircularInkRing(RadialBand(inner - pad, outer + pad), start / record_length, end / record_length)
                 for start, end, inner, outer in feature_radius_intervals(feature_dict, record_length, slot.payload)
             )
-        elif (band := slot.own_reserved_band_px) is not None:
-            inks.append(CircularInkRing(band))
     return tuple(inks)
 
 
@@ -1643,6 +1711,94 @@ def _slot_skew_source(
     return nt, slot_df if f"{nt} skew" in slot_df.columns else None, config
 
 
+def _slot_norm_factor(resolved_slot: CircularResolvedSlot, canvas_radius: float) -> float:
+    """The slot's anchor radius as a share of the canvas radius, as its drawer takes it."""
+
+    # Radial layout always resolves a radius for a drawn slot.
+    anchor_radius_px = resolved_slot.anchor_radius_px
+    assert anchor_radius_px is not None
+    return float(anchor_radius_px) / float(canvas_radius)
+
+
+def _slot_depth_source(
+    resolved_slot: CircularResolvedSlot,
+    depth_df: DataFrame | None,
+    depth_config: DepthConfigurator | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
+) -> tuple[DataFrame | None, DepthConfigurator | None, DepthTrackData | None] | None:
+    """The data and settings a depth slot draws with (``None`` where they are missing) and its track when there
+    are several; ``None`` when the slot names a track there is not."""
+
+    if depth_tracks_by_index is None:
+        return depth_df, depth_config, None
+    track_index = parse_nonnegative_integer(
+        resolved_slot.params.get("track_index", 0),
+        field_name=f"depth slot '{resolved_slot.id}' track_index",
+    )
+    depth_track = depth_tracks_by_index.get(track_index)
+    if depth_track is None:
+        return None
+    return depth_track.df, depth_track.config, depth_track
+
+
+def _slot_conservation_track(
+    resolved_slot: CircularResolvedSlot, conservation_tracks: Sequence[ConservationTrack] | None
+) -> ConservationTrack | None:
+    """The conservation track a conservation slot draws."""
+
+    track_index = int(resolved_slot.params.get("track_index", 0) or 0)
+    return next(
+        (track for track in (conservation_tracks or ()) if int(track.track_index) == track_index),
+        None,
+    )
+
+
+class _TickOptions(TypedDict):
+    label_side: str
+    tick_side: str
+    tick_length_px: float | None
+    track_preset: str | None
+
+
+def _slot_tick_options(resolved_slot: CircularResolvedSlot, use_slot_tick_options: bool) -> _TickOptions | None:
+    """The sides, tick length and preset a tick slot draws with; ``None`` when it draws neither ticks nor
+    labels."""
+
+    tick_layout = resolved_slot.payload if isinstance(resolved_slot.payload, CircularTickLayout) else None
+    if tick_layout is not None:
+        label_side, tick_side = str(tick_layout.label_side), str(tick_layout.tick_side)
+    else:
+        label_side, tick_side = tick_sides_for_tick_label_layout(
+            resolved_slot.params.get("tick_label_layout"),
+            side=resolved_slot.side,
+        )[:2]
+    label_side, tick_side = label_side.strip().lower(), tick_side.strip().lower()
+    if label_side == "none" and tick_side == "none":
+        return None
+    if not (use_slot_tick_options or tick_layout is not None):
+        return {"label_side": "legacy", "tick_side": "legacy", "tick_length_px": None, "track_preset": None}
+    return {
+        "label_side": label_side,
+        "tick_side": tick_side,
+        "tick_length_px": (
+            tick_layout.tick_length_px
+            if tick_layout is not None
+            else (
+                float(resolved_slot.draw_width_px)
+                if resolved_slot.explicit_width and resolved_slot.draw_width_px > 0
+                else None
+            )
+        ),
+        "track_preset": (
+            tick_layout.track_preset
+            if tick_layout is not None
+            else normalize_circular_track_preset(
+                str(resolved_slot.params.get("preset", resolved_slot.params.get("track_preset", "tuckin")))
+            )
+        ),
+    }
+
+
 
 
 def _sync_legend_table_for_circular_slots(
@@ -1775,7 +1931,7 @@ def _draw_resolved_circular_slot(
     # Radial layout always resolves a radius; float(None) already failed here before.
     anchor_radius_px = resolved_slot.anchor_radius_px
     assert anchor_radius_px is not None
-    norm_factor_override = float(anchor_radius_px) / float(canvas_config.radius)
+    norm_factor_override = _slot_norm_factor(resolved_slot, float(canvas_config.radius))
     if renderer == "spacer":
         return canvas
 
@@ -1868,51 +2024,13 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "ticks":
-        tick_layout = (
-            resolved_slot.payload
-            if isinstance(resolved_slot.payload, CircularTickLayout)
-            else None
-        )
-        label_side = (
-            str(tick_layout.label_side)
-            if tick_layout is not None
-            else tick_sides_for_tick_label_layout(
-                resolved_slot.params.get("tick_label_layout"),
-                side=resolved_slot.side,
-            )[0]
-        ).strip().lower()
-        tick_side = (
-            str(tick_layout.tick_side)
-            if tick_layout is not None
-            else tick_sides_for_tick_label_layout(
-                resolved_slot.params.get("tick_label_layout"),
-                side=resolved_slot.side,
-            )[1]
-        ).strip().lower()
-        if label_side != "none" or tick_side != "none":
+        tick_options = _slot_tick_options(resolved_slot, use_slot_tick_options)
+        if tick_options is not None:
             tick_group_kwargs: dict[str, Any] = {
                 "group_key": GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id)),
                 "radius_override": float(anchor_radius_px),
+                **tick_options,
             }
-            if use_slot_tick_options or tick_layout is not None:
-                tick_group_kwargs["label_side"] = label_side
-                tick_group_kwargs["tick_side"] = tick_side
-                tick_group_kwargs["tick_length_px"] = (
-                    tick_layout.tick_length_px
-                    if tick_layout is not None
-                    else (
-                        float(resolved_slot.draw_width_px)
-                        if resolved_slot.explicit_width and resolved_slot.draw_width_px > 0
-                        else None
-                    )
-                )
-                tick_group_kwargs["track_preset"] = (
-                    tick_layout.track_preset
-                    if tick_layout is not None
-                    else normalize_circular_track_preset(
-                        str(resolved_slot.params.get("preset", resolved_slot.params.get("track_preset", "tuckin")))
-                    )
-                )
             tick_group_kwargs["slot_id"] = str(resolved_slot.id)
             if use_slot_group_id:
                 tick_group_kwargs["group_id"] = track_slot_svg_id(
@@ -1930,21 +2048,11 @@ def _draw_resolved_circular_slot(
         return canvas
 
     if renderer == "depth":
-        depth_group_id = str(resolved_slot.id)
-        selected_depth_df = depth_df
-        selected_depth_config = depth_config
-        if depth_tracks_by_index is not None:
-            track_index = parse_nonnegative_integer(
-                resolved_slot.params.get("track_index", 0),
-                field_name=f"depth slot '{resolved_slot.id}' track_index",
-            )
-            depth_track = depth_tracks_by_index.get(track_index)
-            if depth_track is None:
-                return canvas
-            selected_depth_df = depth_track.df
-            selected_depth_config = depth_track.config
-            if not use_slot_group_id:
-                depth_group_id = depth_track.id
+        depth_source = _slot_depth_source(resolved_slot, depth_df, depth_config, depth_tracks_by_index)
+        if depth_source is None:
+            return canvas
+        selected_depth_df, selected_depth_config, depth_track = depth_source
+        depth_group_id = depth_track.id if depth_track is not None and not use_slot_group_id else str(resolved_slot.id)
         if selected_depth_config is None or selected_depth_df is None:
             logger.warning("Skipping circular depth slot '%s' because depth data are unavailable.", resolved_slot.id)
             return canvas
@@ -1975,15 +2083,7 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "sequence_conservation":
-        track_index = int(resolved_slot.params.get("track_index", 0) or 0)
-        track = next(
-            (
-                conservation_track
-                for conservation_track in (conservation_tracks or ())
-                if int(conservation_track.track_index) == track_index
-            ),
-            None,
-        )
+        track = _slot_conservation_track(resolved_slot, conservation_tracks)
         if track is None:
             logger.warning(
                 "Skipping circular conservation slot '%s' because conservation data are unavailable.",
@@ -2794,20 +2894,34 @@ def add_record_on_circular_canvas(
             )
         )
 
-    def definition_lines_on_tracks(layout: CircularRadialLayout, definition_lines: Sequence[Aabb]) -> int:
+    def definition_lines_on_tracks(
+        layout: CircularRadialLayout,
+        definition_lines: Sequence[Aabb],
+        labels: Mapping[str, Sequence[CircularAnnotationLabel]],
+    ) -> int:
         inks = _record_track_ink(
             layout,
-            canvas_radius=float(canvas_config.radius),
-            record_length=len(gb_record.seq),
+            gb_record=gb_record,
+            canvas_config=canvas_config,
             record_transform=record_transform,
             gc_df=gc_df,
             gc_config=gc_config,
             skew_config=skew_config,
+            depth_df=depth_df,
+            depth_config=depth_config,
+            depth_tracks_by_index=depth_tracks_by_index,
+            conservation_tracks=conservation_tracks,
+            conservation_min_identity=conservation_min_identity,
             dinucleotide_dataframes=dinucleotide_dataframes,
             dinucleotide_content_dataframes=dinucleotide_content_dataframes,
             dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
+            gc_content_tick_font_size_override=gc_content_tick_font_size_override,
             feature_dict=layout_feature_dict,
             feature_config=feature_config,
+            annotation_track_layouts=annotation_track_layouts,
+            annotation_labels=labels,
+            annotation_record_index=annotation_record_index,
+            use_slot_tick_options=user_slot_mode,
         )
         return _definition_lines_on_tracks(inks, definition_lines)
 
@@ -2819,7 +2933,7 @@ def add_record_on_circular_canvas(
             layout, _, line_count = place_around_definition(probe_cfg)
         except ValidationError:
             return False
-        return definition_lines_on_tracks(layout, centre_definition_text(probe_cfg, line_count)) == 0
+        return definition_lines_on_tracks(layout, centre_definition_text(probe_cfg, line_count), {}) == 0
 
     radial_layout, definition_reserved_radius_px, species_line_count = place_around_definition(cfg)
     if radial_layout.features is not None:
@@ -3118,7 +3232,9 @@ def add_record_on_circular_canvas(
         radial_refused=radial_refused,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
-        definition_track_overlaps=definition_lines_on_tracks(radial_layout, definition_text) if definition_text else 0,
+        definition_track_overlaps=(
+            definition_lines_on_tracks(radial_layout, definition_text, annotation_labels) if definition_text else 0
+        ),
         definition_probe=definition_clears_tracks,
     )
     source_content_bounds = _collect_circular_primary_bounds(

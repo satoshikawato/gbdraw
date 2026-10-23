@@ -23,8 +23,10 @@ from gbdraw.annotations import (
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.annotations.layout import PlacedRegionAnnotation
-from gbdraw.annotations.models import ResolvedRegionAnnotation
+from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
+from gbdraw.layout.record_coordinates import DisplayFragment
 from gbdraw.layout.circular import RadialBand
+from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import (
     Point,
@@ -682,6 +684,105 @@ def _label_text(
     return text
 
 
+def _band_fill(mark: str, style: RegionAnnotationStyle) -> str:
+    """The fill a band or highlight mark is drawn with."""
+
+    return hatch_pattern_paint(style.hatch) if style.hatch else (
+        style.fill or ("#94a3b8" if mark == "highlight" else "none")
+    )
+
+
+def _cap_positions(
+    start: float, end: float, raw_start: float, raw_end: float, fragment: DisplayFragment | None
+) -> tuple[float, ...]:
+    """The ends of one drawn part of a bracket that get an end cap: not where the part was split or cut."""
+
+    return tuple(
+        position
+        for position in (start, end)
+        if not (
+            fragment is not None
+            and (
+                (position == start and (start != raw_start or fragment.artificial_start))
+                or (position == end and (end != raw_end or fragment.artificial_end))
+            )
+        )
+    )
+
+
+def circular_annotation_track_ink(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    record_length: int,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    side: str,
+    params: AnnotationTrackParams,
+    labels: Sequence[CircularAnnotationLabel] = (),
+) -> tuple[CircularInk, ...]:
+    """What ``circular_annotation_track_content`` paints with the same arguments: each band or highlight (its
+    area when filled, else its outline), each line with its end caps, and the labels' letters."""
+
+    if record_length <= 0:
+        return ()
+    placements, lane_width = _record_lanes(
+        track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
+    )
+    labels_by_id = {label.annotation_id: label for label in labels}
+    inks: list[CircularInk] = []
+    for placement in placements:
+        annotation = placement.annotation
+        auto_feature_underlay = is_auto_feature_underlay(annotation)
+        style = effective_annotation_style(annotation, params)
+        lane_inner, lane_outer = _lane_radii(
+            placement.lane, lane_width, side=side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
+            params=params,
+        )
+        radius = 0.5 * (lane_inner + lane_outer)
+        pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
+        for segment_index, (raw_start, raw_end) in enumerate(annotation.geometry_segments):
+            fragment = annotation.display_parts[segment_index] if annotation.display_parts is not None else None
+            for start, end in _safe_segments(raw_start, raw_end, record_length):
+                start_turn, end_turn = start / record_length, end / record_length
+                if annotation.mark in {"band", "highlight"}:
+                    if _band_fill(annotation.mark, style) != "none":
+                        inks.append(CircularInkRing(RadialBand(lane_inner - pad, lane_outer + pad), start_turn, end_turn))
+                    elif pad > 0:
+                        inks.extend(
+                            CircularInkRing(RadialBand(edge - pad, edge + pad), start_turn, end_turn)
+                            for edge in (lane_inner, lane_outer)
+                        )
+                        inks.extend(
+                            CircularInkPolygon.segment(
+                                _point(position, record_length, lane_inner),
+                                _point(position, record_length, lane_outer),
+                                pad,
+                            )
+                            for position in (start, end)
+                        )
+                    continue
+                if pad <= 0:
+                    continue
+                # A round cap reaches half the stroke past each end.
+                reach = pad / max(radius, 1e-9) / (2.0 * math.pi)
+                inks.append(CircularInkRing(RadialBand(radius - pad, radius + pad), start_turn - reach, end_turn + reach))
+                if annotation.mark == "bracket" and style.line_cap != "none":
+                    cap = cap_size(lane_width)
+                    inks.extend(
+                        CircularInkPolygon.segment(
+                            _point(position, record_length, radius - cap),
+                            _point(position, record_length, radius + cap),
+                            pad,
+                        )
+                        for position in _cap_positions(start, end, raw_start, raw_end, fragment)
+                    )
+        label = labels_by_id.get(annotation.id)
+        if label is not None:
+            inks.extend(CircularInkPolygon(tuple(part)) for part in label.parts if len(part) >= 3)
+    return tuple(inks)
+
+
 def circular_annotation_track_content(
     track: ResolvedAnnotationTrack,
     *,
@@ -761,9 +862,7 @@ def circular_annotation_track_content(
                 if annotation.mark in {"band", "highlight"}:
                     if style.hatch:
                         definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
-                    fill = hatch_pattern_paint(style.hatch) if style.hatch else (
-                        style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
-                    )
+                    fill = _band_fill(annotation.mark, style)
                     path = Path(
                         d=_band_path(start, end, record_length, lane_inner, lane_outer),
                         fill=fill,
@@ -806,12 +905,7 @@ def circular_annotation_track_content(
                     item_group.add(border)
                 if annotation.mark == "bracket" and style.line_cap != "none":
                     cap = cap_size(lane_width)
-                    for position in (start, end):
-                        if fragment is not None and (
-                            (position == start and (start != raw_start or fragment.artificial_start))
-                            or (position == end and (end != raw_end or fragment.artificial_end))
-                        ):
-                            continue
+                    for position in _cap_positions(start, end, raw_start, raw_end, fragment):
                         x1, y1 = _point(position, record_length, radius - cap)
                         x2, y2 = _point(position, record_length, radius + cap)
                         cap_path = Path(
@@ -860,4 +954,5 @@ __all__ = [
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",
+    "circular_annotation_track_ink",
 ]
