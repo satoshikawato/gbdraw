@@ -4823,14 +4823,14 @@ export const createAppSetup = () => {
         }
         return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
       },
-      afterGenerate: async (result) => {
+      afterGenerate: async (result, runDrawing) => {
         if (result?.status === 'error' && mode.value === 'linear') {
           await focusLinearComparisonIssue();
         }
         // Labels that do not fit drew nothing: the dialog computes the rows the bounded search did not reach.
         if (result?.status === 'error' && result.labelFit) {
           void openLabelFitDialog(result.labelFit.report, {
-            rowToken: result.labelFit.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular'
+            rowToken: result.labelFit.rowToken, drawing: runDrawing
           });
         }
         if (result?.status === 'ok') {
@@ -4994,7 +4994,7 @@ export const createAppSetup = () => {
     computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
     )).result,
-    writeRowSettings: (values, rowMode) => applyLabelFitValues(state.drawingOfMode(rowMode), values, rowMode),
+    writeRowSettings: (values, drawing) => applyLabelFitValues(drawing, values, drawing.mode),
     withHistory: dialogChoice.withHistory,
     closeAfterChoice: dialogChoice.closeAfterChoice,
     choicePending: () => dialogChoice.pending.value,
@@ -5011,7 +5011,7 @@ export const createAppSetup = () => {
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;
-    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular' });
+    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, drawing: historySnapshots.displayedArtifactDrawing() });
   };
   /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {

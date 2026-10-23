@@ -5389,7 +5389,7 @@ export const createRunAnalysis = ({
    * @param {HistoryArtifactHandle | null} [generatedArtifactHandle]
    * @param {Record<string, any> | null} [comparisonExecution]
    * @param {{ prepareGenerate?: (() => Promise<Record<string, any>>) | null,
-   *   afterGenerate?: ((outcome: Record<string, any> | null) => any) | null }} [options]
+   *   afterGenerate?: ((outcome: Record<string, any> | null, drawing: DrawingState) => any) | null }} [options]
    */
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
@@ -5544,7 +5544,7 @@ export const createRunAnalysis = ({
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
-      await afterGenerate?.(outcome);
+      await afterGenerate?.(outcome, drawing);
       if (outcome?.status === 'ok') shownGenerateDraft = { results: results.value, signature: readDraftSignature?.() || '' };
       return outcome;
     } catch (cause) {

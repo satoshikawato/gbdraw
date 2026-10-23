@@ -24,6 +24,7 @@ const { normalizeLabelFitFailure, normalizeLabelFitRow, normalizeResultLabelFits
 );
 const { createLabelFitDialog } = await import('../../gbdraw/web/js/app/label-fit-dialog.js');
 
+const drawing = modeDrawing(state, 'circular');
 const Y_OFFSET = 'labels.unified_adjustment.outer_labels.y_radius_offset';
 const row = (kind, status, extra = {}) => ({
   kind, title: kind.replace(/_/g, ' '), status, values: null, settings: [], canvasSize: null, reason: null, note: null,
@@ -204,7 +205,7 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
   const dialog = createLabelFitDialog({
     reactive: (value) => value,
     computeRow,
-    writeRowSettings: (values, mode) => { writes.push({ values, mode }); onWrite(); },
+    writeRowSettings: (values, written) => { writes.push({ values, drawing: written }); onWrite(); },
     withHistory: (label, handler, cancel) => async (choice) => {
       if (choice === 'cancel') return cancel();
       steps.push(label());
@@ -228,7 +229,7 @@ test('while Apply writes, the dialog is busy and Escape (its Cancel) does nothin
     escapes.push(harness.dialog.labelFitDialog.show);
   } });
   const { dialog, steps, writes, generates } = harness;
-  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
+  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { drawing });
   await dialog.resolveLabelFitChoice('apply');
   assert.equal(escapes.length, 2);
   assert.equal(await escapes[0], undefined);
@@ -281,16 +282,16 @@ test('only a Generate that drew nothing or the notice bar opens the dialog; a re
 test('Apply writes the chosen row as one History step, closes, and Generates; Cancel writes nothing', async () => {
   const rows = [row('outward_vertical', 'not_found', { reason: 'No fit' }), foundRow('smaller_font', 1.2)];
   const { dialog, steps, writes, generates } = dialogHarness();
-  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { mode: 'circular' });
+  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { drawing });
   assert.equal(dialog.labelFitDialog.show, true);
   assert.equal(dialog.labelFitDialog.selectedKind, 'smaller_font');
   await dialog.resolveLabelFitChoice('apply');
   assert.deepEqual(steps, ['Fit labels: smaller font']);
-  assert.deepEqual(writes, [{ values: { [Y_OFFSET]: 1.2 }, mode: 'circular' }]);
+  assert.deepEqual(writes, [{ values: { [Y_OFFSET]: 1.2 }, drawing }]);
   assert.equal(generates.length, 1);
   assert.equal(dialog.labelFitDialog.show, false);
 
-  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { mode: 'circular' });
+  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { drawing });
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(steps.length, 1);
   assert.equal(writes.length, 1);
@@ -301,7 +302,7 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
 test('a row that leaves crossing leaders is offered after the rows that fit, and Apply writes it', async () => {
   const { dialog, steps, writes, generates } = dialogHarness();
   await dialog.openLabelFitDialog(normalizeReport(report([row('radial', 'not_found', { reason: 'No fit' }), noticeRow()])),
-    { mode: 'circular' });
+    { drawing });
   const rows = dialog.labelFitDialog.rows;
   assert.deepEqual(rows.map((item) => [item.kind, item.offered]), [['radial', false], ['separate_features', true]]);
   assert.equal(rows[1].note, '14 leader pairs still cross');
@@ -309,12 +310,12 @@ test('a row that leaves crossing leaders is offered after the rows that fit, and
   assert.equal(dialog.labelFitDialog.selectedKind, 'separate_features');
   await dialog.resolveLabelFitChoice('apply');
   assert.deepEqual(steps, ['Fit labels: separate features']);
-  assert.deepEqual(writes, [{ values: { 'canvas.resolve_overlaps': true }, mode: 'circular' }]);
+  assert.deepEqual(writes, [{ values: { 'canvas.resolve_overlaps': true }, drawing }]);
   assert.equal(generates.length, 1);
 
   // A row that fits comes first in Python's order and is preselected.
   await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2), noticeRow()])),
-    { mode: 'circular' });
+    { drawing });
   assert.equal(dialog.labelFitDialog.selectedKind, 'smaller_font');
 });
 
@@ -329,7 +330,7 @@ test('rows Generate did not search are computed one after another when the dialo
     row('combination', 'not_computed')];
   const { dialog } = dialogHarness({ computeRow });
   await dialog.openLabelFitDialog(normalizeReport(report(rows, { drawn: true })),
-    { rowToken: 'circular:1:0', mode: 'circular' });
+    { rowToken: 'circular:1:0', drawing });
   assert.deepEqual(asked, [['circular:1:0', 'outward_vertical'], ['circular:1:0', 'tighter_rows'],
     ['circular:1:0', 'combination']]);
   assert.deepEqual(dialog.labelFitDialog.rows.map((item) => item.status), ['found', 'failed', 'not_found']);
@@ -375,7 +376,7 @@ test('Apply or Cancel during a row waits for that row, says so, and starts no fu
     } });
     const { dialog, steps, writes, generates, pending } = harness;
     const computing = dialog.openLabelFitDialog(normalizeReport(report(rows, { drawn: true })),
-      { rowToken: 'circular:1:0', mode: 'circular' });
+      { rowToken: 'circular:1:0', drawing });
     assert.equal(dialog.labelFitDialog.rows[0].status, 'computing');
     assert.deepEqual(statusShown(pending.value, dialog.labelFitDialog), []);
     const chosen = dialog.resolveLabelFitChoice(choice);
