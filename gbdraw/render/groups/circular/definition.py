@@ -27,7 +27,6 @@ from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
@@ -259,11 +258,9 @@ class DefinitionGroup:
         definition_group_id: str | None = None,
         record_index: int = 0,
         record_count: int = 1,
-        record_transform: RecordDisplayTransform | None = None,
         species_line_count: int = 1,
         record_presentation: RecordPresentation | None = None,
     ) -> None:
-        self.record_transform = record_transform
         self.record_presentation = record_presentation
         self.species_line_count = max(1, int(species_line_count))
         self.record_facts: DefinitionRecordFacts = (
@@ -419,7 +416,6 @@ class DefinitionGroup:
             show_gc=show_gc,
             font_size=active_font_size,
             name_font_weight=active_name_font_weight,
-            record_transform=self.record_transform,
             species_line_parts=species_line_parts,
         )
 

@@ -2351,7 +2351,6 @@ def assemble_linear_diagram(
         canvas_config,
         cfg=cfg,
         line_kinds_by_record=local_definition_line_kinds,
-        record_transforms=record_transforms,
         record_presentations=presentations,
     )
     row_definition_width = 0.0
@@ -2367,7 +2366,6 @@ def assemble_linear_diagram(
             canvas_config,
             cfg=cfg,
             line_kinds_by_record=list(row_definition_line_kinds),
-            record_transforms=record_transforms,
             record_presentations=presentations,
         )
     record_depth_data: list[list[DepthTrackData]] = (
@@ -3239,7 +3237,6 @@ def assemble_linear_diagram(
                 row_line_kinds=row_definition_line_kinds[record_index],
                 record_index=record_index,
                 record_count=total_records,
-                record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                 record_presentation=presentations[record_index],
                 definition_column_left=definition_column_left,
                 record_key=str(record_keys[record_index]),
