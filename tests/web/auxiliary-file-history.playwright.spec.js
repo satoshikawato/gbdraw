@@ -211,9 +211,9 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(stacks, { timeout: 60_000 }).not.toBe(beforeUndo);
   expect(await undoCount()).toBe(removedAt - 1);
-  // The rules come back now; the Legend list follows when the drawing is shown
-  // and its figure drawn (OV-1655).
-  await expect.poll(async () => (await circular()).rules).toEqual(loaded.rules);
+  // The rules and their Legend rows come back now, while Circular is not
+  // shown (OV-1655).
+  await expect.poll(circular).toEqual(loaded);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await switchMode(page, 'circular');
   await expect.poll(shownLegend, { timeout: 120_000 }).toEqual(['Hand', 'Imported']);

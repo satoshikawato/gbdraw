@@ -41,6 +41,27 @@ export { cloneJsonData };
 
 // Where an intent holds the composition offsets, keyed by Result identity (B17).
 const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
+// Where an intent lists the Legend rows (`editorIntentOf`). A row's `xPos`
+// and `yPos` are where the drawn figure lays it out; a redraw moves them,
+// which is no edit of the list (OV-1655).
+const LEGEND_ROWS_INTENT_PATH = Object.freeze(['editorState', 'legend', 'entries']);
+/**
+ * The part of an intent value that an edit changes (History's `editedPartOf`):
+ * a Legend row list without its rows' layout; any other value whole.
+ * @param {readonly string[]} path
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+const editedIntentPartOf = (path, value) => (
+  Array.isArray(value) && path.length === LEGEND_ROWS_INTENT_PATH.length
+    && path.every((key, index) => key === LEGEND_ROWS_INTENT_PATH[index])
+    ? value.map((row) => {
+        if (!row || typeof row !== 'object') return row;
+        const { xPos: _x, yPos: _y, ...edited } = /** @type {Record<string, unknown>} */ (row);
+        return edited;
+      })
+    : value
+);
 
 /**
  * The per-feature edits a History intent, checkpoint, or generated artifact holds.
@@ -2067,7 +2088,8 @@ export const createHistorySnapshotService = ({
     /** @param {ArtifactCheckpointData | null | undefined} snapshot */
     applyCheckpoint: (snapshot) => applyArtifactCheckpoint(drawingId, snapshot),
     // OV-110: the intent's composition offsets are keyed by Result identity.
-    identityMapPath: COMPOSITION_INTENT_PATH
+    identityMapPath: COMPOSITION_INTENT_PATH,
+    editedPartOf: editedIntentPartOf
   });
 
   // R15-23: the History ports of the Session-level values (the router's

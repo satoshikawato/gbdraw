@@ -1710,6 +1710,7 @@ export const createAppSetup = () => {
         signatureFor: historySnapshots.snapshotSignature,
         collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
         identityMapPath: ports.identityMapPath,
+        editedPartOf: ports.editedPartOf,
         makeRef: ref,
         mutationAvailability: sessionOperationAvailability
       });

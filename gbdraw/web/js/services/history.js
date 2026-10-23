@@ -167,15 +167,19 @@ const intentValueAt = (intent, path) => {
  * The changes of a step that `intent` still holds as the step left them
  * (`direction` leaves that side): what an Undo or Redo restores of a step
  * whose values a later step elsewhere may have changed again (OIC-030).
+ * `editedPartOf` gives the part of a value a later edit changes (the intent
+ * owner's `editedPartOf` port).
  * @param {HistoryIntent | null} intent
  * @param {readonly HistoryIntentChange[]} changes
  * @param {'undo' | 'redo'} direction
+ * @param {IntentEditedPart} [editedPartOf]
  */
-const changesAsLeft = (intent, changes, direction) => {
+const changesAsLeft = (intent, changes, direction, editedPartOf = (_path, value) => value) => {
   const leaving = direction === 'undo' ? 'after' : 'before';
   return changes.filter((change) => {
     const { has, value } = intentValueAt(intent, change.path);
-    return has === change[`${leaving}Has`] && (!has || sameJsonValue(value, change[leaving]));
+    return has === change[`${leaving}Has`]
+      && (!has || sameJsonValue(editedPartOf(change.path, value), editedPartOf(change.path, change[leaving])));
   });
 };
 
@@ -319,6 +323,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   values as the step opened (`stepOpened`).
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
+ * @typedef {(path: readonly string[], value: unknown) => unknown} IntentEditedPart
+ *   The part of the intent value at `path` that an edit changes.
  * @typedef {{
  *   retainedBytes: number,
  *   fileIds?: readonly string[],
@@ -379,6 +385,10 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {readonly string[] | null} [identityMapPath]
  *   The intent path of a map keyed by Result identity (the composition
  *   offsets); `heldIdentities` lists the keys History holds there (OV-110).
+ * @property {IntentEditedPart} [editedPartOf]
+ *   The part of an intent value that an edit changes, without what the drawn
+ *   figure lays out; a project part restores a value whose edited part is
+ *   still as its step left it (OV-1655). The whole value by default.
  * @property {() => SessionMark | null} [stepOpened]
  *   The router's Session values as a step opens here; the step carries them to its end.
  * @property {(entry: HistoryEntry | null, label: string, mark: SessionMark | null) => IntentEntry | null} [stepEnded]
@@ -489,6 +499,7 @@ export const createHistoryManager = ({
   mutationAvailability = () => null,
   stepAvailability = () => null,
   identityMapPath = null,
+  editedPartOf = (_path, value) => value,
   stepOpened = () => null,
   stepEnded = () => null,
   applySessionPart = () => {}
@@ -1987,7 +1998,8 @@ export const createHistoryManager = ({
 
   // D-15-51: this drawing's part of a project step (Reset all drawings). An
   // intent part restores only the values still as the step left them (a
-  // later step of this drawing on the same path is kept, OIC-030). A
+  // later step of this drawing on the same path is kept, OIC-030); a value
+  // a redraw only laid out anew is as left (`editedPartOf`, OV-1655). A
   // checkpoint part restores its checkpoint when `whole` (its drawing is
   // shown and kept every newer step, OV-1169), and otherwise the intent
   // values it changed; the Result shows them when the drawing is shown again
@@ -2002,7 +2014,7 @@ export const createHistoryManager = ({
       await applyCheckpointEntry(direction === 'undo' ? entry.before : entry.after);
     } else {
       await refreshCurrentIntent();
-      const changes = changesAsLeft(currentIntent, entry.changes || [], direction);
+      const changes = changesAsLeft(currentIntent, entry.changes || [], direction, editedPartOf);
       if (changes.length > 0) await applyIntentEntry({ ...entry, type: 'intent', changes }, direction);
     }
     touch();

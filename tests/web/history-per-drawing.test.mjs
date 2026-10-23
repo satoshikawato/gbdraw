@@ -613,3 +613,32 @@ test('turning Instant Preview on applies every drawing\'s queued palette in one 
   assert.equal(state.appliedPaletteName.value, 'circular-applied');
   assert.equal(circular.pendingPaletteName.value, 'queued');
 });
+
+// OV-1655: a file card's Remove from Linear takes a Legend row from hidden
+// Circular in one project step. When Circular is shown, its figure is drawn
+// again and lays the kept rows out anew (their xPos and yPos move); that is no
+// later edit of the list, so the Undo from Linear brings the row back before
+// Circular is shown again. A later edit of a row (a new caption) is kept, and
+// the Undo leaves the list (OIC-030).
+for (const later of ['redraw', 'rename']) test(`an Undo from the other drawing ${later === 'redraw' ? 'restores a Legend list a redraw only laid out anew' : 'keeps a Legend list a later step changed'} (OV-1655)`, async () => {
+  const { replaceLegendRows } = await import('../../gbdraw/web/js/services/drawing/paint.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const circular = modeDrawing(state, 'circular');
+  const row = (caption, yPos) => ({ caption, originalCaption: caption, color: '#000000', xPos: 10, yPos, featureIds: [] });
+  show(app, 'linear');
+  replaceLegendRows(circular.slices.paint, [row('Hand', 0), row('Imported', 40), row('GC content', 80)]);
+  await history.captureBaseline();
+  await history.runProjectStep('Remove specific rules file', () => {
+    replaceLegendRows(circular.slices.paint, circular.legendEntries.value.filter((entry) => entry.caption !== 'Imported'));
+  });
+  const captions = () => circular.legendEntries.value.map((entry) => entry.caption);
+  assert.deepEqual(captions(), ['Hand', 'GC content']);
+  show(app, 'circular');
+  if (later === 'redraw') replaceLegendRows(circular.slices.paint, [row('Hand', 0), row('GC content', 40)]);
+  else await history.runUndoable('Rename Legend row', () => replaceLegendRows(circular.slices.paint, [row('Hand', 0), row('GC', 80)]));
+  show(app, 'linear');
+  assert.equal(history.undoLabel(), 'Remove specific rules file');
+  await app.undoHistory();
+  assert.deepEqual(captions(), later === 'redraw' ? ['Hand', 'Imported', 'GC content'] : ['Hand', 'GC']);
+});
