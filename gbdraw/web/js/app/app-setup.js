@@ -2224,8 +2224,12 @@ export const createAppSetup = () => {
   // The diagrams the next Circular Generate draws, from the record set of the
   // request, read once: the Auto notes take the record lengths of each, and the
   // track slot estimates those of the diagram that draws the shown Result's
-  // record.
-  const circularDiagrams = computed(() => circularRequestDiagrams(state.circularRecordList.value, state.drawingOfMode('circular')));
+  // record. These estimates read the shown Circular drawing's settings; none
+  // while another drawing is shown (its panel shows no Circular estimate).
+  const circularDiagrams = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? circularRequestDiagrams(state.circularRecordList.value, drawing) : [];
+  });
   const circularEstimateRecordLengths = computed(() => circularEstimateLengths(
     circularDiagrams.value, getCommittedCanonicalRenderRequest(), state.selectedResultIndex.value
   ));
@@ -2257,9 +2261,10 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(
-    state, state.drawingOfMode('circular'), circularEstimateRecordLengths.value
-  ));
+  const circularConservationLayoutWarning = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? estimateCircularConservationLayoutWarning(state, drawing, circularEstimateRecordLengths.value) : '';
+  });
   const losatSettings = createLosatSettings({ state });
   /**
    * The record a Linear entry draws, once its records are read: the one its
@@ -2278,14 +2283,19 @@ export const createAppSetup = () => {
     const region = linearCardRegion(seq, 1, linearSeqRecord(seq)?.recordLength);
     return region && !('error' in region) ? regionClampNote(region.drawn) : '';
   };
-  const circularRegionNote = computed(() => circularDrawingRegionNote(state.circularRecordList.value, state.drawingOfMode('circular')));
+  const circularRegionNote = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? circularDrawingRegionNote(state.circularRecordList.value, drawing) : '';
+  });
   // Auto values follow the records the next Generate draws. The Linear ones are
   // known once every drawn record is read and none is cropped; until then the
   // values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
     circularDiagramLengths: () => circularDiagrams.value.map((/** @type {CircularDiagramRecords} */ diagram) => diagram.lengths),
     linearRecordLengths: () => {
-      const lengths = state.drawingOfMode('linear').drawnLinearSeqs.value.map((seq) => {
+      const drawing = shownDrawingOfMode('linear');
+      if (!drawing) return [];
+      const lengths = drawing.drawnLinearSeqs.value.map((seq) => {
         if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
         return Number(linearSeqRecord(seq)?.recordLength);
       });
