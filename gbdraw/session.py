@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import re
 import tempfile
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
@@ -18,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.io.table_text import legacy_table_rows
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_io import (
@@ -25,6 +25,7 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
+    DRAWINGS_SESSION_MIN_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
@@ -61,7 +62,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
 )
@@ -912,6 +912,15 @@ def _build_session_document_from_drawings(
                 + "."
             )
         active = matches[0]
+    if base is not None and base.version >= DRAWINGS_SESSION_MIN_VERSION:
+        return _drawings_session_document(
+            base,
+            dict(zip(taken_ids, views, strict=True)),
+            resources=descriptors,
+            title=title,
+            created_at=created_at,
+            web_file_inventory=web_file_inventory,
+        )
     try:
         fields = (
             write_session_drawings(views, active=active)
@@ -962,27 +971,68 @@ def _build_session_document_from_resolved_request(
     )
 
 
+def _drawings_session_document(
+    base: SessionDocument,
+    views: dict[str, dict[str, Any]],
+    *,
+    resources: Mapping[str, Mapping[str, Any]],
+    title: str | None,
+    created_at: datetime | None,
+    web_file_inventory: Mapping[str, Any] | None,
+) -> SessionDocument:
+    """A Session 49 saved again: each view replaces the base drawing of its ID.
+
+    The resources that no drawing names any more are dropped before the
+    writer, which refuses them.
+    """
+
+    from gbdraw.session_resources import drawing_resource_ids
+
+    shared = dict(resources)
+    for view in views.values():
+        view["resources"] = shared
+        if title is not None:
+            view["title"] = str(title)
+        if web_file_inventory is not None:
+            _attach_current_web_file_bindings(view, web_file_inventory)
+        normalize_current_session_artifacts(view)
+    kept = [drawing.artifacts.fields for drawing in base._drawings if drawing.id not in views]
+    referenced = set().union(*(drawing_resource_ids(fields) for fields in (*views.values(), *kept)))
+    for view in views.values():
+        _keep_resources(view, referenced)
+    try:
+        fields = replace_session_drawings(base._data, views)
+    except ValidationError as exc:
+        raise SessionFormatError(str(exc)) from exc
+    return SessionDocument({
+        "format": SESSION_FORMAT,
+        "createdAt": (created_at or datetime.now(timezone.utc)).isoformat(),
+        **fields,
+    })
+
+
 def _drop_unreferenced_resources(
     data: dict[str, Any],
     previous: Mapping[str, Any],
 ) -> None:
     """Drop the previous resources that the requests and Web files no longer name."""
 
-    from gbdraw.session_resources import canonical_resource_ids
+    from gbdraw.session_resources import drawing_resource_ids
+
+    referenced = set().union(
+        *(drawing_resource_ids(drawing.artifacts.fields) for drawing in read_session_drawings(data))
+    )
+    _keep_resources(data, referenced | (set(data["resources"]) - set(previous)))
+
+
+def _keep_resources(data: dict[str, Any], kept: set[str]) -> None:
+    """Keep only the resources ``kept`` names in ``data``, and their original names."""
 
     web_files = data.get("webFiles")
-    referenced = canonical_resource_ids(web_files)
-    for drawing in read_session_drawings(data):
-        referenced |= drawing.resource_ids
-    if isinstance(web_files, Mapping):
-        for field_name in ("conservationLosatFastaSources", "conservationSequenceSources"):
-            source_ids = web_files.get(field_name)
-            if isinstance(source_ids, list):
-                referenced.update(item for item in source_ids if isinstance(item, str))
     data["resources"] = {
         resource_id: descriptor
         for resource_id, descriptor in data["resources"].items()
-        if resource_id in referenced or resource_id not in previous
+        if resource_id in kept
     }
     original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
     if isinstance(web_files, Mapping) and isinstance(original_names, Mapping):
@@ -1244,7 +1294,7 @@ def upgrade_session_document(
 ) -> SessionUpgrade:
     """Return a Session in the current version without rendering it.
 
-    A current document is returned unchanged. A Session 46 or 47 keeps its
+    A current document, or a Session 49, is returned unchanged. A Session 46 or 47 keeps its
     drawings; a Session 46 gets its Legend color and stroke edits keyed by
     row key (:func:`gbdraw.session_io.legend_edits_by_row_key`), and the
     stored protein results of a reverse-complemented Linear record are
@@ -1267,7 +1317,8 @@ def upgrade_session_document(
     """
 
     loaded = load_session_document(document)
-    if loaded.version == CURRENT_SESSION_VERSION:
+    # A Session 49 is newer than the current version until the flip.
+    if loaded.version >= CURRENT_SESSION_VERSION:
         return SessionUpgrade(loaded)
     if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
         return SessionUpgrade(_upgrade_mode_scoped_session(loaded, temporary_directory))
@@ -1447,7 +1498,7 @@ def _validate_document(data: Mapping[str, Any]) -> None:
     assert isinstance(resources, Mapping)
     sanitized_names: set[str] = set()
     for resource_id, entry in resources.items():
-        if not isinstance(resource_id, str) or not _RESOURCE_ID_RE.fullmatch(resource_id):
+        if not isinstance(resource_id, str) or not SESSION_ID_RE.fullmatch(resource_id):
             raise SessionResourceError(
                 f"Invalid canonical resource ID: {resource_id!r}."
             )

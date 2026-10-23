@@ -549,8 +549,9 @@ def test_current_session_version_matches_web_config() -> None:
     # The Web reads these values from `contracts/schema.generated.js`.
     assert CURRENT_SESSION_VERSION == 48 and ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
     assert MODE_SCOPED_SESSION_MIN_VERSION == 46
+    # Python also reads Session 49 (drawings) before the Web does (D-15-81).
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION, 49}
     )
 
 
@@ -2143,7 +2144,7 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
 
 def test_future_session_version_fails() -> None:
     session = _minimal_session({})
-    session["version"] = CURRENT_SESSION_VERSION + 1
+    session["version"] = max(SUPPORTED_SESSION_VERSIONS) + 1
 
     with pytest.raises(ValidationError, match="newer"):
         validate_session(session)

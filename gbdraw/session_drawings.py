@@ -36,6 +36,15 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.session_contract import (
+    DRAWING_ID_MAX_LENGTH,
+    SESSION_ID_RE,
+    GbdrawSession49,
+    SessionDrawing,
+    SessionProjectUi,
+    SessionProjectWebFiles,
+    keys_of,
+)
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
@@ -62,24 +71,24 @@ _LAYOUT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS
 _SET_FIELDS = OTHER_MODE_RESULT_FIELDS - {"editorState", "ui"}
 _SET_EDITOR_FIELDS = OTHER_MODE_RESULT_EDITOR_FIELDS - {"legend"}
 
-# Session 49: the project fields beside ``ui``, ``webFiles`` and ``drawings``.
-PROJECT_FIELDS = frozenset({"format", "version", "createdAt", "title", "resources", "legacyArtifacts"})
-# The ``ui`` keys of the whole project; a drawing's ``ui`` holds every other
-# view key and its mode slice's ``ui`` keys.
-PROJECT_UI_FIELDS = frozenset({
-    "losatExecution", "downloadDpi", "autoLabelReflow", "paletteInstantPreviewEnabled",
-    "richFeaturePopup", "featurePanelTab",
-})
-# Resource metadata, the only ``webFiles`` key of the project.
-PROJECT_WEB_FILES_FIELDS = frozenset({"resourceOriginalNames"})
-# The fields a drawing keeps under the names a one-drawing view gives them.
-_DRAWING_FIELDS = frozenset({
-    "renderRequest", "results", "runMetadata", "cliInvocation", "cliOptions", "orthogroupState",
-    "losatCache", "losatDerivedCache", "proteinIdentityManifest",
-})
+# Session 49 (declared in gbdraw.session_contract): the project fields beside
+# ``ui``, ``webFiles`` and ``drawings``; the ``ui`` keys of the whole project
+# (a drawing's ``ui`` holds every other view key and its mode slice's ``ui``
+# keys); resource metadata, the only ``webFiles`` key of the project; and the
+# fields a drawing keeps under the names a one-drawing view gives them.
+PROJECT_FIELDS = keys_of(GbdrawSession49) - {"ui", "webFiles", "drawings"}
+PROJECT_UI_FIELDS = keys_of(SessionProjectUi) - {"activeDrawingId"}
+PROJECT_WEB_FILES_FIELDS = keys_of(SessionProjectWebFiles)
+_DRAWING_FIELDS = keys_of(SessionDrawing) - {
+    "id", "name", "mode", "config", "features", "editorState", "ui", "webFiles",
+}
 # The ``webFiles`` request metadata each mode's drawing keeps (D-15-79).
 _DRAWING_WEB_FILES_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType({
-    "circular": frozenset({"circularOutputPrefixExplicit", "circularInputOriginalName"}),
+    "circular": frozenset({
+        "circularOutputPrefixExplicit", "circularInputOriginalName",
+        # D-15-83: the conservation inputs are the Circular drawing's.
+        "conservationLosatFastaSources", "conservationSequenceSources", "conservationBlastSource",
+    }),
     "linear": frozenset({"linearRecordMetadata"}),
 })
 # The view's input-type key of each mode; a drawing's ``ui`` names it ``inputType``.
@@ -593,6 +602,91 @@ def _identity_problem(ids: Sequence[str], names: Sequence[str]) -> str | None:
     return None
 
 
+
+def _unreferenced_resources(project: Mapping[str, Any], drawings: Sequence[Mapping[str, Any]]) -> list[str]:
+    """The project's resources that no drawing names."""
+
+    from gbdraw.session_resources import drawing_resource_ids
+
+    referenced = set().union(*(drawing_resource_ids(drawing) for drawing in drawings))
+    return sorted(set(_mapping(project.get("resources"))) - referenced)
+
+
+def _layout_error(message: str) -> ValidationError:
+    return ValidationError(message, diagnostic=_LAYOUT_INVALID)
+
+
+def _unknown_keys(value: Mapping[str, Any], allowed: frozenset[str], where: str) -> None:
+    unknown = sorted(str(key) for key in value if key not in allowed)
+    if unknown:
+        raise _layout_error(f"Session 49 {where} contains unclassified field(s): " + ", ".join(unknown) + ".")
+
+
+def _checked_drawing(drawing: object) -> SessionDrawing:
+    """One entry of ``drawings``, with its own keys only (``SessionDrawing``)."""
+
+    if not isinstance(drawing, Mapping):
+        raise _layout_error("Each Session 49 drawing must be an object.")
+    _unknown_keys(drawing, keys_of(SessionDrawing), "drawing")
+    missing = sorted(SessionDrawing.__required_keys__ - set(drawing))
+    if missing:
+        raise _layout_error("A Session 49 drawing requires " + ", ".join(missing) + ".")
+    drawing_id, mode = drawing["id"], drawing["mode"]
+    if (not isinstance(drawing_id, str) or len(drawing_id) > DRAWING_ID_MAX_LENGTH
+            or not SESSION_ID_RE.fullmatch(drawing_id)):
+        raise _layout_error(f"Invalid Session 49 drawing ID: {drawing_id!r}.")
+    if not isinstance(drawing["name"], str) or not isinstance(mode, str) or mode not in DRAWING_NAMES:
+        raise _layout_error(f"Session 49 drawing {drawing_id} needs a name and a diagram mode.")
+    if drawing["renderRequest"] is not None and _request_mode(drawing) != mode:
+        raise _layout_error(f"Session 49 drawing {drawing_id} has a request of another mode than {mode}.")
+    ui = drawing.get("ui", {})
+    if not isinstance(ui, Mapping):
+        raise _layout_error(f"Session 49 drawing {drawing_id} has a ui that is not an object.")
+    _unknown_keys(ui, frozenset(ui) - PROJECT_UI_FIELDS - {"mode", "activeDrawingId", *_INPUT_TYPE_FIELDS.values()},
+                  f"drawing {drawing_id} ui")
+    web_files = drawing.get("webFiles", {})
+    if not isinstance(web_files, Mapping):
+        raise _layout_error(f"Session 49 drawing {drawing_id} has webFiles that are not an object.")
+    _unknown_keys(web_files, frozenset({"bindings"}) | _DRAWING_WEB_FILES_FIELDS[mode], f"drawing {drawing_id} webFiles")
+    if drawing["renderRequest"] is None and (
+        drawing["results"] != [] or drawing.get("runMetadata")
+        or _mapping(drawing.get("editorState")).get("featureCatalog") is not None
+    ):
+        raise _layout_error(f"Session 49 drawing {drawing_id} has Results without a request.")
+    return cast(SessionDrawing, drawing)
+
+
+def checked_drawing_views(data: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+    """The one-drawing view of each drawing of a Session 49, after checking
+    the layout: the closed project (``GbdrawSession49``), its drawings
+    (``SessionDrawing``) with unique IDs and names, ``ui.activeDrawingId``,
+    and that each resource is some drawing's. ``validate_session`` checks
+    each view as it checks a Session 46-48."""
+
+    _unknown_keys(data, keys_of(GbdrawSession49), "project")
+    missing = sorted(GbdrawSession49.__required_keys__ - set(data))
+    if missing:
+        raise _layout_error("Session 49 requires " + ", ".join(missing) + ".")
+    ui, web_files, entries = data["ui"], data.get("webFiles", {}), data["drawings"]
+    if not isinstance(ui, Mapping) or not isinstance(web_files, Mapping):
+        raise _layout_error("Session 49 ui and webFiles must be objects.")
+    _unknown_keys(ui, keys_of(SessionProjectUi), "ui")
+    _unknown_keys(web_files, keys_of(SessionProjectWebFiles), "webFiles")
+    if not isinstance(entries, list) or not entries:
+        raise _layout_error("Session 49 requires a non-empty drawings list.")
+    drawings = [_checked_drawing(entry) for entry in entries]
+    problem = _identity_problem([drawing["id"] for drawing in drawings], [drawing["name"] for drawing in drawings])
+    if problem:
+        raise _layout_error(f"Session 49 cannot hold these drawings: {problem}.")
+    if ui.get("activeDrawingId") not in {drawing["id"] for drawing in drawings}:
+        raise _layout_error("Session 49 ui.activeDrawingId must name one of its drawings.")
+    if not isinstance(data["resources"], Mapping):
+        raise _layout_error("Session 49 requires a canonical resources object.")
+    unreferenced = _unreferenced_resources(data, [cast(Mapping[str, Any], drawing) for drawing in drawings])
+    if unreferenced:
+        raise _layout_error("No drawing names the resources " + ", ".join(unreferenced) + ".")
+    return tuple(_drawing_view(data, cast(Mapping[str, Any], drawing)) for drawing in drawings)
+
 def _drawings_document(
     views: Sequence[Mapping[str, Any]],
     *,
@@ -607,8 +701,6 @@ def _drawings_document(
     others may repeat but not change them. Each drawing keeps the LOSAT
     entries its own view carries, so an entry two drawings use is in both.
     """
-
-    from gbdraw.session_resources import canonical_resource_ids
 
     if not views or len(ids) != len(views) or len(names) != len(views):
         raise ValidationError("Each drawing of a Session needs one ID and one name.", diagnostic=_LAYOUT_INVALID)
@@ -630,11 +722,7 @@ def _drawings_document(
                 diagnostic=_LAYOUT_INVALID,
             )
     drawings = [_drawing_of_view(view, drawing_id, name) for view, drawing_id, name in zip(views, ids, names)]
-    referenced: set[str] = set()
-    for drawing in drawings:
-        for field_name in ("renderRequest", "webFiles", "results"):
-            referenced |= canonical_resource_ids(drawing.get(field_name))
-    unreferenced = sorted(set(_mapping(project.get("resources"))) - referenced)
+    unreferenced = _unreferenced_resources(project, drawings)
     if unreferenced:
         raise ValidationError(
             "No drawing names the resources " + ", ".join(unreferenced) + "; leave them out of the Session.",
@@ -734,7 +822,7 @@ def replace_session_drawings(
         raise ValidationError("Session has no drawing " + ", ".join(unknown) + " to replace.", diagnostic=_LAYOUT_INVALID)
     replaced = [views[drawing.id] for drawing in drawings if drawing.id in views]
     for drawing in drawings:
-        if drawing.id in views and _request_mode(views[drawing.id]) != drawing.mode:
+        if drawing.id in views and _view_mode(views[drawing.id]) != drawing.mode:
             raise ValidationError(f"The {drawing.id} drawing keeps its {drawing.mode} mode.", diagnostic=_LAYOUT_INVALID)
     if int(data["version"]) >= DRAWINGS_SESSION_MIN_VERSION:
         active = active_session_drawing(data, drawings)
@@ -770,6 +858,7 @@ __all__ = [
     "active_session_drawing",
     "allocate_drawing_id",
     "allocate_session_drawing",
+    "checked_drawing_views",
     "drawing_draft_config",
     "read_session_drawings",
     "replace_session_drawings",

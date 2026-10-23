@@ -17,8 +17,8 @@ from typing import Any, Callable, Collection, Mapping
 
 from gbdraw import session_io
 from gbdraw.io.filenames import safe_embedded_filename, unique_filename
+from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.session_request_codec import (
-    _RESOURCE_ID_RE,
     CanonicalRequestEncodingError,
     CanonicalRequestResource,
 )
@@ -45,6 +45,28 @@ def canonical_resource_ids(value: object) -> set[str]:
                     pending.append(child)
     return found
 
+
+
+# The ``webFiles`` keys that list the resource IDs of conservation inputs.
+_RESOURCE_ID_LIST_FIELDS = ("conservationLosatFastaSources", "conservationSequenceSources")
+
+
+def drawing_resource_ids(fields: Mapping[str, Any]) -> set[str]:
+    """The resource IDs a drawing names: its request, Web files and Results.
+
+    ``fields`` is a Session 49 drawing or a one-drawing view; both name these
+    parts alike. A resource no drawing names is not the Session's.
+    """
+
+    found = set()
+    for field_name in ("renderRequest", "webFiles", "results"):
+        found |= canonical_resource_ids(fields.get(field_name))
+    web_files = fields.get("webFiles")
+    for field_name in _RESOURCE_ID_LIST_FIELDS:
+        source_ids = web_files.get(field_name) if isinstance(web_files, Mapping) else None
+        if isinstance(source_ids, list):
+            found.update(item for item in source_ids if isinstance(item, str))
+    return found
 
 @dataclass
 class _HeldResource:
@@ -124,7 +146,7 @@ class SessionResourceTable:
             return shared
         data = read()
         safe_name = safe_embedded_filename(entry.get("name"), fallback="resource.dat")
-        if (_RESOURCE_ID_RE.fullmatch(preferred_id) and preferred_id not in self._held
+        if (SESSION_ID_RE.fullmatch(preferred_id) and preferred_id not in self._held
                 and safe_name == entry.get("name") and safe_name not in self._names):
             resource_id, name = preferred_id, safe_name
         else:
@@ -358,4 +380,4 @@ def _resource_descriptor(resource: CanonicalRequestResource) -> dict[str, Any]:
     }
 
 
-__all__ = ["RequestResources", "SessionResourceTable", "canonical_resource_ids"]
+__all__ = ["RequestResources", "SessionResourceTable", "canonical_resource_ids", "drawing_resource_ids"]
