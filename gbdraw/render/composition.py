@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TypedDict
 
 from svgwrite.container import Group
 from svgwrite.drawing import Drawing
@@ -36,12 +36,75 @@ _ROLE_SELECTORS = {
 }
 
 
+class BoundsPayload(TypedDict):
+    height: float
+    width: float
+    x: float
+    y: float
+
+
+class _TargetPayloadBase(TypedDict):
+    automaticTranslation: list[float]
+    role: str
+    selector: str
+
+
+class PrimaryTargetPayload(_TargetPayloadBase):
+    finalBounds: BoundsPayload
+
+
+class LocalTargetPayload(_TargetPayloadBase):
+    localBounds: BoundsPayload
+
+
+class LengthBarPayload(TypedDict):
+    """The Linear scale's painted bounds before its leading composition translate."""
+
+    localBounds: BoundsPayload
+
+
+class OverlayPolicyPayload(TypedDict):
+    candidateScoreOrder: list[str]
+    canvasGrowthCandidateOrder: list[str]
+    canvasGrowthScoreOrder: list[str]
+    quadrantBoundaryRatio: float
+
+
+class SpacingPayload(TypedDict):
+    dockGapPx: float
+    edgePaddingPx: float
+    overlayClearancePx: float
+    stackGapPx: float
+    titleGapPx: float
+
+
+class _CompositionMetadataRequired(TypedDict):
+    legend: LocalTargetPayload | None
+    legendReflow: dict[str, object] | None
+    legendSide: str
+    overlayObstacles: list[BoundsPayload]
+    overlayPolicy: OverlayPolicyPayload
+    primary: PrimaryTargetPayload
+    spacing: SpacingPayload
+    title: LocalTargetPayload | None
+    titleSide: str
+
+
+class CompositionMetadataPayload(_CompositionMetadataRequired, total=False):
+    """The ``data-gbdraw-composition`` JSON (schema 1) that the Web reads.
+
+    ``lengthBar`` exists only for a Linear figure with a drawn scale.
+    """
+
+    lengthBar: LengthBarPayload
+
+
 def _wire_number(value: float) -> float:
     value = float(value)
     return 0.0 if value == 0.0 else value
 
 
-def _bounds_payload(bounds: Aabb) -> dict[str, float]:
+def _bounds_payload(bounds: Aabb) -> BoundsPayload:
     return {
         "height": _wire_number(bounds.height),
         "width": _wire_number(bounds.width),
@@ -68,24 +131,24 @@ def _local_bounds(placement: CompositionPlacement) -> Aabb:
     return placement.final_bounds.translated(-placement.dx, -placement.dy)
 
 
-def _target_payload(
-    placement: CompositionPlacement,
-    *,
-    composition_role: str,
-    include_final_bounds: bool,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
+def _primary_target_payload(placement: CompositionPlacement) -> PrimaryTargetPayload:
+    return {
         "automaticTranslation": _translation_payload(placement),
+        "finalBounds": _bounds_payload(placement.final_bounds),
+        "role": _PRIMARY_ROLE,
+        "selector": _ROLE_SELECTORS[_PRIMARY_ROLE],
+    }
+
+
+def _local_target_payload(
+    placement: CompositionPlacement, *, composition_role: str
+) -> LocalTargetPayload:
+    return {
+        "automaticTranslation": _translation_payload(placement),
+        "localBounds": _bounds_payload(_local_bounds(placement)),
         "role": composition_role,
         "selector": _ROLE_SELECTORS[composition_role],
     }
-    bounds = (
-        placement.final_bounds if include_final_bounds else _local_bounds(placement)
-    )
-    payload["finalBounds" if include_final_bounds else "localBounds"] = _bounds_payload(
-        bounds
-    )
-    return payload
 
 
 def _metadata_payload(
@@ -100,13 +163,9 @@ def _metadata_payload(
     length_bar_local_bounds: Aabb | None,
 ) -> str:
     spacing = plan.spacing
-    payload: dict[str, Any] = {
+    payload: CompositionMetadataPayload = {
         "legend": (
-            _target_payload(
-                legend_placement,
-                composition_role=_LEGEND_ROLE,
-                include_final_bounds=False,
-            )
+            _local_target_payload(legend_placement, composition_role=_LEGEND_ROLE)
             if legend_placement is not None
             else None
         ),
@@ -134,11 +193,7 @@ def _metadata_payload(
                 OVERLAY_QUADRANT_BOUNDARY_RATIO
             ),
         },
-        "primary": _target_payload(
-            primary_placement,
-            composition_role=_PRIMARY_ROLE,
-            include_final_bounds=True,
-        ),
+        "primary": _primary_target_payload(primary_placement),
         "spacing": {
             "dockGapPx": _wire_number(spacing.dock_gap_px),
             "edgePaddingPx": _wire_number(spacing.edge_padding_px),
@@ -147,11 +202,7 @@ def _metadata_payload(
             "titleGapPx": _wire_number(spacing.title_gap_px),
         },
         "title": (
-            _target_payload(
-                title_placement,
-                composition_role=_TITLE_ROLE,
-                include_final_bounds=False,
-            )
+            _local_target_payload(title_placement, composition_role=_TITLE_ROLE)
             if title_placement is not None
             else None
         ),
