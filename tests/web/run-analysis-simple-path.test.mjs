@@ -2340,6 +2340,52 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.match(thirteenWatches[0].timing, /FASTA cache hits=0, .*JS FASTA=1, Worker FASTA=0/);
     assert.match(thirteenWatches[1].timing, /FASTA cache hits=13, .*JS FASTA=0, Worker FASTA=0/);
     assert.equal(thirteenWatches[1].fastaDigests, 0);
+
+    // OV-1555, OV-1590: after a Generate, the blastp extraction of two of its records sends no
+    // GenBank bytes. It stages the record source under the resource id and token the Worker
+    // holds, so Python reads the records that Generate parsed; and it leaves the staging cache
+    // as it was, so the next Generate sends nothing either.
+    state.linearSeqs.splice(2);
+    const twoPlan = resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
+    });
+    const twoResult = result('two-cards.svg', 'two-cards');
+    workerResponses.push(response(twoResult, validCatalog(twoResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const drawnRun = workerMessages.findLast(({ type }) => type === 'run').payload;
+    const drawnToken = drawnRun.resourceManifest.find(({ resourceId }) => resourceId === 'record-1-genbank').cacheToken;
+    state.activeDrawing().losatProgram.value = 'blastp';
+    state.activeDrawing().losat.blastp.mode = 'pairwise';
+    state.files.linearCanonicalComparisons = [];
+    const helpersBeforeProteins = workerMessages.length;
+    workerHelperResponses.splice(0);
+    ['REC1', 'REC2'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${recordId}_p1\nMK\n`, record_id: recordId, record_length: 8, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-${recordId}`, record_analysis_id: recordId, record_instance_key: recordId,
+      runtime_binding_hash: `rt-${recordId}`, display_binding_hash: `dp-${recordId}`, identity_manifest: null
+    } }));
+    // The Generate stops after the extractions: these replies carry no protein identity manifest.
+    assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram: 'blastp', blastpMode: 'pairwise'
+    }))).status, 'error');
+    const extractions = workerMessages.slice(helpersBeforeProteins)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta');
+    assert.equal(extractions.length, 2);
+    for (const { payload } of extractions) {
+      assert.deepEqual((payload.files || []).map(({ role }) => role).filter((role) => role !== 'visibility'), []);
+      assert.deepEqual(payload.recordSource, { kind: 'genbank', resourceId: 'record-1-genbank' });
+      assert.deepEqual(payload.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
+        [['record-1-genbank', drawnToken]]);
+      assert.deepEqual(payload.stagedResources, []);
+    }
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    const afterProteins = result('two-cards-after.svg', 'two-cards-after');
+    workerResponses.push(response(afterProteins, validCatalog(afterProteins.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(workerMessages.findLast(({ type }) => type === 'run').payload.stagedResources, []);
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];

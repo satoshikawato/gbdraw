@@ -371,10 +371,12 @@ const fastPathRecords = async (files, parse) => {
 
 // The one owner of what is read from a source File (OV-1587): the record lists
 // of the Linear cards, the Circular refresh, a draft Save and the comparison
-// frame, and the ring comparison sequence with its digest. Each read is kept
-// once per File object (or per GFF3 and FASTA pair) and key: an uploaded File and
-// a Session resource view never change their bytes. A failed read is not kept;
-// each reader keeps an error it treats as final in its own state.
+// frame, the ring comparison sequence with its digest, and what Generate reads
+// for LOSAT (the parsed sequences, the Circular reference FASTA, and the
+// Worker's FASTA and protein extractions). Each read is kept once per File
+// object (or per GFF3 and FASTA pair) and key: an uploaded File and a Session
+// resource view never change their bytes. A failed read is not kept; each
+// reader keeps an error it treats as final in its own state.
 /**
  * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<FileLike, FileReads> }} FileReads
  */
@@ -395,16 +397,22 @@ const fileReadsOf = (byFile, file) => {
 /**
  * @template T
  * @param {readonly [FileLike] | readonly [FileLike, FileLike]} files The File, or a GFF3 File and its FASTA File.
- * @param {string} key What is read from them.
+ * @param {string} key What is read from them: its kind, then `:` and the settings of the reading.
  * @param {() => Promise<T>} read
+ * @param {number} [limit] How many reads of this kind the File keeps, the oldest dropped first.
  * @returns {Promise<T>}
  */
-const readOncePerFile = (files, key, read) => {
+export const readOncePerFile = (files, key, read, limit = Infinity) => {
   const [file, pairedFile] = files;
   const owner = fileReadsOf(fileReads, file);
   const { reads } = pairedFile ? fileReadsOf(owner.paired, pairedFile) : owner;
   const held = /** @type {Promise<T> | undefined} */ (reads.get(key));
   if (held) return held;
+  if (Number.isFinite(limit)) {
+    const kind = key.slice(0, key.indexOf(':') + 1);
+    const sameKind = [...reads.keys()].filter((readKey) => readKey.startsWith(kind));
+    if (sameKind.length >= limit) reads.delete(sameKind[0]);
+  }
   const started = read();
   reads.set(key, started);
   started.catch(() => { if (reads.get(key) === started) reads.delete(key); });

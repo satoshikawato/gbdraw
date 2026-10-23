@@ -1067,7 +1067,6 @@ await exercisePairLoop({failure: 'cancel'});
   const registration = {
     convertedPayload, losatPairs: context.losatPairs, useCollinearBlastp: true, resolvedComparisons: [],
     getPayloadName: (path) => path,
-    registerRunInfoFile() {},
     recordGeneratedCliFile: (path, text, { name }) => generatedFiles.set(path, { name, text })
   };
   new Function('context', `

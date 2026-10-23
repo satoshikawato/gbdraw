@@ -86,18 +86,50 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
   return buffer;
 };
 
+/**
+ * The id of the resource of `resources` whose bytes `file` owns (the File the
+ * user chose, or a Session resource view), of this kind, or null. A request
+ * that names it stages the bytes the Worker holds under that id (OV-1555).
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {object | null | undefined} file
+ * @param {string} kind
+ * @returns {string | null}
+ */
+export const resourceIdOwnedBy = (resources, file, kind) => {
+  if (!resources || !file) return null;
+  const owner = getResourcePayloadOwner(file);
+  return Object.keys(resources).find((resourceId) => {
+    const descriptor = resources[resourceId];
+    return typeof descriptor === 'object' && descriptor !== null
+      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadOwner(descriptor) === owner;
+  }) ?? null;
+};
+
 export const createDiagramResourceTransport = () => {
   let cachedResources = new Map();
   let nextCacheToken = 1;
+  // A new Worker holds nothing: a helper staging prepared before the reset records nothing.
+  let workerEpoch = 0;
 
   const reset = () => {
     cachedResources = new Map();
     nextCacheToken = 1;
+    workerEpoch += 1;
   };
 
-  /** @param {{ request?: unknown, resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null }} [payload] */
-  const prepare = async ({ request, resources } = {}) => {
+  // A render stages what its request names, and the Worker then holds only that.
+  // A helper (`retain`) stages the resources it reads, and the Worker keeps the
+  // rest for the next Generate (OV-1590), so the cache keeps them too.
+  /**
+   * @param {{
+   *   request?: unknown,
+   *   resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null,
+   *   retain?: boolean
+   * }} [payload]
+   */
+  const prepare = async ({ request, resources, retain = false } = {}) => {
     const previousCachedResources = cachedResources;
+    const preparedEpoch = workerEpoch;
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
     const stagedResources = [];
@@ -154,6 +186,7 @@ export const createDiagramResourceTransport = () => {
       recordStructuralMetric('transferredResourceBytes', bytes.byteLength, { resourceId });
       stagedResources.push({ resourceId, cacheToken, bytes });
     }
+    const stagedResourceIds = stagedResources.map(({ resourceId }) => resourceId);
     recordSessionLifecycleEvent('resource-stage-end', {
       referencedResourceCount: referencedIds.length,
       referencedDeclaredBytes,
@@ -165,6 +198,13 @@ export const createDiagramResourceTransport = () => {
       resourceManifest,
       stagedResources,
       commit() {
+        if (retain) {
+          if (workerEpoch !== preparedEpoch) return false;
+          stagedResourceIds.forEach((resourceId) => {
+            cachedResources.set(resourceId, nextCachedResources.get(resourceId));
+          });
+          return true;
+        }
         // A reset or another acknowledged request supersedes this preparation.
         if (cachedResources !== previousCachedResources) return false;
         cachedResources = nextCachedResources;
