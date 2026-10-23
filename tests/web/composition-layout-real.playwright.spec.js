@@ -908,9 +908,10 @@ test('real Circular render grows the canvas to hold a Legend dragged off the edg
   await page.evaluate(async () => { window.__GBDRAW_APP__.resetLayout(); await window.Vue.nextTick(); });
   await expect.poll(async () => (await canvasState(page)).delta.every((value) => value === 0), { timeout: 30000 }).toBe(true);
   const reset = await canvasState(page);
-  const [bx, by, bw, bh] = reset.base.split(' ').map(Number);
-  expect(reset.root.viewBox.split(' ').map(Number), 'Reset Layout returns the automatic canvas').toEqual([bx, by, bw, bh]);
+  expect(reset.base, 'the automatic canvas keeps no record of the growth').toBeNull();
   expect(reset.saved).toEqual(reset.root);
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await canvasState(page)).root, 'Reset Layout returns the automatic canvas Generate draws').toEqual(reset.root);
   expect(externalRequests).toEqual([]);
 });
 

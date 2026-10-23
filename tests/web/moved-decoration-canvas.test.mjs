@@ -67,6 +67,8 @@ const root = (svg) => ({
   base: svg.getAttribute('data-original-view-box')
 });
 const AUTOMATIC = { viewBox: '0 0 186 152', width: '186px', height: '152px', base: null };
+// The root's attributes in document order (the fake DOM keeps them in a Map).
+const rootMarkup = (svg) => JSON.stringify([...svg.attributes.entries()]);
 const legendAt = (svg) => svg.querySelector('#legend').getAttribute('transform');
 
 test('a Legend moved past the left edge grows the canvas and keeps its offset; reset returns the automatic canvas', () => {
@@ -81,7 +83,7 @@ test('a Legend moved past the left edge grows the canvas and keeps its offset; r
 
   resetCompositionUserDeltas(svg);
   assert.equal(applyCanvasToSvg(svg, {}), true);
-  assert.deepEqual(root(svg), { ...AUTOMATIC, base: '0 0 186 152' });
+  assert.deepEqual(root(svg), AUTOMATIC, 'the automatic canvas keeps no record of the growth');
 });
 
 test('a drag that stays inside the automatic canvas leaves the root byte-identical', () => {
@@ -188,6 +190,18 @@ test('showing a stored Result with an off-canvas offset changes nothing and comm
     assert.deepEqual(root(svg), stored);
     assert.deepEqual(commits, []);
   }
+  // A Result saved with a record of its automatic canvas (padded once, then
+  // unpadded) keeps that record when shown.
+  const recorded = resultSvg();
+  for (const name of ['data-original-view-box', 'data-original-width', 'data-original-height']) {
+    recorded.setAttribute(name, name === 'data-original-view-box' ? '0 0 186 152' : name.endsWith('width') ? '186' : '152');
+  }
+  const savedMarkup = rootMarkup(recorded);
+  const recordedCommits = [];
+  const recordedActions = createLegendCanvasActions({ state: appState(recorded), commitActiveResultEdit: (reason) => Boolean(recordedCommits.push(reason)) });
+  assert.equal(recordedActions.applyCanvasPadding(), false);
+  assert.equal(rootMarkup(recorded), savedMarkup);
+  assert.deepEqual(recordedCommits, []);
   // A padding edit on a Result saved before the canvas grew re-pads it and adds no growth.
   const old = resultSvg();
   applyCanvasToSvg(old, { left: 40 });
@@ -240,8 +254,13 @@ test('the Legend position reset returns the automatic canvas', () => {
   assert.deepEqual(commits, ['legend-position-reset']);
 });
 
-test('Undo and Redo of a Legend offset refit the canvas', () => {
+test('Undo and Redo of a Legend offset refit the canvas, and Undo restores the root byte for byte', () => {
   const svg = resultSvg();
+  // Python writes integral sizes with a decimal point.
+  svg.setAttribute('viewBox', '0.0 0.0 186.0 152.0');
+  svg.setAttribute('width', '186.0px');
+  svg.setAttribute('height', '152.0px');
+  const before = rootMarkup(svg);
   const state = appState(svg);
   const layout = createLegendLayout({
     state,
@@ -257,5 +276,7 @@ test('Undo and Redo of a Legend offset refit the canvas', () => {
   layout.reconcileCompositionUserDeltas({ r1: { primary: [[0, 0]], legend: [-200, 10], title: [0, 0] } }, identities);
   assert.equal(root(svg).viewBox, '-76 0 262 152');
   layout.reconcileCompositionUserDeltas({ r1: { primary: [[0, 0]], legend: [0, 0], title: [0, 0] } }, identities);
-  assert.equal(root(svg).viewBox, '0 0 186 152');
+  assert.equal(rootMarkup(svg), before, 'Undo writes no canvas record onto the restored Result');
+  layout.reconcileCompositionUserDeltas({ r1: { primary: [[0, 0]], legend: [-200, 10], title: [0, 0] } }, identities);
+  assert.deepEqual(root(svg), { viewBox: '-76 0 262 152', width: '262px', height: '152px', base: '0.0 0.0 186.0 152.0' }, 'Redo grows it again');
 });

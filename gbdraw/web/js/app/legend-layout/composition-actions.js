@@ -1026,6 +1026,21 @@ const viewBoxBounds = (value) => {
 };
 
 /**
+ * The number text of a root size, verbatim for a pixel size ("817.0px" ->
+ * "817.0"), so the automatic root is restored byte for byte.
+ * @param {string | null} value
+ * @param {number} fallback The viewBox extent, for a size without a number.
+ * @returns {string}
+ */
+const sizeText = (value, fallback) => {
+  const pixels = /^([0-9.eE+-]+)px$/.exec(value ?? '');
+  return pixels ? pixels[1] : String(Number.parseFloat(value ?? '') || fallback);
+};
+
+/** The root attributes that record the automatic canvas of a grown or padded Result. */
+const CANVAS_RECORD_ATTRIBUTES = ['data-original-view-box', 'data-original-width', 'data-original-height'];
+
+/**
  * @typedef {object} CanvasFitOptions
  * @property {CompositionBinding | null} [binding] The root's binding when the caller holds it.
  * @property {boolean} [refit] True (the default) when the user placed an item:
@@ -1038,10 +1053,12 @@ const viewBoxBounds = (value) => {
  * Size the canvas of one SVG root: the automatic canvas, grown so that each
  * moved Legend or plot title stays inside it with the edge padding (Owner,
  * 2026-10-23; never smaller than the automatic canvas), then the editor
- * canvas padding around it. The automatic viewBox and size are recorded once
- * on the root, so applying the same state again changes nothing, and a Result
- * that neither grows nor is padded stays byte-identical. Returns whether the
- * root changed.
+ * canvas padding around it. The automatic viewBox and size are recorded on
+ * the root while it grows or is padded, so applying the same state again
+ * changes nothing. A placement that leaves it neither grown nor padded removes
+ * the record, so Undo, Reset, and a drag back restore the root byte for byte
+ * (PD-OI-052); showing a stored Result keeps its root as saved. Returns whether
+ * the root changed.
  * @param {Element} svg
  * @param {Partial<Record<string, unknown>> | null | undefined} value The canvas padding.
  * @param {CanvasFitOptions} [options]
@@ -1078,20 +1095,25 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
     bounds.x < x || bounds.y < y || maxX(bounds) > x + width || maxY(bounds) > y + height
   ));
   if (!recordedBase && !padded && !grows) return false;
-  const baseWidth = svg.getAttribute('data-original-width')
-    || String(Number.parseFloat(svg.getAttribute('width') ?? '') || width);
-  const baseHeight = svg.getAttribute('data-original-height')
-    || String(Number.parseFloat(svg.getAttribute('height') ?? '') || height);
+  const baseWidth = svg.getAttribute('data-original-width') || sizeText(svg.getAttribute('width'), width);
+  const baseHeight = svg.getAttribute('data-original-height') || sizeText(svg.getAttribute('height'), height);
   let changed = false;
+  if (!padded && !grows) {
+    changed = setRootAttribute(svg, 'viewBox', base) || changed;
+    changed = setRootAttribute(svg, 'width', `${baseWidth}px`) || changed;
+    changed = setRootAttribute(svg, 'height', `${baseHeight}px`) || changed;
+    if (!refit) return changed;
+    CANVAS_RECORD_ATTRIBUTES.forEach((name) => {
+      if (!svg.hasAttribute(name)) return;
+      svg.removeAttribute(name);
+      changed = true;
+    });
+    return changed;
+  }
   if (!recordedBase) {
     changed = setRootAttribute(svg, 'data-original-view-box', base) || changed;
     changed = setRootAttribute(svg, 'data-original-width', baseWidth) || changed;
     changed = setRootAttribute(svg, 'data-original-height', baseHeight) || changed;
-  }
-  if (!padded && !grows) {
-    changed = setRootAttribute(svg, 'viewBox', base) || changed;
-    changed = setRootAttribute(svg, 'width', `${baseWidth}px`) || changed;
-    return setRootAttribute(svg, 'height', `${baseHeight}px`) || changed;
   }
   // `grows` holds only when a moved item exists, so the union has it.
   const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([automatic, ...moved])) : automatic;
