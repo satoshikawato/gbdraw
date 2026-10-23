@@ -48,6 +48,25 @@ def _require(report: dict, ok: bool, svg: Path) -> dict:
     return report
 
 
+# The union of the preview drawing's elements that match a selector, clipped
+# to the visible canvas, in page CSS px.
+_DETAIL = """
+(selector) => {
+  const region = document.querySelector('$REGION');
+  const view = region.getBoundingClientRect();
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const node of region.querySelectorAll(selector)) {
+    const b = node.getBoundingClientRect();
+    if (!node.closest('svg') || !b.width || !b.height) continue;
+    left = Math.min(left, b.left); top = Math.min(top, b.top);
+    right = Math.max(right, b.right); bottom = Math.max(bottom, b.bottom);
+  }
+  left = Math.max(left, view.left); top = Math.max(top, view.top);
+  right = Math.min(right, view.right); bottom = Math.min(bottom, view.bottom);
+  return right > left && bottom > top ? {x: left, y: top, width: right - left, height: bottom - top} : null;
+}
+""".replace("$REGION", PREVIEW_REGION)
+
 _HIT = """
 (selector) => {
   // In an opened Interactive SVG the drawing is the whole page.
@@ -439,11 +458,13 @@ def _svg_tab(rec: Recorder, popup: Locator, name: str, *, seconds: float) -> Non
 def _svg_close(rec: Recorder, popup: Locator) -> None:
     rec.click(popup.get_by_role("button", name="x", exact=True), pause=0.3)
     expect(popup).to_be_hidden()
-    # The close button sits over the drawing; leave it so no hover tooltip
-    # from an unrelated ribbon or feature closes the take.
-    rec.move_to(60, VIEWPORT[1] - 40)
+    # Back to the whole drawing, and long enough there that the take never
+    # ends while the camera is still easing out of the popup's zoom. The
+    # close button sits over the drawing; the pointer leaves it so no hover
+    # tooltip from an unrelated ribbon or feature shows meanwhile.
     rec.camera(duration=0.9)
-    rec.hold(0.4)
+    rec.move_to(60, rec.page.viewport_size["height"] - 40)
+    rec.hold(1.0)
 
 
 def _svg_feature(rec: Recorder, svg_id: str, step: int, *,
@@ -861,21 +882,43 @@ def _inspect_tobacco_chloroplast(svg: Path) -> dict:
 # Generate again. Every UI name in a locator goes through ``rec.t``, so the same
 # steps record the English and the translated app.
 
-def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4) -> None:
-    """Name what the new preview shows while the camera holds the whole figure."""
+def _frame_figure(rec: Recorder) -> dict:
+    """Frame the whole preview figure; returns its stage bounds."""
 
-    rec.caption(step, title, subtitle)
     figure = rec.figure()
     if figure is None:
         raise AssertionError("No preview figure to show")
     zoom = min(VIEWPORT[0] / figure["width"], VIEWPORT[1] / figure["height"]) / 1.08
     rec.camera(figure, zoom=max(1.0, min(zoom, 2.2)), duration=1.0)
+    return figure
+
+
+def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4,
+                 detail: str | None = None) -> None:
+    """Name what the new preview shows while the camera holds the whole figure.
+
+    ``detail`` selects part of the drawing, such as one column of records; a
+    figure too wide to read whole is then held on that part at a zoom where
+    its labels read, and the camera returns to the whole figure.
+    """
+
+    rec.caption(step, title, subtitle)
+    figure = _frame_figure(rec)
     bottom = figure["y"] + figure["height"]
     if figure["x"] <= rec.x <= figure["x"] + figure["width"] and figure["y"] <= rec.y <= bottom:
         # A pointer resting on the legend or a label opens the preview's
         # "Turn on Layout edit" hint over the figure being shown.
         rec.move_to(rec.x - rec.origin[0], bottom - rec.origin[1] + 10)
     rec.hold(seconds)
+    if detail:
+        box = rec.page.evaluate(_DETAIL, detail)
+        if not box:
+            raise AssertionError(f"No preview element matches {detail!r}")
+        zoom = min(VIEWPORT[0] / box["width"], VIEWPORT[1] / box["height"]) / 1.08
+        rec.camera(box, zoom=max(1.0, min(zoom, 3.0)), duration=1.0)
+        rec.hold(3.0)
+        _frame_figure(rec)
+        rec.hold(0.8)
 
 
 def _linear_file(rec: Recorder, index: int, source: Path) -> Locator:
@@ -1530,6 +1573,9 @@ VIBRIO_SPECIES = (("<i>Vibrio parahaemolyticus</i>", "RIMD 2210633"), ("<i>Vibri
 # (qualifier key, query, the record of each match in the order the search lists them)
 VIBRIO_INITIATORS = (("gene", "dnaA", ("NC_004603.1", "NC_022349.1")),
                      ("product", "RctB", ("NC_004605.1", "NC_022359.1")))
+# Chromosome I of both rows with their species labels: the part of the wide
+# figure the detail holds frame, so its labels and blocks read.
+VIBRIO_CHROMOSOME_I = '[data-record-column="0"], [data-gbdraw-role="record-definition-row"]'
 VIBRIO_SHAPES = ("CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region")
 VIBRIO_GALLERY = REPO_ROOT / "gbdraw/web/gallery/sources/vibrio-harveyi-group-collinear.svg"
 _LEFTMOST = """
@@ -1643,7 +1689,8 @@ def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
 
     rec.caption(4, "Generate with the defaults", "The first run starts Python in the browser")
     _generate(rec, target=2.4, look=0.6)
-    _show_figure(rec, 4, "One species per row", "Each row shows only its species and strain")
+    _show_figure(rec, 4, "One species per row", "Each row shows only its species and strain",
+                 detail=VIBRIO_CHROMOSOME_I)
 
     rec.caption(5, "Compare with Collinear blocks", "Comparison › Run LOSAT, then Settings")
     settings = _losat_settings(rec)
@@ -1661,7 +1708,8 @@ def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
     rec.caption(5, "Run LOSAT once", "Generate shows each stage while it runs")
     # Four 3-5 Mbp proteomes: the search takes minutes.
     _generate(rec, target=3.0, look=0.6, stages=True, timeout_ms=900_000)
-    _show_figure(rec, 5, "The ribbons run diagonally", "NCBI starts each chromosome elsewhere")
+    _show_figure(rec, 5, "The ribbons run diagonally", "NCBI starts each chromosome elsewhere",
+                 detail=VIBRIO_CHROMOSOME_I)
 
     rec.caption(6, "Start chromosome I at dnaA", "Search: Qualifier value · gene · dnaA")
     _rotate_initiators(rec, 6, *VIBRIO_INITIATORS[0])
@@ -1683,7 +1731,7 @@ def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
         found = page.evaluate(_LEFTMOST, [record_id, _svg_id(rec, feature_filter, arg)])
         if found is None or found["offset"] > 3:
             raise AssertionError(f"{record_id} does not start at its initiator: {found}")
-    _show_figure(rec, 8, "Blocks run straight down", "Inversions stand out in red")
+    _show_figure(rec, 8, "Blocks run straight down", "Inversions stand out in red", detail=VIBRIO_CHROMOSOME_I)
 
     rec.caption(9, "Finish the figure", "Features › Rendering: Rectangle for all seven")
     rec.open_section(_summary(rec, "Features"))
@@ -1723,7 +1771,8 @@ def _vibrio_harveyi_group_collinear(rec: Recorder, downloads: Path) -> Path:
     rec.caption(10, "Generate and check the result", "Generate again reuses the LOSAT results")
     _generate(rec, target=4.0, look=0.6, stages=True, timeout_ms=900_000)
     rec.mark("blocks")
-    _show_figure(rec, 10, "Rows start at dnaA and rctB", "Each chromosome begins at its initiator")
+    _show_figure(rec, 10, "Rows start at dnaA and rctB", "Each chromosome begins at its initiator",
+                 detail=VIBRIO_CHROMOSOME_I)
     _look(rec, rec.text_bounds(r"^(Collinear|Inverted)$"), zoom=2.2, seconds=2.4, pad=40)
     _show_figure(rec, 10, "Red blocks: inversions", "within chromosome I or within chromosome II")
     _show_figure(rec, 10, "Few blocks cross over", "from one species' chromosome I to the other's II")
