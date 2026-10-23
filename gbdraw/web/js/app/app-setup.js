@@ -2396,14 +2396,16 @@ export const createAppSetup = () => {
     drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalized);
   };
   const circularDepthTrackRows = computed(() => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return [];
     return rowsForDepthTrackCount(
       drawing,
       sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular)
     );
   });
   const linearDepthTrackRows = () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return [];
     return rowsForDepthTrackCount(drawing, linearDepthTrackUiCount());
   };
   /** @param {LinearSourceGroup} source */
@@ -2425,7 +2427,8 @@ export const createAppSetup = () => {
   const linearSourceInspectionFailed = (source) => Boolean(linearRecordSelector.errorFor(source.sequence));
   /** @param {LinearSeq} seq */
   const linearRecordGencodeRequired = (seq) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return false;
     return drawing.hasActiveLinearLosatIntent.value && drawing.losatProgram.value === 'tblastx'
       && !(Number(seq.losat_gencode) >= 1);
   };
@@ -2753,7 +2756,8 @@ export const createAppSetup = () => {
   const getCircularDepthFile = (index) => circularDepthRepresentatives()[Number(index)] || null;
   /** @param {number} index @param {FileLike | null} file */
   const setCircularDepthFile = (index, file) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
@@ -2810,12 +2814,14 @@ export const createAppSetup = () => {
   };
   /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
   const setLinearDepthFile = (seq, index, file) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     return setLinearDepthFiles(drawing, [seq], index, file);
   };
   /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file */
   const setLinearSourceDepthFile = (source, index, file) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     return setLinearDepthFiles(
       drawing,
       (source?.records || []).map(({ sequence }) => sequence),
@@ -2829,7 +2835,8 @@ export const createAppSetup = () => {
     () => setLinearSourceDepthFile(source, index, null)
   );
   const addCircularDepthTrack = () => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
@@ -2837,7 +2844,8 @@ export const createAppSetup = () => {
     retireLegendStylesOfUnnamedCaptions(() => { if (hasCircularDepthFiles.value) drawing.form.show_depth = true; });
   };
   const addLinearDepthTrack = () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const nextCount = linearDepthTrackUiCount() + 1;
@@ -2847,7 +2855,8 @@ export const createAppSetup = () => {
   };
   /** @param {number} index */
   const removeCircularDepthTrack = (index) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
@@ -2889,7 +2898,8 @@ export const createAppSetup = () => {
   };
   /** @param {number} index */
   const removeLinearDepthTrack = (index) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
@@ -2984,13 +2994,15 @@ export const createAppSetup = () => {
   };
   /** @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles */
   const setCircularConservationUploadFiles = (nextFiles) => {
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     bindInputFileList(state.inputFiles, files, 'c_conservation_blasts', nextFiles);
     files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
     losatCacheInfo.value = [];
-    reconcileCircularConservation(state.drawingOfMode('circular'));
+    reconcileCircularConservation(drawing);
   };
   // The comparison rings of a Circular drawing follow their source files: the
   // series, whether the rings are on, and the managed stack rows. Each
@@ -3066,7 +3078,8 @@ export const createAppSetup = () => {
   });
   /** @param {number} index @param {number} direction */
   const canMoveCircularConservationSeries = (index, direction) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return false;
     const idx = Number(index);
     const target = idx + Math.sign(Number(direction));
     return (
@@ -3080,7 +3093,8 @@ export const createAppSetup = () => {
   };
   /** @param {number} index @param {number} direction */
   const moveCircularConservationSeries = (index, direction) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (moveConservationSeriesEntry(drawing.circularConservation.series, index, direction)) {
@@ -3102,7 +3116,8 @@ export const createAppSetup = () => {
   const auxiliaryFileImports = createAuxiliaryFileImports(reactive, state.inputFiles);
   /** @param {Event & { target: HTMLInputElement }} event */
   const addCircularConservationComparisonFile = (event) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const target = event?.target || null;
@@ -3154,7 +3169,8 @@ export const createAppSetup = () => {
   };
   /** @param {number} index */
   const removeCircularConservationSource = (index) => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
