@@ -469,6 +469,19 @@ def test_switch_language_shows_the_pane_before_the_menu_and_after_with_no_argume
     assert calls[11][1] == ('language-zh',)
 
 
+def test_the_stages_caption_covers_only_the_first_lane_generate() -> None:
+    tree = ast.parse((CAPTURE_ROOT / 'video' / 'promo.py').read_text(encoding='utf-8'))
+    lane_to = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == '_lane_to')
+    captions = [(node.lineno, node.args[1].value, ast.unparse(guard.test)) for guard in ast.walk(lane_to)
+                if isinstance(guard, ast.If) for node in ast.walk(guard)
+                if isinstance(node, ast.Call) and getattr(node.func, 'attr', '') == 'caption'
+                and any(isinstance(stmt, ast.Expr) and stmt.value is node for stmt in guard.body)]
+    # The stages caption is set only for the first move; a repeat puts the lane step's own caption back first.
+    assert [(text, test) for _, text, test in captions] == [
+        ('Put a feature on the lane you choose', 'repeat'), ('Generate shows each stage as it runs', 'not repeat')]
+    assert captions[0][0] < captions[1][0]
+
+
 def test_the_promotion_passes_its_captions_and_marks_to_the_one_language_switch() -> None:
     from video import promo
     from video.walkthrough import switch_language
