@@ -1064,16 +1064,14 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
     canvas.width + padding.left + padding.right, canvas.height + padding.top + padding.bottom
   ].map(wireNumber).join(' ');
   if (!refit && moved.length) {
-    // A stored Result drawn with this padding and no growth stays as it is;
-    // otherwise only the growth its canvas already shows is kept.
+    // A stored Result keeps the growth it shows: only items its canvas already
+    // holds count. The tolerance absorbs an ulp lost in the union's width.
     const shown = viewBoxBounds(svg.getAttribute('viewBox'));
-    moved = !shown || svg.getAttribute('viewBox') === outerViewBox(automatic) ? [] : moved.flatMap((bounds) => {
-      const minX = Math.max(bounds.x, shown.x);
-      const minY = Math.max(bounds.y, shown.y);
-      const right = Math.min(maxX(bounds), maxX(shown));
-      const bottom = Math.min(maxY(bounds), maxY(shown));
-      return right > minX && bottom > minY ? [{ x: minX, y: minY, width: right - minX, height: bottom - minY }] : [];
-    });
+    const EPSILON = 1e-6;
+    moved = shown ? moved.filter((bounds) => (
+      bounds.x >= shown.x - EPSILON && bounds.y >= shown.y - EPSILON
+      && maxX(bounds) <= maxX(shown) + EPSILON && maxY(bounds) <= maxY(shown) + EPSILON
+    )) : [];
   }
   const { x, y, width, height } = automatic;
   const grows = moved.some((bounds) => (

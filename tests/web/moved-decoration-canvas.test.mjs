@@ -188,6 +188,13 @@ test('showing a stored Result with an off-canvas offset changes nothing and comm
     assert.deepEqual(root(svg), stored);
     assert.deepEqual(commits, []);
   }
+  // A padding edit on a Result saved before the canvas grew re-pads it and adds no growth.
+  const old = resultSvg();
+  applyCanvasToSvg(old, { left: 40 });
+  applyCompositionUserDeltas(old, { legend: [-200, 10] });
+  const oldActions = createLegendCanvasActions({ state: appState(old, { left: 10 }), commitActiveResultEdit: () => true });
+  assert.equal(oldActions.applyCanvasPadding(), true);
+  assert.equal(root(old).viewBox, '-10 0 196 152');
   // A Result saved with its grown canvas keeps it, and a padding edit keeps the growth.
   const grown = resultSvg();
   applyCompositionUserDeltas(grown, { legend: [-200, 10] });
