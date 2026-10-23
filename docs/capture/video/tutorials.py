@@ -20,7 +20,7 @@ from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS, REPO_ROOT, tutorial
 from flows.web_capture import assert_fixture_identity
 from video.walkthrough import (PORTRAIT_FIGURE_WIDTH, PREVIEW_REGION, VIEWPORT, _PREVIEW, Journey, Recorder, _center,
                                export_interactive_svg, open_in_browser)
-from video.walkthrough_render import TUTORIAL_LANGUAGES, take_name
+from video.walkthrough_render import PORTRAIT, TUTORIAL_LANGUAGES, take_name
 
 
 def _fixture(file_id: str) -> Path:
@@ -152,15 +152,7 @@ def _fit_preview(rec: Recorder, *, margin: float = 24) -> None:
     dx = canvas["x"] + canvas["width"] / 2 - (svg["x"] + svg["width"] / 2)
     dy = canvas["y"] + canvas["height"] / 2 - (svg["y"] + svg["height"] / 2)
     if abs(dx) > 24 or abs(dy) > 24:
-        # Leaving the canvas ends a pan, so the drag must end inside it too.
-        inside = [(x, y) for x, y in geometry["blank"]
-                  if canvas["x"] + 16 <= x + dx <= canvas["x"] + canvas["width"] - 16
-                  and canvas["y"] + 16 <= y + dy <= canvas["y"] + canvas["height"] - 16]
-        if not inside:
-            raise AssertionError(f"No blank preview area to pan from: {geometry}")
-        start = inside[0]
-        rec.drag(start, (start[0] + dx, start[1] + dy))
-        page.wait_for_timeout(300)
+        _pan_preview(rec, dx, dy)
         geometry = page.evaluate(_PREVIEW)
         canvas, svg = geometry["canvas"], geometry["svg"]
         off = canvas["x"] + canvas["width"] / 2 - (svg["x"] + svg["width"] / 2)
@@ -168,6 +160,40 @@ def _fit_preview(rec: Recorder, *, margin: float = 24) -> None:
             raise AssertionError(f"The preview pan did not center the figure: {geometry}")
     if skimming:
         rec.normal_speed()
+
+
+def _pan_preview(rec: Recorder, dx: float, dy: float, *, duration: float = 0.9) -> None:
+    """Drag the preview's blank background by ``(dx, dy)`` CSS px, as a person pans it.
+
+    Leaving the canvas ends a pan, so each drag ends inside it; a pan longer
+    than one drag can reach takes another from a fresh blank spot.
+    """
+
+    for _ in range(4):
+        if abs(dx) < 2 and abs(dy) < 2:
+            return
+        geometry = rec.page.evaluate(_PREVIEW)
+        canvas = geometry["canvas"]
+        left, top = canvas["x"] + 16, canvas["y"] + 16
+        right, bottom = canvas["x"] + canvas["width"] - 16, canvas["y"] + canvas["height"] - 16
+
+        def reach(x: float, y: float) -> float:
+            """The share of the pan a drag from ``(x, y)`` can make without leaving the canvas."""
+
+            share = 1.0
+            for start, delta, low, high in ((x, dx, left, right), (y, dy, top, bottom)):
+                if delta:
+                    share = min(share, max(0.0, ((high if delta > 0 else low) - start) / delta))
+            return share
+
+        share, start = max(((reach(*point), point) for point in geometry["blank"]), key=lambda row: row[0],
+                           default=(0.0, None))
+        if share < 0.05:
+            raise AssertionError(f"No blank preview area to pan from: {geometry}")
+        rec.drag(start, (start[0] + dx * share, start[1] + dy * share), duration=duration * max(share, 0.5))
+        rec.page.wait_for_timeout(300)
+        dx, dy = dx * (1 - share), dy * (1 - share)
+    raise AssertionError(f"The preview pan did not finish: {dx:.0f}, {dy:.0f} px left")
 
 
 def _generate(rec: Recorder, *, target: float | None = 1.4, look: float = 2.0,
@@ -895,13 +921,13 @@ def _frame_figure(rec: Recorder) -> dict:
 
 
 def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = "", *, seconds: float = 3.4,
-                 detail: Callable[[Recorder], list[dict]] | None = None) -> None:
+                 detail: Callable[[Recorder], dict] | None = None) -> None:
     """Name what the new preview shows while the camera holds the whole figure.
 
-    ``detail`` returns parts of a figure too small to read whole (page CSS
-    px rects, such as one column of records or the two halves of the
-    drawing): the camera then holds each part about 3 s at a zoom where it
-    reads, and returns to the whole figure. Both layouts frame the same parts.
+    ``detail`` returns the part of a figure too small to read whole (a page
+    CSS px rect, such as one column of records): the wide window then holds
+    it about 3 s at a camera zoom where it reads, and the tall window reads
+    it closely in the app (``_read_closely``). Then the whole figure again.
     """
 
     rec.caption(step, title, subtitle)
@@ -913,38 +939,129 @@ def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = ""
         rec.move_to(rec.x - rec.origin[0], bottom - rec.origin[1] + 10)
     rec.hold(seconds)
     if detail:
-        boxes = detail(rec)
-        for box in boxes:
-            zoom = min(VIEWPORT[0] / box["width"], VIEWPORT[1] / box["height"]) / 1.08
-            # The tall window frames the whole part too, not the wide zoom's crop of it.
-            rec.camera(box, zoom=max(1.0, min(zoom, 3.0)), duration=1.0, portrait=box)
-            # Each move eases for 1 s, so the part then stays still about 3 s.
-            rec.hold(4.0 if len(boxes) == 1 else 3.4)
+        part = detail(rec)
+        if rec.portrait:
+            _read_closely(rec, part)
+        else:
+            zoom = min(VIEWPORT[0] / part["width"], VIEWPORT[1] / part["height"]) / 1.08
+            rec.camera(part, zoom=max(1.0, min(zoom, 3.0)), duration=1.0)
+            # The move eases for 1 s, so the part then stays still about 3 s.
+            rec.hold(4.0)
         _frame_figure(rec)
         rec.hold(1.6)
 
 
-def _preview_part(selector: str) -> Callable[[Recorder], list[dict]]:
+# A portrait detail hold zooms the preview until the record labels' capitals
+# are this tall in the output, as they read in the landscape Vibrio detail.
+DETAIL_CAP_PX = 11
+_CAP_HEIGHT = 0.716   # Liberation Sans capitals, in em
+# The smallest record label whose center lies in a page rect: its font size in page CSS px.
+_RECORD_LABEL = """
+(box) => {
+  const region = document.querySelector('$REGION');
+  let size = Infinity;
+  for (const node of region.querySelectorAll('svg [data-gbdraw-role^="record-definition"] text')) {
+    const b = node.getBoundingClientRect(), user = node.getBBox().height;
+    const x = b.left + b.width / 2, y = b.top + b.height / 2;
+    if (!b.height || !user || x < box.x || x > box.x + box.width || y < box.y || y > box.y + box.height) continue;
+    size = Math.min(size, parseFloat(getComputedStyle(node).fontSize) * b.height / user);
+  }
+  return Number.isFinite(size) ? size : null;
+}
+""".replace("$REGION", PREVIEW_REGION)
+
+
+def _detail_view(part: dict, label: float) -> tuple[float, float]:
+    """The page height a tall-window view of ``part`` shows, and the width of its stops.
+
+    The view shows the part's full height and is tall enough that ``label``
+    (a font size in page CSS px) reads at ``DETAIL_CAP_PX``; each stop is the
+    widest target that view shows whole.
+    """
+
+    readable = label * _CAP_HEIGHT * PORTRAIT.card[3] / DETAIL_CAP_PX
+    rows = {"x": part["x"], "y": part["y"], "width": 0, "height": part["height"]}
+    height = max(PORTRAIT.portrait_view(VIEWPORT, rows, "bottom")[2], readable)
+    return height, PORTRAIT.widest_target(height)
+
+
+def _read_closely(rec: Recorder, part: dict, *, margin: float = 16) -> None:
+    """Read ``part`` in the tall window: zoom in with the preview's own control, pan across, fit again.
+
+    The fitted figure is too small for the tall window to read, and the
+    frames hold only 2 device px per CSS px, so the app draws the part
+    larger: "Zoom in" (skimmed under the fast-forward badge) to the largest
+    zoom whose view still fits inside the canvas, a pan that puts the part's
+    left end in the view, about 3 s still, a slow pan to its right end and
+    another 3 s, then ``_fit_preview``. The camera holds one place meanwhile.
+    """
+
+    page = rec.page
+    geometry = page.evaluate(_PREVIEW)
+    canvas, svg, zoom = geometry["canvas"], geometry["svg"], geometry["zoom"]
+    label = page.evaluate(_RECORD_LABEL, part)
+    if not label:
+        raise AssertionError(f"No record label in the detail part {part}")
+    # The part as shares of the drawing, which zooming and panning keep.
+    share = {"x": (part["x"] - svg["x"]) / svg["width"], "y": (part["y"] - svg["y"]) / svg["height"],
+             "width": part["width"] / svg["width"], "height": part["height"] / svg["height"]}
+    clicks = 0
+    for more in range(1, 49):
+        if zoom + more / 10 > 5.0 + 1e-6:
+            break
+        scale = (zoom + more / 10) / zoom
+        height, _ = _detail_view({"x": 0, "y": 0, "width": part["width"] * scale,
+                                  "height": part["height"] * scale}, label * scale)
+        if height > canvas["height"] - 2 * margin or height * PORTRAIT.aspect > canvas["width"] - 2 * margin:
+            break
+        clicks = more
+    rec.camera(canvas, duration=0.5, portrait=canvas)
+    rec.fast_forward(factor=3.0)
+    zoom_in = _button(rec, "Zoom in")
+    for _ in range(clicks):
+        rec.click(zoom_in, pause=0.35)
+    page.wait_for_timeout(300)
+
+    def located() -> dict:
+        svg = page.evaluate(_PREVIEW)["svg"]
+        return {"x": svg["x"] + share["x"] * svg["width"], "y": svg["y"] + share["y"] * svg["height"],
+                "width": share["width"] * svg["width"], "height": share["height"] * svg["height"]}
+
+    now = located()
+    label = page.evaluate(_RECORD_LABEL, now)
+    height, width = _detail_view(now, label)
+    # The stops' left edges: the part's two ends, or its middle when one view holds it.
+    stops = ([now["x"], now["x"] + now["width"] - width] if now["width"] > width
+             else [now["x"] + (now["width"] - width) / 2])
+
+    def stop(part: dict, x: float) -> dict:
+        return {"x": x, "y": part["y"], "width": width, "height": part["height"]}
+
+    cx, cy, _ = PORTRAIT.portrait_view(VIEWPORT, stop(now, stops[0]), "bottom")
+    _pan_preview(rec, canvas["x"] + canvas["width"] / 2 - cx, canvas["y"] + canvas["height"] / 2 - cy)
+    rec.normal_speed()
+    moved = located()
+    first = stop(moved, moved["x"] + stops[0] - now["x"])
+    rec.event("detail", zoom=round(zoom + clicks / 10, 1), clicks=clicks, stops=len(stops),
+              cap_px=round(label * _CAP_HEIGHT * PORTRAIT.card[3] / PORTRAIT.portrait_view(VIEWPORT, first, "bottom")[2], 1))
+    rec.camera(first, duration=1.0, portrait=first)
+    # The move eases for 1 s, so the part then stays still about 3 s.
+    rec.hold(4.0)
+    if len(stops) > 1:
+        _pan_preview(rec, stops[0] - stops[1], 0, duration=1.8)
+        rec.hold(3.0)
+    _fit_preview(rec)
+
+
+def _preview_part(selector: str) -> Callable[[Recorder], dict]:
     """A ``detail`` of the preview drawing's elements that match ``selector``."""
 
-    def part(rec: Recorder) -> list[dict]:
+    def part(rec: Recorder) -> dict:
         box = rec.page.evaluate(_DETAIL, selector)
         if not box:
             raise AssertionError(f"No preview element matches {selector!r}")
-        return [box]
+        return box
     return part
-
-
-def _figure_halves(rec: Recorder) -> list[dict]:
-    """A ``detail`` of the figure's left and right halves, overlapping a little."""
-
-    figure = rec.figure()
-    if figure is None:
-        raise AssertionError("No preview figure to show")
-    x, y = figure["x"] - rec.origin[0], figure["y"] - rec.origin[1]
-    width = figure["width"] * 0.55
-    return [{"x": x, "y": y, "width": width, "height": figure["height"]},
-            {"x": x + figure["width"] - width, "y": y, "width": width, "height": figure["height"]}]
 
 
 def _linear_file(rec: Recorder, index: int, source: Path) -> Locator:
@@ -1143,10 +1260,15 @@ def _bgc_finish(rec: Recorder) -> None:
     rec.normal_speed()
 
 
-def _bgc_detail(rec: Recorder) -> Callable[[Recorder], list[dict]] | None:
-    """The tall window shows the five fitted rows too small to read, so it pans over their halves."""
+# The five BGC rows: record labels, genes, gene labels, and the ribbons between them (no legend).
+BGC_ROWS = _preview_part('[data-gbdraw-role="record-definition"], [data-gbdraw-feature-id], '
+                         '[data-label-feature-id], [data-match-kind]')
 
-    return _figure_halves if rec.portrait else None
+
+def _bgc_detail(rec: Recorder) -> Callable[[Recorder], dict] | None:
+    """The tall window shows the five fitted rows too small to read, so it reads them closely."""
+
+    return BGC_ROWS if rec.portrait else None
 
 
 def _bgc_aminoglycosides(rec: Recorder, downloads: Path) -> Path:

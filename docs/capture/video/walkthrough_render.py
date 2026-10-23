@@ -123,6 +123,32 @@ class Layout:
             return (y + height + INSET_MARGIN) / self.card[3], 1.0
         return 0.0, (y - INSET_MARGIN) / self.card[3]
 
+    def whole_view(self, viewport: tuple[int, int]) -> float:
+        """The tallest page height the tall window shows: the whole page height, or less when it is narrow."""
+
+        return min(viewport[1], viewport[0] / self.aspect)
+
+    def portrait_view(self, viewport: tuple[int, int], rect: dict, corner: str | None, *,
+                      max_height: float = math.inf) -> tuple[float, float, float]:
+        """The view ``(cx, cy, page height)`` that shows ``rect`` padded in the rows the inset at ``corner`` leaves free.
+
+        ``max_height`` caps what the rect's own height asks for; its width
+        still fits. The camera then keeps the view inside the page.
+        """
+
+        top, bottom = self.free_band(viewport, corner)
+        height = max(min(rect["height"] * PORTRAIT_PAD / (bottom - top), max_height),
+                     rect["width"] * PORTRAIT_PAD / self.aspect)
+        whole = self.whole_view(viewport)
+        height = min(max(height, whole / PORTRAIT_MAX_ZOOM), whole)
+        cy = rect["y"] + rect["height"] / 2 + height * (0.5 - (top + bottom) / 2)
+        return rect["x"] + rect["width"] / 2, cy, height
+
+    def widest_target(self, height: float) -> float:
+        """The widest target a view of this page height shows whole: its width then sets the same height."""
+
+        return height * self.aspect / PORTRAIT_PAD
+
 
 CAPTION_BAND = 144   # px below the landscape window for a caption
 LANDSCAPE = Layout("landscape", (1920, 1080), (160, 34, 1600, 900), False, 40, 26, 1.0, "finale", False)
@@ -377,7 +403,7 @@ class Camera:
         self.viewport = viewport
         self.layout = layout
         self.aspect = layout.aspect
-        self.max_h = min(viewport[1], viewport[0] / self.aspect)
+        self.max_h = layout.whole_view(viewport)
         self.cues = []
         # The page rect the camera stays inside, from each output time on.
         whole = (0.0, 0.0, float(viewport[0]), float(viewport[1]))
@@ -421,16 +447,12 @@ class Camera:
                stage: tuple[float, float, float, float]) -> tuple[float, float, float]:
         """Center the padded ``rect`` in the window rows that the inset at ``corner`` leaves free."""
 
-        top, bottom = self.layout.free_band(self.viewport, corner)
-        height = rect["height"] * PORTRAIT_PAD / (bottom - top)
+        cap = math.inf
         if event["zoom"] > 1 and not event.get("portrait"):
             # A tall target, such as the whole settings column, keeps close to
             # the logged zoom instead of shrinking to fit its full height.
-            height = min(height, self.viewport[1] / event["zoom"] * PORTRAIT_ZOOM_SLACK)
-        height = max(height, rect["width"] * PORTRAIT_PAD / self.aspect)
-        height = min(max(height, self.max_h / PORTRAIT_MAX_ZOOM), self.max_h)
-        cy = rect["y"] + rect["height"] / 2 + height * (0.5 - (top + bottom) / 2)
-        return self._clamp(rect["x"] + rect["width"] / 2, cy, height, stage)
+            cap = self.viewport[1] / event["zoom"] * PORTRAIT_ZOOM_SLACK
+        return self._clamp(*self.layout.portrait_view(self.viewport, rect, corner, max_height=cap), stage)
 
     def _covered(self, state: tuple[float, float, float], corner: str, rect: dict) -> bool:
         """Whether the inset at ``corner`` hides part of ``rect`` in the view ``state``."""

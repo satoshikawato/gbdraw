@@ -91,20 +91,26 @@ _PREVIEW = """
   const svg = canvas?.querySelector(':scope > div > svg');
   if (!svg) return null;
   const box = (node) => { const b = node.getBoundingClientRect(); return {x: b.left, y: b.top, width: b.width, height: b.height}; };
-  const blank = [];
+  // Spots a pan may start from. Spots beside the drawing come first: a press
+  // there never reaches the drawing's click handlers, which look for a
+  // feature under the release point even after a pan.
+  const beside = [], blank = [];
   const c = canvas.getBoundingClientRect();
   for (const fx of [0.04, 0.96, 0.5, 0.25, 0.75]) {
     for (const fy of [0.5, 0.3, 0.7]) {
       const x = c.left + c.width * fx, y = c.top + c.height * fy;
       const hit = document.elementFromPoint(x, y);
       if (hit && canvas.contains(hit) && !hit.closest('[data-gbdraw-feature-id], [data-match-kind], text, button'))
-        blank.push([x, y]);
+        (svg.contains(hit) ? blank : beside).push([x, y]);
     }
   }
+  blank.unshift(...beside);
   // The zoom and layout buttons float over the bottom of the canvas.
   const controls = region.querySelector('.preview-controls')?.getBoundingClientRect();
   const bottom = controls?.height ? Math.min(c.bottom, controls.top - 8) : c.bottom;
-  return {canvas: {x: c.left, y: c.top, width: c.width, height: bottom - c.top}, svg: box(svg), blank};
+  // The preview's own zoom: the scale the app writes on the surface around the drawing.
+  const zoom = new DOMMatrixReadOnly(svg.parentElement.style.transform || 'none').a;
+  return {canvas: {x: c.left, y: c.top, width: c.width, height: bottom - c.top}, svg: box(svg), blank, zoom};
 }
 """
 
@@ -392,6 +398,9 @@ class Recorder:
         self.event("down", x=round(sx, 1), y=round(sy, 1))
         self.page.mouse.down()
         self.move_to(*end, duration=duration)
+        # Rest before releasing: the preview applies a pan once a frame, and a
+        # release before the drawing caught up lands on what passed under it.
+        self.page.wait_for_timeout(150)
         self.page.mouse.up()
         self.event("up", x=round(ex, 1), y=round(ey, 1))
         self.hold(0.3)

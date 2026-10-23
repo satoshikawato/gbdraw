@@ -425,3 +425,132 @@ def test_build_all_refuses_used_directories_before_building(tmp_path: Path) -> N
     with pytest.raises(FileExistsError, match='tobacco-chloroplast'):
         build_video.build_all(['tobacco-chloroplast'], tmp_path / 'out', collect=collect)
     assert not (tmp_path / 'out').exists()
+
+
+class _PreviewPage(_StubPage):
+    """The Result Preview as the detail holds see it: a drawing scaled from the canvas's top center.
+
+    "Zoom in" and "Zoom out" change the zoom by 0.1 like the app's buttons;
+    a press that moves before its release pans the drawing by the same amount.
+    """
+
+    CANVAS = {'x': 461.0, 'y': 211.0, 'width': 1442.0, 'height': 737.0}
+    DRAWING = (2680.0, 1020.0)          # the drawing at zoom 1, in CSS px
+    ROWS = (0.0, 0.0, 1.0, 0.8)         # the detail part, as shares of the drawing
+    LABEL = 24.0                        # the record label font at zoom 1
+    BUTTONS = {'Zoom in': {'x': 1500.0, 'y': 960.0, 'width': 40.0, 'height': 40.0},
+               'Zoom out': {'x': 1590.0, 'y': 960.0, 'width': 40.0, 'height': 40.0}}
+
+    def __init__(self) -> None:
+        super().__init__(1920, 1080)
+        self.zoom, self.pan, self.clicks = 0.2, [0.0, 0.0], []
+        self._at = (0.0, 0.0)
+        self._down = None
+
+        def move(x: float, y: float) -> None:
+            self._at = (x, y)
+        self.mouse = type('Mouse', (), {'move': lambda _, x, y: move(x, y),
+                                        'down': lambda _: setattr(self, '_down', self._at),
+                                        'up': lambda _: self._release()})()
+
+    def _release(self) -> None:
+        (sx, sy), (ex, ey) = self._down, self._at
+        if (sx, sy) != (ex, ey):
+            self.pan[0] += ex - sx
+            self.pan[1] += ey - sy
+            return
+        for name, box in self.BUTTONS.items():
+            if box['x'] <= ex <= box['x'] + box['width'] and box['y'] <= ey <= box['y'] + box['height']:
+                self.clicks.append(name)
+                self.zoom = round(self.zoom + (0.1 if name == 'Zoom in' else -0.1), 1)
+
+    def svg(self) -> dict:
+        canvas, (width, height) = self.CANVAS, self.DRAWING
+        return {'x': canvas['x'] + canvas['width'] / 2 - width * self.zoom / 2 + self.pan[0],
+                'y': canvas['y'] + 8 + self.pan[1], 'width': width * self.zoom, 'height': height * self.zoom}
+
+    def rows(self) -> dict:
+        svg, (x, y, width, height) = self.svg(), self.ROWS
+        return {'x': svg['x'] + x * svg['width'], 'y': svg['y'] + y * svg['height'],
+                'width': width * svg['width'], 'height': height * svg['height']}
+
+    def get_by_role(self, _: str, *, name: str, exact: bool) -> object:
+        box = self.BUTTONS[name]
+        return type('Button', (), {'bounding_box': lambda _: dict(box)})()
+
+    def evaluate(self, script: str, arg: object = None) -> object:
+        from video import tutorials
+        from video.walkthrough import _FEATURE_BOUNDS, _PREVIEW
+        canvas = self.CANVAS
+        if script == _PREVIEW:
+            blank = [(canvas['x'] + canvas['width'] * fx, canvas['y'] + canvas['height'] * fy)
+                     for fx in (0.04, 0.96, 0.5, 0.25, 0.75) for fy in (0.5, 0.3, 0.7)]
+            return {'canvas': dict(canvas), 'svg': self.svg(), 'blank': blank, 'zoom': self.zoom}
+        if script == _FEATURE_BOUNDS:
+            return self.svg()
+        if script == tutorials._DETAIL:
+            return self.rows()
+        if script == getattr(tutorials, '_RECORD_LABEL', None):
+            return self.LABEL * self.zoom
+        if 'window.__GBDRAW_APP__.t(' in script:
+            return arg[0]
+        return None
+
+
+def _detail_hold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, portrait: bool) -> tuple[Recorder, _PreviewPage]:
+    from video import tutorials, walkthrough
+
+    expect = type('Expect', (), {'to_be_visible': lambda _: None})()
+    monkeypatch.setattr(walkthrough, 'expect', lambda _: expect)
+    page = _PreviewPage()
+    rec = Recorder(page, tmp_path, portrait=portrait)
+    rec._origin = 0.0
+    tutorials._show_figure(rec, 4, 'Five clusters, one row each', detail=tutorials._preview_part('[data-x]'))
+    return rec, page
+
+
+def test_portrait_detail_holds_zoom_the_preview_until_labels_read_and_fit_again(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec, page = _detail_hold(tmp_path, monkeypatch, portrait=True)
+    zoom_in = page.clicks.count('Zoom in')
+    assert zoom_in >= 1 and page.clicks == ['Zoom in'] * zoom_in + ['Zoom out'] * zoom_in   # the app's control, then Fit
+    assert page.zoom == pytest.approx(0.2)
+    kinds = [event['kind'] for event in rec.events]
+    # The clicks are skimmed under the fast-forward badge.
+    first_down = kinds.index('down')
+    assert 'speed_start' in kinds[:first_down]
+    detail = next(event for event in rec.events if event['kind'] == 'detail')
+    assert detail['cap_px'] >= tutorials_cap() and detail['stops'] == 2
+    stop = next(event for event in rec.events if event['kind'] == 'camera' and event['t'] >= detail['t'])['portrait']
+    # The view of the first stop starts at the part's left end and lies inside the canvas.
+    cx, cy, height = PORTRAIT.portrait_view((1920, 1080), stop, 'bottom')
+    canvas = page.CANVAS
+    assert canvas['x'] <= cx - height * PORTRAIT.aspect / 2 and cx + height * PORTRAIT.aspect / 2 <= canvas['x'] + canvas['width']
+    assert canvas['y'] <= cy - height / 2 and cy + height / 2 <= canvas['y'] + canvas['height']
+    # The pan to the second stop moves the drawing left, before the fit zooms out.
+    after = rec.events[rec.events.index(next(e for e in rec.events if e['kind'] == 'camera' and e['t'] >= detail['t'])):]
+    downs = [e for e in after if e['kind'] == 'down']
+    ups = [e for e in after if e['kind'] == 'up']
+    assert ups[0]['x'] < downs[0]['x']
+    # The hold ends on the whole figure, fitted as before.
+    whole = next(event for event in rec.events if event['kind'] == 'camera')
+    assert rec.events[-1]['kind'] == 'camera'
+    assert (rec.events[-1]['rect']['width'], rec.events[-1]['rect']['height']) \
+        == (whole['rect']['width'], whole['rect']['height'])
+
+
+def tutorials_cap() -> float:
+    from video import tutorials
+
+    return getattr(tutorials, 'DETAIL_CAP_PX', 11) - 0.5
+
+
+def test_landscape_detail_holds_only_move_the_camera(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec, page = _detail_hold(tmp_path, monkeypatch, portrait=False)
+    assert page.clicks == [] and page.pan == [0.0, 0.0] and page.zoom == 0.2
+    cameras = [event for event in rec.events if event['kind'] == 'camera']
+    assert len(cameras) == 3                                   # whole figure, the part, whole figure
+    part = page.rows()
+    zoom = min(1920 / part['width'], 1080 / part['height']) / 1.08
+    assert cameras[1]['rect'] == {key: round(part[key], 1) for key in ('x', 'y', 'width', 'height')}
+    assert cameras[1]['zoom'] == pytest.approx(max(1.0, min(zoom, 3.0)))
