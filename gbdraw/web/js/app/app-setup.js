@@ -1011,7 +1011,8 @@ export const createAppSetup = () => {
 
   /** @param {unknown} action */
   const setLinearComparisonGlobalAction = async (action) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const normalized = String(action || '').trim().toLowerCase();
@@ -1033,7 +1034,8 @@ export const createAppSetup = () => {
 
   /** @param {string} modeKey */
   const setLinearComparisonLosatMode = (modeKey) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const selection = projectLinearComparisonLosatModeSelection({ modeKey });
@@ -1048,7 +1050,8 @@ export const createAppSetup = () => {
 
   /** @param {string} modeKey */
   const setLinearComparisonLosatpMode = (modeKey) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const selection = projectLinearComparisonLosatpModeSelection({
@@ -1140,7 +1143,8 @@ export const createAppSetup = () => {
   };
 
   const addLinearComparison = async () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const drawn = drawing.drawnLinearSeqs.value;
@@ -1180,7 +1184,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id */
   const omitLinearComparison = (id) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1190,7 +1195,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(drawing, next);
   };
   const clearSelectedLinearComparisons = () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1201,7 +1207,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id @param {'queryUid' | 'subjectUid'} endpoint @param {unknown} uid */
   const setLinearComparisonEndpoint = (id, endpoint, uid) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!['queryUid', 'subjectUid'].includes(endpoint)) return;
@@ -1214,7 +1221,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id @param {unknown} source */
   const setLinearComparisonSource = (id, source) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const normalized = source === LINEAR_COMPARISON_SOURCES.LOSAT
@@ -1229,7 +1237,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id @param {InputFileCandidate} file */
   const setLinearComparisonFile = (id, file) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1243,7 +1252,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id */
   const reuseLinearComparisonFile = (id) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1256,7 +1266,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id */
   const deactivateLinearComparisonFile = (id) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1268,7 +1279,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id @param {unknown} value */
   const setLinearComparisonLosatFilename = (id, value) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1280,7 +1292,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id */
   const reuseLinearComparisonLosatFilename = (id) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1293,7 +1306,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} id */
   const deactivateLinearComparisonLosatFilename = (id) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit(drawing);
@@ -1333,7 +1347,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey @param {unknown} value */
   const setResolvedLinearComparisonLosatFilename = (edgeKey, value) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
       edge.losatFilename = String(value || '');
       edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
@@ -1341,20 +1356,23 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey */
   const reuseResolvedLinearComparisonLosatFilename = (edgeKey) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
       if (String(edge.losatFilename || '').trim()) edge.losatFilenameActive = true;
     });
   };
   /** @param {string} edgeKey */
   const deactivateResolvedLinearComparisonLosatFilename = (edgeKey) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
       edge.losatFilenameActive = false;
     });
   };
   const addLinearComparisonBatch = (allPairs = false) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     syncLinearRecordLayout();
     const next = selectedPlanForEdit(drawing);
     adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), allPairs).forEach(([queryUid, subjectUid]) => {
@@ -1364,7 +1382,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey @param {string} action */
   const setLinearComparisonGapAction = (edgeKey, action) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const pair = linearComparisonPairForEdgeKey(edgeKey);
@@ -1399,7 +1418,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} uid @param {number} fallback */
   const linearRecordRowFor = (uid, fallback) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return fallback;
     return drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback;
   };
   const linearLayoutTokens = computed(() => {
