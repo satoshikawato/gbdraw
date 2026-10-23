@@ -463,15 +463,23 @@ class Recorder:
         swatch.fill(value)
         self.hold(0.45)
 
-    def type(self, field: Locator, text: str, *, delay: float = 0.075, in_svg: bool = False) -> None:
+    def type(self, field: Locator, text: str, *, delay: float = 0.075, in_svg: bool = False,
+             skim_after: int | None = None) -> None:
+        """Type ``text`` into ``field``; ``skim_after`` fast-forwards the characters after that many."""
+
         self.click(field, pause=0.12)
         if not field.evaluate("node => node === document.activeElement"):
             raise AssertionError(f"Clicking {field} did not focus it")
         if field.evaluate("node => node.value"):
             self.page.keyboard.press("Control+A")
-        for char in text:
+        skimmed = skim_after is not None and skim_after < len(text)
+        for index, char in enumerate(text):
+            if skimmed and index == skim_after:
+                self.fast_forward(factor=4.0)
             self.page.keyboard.type(char)
             self.page.wait_for_timeout(delay * 1000)
+        if skimmed:
+            self.normal_speed()
         if in_svg:
             if field.evaluate("node => node.value") != text:
                 raise AssertionError(f"Typing did not set {field} to {text!r}")

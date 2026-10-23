@@ -7,6 +7,7 @@ import dataclasses
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,20 +16,57 @@ sys.path.insert(0, str(CAPTURE_ROOT))
 from video import walkthrough_render  # noqa: E402
 from video.walkthrough import PORTRAIT_TAB, Recorder, journeys  # noqa: E402
 from video.walkthrough_render import (  # noqa: E402
-    FPS, HIGHLIGHTS, LANDSCAPE, PORTRAIT, STORIES, TUTORIAL_IDS, TUTORIAL_LANGUAGES, Camera, Language,
-    Overlay, TimeMap, Type, _cjk_fonts, _clean_breaks, _fonts, _moments, _outputs, _runs, take_name, wrap_clauses)
+    FPS, HIGHLIGHTS, INTRO_SECONDS, LANDSCAPE, OPENING_INTRO_SECONDS, PORTRAIT, STORIES, TUTORIAL_IDS,
+    TUTORIAL_LANGUAGES, Camera, Clip, Language, Overlay, Story, TimeMap, Type, _cjk_fonts, _clean_breaks, _fonts,
+    _moments, _outputs, _runs, full_edit, take_name, wrap_clauses)
 
 # The tall window without its overview inset, for the framing rules that predate it.
 PORTRAIT_PLAIN = dataclasses.replace(PORTRAIT, inset=0)
 
 
-def test_highlights_cut_only_at_marks_the_journey_records() -> None:
-    source = (CAPTURE_ROOT / 'video' / 'walkthrough.py').read_text(encoding='utf-8')
+def test_subtitle_cues_never_overlap_at_a_cut() -> None:
+    # 31 frames: the first cue's last 3-frame step would run 2 frames into the second cue.
+    pieces = [walkthrough_render.Piece('recording', 31, moments=tuple(n / FPS for n in range(31)), caption=(None, 'A', '')),
+              walkthrough_render.Piece('recording', 30, moments=tuple(n / FPS for n in range(30)), caption=(None, 'B', ''))]
+    edit = walkthrough_render.Edit('walkthrough', pieces, numbered=True, badge_from=1.3, finale_caption=(None, '', ''))
+    cues = walkthrough_render.Composer.captions(SimpleNamespace(lang=lambda text: text), edit)
+    assert [text for *_, text in cues] == ['A', 'B']
+    assert cues[0][1] <= cues[1][0] == pytest.approx(31 / FPS)
+
+
+def _marks(module: str) -> set[str]:
+    source = (CAPTURE_ROOT / 'video' / module).read_text(encoding='utf-8')
     marks = set(re.findall(r'(?:rec\.mark\(|mark=)"([^"]+)"', source))
     if 'rec.mark(f"rule-{index + 1}")' in source:
         marks |= {f'rule-{index}' for index in range(1, 5)}
-    wanted = {name for first, _, last, _ in HIGHLIGHTS for name in (first, last)}
-    assert wanted <= marks, sorted(wanted - marks)
+    return marks
+
+
+def test_highlights_cut_only_at_marks_the_journey_records() -> None:
+    wanted = {name for clip in HIGHLIGHTS for name in (clip.first, clip.last)}
+    assert wanted <= _marks('walkthrough.py'), sorted(wanted - _marks('walkthrough.py'))
+    # A story's opening cuts its own journey's recording; the promotion records its marks in promo.py.
+    opening = {name for story in STORIES.values() for clip in story.opening for name in (clip.first, clip.last)}
+    assert opening <= _marks('promo.py'), sorted(opening - _marks('promo.py'))
+
+
+def test_an_opening_plays_labeled_clips_before_a_short_title_card() -> None:
+    clips = (Clip('one', -1.0, 'one', 0.0, 'First'), Clip('two', -1.5, 'two', 0.5, 'Second'))
+    story = Story(('Title', 'Note'), (), opening=clips)
+    recording = SimpleNamespace(story=story, marks={'one': 5.0, 'two': 12.0}, steps=[1, 2],
+                                timemap=TimeMap.build([], 0.0, 20.0), duration=20.0)
+    pieces = full_edit(recording, 0).pieces
+    assert [piece.kind for piece in pieces] == ['recording', 'recording', 'intro', 'recording', 'outro']
+    first, second = pieces[:2]
+    assert first.caption == (None, 'First', '') and second.caption == (None, 'Second', '')
+    assert first.moments[0] == pytest.approx(4.0) and abs(first.frames - 1.0 * FPS) <= 1
+    assert second.moments[0] == pytest.approx(10.5) and abs(second.frames - 2.0 * FPS) <= 1
+    assert pieces[2].frames == round(OPENING_INTRO_SECONDS * FPS) and pieces[2].fade == walkthrough_render.CUT_FADE
+    assert pieces[3].caption is None and pieces[3].frames == 20 * FPS
+    # A story without an opening keeps its title card first and at full length.
+    recording.story = dataclasses.replace(story, opening=())
+    plain = full_edit(recording, 0).pieces
+    assert plain[0].kind == 'intro' and plain[0].frames == round(INTRO_SECONDS * FPS)
 
 
 def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
@@ -383,6 +421,7 @@ def _screen_text() -> set[str]:
     strings |= {text for text in (*render.FINALE_TEXT, *render.MONTAGE_CAPTION[1:])}
     strings |= {text for story in STORIES.values() for text in story.intro}
     strings |= {text for story in STORIES.values() for text in story.outro}
+    strings |= {clip.label for story in STORIES.values() for clip in story.opening}
     strings |= {row[0] for row in render.Composer.OUTRO_ROWS}
     return {text for text in strings if text}
 

@@ -34,6 +34,7 @@ FONT_CACHE = Path.home() / ".cache/gbdraw-video-fonts"
 FPS = 30
 RADIUS = 18
 INTRO_SECONDS = 3.4
+OPENING_INTRO_SECONDS = 2.0   # the title card after an opening of highlights
 OUTRO_SECONDS = 5.0
 FADE_SECONDS = 0.5
 FINALE_TEXT = ("Vector stays sharp at any zoom", "The downloaded SVG, magnified 7×")
@@ -163,6 +164,21 @@ INSET_CORNERS = ("bottom", "top")   # the default corner first
 
 
 @dataclass(frozen=True)
+class Clip:
+    """A cut of the recording from ``before`` s around mark ``first`` to ``after`` s around mark ``last``.
+
+    Offsets are on the walkthrough timeline. A clip with a ``label`` shows it
+    as its caption instead of the step's.
+    """
+
+    first: str
+    before: float
+    last: str
+    after: float
+    label: str = ""
+
+
+@dataclass(frozen=True)
 class Story:
     """How one journey's recording becomes videos: its intro, its outputs, and its language.
 
@@ -174,6 +190,8 @@ class Story:
     outputs: tuple[tuple[str, Layout, str], ...]   # (edit, layout, file stem without the language suffix)
     language: str = "en"
     outro: tuple[str, ...] = ()   # the outro's title and lines; empty keeps ``Composer.OUTRO_ROWS``
+    # Highlights the walkthrough edit plays before a shorter title card, each under its label.
+    opening: tuple[Clip, ...] = ()
 
 
 TUTORIAL_IDS = ("HmmtDNA_ATskew", "tobacco-chloroplast", "BGC0000708-BGC0000713",
@@ -214,7 +232,13 @@ PROMO_ID = "promo-zh-0140-vertical"
 PROMO_STORY = Story(
     ("gbdraw 0.14.0: what is new", "Microbial and organelle genome maps · now with a Simplified Chinese interface"),
     (("walkthrough", replace(PORTRAIT, audio=False), "gbdraw-0.14.0-vertical"),), "zh-Hans",
-    outro=("gbdraw.app", "Command line: pip install gbdraw"))
+    outro=("gbdraw.app", "Command line: pip install gbdraw"),
+    # The marks ``video.promo`` sets at the end of each result's hold.
+    opening=(Clip("hl-lang", -2.0, "hl-lang", -0.5, "Simplified Chinese interface"),
+             Clip("hl-font", -1.4, "hl-font", 0.0, "Chinese text in the figure"),
+             Clip("hl-rotate", -1.4, "hl-rotate", 0.0, "Start at any base"),
+             Clip("hl-lane", -1.4, "hl-lane", 0.0, "Features on lanes you choose"),
+             Clip("hl-align", -1.4, "hl-align", 0.0, "Similarity-group alignment")))
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
 STORIES = {
@@ -1341,6 +1365,7 @@ class Piece:
     moments: tuple = ()       # recording pieces: walkthrough-timeline position of each frame
     speed: float = 1.0
     fade: int = 0             # frames of cross-dissolve from the previous piece
+    caption: tuple | None = None   # recording pieces: a fixed caption instead of the recording's
 
     @property
     def start(self) -> float:
@@ -1376,14 +1401,14 @@ class Edit:
 # timings still yields the same story. Offsets and speeds are on the
 # walkthrough timeline.
 HIGHLIGHTS = (
-    ("upload", -0.3, "loaded", 1.2),
-    ("generate", 0.0, "generated", 2.0),
-    ("layout", -0.2, "layout-done", 2.0),
-    ("labels", -0.2, "crowded", 2.2),
-    ("priority-type", -0.2, "genes", 2.6),
-    ("rule-4", -0.1, "legend", 2.4),
-    ("bracket", -0.2, "dloop", 2.6),
-    ("export", -0.1, "downloaded", 1.4),
+    Clip("upload", -0.3, "loaded", 1.2),
+    Clip("generate", 0.0, "generated", 2.0),
+    Clip("layout", -0.2, "layout-done", 2.0),
+    Clip("labels", -0.2, "crowded", 2.2),
+    Clip("priority-type", -0.2, "genes", 2.6),
+    Clip("rule-4", -0.1, "legend", 2.4),
+    Clip("bracket", -0.2, "dloop", 2.6),
+    Clip("export", -0.1, "downloaded", 1.4),
 )
 HIGHLIGHT_SPEED = 1.4
 HIGHLIGHT_WAIT_SPEED = 2.5  # generation waits, on top of the walkthrough's own compression
@@ -1393,13 +1418,37 @@ CUT_FADE = 7
 CHAPTER_FADE = round(FADE_SECONDS * FPS)
 
 
+def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wait_speed: float,
+                 first_fade: int) -> list[Piece]:
+    """One recording piece per clip, cut at the recording's marks; later clips dissolve in quickly."""
+
+    pieces = []
+    for index, clip in enumerate(clips):
+        missing = {clip.first, clip.last} - set(recording.marks)
+        if missing:
+            raise ValueError(f"Recording lacks marks {sorted(missing)}")
+        start = recording.marks[clip.first] + clip.before
+        stop = recording.marks[clip.last] + clip.after
+        if stop <= start:
+            raise ValueError(f"Clip {clip.first}->{clip.last} is empty")
+        moments = _moments(recording.timemap, start, stop, speed, wait_speed)
+        pieces.append(Piece("recording", len(moments), moments=moments, speed=speed,
+                            fade=first_fade if index == 0 else CUT_FADE,
+                            caption=(None, clip.label, "") if clip.label else None))
+    return pieces
+
+
 def full_edit(recording: Recording, finale_frames: int) -> Edit:
     # The vector zoom continues the last step, which exports the SVG. Journeys
     # that end in the exported file itself, such as an Interactive SVG opened
     # in the browser, have no zoom.
     finale_caption = (recording.steps[-1], *FINALE_TEXT)
+    opening = _clip_pieces(recording, recording.story.opening, 1.0, 1.0, 0)
     pieces = [
-        Piece("intro", round(INTRO_SECONDS * FPS)),
+        *opening,
+        # After an opening the title card cuts in quickly, so its logo curl is not drawn under the dissolve.
+        Piece("intro", round((OPENING_INTRO_SECONDS if opening else INTRO_SECONDS) * FPS),
+              fade=CUT_FADE if opening else 0),
         Piece("recording", math.ceil(recording.duration * FPS),
               moments=tuple(n / FPS for n in range(math.ceil(recording.duration * FPS))), fade=CHAPTER_FADE),
     ]
@@ -1410,18 +1459,8 @@ def full_edit(recording: Recording, finale_frames: int) -> Edit:
 
 
 def highlights_edit(recording: Recording, finale_frames: int) -> Edit:
-    pieces = [Piece("montage", round(MONTAGE_SECONDS * FPS))]
-    for index, (first, before, last, after) in enumerate(HIGHLIGHTS):
-        missing = {first, last} - set(recording.marks)
-        if missing:
-            raise ValueError(f"Recording lacks marks {sorted(missing)}")
-        start = recording.marks[first] + before
-        stop = recording.marks[last] + after
-        if stop <= start:
-            raise ValueError(f"Highlight {first}->{last} is empty")
-        moments = _moments(recording.timemap, start, stop, HIGHLIGHT_SPEED, HIGHLIGHT_WAIT_SPEED)
-        pieces.append(Piece("recording", len(moments), moments=moments, speed=HIGHLIGHT_SPEED,
-                            fade=CHAPTER_FADE if index == 0 else CUT_FADE))
+    pieces = [Piece("montage", round(MONTAGE_SECONDS * FPS)),
+              *_clip_pieces(recording, HIGHLIGHTS, HIGHLIGHT_SPEED, HIGHLIGHT_WAIT_SPEED, CHAPTER_FADE)]
     pieces.append(Piece("finale", round(finale_frames / 1.2), speed=1.2, fade=CHAPTER_FADE))
     pieces.append(Piece("outro", round(HIGHLIGHT_OUTRO_SECONDS * FPS), fade=CHAPTER_FADE))
     return Edit("highlights", pieces, numbered=False, badge_from=2.0,
@@ -1460,6 +1499,7 @@ class Composer:
         for edit in self.edits.values():
             shown = [caption for _, caption in recording.captions]
             shown += [edit.finale_caption] if any(piece.kind == "finale" for piece in edit.pieces) else []
+            shown += [piece.caption for piece in edit.pieces if piece.caption]
             for step, title, subtitle in shown + ([MONTAGE_CAPTION] if edit.name == "highlights" else []):
                 self.overlay.caption(step if edit.numbered else None, lang(title), lang(subtitle))
 
@@ -1618,10 +1658,14 @@ class Composer:
                 x, y = self.layout.toast_origin(rec.viewport, layer.size, *inset)
                 extras.append((_fade(layer, alpha), (x, y + round((1 - alpha) * 16))))
         factor = rec.timemap.factor(moment) * piece.rate(local)
-        if factor >= edit.badge_from:
+        # An opening clip is a montage of results: no badge, even where it dissolves into a skimmed moment.
+        if factor >= edit.badge_from and piece.caption is None:
             badge = self.overlay.badge(factor)
             extras.append((badge, self.layout.badge_origin(badge.size)))
-        caption, caption_in, previous = rec.caption_at(moment, piece.start)
+        if piece.caption:
+            caption, caption_in, previous = piece.caption, local / FPS / 0.35, None
+        else:
+            caption, caption_in, previous = rec.caption_at(moment, piece.start)
         return self._compose_card(self._screen(moment, self.camera.at(moment)), caption, caption_in, previous,
                                   extras, edit)
 
@@ -1883,7 +1927,9 @@ class Composer:
         position = 0
         for piece in edit.pieces:
             for local in range(0, piece.frames, 3):
-                if piece.kind == "recording":
+                if piece.caption:
+                    step, title, subtitle = piece.caption
+                elif piece.kind == "recording":
                     step, title, subtitle = self.recording.caption_at(piece.moment(local), piece.start)[0]
                 elif piece.kind == "finale":
                     step, title, subtitle = edit.finale_caption
@@ -1898,6 +1944,9 @@ class Composer:
                 if runs and runs[-1][2] == text:
                     runs[-1][1] = second + 3 / FPS
                 else:
+                    if runs:
+                        # A piece of a length not divisible by 3 would let the cue run past the next one's start.
+                        runs[-1][1] = min(runs[-1][1], second)
                     runs.append([second, second + 3 / FPS, text])
             position += piece.frames
         return [(a, b, text) for a, b, text in runs if text]
