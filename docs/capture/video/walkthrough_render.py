@@ -245,10 +245,10 @@ PROMO_STORY = Story(
     opening=(Clip("hl-lang-en", -0.6, "hl-lang-en", 0.0, "Simplified Chinese interface"),
              Clip("hl-lang-pick", -0.7, "hl-lang-pick", 0.0, "Simplified Chinese interface"),
              Clip("hl-lang-zh", -0.9, "hl-lang-zh", 0.0, "Simplified Chinese interface"),
-             Clip("hl-font", -1.1, "hl-font", 0.0, "Chinese text in the figure"),
+             Clip("hl-font", -1.0, "hl-font", 0.0, "Chinese text in the figure"),
              *(Clip(f"hl-rotate-{n}", -0.5, f"hl-rotate-{n}", 0.0, "Start at any base") for n in range(1, 5)),
              *(Clip(f"hl-lane-{n}", -0.5, f"hl-lane-{n}", 0.0, "Features on lanes you choose") for n in range(1, 5)),
-             Clip("hl-align", -1.2, "hl-align", 0.0, "Similarity-group alignment")))
+             Clip("hl-align", -1.0, "hl-align", 0.0, "Similarity-group alignment")))
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
 STORIES = {

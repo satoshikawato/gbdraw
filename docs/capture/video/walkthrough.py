@@ -59,6 +59,8 @@ GALLERY_SOURCES = REPO_ROOT / "gbdraw/web/gallery/sources"
 FINALE_SIZE = (1600, 900)
 FINALE_PORTRAIT_SIZE = (936, 1060)
 MENU_ROWS = 8
+MENU_ROW_PX = 22      # a drawn menu row, in CSS px
+PANE_HEIGHT = 420     # the settings pane from its top to Basic: headings, Applies on Generate, GenBank, Browse
 SKIM = 3.0             # fast-forward factor for navigation and repeats
 STAGES_SECONDS = 2.0   # how long a Generate's stage line plays at normal speed before its wait skims
 FINALE_FRAMES = 105
@@ -425,7 +427,7 @@ class Recorder:
         self.hold(0.3)
 
     def choose(self, select: Locator, value: str, *, in_svg: bool = False, rows: int = MENU_ROWS,
-               linger: float = 0.2, keeps: bool = True) -> None:
+               linger: float = 0.2, keeps: bool = True, mark: str | None = None) -> None:
         """Select an option.
 
         Headless Chromium never paints native popups, so the option list and
@@ -435,7 +437,8 @@ class Recorder:
         ``rows`` is the most rows the drawn list shows, and ``linger`` how long
         it stays open before the row is pointed at. ``keeps`` False marks an
         action option, such as Load font file…, after which the select shows
-        its previous value again.
+        its previous value again. ``mark`` names the moment of the click, before
+        the select takes its value: a cut can end with the old state on screen.
         """
 
         box = select.bounding_box()
@@ -452,10 +455,15 @@ class Recorder:
         sx, sy = self._stage(box["x"], box["y"])
         self.event("menu", x=sx, y=sy, width=box["width"], height=box["height"],
                    options=labels, selected=selected, window=[first, rows], duration=0.85 + linger)
+        opened = self.events[-1]
         self.hold(linger)
         # Point at the chosen row of the drawn menu (22 CSS px rows below the box).
-        row_y = box["y"] + box["height"] + 6 + (selected - first + 0.5) * 22
+        row_y = box["y"] + box["height"] + 6 + (selected - first + 0.5) * MENU_ROW_PX
         self._press(box["x"] + min(box["width"], 120) * 0.5, row_y, real=False)
+        # A busy page makes the pointer's travel to the row slow: the list stays open until the click.
+        opened["duration"] = max(opened["duration"], round(time.time() - self._origin - opened["t"], 4) + 0.3)
+        if mark:
+            self.mark(mark)
         if in_svg:
             if select.evaluate(_SET_VALUE, value) != value:
                 raise AssertionError(f"{value!r} could not be selected")
@@ -894,23 +902,48 @@ def open_in_browser(rec: Recorder, svg: Path) -> list[str]:
     return errors
 
 
-def switch_language(rec: Recorder, code: str) -> None:
-    """Switch the app's UI language on camera with the header's Language menu."""
+LANGUAGE_CAPTION = (None, "Switch the app to Simplified Chinese", "Language, in the header")
+
+
+def switch_language(rec: Recorder, code: str, *,
+                    captions: tuple[tuple, tuple, tuple] = (LANGUAGE_CAPTION,) * 3,
+                    marks: tuple[str, str, str] = ("language", "language-pick", "language-zh"),
+                    rows: int = MENU_ROWS) -> None:
+    """Switch the app's UI language on camera: the settings pane before, the header's Language menu, the pane after.
+
+    The pane and the menu are far apart on the page, so the camera frames the
+    pane before and after the pick (one framing both times, in the old and the
+    new language) and the menu with its list in between. ``captions`` are the
+    (step, title, subtitle) shown over the three parts, and ``marks`` name the
+    end of the first hold (just before the menu opens), the click on the
+    option (the header still shows the old language), and the end of the last
+    hold. ``rows`` is how many rows of the option list the drawn menu shows.
+    """
 
     page = rec.page
+    # The pane first, with the fewest queries before it: the recording shows the whole page until the camera cue.
+    pane = {**page.locator(".settings-scroll").bounding_box(), "height": PANE_HEIGHT}
+    rec.camera(pane, zoom=1.6, duration=0, portrait=pane)
+    rec.caption(*captions[0])
     menu = page.locator("select[data-ui-language]")
-    rec.camera(duration=0)
-    rec.caption(None, "Switch the app to Simplified Chinese", "Language, in the header")
-    rec.hold(1.6)
-    rec.mark("language")
-    rec.focus(menu, zoom=2.6)
-    rec.hold(0.5)
-    rec.choose(menu, code)
+    box = menu.bounding_box()
+    # The menu and the list of its options drawn below it.
+    area = {"x": box["x"] - 30, "y": box["y"] - 10, "width": box["width"] + 60,
+            "height": box["height"] + MENU_ROW_PX * min(rows, menu.locator("option").count()) + 34}
+    rec.hold(1.4)
+    rec.mark(marks[0])
+    rec.camera(area, zoom=2.4, duration=0.7, portrait=area)
+    rec.caption(*captions[1])
+    rec.hold(0.7)
+    rec.choose(menu, code, rows=rows, linger=2.0, mark=marks[1])
     page.wait_for_function("(code) => window.__GBDRAW_APP__.uiLocale.value === code", arg=code)
     page.wait_for_function("() => document.fonts.status === 'loaded'")
-    rec.hold(1.4)
-    rec.camera(duration=0.9)
-    rec.hold(1.6)
+    rec.camera(pane, zoom=1.6, duration=0.7, portrait=pane)
+    rec.caption(*captions[2])
+    rec.hold(1.9)
+    rec.mark(marks[2])
+    rec.camera(duration=0.8)
+    rec.hold(0.4)
 
 
 def _inspect_export(svg: Path) -> dict:

@@ -16,6 +16,7 @@ import json
 import os
 import re
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 
 from playwright.sync_api import Locator, expect
@@ -23,25 +24,26 @@ from playwright.sync_api import Locator, expect
 from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS
 from video.tutorials import (_button, _close_feature, _feature_point, _fit_preview, _frame_box, _frame_figure,
                              _label, _look, _open_feature, _pick, _summary)
-from video.walkthrough import PREVIEW_REGION, SKIM, STAGES_SECONDS, Journey, Recorder, _center, _skimmed
-from video.walkthrough_render import FONT_CACHE, PORTRAIT_PAD, PROMO_ID
+from video.walkthrough import (PREVIEW_REGION, SKIM, STAGES_SECONDS, VIEWPORT, Journey, Recorder, _center,
+                               _skimmed, switch_language)
+from video.walkthrough_render import FONT_CACHE, PORTRAIT, PORTRAIT_PAD, PROMO_ID
 
 HMMT_EXAMPLE = "HmmtDNA_ATskew"   # the map with AT content and AT skew tracks
 BGC_EXAMPLE = "BGC0000708-BGC0000713"
 BGC_RECORDS = ("BGC0000708", "BGC0000709", "BGC0000711", "BGC0000712", "BGC0000713")
 TITLE = "人类线粒体基因组"
 LANGUAGES = 11          # English and the ten translations
-MENU_ROW = 22
-PANE_HEIGHT = 420       # the settings pane from its top to Basic: headings, Applies on Generate, GenBank, Click to Browse
 # The record starts at each gene in turn. The first rotation teaches it; the others are fast-forwarded repeats.
 ROTATE_GENES = ("COX1", "ND1", "CYTB", "ND5")
 ROTATE_MARKS = ("hl-rotate-1", "hl-rotate-2", "hl-rotate-3", "hl-rotate-4")
-# Genes put on a lane one after another (gene, Feature placement choice). ATP8 has an outside label and leader
-# line, so its label and leader stay true to "move with it"; the others lie on the COX2...ND4L arc around it.
-LANE_MOVES = (("ATP8", "outward"), ("COX3", "inward"), ("ND3", "outward"), ("ND4L", "inward"))
+# Genes put on the first outward lane one after another, each staying out, so the genes standing out of the ring
+# build up. ATP8 has an outside label and leader line, so its label and leader stay true to "move with it".
+LANE_GENES = ("ATP8", "COX3", "ND3", "ND4L")
 LANE_MARKS = ("hl-lane-1", "hl-lane-2", "hl-lane-3", "hl-lane-4")
-LANE_ARC = ("COX2", "ATP8", "ATP6", "COX3", "ND3", "ND4L")
-REPEAT_SECONDS = 2.0    # one fast-forwarded repeat of a rotation or a lane move, as the viewer sees it
+LANE_SIDE = "outward"
+REPEAT_SECONDS = 1.5    # one fast-forwarded repeat of a rotation or a lane move, as the viewer sees it
+FONT_VIEW_HEIGHT = 470      # page px the Chinese title's view shows, from just below the search box
+LANE_ROOM = 45          # page px around the arc for an outward lane and its labels
 VERSION_HOLD = 0.9      # the map held, popup closed, before a version's mark; the opening clip is its last 0.5 s
 
 _FONT_READY = """
@@ -75,6 +77,21 @@ _MAP_PART = """
   const right = Math.max(...boxes.map((b) => b.right)), bottom = Math.max(...boxes.map((b) => b.bottom));
   return {x: left, y: top, width: right - left, height: bottom - top};
 }
+""".replace("$REGION", PREVIEW_REGION)
+
+
+_ANCHOR = """
+() => {
+  const svg = document.querySelector('$REGION svg');
+  const text = [...svg.querySelectorAll('text')].find((node) => node.textContent.startsWith('NC_'));
+  const box = text.getBoundingClientRect(), whole = svg.getBoundingClientRect();
+  return {x: box.left + box.width / 2, y: box.top + box.height / 2, scale: whole.width / svg.viewBox.baseVal.width};
+}
+""".replace("$REGION", PREVIEW_REGION)
+
+
+_LEGEND_RIGHT = """
+() => document.querySelector('$REGION svg #legend')?.getBoundingClientRect().right ?? null
 """.replace("$REGION", PREVIEW_REGION)
 
 
@@ -158,44 +175,6 @@ def _generate(rec: Recorder, *, stages: bool = False) -> None:
             rec.generate(target=None)
     _fit(rec)
     rec.camera(duration=0.9)
-
-
-def _switch_to_chinese(rec: Recorder, code: str) -> None:
-    """Steps lang and lang2: the settings pane in English, the Language menu with every language, the pane in Chinese.
-
-    The pane and the menu are far apart on the page, so the camera frames the pane before and after the pick
-    (the same framing both times) and the menu in between.
-    """
-
-    page = rec.page
-    # The pane first, with the fewest queries before it: the recording shows the whole page until the camera cue.
-    pane = {**page.locator(".settings-scroll").bounding_box(), "height": PANE_HEIGHT}
-    rec.camera(pane, zoom=1.6, duration=0, portrait=pane)
-    rec.caption(1, "The interface in Simplified Chinese",
-                "The Language menu in the header switches at once, without reloading")
-    menu = page.locator("select[data-ui-language]")
-    expect(menu.locator("option")).to_have_count(LANGUAGES)
-    box = menu.bounding_box()
-    # The menu and the list of every language drawn below it.
-    area = {"x": box["x"] - 30, "y": box["y"] - 10, "width": box["width"] + 60,
-            "height": box["height"] + MENU_ROW * LANGUAGES + 34}
-    rec.hold(1.4)
-    rec.mark("hl-lang-en")
-    rec.camera(area, zoom=2.4, duration=0.7, portrait=area)
-    rec.caption(1, "11 interface languages", "Including Simplified and Traditional Chinese")
-    rec.hold(0.7)
-    rec.choose(menu, code, rows=LANGUAGES, linger=2.0)
-    page.wait_for_function("(code) => window.__GBDRAW_APP__.uiLocale.value === code", arg=code)
-    page.wait_for_function("() => document.fonts.status === 'loaded'")
-    rec.hold(0.2)
-    rec.mark("hl-lang-pick")
-    rec.camera(pane, zoom=1.6, duration=0.7, portrait=pane)
-    rec.caption(1, "The interface in Simplified Chinese",
-                "The Language menu in the header switches at once, without reloading")
-    rec.hold(1.9)
-    rec.mark("hl-lang-zh")
-    rec.camera(duration=0.8)
-    rec.hold(0.4)
 
 
 def _wheel_into_view(rec: Recorder, area: dict, target: Locator) -> None:
@@ -285,7 +264,14 @@ def _font_and_title(rec: Recorder) -> None:
     with _skimmed(rec):
         _pick(rec, _label(rec, "Plot Title Position"), "top")
     _generate(rec)
-    _look(rec, rec.text_bounds(f"^{TITLE}$"), zoom=2.4, seconds=2.4, pad=50)
+    title_box = rec.text_bounds(f"^{TITLE}$")
+    search = page.locator(".preview-feature-search")
+    # The toolbar and the search box sit above the figure: the view starts below them, so neither is cut.
+    top = search.bounding_box()["y"] + search.bounding_box()["height"] + 6 if search.count() and search.first.is_visible() \
+        else title_box["y"] - 40
+    view = _tall_view(title_box["x"] + title_box["width"] / 2 - FONT_VIEW_HEIGHT * PORTRAIT.aspect / 2, top, FONT_VIEW_HEIGHT)
+    rec.camera(view, zoom=2.4, duration=1.1, portrait=view)
+    rec.hold(2.4)
     rec.mark("hl-font")
 
 
@@ -296,6 +282,17 @@ def _map_frame(rec: Recorder, genes: tuple[str, ...] | None, *, pad: float) -> d
     if box is None:
         raise AssertionError(f"No drawn feature to frame: {genes}")
     return {"x": box["x"] - pad, "y": box["y"] - pad, "width": box["width"] + 2 * pad, "height": box["height"] + 2 * pad}
+
+
+def _tall_view(left: float, top: float, height: float) -> dict:
+    """The rect that makes the tall window show exactly the page rows ``top`` to ``top + height``, from ``left``.
+
+    The camera pads a framed rect and sizes the view by its width; a rect as wide as the view needs, and as
+    low as a line, gives the view this position and height whatever the figure holds there.
+    """
+
+    width = height * PORTRAIT.aspect / PORTRAIT_PAD
+    return {"x": left + height * PORTRAIT.aspect / 2 - width / 2, "y": top + height / 2 - 1, "width": width, "height": 2}
 
 
 def _rotation_frame(rec: Recorder) -> dict:
@@ -374,14 +371,14 @@ def _rotate(rec: Recorder) -> None:
     _rotate_to(rec, ROTATE_GENES[0], repeat=False)
     frame = _rotation_frame(rec)
     expect(rec.page.locator(PREVIEW_REGION)).to_contain_text("5,904")   # COX1 at the top; the center text says so
-    _show_version(rec, frame, ROTATE_MARKS[0], 2.4)
+    _show_version(rec, frame, ROTATE_MARKS[0], 2.0)
     for gene, mark in zip(ROTATE_GENES[1:], ROTATE_MARKS[1:], strict=True):
         _rotate_to(rec, gene, repeat=True)
         _show_version(rec, frame, mark, VERSION_HOLD)
 
 
-def _lane_to(rec: Recorder, gene: str, side: str, *, repeat: bool) -> None:
-    """``gene`` › Feature placement › ``side`` lane 1, then Generate.
+def _lane_to(rec: Recorder, gene: str, *, repeat: bool) -> None:
+    """``gene`` › Feature placement › Outward lane 1, then Generate.
 
     The first move plays at normal speed with the Generate stage line; a repeat, Generate included, plays in
     about ``REPEAT_SECONDS``.
@@ -395,7 +392,7 @@ def _lane_to(rec: Recorder, gene: str, side: str, *, repeat: bool) -> None:
             placement.evaluate("node => node.scrollIntoView({block: 'center'})")
             page.wait_for_timeout(300)
             rec.focus(placement, zoom=2.4, duration=0.6)
-        rec.choose(placement, side)
+        rec.choose(placement, LANE_SIDE)
         rec.hold(0.4)
         with _skimmed(rec):
             _close_feature(rec)
@@ -407,18 +404,47 @@ def _lane_to(rec: Recorder, gene: str, side: str, *, repeat: bool) -> None:
             rec.move_to(230, 560)
 
 
+def _lane_frame(rec: Recorder) -> dict:
+    """The arc that holds the moved genes, tight: what the moves change fills the tall window.
+
+    The view starts a lane's width left of the arc (or past the legend's edge when that is nearer), so the Legend
+    and the center text are out of it. The arc sits in the rows the overview inset leaves free. The frame is
+    returned relative to the ring's center text, in figure units: each Generate fits the figure afresh, so
+    ``_place`` puts the same part of it in view again.
+    """
+
+    arc = _map_frame(rec, LANE_GENES, pad=0)
+    legend_right = rec.page.evaluate(_LEGEND_RIGHT)
+    left = max(arc["x"] - LANE_ROOM, (legend_right or -1e9) + 8)
+    free = (lambda rows: rows[1] - rows[0])(PORTRAIT.free_band(VIEWPORT, "bottom"))
+    height = max((arc["height"] + 2 * LANE_ROOM) / free, VIEWPORT[1] / 2.6)
+    frame = _tall_view(left, arc["y"] - LANE_ROOM, height)
+    anchor = rec.page.evaluate(_ANCHOR)
+    print(f"lane arc: {arc} legend right: {legend_right} frame: {frame} anchor: {anchor}", flush=True)
+    return {"x": (frame["x"] - anchor["x"]) / anchor["scale"], "y": (frame["y"] - anchor["y"]) / anchor["scale"],
+            "width": frame["width"] / anchor["scale"], "height": frame["height"] / anchor["scale"]}
+
+
+def _place(rec: Recorder, relative: dict) -> dict:
+    """The page rect of a frame made by ``_lane_frame``, on the figure as it is drawn now."""
+
+    anchor = rec.page.evaluate(_ANCHOR)
+    return {"x": anchor["x"] + relative["x"] * anchor["scale"], "y": anchor["y"] + relative["y"] * anchor["scale"],
+            "width": relative["width"] * anchor["scale"], "height": relative["height"] * anchor["scale"]}
+
+
 def _lane(rec: Recorder) -> None:
-    """Steps lane and stages: ATP8 › Outward lane 1 with the Generate stages, then three more genes on lanes."""
+    """Steps lane and stages: ATP8 › Outward lane 1 with the Generate stages, then three more genes out, one by one."""
 
     rec.caption(5, "Put a feature on the lane you choose", "Its label and leader line move with it")
-    # The arc is framed before any move, with room for the lanes' labels; every version keeps this framing.
-    frame = _map_frame(rec, LANE_ARC, pad=45)
-    print(f"lane frame: {frame}", flush=True)
+    # The arc is framed before any move; every version keeps this framing.
+    relative = _lane_frame(rec)
+    frame = _place(rec, relative)
     rec.camera(frame, zoom=2.0, duration=1.1, portrait=frame)
-    rec.hold(1.0)
-    for index, ((gene, side), mark) in enumerate(zip(LANE_MOVES, LANE_MARKS, strict=True)):
-        _lane_to(rec, gene, side, repeat=bool(index))
-        _show_version(rec, frame, mark, 2.6 if index == 0 else VERSION_HOLD)
+    rec.hold(0.6)
+    for index, (gene, mark) in enumerate(zip(LANE_GENES, LANE_MARKS, strict=True)):
+        _lane_to(rec, gene, repeat=bool(index))
+        _show_version(rec, _place(rec, relative), mark, 2.0 if index == 0 else VERSION_HOLD)
 
 
 def _reset_alignment(rec: Recorder) -> None:
@@ -555,6 +581,7 @@ def _session(rec: Recorder, downloads: Path) -> None:
 
 def _promo(rec: Recorder, downloads: Path) -> Path:
     page = rec.page
+    expect(page.locator("select[data-ui-language] option")).to_have_count(LANGUAGES)   # the caption's "11 languages"
     rec.caption(2, "Load an example", "The human mitochondrial genome with AT skew opens as a finished map")
     _load_example(rec, page.locator("button[aria-describedby='example-session-help']"), HMMT_EXAMPLE, "circular")
     _frame_figure(rec)
@@ -584,5 +611,13 @@ def _inspect_promo(svg: Path) -> dict:
     return report
 
 
+# The Language menu step: captions of the three parts (the pane in English, the menu with every language, the pane
+# in Chinese) and the marks the opening's language clips cut at.
+_SWITCH = partial(
+    switch_language, rows=LANGUAGES,
+    captions=((1, "The interface in Simplified Chinese", "The Language menu in the header switches at once, without reloading"),
+              (1, "11 interface languages", "Including Simplified and Traditional Chinese"),
+              (1, "The interface in Simplified Chinese", "The Language menu in the header switches at once, without reloading")),
+    marks=("hl-lang-en", "hl-lang-pick", "hl-lang-zh"))
 PROMOS = (Journey(PROMO_ID, (), _promo, _inspect_promo, zoom_text="", vector_zoom=False, portrait=True,
-                  switch=_switch_to_chinese),)
+                  switch=_SWITCH),)

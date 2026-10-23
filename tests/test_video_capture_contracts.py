@@ -132,7 +132,7 @@ def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> N
     opening = STORIES[walkthrough_render.PROMO_ID].opening
     for label, marks, genes in (('Start at any base', promo.ROTATE_MARKS, promo.ROTATE_GENES),
                                 ('Features on lanes you choose', promo.LANE_MARKS,
-                                 [gene for gene, _ in promo.LANE_MOVES])):
+                                 promo.LANE_GENES)):
         clips = [clip for clip in opening if clip.label == label]
         # At least four versions, each a different gene, cut one after another under one label.
         assert [clip.last for clip in clips] == list(marks) and len(set(genes)) == len(genes) >= 4
@@ -401,6 +401,68 @@ def test_a_take_renders_only_the_language_it_recorded() -> None:
         assert [stem for *_, stem in outputs] == [stem + suffix for *_, stem in story.outputs]
 
 
+class _SwitchPage(_StubPage):
+    """A page with a settings pane, the Language menu with eleven options, and no other behavior."""
+
+    class _Node:
+        def __init__(self, box: dict | None = None, count: int = 0) -> None:
+            self.box, self._count = box, count
+
+        def bounding_box(self) -> dict:
+            return self.box
+
+        def locator(self, _: str) -> '_SwitchPage._Node':
+            return _SwitchPage._Node(count=11)
+
+        def count(self) -> int:
+            return self._count
+
+    def locator(self, selector: str) -> '_SwitchPage._Node':
+        box = {'x': 16, 'y': 112, 'width': 424, 'height': 830} if 'settings-scroll' in selector else \
+            {'x': 1749, 'y': 16, 'width': 131, 'height': 23}
+        return self._Node(box)
+
+    def wait_for_function(self, *_, **__) -> None:
+        pass
+
+
+@pytest.mark.parametrize('portrait', [False, True])
+def test_switch_language_shows_the_pane_before_the_menu_and_after_with_no_arguments(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, portrait: bool) -> None:
+    from video.walkthrough import MENU_ROWS, PANE_HEIGHT, Journey, switch_language
+
+    # A tutorial take calls the journey's switch with only the recorder and the language code.
+    assert Journey.__dataclass_fields__['switch'].default is switch_language
+    rec = Recorder(_SwitchPage(1920, 1080), tmp_path, portrait=portrait)
+    calls: list[tuple] = []
+    for name in ('camera', 'caption', 'hold', 'mark', 'choose'):
+        monkeypatch.setattr(rec, name, lambda *a, _name=name, **k: calls.append((_name, a, k)))
+    switch_language(rec, 'zh-Hans')
+    names = [call[0] for call in calls]
+    assert names == ['camera', 'caption', 'hold', 'mark', 'camera', 'caption', 'hold', 'choose', 'camera', 'caption',
+                     'hold', 'mark', 'camera', 'hold']
+    pane, before, menu_hold, *_ = calls
+    caption = (None, 'Switch the app to Simplified Chinese', 'Language, in the header')
+    assert [call[1] for call in calls if call[0] == 'caption'] == [caption] * 3
+    # The settings pane in the old language for at least 1 s, then the menu, then the same framing in the new one.
+    assert pane[1][0]['height'] == PANE_HEIGHT and calls[2][1][0] >= 1.0
+    assert calls[8][1][0] == pane[1][0] and calls[10][1][0] >= 1.5
+    # The mark that finds the menu comes just before it opens; the pick has its own mark, and it shows MENU_ROWS rows.
+    assert calls[3][1] == ('language',) and calls[7][2] == {'rows': MENU_ROWS, 'linger': 2.0, 'mark': 'language-pick'}
+    assert calls[11][1] == ('language-zh',)
+
+
+def test_the_promotion_passes_its_captions_and_marks_to_the_one_language_switch() -> None:
+    from video import promo
+    from video.walkthrough import switch_language
+
+    assert promo._SWITCH.func is switch_language and promo.PROMOS[0].switch is promo._SWITCH
+    assert promo._SWITCH.keywords['marks'] == ('hl-lang-en', 'hl-lang-pick', 'hl-lang-zh')
+    assert not hasattr(promo, '_switch_to_chinese')
+    assert [caption[1] for caption in promo._SWITCH.keywords['captions']] == [
+        'The interface in Simplified Chinese', '11 interface languages', 'The interface in Simplified Chinese']
+
+
 def test_recorder_logs_a_smaller_tab_on_the_stage(tmp_path: Path) -> None:
     rec = Recorder(_StubPage(*PORTRAIT_TAB), tmp_path, portrait=True)
     rec._origin = 0.0
@@ -499,6 +561,10 @@ def _screen_text() -> set[str]:
     strings |= {text for story in STORIES.values() for text in story.intro}
     strings |= {text for story in STORIES.values() for text in story.outro}
     strings |= {clip.label for story in STORIES.values() for clip in story.opening}
+    # The Language menu step's captions are data: its default (tutorials) and the promotion's own.
+    from video import promo
+    from video.walkthrough import LANGUAGE_CAPTION
+    strings |= {text for caption in (LANGUAGE_CAPTION, *promo._SWITCH.keywords['captions']) for text in caption[1:]}
     strings |= {row[0] for row in render.Composer.OUTRO_ROWS}
     return {text for text in strings if text}
 
