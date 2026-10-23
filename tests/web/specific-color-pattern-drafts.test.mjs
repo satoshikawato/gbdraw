@@ -28,7 +28,7 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
     manualSpecificRules: [rule()], extractedFeatures: { value: features },
     featureColorOverrides: {}, errorLog: { value: null },
     results: { value: [{ name: 'figure', content: '<svg>accepted</svg>' }] },
-    svgResultIdentity: { value: 'accepted' }, mode: { value: 'circular' }, generatedMode: { value: 'circular' },
+    svgResultIdentity: { value: 'accepted' }, mode: { value: 'circular' },
     addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {}
   };

@@ -812,9 +812,10 @@ const listedResults = computed((/** @type {ListedResults | undefined} */ previou
 const featureList = computed(() => {
   void ruleMatchingPending.value;
   const { list, names, metadata } = listedResults.value;
-  const catalogFeatures = resultCatalogFeatures(state, selectedResultIndex.value, list);
+  const drawing = activeDrawing();
+  const catalogFeatures = resultCatalogFeatures(state, drawing.mode, selectedResultIndex.value, list);
   if (catalogFeatures) {
-    return listFeatureRows(catalogFeatures, featureDrawnContext(activeDrawing(), {
+    return listFeatureRows(catalogFeatures, featureDrawnContext(drawing, {
       diagramOptions: { selectedFeaturesSet: metadata?.selectedFeatureTypes }
     }));
   }

@@ -800,16 +800,18 @@ const legendSourceOf = (catalogFeatures, context, { asRendered }) => {
   ]);
 };
 
-// The Legend source of every committed Result, in Result order.
+// The Legend source of every committed Result, in Result order; `mode`: the
+// mode of the drawing that owns the Results (`resultCatalogFeatures`).
 /**
  * @param {{ results?: { value?: unknown } } | null | undefined} state
+ * @param {string} mode
  * @param {FeatureDrawnContext} context
  * @param {{ asRendered?: boolean }} [options]
  */
-export const resultLegendSources = (state, context, { asRendered = false } = {}) => {
+export const resultLegendSources = (state, mode, context, { asRendered = false } = {}) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
-    const catalogFeatures = resultCatalogFeatures(state, index);
+    const catalogFeatures = resultCatalogFeatures(state, mode, index);
     return catalogFeatures ? legendSourceOf(catalogFeatures, context, { asRendered }) : '';
   });
 };
@@ -855,15 +857,16 @@ const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
 };
 
 // The row keys of every committed Result, in Result order (an empty map for
-// a Result without a catalog); `byColor`: as `legendRowKeysOf`.
+// a Result without a catalog); `byColor`: as `legendRowKeysOf`; `mode`: as
+// `resultLegendSources`.
 /**
- * @param {{ results?: { value?: unknown } }} state @param {FeatureDrawnContext} context
+ * @param {{ results?: { value?: unknown } }} state @param {string} mode @param {FeatureDrawnContext} context
  * @param {{ byColor?: boolean }} [options]
  */
-export const resultLegendRowKeys = (state, context, { byColor = true } = {}) => {
+export const resultLegendRowKeys = (state, mode, context, { byColor = true } = {}) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
-    const catalogFeatures = resultCatalogFeatures(state, index);
+    const catalogFeatures = resultCatalogFeatures(state, mode, index);
     return catalogFeatures ? legendRowKeysOf(catalogFeatures, context, { byColor }) : new Map();
   });
 };

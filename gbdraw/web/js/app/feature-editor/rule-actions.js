@@ -262,8 +262,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // A commit keys rule rows as Python does (OV-1235); a restore by caption (D-15-38).
     const byColor = Boolean(rows);
     return !legendRowsShowable(
-      resultLegendRowKeys(state, legendSourceContext(drawing, before), { byColor }),
-      resultLegendRowKeys(state, legendSourceContext(drawing, after), { byColor }),
+      resultLegendRowKeys(state, drawing.mode, legendSourceContext(drawing, before), { byColor }),
+      resultLegendRowKeys(state, drawing.mode, legendSourceContext(drawing, after), { byColor }),
       {
         displayed: Number(state.selectedResultIndex?.value) || 0,
         shows,

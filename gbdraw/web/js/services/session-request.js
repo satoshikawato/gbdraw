@@ -1935,7 +1935,7 @@ const ALL_GENERATED_TABLES = Object.freeze({
 export const requestLabelProjection = (state, drawing) => {
   const bulk = drawing.labelTextBulkOverrides || {};
   if (Object.keys(bulk).length === 0) return { bulkLabelText: {}, rows: [] };
-  const displayed = resultRenderedFeatures(state);
+  const displayed = resultRenderedFeatures(state, drawing.mode);
   const labelTargets = (state.editableLabels?.value || []).map((entry) => ({
     identityKey: featureIdentityKeyOf(displayed?.get(String(entry?.featureId || '').trim())),
     sourceText: entry?.sourceText

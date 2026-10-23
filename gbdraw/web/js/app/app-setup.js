@@ -4184,7 +4184,7 @@ export const createAppSetup = () => {
     // the features read from it and the fills it draws.
     const plan = compileDirectEditorMutationPlan({
       catalogAdmission: catalog
-        ? admitFeatureCatalog(catalog, toRaw(results.value), { mode: state.generatedMode.value })
+        ? admitFeatureCatalog(catalog, toRaw(results.value), { mode: drawing.mode })
         : displayedFeatureAddressing(
           toRaw(extractedFeatures.value) || [], results.value.map((/** @type {{ name?: unknown } | null | undefined} */ result) => result?.name), resultIndex, svg
         ),

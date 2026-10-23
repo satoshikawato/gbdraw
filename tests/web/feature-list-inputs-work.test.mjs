@@ -48,12 +48,11 @@ const resultsNamed = (...names) => {
 
 const setup = () => {
   installShownDrawing('circular');
-  state.generatedMode.value = 'circular';
   state.featureCatalog.value = catalog();
   state.results.value = resultsNamed('result-0.svg', 'result-1.svg');
   state.selectedResultIndex.value = 0;
   // The features the rule preparation evaluates, as Generate admission sets them.
-  const admitted = resultCatalogFeatures(state);
+  const admitted = resultCatalogFeatures(state, 'circular');
   state.extractedFeatures.value = [...admitted.rendered.values()];
   state.biologicalFeatures.value = admitted.biological;
   const drawing = state.activeDrawing();

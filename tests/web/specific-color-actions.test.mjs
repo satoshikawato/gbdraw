@@ -800,14 +800,14 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const group = { querySelectorAll: () => shownKeys.map(row) };
   const svg = { getElementById: (id) => (id === 'legend' ? { querySelector: (selector) => (selector === '#feature_legend' ? group : null) } : null) };
   const state = {
-    featureCatalog: { value: catalog }, generatedMode: { value: 'circular' }, selectedResultIndex: { value: 0 },
+    featureCatalog: { value: catalog }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
     extractedFeatures: { value: [] }
   };
-  state.extractedFeatures.value = [...resultCatalogFeatures(state).renderedByIdentity.values()];
+  state.extractedFeatures.value = [...resultCatalogFeatures(state, 'circular').renderedByIdentity.values()];
   const drawingState = withDrawings(state);
   let rerenders = 0;
   const actions = createFeatureRuleActions({
