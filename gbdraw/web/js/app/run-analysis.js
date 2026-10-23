@@ -5,7 +5,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
-/** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
+/** @import { CircularDiscoveryState, ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
@@ -47,6 +47,7 @@ import {
   bindCanonicalTypedResource,
   isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
+  linearRecordSourceResources,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
@@ -136,16 +137,18 @@ import {
   requireCurrentProteinBlastpMode
 } from '../services/current-option-values.js';
 import {
-  browserReaderText,
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
   discoveryErrorIsFinal,
+  gffFastaReaderSelector,
+  parseSequenceRecordsFast,
+  readAllSequenceRecords,
   readComparisonSequence,
   readComparisonSequenceDigest,
-  readOncePerFile
+  readOncePerFile,
+  readParsedSequenceRecords
 } from '../services/record-discovery.js';
-import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -172,11 +175,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
-import {
-  cloneFileBytesForTransfer,
-  readFileBytes,
-  readFileText
-} from '../services/file-content-cache.js';
+import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 import {
   admitFeatureCatalog
 } from '../services/feature-catalog.js';
@@ -961,12 +960,6 @@ const wrapFastaSequence = (sequence) => {
  * A record's sequence as the LOSAT search reads it.
  * @typedef {{ id: string, sequence: string }} LosatSequence
  */
-/**
- * A record of a sequence file, in file order. `sequence` is null for a GenBank record without one (a CON record):
- * it keeps its place, so `#N` and the automatic first record name the records Python reads, and only the
- * Python reader reports its FASTA.
- * @typedef {{ id: string, sequence: string | null }} ParsedSequenceRecord
- */
 /** @param {LosatSequence} record */
 const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
 /** @param {unknown} fasta */
@@ -995,37 +988,6 @@ const selectParsedRecord = (records, selectorRaw) => {
   if (matches.length === 0) throw new Error(`Record selector '${selector}' did not match any record ID.`);
   if (matches.length > 1) throw new Error(`Record selector '${selector}' matched multiple records. Use #index to disambiguate.`);
   return matches[0];
-};
-/** @param {unknown} text */
-const parseFastaRecordsFast = (text) => {
-  /** @type {ParsedSequenceRecord[]} */
-  const records = [];
-  let current = /** @type {{ id: string, parts: string[] } | null} */ (null);
-  String(text || '').split(/\r?\n/).forEach((line) => {
-    if (line.startsWith('>')) {
-      if (current) records.push({ id: current.id, sequence: current.parts.join('').toUpperCase() });
-      const header = line.slice(1).trim();
-      current = { id: header.split(/\s+/)[0] || `record_${records.length + 1}`, parts: [] };
-      return;
-    }
-    if (current && line.trim()) current.parts.push(line.replace(/\s+/g, ''));
-  });
-  if (current) records.push({ id: current.id, sequence: current.parts.join('').toUpperCase() });
-  return records;
-};
-/** @param {unknown} text */
-const parseGenbankRecordsFast = (text) => {
-  /** @type {ParsedSequenceRecord[]} */
-  const records = [];
-  const recordChunks = String(text || '').split(/^\/\/\s*$/m);
-  recordChunks.forEach((chunk) => {
-    const header = genbankHeaderIds(chunk);
-    if (!header) return;
-    const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    const sequence = originMatch ? originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase() : '';
-    records.push({ id: header.recordId, sequence: sequence || null });
-  });
-  return records;
 };
 /**
  * @param {ParsedSequenceRecord} record
@@ -1098,41 +1060,15 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 /**
- * @param {string} text
- * @param {string} fmt
- * @returns {ParsedSequenceRecord[]}
- */
-const parseSequenceRecordsFast = (text, fmt) => (
-  fmt === 'genbank' ? parseGenbankRecordsFast(text) : parseFastaRecordsFast(text)
-);
-/**
- * A file's records, parsed once per file and format, or null when only the Python reader reads the file
- * (`browserReaderText`); `parsed` says whether this call read the file.
- * @param {FileLike} file
- * @param {string} fmt
- * @returns {Promise<{ records: readonly ParsedSequenceRecord[] | null, parsed: boolean }>}
- */
-const readParsedSequenceRecords = async (file, fmt) => {
-  let parsed = false;
-  const records = await readOncePerFile([file], `sequence-records:${fmt}`, async () => {
-    parsed = true;
-    // Decoded from the bytes Generate already read: a Session resource view would keep a text read beside them.
-    const text = browserReaderText(await readFileBytes(file));
-    return text === null
-      ? null
-      : Object.freeze(parseSequenceRecordsFast(text, fmt).map((record) => Object.freeze(record)));
-  });
-  return { records, parsed };
-};
-/**
- * The source of a Linear record as the committed request names it, with its resources, when the committed
- * request draws these files (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
- * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources.
+ * The source of a Linear record as a request names it, with its resources, when the request draws these files
+ * (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources, or
+ *   those the next Generate's request names (`linearRecordSourceResources`).
  * @param {FileLike} sourceFile
  * @param {FileLike | null} fastaFile
  * @returns {{ recordSource: CanonicalRecordSource, resources: NonNullable<GenerationPayload['resources']> } | null}
  */
-const committedRecordSource = (resources, sourceFile, fastaFile) => {
+const requestRecordSource = (resources, sourceFile, fastaFile) => {
   if (!resources) return null;
   /** @type {CanonicalRecordSource | null} */
   let recordSource = null;
@@ -1174,17 +1110,18 @@ const losatSeqEntryFromRecord = (record, regionSpec) => {
 export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
-/** @param {{ file?: any, text?: string | null, fmt: string }} options */
-const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
-  const sourceText = typeof text === 'string' ? text : await readFileText(file);
-  const records = parseSequenceRecordsFast(sourceText, fmt)
-    .filter(/** @returns {record is LosatSequence} */ (record) => record.sequence !== null);
+/**
+ * The LOSAT FASTA of every record of the Circular reference: the subject database of the conservation rings, the
+ * records the CLI loader reads (OV-1599). A record without a sequence is left out.
+ * @param {FileLike} file
+ * @param {string} fmt
+ */
+const readAllLosatFasta = async (file, fmt) => {
+  /** @type {LosatSequence[]} */
+  const records = (await readAllSequenceRecords(file, fmt))
+    .flatMap(({ id, sequence }) => (sequence === null ? [] : [{ id, sequence }]));
   if (!records.length) throw new Error('No records found for circular conservation reference.');
-  return {
-    fasta: records.map((record) => buildFastaText(record)).join(''),
-    recordIds: records.map((record) => record.id),
-    canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
-  };
+  return records.map((record) => buildFastaText(record)).join('');
 };
 /**
  * @param {FileLike | FileLike[] | null | undefined} sourceFiles
@@ -3168,7 +3105,7 @@ export const createRunAnalysis = ({
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
             const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
               [subjectFile], `ring-subject:${subjectFmt}`, async () => {
-                const fasta = (await extractAllLosatFastaFast({ file: subjectFile, fmt: subjectFmt })).fasta;
+                const fasta = await readAllLosatFasta(/** @type {FileLike} */ (subjectFile), subjectFmt);
                 return Object.freeze({ fasta, hash: await hashText(fasta) });
               }
             );
@@ -3660,6 +3597,13 @@ export const createRunAnalysis = ({
 
         /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
+        /** @type {Readonly<Record<string, unknown>> | null | undefined} */
+        let nextResources;
+        // The record sources this Generate's request will name, read once (OV-1595).
+        const nextRecordResources = () => {
+          if (nextResources === undefined) nextResources = linearRecordSourceResources(linearSeqs, lInputType.value);
+          return nextResources;
+        };
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
@@ -3689,7 +3633,12 @@ export const createRunAnalysis = ({
             ? 'genbank'
             : (useProteinBlastp ? 'gff' : 'fasta');
           const regionSpec = regionSpecs[idx]?.file || null;
-          const recordSelector = recordSelectors[idx] ?? '';
+          // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
+          const recordSelector = !useProteinBlastp && lInputType.value === 'gff'
+            ? await gffFastaReaderSelector({
+                gffFile: losatSeqs[idx]?.gff, fastaFile: losatSeqs[idx]?.fasta, selector: recordSelectors[idx] ?? ''
+              })
+            : (recordSelectors[idx] ?? '');
           const reverseFlag = /** @type {string} */ ('0');
           const sourceFile = lInputType.value === 'gb'
             ? losatSeqs[idx]?.gb
@@ -3724,10 +3673,15 @@ export const createRunAnalysis = ({
           if (useProteinBlastp) {
             entry = await readOncePerFile(readFiles, `protein-fasta:${persistentCacheKey}`, async () => {
               extracted = true;
-              // A source of the committed drawing is staged under its resource ids: the Worker holds its bytes
-              // and the records the last Generate parsed (OV-1555). Another file is sent.
-              const committed = committedRecordSource(
-                typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null,
+              // A source is staged under the resource ids this Generate's request names, so it crosses once and
+              // is parsed once for every card and the render (OV-1595); when the request repeats the last one, the
+              // Worker already holds its bytes and the records the last Generate parsed (OV-1555). Only when the
+              // request cannot be named (a card lacks a file) are the committed drawing's ids used. Another file
+              // (of a record turned off only) is sent.
+              const committed = requestRecordSource(
+                nextRecordResources() ?? (
+                  typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
+                ),
                 /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null
               );
               /** @type {{ role: string, bytes: ArrayBuffer }[]} */
@@ -4164,6 +4118,7 @@ export const createRunAnalysis = ({
             ...losatSearch,
             specs: jobSpecs,
             getEntry: getSeqEntry,
+            getDigest: getSeqHash,
             buildArgs: buildLosatArgs,
             hashText,
             protein: useProteinBlastp

@@ -98,6 +98,7 @@ def run_browser(root, payload, expected_keys, samples):
                     const specs = all.filter(x => infer || x.queryIndex !== x.subjectIndex);
                     const plan = await prepareLosatSourceBatches({sequences, specs,
                       getEntry: async i => ({fasta: `>protein-${i}\\nMKK\\n`}),
+                      getDigest: async i => hashText(`>protein-${i}\\nMKK\\n`),
                       buildArgs: () => [], hashText, protein: true, excludeSelfComparisons: !infer});
                     if (!infer && plan.batches.some(b => b.query.indexes.some(i => b.subject.indexes.includes(i)))) {
                       throw new Error('OFF source batch searches a record against itself');

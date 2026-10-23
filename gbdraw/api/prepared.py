@@ -137,6 +137,9 @@ class _PreparedCacheTransaction:
     # A helper's lookup (``transaction(read_only=True)``): entries are read,
     # never published, pruned, evicted or reordered; misses build for the call.
     read_only: bool = False
+    # The protein extraction's lookup also publishes the input layers it built
+    # for the resources it staged, as a Generate does (OV-1595).
+    publish_inputs: bool = False
 
 
 # The first element of a resolved record's identity (``request_render``).
@@ -594,7 +597,10 @@ class PreparedBiologicalInputCache:
     value that serves only that call, and nothing is published, pruned,
     evicted or reordered, so the render-stage entries stay for the next
     Generate. The owners it read are checked when it ends, as a commit checks
-    them.
+    them. The blastp protein extraction's lookup (``publish_inputs``) also
+    publishes the decoded resources and parsed sources it built, which the
+    page staged under the ids the next Generate names (OV-1595); it prunes
+    and evicts nothing.
     """
 
     def __init__(self) -> None:
@@ -673,10 +679,13 @@ class PreparedBiologicalInputCache:
         diagnostics: MutableMapping[str, Any] | None,
         retention: PreparedInputRetention | None = None,
         read_only: bool = False,
+        publish_inputs: bool = False,
     ) -> Iterator[None]:
         """Activate one transactional Web render against the active manifest.
 
-        ``read_only`` opens a helper's lookup instead (see the class docstring).
+        ``read_only`` opens a helper's lookup instead; with it, ``publish_inputs``
+        lets that lookup publish the input layers it built (see the class
+        docstring). A write transaction publishes them anyway.
         """
 
         if _ACTIVE_PREPARED_TRANSACTION.get() is not None:
@@ -692,6 +701,7 @@ class PreparedBiologicalInputCache:
             active_identities=frozenset(resource_paths.values()),
             diagnostics=diagnostics,
             read_only=read_only,
+            publish_inputs=publish_inputs,
             font_environment=tuple(
                 sorted(
                     (font.family, font.weight, font.italic, font.face.content_id, font.face.index)
@@ -712,10 +722,12 @@ class PreparedBiologicalInputCache:
             yield
             if read_only:
                 self._verify_used_owners(transaction)
+                if publish_inputs:
+                    self._publish_inputs(transaction, verified=True)
             else:
                 self._commit(transaction)
         except BaseException:
-            if not read_only:
+            if not read_only or publish_inputs:
                 self._publish_inputs(transaction)
             self._previous_transaction_failed = True
             raise
@@ -806,7 +818,8 @@ class PreparedBiologicalInputCache:
         transaction.accessed[layer][key] = value
         if _records_from_value(value) is not None:
             transaction.record_touched = True
-        if transaction.read_only or (publish is not None and not publish(value)):
+        kept = not transaction.read_only or (transaction.publish_inputs and layer in _INPUT_LAYERS)
+        if not kept or (publish is not None and not publish(value)):
             return value
         entry = _PreparedCacheEntry(
             value=value,
@@ -910,23 +923,27 @@ class PreparedBiologicalInputCache:
                     walk_features=walk_features,
                 )
 
-    def _publish_inputs(self, transaction: _PreparedCacheTransaction) -> None:
-        """Publish the decoded and parsed inputs a failed write transaction built.
+    def _publish_inputs(
+        self, transaction: _PreparedCacheTransaction, *, verified: bool = False,
+    ) -> None:
+        """Publish the decoded and parsed inputs a transaction built.
 
-        An entry whose value the request changed is not kept (checked in full,
-        as a commit checks). Nothing is pruned: a failed request is not the
-        one-project bound.
+        A failed write transaction, and the protein extraction's lookup, call
+        it. An entry whose value the request changed is not kept (checked in
+        full, as a commit checks; ``verified`` when the lookup's end has just
+        checked it). Nothing is pruned: neither is the one-project bound.
         """
 
         for layer in _INPUT_LAYERS:
             current = self._layers[layer]
             for key, entry in transaction.pending[layer].items():
-                try:
-                    self._verify_owner(layer, key, entry, transaction, walk_features=True)
-                except Exception:
-                    # Changed, or its stamp cannot be built: the request's own
-                    # error stays the one it raises.
-                    continue
+                if not verified:
+                    try:
+                        self._verify_owner(layer, key, entry, transaction, walk_features=True)
+                    except Exception:
+                        # Changed, or its stamp cannot be built: the request's own
+                        # error stays the one it raises.
+                        continue
                 previous = current.pop(key, None)
                 self._retained_total += entry.retained_bytes - (
                     previous.retained_bytes if previous is not None else 0

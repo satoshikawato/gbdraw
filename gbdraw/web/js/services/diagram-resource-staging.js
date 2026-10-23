@@ -220,7 +220,8 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
         size: descriptor.size,
         lastModified: Number(descriptor.lastModified) || 0
       });
-      // Equal bytes under another resource ID of this request travel once.
+      // Equal bytes under another resource ID of this request travel once, and bytes a helper
+      // staged from a File stay held for the Generate that encodes that File (OV-1595).
       const cacheHit = previousHeldTokens.has(cacheToken) || manifestTokens.has(cacheToken);
       manifestTokens.add(cacheToken);
       if (cacheHit) {

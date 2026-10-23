@@ -238,3 +238,36 @@ test('two Linear cards that read one Session resource both find its committed re
   const uploadedResources = { 'record-2-genbank': setResourcePayloadOwner(descriptor('LOCUS new'), uploaded) };
   assert.equal(resourceIdOwnedBy(uploadedResources, uploaded, 'genbank'), 'record-2-genbank');
 });
+
+// OV-1595: a helper stages a File the next request names before any Generate encodes it (a descriptor without
+// data whose payload owner is the File). The render that follows (the blastp Generate's own, or a later one)
+// encodes that File under the same id and finds the bytes held: it sends nothing. Another File with the same
+// bytes is not the File the helper staged, so it is sent.
+test('a File a helper staged is held for the render that encodes it (OV-1595)', async () => {
+  const text = 'LOCUS upload\nORIGIN\n//\n';
+  const upload = { arrayBuffer: async () => new TextEncoder().encode(text).buffer };
+  const request = { records: [{ source: { kind: 'genbank', resourceId: 'record-1-genbank' } }], diagramOptions: {} };
+  const { data: _data, ...withoutData } = descriptor(text);
+  const transport = createDiagramResourceTransport();
+
+  const helper = await transport.prepare({
+    request, resources: { 'record-1-genbank': setResourcePayloadOwner({ ...withoutData, data: undefined }, upload) },
+    retain: true
+  });
+  assert.deepEqual(helper.stagedResources.map(({ resourceId }) => resourceId), ['record-1-genbank']);
+  assert.equal(helper.commit(), true);
+
+  const render = await transport.prepare({
+    request, resources: { 'record-1-genbank': setResourcePayloadOwner(descriptor(text), upload) }
+  });
+  assert.deepEqual(render.stagedResources, []);
+  assert.equal(render.resourceManifest[0].cacheToken, helper.resourceManifest[0].cacheToken);
+  assert.equal(render.commit(), true);
+
+  const sameBytes = { arrayBuffer: async () => new TextEncoder().encode(text).buffer };
+  const other = await createDiagramResourceTransport().prepare({
+    request, resources: { 'record-1-genbank': setResourcePayloadOwner({ ...withoutData, data: undefined }, sameBytes) },
+    retain: true
+  });
+  assert.equal(other.stagedResources.length, 1);
+});
