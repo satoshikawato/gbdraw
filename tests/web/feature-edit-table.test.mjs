@@ -34,17 +34,17 @@ test('the export writes the Source recipe table: #index of the request record an
   });
   assert.deepEqual(table, {
     text: `${HEADER}\n#1\thash=f1\t\t\t" Text ""quoted"" "\n#3\thash=f2~1\toff\ton\t\n`,
-    reason: ''
+    reason: null
   });
   // An input of several records shifts every later #index, so no table carries it.
   counts['source-b'] = 2;
   assert.deepEqual(await buildFeatureOverrideTable({
     renderRequest, resources: {}, rows: [row('c', 'f2', { featureVisibility: 'off' })],
     readResourceRecordCount: async (resourceId) => counts[resourceId]
-  }), { text: '', reason: 'feature placements and feature edits require exact materialized records.' });
+  }), { text: '', reason: { text: 'feature placements and feature edits require exact materialized records.' } });
   assert.deepEqual(await buildFeatureOverrideTable({
     renderRequest: { records: [record('a')] }, resources: {}, rows: [row('b:2', 'f1', { featureVisibility: 'off' })]
-  }), { text: '', reason: 'a feature edit names a feature identity that no table row can carry.' });
+  }), { text: '', reason: { text: 'a feature edit names a feature identity that no table row can carry.' } });
 });
 
 test('a loaded table must return request rows of the committed records', () => {
