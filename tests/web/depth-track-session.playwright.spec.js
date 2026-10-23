@@ -3032,7 +3032,17 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       downloadBundle: {
         ...app.lastRunInfo.downloadBundle,
         description:
-          'Source recipe helper files: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.'
+          'Source recipe helper files: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.',
+        descriptionParts: [
+          {
+            text: 'Source recipe helper files: {files}.',
+            params: { files: { text: 'browser-comparison.tsv', verbatim: true } }
+          },
+          {
+            text: 'Exact replay file: {files}.',
+            params: { files: { text: 'out.gbdraw-session.json', verbatim: true } }
+          }
+        ]
       }
     };
   });
@@ -3053,11 +3063,27 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
         invocation: null,
         helperFiles: [],
         unavailableReason:
-          'Source recipe unavailable: multiple uploaded inputs use the visible filename "genome.gbk".'
+          'Source recipe unavailable: multiple uploaded inputs use the visible filename "genome.gbk".',
+        unavailableReasonParts: [{
+          text: 'Source recipe unavailable: {reason}',
+          params: {
+            reason: {
+              text: 'multiple uploaded inputs use the visible filename "{name}".',
+              params: { name: 'genome.gbk' }
+            }
+          }
+        }]
       },
       downloadBundle: {
         ...app.lastRunInfo.downloadBundle,
-        description: 'The Source recipe is unavailable. Exact replay file: out.gbdraw-session.json.'
+        description: 'The Source recipe is unavailable. Exact replay file: out.gbdraw-session.json.',
+        descriptionParts: [
+          { text: 'The Source recipe is unavailable.' },
+          {
+            text: 'Exact replay file: {files}.',
+            params: { files: { text: 'out.gbdraw-session.json', verbatim: true } }
+          }
+        ]
       }
     };
   });

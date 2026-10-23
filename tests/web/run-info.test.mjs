@@ -782,7 +782,7 @@ const linearCanonical = canonical({
   ];
   const shifted = await buildSourceRecipe(positioned);
   assert.equal(shifted.available, false);
-  assert.match(shifted.unavailableReason, /record translations/);
+  assert.match(shifted.unavailableReason, /record position offsets/);
   const partialRows = structuredClone(linearCanonical);
   partialRows.renderRequest.records[0].presentation.gridRow = 2;
   const partialRecipe = await buildSourceRecipe(partialRows);
@@ -1051,7 +1051,8 @@ const linearCanonical = canonical({
       args: [],
       fileMetadata: new Map(),
       generatedFiles: [],
-      unavailableReason: 'Source recipe unavailable: source-file provenance is missing.'
+      unavailableReason: 'Source recipe unavailable: source-file provenance is missing.',
+      unavailableReasonParts: [{ text: 'Source recipe unavailable: source-file provenance is missing.', verbatim: true }]
     },
     exactReplayArgs: ['--session', '/canonical-render-session.gbdraw-session.json'],
     fileMetadata: {
@@ -1473,7 +1474,55 @@ test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (
   assert.deepEqual(runInfo.losatRuntimes, [{
     program: 'tblastx', kind: 'losat', version: '0.1.0', source: 'bundled',
     path: 'gbdraw/bin/linux-x86_64/losat',
-    text: 'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)'
+    text: 'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)',
+    textParts: [{ text: 'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)', verbatim: true }]
   }]);
   assert.deepEqual(buildRunInfo({ mode: 'circular' }).losatRuntimes, []);
+});
+
+// OV-1678: the Run info keeps its texts in English (the same in every UI
+// language) beside the parts they are made of, and the Run info tab shows the
+// parts in the UI language.
+test('OV-1678: in Simplified Chinese the Run info shows its notes, files description, unavailable reason and runtimes translated', async () => {
+  const { setUiLocale, SOURCE_LOCALE } = await import(pathToFileURL(join(tempDir, 'js', 'utils', 'i18n.js')));
+  const { errorText } = await import(pathToFileURL(join(tempDir, 'js', 'utils', 'error-text.js')));
+  const { default: zh } = await import(pathToFileURL(join(tempDir, 'js', 'utils', 'i18n-catalogs', 'zh-Hans.js')));
+  const cacheMap = new Map([['old', { program: 'blastn' }]]);
+  const build = () => buildRunInfo({
+    mode: 'linear',
+    // Two uploaded inputs with one visible name: the reason names it.
+    sourceRecipe: { mode: 'linear', available: true, args: ['--gbk', '/a/x.gb', '/b/x.gb'], generatedFiles: [] },
+    fileMetadata: { '/a/x.gb': { name: 'x.gb' }, '/b/x.gb': { name: 'x.gb' } },
+    exactReplayArgs: ['--session', '/canonical-render-session.gbdraw-session.json'],
+    startedAtIso: '2026-10-23T00:00:00.000Z',
+    losatComparisons: true,
+    losatRuntimes: summarizeLosatRuntimes([{ key: 'old', display: true }], cacheMap)
+  });
+  const english = build();
+  const reason = 'Source recipe unavailable: multiple uploaded inputs use the visible filename "x.gb".';
+  assert.equal(english.sourceRecipe.unavailableReason, reason);
+  assert.deepEqual(english.reproducibility.notes, [
+    reason, 'Exact replay remains available from the committed canonical session.', LOSAT_DATABASE_SCOPE_NOTE
+  ]);
+  assert.equal(english.downloadBundle.description, 'The Source recipe is unavailable. No Exact replay file is available.');
+  assert.equal(english.losatRuntimes[0].text, 'blastn: runtime not recorded');
+  // In English the parts show the stored text.
+  assert.equal(errorText(english.sourceRecipe.unavailableReasonParts), reason);
+  assert.deepEqual(english.reproducibility.noteParts.map((part) => errorText([part])), english.reproducibility.notes);
+  await setUiLocale('zh-Hans');
+  try {
+    // The Run info stays English in every UI language.
+    assert.deepEqual(build(), english);
+    const shownReason = zh['Source recipe unavailable: {reason}'].replace('{reason}',
+      zh['multiple uploaded inputs use the visible filename "{name}".'].replace('{name}', 'x.gb'));
+    assert.equal(errorText(english.sourceRecipe.unavailableReasonParts), shownReason);
+    assert.deepEqual(english.reproducibility.noteParts.map((part) => errorText([part])), [
+      shownReason, zh['Exact replay remains available from the committed canonical session.'], zh[LOSAT_DATABASE_SCOPE_NOTE]
+    ]);
+    assert.equal(errorText(english.downloadBundle.descriptionParts),
+      `${zh['The Source recipe is unavailable.']}${zh['No Exact replay file is available.']}`);
+    assert.equal(errorText(english.losatRuntimes[0].textParts), zh['{program}: runtime not recorded'].replace('{program}', 'blastn'));
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

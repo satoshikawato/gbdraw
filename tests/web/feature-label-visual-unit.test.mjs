@@ -6,6 +6,8 @@ import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/w
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
+import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -294,9 +296,8 @@ for (const [reason, options, sentence] of absenceCases) {
     const none = 'This feature has no label in the current Result.';
     // The popup note, before the edit is applied, names the same reason in a few words.
     state.clickedFeature.value.labelText = '';
-    const cause = LABEL_ABSENCE_REASONS[reason]?.cause;
-    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`No label shown${cause ? ` (${cause})` : ''}.`), true,
-      actions.clickedFeatureLabelHint.value);
+    const note = LABEL_ABSENCE_REASONS[reason]?.note ?? 'No label shown.';
+    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(note), true, actions.clickedFeatureLabelHint.value);
     state.clickedFeature.value.labelText = 'Renamed';
     const applied = actions.updateClickedFeatureLabelText();
     assert.equal(state.hiddenLabelTextDialog.show, true);
@@ -320,9 +321,9 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   }
   returned.delete('');
   assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
-  Object.values(LABEL_ABSENCE_REASONS).forEach(({ sentence, cause }) => {
+  Object.values(LABEL_ABSENCE_REASONS).forEach(({ sentence, note }) => {
     assert.equal(typeof sentence, 'string');
-    assert.equal(typeof cause, 'string');
+    assert.equal(typeof note, 'string');
   });
 });
 
@@ -448,6 +449,35 @@ test('the popup note names why the diagram draws no label for the feature', () =
   setRow(state, featureId, { featureVisibility: 'off', labelVisibility: 'on' });
   clicked.labelKey = 'label-1';
   assert.equal(hint(), 'No label shown (the feature is hidden). On applies when the feature is shown.');
+});
+
+// OV-1679: the popup note and the Label Not Shown dialog sentence are shown in
+// the UI language, each sentence a key, joined with its sentence separator.
+test('OV-1679: the popup label note and the Label Not Shown dialog are shown in Simplified Chinese', async () => {
+  await setUiLocale('zh-Hans');
+  try {
+    const featureId = 'feature:one/[a]';
+    const diagramOptions = { featureShapes: { repeat_region: 'underlay' }, configOverrides: { 'labels.rendering': 'auto' } };
+    const { state, actions } = buildHarness({ diagramOptions });
+    const clicked = state.clickedFeature.value;
+    clicked.labelKey = '';
+    assert.equal(actions.clickedFeatureLabelHint.value, `${zhHans['No label shown.']}${zhHans['Choose On to show it.']}`);
+    clicked.feat = featureFor(featureId, 'repeat_region');
+    clicked.labelVisibility = 'on';
+    setRow(state, featureId, { labelVisibility: 'on' });
+    assert.equal(actions.clickedFeatureLabelHint.value,
+      `${zhHans['No label shown (drawn as Underlay).']}${zhHans['On applies when the label can be drawn.']}`);
+    for (const reason of ['underlay', '']) {
+      state.hiddenLabelTextDialog.reason = reason;
+      assert.equal(actions.hiddenLabelTextMessage.value, [
+        zhHans['This feature has no label in the current Result.'],
+        zhHans[reason ? 'Labels are not drawn for features drawn as "Underlay".' : 'The current Show Labels and label filter settings draw none.'],
+        zhHans['The edited text will not appear unless you show this label.']
+      ].join(''));
+    }
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 test('Label visibility On for an underlay feature waits for Keep without label or Cancel', async () => {

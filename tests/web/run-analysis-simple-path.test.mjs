@@ -1991,7 +1991,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       version: null,
       source: 'wasm',
       path: null,
-      text: 'blastn: LOSAT, version not recorded (wasm)'
+      text: 'blastn: LOSAT, version not recorded (wasm)',
+      textParts: [{
+        text: '{program}: {name}, version not recorded ({origin})', params: { program: 'blastn', name: 'LOSAT', origin: 'wasm' }
+      }]
     }]);
     // Generated LOSATN rows stay in the search frame; the Python planner
     // projects the reversed record (PD-OI-073), so no Web conversion runs.

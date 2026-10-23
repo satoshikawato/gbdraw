@@ -239,6 +239,18 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     await expect.poll(() => pageLanguage(page)).toBe(tag);
     expect(await generatedRecipes(page)).toBe(englishRecipes);
   }
+  // OV-1678: the Run info tab shows its notes and the Reproducibility files
+  // description in the UI language, while the Run info keeps them in English.
+  const zh = await catalogOf('zh-Hans');
+  await page.getByRole('button', { name: zh['Run info'], exact: true }).click();
+  const panel = page.locator('.run-info-panel');
+  const { notes, description } = await page.evaluate(() => window.__GBDRAW_APP__.lastRunInfo)
+    .then((info) => ({ notes: info.reproducibility.notes, description: info.downloadBundle.description }));
+  expect(notes).toContain('The Source recipe can be rerun with the uploaded file names shown here.');
+  await expect(panel.getByText(zh['The Source recipe can be rerun with the uploaded file names shown here.'], { exact: true })).toBeVisible();
+  const shown = await panel.locator('p').allTextContents();
+  for (const english of [...notes, description]) expect(shown.map((text) => text.trim())).not.toContain(english);
+  await panel.screenshot({ path: testInfo.outputPath('run-info-zh-Hans.png') });
   expect(errors).toEqual([]);
 });
 

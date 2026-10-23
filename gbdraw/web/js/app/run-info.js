@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { normalizeUserFacingError, renderErrorText } from '../utils/error-normalization.js';
 import {
   buildCircularTrackSlotSpec
 } from './circular-track-slots.js';
@@ -13,13 +13,14 @@ import {
   parseLinearTrackSlotSpec
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
-import { t } from '../utils/i18n.js';
+import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 
 /**
  * @typedef {{ path?: unknown, name?: unknown, kind?: unknown, slot?: unknown }} FileMetadataInput One file's metadata as a caller supplies it.
@@ -40,6 +41,7 @@ import { base64ToBytes } from '../services/byte-utils.js';
  * @typedef {{ kind: 'genbank' | 'gffFasta', ids: string[] }} SourceSpec The resource ids that one record needs.
  * @typedef {{ path: string, name: string, slot: string }} RecipeHelperFile A file the recipe or the replay needs beside the uploaded inputs.
  * @typedef {{ program: string, kind: string, version: string | null, source: string, path: string | null }} LosatRuntimeRecord
+ * @typedef {LosatRuntimeRecord & { text: string, textParts: ErrorTextPart[] }} LosatRuntimeLine A runtime record and its line: the English `text` and the parts it is made of.
  * @typedef {object} SourceRecipe
  * @property {boolean} available
  * @property {'circular' | 'linear'} mode
@@ -48,17 +50,43 @@ import { base64ToBytes } from '../services/byte-utils.js';
  * @property {RecipeGeneratedFile[]} generatedFiles
  * @property {{ schema: number, consumedPaths: string[], metadataPaths: string[] } | null} semanticCoverage
  * @property {string} unavailableReason
+ * @property {ErrorTextPart[]} unavailableReasonParts the parts `unavailableReason` is made of; empty when available
  */
 
 const SAFE_SHELL_TOKEN_RE = /^[A-Za-z0-9_@%+=:,./-]+$/;
 
-const SOURCE_PROVENANCE_UNAVAILABLE =
-  'Source recipe unavailable: this session does not contain sufficient source-file provenance.';
+// The Run info texts (OV-1678) are kept as text parts (`ErrorTextPart`, each
+// text marked with `msg`): the Run info stores the English text they make
+// (`renderErrorText`), the same in every UI language, beside the parts, and the
+// Run info tab shows the parts with `errorText` in the UI language.
+const RECIPE_UNAVAILABLE = msg('Source recipe unavailable.');
 
-class SourceRecipeUnavailable extends Error {}
+// Why no Source recipe is available: "Source recipe unavailable: {reason}",
+// with `reason` one clause marked with `msg`.
+/**
+ * @param {ErrorTextPart} reason
+ * @returns {ErrorTextPart[]}
+ */
+const unavailableParts = (reason) => [{ text: msg('Source recipe unavailable: {reason}'), params: { reason } }];
 
-// identityTableUnavailable assigns reason after construction.
-/** @typedef {{ reason?: string }} Reasoned */
+class SourceRecipeUnavailable extends Error {
+  /** @param {ErrorTextPart} reason */
+  constructor(reason) {
+    const parts = unavailableParts(reason);
+    super(renderErrorText(parts));
+    /** @type {ErrorTextPart[]} */
+    this.parts = parts;
+  }
+}
+
+/**
+ * @param {string} text a clause marked with `msg`
+ * @param {Readonly<Record<string, string | number>>} [params]
+ */
+const recipeUnavailable = (text, params) => new SourceRecipeUnavailable(params ? { text, params } : { text });
+
+// identityTableUnavailable assigns the reason after construction.
+/** @typedef {{ tableReason?: ErrorTextPart }} Reasoned */
 
 /** @param {unknown} value */
 const normalizePath = (value) => String(value ?? '').trim();
@@ -159,16 +187,12 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
   const reserveFixed = (namespace, path, entry) => {
     const name = visibleBasename(entry.name);
     if (!name) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: an uploaded input has no safe visible filename.'
-      );
+      throw recipeUnavailable(msg('an uploaded input has no safe visible filename.'));
     }
     const key = filenameCollisionKey(name);
     const owner = `${namespace}:${path}`;
     if (used.has(key) && used.get(key) !== owner) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: multiple uploaded inputs use the visible filename "${name}".`
-      );
+      throw recipeUnavailable(msg('multiple uploaded inputs use the visible filename "{name}".'), { name });
     }
     entry.name = name;
     used.set(key, owner);
@@ -205,14 +229,18 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
   return { source, exact };
 };
 
-/** @param {readonly { name?: unknown, path?: unknown }[] | null | undefined} files */
-const formatHelperFileList = (files) => {
+/**
+ * The helper files a note names: up to three file names, then how many more.
+ * @param {readonly { name?: unknown, path?: unknown }[] | null | undefined} files
+ * @returns {ErrorTextPart}
+ */
+const helperFileList = (files) => {
   const names = Array.from(new Set((Array.isArray(files) ? files : [])
     .map((file) => String(file?.name || fallbackNameFromPath(file?.path)).trim())
     .filter(Boolean)));
-  if (names.length === 0) return 'generated helper files';
-  if (names.length <= 3) return names.join(', ');
-  return `${names.slice(0, 3).join(', ')}, and ${names.length - 3} more`;
+  if (names.length === 0) return { text: msg('generated helper files') };
+  if (names.length <= 3) return { text: names.join(', '), verbatim: true };
+  return { text: msg('{names}, and {count} more'), params: { names: names.slice(0, 3).join(', '), count: names.length - 3 } };
 };
 
 /** @param {unknown} selector */
@@ -243,10 +271,8 @@ const tsv = (columns, rows) => `${[
 
 // An identity table that cannot carry a row: the Source recipe is unavailable,
 // and Export Feature Edits TSV reports the reason.
-/** @param {string} reason */
-const identityTableUnavailable = (reason) => Object.assign(
-  new SourceRecipeUnavailable(`Source recipe unavailable: ${reason}`), { reason }
-);
+/** @param {string} text a clause marked with `msg` */
+const identityTableUnavailable = (text) => Object.assign(new SourceRecipeUnavailable({ text }), { tableReason: { text } });
 
 // R12: identity-table rows must read back as the same rows through the CLI's one
 // reader (gbdraw/features/source.py::read_identity_table trims every cell except
@@ -255,13 +281,15 @@ const identityTableUnavailable = (reason) => Object.assign(
 /**
  * @param {CanonicalRenderRequest} renderRequest
  * @param {{ recordKey: string, biologicalFeatureId: string }} row
- * @param {string} kind
+ * @param {'placement' | 'feature edit'} kind
  */
 const identityTableCells = (renderRequest, row, kind) => {
   const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
   const id = row.biologicalFeatureId;
   if (index < 0 || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
-    throw identityTableUnavailable(`a ${kind} names a feature identity that no table row can carry.`);
+    throw identityTableUnavailable(kind === 'placement'
+      ? msg('a placement names a feature identity that no table row can carry.')
+      : msg('a feature edit names a feature identity that no table row can carry.'));
   }
   return { record: `#${index + 1}`, feature_selector: `hash=${id}` };
 };
@@ -280,7 +308,7 @@ const featureOverrideTableRow = (renderRequest, row) => {
   if (![null, 'on', 'off', 'exclude_matching'].includes(feature) || ![null, 'on', 'off'].includes(label)
     || (text !== null && (typeof text !== 'string' || !text.trim() || /[\t\r\n\0]/.test(text)))
     || (feature === null && label === null && text === null)) {
-    throw identityTableUnavailable('a feature edit has a value that the feature override table cannot carry.');
+    throw identityTableUnavailable(msg('a feature edit has a value that the feature override table cannot carry.'));
   }
   return { ...cells, feature_visibility: feature ?? '', label_visibility: label ?? '', label_text: text ?? '' };
 };
@@ -373,9 +401,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     const collisionKey = name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
     const existing = visibleNameOwners.get(collisionKey);
     if (existing && existing !== owner) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: multiple required files use the visible filename "${name}".`
-      );
+      throw recipeUnavailable(msg('multiple required files use the visible filename "{name}".'), { name });
     }
     visibleNameOwners.set(collisionKey, owner);
   };
@@ -394,23 +420,21 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     const resourceId = String(resourceIdRaw || '').trim();
     const descriptor = descriptors[resourceId];
     if (!resourceId || !isPlainObject(descriptor)) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: canonical resource "${resourceId || '(missing)'}" is unavailable.`
-      );
+      throw recipeUnavailable(msg('canonical resource "{resource}" is unavailable.'), { resource: resourceId || '(missing)' });
     }
     // `has` holds, so the entry is a string.
     if (pathsByResourceId.has(resourceId)) return /** @type {string} */ (pathsByResourceId.get(resourceId));
 
     const originalName = originalNames.get(resourceId) || '';
-    if (source && !originalName) throw new SourceRecipeUnavailable(SOURCE_PROVENANCE_UNAVAILABLE);
+    if (source && !originalName) {
+      throw recipeUnavailable(msg('this session does not contain sufficient source-file provenance.'));
+    }
     const generated = !originalName;
     const name = originalName || visibleBasename(
       generatedNames.get(resourceId) || generatedNames.get(nameHintSlot) || fallback
     );
     if (!name) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: a generated helper has no trustworthy visible filename.'
-      );
+      throw recipeUnavailable(msg('a generated helper has no trustworthy visible filename.'));
     }
     if (!generated) reserveName(name, resourceId);
     const path = `/run-info-resource-${resourceId}`;
@@ -427,9 +451,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     if (generated) {
       const data = resourceBytes(descriptor);
       if (!data) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: generated helper file "${name}" cannot be materialized.`
-        );
+        throw recipeUnavailable(msg('generated helper file "{name}" cannot be materialized.'), { name });
       }
       generatedFiles.push({ path, name, slot: resolvedSlot, data });
     }
@@ -514,9 +536,7 @@ const DIAGRAM_OPTION_FIELDS = new Set([
  */
 const coverObject = (coverage, value, path, projected, metadata = []) => {
   if (!isPlainObject(value)) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: semantic field "${path}" is malformed.`
-    );
+    throw recipeUnavailable(msg('semantic field "{field}" is malformed.'), { field: path });
   }
   const projectedKeys = new Set(projected);
   const metadataKeys = new Set(metadata);
@@ -525,9 +545,7 @@ const coverObject = (coverage, value, path, projected, metadata = []) => {
     if (projectedKeys.has(key)) coverage.consumedPaths.add(fieldPath);
     else if (metadataKeys.has(key)) coverage.metadataPaths.add(fieldPath);
     else {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: semantic field "${fieldPath}" has no current CLI projection.`
-      );
+      throw recipeUnavailable(msg('semantic field "{field}" has no current CLI projection.'), { field: fieldPath });
     }
   });
 };
@@ -589,9 +607,7 @@ const validateCurrentSemanticCoverage = (request) => {
   ], ['schema']);
   const supportedGroupings = request.mode === 'circular' ? ['single', 'grid'] : ['single'];
   if (!supportedGroupings.includes(request.grouping) || Array.isArray(request.output)) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: batch or multiple-output semantics have no single current CLI projection.'
-    );
+    throw recipeUnavailable(msg('batch or multiple-output semantics have no single current CLI projection.'));
   }
 
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
@@ -601,9 +617,7 @@ const validateCurrentSemanticCoverage = (request) => {
     ], ['recordKey']);
     coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
-      );
+      throw recipeUnavailable(msg('record cardinality "{cardinality}" has no current CLI projection.'), { cardinality: String(record.cardinality || 'missing') });
     }
     coverObject(
       coverage,
@@ -615,9 +629,7 @@ const validateCurrentSemanticCoverage = (request) => {
     );
     if (record.selector) {
       if (!['recordId', 'recordIndex'].includes(record.selector.kind)) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: record selector "${String(record.selector.kind || 'unknown')}" has no current CLI projection.`
-        );
+        throw recipeUnavailable(msg('record selector "{selector}" has no current CLI projection.'), { selector: String(record.selector.kind || 'unknown') });
       }
       coverObject(
         coverage,
@@ -632,9 +644,7 @@ const validateCurrentSemanticCoverage = (request) => {
       ]);
       if (record.region.selector) {
         if (!['recordId', 'recordIndex'].includes(record.region.selector.kind)) {
-          throw new SourceRecipeUnavailable(
-            `Source recipe unavailable: region selector "${String(record.region.selector.kind || 'unknown')}" has no current CLI projection.`
-          );
+          throw recipeUnavailable(msg('region selector "{selector}" has no current CLI projection.'), { selector: String(record.region.selector.kind || 'unknown') });
         }
         coverObject(
           coverage,
@@ -650,9 +660,7 @@ const validateCurrentSemanticCoverage = (request) => {
     /** @type {const} */ (['gridRow', 'gridColumn']).forEach((field) => {
       const value = /** @type {unknown} */ (record.presentation[field]); // read as text too: a blank cell is ''
       if (value !== null && value !== undefined && value !== '' && gridCoordinate(value) === '') {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: record placement "${path}.presentation.${field}" is invalid.`
-        );
+        throw recipeUnavailable(msg('record placement "{field}" is invalid.'), { field: `${path}.presentation.${field}` });
       }
     });
   });
@@ -670,9 +678,7 @@ const validateCurrentSemanticCoverage = (request) => {
   });
   if ((options.annotations?.sets || []).some((set) => (set?.annotations || [])
     .some((item) => item?.target?.kind === 'featureIdentity'))) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: annotations that name a source feature have no current CLI projection.'
-    );
+    throw recipeUnavailable(msg('annotations that name a source feature have no current CLI projection.'));
   }
   (options.featurePlacements || []).forEach((row, index) => {
     const path = `diagramOptions.featurePlacements[${index}]`;
@@ -714,9 +720,7 @@ const validateCurrentSemanticCoverage = (request) => {
     ));
   });
   if (options.annotations !== undefined) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: canonical annotation semantics have no fully lossless current CLI projection.'
-    );
+    throw recipeUnavailable(msg('canonical annotation semantics have no fully lossless current CLI projection.'));
   }
 
   const layoutFields = request.mode === 'linear'
@@ -734,23 +738,17 @@ const validateCurrentSemanticCoverage = (request) => {
             !isPlainObject(item) || Object.keys(item).sort().join(',') !== 'recordKey,x,y' ||
             item.recordKey !== request.records[index].recordKey || item.x !== 0 || item.y !== 0
           ))) {
-        throw new SourceRecipeUnavailable(
-          'Source recipe unavailable: nonzero or incomplete record translations have no current CLI projection.'
-        );
+        throw recipeUnavailable(msg('nonzero or incomplete record position offsets have no current CLI projection.'));
       }
     }
     if (request.layout?.similarityAlignment != null) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: a resolved similarity alignment has no current CLI projection.'
-      );
+      throw recipeUnavailable(msg('a resolved similarity alignment has no current CLI projection.'));
     }
   }
   (Array.isArray(request.comparisons) ? request.comparisons : []).forEach((comparison, index) => {
     const path = `comparisons[${index}]`;
     if (comparison?.kind !== 'nucleotideBlast') {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: comparison "${String(comparison?.kind || 'unknown')}" has no lossless current CLI projection.`
-      );
+      throw recipeUnavailable(msg('comparison "{comparison}" has no lossless current CLI projection.'), { comparison: String(comparison?.kind || 'unknown') });
     }
     coverObject(coverage, comparison, path, [
       'kind', 'resourceId', 'queryRecordIndex', 'subjectRecordIndex'
@@ -760,9 +758,7 @@ const validateCurrentSemanticCoverage = (request) => {
     'prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy'
   ]);
   if (request.output?.interactiveMetadataPolicy !== 'auto') {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: the interactive metadata policy has no current CLI projection.'
-    );
+    throw recipeUnavailable(msg('the interactive metadata policy has no current CLI projection.'));
   }
   return {
     schema: coverage.schema,
@@ -790,9 +786,7 @@ const sourceSpec = (record) => {
       ]
     };
   }
-  throw new SourceRecipeUnavailable(
-    `Source recipe unavailable: source kind "${String(source.kind || 'unknown')}" has no CLI recipe.`
-  );
+  throw recipeUnavailable(msg('source kind "{kind}" has no CLI recipe.'), { kind: String(source.kind || 'unknown') });
 };
 
 // The row of each record, and, when the order of the positions within a row is
@@ -808,7 +802,7 @@ const layoutRows = (request, records) => {
   const columns = [];
   if (positions == null) return { rows: [], columns };
   if (!Array.isArray(positions)) {
-    throw new SourceRecipeUnavailable('Source recipe unavailable: record placement is invalid.');
+    throw recipeUnavailable(msg('record placement is invalid.'));
   }
   if (positions.length === 0) return { rows: [], columns };
   const rows = Array(records.length).fill(null);
@@ -840,17 +834,13 @@ const layoutRows = (request, records) => {
       row < 1 ||
       rows[recordIndex] !== null
     ) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: record placement cannot be projected into a records table.'
-      );
+      throw recipeUnavailable(msg('record placement cannot be projected into a records table.'));
     }
     rows[recordIndex] = row;
     rowMembers.set(row, [...(rowMembers.get(row) || []), recordIndex]);
   });
   if (rows.some((row) => row === null)) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: record placement is incomplete for a records table.'
-    );
+    throw recipeUnavailable(msg('record placement is incomplete for a records table.'));
   }
   const recordOrder = [...rowMembers.values()].every((members) => (
     members.every((recordIndex, at) => at === 0 || recordIndex > members[at - 1])
@@ -880,13 +870,11 @@ const gridCoordinate = (value) => {
 const appendInputArgs = async (args, request, files) => {
   const records = Array.isArray(request.records) ? request.records : [];
   if (records.length === 0) {
-    throw new SourceRecipeUnavailable('Source recipe unavailable: the committed render has no source records.');
+    throw recipeUnavailable(msg('the committed render has no source records.'));
   }
   const specs = records.map(sourceSpec);
   if (new Set(specs.map((spec) => spec.kind)).size !== 1) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: the committed render mixes source kinds that the CLI cannot combine.'
-    );
+    throw recipeUnavailable(msg('the committed render mixes source kinds that the CLI cannot combine.'));
   }
   const inputKind = specs[0].kind;
   const sourcePaths = specs.map((spec, recordIndex) => spec.ids.map((resourceId, partIndex) => (
@@ -929,7 +917,7 @@ const appendInputArgs = async (args, request, files) => {
   records.forEach((record, index) => {
     const presentationRow = gridCoordinate(record.presentation?.gridRow);
     if (presentationRow !== '' && requestedRows.length && presentationRow !== requestedRows[index]) {
-      throw new SourceRecipeUnavailable('Source recipe unavailable: record row placement conflicts with the layout.');
+      throw recipeUnavailable(msg('record row placement conflicts with the layout.'));
     }
   });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
@@ -939,9 +927,7 @@ const appendInputArgs = async (args, request, files) => {
       if (await files.resourceRecordCount(
         specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
       ) === 1) continue;
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: this record cardinality cannot be preserved by a CLI records table.'
-      );
+      throw recipeUnavailable(msg('this record cardinality cannot be preserved by a CLI records table.'));
     }
   }
 
@@ -964,9 +950,7 @@ const appendInputArgs = async (args, request, files) => {
           inputKind === 'genbank' ? 'genbank' : 'fasta'
         ) !== 1
       ) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: record cardinality "${canonicalCardinality || 'missing'}" cannot be preserved by the current CLI.`
-        );
+        throw recipeUnavailable(msg('record cardinality "{cardinality}" cannot be preserved by the current CLI.'), { cardinality: canonicalCardinality || 'missing' });
       }
     }
   }
@@ -1187,7 +1171,7 @@ const appendConfigOverrides = (args, request) => {
   if (Array.isArray(blacklist) && blacklist.length > 0) {
     appendOption(args, '--label_blacklist', blacklist.join(','));
   } else if (blacklist !== undefined && !Array.isArray(blacklist)) {
-    throw new SourceRecipeUnavailable('Source recipe unavailable: the label blacklist is malformed.');
+    throw recipeUnavailable(msg('the label blacklist is malformed.'));
   }
 
   const scopePath = request.mode === 'linear' ? 'labels.linear.scope' : 'labels.circular.scope';
@@ -1197,7 +1181,7 @@ const appendConfigOverrides = (args, request) => {
       appendOption(args, '--show_labels', scope);
     } else {
       const value = { outer: 'out', both: 'both', none: 'none' }[String(scope)];
-      if (!value) throw new SourceRecipeUnavailable(`Source recipe unavailable: unsupported label scope "${scope}".`);
+      if (!value) throw recipeUnavailable(msg('unsupported label scope "{scope}".'), { scope: String(scope) });
       appendOption(args, '--labels', value);
     }
   }
@@ -1216,9 +1200,7 @@ const appendConfigOverrides = (args, request) => {
       && hasSizedOverride('objects.scale.font_size')
       && !hasSizedOverride('objects.scale.ruler_label_font_size')
     ) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'
-      );
+      throw recipeUnavailable(msg('the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'));
     }
     appendBooleanOption(args, take('objects.definition.linear.show_replicon'), '--show_replicon');
     appendBooleanOption(args, take('objects.definition.linear.show_accession'), '', '--hide_accession');
@@ -1238,9 +1220,7 @@ const appendConfigOverrides = (args, request) => {
     const longValue = take(`${prefix}.long`);
     if (shortValue === undefined && longValue === undefined) return;
     if (shortValue === undefined || longValue === undefined || Number(shortValue) !== Number(longValue)) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: size-specific setting "${prefix}" cannot be expressed by the current CLI.`
-      );
+      throw recipeUnavailable(msg('size-specific setting "{setting}" cannot be expressed by the current CLI.'), { setting: prefix });
     }
     appendOption(args, option, shortValue);
   });
@@ -1250,9 +1230,7 @@ const appendConfigOverrides = (args, request) => {
     if (definitionInterval !== undefined) {
       const fontSize = overrides['objects.definition.circular.font_size'];
       if (fontSize === undefined || Number(definitionInterval) !== Math.trunc(Number(fontSize) + 2)) {
-        throw new SourceRecipeUnavailable(
-          'Source recipe unavailable: the custom circular definition interval has no CLI option.'
-        );
+        throw recipeUnavailable(msg('the custom circular definition interval has no CLI option.'));
       }
     }
     const configuredTitleFontSize = take('objects.definition.circular.plot_title_font_size');
@@ -1260,9 +1238,7 @@ const appendConfigOverrides = (args, request) => {
       configuredTitleFontSize !== undefined
       && Number(configuredTitleFontSize) !== Number(options.plotTitleFontSize)
     ) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: conflicting plot-title font settings cannot be expressed by the current CLI.'
-      );
+      throw recipeUnavailable(msg('conflicting plot-title font settings cannot be expressed by the current CLI.'));
     }
   } else {
     ['name', 'subtitle', 'replicon', 'accession', 'length'].forEach((kind) => {
@@ -1287,9 +1263,7 @@ const appendConfigOverrides = (args, request) => {
 
   const unsupported = Object.keys(overrides).filter((path) => !consumed.has(path));
   if (unsupported.length > 0) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: setting "${unsupported[0]}" has no current CLI projection.`
-    );
+    throw recipeUnavailable(msg('setting "{setting}" has no current CLI projection.'), { setting: unsupported[0] });
   }
 };
 
@@ -1349,9 +1323,7 @@ const appendDepthOptions = (args, options, files) => {
         : '';
     });
     if (!paths.some(Boolean)) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: depth track ${trackIndex + 1} has no source file.`
-      );
+      throw recipeUnavailable(msg('depth track {n} has no source file.'), { n: trackIndex + 1 });
     }
     args.push('--depth_track', ...paths);
   });
@@ -1385,9 +1357,7 @@ const formatCanonicalTrackScalar = (value, { allowFactor = false } = {}) => {
   const numeric = Number(value.value);
   const unit = String(value.unit || '').trim().toLowerCase();
   if (!Number.isFinite(numeric) || (unit !== 'px' && !(allowFactor && unit === 'factor'))) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: a canonical track dimension cannot be represented by the current CLI.'
-    );
+    throw recipeUnavailable(msg('a canonical track dimension cannot be represented by the current CLI.'));
   }
   return unit === 'px' ? `${numeric}px` : String(numeric);
 };
@@ -1430,21 +1400,15 @@ const TRACK_PARAM_KEY_NAMES = [...new Set(Object.values(TRACK_PARAM_KEYS)
  */
 const validateTrackParams = (mode, renderer, params) => {
   if (!isPlainObject(params)) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a canonical ${mode} track slot has malformed params.`
-    );
+    throw recipeUnavailable(msg('a canonical {mode} track slot has malformed params.'), { mode });
   }
   const allowed = TRACK_PARAM_KEYS[mode]?.[renderer];
   if (!allowed) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: ${mode} track renderer "${renderer}" is not accepted by the current CLI.`
-    );
+    throw recipeUnavailable(msg('{mode} track renderer "{renderer}" is not accepted by the current CLI.'), { mode, renderer });
   }
   const unsupported = Object.keys(params).find((key) => !allowed.has(key));
   if (unsupported) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: ${mode} track field "params.${unsupported}" cannot be projected losslessly.`
-    );
+    throw recipeUnavailable(msg('{mode} track field "{field}" cannot be projected losslessly.'), { mode, field: `params.${unsupported}` });
   }
 };
 
@@ -1454,14 +1418,10 @@ const validateTrackParams = (mode, renderer, params) => {
  */
 const validateStructuredTrackSlot = (slot, mode) => {
   if (!isPlainObject(slot)) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a canonical ${mode} track slot is malformed.`
-    );
+    throw recipeUnavailable(msg('a canonical {mode} track slot is malformed.'), { mode });
   }
   if (slot.kind !== `${mode}TrackSlot`) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a canonical ${mode} track slot has an invalid kind.`
-    );
+    throw recipeUnavailable(msg('a canonical {mode} track slot has an invalid kind.'), { mode });
   }
   const id = typeof slot.id === 'string' ? slot.id.trim() : '';
   const renderer = typeof slot.renderer === 'string' ? slot.renderer.trim() : '';
@@ -1472,9 +1432,7 @@ const validateStructuredTrackSlot = (slot, mode) => {
     !id || !renderer || typeof slot.enabled !== 'boolean' || !Number.isInteger(slot.z)
     || (slot.side !== null && !allowedSides.has(slot.side))
   ) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a canonical ${mode} track slot has invalid identity fields.`
-    );
+    throw recipeUnavailable(msg('a canonical {mode} track slot has invalid identity fields.'), { mode });
   }
   validateTrackParams(mode, renderer, slot.params);
   return slot;
@@ -1490,9 +1448,7 @@ const validateStructuredTrackSlot = (slot, mode) => {
  * @param {{ id: string, renderer: string, exact?: boolean }} identity
  */
 const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }) => {
-  const unavailable = () => new SourceRecipeUnavailable(
-    `Source recipe unavailable: a ${mode} track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.`
-  );
+  const unavailable = () => recipeUnavailable(msg('a {mode} track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.'), { mode });
   const text = String(token).trim();
   const commentIndex = [' #', '\t#'].map((marker) => text.indexOf(marker)).find((index) => index >= 0);
   if (!text || text.startsWith('#') || commentIndex !== undefined) throw unavailable();
@@ -1511,9 +1467,7 @@ const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }
     });
   if (readId !== String(id).trim() || readRenderer !== String(renderer).trim()) throw unavailable();
   if (entries.some(([key, value]) => !key || !value)) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a canonical ${mode} track slot has a malformed option.`
-    );
+    throw recipeUnavailable(msg('a canonical {mode} track slot has a malformed option.'), { mode });
   }
   const reread = `${readId}:${readRenderer}${entries.length
     ? `@${entries.map(([key, value]) => `${key}=${value}`).join(',')}`
@@ -1530,9 +1484,7 @@ const trackSlotForRecipe = (slot, mode, options) => {
   if (typeof slot === 'string') {
     const text = slot.trim();
     if (!text) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: a canonical ${mode} track slot cannot be empty.`
-      );
+      throw recipeUnavailable(msg('a canonical {mode} track slot cannot be empty.'), { mode });
     }
     try {
       const parsed = mode === 'circular'
@@ -1542,9 +1494,7 @@ const trackSlotForRecipe = (slot, mode, options) => {
       validateTrackParams(mode, parsed.renderer, parsed.params || {});
     } catch (error) {
       if (error instanceof SourceRecipeUnavailable) throw error;
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: a canonical ${mode} track slot is not accepted by the current CLI.`
-      );
+      throw recipeUnavailable(msg('a canonical {mode} track slot is not accepted by the current CLI.'), { mode });
     }
     return text;
   }
@@ -1568,9 +1518,7 @@ const trackSlotForRecipe = (slot, mode, options) => {
     }
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) throw error;
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a canonical ${mode} track slot cannot be projected losslessly.`
-    );
+    throw recipeUnavailable(msg('a canonical {mode} track slot cannot be projected losslessly.'), { mode });
   }
   assertCliSlotTokenLossless(token, mode, { id: slot.id, renderer: slot.renderer, exact: true });
   return token;
@@ -1604,21 +1552,15 @@ const appendTrackOptions = (args, request) => {
   const slots = tracks[field];
   if (slots === null || slots === undefined) {
     if (tracks[axisField] !== null && tracks[axisField] !== undefined) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: ${request.mode} track axis placement has no explicit track slots.`
-      );
+      throw recipeUnavailable(msg('{mode} track axis placement has no explicit track slots.'), { mode: request.mode });
     }
     return;
   }
   if (!Array.isArray(slots)) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: canonical ${request.mode} track slots must be an array or null.`
-    );
+    throw recipeUnavailable(msg('canonical {mode} track slots must be an array or null.'), { mode: request.mode });
   }
   if (slots.length === 0) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: an explicit empty ${request.mode} track list means no tracks, which the current CLI cannot express.`
-    );
+    throw recipeUnavailable(msg('an explicit empty {mode} track list means no tracks, which the current CLI cannot express.'), { mode: request.mode });
   }
   const option = request.mode === 'circular' ? '--circular_track_slot' : '--linear_track_slot';
   slots.forEach((slot) => appendOption(args, option, trackSlotForRecipe(slot, request.mode, options)));
@@ -1690,14 +1632,10 @@ const appendComparisonOptions = (args, request, files) => {
     || comparison.subjectRecordIndex < 0
     || comparison.subjectRecordIndex >= recordCount
   ))) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: a comparison cannot be bound losslessly to its source records.'
-    );
+    throw recipeUnavailable(msg('a comparison cannot be bound losslessly to its source records.'));
   }
   if (comparisons.some((comparison) => comparison.kind !== 'nucleotideBlast')) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: this committed protein comparison has no lossless source CLI projection.'
-    );
+    throw recipeUnavailable(msg('this committed protein comparison has no lossless source CLI projection.'));
   }
   const drawable = comparisons;
   const adjacent = drawable.every((comparison, index) => (
@@ -1753,9 +1691,7 @@ const appendComparisonOptions = (args, request, files) => {
 const appendDiagramOptions = (args, request, files) => {
   const options = request.diagramOptions || {};
   if (Array.isArray(request.output) && request.output.length !== 1) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: per-record batch output names have no single current CLI projection.'
-    );
+    throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
   }
   const output = Array.isArray(request.output) ? request.output[0] : request.output;
   appendOption(args, '-o', output?.prefix);
@@ -1769,16 +1705,12 @@ const appendDiagramOptions = (args, request, files) => {
   }
   if (options.selectedFeaturesSet !== null && options.selectedFeaturesSet !== undefined) {
     if (!Array.isArray(options.selectedFeaturesSet)) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: selected features must be an array or null.'
-      );
+      throw recipeUnavailable(msg('selected features must be an array or null.'));
     }
     if (!options.selectedFeaturesSet.every((feature) => (
       typeof feature === 'string' && feature.trim().length > 0
     ))) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: selected features must contain only non-empty strings.'
-      );
+      throw recipeUnavailable(msg('selected features must contain only non-empty strings.'));
     }
     if (options.selectedFeaturesSet.length > 0) {
       args.push('-k', options.selectedFeaturesSet.join(','));
@@ -1807,9 +1739,7 @@ const appendDiagramOptions = (args, request, files) => {
     const configured = options.configOverrides?.['objects.blast_match.style'];
     if (configured === undefined) appendOption(args, '--pairwise_match_style', options.pairwiseMatchStyle);
     else if (String(configured) !== String(options.pairwiseMatchStyle)) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: conflicting pairwise comparison styles cannot be expressed by the current CLI.'
-      );
+      throw recipeUnavailable(msg('conflicting pairwise comparison styles cannot be expressed by the current CLI.'));
     }
   }
   appendResourceOptions(args, options, files);
@@ -1852,7 +1782,7 @@ const requireExactRecords = async (renderRequest, files) => {
     if (record.cardinality === 'exactly_one') continue;
     const source = sourceSpec(record);
     if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
-      throw identityTableUnavailable('feature placements and feature edits require exact materialized records.');
+      throw identityTableUnavailable(msg('feature placements and feature edits require exact materialized records.'));
     }
   }
 };
@@ -1867,10 +1797,10 @@ export const buildFeatureOverrideTable = async ({
 }) => {
   try {
     await requireExactRecords(renderRequest, createRecipeFiles(resources, {}, null, readResourceRecordCount));
-    return { text: featureOverrideTable(renderRequest, rows), reason: '' };
+    return { text: featureOverrideTable(renderRequest, rows), reason: null };
   } catch (error) {
-    if (error instanceof SourceRecipeUnavailable && /** @type {Reasoned} */ (error).reason) return {
-      text: '', reason: /** @type {Reasoned} */ (error).reason };
+    const reason = error instanceof SourceRecipeUnavailable ? /** @type {Reasoned} */ (error).tableReason : undefined;
+    if (reason) return { text: '', reason };
     throw error;
   }
 };
@@ -1897,20 +1827,21 @@ export const buildSourceRecipe = async ({
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
   /**
-   * @param {unknown} reason
+   * @param {SourceRecipeUnavailable} error
    * @returns {SourceRecipe}
    */
-  const unavailable = (reason) => ({
+  const unavailable = (error) => ({
     available: false,
     mode: mode === 'linear' ? 'linear' : 'circular',
     args: [],
     fileMetadata: new Map(),
     generatedFiles: [],
     semanticCoverage: null,
-    unavailableReason: String(reason || 'Source recipe unavailable.')
+    unavailableReason: error.message,
+    unavailableReasonParts: error.parts
   });
   if (!isPlainObject(renderRequest) || !['circular', 'linear'].includes(mode)) {
-    return unavailable('Source recipe unavailable: the committed render request is missing or invalid.');
+    return unavailable(recipeUnavailable(msg('the committed render request is missing or invalid.')));
   }
   try {
     const semanticCoverage = validateCurrentSemanticCoverage(renderRequest);
@@ -1945,12 +1876,13 @@ export const buildSourceRecipe = async ({
       fileMetadata: files.fileMetadata,
       generatedFiles: files.generatedFiles,
       semanticCoverage,
-      unavailableReason: ''
+      unavailableReason: '',
+      unavailableReasonParts: []
     };
   } catch (error) {
-    if (error instanceof SourceRecipeUnavailable) return unavailable(error.message);
+    if (error instanceof SourceRecipeUnavailable) return unavailable(error);
     console.warn('Failed to project the committed render into a source CLI recipe.', normalizeUserFacingError(error));
-    return unavailable('Source recipe unavailable: the committed render cannot be represented safely by the current CLI.');
+    return unavailable(recipeUnavailable(msg('the committed render cannot be represented safely by the current CLI.')));
   }
 };
 
@@ -2063,9 +1995,7 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
     const path = String(pathRaw || '').trim();
     const name = allocatedMetadata.get(path)?.name;
     if (!name) {
-      throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: a generated helper dependency has no allocated filename.'
-      );
+      throw recipeUnavailable(msg('a generated helper dependency has no allocated filename.'));
     }
     return name;
   };
@@ -2077,30 +2007,32 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
       ? file.buildData(finalNameForPath)
       : file?.data;
     if (!(typeof data === 'string' || data instanceof Uint8Array)) {
-      throw new SourceRecipeUnavailable(
-        `Source recipe unavailable: generated helper file "${name}" cannot be materialized.`
-      );
+      throw recipeUnavailable(msg('generated helper file "{name}" cannot be materialized.'), { name });
     }
     return { path, name, slot, data };
   });
 };
 
 // PD-OI-018 revision 4 and D-40: the Web search database differs from the CLI.
-export const LOSAT_DATABASE_SCOPE_NOTE = 'LOSAT E-values use the subject source file as the search database, '
-  + 'without the query record when both records come from the same file.';
+export const LOSAT_DATABASE_SCOPE_NOTE = msg('LOSAT E-values use the subject source file as the search database, without the query record when both records come from the same file.');
 
 /** @type {Readonly<Record<string, string>>} */
 const LOSAT_RUNTIME_NAMES = Object.freeze({ losat: 'LOSAT', 'ncbi-blast': 'NCBI BLAST+' });
 
 // One line per search runtime: program, runtime kind, version and source, plus
 // the executable path that CLI Sessions record (design D9/D10).
-/** @param {LosatRuntimeRecord} runtime */
-export const formatLosatRuntime = ({ program, kind, version, source, path }) => {
-  if (!kind) return `${program}: runtime not recorded`;
+/**
+ * @param {LosatRuntimeRecord} runtime
+ * @returns {ErrorTextPart[]}
+ */
+const losatRuntimeParts = ({ program, kind, version, source, path }) => {
+  if (!kind) return [{ text: msg('{program}: runtime not recorded'), params: { program } }];
   const name = LOSAT_RUNTIME_NAMES[kind] || kind;
-  const release = version ? ` ${version}` : ', version not recorded';
   const origin = [source, path].filter(Boolean).join(', ');
-  return `${program}: ${name}${release}${origin ? ` (${origin})` : ''}`;
+  if (version) return [{ text: `${program}: ${name} ${version}${origin ? ` (${origin})` : ''}`, verbatim: true }];
+  return [origin
+    ? { text: msg('{program}: {name}, version not recorded ({origin})'), params: { program, name, origin } }
+    : { text: msg('{program}: {name}, version not recorded'), params: { program, name } }];
 };
 
 // The distinct runtimes of the displayed raw LOSAT entries of a run, Web or
@@ -2126,9 +2058,14 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
       path: runtime?.path ? String(runtime.path) : null
     };
     const identity = JSON.stringify(record);
-    if (!runtimes.has(identity)) runtimes.set(identity, { ...record, text: formatLosatRuntime(record) });
+    if (!runtimes.has(identity)) {
+      const textParts = losatRuntimeParts(record);
+      runtimes.set(identity, { ...record, text: renderErrorText(textParts), textParts });
+    }
   });
-  return Array.from(runtimes.values());
+  /** @type {LosatRuntimeLine[]} */
+  const lines = Array.from(runtimes.values());
+  return lines;
 };
 
 /**
@@ -2143,7 +2080,7 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
  * @property {string} [startedAtIso]
  * @property {string} [generatedBy]
  * @property {boolean} [losatComparisons]
- * @property {any[]} [losatRuntimes]
+ * @property {LosatRuntimeLine[]} [losatRuntimes]
  * @property {any[]} [featureIdentityNotices]
  */
 
@@ -2170,9 +2107,12 @@ export const buildRunInfo = ({
       .some((notice) => notice?.status === 'unresolved');
   if (unresolvedIdentity && Array.isArray(sourceRecipe?.generatedFiles)) sourceRecipe.generatedFiles.splice(0);
   let sourceAvailable = sourceRecipe?.available !== false && !unresolvedIdentity;
-  let sourceUnavailableReason = unresolvedIdentity
-    ? 'Source recipe unavailable: a feature edit or placement names a feature that the source does not have.'
-    : String(sourceRecipe?.unavailableReason || 'Source recipe unavailable.');
+  /** @type {ErrorTextPart[]} */
+  let sourceUnavailableParts = unresolvedIdentity
+    ? unavailableParts({ text: msg('a feature edit or placement names a feature that the source does not have.') })
+    : [];
+  if (!sourceUnavailableParts.length && sourceRecipe?.available === false) sourceUnavailableParts = sourceRecipe.unavailableReasonParts;
+  if (!sourceUnavailableParts.length) sourceUnavailableParts = [{ text: RECIPE_UNAVAILABLE }];
   const sourceMetadata = unresolvedIdentity ? new Map() : normalizeFileMetadata(
     sourceRecipe?.fileMetadata || fileMetadata
   );
@@ -2206,7 +2146,7 @@ export const buildRunInfo = ({
   } catch (error) {
     if (!(error instanceof SourceRecipeUnavailable)) throw error;
     sourceAvailable = false;
-    sourceUnavailableReason = error.message;
+    sourceUnavailableParts = error.parts;
     allocatedMetadata = allocateVisibleFilenames({
       sourceMetadata: new Map(),
       exactMetadata,
@@ -2247,49 +2187,53 @@ export const buildRunInfo = ({
   const hasLosatHelpers = sourceHelpers.some(
     (helper) => /losat|blast/i.test(`${helper.slot} ${helper.name}`)
   );
-  const notes = [];
+  // Each note is one part (one or two sentences of one key).
+  /** @type {ErrorTextPart[]} */
+  const noteParts = [];
   let level = 'exact-uploaded-files';
   if (!sourceAvailable) {
     level = 'source-unavailable';
-    notes.push(sourceUnavailableReason);
-    if (exact) notes.push('Exact replay remains available from the committed canonical session.');
+    noteParts.push(...sourceUnavailableParts);
+    if (exact) noteParts.push({ text: msg('Exact replay remains available from the committed canonical session.') });
   } else if (sourceHelpers.length > 0) {
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
-    notes.push(
-      `The source recipe references browser-generated file(s): ${formatHelperFileList(sourceHelpers)}. ` +
-      'Use "Download reproducibility files" to save those file(s) next to the uploaded inputs before running the command in a terminal.'
-    );
-    notes.push(
-      'If you save a .gbdraw-session.json.gz and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the compressed JSON; these TSV files do not need to be saved separately for session restore.'
-    );
+    noteParts.push({
+      text: msg('The Source recipe references browser-generated file(s): {files}. Use "Download reproducibility files" to save those file(s) next to the uploaded inputs before running the command in a terminal.'),
+      params: { files: helperFileList(sourceHelpers) }
+    });
+    noteParts.push({
+      text: msg('If you save a .gbdraw-session.json.gz and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the compressed JSON; these TSV files do not need to be saved separately for session restore.')
+    });
   }
   if (source.unresolvedFileArgs.length > 0) {
     level = 'pseudo';
-    notes.push('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
+    noteParts.push({ text: msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.') });
   }
-  if (notes.length === 0) {
-    notes.push('The source recipe can be rerun with the uploaded file names shown here.');
+  if (noteParts.length === 0) {
+    noteParts.push({ text: msg('The Source recipe can be rerun with the uploaded file names shown here.') });
   }
   if (losatComparisons) {
-    notes.push(LOSAT_DATABASE_SCOPE_NOTE);
+    noteParts.push({ text: LOSAT_DATABASE_SCOPE_NOTE });
   }
   if (exact && exact.helperFiles.length > 0) {
-    notes.push(
-      `Exact replay references ${formatHelperFileList(exact.helperFiles)}, which is included in "Download reproducibility files".`
-    );
+    noteParts.push({
+      text: msg('Exact replay references {files}, which is included in "Download reproducibility files".'),
+      params: { files: helperFileList(exact.helperFiles) }
+    });
   }
-  const bundleDescription = [
+  /** @type {ErrorTextPart[]} */
+  const descriptionParts = [
     sourceAvailable
       ? (
           sourceHelpers.length > 0
-            ? `Source recipe helper files: ${formatHelperFileList(sourceHelpers)}.`
-            : 'The Source recipe uses only the original source files.'
+            ? { text: msg('Source recipe helper files: {files}.'), params: { files: helperFileList(sourceHelpers) } }
+            : { text: msg('The Source recipe uses only the original source files.') }
         )
-      : 'The Source recipe is unavailable.',
+      : { text: msg('The Source recipe is unavailable.') },
     exact && exact.helperFiles.length > 0
-      ? `Exact replay file: ${formatHelperFileList(exact.helperFiles)}.`
-      : 'No Exact replay file is available.'
-  ].join(' ');
+      ? { text: msg('Exact replay file: {files}.'), params: { files: helperFileList(exact.helperFiles) } }
+      : { text: msg('No Exact replay file is available.') }
+  ];
 
   return {
     schema: 1,
@@ -2313,9 +2257,8 @@ export const buildRunInfo = ({
           ? 'unavailable'
           : (sourceHelpers.length > 0 ? 'requires-generated-helper-files' : 'ready-with-original-files')
       },
-      unavailableReason: sourceAvailable
-        ? ''
-        : sourceUnavailableReason
+      unavailableReason: sourceAvailable ? '' : renderErrorText(sourceUnavailableParts),
+      unavailableReasonParts: sourceAvailable ? [] : sourceUnavailableParts
     },
     exactReplay: {
       available: Boolean(exact),
@@ -2329,11 +2272,13 @@ export const buildRunInfo = ({
       available: helperFiles.length > 0,
       sourceRecipeFiles: sourceHelpers,
       exactReplayFiles: exact?.helperFiles || [],
-      description: bundleDescription
+      description: renderErrorText(descriptionParts),
+      descriptionParts
     },
     reproducibility: {
       level,
-      notes
+      notes: noteParts.map((part) => renderErrorText([part])),
+      noteParts
     }
   };
 };

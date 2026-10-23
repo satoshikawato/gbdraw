@@ -745,3 +745,14 @@ test('OV-1415: the words a declined label table names as changed are a key, show
   const source = readFileSync(join(jsRoot, 'app', 'feature-editor', 'label-actions.js'), 'utf8');
   assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
 });
+
+// OV-1690: the record list sentence ends inside its key, so a locale writes its
+// own punctuation, and the next sentence follows the locale's separator.
+test('OV-1690: the record list sentence is one key, joined to the next with the sentence separator', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<p id="record-list-description"');
+  const block = html.slice(start, html.indexOf('</p>', start));
+  assert.match(block, /<i18n-text :text="t\('\{file\}: \{records\}\.'\)">/);
+  assert.match(block, /sentenceSeparator\(\) \+ settingApplicationSentence\('inputs'\)/);
+  assert.doesNotMatch(block, /<\/span>\.|<\/strong>:/);
+});
