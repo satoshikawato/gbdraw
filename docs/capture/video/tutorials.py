@@ -916,7 +916,8 @@ def _show_figure(rec: Recorder, step: int | None, title: str, subtitle: str = ""
         boxes = detail(rec)
         for box in boxes:
             zoom = min(VIEWPORT[0] / box["width"], VIEWPORT[1] / box["height"]) / 1.08
-            rec.camera(box, zoom=max(1.0, min(zoom, 3.0)), duration=1.0)
+            # The tall window frames the whole part too, not the wide zoom's crop of it.
+            rec.camera(box, zoom=max(1.0, min(zoom, 3.0)), duration=1.0, portrait=box)
             # Each move eases for 1 s, so the part then stays still about 3 s.
             rec.hold(4.0 if len(boxes) == 1 else 3.4)
         _frame_figure(rec)
