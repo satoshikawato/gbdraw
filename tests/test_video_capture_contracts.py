@@ -164,8 +164,8 @@ def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
 
 
 def test_a_frame_long_gap_between_skims_keeps_the_badge() -> None:
-    # The code between two skims runs for a few hundredths of a second at normal speed: the badge would blink off
-    # for a frame. Such a gap plays with the skim before it; a gap a viewer can see stays at normal speed.
+    # The code between two skims runs for a few hundredths of a second (a tenth on a busy machine) at normal speed:
+    # the badge would blink off for a few frames. Such a gap plays with the skim before it; a gap a viewer can see stays at normal speed.
     events = [
         {'t': 2.0, 'kind': 'speed_start', 'factor': 3.0, 'target': None},
         {'t': 5.0, 'kind': 'speed_end'},

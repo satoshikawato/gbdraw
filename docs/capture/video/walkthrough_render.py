@@ -402,9 +402,9 @@ class Language:
 
 # -- timeline ---------------------------------------------------------------
 
-# A normal-speed gap between two skims shorter than this (recording seconds) is a frame or two of the code between
-# them, not a moment for the viewer.
-SKIM_BRIDGE = 0.1
+# A normal-speed gap between two skims shorter than this (recording seconds) is the code between them (slower on a
+# busy machine), a few frames and no moment for the viewer.
+SKIM_BRIDGE = 0.25
 
 @dataclass
 class TimeMap:
