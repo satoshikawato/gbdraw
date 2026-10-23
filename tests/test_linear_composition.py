@@ -12,8 +12,10 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.api import LinearMultiRecordOptions
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.core.text import calculate_svg_bbox_dimensions
 from gbdraw.layout.composition import LegendPlacement, TitlePlacement
 from gbdraw.layout.spatial import Aabb, union_aabbs
+from gbdraw.render.groups.linear.plot_title import plot_title_content
 
 
 _TRANSLATE_RE = re.compile(
@@ -268,3 +270,29 @@ def test_linear_multi_row_track_metadata_uses_final_primary_translation() -> Non
         assert sum(y_value for _x_value, y_value in translations) == pytest.approx(
             record_payload["axisYpx"]
         )
+
+
+@pytest.mark.parametrize(
+    ("title", "parts"),
+    [
+        ("Audit plot title", [("Audit plot title", "normal")]),
+        (
+            "<i>Escherichia coli</i> O157:H7 str. Sakai",
+            [("Escherichia coli", "italic"), (" O157:H7 str. Sakai", "normal")],
+        ),
+    ],
+)
+def test_linear_plot_title_box_is_its_painted_width(title: str, parts: list[tuple[str, str]]) -> None:
+    """OV-1608: the title's composition box is the painted width of its styled parts."""
+    family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+    content = plot_title_content(title, font_family=family, font_size=32.0, dpi=96)
+    sizes = [
+        calculate_svg_bbox_dimensions(text, family, 32.0, 96, font_style=style)
+        for text, style in parts
+    ]
+    width = sum(size[0] for size in sizes)
+    height = max(size[1] for size in sizes)
+    assert content.local_bounds.width == pytest.approx(width)
+    assert content.local_bounds.height == pytest.approx(height)
+    assert content.local_bounds.min_x == pytest.approx(-0.5 * width)
+    assert content.local_bounds.min_y == pytest.approx(-0.5 * height)
