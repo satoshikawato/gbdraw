@@ -100,6 +100,9 @@ ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 48 a Session without a Web draft (CLI, Python API) holds each
 # table only as its file card's file: the Web reads every row as that file's.
 FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
+# From version 49 a Session lists its drawings in ``drawings``
+# (gbdraw.session_drawings owns the layout); admitted from the flip on.
+DRAWINGS_SESSION_MIN_VERSION = 49
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
@@ -141,6 +144,16 @@ OTHER_MODE_RESULT_UI_FIELDS = keys_of(SessionOtherModeUi)
 OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
 OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
 OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
+# Web file binding slots (``webFiles.bindings``, schema 2): the five file
+# cards, which every drawing binds, and the slots of each diagram mode's inputs.
+WEB_BINDING_CARD_SLOTS = frozenset({"d_color", "t_color", "blacklist", "whitelist", "qualifier_priority"})
+WEB_BINDING_MODE_SLOTS: Mapping[str, frozenset[str]] = {
+    "circular": frozenset({
+        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
+        "c_conservation_blasts_source", "c_conservation_fastas", "c_conservation_sequence_sources",
+    }),
+    "linear": frozenset({"linearSeqs", "linearComparisons"}),
+}
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -833,14 +846,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         else:
             leaf(binding)
 
-    slots = {
-        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
-        "c_conservation_fastas", "c_conservation_sequence_sources", "d_color",
-        "t_color", "blacklist", "whitelist", "qualifier_priority",
-    }
-    if current and set(bindings) - slots - {
-        "schema", "c_conservation_blasts_source", "linearSeqs", "linearComparisons",
-    }:
+    # Every slot that holds one file binding or a list of them.
+    slots = (WEB_BINDING_MODE_SLOTS["circular"] | WEB_BINDING_CARD_SLOTS) - {"c_conservation_blasts_source"}
+    if current and set(bindings) - {"schema"} - WEB_BINDING_CARD_SLOTS - frozenset().union(*WEB_BINDING_MODE_SLOTS.values()):
         raise ValidationError("Unknown Web binding inventory field.")
     for slot in slots:
         value(bindings.get(slot), slot == "c_gb")
