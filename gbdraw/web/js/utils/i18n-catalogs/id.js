@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "Membuat diagram. Coba lagi setelah pembuatan selesai.",
   "Generation Error": "Kesalahan pembuatan diagram",
   "Genes": "Gen",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "Berikan satu file sekuens perbandingan per cincin, tanpa tabel BLAST, dan gunakan record yang ditampilkan sebagai subject.",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "Berikan satu file sekuens perbandingan per cincin, tanpa tabel BLAST, dan gunakan file referensi sebagai subject.",
   "Global title shown once for the whole linear plot.": "Judul global yang ditampilkan satu kali untuk seluruh diagram linear.",
   "Go to {section}": "Buka {section}",
   "Group path ID": "ID jalur kelompok",

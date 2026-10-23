@@ -92,14 +92,43 @@ def determine_length_parameter(record_length: int, length_threshold: int) -> Siz
 
 def sliding_window(length: int, cfg: GbdrawConfig) -> tuple[int, int]:
     """Return the Auto GC content and skew (window, step) for a record length."""
-    tiers = cfg.objects.sliding_window
-    if length < 1_000_000:
-        window, step = tiers.default
-    elif length < 10_000_000:
-        window, step = tiers.up1m
-    else:
-        window, step = tiers.up10m
+    for below, window, step in sliding_window_tiers(cfg):
+        if length < below:
+            return window, step
+    window, step = cfg.objects.sliding_window.up10m
     return int(window), int(step)
+
+
+def sliding_window_tiers(cfg: GbdrawConfig) -> tuple[tuple[int, int, int], ...]:
+    """Return the Auto GC (below bp, window, step) tiers; longer records use ``up10m``."""
+    tiers = cfg.objects.sliding_window
+    return (
+        (1_000_000, int(tiers.default[0]), int(tiers.default[1])),
+        (10_000_000, int(tiers.up1m[0]), int(tiers.up1m[1])),
+    )
+
+
+def tick_and_window_tiers(cfg: GbdrawConfig) -> dict[str, object]:
+    """Return the length tiers of the Auto ticks and sliding window, for the Web hints.
+
+    Each ``tiers`` row is checked in order against the record length (circular
+    ticks: at most; the others: below); a longer record takes ``above``.
+    """
+    up10m = cfg.objects.sliding_window.up10m
+    return {
+        "slidingWindow": {
+            "tiers": [list(row) for row in sliding_window_tiers(cfg)],
+            "above": [int(up10m[0]), int(up10m[1])],
+        },
+        "circularTicks": {
+            "tiers": [list(row) for row in _CIRCULAR_TICK_TIERS],
+            "above": list(_CIRCULAR_TICKS_ABOVE_TIERS),
+        },
+        "linearTicks": {
+            "tiers": [list(row) for row in _LINEAR_TICK_TIERS],
+            "above": _LINEAR_TICK_ABOVE_TIERS,
+        },
+    }
 
 
 def depth_sliding_window(window: int, step: int) -> tuple[int, int]:

@@ -118,7 +118,7 @@ from gbdraw.config.models.labels import LabelsFilteringConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.config.modify import with_config_overrides
+from gbdraw.config.modify import with_config_overrides, with_fit_row_overrides
 from gbdraw.configurators import (
     BlastMatchConfigurator,
     DepthConfigurator,
@@ -226,7 +226,7 @@ from gbdraw.render.group_content import (
     place_content,
 )
 from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
-from gbdraw.render.groups.circular.definition import definition_record_facts
+from gbdraw.render.groups.circular.definition import CircularDefinitionProfile, definition_record_facts
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
@@ -366,6 +366,12 @@ def _with_available_font_family(cfg: GbdrawConfig) -> GbdrawConfig:
         logger.warning(resolution.message)
     text = replace(cfg.objects.text, font_family=resolution.effective)
     return replace(cfg, objects=replace(cfg.objects, text=text))
+
+
+def _set_config_paths(options: CircularDiagramOptions | LinearDiagramOptions) -> frozenset[str]:
+    """The config paths the caller's ``config_overrides`` set, which a label-fit row keeps."""
+
+    return frozenset(path for path, value in (options.config_overrides or {}).items() if value is not None)
 
 
 def _resolve_diagram_options_config(
@@ -1319,6 +1325,23 @@ def _resolve_plot_title_font_size(value: float | None) -> float:
 
 def _normalize_plot_title(plot_title: str | None) -> str:
     return str(plot_title or "").strip()
+
+
+def _circular_record_definition_profile(
+    *,
+    record_count: int,
+    show_plot_title: bool,
+    keep_full_definition_with_plot_title: bool,
+) -> Literal["full", "record_summary"]:
+    """The center definition a record draws: the full one, or the record summary.
+
+    A shown plot title replaces the species lines unless the full definition is
+    kept; without a title only a single record draws the full definition.
+    """
+
+    if show_plot_title:
+        return "full" if keep_full_definition_with_plot_title else "record_summary"
+    return "full" if record_count == 1 else "record_summary"
 
 
 def _apply_circular_plot_title_font_size_override(
@@ -2465,7 +2488,8 @@ def assemble_circular_diagram_from_record(
     bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore,
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
-    _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
+    _definition_profile: CircularDefinitionProfile = "full",
+    _layout_definition_profile: CircularDefinitionProfile | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
@@ -2570,17 +2594,16 @@ def assemble_circular_diagram_from_record(
     )
     normalized_plot_title = _normalize_plot_title(plot_title)
     show_plot_title = False
-    effective_definition_profile: Literal["full", "record_summary", "shared_common"] = (
+    effective_definition_profile: CircularDefinitionProfile = (
         _definition_profile
     )
     if _definition_profile == "full":
         show_plot_title = normalized_plot_title_position != "none"
-        if show_plot_title and keep_full_definition_with_plot_title:
-            effective_definition_profile = "full"
-        elif show_plot_title:
-            effective_definition_profile = "record_summary"
-        else:
-            effective_definition_profile = "full"
+        effective_definition_profile = _circular_record_definition_profile(
+            record_count=1,
+            show_plot_title=show_plot_title,
+            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+        )
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
     circular_track_axis_index = _validate_circular_track_axis_index(
@@ -2838,6 +2861,10 @@ def assemble_circular_diagram_from_record(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
+        # The radial layout reserves the definition drawn without the plot title (OV-1710).
+        layout_definition_profile=(
+            _definition_profile if _layout_definition_profile is None else _layout_definition_profile
+        ),
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
         title_content=title_content,
@@ -3070,11 +3097,16 @@ def assemble_circular_diagram_from_records(
     )
     cfg = replace(cfg, canvas=canvas_cfg)
     show_plot_title = normalized_plot_title_position != "none"
-    record_definition_profile: Literal["full", "record_summary"] = "record_summary"
-    if len(records) == 1 and not show_plot_title:
-        record_definition_profile = "full"
-    elif show_plot_title and keep_full_definition_with_plot_title:
-        record_definition_profile = "full"
+    record_definition_profile = _circular_record_definition_profile(
+        record_count=len(records),
+        show_plot_title=show_plot_title,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+    )
+    layout_definition_profile = _circular_record_definition_profile(
+        record_count=len(records),
+        show_plot_title=False,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+    )
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
         cfg,
@@ -3223,6 +3255,7 @@ def assemble_circular_diagram_from_records(
             identity=identity,
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
+            _layout_definition_profile=layout_definition_profile,
             _precomputed_depth_tracks=(
                 record_depth_track_data[record_index]
                 if record_depth_track_data is not None
@@ -3705,7 +3738,7 @@ def build_circular_diagram(
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_record(
             gb_record,
-            cfg=with_config_overrides(cfg, overrides),
+            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
             selected_features_set=options.selected_features_set,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
@@ -4050,7 +4083,7 @@ def build_circular_multi_diagram(
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_records(
             records,
-            cfg=with_config_overrides(cfg, overrides),
+            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
             conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,

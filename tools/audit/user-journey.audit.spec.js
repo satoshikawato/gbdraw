@@ -437,12 +437,14 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
 // SVG strings show the draft. The 0.13.0 Gallery Session saved a Result older
 // than its four color rules and plot title; the Session 44 holds a staged
 // record-display row (TESTB from 201, reversed) and `main`'s renderer output.
+// The display start changes no text (the definition shows the record length,
+// OV-1694), so its mark is a TESTB feature block at its displayed position.
 const J3_SESSIONS = [
   { key: 'v30-bgc', name: '0.13.0 Session 30 (BGC0000708-BGC0000713, Linear)', file: FIXTURE('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'),
     draftMarks: ['Core biosynthetic genes', 'Additional biosynthetic genes', 'Transport-related genes', 'Regulatory genes']
       .map((caption) => `data-legend-key="${caption}"`).concat('Aminoglycoside biosynthetic gene clusters from') },
   { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz'),
-    draftMarks: ['[201..1], [4,000..202] bp'] },
+    draftMarks: ['d="M 1350.5,-48.0 L 1450.5,-48.0 L 1450.5,-7.999999999999998 L 1350.5,-7.999999999999998 z" data-gbdraw-feature-id="fd6a65bce_record_2"'] },
   { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw-session.json') },
   { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw-session.json') }
 ];

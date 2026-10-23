@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "正在產生圖譜。產生完成後請重試。",
   "Generation Error": "圖譜產生錯誤",
   "Genes": "基因",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "請為每個環提供一個比較序列檔案（不含BLAST表格），並以顯示的記錄作為目標序列。",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "請為每個環提供一個比較序列檔案（不含BLAST表格），並以參考檔案作為目標序列。",
   "Global title shown once for the whole linear plot.": "為整個線狀圖譜顯示一次的全域標題。",
   "Go to {section}": "前往{section}",
   "Group path ID": "組路徑ID",

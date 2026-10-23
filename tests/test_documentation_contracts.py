@@ -19,6 +19,7 @@ pytestmark = pytest.mark.recipe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0.md"
+PATCH_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.1.md"
 BETA_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0b0.md"
 SESSION_COMPATIBILITY = (
     REPO_ROOT / "docs" / "REFERENCE" / "session-and-request-compatibility.md"
@@ -101,6 +102,7 @@ def test_release_navigation_retains_beta_history_and_delegates_publication_dates
             r"\[0\.14\.0 release notes\]\([^)]*RELEASE_NOTES_0\.14\.0\.md\)",
             source,
         ), relative_path
+        assert "RELEASE_NOTES_0.14.1.md" in source, relative_path
     for path in (RELEASE_NOTES, REPO_ROOT / "docs/DOCS.md", REPO_ROOT / "docs/ABOUT.md"):
         assert "RELEASE_NOTES_0.14.0b0.md" in path.read_text(encoding="utf-8")
     for source in (changelog, RELEASE_NOTES.read_text(encoding="utf-8")):
@@ -110,7 +112,7 @@ def test_release_navigation_retains_beta_history_and_delegates_publication_dates
 def test_installation_distinguishes_source_version_from_index_availability() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     install = (REPO_ROOT / "docs/INSTALL.md").read_text(encoding="utf-8")
-    for source in (readme, install, RELEASE_NOTES.read_text(encoding="utf-8")):
+    for source in (readme, install, PATCH_NOTES.read_text(encoding="utf-8")):
         prose = " ".join(source.split())
         assert f"`{__version__}`" in prose
         assert "https://pypi.org/project/gbdraw/" in prose

@@ -227,7 +227,8 @@ def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
     # gbdraw.auto_sizes takes DiagramMode from this module.
-    from gbdraw.auto_sizes import linear_label_size_records
+    from gbdraw.auto_sizes import linear_label_size_records, tick_and_window_tiers
+    from gbdraw.config.models import GbdrawConfig
     from gbdraw.labels.label_style import (
         DEFAULT_LABEL_LINE,
         DEFAULT_LABEL_PROTECTION,
@@ -249,6 +250,7 @@ def mode_profiles_payload() -> dict[str, object]:
                 scope: linear_label_size_records(scope) for scope in get_args(LinearLabelScope)
             },
             "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},
+            **tick_and_window_tiers(GbdrawConfig.from_dict(packaged)),
         },
         "comparisonDomains": {
             _camel_threshold_name(name): {

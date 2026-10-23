@@ -14,15 +14,103 @@ const deepFreeze = (value) => {
 
 export const MODE_PROFILE_DATA = deepFreeze({
   "autoSizes": {
+    "circularTicks": {
+      "above": [
+        1000000,
+        200000
+      ],
+      "tiers": [
+        [
+          30000,
+          1000,
+          100
+        ],
+        [
+          50000,
+          5000,
+          1000
+        ],
+        [
+          150000,
+          10000,
+          1000
+        ],
+        [
+          1000000,
+          50000,
+          10000
+        ],
+        [
+          10000000,
+          500000,
+          100000
+        ]
+      ]
+    },
     "linearLabelSizeRecords": {
       "all": "all",
       "first": "first",
       "none": "all",
       "orthogroup_top": "all"
     },
+    "linearTicks": {
+      "above": 1000000,
+      "tiers": [
+        [
+          2000,
+          100
+        ],
+        [
+          20000,
+          1000
+        ],
+        [
+          50000,
+          5000
+        ],
+        [
+          150000,
+          10000
+        ],
+        [
+          250000,
+          50000
+        ],
+        [
+          1000000,
+          100000
+        ],
+        [
+          2000000,
+          200000
+        ],
+        [
+          5000000,
+          500000
+        ]
+      ]
+    },
     "sizeClassThresholdBp": {
       "circular": 75000,
       "linear": 100000
+    },
+    "slidingWindow": {
+      "above": [
+        100000,
+        10000
+      ],
+      "tiers": [
+        [
+          1000000,
+          1000,
+          100
+        ],
+        [
+          10000000,
+          10000,
+          1000
+        ]
+      ]
     }
   },
   "comparisonDomains": {

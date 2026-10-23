@@ -307,3 +307,28 @@ test('OV-519: the track preview estimates the shown Result by its record, not it
   // A Linear Result names no Circular record.
   assert.equal(featureWidthEstimate(three, firstOff, { ...batch, mode: 'linear' }, 1), '≈ 18.5 px (estimate)');
 });
+
+/** @param {string} text "500 kbp (auto)" -> 500000 */
+const shownBp = (text) => {
+  const match = /^([\d.]+) (Mbp|kbp|bp)/.exec(text);
+  assert.ok(match, text);
+  return Number(match[1]) * { Mbp: 1_000_000, kbp: 1000, bp: 1 }[/** @type {'Mbp' | 'kbp' | 'bp'} */ (match[2])];
+};
+
+// Python's tiers reach the Web hints through mode-profiles.generated.js; every
+// tier edge (the bound and its neighbours) is pinned to Python's value.
+test('the scale interval and sliding window hints follow Python at every length-tier edge', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/auto_size_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(vectors.autoHints.length > 40, 'edge vectors exist');
+  for (const entry of vectors.autoHints) {
+    const display = createAutoValueDisplay(withDrawings({
+      mode: { value: entry.mode },
+      form: {},
+      adv: {}
+    }), { circularDiagramLengths: () => [[entry.length]], linearRecordLengths: () => [entry.length] });
+    const name = `${entry.mode} ${entry.length}`;
+    assert.equal(shownBp(display.autoValueText('scaleInterval')), entry.scaleInterval, name);
+    assert.equal(shownBp(display.autoValueText('dinucleotideWindow')), entry.window, name);
+    assert.equal(shownBp(display.autoValueText('dinucleotideStep')), entry.step, name);
+  }
+});

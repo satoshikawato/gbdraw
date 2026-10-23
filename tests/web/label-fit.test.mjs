@@ -159,6 +159,8 @@ test('a row\'s config paths become the draft fields the request mapping projects
     { form: {}, adv: { circular_label_placement: 'radial' } });
   // "Separate overlapping features" (LP-D52) switches the mode's Resolve Overlaps control on.
   assert.deepEqual(draft({ 'canvas.resolve_overlaps': true }), { form: {}, adv: { resolve_overlaps: true } });
+  // "Smaller definition font" (D-12) sets Record Labels > Default font size.
+  assert.deepEqual(draft({ 'objects.definition.circular.font_size': 16.5 }), { form: {}, adv: { def_font_size: 16.5 } });
   assert.deepEqual(draftFieldsForConfigValues({ 'canvas.resolve_overlaps': true }, 'linear', modeDrawing(state, 'linear').adv),
     { form: {}, adv: { resolve_overlaps: true } });
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';

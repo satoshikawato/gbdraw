@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "Đang tạo sơ đồ. Hãy thử lại sau khi tạo xong.",
   "Generation Error": "Lỗi tạo sơ đồ",
   "Genes": "Số gene",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "Cung cấp một tệp trình tự so sánh cho mỗi vòng, không kèm bảng BLAST, và dùng các bản ghi đang hiển thị làm subject.",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "Cung cấp một tệp trình tự so sánh cho mỗi vòng, không kèm bảng BLAST, và dùng tệp tham chiếu làm subject.",
   "Global title shown once for the whole linear plot.": "Tiêu đề chung, hiển thị một lần cho toàn bộ sơ đồ dạng thẳng.",
   "Go to {section}": "Đi đến {section}",
   "Group path ID": "ID đường đi của nhóm",

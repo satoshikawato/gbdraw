@@ -4,6 +4,7 @@ import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
 import {
+  applyCanvasToSvg,
   applyCompositionUserDeltas,
   compositionUserDeltas,
   resetCompositionUserDeltas
@@ -75,6 +76,7 @@ export const createLegendLayout = ({
     if (!svg) return;
     diagramActions.resetLengthBarPosition();
     const binding = resetCompositionUserDeltas(svg);
+    applyCanvasToSvg(svg, state.activeDrawing().canvasPadding);
     repositionActions.syncStateFromComposition(svg, binding);
     previewRuntime?.commitActiveResultEdit('layout-position-reset');
   };
@@ -152,6 +154,7 @@ export const createLegendLayout = ({
       if (!deltas || index < 0) return;
       const changed = previewRuntime?.commitResultEdit(index, (svg, { mounted }) => {
         const applied = applyCompositionUserDeltas(svg, deltas);
+        if (applied.changed) applyCanvasToSvg(svg, state.activeDrawing().canvasPadding);
         if (applied.changed && mounted) repositionActions.syncStateFromComposition(svg, applied.binding);
         return applied.changed;
       }, 'layout-composition-reconcile');

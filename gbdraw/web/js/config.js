@@ -1,5 +1,5 @@
 // @ts-check
-export const GBDRAW_WHEEL_NAME = "gbdraw-0.14.0-py3-none-any.whl";
+export const GBDRAW_WHEEL_NAME = "gbdraw-0.14.1-py3-none-any.whl";
 // The gbdraw version: the version field of the wheel's file name (PEP 427),
 // which tools/prepare_browser_wheel.py writes from pyproject.toml.
 export const GBDRAW_VERSION = GBDRAW_WHEEL_NAME.split('-')[1];

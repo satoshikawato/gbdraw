@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import math
+
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Path, Text
 
 from ....canvas import CircularCanvasGeometry
 from ....config.models import CircularRenderProfile
+from ....layout.circular import RadialBand
+from ....layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing
 from ....svg.circular_ticks import (
+    circular_tick_labels,
+    circular_tick_marks,
     get_circular_tick_intervals,
     generate_circular_tick_paths,
     generate_circular_tick_labels,
@@ -118,6 +124,57 @@ class TickGroup:
         for tick_label_path_large in tick_label_paths_large:
             self.tick_group.add(tick_label_path_large)
         return self.tick_group
+
+    def ink(self) -> tuple[CircularInk, ...]:
+        """What the group paints: each large tick mark (butt-capped, ``tick_width`` wide) and each label's letters
+        along its circle."""
+
+        ticks_large = list(range(0, self.total_len, self.tick_large))
+        half = 0.5 * float(self.tick_width)
+        inks: list[CircularInk] = [
+            CircularInkPolygon.segment(start, end, half)
+            for start, end in circular_tick_marks(
+                self.radius,
+                self.total_len,
+                "large",
+                ticks_large,
+                self.track_type,
+                self.separate_strands,
+                tick_side=self.tick_side,
+                tick_length_px=self.tick_length_px,
+                length_reference_radius_px=float(self.geometry.radius),
+                record_transform=self.record_transform,
+                length_threshold=self.length_threshold,
+            )
+        ] if half > 0 else []
+        for _, tick, label in circular_tick_labels(
+            self.radius,
+            self.total_len,
+            "large",
+            [x for x in ticks_large if x != 0],
+            self.font_size,
+            self.font_family,
+            self.track_type,
+            self.separate_strands,
+            self.dpi,
+            label_side=self.label_side,
+            tick_side=self.tick_side,
+            tick_length_px=self.tick_length_px,
+            tick_width=float(self.tick_width),
+            length_reference_radius_px=float(self.geometry.radius),
+            record_transform=self.record_transform,
+            tick_interval=self.tick_large,
+            length_threshold=self.length_threshold,
+        ):
+            # The text is centred on its tick along the circle at its path radius.
+            half_turn = 0.5 * label.bbox_width_px / max(1.0, label.path_radius_px) / (2.0 * math.pi)
+            turn = float(tick) / self.total_len
+            inks.append(
+                CircularInkRing(
+                    RadialBand(label.radial_inner_px, label.radial_outer_px), turn - half_turn, turn + half_turn
+                )
+            )
+        return tuple(inks)
 
     def get_group(self) -> Group:
         return self.tick_group
