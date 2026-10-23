@@ -5,12 +5,13 @@ framed for phone feeds. The header Language menu switches the app to 简体中�
 on camera; then two Gallery examples, opened with Load example, show the new
 features as they are: a loaded font with a Chinese plot title, a record rotated
 to start at a feature, a feature moved to a lane while Generate shows its
-stages, a similarity-group alignment, and Save Session with Run info. Captions are English source text; the take shows them
+stages, Save Session with Run info, and a similarity-group alignment. Captions are English source text; the take shows them
 only in zh-Hans (``docs/videos/meet-gbdraw/captions.zh-Hans.json``).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -21,7 +22,7 @@ from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS
 from video.tutorials import (_button, _close_feature, _feature_point, _field, _fit_preview, _frame_box, _frame_figure,
                              _label, _look, _open_feature, _pick, _summary, _svg_id)
 from video.walkthrough import PREVIEW_REGION, Journey, Recorder, _center
-from video.walkthrough_render import FONT_CACHE, PROMO_ID
+from video.walkthrough_render import FONT_CACHE, PORTRAIT_PAD, PROMO_ID
 
 HMMT_EXAMPLE = "HmmtDNA_basic_circular"
 BGC_EXAMPLE = "BGC0000708-BGC0000713"
@@ -31,10 +32,16 @@ LANGUAGES = 11          # English and the ten translations
 LANE_GENE = "ATP6"      # a gene whose outside label and leader line show the move
 LANE_LABEL = "ATP synthase F0 subunit 6"
 STAGES_SECONDS = 2.0   # how long Generate's stage line plays at normal speed
-MENU_ROW = 22           # CSS px per row of a drawn option list (``Recorder.choose``)
+MENU_ROW = 22
 
 _FONT_READY = """
 () => (document.querySelector('select[data-font-select]')?.selectedOptions[0]?.label || '') === 'Noto Sans SC'
+"""
+_LOAD_OR_ASK = """
+([before, name]) => { const app = window.__GBDRAW_APP__;
+  const asked = [...document.querySelectorAll('[role="dialog"] button')]
+    .some((button) => button.offsetParent && button.textContent.trim() === name);
+  return asked || app.processing || String(app?.results?.[0]?.content || '') !== before; }
 """
 _RESULT_CHANGED = """
 (before) => { const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || '');
@@ -161,8 +168,8 @@ def _wheel_into_view(rec: Recorder, area: dict, target: Locator) -> None:
     rec.hold(0.4)
 
 
-def _load_example(rec: Recorder, button: Locator, example_id: str, mode: str, *, replaces: bool) -> None:
-    """Load example › ``example_id``; ``replaces`` answers the question about replacing the current work."""
+def _load_example(rec: Recorder, button: Locator, example_id: str, mode: str) -> None:
+    """Load example › ``example_id``; a question about replacing unsaved work is answered with Load example."""
 
     page = rec.page
     before = _content(rec)
@@ -177,16 +184,18 @@ def _load_example(rec: Recorder, button: Locator, example_id: str, mode: str, *,
     rec.hold(0.4)
     # The examples scroll inside their list, not the dialog.
     _wheel_into_view(rec, row.locator("xpath=ancestor::ul[1]").bounding_box(), row)
-    rec.click(row, pause=0.3)
-    if replaces:
-        replace = page.locator('[role="dialog"]:visible').get_by_role("button", name=rec.t("Load example"), exact=True)
-        expect(replace).to_be_visible()
+    rec.click(row, pause=0.1)
+    rec.fast_forward(target=0.8)
+    replace = page.locator('[role="dialog"]:visible').get_by_role("button", name=rec.t("Load example"), exact=True)
+    page.wait_for_function(_LOAD_OR_ASK, arg=[before, rec.t("Load example")], timeout=GENERATION_TIMEOUT_MS)
+    if replace.count():
+        rec.normal_speed()
         question = replace.locator("xpath=ancestor::*[@role='dialog'][1]").bounding_box()
         rec.camera(question, zoom=1.8, duration=0.6, portrait=question)
         rec.hold(0.5)
         rec.click(replace, pause=0.2)
+        rec.fast_forward(target=0.8)
     rec.camera(duration=0.8)
-    rec.fast_forward(target=0.8)
     page.wait_for_function(_EXAMPLE_LOADED, arg=[mode, before], timeout=GENERATION_TIMEOUT_MS)
     page.wait_for_function("() => document.fonts.status === 'loaded'")
     rec.hold(0.4)
@@ -312,10 +321,10 @@ def _align(rec: Recorder) -> None:
     """Step align: livU of BGC0000708 › Similarity group og_6 › Align…"""
 
     page = rec.page
-    rec.caption(6, "Align records by a similarity group",
+    rec.caption(7, "Align records by a similarity group",
                 "Click a gene, choose Align…, and the clusters line up in one step")
     # The header's Load example; the empty preview's button left with the first example.
-    _load_example(rec, _button(rec, "Load example").first, BGC_EXAMPLE, "linear", replaces=True)
+    _load_example(rec, _button(rec, "Load example").first, BGC_EXAMPLE, "linear")
     _reset_alignment(rec)
     _frame_figure(rec)
     rec.hold(0.7)
@@ -349,17 +358,21 @@ def _align(rec: Recorder) -> None:
     _look(rec, page.evaluate(_GROUP_BOUNDS, "og_6"), zoom=2.4, seconds=2.2)
 
 
-def _session(rec: Recorder, downloads: Path) -> Path:
-    """Step session: Save Session, then Run info and its command line."""
+_TEXT_BOX = """
+(node) => { const range = document.createRange(); range.selectNodeContents(node);
+  const box = range.getBoundingClientRect(); return {x: box.left, y: box.top, width: box.width, height: box.height}; }
+"""
+
+
+def _session(rec: Recorder, downloads: Path) -> None:
+    """Step session, on the human mitochondrial map after its last Generate: Save Session, then Run info.
+
+    Run info shows the commands of the last Generate; the camera frames the
+    Source recipe and Exact replay commands, not the notes below them.
+    """
 
     page = rec.page
-    rec.caption(7, "Save a Session and continue any time", "Run info gives the command line that redraws the figure")
-    # Run info shows its replay command for a Generate, not for an edit applied at once such as Align;
-    # this Generate redraws the same figure, so it is skimmed whole.
-    rec.fast_forward(target=1.2)
-    rec.generate(target=None)
-    rec.normal_speed()
-    _fit(rec)
+    rec.caption(6, "Save a Session and continue any time", "Run info gives the command line that redraws the figure")
     save = page.locator(f"button[aria-label='{rec.t('Save Session')}']")
     rec.focus(save, zoom=2.4, duration=0.8)
     rec.hold(0.2)
@@ -377,35 +390,50 @@ def _session(rec: Recorder, downloads: Path) -> Path:
     _settle(rec)
     rec.focus(tab, zoom=2.4, duration=0.6)
     rec.click(tab, pause=0.6)
-    # Exact replay: its heading row and the command below it.
-    replay = page.get_by_text(rec.t("Exact replay"), exact=True).locator("xpath=../..")
-    command = replay.locator("pre")
-    expect(command).to_contain_text(f"gbdraw linear --session {BGC_EXAMPLE}.gbdraw-session.json")
-    # The block spans the whole card; frame its heading and the command's text.
-    text = command.evaluate("""node => { const range = document.createRange(); range.selectNodeContents(node);
-      const box = range.getBoundingClientRect(); return {x: box.left, y: box.top, width: box.width, height: box.height}; }""")
-    heading = page.get_by_text(rec.t("Exact replay"), exact=True).bounding_box()
-    left, top = min(heading["x"], text["x"]), heading["y"]
-    area = {"x": left, "y": top, "width": text["x"] + text["width"] - left, "height": text["y"] + text["height"] - top}
-    _frame_box(rec, area, zoom=2.4, pad=24)
-    rec.move_to(*_center(text))
-    rec.hold(2.6)
-    return session
+    source_heading = page.get_by_text(rec.t("Source recipe"), exact=True)
+    replay_heading = page.get_by_text(rec.t("Exact replay"), exact=True)
+    # Each heading row's block holds the command, or, for the Source recipe, why it is unavailable.
+    source = source_heading.locator("xpath=../../*[last()]")
+    replay = replay_heading.locator("xpath=../../pre")
+    expect(replay).to_contain_text(" --session ")
+    shown = page.evaluate("""() => { const info = window.__GBDRAW_APP__.lastRunInfo || {};
+      return {source_available: info.sourceRecipe?.available !== false,
+              source: String(info.sourceRecipe?.command || info.sourceRecipe?.unavailableReason || info.command || ''),
+              replay: String(info.exactReplay?.command || info.sessionCommand || '')}; }""")
+    (downloads / "run-info.json").write_text(json.dumps(shown, ensure_ascii=False, indent=1), encoding="utf-8")
+    boxes = [source_heading.bounding_box(), replay_heading.bounding_box(), replay.bounding_box(),
+             source.evaluate(_TEXT_BOX) if shown["source_available"] else source.bounding_box(),
+             replay.evaluate(_TEXT_BOX)]
+    # The tall window shows a column as wide as the Exact replay command, from the Save Session notice
+    # down to the Exact replay box; the notes below it fall under the inset or out of the shot. The
+    # renderer pads a framed rect by PORTRAIT_PAD, so the rect is that column narrowed by it.
+    notice = page.get_by_text(session.name).first.bounding_box()
+    left = min(notice["x"], *(box["x"] for box in boxes)) - 12
+    width = boxes[4]["x"] + boxes[4]["width"] + 12 - left
+    top, bottom = notice["y"] - 8, boxes[2]["y"] + boxes[2]["height"] + 8
+    inner = width / PORTRAIT_PAD
+    area = {"x": left + (width - inner) / 2, "y": top, "width": inner, "height": bottom - top}
+    rec.camera(area, zoom=2.4, duration=0.9, portrait=area)
+    rec.move_to(*_center(boxes[4]))
+    rec.hold(3.0)
+    # Back to the preview for the next example, skimmed.
+    rec.fast_forward(target=0.4)
+    rec.click(_button(rec, "Preview"), pause=0.2)
+    rec.normal_speed()
 
 
 def _promo(rec: Recorder, downloads: Path) -> Path:
     page = rec.page
     rec.caption(2, "Load an example", "The human mitochondrial genome opens as a finished map")
-    _load_example(rec, page.locator("button[aria-describedby='example-session-help']"), HMMT_EXAMPLE, "circular",
-                  replaces=False)
+    _load_example(rec, page.locator("button[aria-describedby='example-session-help']"), HMMT_EXAMPLE, "circular")
     _frame_figure(rec)
     rec.hold(2.0)
     _font_and_title(rec)
     _rotate(rec)
     _lane(rec)
+    _session(rec, downloads)
     _align(rec)
     figure = _content(rec)
-    _session(rec, downloads)
     # The outro shows the last figure: the Result the app drew, as the SVG it holds.
     exported = downloads / f"{BGC_EXAMPLE}.svg"
     exported.write_text(figure, encoding="utf-8")
@@ -417,7 +445,8 @@ def _inspect_promo(svg: Path) -> dict:
     report = {
         "records": sorted(set(BGC_RECORDS) & set(re.findall(r"BGC\d{7}", text))),
         "similarity_links": text.count('data-match-kind="orthogroup"'),
-        "session": any(svg.parent.glob(f"{BGC_EXAMPLE}.gbdraw-session.json*")),
+        "session": sorted(path.name for path in svg.parent.glob("*.gbdraw-session.json*")),
+        "run_info": json.loads((svg.parent / "run-info.json").read_text(encoding="utf-8")),
     }
     if len(report["records"]) != len(BGC_RECORDS) or not report["similarity_links"] or not report["session"]:
         raise AssertionError(f"The promotion's last Result or Session is missing: {report}")
