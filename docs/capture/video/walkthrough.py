@@ -242,6 +242,9 @@ class Recorder:
         page.bring_to_front()
         self._screencast()
         size = page.viewport_size
+        # The renderer keeps the camera inside this rect, and a portrait take
+        # hides its overview inset while the rect is smaller than the stage.
+        self.event("stage", rect={"x": origin[0], "y": origin[1], "width": size["width"], "height": size["height"]})
         x = min(max(self.x, origin[0]), origin[0] + size["width"])
         y = min(max(self.y, origin[1]), origin[1] + size["height"])
         if (x, y) != (self.x, self.y):

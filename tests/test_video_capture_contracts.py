@@ -15,7 +15,7 @@ sys.path.insert(0, str(CAPTURE_ROOT))
 from video import walkthrough_render  # noqa: E402
 from video.walkthrough import PORTRAIT_TAB, Recorder, journeys  # noqa: E402
 from video.walkthrough_render import (  # noqa: E402
-    FPS, HIGHLIGHTS, LANDSCAPE, PORTRAIT, STORIES, TUTORIAL_IDS, TUTORIAL_LANGUAGES, VERTICAL, Camera, Language,
+    FPS, HIGHLIGHTS, LANDSCAPE, PORTRAIT, STORIES, TUTORIAL_IDS, TUTORIAL_LANGUAGES, Camera, Language,
     Overlay, TimeMap, Type, _cjk_fonts, _clean_breaks, _fonts, _moments, _outputs, _runs, take_name, wrap_clauses)
 
 # The tall window without its overview inset, for the framing rules that predate it.
@@ -222,6 +222,13 @@ def caption_types(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Type]:
     ('zh-Hans', PORTRAIT, 3, '氨基糖苷类生物合成基因簇之间的蛋白质相似性', '', None),
     ('zh-Hans', LANDSCAPE, 3, '氨基糖苷类生物合成基因簇之间的蛋白质相似性', '',
      (['氨基糖苷类生物合成基因簇之间的蛋白质相似性'], [])),
+    # The landscape band below the window holds one title line and two subtitle lines.
+    ('en', LANDSCAPE, 5, 'Three subtitle lines',
+     'The first clause of this subtitle runs long enough to fill most of one line; '
+     'the second clause of this subtitle runs long enough to fill another line; '
+     'and the third clause of this subtitle would fall below the caption band', None),
+    ('en', LANDSCAPE, 5, 'A title clause long enough for one line of the band, '
+     'and a second clause that wraps the title', 'Any subtitle', None),
 ])
 def test_captions_fit_their_window_or_fail_the_render(caption_types, code, layout, step, title, subtitle,
                                                       lines) -> None:
@@ -261,6 +268,9 @@ class _StubPage:
     def wait_for_timeout(self, _: float) -> None:
         pass
 
+    def bring_to_front(self) -> None:
+        pass
+
     def evaluate(self, _: str) -> None:
         return None
 
@@ -286,6 +296,31 @@ def test_recorder_logs_a_smaller_tab_on_the_stage(tmp_path: Path) -> None:
     assert (rec.events[-1]['x'], rec.events[-1]['y']) == pytest.approx((783, 200))
     rec.camera(duration=0)
     assert rec.events[-1]['rect'] == {'x': 483.0, 'y': 0.0, 'width': PORTRAIT_TAB[0], 'height': PORTRAIT_TAB[1]}
+
+
+def test_switching_to_a_tab_logs_the_stage_it_fills(tmp_path: Path) -> None:
+    rec = Recorder(_StubPage(1920, 1080), tmp_path, portrait=True)
+    rec._origin = 0.0
+    rec._cdp = type('Cdp', (), {'send': lambda *_: None})()
+    rec._screencast = lambda: None
+    rec._first_frame = lambda _: None
+    rec.switch_page(_StubPage(*PORTRAIT_TAB), origin=(483.0, 0.0))
+    stages = [event for event in rec.events if event['kind'] == 'stage']
+    assert [event['rect'] for event in stages] == [
+        {'x': 483.0, 'y': 0.0, 'width': PORTRAIT_TAB[0], 'height': PORTRAIT_TAB[1]}]
+
+
+def test_portrait_camera_stays_inside_a_smaller_tab() -> None:
+    tab = {'x': 483.0, 'y': 0.0, 'width': 954, 'height': 1080}
+    popup = {'x': 1180.0, 'y': 300.0, 'width': 240, 'height': 300}   # at the tab's right edge
+    events = [{'t': 0.0, 'kind': 'stage', 'rect': tab},
+              {'t': 0.0, 'kind': 'camera', 'cx': 1300, 'cy': 450, 'zoom': 2.0, 'duration': 0,
+               'rect': popup, 'subject': None, 'portrait': None}]
+    camera = Camera(events, TimeMap.build([], 0.0, 4.0), (1920, 1080), PORTRAIT)
+    cx, cy, height = camera.at(2.0)
+    width = height * PORTRAIT.aspect
+    assert tab['x'] <= cx - width / 2 and cx + width / 2 <= tab['x'] + tab['width'] + 1e-6
+    assert 0 <= cy - height / 2 and cy + height / 2 <= tab['height'] + 1e-6
 
 
 def test_intro_titles_break_chinese_only_where_no_word_splits() -> None:

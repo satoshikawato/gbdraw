@@ -72,6 +72,25 @@ class Layout:
     def aspect(self) -> float:
         return self.card[2] / self.card[3]
 
+    @property
+    def caption_steps(self) -> tuple[int, int]:
+        """The line pitch of a caption's title and of its subtitle."""
+
+        return round(self.title_size * 1.18), round(self.subtitle_size * 1.35)
+
+    def caption_rows(self, title_lines: int, subtitle_lines: int) -> tuple[int, int, int]:
+        """Where a caption's title and subtitle start in its layer, and the layer's height.
+
+        Landscape captions sit in one fixed band below the window, so their
+        height is the band's; a portrait caption is as tall as its lines.
+        """
+
+        title_step, subtitle_step = self.caption_steps
+        if self.portrait:
+            return 0, title_step * title_lines, title_step * title_lines + subtitle_step * subtitle_lines + 12
+        top = 18 if subtitle_lines else 30
+        return top, top + title_step * (title_lines - 1) + 56, CAPTION_BAND
+
     def inset_box(self, viewport: tuple[int, int], corner: str) -> tuple[int, int, int, int]:
         """The overview inset in window pixels (x, y, width, height), at the ``"bottom"`` or ``"top"`` left corner."""
 
@@ -105,6 +124,7 @@ class Layout:
         return 0.0, (y - INSET_MARGIN) / self.card[3]
 
 
+CAPTION_BAND = 144   # px below the landscape window for a caption
 LANDSCAPE = Layout("landscape", (1920, 1080), (160, 34, 1600, 900), False, 40, 26, 1.0, "finale", False)
 # 9:16 for TikTok and RedNote. The window avoids the top 400 px and bottom
 # 430 px, where the apps draw their own navigation, captions, and buttons.
@@ -359,12 +379,17 @@ class Camera:
         self.aspect = layout.aspect
         self.max_h = min(viewport[1], viewport[0] / self.aspect)
         self.cues = []
-        overview = True
+        # The page rect the camera stays inside, from each output time on.
+        whole = (0.0, 0.0, float(viewport[0]), float(viewport[1]))
+        self._stage_starts, self._stages = [-math.inf], [whole]
         for event in events:
             if event["kind"] == "stage":
-                overview = (event["rect"]["width"], event["rect"]["height"]) == tuple(viewport)
+                rect = event["rect"]
+                self._stage_starts.append(timemap.out(event["t"]))
+                self._stages.append((rect["x"], rect["y"], rect["width"], rect["height"]))
             elif event["kind"] == "camera":
-                self.cues.append((timemap.out(event["t"]), *self._target(event, overview), event["duration"]))
+                self.cues.append((timemap.out(event["t"]), *self._target(event, self._stages[-1]),
+                                  event["duration"]))
         self.starts = [cue[0] for cue in self.cues]
         self._states = []
         state = self._clamp(viewport[0] / 2, viewport[1] / 2, self.max_h)
@@ -373,11 +398,12 @@ class Camera:
                 state = self._at(index - 1, self.starts[index])
             self._states.append(state)
 
-    def _target(self, event: dict, overview: bool) -> tuple[tuple[float, float, float], str | None]:
-        """The cue's framing and the inset corner it leaves the target clear of (None: no inset)."""
+    def _target(self, event: dict, stage: tuple[float, float, float, float]
+                ) -> tuple[tuple[float, float, float], str | None]:
+        """The cue's framing inside ``stage`` and the inset corner it leaves the target clear of (None: no inset)."""
 
         if not self.layout.portrait:
-            return self._clamp(event["cx"], event["cy"], self.viewport[1] / max(1.0, event["zoom"])), None
+            return self._clamp(event["cx"], event["cy"], self.viewport[1] / max(1.0, event["zoom"]), stage), None
         rect = event.get("portrait") or event["rect"]
         subject = event.get("subject")
         # An overview too wide for the tall window shows the diagram instead;
@@ -385,13 +411,14 @@ class Camera:
         if (rect["width"] * PORTRAIT_PAD / self.aspect > self.max_h and subject and not event.get("portrait")
                 and _contains(rect, subject)):
             rect = subject
-        if not (self.layout.inset and overview):
-            return self._frame(event, rect, None), None
-        framings = [(self._frame(event, rect, corner), corner) for corner in INSET_CORNERS]
+        if not (self.layout.inset and stage[2:] == tuple(self.viewport)):
+            return self._frame(event, rect, None, stage), None
+        framings = [(self._frame(event, rect, corner, stage), corner) for corner in INSET_CORNERS]
         # A target too large to clear the inset anywhere keeps the default corner.
         return next((row for row in framings if not self._covered(*row, rect)), framings[0])
 
-    def _frame(self, event: dict, rect: dict, corner: str | None) -> tuple[float, float, float]:
+    def _frame(self, event: dict, rect: dict, corner: str | None,
+               stage: tuple[float, float, float, float]) -> tuple[float, float, float]:
         """Center the padded ``rect`` in the window rows that the inset at ``corner`` leaves free."""
 
         top, bottom = self.layout.free_band(self.viewport, corner)
@@ -403,7 +430,7 @@ class Camera:
         height = max(height, rect["width"] * PORTRAIT_PAD / self.aspect)
         height = min(max(height, self.max_h / PORTRAIT_MAX_ZOOM), self.max_h)
         cy = rect["y"] + rect["height"] / 2 + height * (0.5 - (top + bottom) / 2)
-        return self._clamp(rect["x"] + rect["width"] / 2, cy, height)
+        return self._clamp(rect["x"] + rect["width"] / 2, cy, height, stage)
 
     def _covered(self, state: tuple[float, float, float], corner: str, rect: dict) -> bool:
         """Whether the inset at ``corner`` hides part of ``rect`` in the view ``state``."""
@@ -415,11 +442,18 @@ class Camera:
         return ((rect["x"] - left) * scale < x + width and (rect["x"] + rect["width"] - left) * scale > x
                 and (rect["y"] - top) * scale < y + inset_height and (rect["y"] + rect["height"] - top) * scale > y)
 
-    def _clamp(self, cx: float, cy: float, height: float) -> tuple[float, float, float]:
-        height = min(height, self.max_h)
+    def _clamp(self, cx: float, cy: float, height: float,
+               stage: tuple[float, float, float, float] | None = None) -> tuple[float, float, float]:
+        """Keep the view inside ``stage`` (x, y, width, height; default: the whole page)."""
+
+        x, y, width, stage_h = stage or (0.0, 0.0, *self.viewport)
+        height = min(height, self.max_h, stage_h, width / self.aspect)
         half_w, half_h = height * self.aspect / 2, height / 2
-        return (min(max(cx, half_w), self.viewport[0] - half_w),
-                min(max(cy, half_h), self.viewport[1] - half_h), height)
+        return (min(max(cx, x + half_w), x + width - half_w),
+                min(max(cy, y + half_h), y + stage_h - half_h), height)
+
+    def _stage_at(self, output: float) -> tuple[float, float, float, float]:
+        return self._stages[bisect.bisect_right(self._stage_starts, output) - 1]
 
     def _at(self, index: int, output: float) -> tuple[float, float, float]:
         start, target, _, duration = self.cues[index]
@@ -433,7 +467,7 @@ class Camera:
         index = bisect.bisect_right(self.starts, output) - 1
         if index < 0:
             return self._clamp(self.viewport[0] / 2, self.viewport[1] / 2, self.max_h)
-        return self._clamp(*self._at(index, output))
+        return self._clamp(*self._at(index, output), self._stage_at(output))
 
     def inset_at(self, output: float) -> tuple[str | None, float]:
         """The inset's corner at ``output`` and its opacity: it fades out and back in when the corner changes."""
@@ -601,6 +635,13 @@ class Overlay:
                              if text else [])
             except ValueError as error:
                 raise ValueError(f"{self.lang.code} {layout.name} caption: {error}") from None
+        title_top, subtitle_top, height = layout.caption_rows(len(lines[0]), len(lines[1]))
+        title_step, subtitle_step = layout.caption_steps
+        bottom = (subtitle_top + subtitle_step * len(lines[1]) if lines[1]
+                  else title_top + title_step * len(lines[0]))
+        if bottom > height:
+            raise ValueError(f"{self.lang.code} {layout.name} caption needs {bottom} px of its {height} px band: "
+                             f"{title!r} / {subtitle!r}")
         return lines[0], lines[1]
 
     def caption(self, step: int | None, title: str, subtitle: str) -> Image.Image:
@@ -614,13 +655,8 @@ class Overlay:
         title_font = self.type.font(600, layout.title_size)
         subtitle_font = self.type.font(400, layout.subtitle_size)
         title_lines, subtitle_lines = self.caption_lines(step, title, subtitle)
-        title_step, subtitle_step = round(layout.title_size * 1.18), round(layout.subtitle_size * 1.35)
-        if layout.portrait:
-            height = title_step * len(title_lines) + subtitle_step * len(subtitle_lines) + 12
-            y = 0
-        else:
-            # Landscape captions keep one fixed band below the window.
-            height, y = 144, 18 if subtitle else 30
+        title_step, subtitle_step = layout.caption_steps
+        y, subtitle_y, height = layout.caption_rows(len(title_lines), len(subtitle_lines))
         layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(layer)
         if step is not None:
@@ -632,7 +668,7 @@ class Overlay:
         for line in title_lines:
             draw.text((indent, y), line, font=title_font, fill=INK + (255,))
             y += title_step
-        y += 0 if layout.portrait else 56 - title_step
+        y = subtitle_y
         for line in subtitle_lines:
             draw.text((indent, y), line, font=subtitle_font, fill=MUTED + (255,))
             y += subtitle_step
