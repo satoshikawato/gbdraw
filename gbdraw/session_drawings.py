@@ -230,6 +230,29 @@ def active_session_drawing(
     return drawings[0] if drawings else None
 
 
+def allocate_drawing_id(mode: str, taken_ids: Sequence[str]) -> str:
+    """The ID a new drawing of ``mode`` gets beside ``taken_ids``.
+
+    The mode itself when free, else ``<mode>-<n>`` with the smallest free
+    ``n >= 2`` (B2-D4). ``gbdraw/web/js/services/drawing-view.js``
+    ``allocateDrawingId`` takes the same rule; both read the ``ids`` vectors
+    of ``tests/fixtures/sessions/drawings-vectors.json``.
+    """
+
+    if mode not in DRAWING_NAMES:
+        raise ValidationError(
+            f"A drawing mode must be circular or linear, not {mode!r}.",
+            diagnostic=_LAYOUT_INVALID,
+        )
+    taken = frozenset(taken_ids)
+    if mode not in taken:
+        return mode
+    number = 2
+    while f"{mode}-{number}" in taken:
+        number += 1
+    return f"{mode}-{number}"
+
+
 def allocate_session_drawing(
     mode: str,
     *,
@@ -237,27 +260,23 @@ def allocate_session_drawing(
     requested_name: str | None,
     taken_ids: Sequence[str],
 ) -> tuple[str, str]:
-    """The ID and name a new drawing of ``mode`` gets in the current layout."""
+    """The ID and name a new drawing of ``mode`` gets beside ``taken_ids``.
 
-    if mode not in DRAWING_NAMES:
-        raise ValidationError(
-            f"A drawing mode must be circular or linear, not {mode!r}.",
-            diagnostic=_LAYOUT_INVALID,
-        )
-    name = DRAWING_NAMES[mode]
-    if requested_id not in (None, mode) or requested_name not in (None, name):
+    A drawing's ID comes from its kind (:func:`allocate_drawing_id`), so a
+    requested ID must be that one. The name is the mode's name, followed by
+    the ID's number for a second drawing of the mode (``Linear 2``).
+    """
+
+    drawing_id = allocate_drawing_id(mode, taken_ids)
+    number = drawing_id[len(mode) + 1:]
+    name = DRAWING_NAMES[mode] + (f" {number}" if number else "")
+    if requested_id not in (None, drawing_id) or requested_name not in (None, name):
         raise ValidationError(
             f"Session {CURRENT_SESSION_VERSION} names each drawing by its mode: "
-            f"a {mode} drawing has ID {mode!r} and name {name!r}.",
+            f"this {mode} drawing has ID {drawing_id!r} and name {name!r}.",
             diagnostic=_LAYOUT_INVALID,
         )
-    if mode in taken_ids:
-        raise ValidationError(
-            f"Session {CURRENT_SESSION_VERSION} holds at most one drawing of each mode; "
-            f"it already has a {mode} drawing.",
-            diagnostic=_LAYOUT_INVALID,
-        )
-    return mode, name
+    return drawing_id, name
 
 
 _ARTIFACT_ENTRY_FIELDS = ("losatCache", "losatDerivedCache")
@@ -484,6 +503,7 @@ __all__ = [
     "SessionDrawingArtifacts",
     "SessionDrawingParts",
     "active_session_drawing",
+    "allocate_drawing_id",
     "allocate_session_drawing",
     "drawing_draft_config",
     "read_session_drawings",

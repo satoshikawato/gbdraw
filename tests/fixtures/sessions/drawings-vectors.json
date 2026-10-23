@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "ids": [
+    { "mode": "circular", "taken": [], "id": "circular" },
+    { "mode": "linear", "taken": ["circular"], "id": "linear" },
+    { "mode": "linear", "taken": ["linear"], "id": "linear-2" },
+    { "mode": "linear", "taken": ["circular", "linear", "linear-2"], "id": "linear-3" },
+    { "mode": "linear", "taken": ["linear", "linear-3"], "id": "linear-2" },
+    { "mode": "circular", "taken": ["linear", "linear-2"], "id": "circular" },
+    { "mode": "circular", "taken": ["circular-2"], "id": "circular" },
+    { "mode": "circular", "taken": ["circular", "circular-2", "circular-4"], "id": "circular-3" }
+  ],
+  "upgrades": []
+}
