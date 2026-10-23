@@ -66,9 +66,10 @@ decoded resources and parsed sources it built (they depend only on the
 resource bytes and their key) when it ends, also when its render fails, unless
 the request changed them; it publishes resolved records and render-stage
 results only after the full render succeeds. The blastp protein extraction
-helper also publishes, when it ends, the decoded resources and parsed sources
-it built for the files it staged, unless it changed them; any other helper
-lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
+helper and the Circular ring search-frame helper
+(`convertRingTablesToSearchFrame`) also publish, when they end, the decoded
+resources and parsed sources they built for the files they staged, unless they
+changed them; any other helper lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
 reply.
 
 The reply carries a piece's children text only when the request did not name
@@ -449,7 +450,11 @@ special case, when the paths disagree.
 Comparison evidence uses three frames: F, the search frame (the selected and
 cropped record on its source strand, which is the LOSAT output); V, the display
 frame (F with the effective reverse complement applied); and Src, input-file
-coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F. Every comparison
+coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F, except for Circular
+similarity rings: their LOSAT database is the whole reference file (uncropped),
+so their raw rows and **Save Raw LOSAT TSV** are that search's output in Src,
+and the Python owner `ring_rows_in_search_frame` converts them to F before they
+become ring tables. Every comparison
 table is read in F, and only the Python planner projects orientation to V.
 Human-readable coordinates (popups, FASTA headers) lead with Src. The Linear
 orientation owner is the File card's `region_reverse`, written by
