@@ -73,7 +73,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./record-source-coordinates.js", "./record-source-coordinates.mjs")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./conservation-series.js", "./conservation-series.mjs")
-        .replace("./genbank-header.js", "./genbank-header.mjs")
+        .replace("./record-discovery.js", "./record-discovery.mjs")
         .replace("./file-content-cache.js", "./file-content-cache.mjs")
         .replace("./record-options.js", "./record-options.mjs")
         .replace("../utils/i18n.js", "./i18n.mjs"),
@@ -89,19 +89,39 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     (tmp_path / "record-draw-selection.mjs").write_text(
         (WEB_ROOT / "js" / "services" / "record-draw-selection.js")
         .read_text(encoding="utf-8")
-        .replace("../utils/download-names.js", "./download-names.mjs"),
+        .replace("../utils/download-names.js", "./download-names.mjs")
+        .replace("./drawing/feature-edits.js", "./drawing-feature-edits.mjs")
+        .replace("./drawing/paint.js", "./drawing-paint.mjs"),
         encoding="utf-8",
     )
+    # The drawing slices record-draw-selection.js deletes record edits through.
+    for name in ("feature-edits", "paint", "slice-handle"):
+        (tmp_path / f"drawing-{name}.mjs").write_text(
+            (WEB_ROOT / "js" / "services" / "drawing" / f"{name}.js")
+            .read_text(encoding="utf-8")
+            .replace("../../utils/reactivity.js", "./reactivity.mjs")
+            .replace("../json-clone.js", "./json-clone.mjs")
+            .replace("./slice-handle.js", "./drawing-slice-handle.mjs"),
+            encoding="utf-8",
+        )
+    for path in ("utils/reactivity.js", "services/json-clone.js"):
+        (tmp_path / path.split("/")[1].replace(".js", ".mjs")).write_text(
+            (WEB_ROOT / "js" / path).read_text(encoding="utf-8"), encoding="utf-8"
+        )
     (tmp_path / "download-names.mjs").write_text(
         (WEB_ROOT / "js" / "utils" / "download-names.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    (tmp_path / "genbank-header.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "genbank-header.js").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
     (tmp_path / "file-content-cache.mjs").write_text(
         "export const readFileText = (file) => file.text();\n",
+        encoding="utf-8",
+    )
+    # match-sequences.js reads restored Session files through record-discovery.js, which this popup test does not use.
+    (tmp_path / "record-discovery.mjs").write_text(
+        "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };\n"
+        "export const gffFastaReaderSelector = unused;\n"
+        "export const readAllSequenceRecords = unused;\n"
+        "export const readComparisonSequenceRecords = unused;\n",
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"

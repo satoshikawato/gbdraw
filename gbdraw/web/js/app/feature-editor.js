@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { RulePreparation } from './rule-matching.js' */
-/** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
+/** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShowElementSettings, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
@@ -64,6 +64,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
+ * @property {EditDefaultColorsPort} editDefaultColors
  * @property {LegendRowIsNamedPort} [legendRowIsNamed]
  * @property {LegendRowNamePort} [legendRowName]
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
@@ -108,6 +109,7 @@ export const createFeatureEditor = ({
   evaluateLabelRules,
   readUserDefaultColor,
   setDefaultColor,
+  editDefaultColors,
   legendRowIsNamed,
   legendRowName,
   findLegendRowNamed,
@@ -127,7 +129,7 @@ export const createFeatureEditor = ({
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
     state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
+    ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
     revealSetting
   });
   const featureSvgActions = createFeatureSvgActions({
@@ -222,9 +224,10 @@ export const createFeatureEditor = ({
     addCustomColor: ruleActions.addCustomColor,
     addPriorityRule: ruleActions.addPriorityRule,
     setLabelFilterMode: ruleActions.setLabelFilterMode,
+    setBlacklistText: ruleActions.setBlacklistText,
     addWhitelistRule: ruleActions.addWhitelistRule,
+    setWhitelistRuleField: ruleActions.setWhitelistRuleField,
     removeWhitelistRule: ruleActions.removeWhitelistRule,
-    editWhitelistRule: ruleActions.editWhitelistRule,
     removePriorityRule: ruleActions.removePriorityRule,
     addFeature: ruleActions.addFeature,
     removeFeature: ruleActions.removeFeature,
@@ -232,6 +235,7 @@ export const createFeatureEditor = ({
     setFeatureShape: ruleActions.setFeatureShape,
     addSpecificRule: ruleActions.addSpecificRule,
     commitSpecificRules: ruleActions.commitSpecificRules,
+    ruleWritePending: ruleActions.ruleWritePending,
     importSpecificRules: ruleActions.importSpecificRules,
     removeImportedSpecificRules: ruleActions.removeImportedSpecificRules,
     followRestoredSpecificRules: ruleActions.followRestoredRules,

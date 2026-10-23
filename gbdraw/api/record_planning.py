@@ -35,7 +35,7 @@ from gbdraw.io.cli_tables import (
     read_conservation_table,
     read_records_table,
 )
-from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.comparisons import read_comparison_resource
 from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -43,7 +43,6 @@ from gbdraw.io.record_select import (
 )
 from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.api.prepared import register_prepared_resource_value
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -1097,6 +1096,44 @@ def _load_source_records(
     )
 
 
+class _NotPrepared(Exception):
+    """A parsed-source lookup that found no entry: it builds nothing."""
+
+
+def prepared_parsed_source(
+    source: RecordInputSource,
+    load: Callable[[RecordInputSource], ParsedRecordInputs],
+) -> ParsedRecordInputs | None:
+    """The records a Generate parses from this staged Web source, or ``None``.
+
+    A Worker helper inside ``prepared_input_lookup`` reads the entry stored
+    under the same resource identities. On a miss it parses with ``load``, the
+    render's own source load (``request_render.load_render_source_records``,
+    which the caller passes): the protein extraction's lookup publishes that
+    entry for the next Generate (OV-1595), any other lookup keeps it for the
+    call. It gets ``None`` for a source the Worker did not stage, or when that
+    load fails: it then keeps its own reader, so its errors are the ones it
+    has without the cache. The records are shared: a reader must not change
+    them (the lookup checks their owner stamps).
+    """
+
+    cache_spec = _prepared_source_cache_spec(source)
+    if cache_spec is None:
+        return None
+
+    def not_prepared() -> ParsedRecordInputs:
+        raise _NotPrepared
+
+    try:
+        return cast(ParsedRecordInputs, get_or_build_parsed_source(*cache_spec, not_prepared))
+    except _NotPrepared:
+        pass
+    try:
+        return load(source)
+    except Exception:
+        return None
+
+
 def _prepared_source_cache_spec(
     source: RecordInputSource,
 ) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
@@ -1725,7 +1762,7 @@ def resolve_linear_options(
             continue
         try:
             # The file's staged identity keys the stages that take its rows.
-            matches = register_prepared_resource_value(read_comparison_table(row.blast), row.blast)
+            matches = read_comparison_resource(row.blast)
         except ValidationError as exc:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
@@ -1826,6 +1863,7 @@ __all__ = [
     "ResolvedRecordProvenance",
     "depth_track_inputs_from_cli",
     "parse_cli_bool",
+    "prepared_parsed_source",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",

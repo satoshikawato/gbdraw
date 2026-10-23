@@ -7,6 +7,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRecordSelection } from '../../gbdraw/web/js/app/record-selection.js';
+import { ANNOTATION_SETS_SLICE, removeAnnotations } from '../../gbdraw/web/js/services/drawing/annotation-sets.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
   linearCardHasSettings,
@@ -177,7 +180,13 @@ test('an upload with many records opens its list; several open one at a time (D-
 
 test('Delete settings removes the record edits, annotations, pairs, and rotation of its records only', () => {
   const featureKey = (recordKey, id) => JSON.stringify([recordKey, id]);
-  const data = {
+  const annotations = ANNOTATION_SETS_SLICE.create({ annotationSets: [{ annotations: [
+    { id: 'bound-a', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-a' } },
+    { id: 'feature-a', target: { kind: 'featureIdentity', recordKey: 'uid-a' }, metadata: {} },
+    { id: 'bound-b', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-b' } },
+    { id: 'unbound', target: { kind: 'coordinateSpan' }, metadata: {} }
+  ] }] });
+  const edits = FEATURE_EDITS_SLICE.create({
     featureOverrides: {
       [featureKey('uid-a', 'f1')]: { recordKey: 'uid-a', biologicalFeatureId: 'f1' },
       [featureKey('uid-a:2', 'f2')]: { recordKey: 'uid-a:2', biologicalFeatureId: 'f2' },
@@ -185,14 +194,16 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
     },
     featurePlacementOverrides: {
       [featureKey('uid-a', 'f3')]: { recordKey: 'uid-a', biologicalFeatureId: 'f3', placement: 'lane' }
-    },
-    featureStrokeOverrides: { 'uid-a\0f1': { color: '#000' }, 'uid-b\0f1': { color: '#111' } },
-    annotationSets: [{ annotations: [
-      { id: 'bound-a', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-a' } },
-      { id: 'feature-a', target: { kind: 'featureIdentity', recordKey: 'uid-a' }, metadata: {} },
-      { id: 'bound-b', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-b' } },
-      { id: 'unbound', target: { kind: 'coordinateSpan' }, metadata: {} }
-    ] }],
+    }
+  });
+  const paint = PAINT_SLICE.create({
+    featureStrokeOverrides: { 'uid-a\0f1': { strokeColor: '#000000' }, 'uid-b\0f1': { strokeColor: '#111111' } }
+  });
+  const data = {
+    featureEdits: edits.handle,
+    paint: paint.handle,
+    annotationSets: annotations.view.annotationSets,
+    removeAnnotation: (annotation) => removeAnnotations(annotations.handle, [annotation]),
     recordDisplayDrafts: [{ sourceUid: 'uid-a', selector: '#1' }, { sourceUid: 'uid-b', selector: '#1' }],
     comparisonEdges: [
       { queryUid: 'uid-a', subjectUid: 'uid-b' }, { queryUid: 'uid-b', subjectUid: 'uid-c' }, { queryUid: 'uid-c', subjectUid: 'uid-a' }
@@ -205,23 +216,24 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
   }];
   assert.deepEqual([...recordsWithEdits(owners, data)], ['uid-a']);
   assert.equal(removeRecordEdits(owners, data), 9);
-  assert.deepEqual(Object.values(data.featureOverrides).map((row) => row.recordKey), ['uid-b']);
-  assert.deepEqual(data.featurePlacementOverrides, {});
-  assert.deepEqual(Object.keys(data.featureStrokeOverrides), ['uid-b\0f1']);
+  assert.deepEqual(Object.values(edits.view.featureOverrides).map((row) => row.recordKey), ['uid-b']);
+  assert.deepEqual(edits.view.featurePlacementOverrides, {});
+  assert.deepEqual(Object.keys(paint.view.featureStrokeOverrides), ['uid-b\0f1']);
   assert.deepEqual(data.annotationSets[0].annotations.map((item) => item.id), ['bound-b', 'unbound']);
   assert.deepEqual(data.recordDisplayDrafts, [{ sourceUid: 'uid-b', selector: '#1' }]);
   assert.deepEqual(data.comparisonEdges, [{ queryUid: 'uid-b', subjectUid: 'uid-c' }]);
   assert.equal(recordsWithEdits(owners, data).size, 0);
 
   // A Circular record: its `record-N` and single-record keys and its own rotation row.
+  const circularEdits = FEATURE_EDITS_SLICE.create({ featureOverrides: {
+    [featureKey('record-2', 'f1')]: { recordKey: 'record-2' },
+    [featureKey('circular-chr2-_2', 'f1')]: { recordKey: 'circular-chr2-_2' },
+    [featureKey('record-1', 'f1')]: { recordKey: 'record-1' },
+    // `record-2` is not an expandable key, so `record-2:1` is another record.
+    [featureKey('record-2:1', 'f1')]: { recordKey: 'record-2:1' }
+  } });
   const circular = {
-    featureOverrides: {
-      [featureKey('record-2', 'f1')]: { recordKey: 'record-2' },
-      [featureKey('circular-chr2-_2', 'f1')]: { recordKey: 'circular-chr2-_2' },
-      [featureKey('record-1', 'f1')]: { recordKey: 'record-1' },
-      // `record-2` is not an expandable key, so `record-2:1` is another record.
-      [featureKey('record-2:1', 'f1')]: { recordKey: 'record-2:1' }
-    },
+    featureEdits: circularEdits.handle,
     recordDisplayDrafts: [{ sourceUid: 'circular', selector: '#1' }, { sourceUid: 'circular', selector: '#2' }],
     annotationBindingField: 'binding'
   };
@@ -229,7 +241,7 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
     key: '#2', requestKeys: ['record-2', 'circular-chr2-_2'], bindingKeys: [],
     displaySource: 'circular', displaySelector: '#2'
   }], circular);
-  assert.deepEqual(Object.values(circular.featureOverrides).map((row) => row.recordKey), ['record-1', 'record-2:1']);
+  assert.deepEqual(Object.values(circularEdits.view.featureOverrides).map((row) => row.recordKey), ['record-1', 'record-2:1']);
   assert.deepEqual(circular.recordDisplayDrafts, [{ sourceUid: 'circular', selector: '#1' }]);
 });
 

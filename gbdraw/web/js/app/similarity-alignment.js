@@ -1317,7 +1317,7 @@ export const createSimilarityAlignmentActions = ({
   clearCandidatePreview = null,
   onError = null
 }) => {
-  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawings?.linear?.recordsOff);
+  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawingOfMode('linear').recordsOff);
   if (
     !state
     || typeof getOrthogroupById !== 'function'

@@ -472,14 +472,10 @@ def test_locked_linear_definition_column_uses_rendered_svg_text_width(
     def rendered_svg_bbox(*_args, **_kwargs):
         return 60.0, 12.0
 
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
-        overestimated_bbox,
-    )
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
-        rendered_svg_bbox,
-    )
+    # Plain and mixed lines both measure in gbdraw.core.text.measure_mixed_text_line.
+    for module in ("gbdraw.core.text",):
+        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", overestimated_bbox)
+        monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", rendered_svg_bbox)
 
     definition_width = _definition_width(_record(), config_dict, canvas_config, _label("Wide Label"))
     canvas = Drawing()
@@ -511,14 +507,9 @@ def test_locked_linear_definition_column_uses_configured_definition_gap(
         definition_gap=32,
     )
 
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
-        lambda *_args, **_kwargs: (64.0, 12.0),
-    )
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
-        lambda *_args, **_kwargs: (64.0, 12.0),
-    )
+    for module in ("gbdraw.core.text",):
+        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", lambda *_args, **_kwargs: (64.0, 12.0))
+        monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", lambda *_args, **_kwargs: (64.0, 12.0))
 
     definition_width = _definition_width(_record(), config_dict, canvas_config, _label("Wide Label"))
     canvas = Drawing()
@@ -750,14 +741,10 @@ def test_definition_plain_lines_use_definition_font_weight(
         calls.append((str(text), str(font_weight), str(font_style)))
         return 10.0, 12.0
 
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
-        fake_bbox,
-    )
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
-        fake_bbox,
-    )
+    # Plain and mixed lines both measure in gbdraw.core.text.measure_mixed_text_line.
+    for module in ("gbdraw.core.text",):
+        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", fake_bbox)
+        monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", fake_bbox)
 
     DefinitionGroup(
         _record(),
@@ -789,14 +776,10 @@ def test_definition_mixed_content_width_sums_style_aware_parts(
         calls.append(key)
         return widths.get(key, 1.0), 12.0
 
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
-        fake_bbox,
-    )
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
-        fake_bbox,
-    )
+    # Plain and mixed lines both measure in gbdraw.core.text.measure_mixed_text_line.
+    for module in ("gbdraw.core.text",):
+        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", fake_bbox)
+        monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", fake_bbox)
 
     definition_group = DefinitionGroup(
         _record(),

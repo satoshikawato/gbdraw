@@ -75,7 +75,7 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
     format_linear_tick_label,
 )
-from ...io.comparisons import filter_comparison_dataframe, read_comparison_table
+from ...io.comparisons import filter_comparison_dataframe, read_comparison_resource
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
@@ -650,13 +650,11 @@ def _read_comparison_files(
 ) -> tuple[DataFrame, ...]:
     """Read each comparison file of the request and log the thresholds that will filter it.
 
-    A file the request staged as a resource gives its table that resource's
-    identity, so the ``comparison_rows`` stage that filters it can be reused.
-    This runs outside that stage, so every request logs what it reads.
+    A file the request staged as a resource is parsed once per resource and
+    gives its table that resource's identity, so the ``comparison_rows`` stage
+    that filters it can be reused. This runs outside that stage, so every
+    request logs what it reads.
     """
-
-    # gbdraw.api imports this module, so its prepared-input owner is imported here.
-    from gbdraw.api.prepared import register_prepared_resource_value
 
     if not blast_files:
         return ()
@@ -670,9 +668,7 @@ def _read_comparison_files(
     tables: list[DataFrame] = []
     for comparison_file in blast_files:
         logger.info("INFO: Loading {}".format(comparison_file))
-        tables.append(
-            register_prepared_resource_value(read_comparison_table(comparison_file), comparison_file)
-        )
+        tables.append(read_comparison_resource(comparison_file))
     logger.info("INFO:             ... finished loading comparison file(s)")
     return tuple(tables)
 

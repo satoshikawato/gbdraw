@@ -243,22 +243,36 @@ export const convertStoredProteinResultFrames = async (version, drawings, { conv
     const resources = drawing?.resources ?? {};
     if (!drawing || !storesReversedProteinResult(drawing.renderRequest, resources)) continue;
     if (!convert) throw diagnosticError('HELPER_PROTOCOL', {}, PROTEIN_RESULT_CONVERSION);
-    const response = /** @type {UnvalidatedFields<'result', UnvalidatedFields<'resources'>>} */ (await convert(
-      { version, canonicalRequest: drawing.renderRequest, resources }
-    ));
-    const returned = response?.result?.resources;
-    if (!returned || typeof returned !== 'object' || Array.isArray(returned)) {
-      throw diagnosticError('RESULT_INVALID', {}, PROTEIN_RESULT_CONVERSION);
-    }
-    for (const [resourceId, value] of Object.entries(returned)) {
-      const item = /** @type {UnvalidatedFields<keyof ConvertedResource>} */ (value);
+    const response = await convert({ version, canonicalRequest: drawing.renderRequest, resources });
+    for (const [resourceId, item] of readConvertedResources(response, PROTEIN_RESULT_CONVERSION)) {
       const previous = converted.get(resourceId);
-      if (typeof item?.data !== 'string' || !Number.isSafeInteger(item.size) || Number(item.size) < 0
-        || (previous && previous.data !== item.data)) {
-        throw diagnosticError('RESULT_INVALID', {}, PROTEIN_RESULT_CONVERSION);
-      }
-      converted.set(resourceId, { data: item.data, size: Number(item.size) });
+      if (previous && previous.data !== item.data) throw diagnosticError('RESULT_INVALID', {}, PROTEIN_RESULT_CONVERSION);
+      converted.set(resourceId, item);
     }
+  }
+  return converted;
+};
+
+/**
+ * The bytes by resource ID of a Worker conversion reply, `{ result: { resources: { [id]: { data, size } } } }`,
+ * as Python returns them. A reply of another shape fails as RESULT_INVALID of `failure`.
+ * @param {unknown} response
+ * @param {{ stage: 'helper', operation: string }} failure
+ * @returns {Map<string, ConvertedResource>}
+ */
+export const readConvertedResources = (response, failure) => {
+  const returned = /** @type {UnvalidatedFields<'result', UnvalidatedFields<'resources'>>} */ (response)?.result?.resources;
+  if (!returned || typeof returned !== 'object' || Array.isArray(returned)) {
+    throw diagnosticError('RESULT_INVALID', {}, failure);
+  }
+  /** @type {Map<string, ConvertedResource>} */
+  const converted = new Map();
+  for (const [resourceId, value] of Object.entries(returned)) {
+    const item = /** @type {UnvalidatedFields<keyof ConvertedResource>} */ (value);
+    if (typeof item?.data !== 'string' || !Number.isSafeInteger(item.size) || Number(item.size) < 0) {
+      throw diagnosticError('RESULT_INVALID', {}, failure);
+    }
+    converted.set(resourceId, { data: item.data, size: Number(item.size) });
   }
   return converted;
 };

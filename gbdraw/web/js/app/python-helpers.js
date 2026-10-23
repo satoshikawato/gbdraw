@@ -10,8 +10,12 @@ from gbdraw.web_support.feature_metadata import (
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
+    prepared_input_lookup,
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
+from gbdraw.api import GenBankInputSource
+from gbdraw.api.record_planning import prepared_parsed_source
+from gbdraw.api.request_render import load_render_source_records
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
@@ -21,6 +25,7 @@ from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
+from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
 from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
 
@@ -31,11 +36,11 @@ def _start_web_worker_state():
     epoch and the random seed. The helpers call it when they load; a Worker
     restored from a Pyodide snapshot calls it again, so no two Workers share
     the state the snapshot froze (OV-1000)."""
-    global _WEB_LOSATP_FILTERED_HIT_CACHE, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
+    global _WEB_LOSATP_HIT_TABLES, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
     global _WEB_PREPARED_INPUT_CACHE, _WEB_LABEL_FIT_SEARCHES
     import random
     random.seed()
-    _WEB_LOSATP_FILTERED_HIT_CACHE = {}
+    _WEB_LOSATP_HIT_TABLES = {}
     _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
     _WEB_LOSATP_CACHE_ORDER = []
     _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
@@ -44,8 +49,6 @@ def _start_web_worker_state():
     _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
 
 def _web_losatp_cache_by_name(name):
-    if name == "filtered":
-        return _WEB_LOSATP_FILTERED_HIT_CACHE
     if name == "converted":
         return _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE
     raise KeyError(name)
@@ -162,6 +165,7 @@ def run_canonical_request_wrapper(
     resource_identities_json=None,
     held_feature_catalog_revision=None,
     held_segments_json=None,
+    retention_json=None,
 ):
     try:
         with web_error_stage("request-validation"):
@@ -178,6 +182,8 @@ def run_canonical_request_wrapper(
                 identity_text = str(resource_identities_json).strip()
                 if identity_text and identity_text.lower() not in {"null", "undefined", "none"}:
                     resource_identities = json.loads(identity_text)
+            # A4b: the drawing it renders and the tokens the page retains ("null": none).
+            retention = None if _is_blank_or_js_nullish(retention_json) else json.loads(str(retention_json))
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
         result = render_staged_canonical_web_request(
             payload,
@@ -190,6 +196,7 @@ def run_canonical_request_wrapper(
                 else None
             ),
             _resource_identities=resource_identities,
+            _prepared_input_retention=retention,
             _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
             _held_feature_catalog_revision=held_revision,
             _held_segments=held_segments,
@@ -508,12 +515,19 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
     selector = parse_record_selector(_normalize_web_record_selector(record_selector))
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
     if fmt == "genbank":
-        records = list(SeqIO.parse(path, "genbank"))
-        if not records:
+        # The records a Generate parses from this staged file (OV-1555, OV-1595),
+        # shared and read only; for a file sent as is, this reader's own parse.
+        prepared = prepared_parsed_source(GenBankInputSource(path), load_render_source_records)
+        source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
+        if not source_records:
             raise ValueError("No records found")
-        records = select_record(records, selector) if selector is not None else [records[0]]
+        records = select_record(source_records, selector) if selector is not None else [source_records[0]]
         if source_feature_catalogs is not None:
-            source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
+            if prepared is None:
+                source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
+            else:
+                catalogs = {id(record): catalog for record, catalog in zip(prepared.records, prepared.source_feature_catalogs)}
+                source_feature_catalogs.extend(catalogs[id(record)] for record in records)
     elif fmt == "gff":
         if not fasta_path:
             raise ValueError("GFF3 protein extraction requires a FASTA path.")
@@ -957,6 +971,23 @@ def _web_derived_settings(settings):
         _WEB_DERIVED_SETTING_NAMES[name]: value for name, value in settings.items()
     })
 
+# The last valid protein identity manifest, by its exact JSON text (OV-1553): Generate's key request and every
+# table of Download all send the same manifest, and its validation reads nothing else. A manifest that fails is not
+# kept, and the helpers that read the kept one do not change it.
+_web_validated_protein_manifest = (None, None)
+
+def _validated_web_protein_manifest(identity_manifest_json):
+    global _web_validated_protein_manifest
+    from gbdraw.analysis.protein_colinearity import validate_protein_identity_manifest
+
+    text = str(identity_manifest_json)
+    held_text, held_manifest = _web_validated_protein_manifest
+    if held_text == text:
+        return held_manifest
+    manifest = validate_protein_identity_manifest(json.loads(text))
+    _web_validated_protein_manifest = (text, manifest)
+    return manifest
+
 def build_protein_losat_cache_keys_json(
     identity_manifest_json,
     pairs_json,
@@ -978,10 +1009,9 @@ def build_protein_losat_cache_keys_json(
         from gbdraw.analysis.protein_colinearity import (
             build_protein_losat_cache_key,
             build_protein_losat_pair_identity,
-            validate_protein_identity_manifest,
         )
 
-        manifest = validate_protein_identity_manifest(json.loads(str(identity_manifest_json)))
+        manifest = _validated_web_protein_manifest(identity_manifest_json)
         pairs = json.loads(str(pairs_json))
         keys = []
         for pair in pairs:
@@ -1053,8 +1083,7 @@ def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
         from gbdraw.analysis.protein_colinearity import hydrate_protein_losat_tsv
 
         entry = json.loads(str(entry_json))
-        manifest = json.loads(str(identity_manifest_json))
-        text = hydrate_protein_losat_tsv(entry, manifest)
+        text = hydrate_protein_losat_tsv(entry, _validated_web_protein_manifest(identity_manifest_json))
         return json.dumps({
             "status": "ok",
             "text": text,
@@ -1369,6 +1398,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             combined_protein_map.update(protein_map)
         extraction = _build_web_protein_extraction(protein_maps_by_record.values())
 
+        # The tables of the last conversion, by raw key: the parsed hits and the hits the last thresholds kept
+        # (OV-1579). A threshold change filters again without reading or parsing a table, and only this
+        # conversion's tables stay, so the hold does not depend on a count limit the tables can exceed.
+        global _WEB_LOSATP_HIT_TABLES
+        thresholds = (
+            str(settings.bitscore),
+            str(settings.evalue),
+            str(settings.identity),
+            str(settings.alignment_length),
+        )
+        kept_tables = {}
         filtered_cache_hits = 0
         filtered_cache_misses = 0
         pair_items = []
@@ -1379,31 +1419,30 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing queryIndex {query_index}.")
             if subject_index not in protein_maps_by_record:
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing subjectIndex {subject_index}.")
-            filter_cache_key = (
-                item["cache_key"],
-                str(settings.bitscore),
-                str(settings.evalue),
-                str(settings.identity),
-                str(settings.alignment_length),
-            )
-            filtered = _web_losatp_cache_get("filtered", filter_cache_key)
-            if filtered is None:
+            table = kept_tables.get(item["cache_key"]) or _WEB_LOSATP_HIT_TABLES.get(item["cache_key"])
+            if table is None:
                 with open(str(raw_tsv_path), "rb") as raw_tsv_handle:
                     raw_tsv_handle.seek(item["raw_tsv_offset"])
                     blast_text = raw_tsv_handle.read(item["raw_tsv_bytes"]).decode("utf-8")
-                hits = parse_losatp_outfmt6(blast_text)
-                filtered = filter_protein_hits_by_thresholds(
-                    hits,
-                    evalue=settings.evalue,
-                    bitscore=settings.bitscore,
-                    identity=settings.identity,
-                    alignment_length=settings.alignment_length,
-                )
-                _web_losatp_cache_set("filtered", filter_cache_key, filtered.copy())
-                filtered_cache_misses += 1
-            else:
-                filtered = filtered.copy()
+                table = {"hits": parse_losatp_outfmt6(blast_text), "thresholds": None, "filtered": None}
+            if table["thresholds"] == thresholds:
                 filtered_cache_hits += 1
+            else:
+                # The filter copies the parsed hits, so the kept ones stay unchanged.
+                table = {
+                    "hits": table["hits"],
+                    "thresholds": thresholds,
+                    "filtered": filter_protein_hits_by_thresholds(
+                        table["hits"],
+                        evalue=settings.evalue,
+                        bitscore=settings.bitscore,
+                        identity=settings.identity,
+                        alignment_length=settings.alignment_length,
+                    ),
+                }
+                filtered_cache_misses += 1
+            kept_tables[item["cache_key"]] = table
+            filtered = table["filtered"].copy()
             pair_items.append(
                 {
                     "pair_index": item["pair_index"],
@@ -1415,6 +1454,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 }
             )
 
+        _WEB_LOSATP_HIT_TABLES = kept_tables
         cache_stats = {
             "convertedPayloadHit": False,
             "filteredHitCacheHits": filtered_cache_hits,
@@ -1687,6 +1727,28 @@ def list_gff_fasta_records(gff_path, fasta_path):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
+def read_all_sequence_records(path, fmt):
+    """Every record of a sequence file, in file order, as the CLI reads it (read_sequence_file_records,
+    the reader of the CLI ring database). The page reads it when its own reader declines the file (a
+    UTF-8 byte order mark, OV-1599). A record without a sequence (a CON record) has none."""
+    try:
+        from gbdraw.io.genome import read_sequence_file_records, record_sequence_text
+        records = read_sequence_file_records(path, fmt)
+        payload = []
+        for record in records:
+            names = (
+                [record.id, *(record.annotations.get("accessions") or [])[:1], record.name]
+                if fmt == "genbank" else [record.id, record.description]
+            )
+            payload.append({
+                "id": str(record.id),
+                "aliases": list(dict.fromkeys(str(name) for name in names if name)),
+                "sequence": record_sequence_text(record),
+            })
+        return json.dumps({"records": payload})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='readAllSequenceRecords', stage="helper")})
+
 def register_web_fonts_json(fonts_json="[]"):
     """Register font files written into the Worker's file system (custom fonts, PR-2).
 
@@ -1714,22 +1776,6 @@ def register_web_fonts_json(fonts_json="[]"):
         return json.dumps({"fonts": registered})
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})
-
-def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
-    """Measure one legend caption at the DPI the renderer resolves from the request config."""
-    try:
-        from gbdraw.api.config import apply_config_overrides
-        from gbdraw.core.text import calculate_bbox_dimensions
-        cfg = apply_config_overrides(json.loads(str(config_json)), json.loads(str(overrides_json)))
-        width, _ = calculate_bbox_dimensions(
-            str(caption),
-            str(font_family or "Arial"),
-            float(font_size or 14),
-            int(cfg.canvas.dpi),
-        )
-        return json.dumps({"width": width})
-    except Exception as error:
-        return json.dumps({'error': serialize_web_error(error, operation='measureLegendText', stage="helper")})
 
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
@@ -1761,27 +1807,65 @@ def compute_label_fit_row_json(row_token, kind):
     return json.dumps({"row": _WEB_LABEL_FIT_SEARCHES.row(str(row_token), str(kind))}, ensure_ascii=False)
 
 
+def _with_prepared_input_lookup(helper, paths_argument=None, publish_inputs=False):
+    """A helper that reads the resources the Worker staged for it reads the inputs
+    the last Generate prepared (read-only: nothing is published, pruned or
+    evicted, except, with publish_inputs, the decoded and parsed inputs it built
+    for them). The Worker passes the identities of the helper's resource
+    manifest after the helper's own arguments; paths_argument is the place
+    of its resource paths among them, or None when the Worker passes them
+    just before the identities, outside the helper's arguments."""
+    def run(*arguments):
+        *helper_arguments, identities_json = arguments
+        if paths_argument is None:
+            *helper_arguments, paths_json = helper_arguments
+        else:
+            paths_json = helper_arguments[paths_argument]
+        with prepared_input_lookup(
+            _WEB_PREPARED_INPUT_CACHE,
+            resource_paths=json.loads(str(paths_json)),
+            resource_identities=json.loads(str(identities_json)),
+            publish_inputs=publish_inputs,
+        ):
+            return helper(*helper_arguments)
+    return run
+
+
 _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
-    "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
+    "resolve_similarity_alignment_json": (
+        _with_prepared_input_lookup(resolve_similarity_alignment_json, 2), "resolveSimilarityAlignment"
+    ),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
-    "extract_cds_protein_fasta": (extract_cds_protein_fasta, "extractCdsProteinFasta"),
+    # The page stages a new upload under the id the next Generate names: the parse is kept for it (OV-1595).
+    "extract_cds_protein_fasta": (
+        _with_prepared_input_lookup(extract_cds_protein_fasta, publish_inputs=True), "extractCdsProteinFasta"
+    ),
     "build_protein_losat_cache_keys_json": (build_protein_losat_cache_keys_json, "buildProteinLosatCacheKeys"),
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
     "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
-    "stored_protein_results_to_search_frame_json": (stored_protein_results_to_search_frame_json, "convertStoredProteinResultFrames"),
+    "stored_protein_results_to_search_frame_json": (
+        _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
+    ),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
+    "read_all_sequence_records": (read_all_sequence_records, "readAllSequenceRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
-    "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
-    "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
+    "read_feature_override_table_json": (
+        _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"
+    ),
+    # Generate converts its ring search output against the records it draws: the parse is kept for its render.
+    "circular_ring_tables_in_search_frame_json": (
+        _with_prepared_input_lookup(circular_ring_tables_in_search_frame_json, 2, publish_inputs=True),
+        "convertRingTablesToSearchFrame"
+    ),
     "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),

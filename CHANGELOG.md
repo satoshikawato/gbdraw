@@ -12,6 +12,82 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Gallery: the HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018
+  tutorials start from the Web defaults and generate after each change, with a
+  preview of every stage; each now lists every setting the Gallery figure needs
+  (Multi-Record Canvas off, outline colors, `rep_origin`, label spacing).
+- Web app: work repeated on unchanged inputs was removed (redundant-work audit).
+  - **Generate Diagram** encodes a newly added file in milliseconds instead of
+    about 0.5 s per 12 MB, **Save Session** no longer re-reads or re-hashes the
+    input files, and returning to Linear no longer reads every File card again
+    (#1293).
+  - **Align** and the feature-edit helpers reuse the inputs the last Generate
+    parsed: on the hepatoplasmataceae Gallery Session the Align helper takes
+    about 0.5 s instead of about 10 s, and it builds two layouts instead of
+    three. Comparison tables are read once, and font subsets are made once per
+    set of characters (#1294, #1297, #1298).
+  - A blastp threshold change filters the kept hits again instead of parsing
+    every raw protein table, and the protein manifest and raw tables are
+    checked once; a file with several File cards is parsed once (#1295).
+  - Generate no longer stages tables that nothing reads, and the blastp protein
+    extraction reads the GenBank records the Worker already holds instead of
+    receiving and parsing the file again (#1296, #1299).
+  - The Generate after a failed one (for example after the Label fit choice)
+    reuses the sources the failed Generate already parsed: about 2.9 s instead
+    of 4.0 s on a 5.5 Mb GenBank file (#1301).
+  - LOSAT hashes each record's FASTA once per file (#1302, #1304), and the
+    first blastp Generate after an upload sends and parses each new file once
+    for all File cards and the diagram: about 4.4-5.1 s instead of 7.6-8.0 s
+    for six cards of a 17.5 MB GenBank file (#1307).
+- Changed: the command line and the Python API search the whole reference file
+  for Circular similarity rings (`--losat losatn` / `tlosatx`), as the web app
+  does: every record with a sequence, uncropped, also records that are not
+  drawn, and every FASTA entry in GFF3 mode. Ring E-values (and so the E-value
+  filter) and LOSAT raw-cache keys change for runs that draw some records of
+  a file, one record of it, or a crop; they now equal the web app's, so a
+  Session saved from the command line opened in the web app reuses its ring
+  LOSAT results. The ring rows stay in the search frame of the drawn record,
+  so `--losat_output_dir`, `conservation.tsv`, and Sessions hold the same
+  frame as before; the raw-cache entries keep the whole-file search output.
+- Fixed: Circular similarity rings (PD-OI-073).
+  - Every ring table (an uploaded table, `--conservation_table`, the ring
+    tables of a Session) is read in the search frame of the drawn record: the
+    record after its crop, on its source strand, 1-based. On a
+    reverse-complemented record the hits are drawn at their place; they were
+    drawn mirrored. A row outside the drawn record is skipped with a warning.
+  - In the web app, ring LOSAT hits on a cropped record are drawn at their
+    place: Generate converts the whole-file search rows to the search frame
+    with the same Python code as the command line, and a Session stores the
+    converted rows. A Session saved by 0.14.0 with a crop and ring LOSAT
+    still holds unconverted rows: its ring draws as in 0.14.0 on a forward
+    crop, and at another unconverted place on a reverse-complemented crop,
+    until the next Generate, which reuses the raw LOSAT cache and converts
+    the rows. Without a crop its rows are already in the search frame, so a
+    reverse-complemented record now draws them at their place.
+  - The web app's message for a ring LOSAT input error says to use the
+    reference file as the subject.
+- Fixed: LOSAT, the Circular conservation database, and restored match
+  sequences now read the same records as the drawing when a GenBank file holds
+  a record without a sequence, a file starts with a UTF-8 byte order mark, or a
+  GFF3 `#N` selector names a record (#1302, #1304, #1307).
+- Fixed: a Circular legend at a corner (`upper_left`, `upper_right`,
+  `lower_left`, `lower_right`) on a Multi-Record Canvas, which the web app
+  uses by default, was drawn over the records; it now clears them and the
+  canvas grows as on a single-record canvas.
+- Fixed: diagram layout collisions.
+  - A top or bottom plot title is drawn outside a corner legend that was
+    moved above or below the diagram, in the drawing and in the web app's
+    live preview; it was drawn through the legend rows.
+  - A one-gradient legend block (for example "Pairwise match identity") is as
+    wide as its title, with the bar centred under it, in Linear legends and in
+    top or bottom Circular legends; a title wider than the bar was cut off at
+    the canvas edge or ran out of the legend.
+  - A Linear plot title's box is the drawn width and height of its text,
+    italic parts included; a title wider than the records reached the canvas
+    edge.
+  - A Circular corner legend that cannot sit beside the circle no longer moves
+    feature labels.
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.

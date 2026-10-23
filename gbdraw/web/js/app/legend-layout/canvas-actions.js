@@ -4,6 +4,7 @@ import {
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
+import { CANVAS_SLICE, setCanvasPaddingSide as setDrawingCanvasPaddingSide } from '../../services/drawing/canvas.js';
 
 /**
  * @typedef {object} LegendCanvasActionsOptions
@@ -46,10 +47,19 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.canvasPadding.top = 0;
-    drawing.canvasPadding.right = 0;
-    drawing.canvasPadding.bottom = 0;
-    drawing.canvasPadding.left = 0;
+    CANVAS_SLICE.reset(drawing.slices.canvas);
+    return applyCanvasPadding();
+  };
+
+  // A padding field's edit applies to the displayed Result at once.
+  /**
+   * @param {'top' | 'right' | 'bottom' | 'left'} side
+   * @param {unknown} value
+   */
+  const setCanvasPaddingSide = (side, value) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    setDrawingCanvasPaddingSide(state.activeDrawing().slices.canvas, side, value);
     return applyCanvasPadding();
   };
 
@@ -105,6 +115,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   return {
     applyCanvasPadding,
     captureBaseConfig,
-    resetCanvasPadding
+    resetCanvasPadding,
+    setCanvasPaddingSide
   };
 };

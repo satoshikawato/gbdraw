@@ -32,10 +32,10 @@ const snapshots = createHistorySnapshotService({
 });
 snapshots.setGeneratedArtifactRuntimeOwner(canonicalRenderArtifactOwner);
 const history = createHistoryManager({
-  buildIntent: snapshots.buildHistoryIntent, applyIntent: snapshots.applyHistoryIntent,
+  ...snapshots.drawingHistory(state.activeDrawing().id),
   buildCheckpoint: () => assert.fail('Generate must not clone a full checkpoint'),
   applyCheckpoint: () => assert.fail('Generate must restore its owner handle'),
-  captureGeneratedArtifactHandle: snapshots.captureGeneratedArtifactHandle,
+  captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()),
   restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
   compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
 });

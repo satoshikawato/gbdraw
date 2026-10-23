@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 
 const metrics = [];
 const lifecycle = [];
@@ -110,4 +111,163 @@ test('unacknowledged preparation, replacement, and reset never publish stale own
   transport.reset();
   assert.equal(beforeReset.commit(), false, 'reset invalidates outstanding preparations');
   assert.equal((await prepare('B')).stagedResources.length, 1);
+});
+
+const genbankRequest = (...resourceIds) => ({
+  records: resourceIds.map((resourceId) => ({ source: { kind: 'genbank', resourceId } }))
+});
+const sha256Hex = (text) => createHash('sha256').update(text).digest('hex');
+const stagedTokens = (prepared) => prepared.stagedResources.map(({ cacheToken }) => cacheToken);
+
+// A4 (IN-A): the Worker keeps the resources of every drawing's committed request, named by the sha256 of their bytes.
+test('alternating drawings reuse the resources every drawing committed', async () => {
+  const committed = [];
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
+  const circular = { request: genbankRequest('circular-genbank'), resources: { 'circular-genbank': descriptor('CIRCULAR') } };
+  const linear = {
+    request: genbankRequest('linear-a', 'linear-b'),
+    resources: { 'linear-a': descriptor('LINEAR A'), 'linear-b': descriptor('LINEAR B') }
+  };
+
+  const first = await transport.prepare(circular);
+  assert.deepEqual(stagedTokens(first), [sha256Hex('CIRCULAR')]);
+  assert.equal(first.commit(), true);
+  committed.push(circular);
+
+  const second = await transport.prepare(linear);
+  assert.deepEqual(stagedTokens(second), [sha256Hex('LINEAR A'), sha256Hex('LINEAR B')]);
+  assert.deepEqual(second.retainedResourceTokens, [sha256Hex('CIRCULAR')], 'the Circular drawing keeps its resource');
+  assert.equal(second.commit(), true);
+  committed.push(linear);
+
+  const third = await transport.prepare(circular);
+  assert.deepEqual(third.stagedResources, [], 'Circular again transfers nothing');
+  assert.deepEqual(third.resourceManifest.map(({ cacheToken }) => cacheToken), [sha256Hex('CIRCULAR')]);
+  assert.deepEqual([...third.retainedResourceTokens].sort(), [sha256Hex('LINEAR A'), sha256Hex('LINEAR B')].sort());
+  assert.equal(third.commit(), true);
+
+  const fourth = await transport.prepare(linear);
+  assert.deepEqual(fourth.stagedResources, [], 'Linear again transfers nothing');
+});
+
+test('equal bytes under two resource IDs share one token and one transfer', async () => {
+  const transport = createDiagramResourceTransport();
+  const text = 'LOCUS same\nORIGIN\n//\n';
+  const fileBacked = setResourcePayloadOwner(
+    descriptor(text, 'copy.gb'),
+    { arrayBuffer: async () => Buffer.from(text).buffer }
+  );
+  const prepared = await transport.prepare({
+    request: genbankRequest('first-copy', 'second-copy'),
+    resources: { 'first-copy': descriptor(text), 'second-copy': fileBacked }
+  });
+  assert.deepEqual(
+    prepared.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
+    [['first-copy', sha256Hex(text)], ['second-copy', sha256Hex(text)]]
+  );
+  assert.deepEqual(stagedTokens(prepared), [sha256Hex(text)]);
+});
+
+test('a resource no committed drawing names is released', async () => {
+  const committed = [];
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
+  const circular = { request: genbankRequest('circular-genbank'), resources: { 'circular-genbank': descriptor('OLD CIRCULAR') } };
+  const linear = { request: genbankRequest('linear-genbank'), resources: { 'linear-genbank': descriptor('LINEAR') } };
+  (await transport.prepare(circular)).commit();
+  committed.push(circular);
+  (await transport.prepare(linear)).commit();
+  committed.push(linear);
+  // The Circular drawing now commits other bytes: nothing names the old ones.
+  committed[0] = { request: circular.request, resources: { 'circular-genbank': descriptor('NEW CIRCULAR') } };
+  const next = await transport.prepare(linear);
+  assert.deepEqual(next.retainedResourceTokens, [], 'the old Circular bytes are not retained');
+  assert.equal(next.commit(), true);
+  assert.deepEqual(stagedTokens(await transport.prepare(circular)), [sha256Hex('OLD CIRCULAR')]);
+});
+
+test('staging decodes base64 with the one shared decoder (OV-1560)', async () => {
+  const bytes = Uint8Array.from({ length: 200_003 }, (_, index) => (index * 89 + 7) % 256);
+  const resources = {
+    big: { kind: 'genbank', name: 'big.gb', type: '', size: bytes.length, lastModified: 0,
+      encoding: 'base64', data: Buffer.from(bytes).toString('base64') },
+    bad: { kind: 'genbank', name: 'bad.gb', type: '', size: 3, lastModified: 0, encoding: 'base64', data: 'TQ!A' }
+  };
+  const request = (resourceId) => ({ records: [{ source: { kind: 'genbank', resourceId } }] });
+  const native = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'setFromBase64');
+  const decodeWith = async (setFromBase64) => {
+    Object.defineProperty(Uint8Array.prototype, 'setFromBase64', { ...native, value: setFromBase64 });
+    try {
+      return await createDiagramResourceTransport().prepare({ request: request('big'), resources });
+    } finally {
+      Object.defineProperty(Uint8Array.prototype, 'setFromBase64', native);
+    }
+  };
+  let nativeCalls = 0;
+  const viaNative = await decodeWith(function (...args) { nativeCalls += 1; return native.value.apply(this, args); });
+  assert.ok(nativeCalls > 0, 'the engine decoder writes the transfer buffer');
+  assert.deepEqual(new Uint8Array(viaNative.stagedResources[0].bytes), bytes);
+  const viaFallback = await decodeWith(undefined);
+  assert.deepEqual(new Uint8Array(viaFallback.stagedResources[0].bytes), bytes);
+  await assert.rejects(
+    createDiagramResourceTransport().prepare({ request: request('bad'), resources }),
+    /Canonical resource bad contains invalid base64 data\./
+  );
+});
+
+test('two Linear cards that read one Session resource both find its committed resource id (OV-1555)', async () => {
+  const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const { adoptCurrentSessionResources, createSessionResourceFileView, sessionResourceSource } = await import(
+    '../../gbdraw/web/js/services/session-resource-backing.js'
+  );
+  const table = adoptCurrentSessionResources({ 'record-1-genbank': descriptor('LOCUS two\nORIGIN\n//\n') });
+  const firstCard = createSessionResourceFileView(table, 'record-1-genbank');
+  const secondCard = createSessionResourceFileView(table, 'record-1-genbank');
+  // A Save serializes each card's view to the one source descriptor, and the last card names its owner;
+  // the request keeps one resource for both cards (`session-request.js` `addFile`).
+  const source = sessionResourceSource(firstCard).descriptor;
+  setResourcePayloadOwner(source, firstCard);
+  setResourcePayloadOwner(source, secondCard);
+  const committed = {
+    'record-1-genbank': setResourcePayloadOwner({ ...source }, secondCard)
+  };
+  assert.equal(resourceIdOwnedBy(committed, firstCard, 'genbank'), 'record-1-genbank');
+  assert.equal(resourceIdOwnedBy(committed, secondCard, 'genbank'), 'record-1-genbank');
+  assert.equal(resourceIdOwnedBy(committed, firstCard, 'fasta'), null);
+  const uploaded = { name: 'new.gb', size: 3 };
+  assert.equal(resourceIdOwnedBy(committed, uploaded, 'genbank'), null);
+  const uploadedResources = { 'record-2-genbank': setResourcePayloadOwner(descriptor('LOCUS new'), uploaded) };
+  assert.equal(resourceIdOwnedBy(uploadedResources, uploaded, 'genbank'), 'record-2-genbank');
+});
+
+// OV-1595: a helper stages a File the next request names before any Generate encodes it (a descriptor without
+// data whose payload owner is the File). The render that follows (the blastp Generate's own, or a later one)
+// encodes that File under the same id and finds the bytes held: it sends nothing. Another File with the same
+// bytes is not the File the helper staged, so it is sent.
+test('a File a helper staged is held for the render that encodes it (OV-1595)', async () => {
+  const text = 'LOCUS upload\nORIGIN\n//\n';
+  const upload = { arrayBuffer: async () => new TextEncoder().encode(text).buffer };
+  const request = { records: [{ source: { kind: 'genbank', resourceId: 'record-1-genbank' } }], diagramOptions: {} };
+  const { data: _data, ...withoutData } = descriptor(text);
+  const transport = createDiagramResourceTransport();
+
+  const helper = await transport.prepare({
+    request, resources: { 'record-1-genbank': setResourcePayloadOwner({ ...withoutData, data: undefined }, upload) },
+    retain: true
+  });
+  assert.deepEqual(helper.stagedResources.map(({ resourceId }) => resourceId), ['record-1-genbank']);
+  assert.equal(helper.commit(), true);
+
+  const render = await transport.prepare({
+    request, resources: { 'record-1-genbank': setResourcePayloadOwner(descriptor(text), upload) }
+  });
+  assert.deepEqual(render.stagedResources, []);
+  assert.equal(render.resourceManifest[0].cacheToken, helper.resourceManifest[0].cacheToken);
+  assert.equal(render.commit(), true);
+
+  const sameBytes = { arrayBuffer: async () => new TextEncoder().encode(text).buffer };
+  const other = await createDiagramResourceTransport().prepare({
+    request, resources: { 'record-1-genbank': setResourcePayloadOwner({ ...withoutData, data: undefined }, sameBytes) },
+    retain: true
+  });
+  assert.equal(other.stagedResources.length, 1);
 });

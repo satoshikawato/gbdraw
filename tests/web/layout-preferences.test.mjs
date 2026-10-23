@@ -4,7 +4,6 @@ const {
   createDefaultLayoutPreferences,
   migrateLegacyLayoutPreferences,
   normalizeLayoutPreferences,
-  replaceLayoutPreferences,
   resolveActiveLayoutPreference,
   resolveCircularLayoutPreference,
   updateActiveLayoutPreference
@@ -77,8 +76,24 @@ assert.deepEqual(migrated, {
   linear: { legend: 'left', plotTitlePosition: 'center' }
 });
 
+// A drawing's settings slice installs normalized preferences into its own objects.
+const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const target = createDefaultLayoutPreferences();
-replaceLayoutPreferences(target, migrated);
+const { single } = target.circular;
+const settings = SETTINGS_SLICE.create({ layoutPreferences: target });
+SETTINGS_SLICE.install(settings.handle, { layoutPreferences: normalizeLayoutPreferences(migrated) });
 assert.deepEqual(target, migrated);
+assert.equal(target.circular.single, single, 'the nested preferences stay the same objects');
+
+// The Multi-Record Canvas toggle's smart defaults (A2 W1): a left Legend and
+// no title move below the grid, other sides are copied, and a stored
+// multi-record side means the toggle stored them already.
+const { circularMultiRecordDefaults } = await import('../../gbdraw/web/js/services/layout-preferences.js');
+assert.deepEqual(circularMultiRecordDefaults(createDefaultLayoutPreferences()), { legend: 'bottom', plotTitlePosition: 'bottom' });
+const sided = createDefaultLayoutPreferences();
+Object.assign(sided.circular.single, { legend: 'right', plotTitlePosition: 'top' });
+assert.deepEqual(circularMultiRecordDefaults(sided), { legend: 'right', plotTitlePosition: 'top' });
+sided.circular.multi.plotTitlePosition = 'none';
+assert.equal(circularMultiRecordDefaults(sided), null);
 
 console.log('layout preference tests passed');

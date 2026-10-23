@@ -172,7 +172,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
 /**
  * The candidate rules a commit or a run admits (`prepareCandidate`).
  * @typedef {object} RuleCandidate
- * @property {Partial<SpecificColorRule>[]} rules The rule rows, as `normalizeSpecificRule` writes them
+ * @property {readonly Partial<SpecificColorRule>[]} rules The rule rows, as `normalizeSpecificRule` writes them
  *   (as given with `options.asGiven`); a caption stays as written.
  * @property {RuleInputsSnapshot} snapshot The inputs the candidate was prepared from.
  */
@@ -181,18 +181,18 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * The rule preparation: every owner that reads rule matches runs through it
  * (R13), as the whole-object `rulePreparation` or as one function of it.
  * @typedef {object} RulePreparation
- * @property {(rules?: Partial<SpecificColorRule>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
+ * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
  *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
  *   `options.blocked` says whether a Session operation discards the matches (default: any Session operation);
  *   the other options are the evaluation's.
- * @property {(rules?: Partial<SpecificColorRule>[]) => void} retain
+ * @property {(rules?: readonly Partial<SpecificColorRule>[]) => void} retain
  *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
  * @property {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
  *   Prepares what `resolveFeatureDrawn` reads; resolves to `{ error }` when Generate rejects the visibility rule table.
  *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
  *   `view` marks a preparation that only reads the matches (a popup opening): it does not raise `blocking`.
- * @property {(rules?: Partial<SpecificColorRule>[]) => boolean} isPrepared
- * @property {(rules?: Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
+ * @property {(rules?: readonly Partial<SpecificColorRule>[]) => boolean} isPrepared
+ * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.asGiven` prepares the rules as they are, without writing them as `normalizeSpecificRule` does.
  * @property {() => RuleInputsSnapshot} snapshot The inputs the matches depend on.
  * @property {(before: RuleInputsSnapshot) => boolean} isCurrent Whether `before` is still the current inputs.
@@ -300,7 +300,7 @@ export const createRulePreparation = ({
   // Rules a restore replaces: the next preparation matches them with the
   // restored ones, in one evaluation, so the Legend change of the restore is
   // read from known matches (`retain`).
-  /** @type {Partial<SpecificColorRule>[]} */
+  /** @type {readonly Partial<SpecificColorRule>[]} */
   let retained = [];
   /** @type {RulePreparation['retain']} */
   const retain = (rules = []) => { retained = rules; };

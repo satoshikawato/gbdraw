@@ -9,7 +9,7 @@ const {
   markedRows,
   removeImportedPriorityRows,
   withImportedBlacklistWords,
-  withImportedDefaultColors,
+  importedDefaultColors,
   withoutImportedBlacklistWords,
   withoutImportedDefaultColors,
   withoutImportedRows
@@ -33,7 +33,9 @@ test('the Default colors take back the user color or the palette color, and keep
   // CDS had a user color, tRNA the palette's; misc is not in the palette.
   const before = { ...palette, CDS: '#111111' };
   const userColorOf = (type) => (before[type] !== undefined && before[type] !== palette[type] ? before[type] : null);
-  const { colors, imported } = withImportedDefaultColors(before, { CDS: '#ff0000', tRNA: '#00ff00', rRNA: '#0000ff', misc: '#123456' }, userColorOf);
+  const fileColors = { CDS: '#ff0000', tRNA: '#00ff00', rRNA: '#0000ff', misc: '#123456' };
+  const imported = importedDefaultColors(fileColors, userColorOf);
+  const colors = { ...before, ...fileColors };
   assert.deepEqual(imported.CDS, { color: '#ff0000', handColor: '#111111' });
   assert.deepEqual(imported.tRNA, { color: '#00ff00', handColor: null });
   // A later edit of rRNA is the user's.

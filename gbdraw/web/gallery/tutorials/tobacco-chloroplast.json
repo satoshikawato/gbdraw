@@ -2,7 +2,7 @@
   "id": "tobacco-chloroplast",
   "version": 1,
   "title": "Annotate the four regions of a tobacco chloroplast genome",
-  "summary": "Import the LSC, SSC, IRa, and IRb boundaries for NC_001879.2, tint each region from the feature ring through GC content, name the regions on a curved ring, and keep chloroplast feature colors, radial labels, and GC content visible.",
+  "summary": "Start from the Web defaults for the tobacco plastid record NC_001879.2, then label the genes, color the gene groups, import the LSC, SSC, IRa, and IRb boundaries, name them on a ring, tint each region from the feature ring through GC content, and finish the outlines and legend, generating after each change.",
   "appMode": "Circular",
   "primaryWorkflow": "Circular region annotations with custom track slots",
   "downloads": [
@@ -38,7 +38,7 @@
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
-      "body": "For exact reproduction, use Session in the Gallery and then Load Session in the web app. To build the figure manually, open gbdraw.app and select Circular before adding the plastid record.",
+      "body": "Open gbdraw.app and select Circular before adding the plastid record.",
       "operations": [
         {
           "media": {
@@ -58,11 +58,49 @@
             ]
           }
         }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": "role=button[name='Circular's]"
+        }
       ]
     },
     {
       "title": "Upload the chloroplast GenBank record",
-      "body": "Upload NC_001879.gbk as the Circular GenBank input. The record must be NC_001879.2 because the region table uses its coordinate system.",
+      "body": "Upload NC_001879.gbk as the Circular GenBank input. The record must be NC_001879.2 because the region table uses its coordinates. Set Output Prefix and Species; type the <i> tags in Species literally to italicize the center label.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "GenBank/DDBJ File",
+            "NC_001879.gbk"
+          ],
+          [
+            "Output Prefix",
+            "tobacco-chloroplast"
+          ],
+          [
+            "Species",
+            "<i>Nicotiana tabacum</i>"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "fill",
+          "selector": "#output-prefix",
+          "value": "tobacco-chloroplast"
+        },
+        {
+          "type": "fill",
+          "selector": "#circular-species",
+          "value": "<i>Nicotiana tabacum</i>"
+        }
+      ],
       "operations": [
         {
           "media": {
@@ -85,25 +123,10 @@
               }
             ]
           }
-        }
-      ]
-    },
-    {
-      "title": "Set the output name and center label",
-      "body": "Enter the output prefix and species text. Type the <i> tags literally so the generated center label italicizes the species name.",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Output Prefix", "tobacco-chloroplast"],
-          ["Species", "<i>Nicotiana tabacum</i>"],
-          ["Strain", "blank"],
-          ["Rich Feature Popup", "On"]
-        ]
-      },
-      "operations": [
+        },
         {
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-03-01-basic-settings.webp",
+            "src": "./media/tobacco-chloroplast/manual-02-02-basic-settings.webp",
             "alt": "Basic card with tobacco-chloroplast as the output prefix and literal Nicotiana tabacum italic markup in Species.",
             "caption": "Set Output Prefix to tobacco-chloroplast and enter the literal <i>Nicotiana tabacum</i> markup in Species."
           },
@@ -116,47 +139,144 @@
       ]
     },
     {
-      "title": "Configure the circular layout and labels",
-      "body": "Use strand-separated features, retain GC content, hide GC skew, and place labels on both sides of the feature ring. The four radius offsets are preserved by the bundled session and by the runnable command.",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Track Preset", "Tuckin"],
-          ["Separate Strands", "On"],
-          ["Hide GC Content", "Off"],
-          ["Hide GC Skew", "On"],
-          ["Label Mode", "Both (Out + Inner)"],
-          ["Circular Label Placement", "Radial"],
-          ["Outer X / Y Offset", "0.90 / 0.90"],
-          ["Inner X / Y Offset", "0.975 / 0.975"],
-          ["Legend position", "Upper Left"],
-          ["Default font size", "28"]
-        ]
-      },
+      "title": "Generate with the defaults",
+      "body": "Click Generate Diagram. The defaults draw every feature in the stock colors on two strands, with GC content and GC skew rings and the legend at the left. The large gray blocks are repeat_region features; the last step replaces them with rep_origin. No gene is named, and nothing marks the four plastome regions yet.",
+      "replay": [
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-04-01-layout-options.webp",
-            "alt": "Layout controls with Separate Strands selected, Hide GC Content clear, and Hide GC Skew selected.",
-            "caption": "Turn on Separate Strands, keep GC content, and hide GC skew."
+            "src": "./media/tobacco-chloroplast/manual-03-01-default-preview.webp",
+            "alt": "Tobacco chloroplast preview with the Web defaults: features in the stock colors on two strands, large gray repeat_region blocks, GC content and GC skew rings, no labels, and the legend at the left.",
+            "caption": "Web defaults: no gene names, stock colors, no region marks."
           },
           "capture": {
             "source": "webapp",
-            "openDetails": ["Layout"],
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 3,
+            "viewport": {
+              "width": 1400,
+              "height": 1400
+            },
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'chloroplast-layout-summary'; options.dataset.capture = 'chloroplast-layout-options'; card.scrollIntoView({ block: 'start' });"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
               }
             ],
-            "clipSelectors": ["[data-capture='chloroplast-layout-summary']", "[data-capture='chloroplast-layout-options']"],
-            "cropPadding": 14
+            "selector": "svg[data-capture-chloroplast-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.labels_mode": "none",
+              "form.legend": "left",
+              "adv.circular_track_slots_enabled": false
+            },
+            "visibleText": [
+              "Nicotiana tabacum",
+              "NC_001879.2",
+              "GC content"
+            ]
           }
+        }
+      ]
+    },
+    {
+      "title": "Label the genes",
+      "body": "Open Labels and set Label Mode to Both (Out + Inner). Set the four label offsets first: Circular Label Placement Radial hides them. Then set Circular Label Placement to Radial, click Choose Priority File (TSV), and choose qualifier_priority.tsv, which labels CDS with gene before old_locus_tag. Click Generate Diagram.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Label Mode",
+            "Both (Out + Inner)"
+          ],
+          [
+            "Outer X / Y Offset",
+            "0.9 / 0.9"
+          ],
+          [
+            "Inner X / Y Offset",
+            "0.975 / 0.975"
+          ],
+          [
+            "Circular Label Placement",
+            "Radial"
+          ],
+          [
+            "Priority File (TSV)",
+            "qualifier_priority.tsv"
+          ]
+        ]
+      },
+      "note": "Set the offsets before Radial: with Radial placement, the Labels card hides the offset fields.",
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Labels\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
         },
         {
-          "title": "Label mode selector",
+          "type": "select",
+          "selector": "#circular-label-mode",
+          "value": "both"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Outer X Offset']",
+          "value": "0.9"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Outer Y Offset']",
+          "value": "0.9"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Inner X Offset']",
+          "value": "0.975"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Inner Y Offset']",
+          "value": "0.975"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Circular Label Placement']",
+          "value": "radial"
+        },
+        {
+          "type": "upload",
+          "selector": "role=button[name='Choose Priority File (TSV)']",
+          "path": "gallery/files/qualifier_priority.tsv"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => window.__GBDRAW_APP__?.files?.qualifier_priority?.name === 'qualifier_priority.tsv'"
+        },
+        {
+          "type": "evaluate",
+          "script": "async () => { const app = window.__GBDRAW_APP__; await app.waitForAuxiliaryFileImport(app.files.qualifier_priority); }"
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-04-02-label-mode-both.webp",
+            "src": "./media/tobacco-chloroplast/manual-04-01-label-mode-both.webp",
             "alt": "Labels card with the Label Mode menu open and Both Out plus Inner highlighted.",
             "caption": "Open Label Mode and choose the highlighted Both (Out + Inner) option."
           },
@@ -171,16 +291,21 @@
             },
             "openSelect": {
               "selectedLabel": "Both (Out + Inner)",
-              "options": ["None", "Out", "Both (Out + Inner)"],
+              "options": [
+                "None",
+                "Out",
+                "Both (Out + Inner)"
+              ],
               "label": "Label Mode"
             },
-            "openDetails": ["Labels"]
+            "openDetails": [
+              "Labels"
+            ]
           }
         },
         {
-          "title": "Radial label placement",
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-04-03-label-placement-radial.webp",
+            "src": "./media/tobacco-chloroplast/manual-04-02-label-placement-radial.webp",
             "alt": "Labels card with the Circular Label Placement menu open and Radial highlighted.",
             "caption": "Open Circular Label Placement and choose the highlighted Radial option."
           },
@@ -195,96 +320,411 @@
             },
             "openSelect": {
               "selectedLabel": "Radial",
-              "options": ["Horizontal", "Radial"],
+              "options": [
+                "Horizontal",
+                "Radial"
+              ],
               "label": "Circular Label Placement",
               "selector": "select[aria-label='Circular Label Placement']"
             },
-            "openDetails": ["Labels"]
+            "openDetails": [
+              "Labels"
+            ]
+          }
+        },
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-04-03-qualifier-priority.webp",
+            "alt": "Priority File (TSV) uploader in the Labels card with qualifier_priority.tsv chosen.",
+            "caption": "Click Choose Priority File (TSV) and choose qualifier_priority.tsv."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 4,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Priority File (TSV)'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Priority File uploader not found.'); root.dataset.capture = 'chloroplast-priority-table'; root.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='chloroplast-priority-table']",
+            "cropPadding": {
+              "top": 4,
+              "right": 14,
+              "bottom": 4,
+              "left": 14
+            },
+            "assertAppState": {
+              "mode": "circular",
+              "files.qualifier_priority.name": "qualifier_priority.tsv"
+            },
+            "visibleText": [
+              "qualifier_priority.tsv"
+            ]
+          },
+          "dataDependent": true
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-04-04-labels-preview.webp",
+            "alt": "Tobacco chloroplast preview with radial gene labels outside and inside the feature ring, still in the stock colors.",
+            "caption": "Radial gene labels on both sides of the feature ring."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 4,
+            "viewport": {
+              "width": 1400,
+              "height": 1400
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-chloroplast-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.labels_mode": "both",
+              "adv.circular_label_placement": "radial",
+              "files.qualifier_priority.name": "qualifier_priority.tsv"
+            },
+            "visibleText": [
+              "Nicotiana tabacum",
+              "NC_001879.2",
+              "psbA",
+              "rbcL"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Load the color and label tables",
-      "body": "Open Colors and upload chloroplast_specific_table.tsv as the Specific rules file. Open Labels and upload qualifier_priority.tsv as Priority File (TSV).",
+      "title": "Color the gene groups",
+      "body": "The preview colors features by type: every CDS is the same blue, with tRNA, rRNA, and repeat_region in their own default colors. Open Colors, click Choose Specific rules file, and choose chloroplast_specific_table.tsv, which gives each chloroplast gene group, such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase, its own color and legend entry. Click Generate Diagram.",
       "table": {
-        "columns": ["File", "UI control", "Purpose"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["chloroplast_specific_table.tsv", "Colors → Specific rules file", "Color chloroplast gene groups and build the legend"],
-          ["qualifier_priority.tsv", "Labels → Priority File (TSV)", "Use gene before old_locus_tag for CDS labels"]
+          [
+            "Specific rules file",
+            "chloroplast_specific_table.tsv"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Colors\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "upload",
+          "selector": "role=button[name='Choose Specific rules file']",
+          "path": "gallery/files/chloroplast_specific_table.tsv"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => window.__GBDRAW_APP__?.files?.t_color?.name === 'chloroplast_specific_table.tsv'"
+        },
+        {
+          "type": "evaluate",
+          "script": "async () => { const app = window.__GBDRAW_APP__; await app.waitForAuxiliaryFileImport(app.files.t_color); }"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "media": {
             "src": "./media/tobacco-chloroplast/manual-05-01-specific-color-table.webp",
             "alt": "Specific rules file uploader in the Colors card with chloroplast_specific_table.tsv selected.",
-            "caption": "Upload chloroplast_specific_table.tsv as the Specific rules file."
+            "caption": "Click Choose Specific rules file and choose chloroplast_specific_table.tsv."
           },
           "capture": {
             "source": "webapp",
-            "openDetails": ["Colors"],
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 5,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.t_color; if (!file) throw new Error('Specific color table was not restored.'); app.files.t_color = new File([file], 'chloroplast_specific_table.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific rules file'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific rules file uploader not found.'); root.dataset.capture = 'chloroplast-specific-table';"
+                "script": "const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific rules file'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific rules file uploader not found.'); root.dataset.capture = 'chloroplast-specific-table'; root.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='chloroplast-specific-table']",
-            "cropPadding": 14
-          }
+            "cropPadding": {
+              "top": 4,
+              "right": 14,
+              "bottom": 4,
+              "left": 14
+            },
+            "assertAppState": {
+              "mode": "circular",
+              "files.t_color.name": "chloroplast_specific_table.tsv"
+            },
+            "visibleText": [
+              "chloroplast_specific_table.tsv"
+            ]
+          },
+          "dataDependent": true
         },
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-05-02-qualifier-priority.webp",
-            "alt": "Priority File uploader in the Labels card with qualifier_priority.tsv selected.",
-            "caption": "Upload qualifier_priority.tsv as Priority File (TSV)."
+            "src": "./media/tobacco-chloroplast/manual-05-02-colors-preview.webp",
+            "alt": "Tobacco chloroplast preview with gene groups in their own colors and a long legend of gene groups.",
+            "caption": "Gene groups get their own colors and legend entries."
           },
           "capture": {
             "source": "webapp",
-            "openDetails": ["Labels"],
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 5,
+            "viewport": {
+              "width": 1400,
+              "height": 1400
+            },
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.qualifier_priority; if (!file) throw new Error('Qualifier priority table was not restored.'); app.files.qualifier_priority = new File([file], 'qualifier_priority.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Priority File (TSV)'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Priority File uploader not found.'); root.dataset.capture = 'chloroplast-priority-table';"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-preview', 'true');"
               },
               {
-                "type": "waitForFunction",
-                "script": "() => window.__GBDRAW_APP__?.manualPriorityRules?.some((rule) => rule.feat === 'CDS' && rule.order === 'gene,old_locus_tag')"
+                "type": "wait",
+                "ms": 100
               }
             ],
-            "selector": "[data-capture='chloroplast-priority-table']",
-            "cropPadding": 14
+            "selector": "svg[data-capture-chloroplast-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "files.t_color.name": "chloroplast_specific_table.tsv"
+            },
+            "visibleText": [
+              "Nicotiana tabacum",
+              "NC_001879.2",
+              "photosystem II"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Import the four plastome regions",
-      "body": "Open Region Annotations and import nicotiana-tabacum-regions-span.tsv. The import creates two sets with the same four regions: plastome_regions holds the named lines and plastome_tint holds the tints. Coordinates are 1-based and inclusive.",
+      "title": "Import the four regions and put them on a ring",
+      "body": "Open Region Annotations, click Import TSV, and choose nicotiana-tabacum-regions-span.tsv. The import creates two sets with the same four regions: plastome_regions holds the named lines and plastome_tint the tints. Do not generate yet: both sets need a track first. Open Layout, open Custom Track Slots, and check Use custom stack. Remove the ticks and gc_skew rows (Row actions, then Remove), set the features row's Lane direction to split, and add an Annotations track for plastome_regions as in the table; use Move outward once so it sits between features and gc_content. Set gc_content as in the table, then click Generate Diagram.",
       "table": {
-        "columns": ["Region", "Start", "End", "Length", "plastome_regions", "plastome_tint"],
+        "columns": [
+          "Slot id",
+          "Renderer",
+          "Position",
+          "Radius",
+          "Width",
+          "Key settings"
+        ],
         "rows": [
-          ["LSC", "1", "86,686", "86,686 bp", "Line, label LSC", "Highlight"],
-          ["IRb", "86,687", "112,029", "25,343 bp", "Line, label IRb", "Highlight"],
-          ["SSC", "112,030", "130,600", "18,571 bp", "Line, label SSC", "Highlight"],
-          ["IRa", "130,601", "155,943", "25,343 bp", "Line, label IRa", "Highlight"]
+          [
+            "features",
+            "Features",
+            "On axis",
+            "Auto",
+            "Auto",
+            "Lane direction: split"
+          ],
+          [
+            "plastome_regions",
+            "Annotations",
+            "Inside",
+            "0.65 ×R",
+            "20 px",
+            "Annotation set: plastome_regions; Show annotation labels: on; Overflow: Compress; Padding: 1; Inner and Outer gap: 1"
+          ],
+          [
+            "gc_content",
+            "Dinucleotide content",
+            "Inside",
+            "0.56 ×R",
+            "0.08 ×R",
+            "Dinucleotide: GC"
+          ]
         ]
       },
-      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2. Single-copy regions are blue and inverted repeats purple in both sets. Download TSV saves the current annotation table for reuse through Import TSV.",
+      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2; coordinates are 1-based and inclusive. A Generate before the sets have tracks stops with \"Two region annotations overlap in the same lane\", because both sets would share the default lane.",
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Region Annotations\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "upload",
+          "selector": "role=button[name='Import TSV']",
+          "path": "gallery/files/nicotiana-tabacum-regions-span.tsv"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.annotationSets || []).length === 2"
+        },
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Layout\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"
+        },
+        {
+          "type": "check",
+          "selector": "role=checkbox[name='Use custom stack's]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.adv?.circular_track_slots || []).length >= 3"
+        },
+        {
+          "type": "click",
+          "selector": "summary[aria-label='Row actions for ticks']"
+        },
+        {
+          "type": "click",
+          "selector": "details.action-menu[open] button.action-menu-item:has-text('Remove')"
+        },
+        {
+          "type": "click",
+          "selector": "summary[aria-label='Row actions for gc_skew']"
+        },
+        {
+          "type": "click",
+          "selector": "details.action-menu[open] button.action-menu-item:has-text('Remove')"
+        },
+        {
+          "type": "select",
+          "selector": "[role='group'][aria-label='Circular track slot features'] select:has(option[value='split'])",
+          "value": "split"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='New circular track renderer']",
+          "value": "annotations"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/Add track$/]"
+        },
+        {
+          "type": "fill",
+          "selector": "[role='group'][aria-label^='Circular track slot '] >> nth=2 >> input[placeholder='slot_id']",
+          "value": "plastome_regions"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_regions Annotation set']",
+          "value": "plastome_regions"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_regions Annotation placement']",
+          "value": "inside"
+        },
+        {
+          "type": "click",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_regions'] button[title='Move outward']"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_regions Radius unit']",
+          "value": "factor"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label='Circular track slot plastome_regions Radius value']",
+          "value": "0.65"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_regions Width unit']",
+          "value": "px"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label='Circular track slot plastome_regions Width value']",
+          "value": "20"
+        },
+        {
+          "type": "click",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_regions'] summary:has-text('Gaps')"
+        },
+        {
+          "type": "fill",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_regions'] [title='Inner gap']",
+          "value": "1"
+        },
+        {
+          "type": "fill",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_regions'] [title='Outer gap']",
+          "value": "1"
+        },
+        {
+          "type": "check",
+          "selector": "[aria-label='Circular track slot plastome_regions Show annotation labels']"
+        },
+        {
+          "type": "select",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_regions'] select:has(option[value='compress'])",
+          "value": "compress"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label='Circular track slot plastome_regions Padding']",
+          "value": "1"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot gc_content Radius unit']",
+          "value": "factor"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label='Circular track slot gc_content Radius value']",
+          "value": "0.56"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot gc_content Width unit']",
+          "value": "factor"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label='Circular track slot gc_content Width value']",
+          "value": "0.08"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-06-01-region-annotations.webp",
             "alt": "Region Annotations card with Download TSV and the plastome_regions set containing LSC, IRb, SSC, and IRa coordinate rows.",
-            "caption": "Import the TSV and verify the plastome_regions set contains the four named line rows from the table; plastome_tint follows it."
+            "caption": "After Import TSV, the plastome_regions set holds the four named line rows from the table; plastome_tint follows it."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
             "cardTitle": "Region Annotations",
-            "openDetails": ["Region Annotations"],
+            "openDetails": [
+              "Region Annotations"
+            ],
             "viewport": {
               "width": 1400,
               "height": 1200
@@ -298,13 +738,35 @@
               "annotationSets.0.annotations.3.id": "ira",
               "annotationSets.1.id": "plastome_tint"
             },
-            "visibleText": ["Download TSV", "Record: NC_001879.2"],
+            "visibleText": [
+              "Download TSV",
+              "Record: NC_001879.2"
+            ],
             "visibleControls": [
-              {"selector": "input[aria-label='Annotation set id']", "value": "plastome_regions"},
-              {"selector": "input[aria-label='Annotation id']", "nth": 0, "value": "lsc"},
-              {"selector": "input[aria-label='Annotation id']", "nth": 1, "value": "irb"},
-              {"selector": "input[aria-label='Annotation id']", "nth": 2, "value": "ssc"},
-              {"selector": "input[aria-label='Annotation id']", "nth": 3, "value": "ira"}
+              {
+                "selector": "input[aria-label='Annotation set id']",
+                "value": "plastome_regions"
+              },
+              {
+                "selector": "input[aria-label='Annotation id']",
+                "nth": 0,
+                "value": "lsc"
+              },
+              {
+                "selector": "input[aria-label='Annotation id']",
+                "nth": 1,
+                "value": "irb"
+              },
+              {
+                "selector": "input[aria-label='Annotation id']",
+                "nth": 2,
+                "value": "ssc"
+              },
+              {
+                "selector": "input[aria-label='Annotation id']",
+                "nth": 3,
+                "value": "ira"
+              }
             ],
             "actions": [
               {
@@ -317,28 +779,204 @@
               }
             ]
           }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-06-02-region-ring-slots.webp",
+            "alt": "Circular track stack with features, the plastome_regions annotation row inside it at 0.65 ×R and 20 px, and GC content at 0.56 ×R and 0.08 ×R.",
+            "caption": "The stack after this step: features, plastome_regions, and gc_content, with the numeric Width/Radius values and units from the table."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "assertAppState": {
+              "mode": "circular",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.length": 3,
+              "adv.circular_track_slots.0.id": "features",
+              "adv.circular_track_slots.1.id": "plastome_regions",
+              "adv.circular_track_slots.2.id": "gc_content"
+            },
+            "visibleControls": [
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Width value\"]",
+                "value": "20"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Width unit\"]",
+                "value": "px"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Radius value\"]",
+                "value": "0.65"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Radius unit\"]",
+                "value": "factor"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Width value\"]",
+                "value": "0.08"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Width unit\"]",
+                "value": "factor"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Radius value\"]",
+                "value": "0.56"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Radius unit\"]",
+                "value": "factor"
+              }
+            ],
+            "selector": "#circular-custom-track-slots-panel",
+            "highlightSelector": "[data-capture='circular-track-slot-plastome_regions']",
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [],
+            "viewport": {
+              "width": 1400,
+              "height": 1600
+            },
+            "cropPadding": 12,
+            "waitForSelector": "[data-capture='circular-track-slot-plastome_regions']",
+            "replayThrough": 6
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-06-03-regions-preview.webp",
+            "alt": "Tobacco chloroplast preview with LSC, IRb, SSC, and IRa named along one ring of lines between the feature ring and GC content.",
+            "caption": "LSC, IRb, SSC, and IRa are named on a ring between the features and GC content."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 6,
+            "viewport": {
+              "width": 1400,
+              "height": 1400
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-chloroplast-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.1.id": "plastome_regions",
+              "annotationSets.0.id": "plastome_regions"
+            },
+            "visibleText": [
+              "Nicotiana tabacum",
+              "NC_001879.2",
+              "LSC",
+              "IRb",
+              "SSC",
+              "IRa"
+            ]
+          }
         }
       ]
     },
     {
-      "title": "Bind the annotation set to the circular track stack",
-      "body": "Open Custom Track Slots in Layout. Keep the feature track on the axis, add plastome_tint as an Underlay on it that extends to GC content, place plastome_regions inside the feature track, and place GC content farther inward. Move a new row into place before you set it to Overlay anchor; an overlay row's Move outward and Move inward arrows are disabled.",
+      "title": "Tint the regions",
+      "body": "Add a second Annotations track for plastome_tint and click Move outward twice so it sits right after features. Then make it an overlay on the feature ring, drawn under the features and extended to GC content, as in the table. Move the row before you set its placement to overlay: an overlay row's Move outward and Move inward are disabled. Click Generate Diagram.",
       "table": {
-        "columns": ["Slot id", "Renderer", "Position", "Radius", "Width", "Key settings"],
+        "columns": [
+          "Slot id",
+          "Renderer",
+          "Key settings"
+        ],
         "rows": [
-          ["features", "Features", "On axis", "Auto", "Auto", "Lane direction: split"],
-          ["plastome_tint", "Annotations", "Overlay anchor", "—", "—", "Set: plastome_tint; Anchor: features; Underlay; Extend to: gc_content; Marks: Highlight; Labels: off; padding: 0"],
-          ["plastome_regions", "Annotations", "Inside", "0.65 ×R", "20 px", "Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px"],
-          ["gc_content", "Dinucleotide content", "Inside", "0.56 ×R", "0.08 ×R", "Dinucleotide: GC"]
+          [
+            "plastome_tint",
+            "Annotations",
+            "Annotation set: plastome_tint; Annotation placement: overlay; Enabled drawable anchor: features; Annotation layer: underlay; Extend to: gc_content; Show annotation labels: off; Padding: 0"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "select",
+          "selector": "select[aria-label='New circular track renderer']",
+          "value": "annotations"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/Add track$/]"
+        },
+        {
+          "type": "fill",
+          "selector": "[role='group'][aria-label^='Circular track slot '] >> nth=3 >> input[placeholder='slot_id']",
+          "value": "plastome_tint"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_tint Annotation set']",
+          "value": "plastome_tint"
+        },
+        {
+          "type": "click",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_tint'] button[title='Move outward']"
+        },
+        {
+          "type": "click",
+          "selector": "[role='group'][aria-label='Circular track slot plastome_tint'] button[title='Move outward']"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_tint Annotation placement']",
+          "value": "overlay"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_tint Enabled drawable anchor']",
+          "value": "features"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_tint Annotation layer']",
+          "value": "underlay"
+        },
+        {
+          "type": "select",
+          "selector": "[aria-label='Circular track slot plastome_tint Extend to']",
+          "value": "gc_content"
+        },
+        {
+          "type": "uncheck",
+          "selector": "[aria-label='Circular track slot plastome_tint Show annotation labels']"
+        },
+        {
+          "type": "fill",
+          "selector": "[aria-label='Circular track slot plastome_tint Padding']",
+          "value": "0"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-07-01-custom-track-slots.webp",
             "alt": "Circular track stack with the plastome_tint Underlay on features extending to GC content, and separate numeric Width/Radius fields and px/×R units for plastome_regions and GC content.",
-            "caption": "Set plastome_tint as in the table, then the numeric Width/Radius values and px/×R units, with plastome_regions between features and gc_content."
+            "caption": "The finished stack: plastome_tint as an Underlay anchored on features that extends to gc_content, above plastome_regions and gc_content."
           },
           "capture": {
             "source": "webapp",
@@ -385,57 +1023,284 @@
               }
             ],
             "selector": "#circular-custom-track-slots-panel",
-            "highlightSelector": "[data-capture='circular-track-slot-plastome_regions']",
-            "openDetails": ["Layout"],
+            "highlightSelector": "[data-capture='circular-track-slot-plastome_tint']",
+            "openDetails": [
+              "Layout"
+            ],
             "actions": [
-              {"type": "click", "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"}
+              {
+                "type": "click",
+                "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"
+              }
             ],
             "viewport": {
               "width": 1400,
               "height": 1600
             },
             "cropPadding": 12,
-            "waitForSelector": "[data-capture='circular-track-slot-plastome_regions']"
+            "waitForSelector": "[data-capture='circular-track-slot-plastome_tint']"
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-07-02-tint-preview.webp",
+            "alt": "Tobacco chloroplast preview with the single-copy regions tinted blue and the inverted repeats purple, from the feature ring through GC content, under the named region ring.",
+            "caption": "The tints run from the feature ring through GC content."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 7,
+            "viewport": {
+              "width": 1400,
+              "height": 1400
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-preview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-chloroplast-preview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "adv.circular_track_slots.1.id": "plastome_tint",
+              "adv.circular_track_slots.length": 4
+            },
+            "visibleText": [
+              "Nicotiana tabacum",
+              "NC_001879.2",
+              "LSC",
+              "IRa"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Generate and inspect the chloroplast map",
-      "body": "Click Generate Diagram. Verify that each region is tinted from the feature ring through the GC-content track, and that LSC, IRb, SSC, and IRa are named along one ring of lines between the feature ring and GC content. The radial gene labels should remain visible on both sides of the feature ring.",
+      "title": "Finish the figure",
+      "body": "Open Layout and clear Multi-Record Canvas, as the Gallery figure is drawn without it. Under Features, remove repeat_region and add rep_origin. Set the outline colors and widths, Circular Label Spacing, Legend position, and Default font size as in the table, then click Generate Diagram. Each region is now tinted from the feature ring through GC content, LSC, IRb, SSC, and IRa are named on the ring between the features and GC content, and the radial gene labels stay on both sides of the feature ring.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Multi-Record Canvas",
+            "Off"
+          ],
+          [
+            "Features",
+            "Remove repeat_region; add rep_origin"
+          ],
+          [
+            "Block stroke color",
+            "Color, #000000; width 1"
+          ],
+          [
+            "Line stroke color",
+            "Color, #d3d3d3; width 2"
+          ],
+          [
+            "Axis stroke color",
+            "Color, #808080; width 3"
+          ],
+          [
+            "Circular Label Spacing",
+            "3"
+          ],
+          [
+            "Legend position",
+            "Upper Left"
+          ],
+          [
+            "Default font size",
+            "28"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const labels = [\"Layout\", \"Features\", \"Axis & Scale\", \"Labels\", \"Legend settings\", \"Titles and Record Labels\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+        },
+        {
+          "type": "uncheck",
+          "selector": "input[data-circular-canvas-setting]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label='Remove repeat_region']"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Feature type to add']",
+          "value": "rep_origin"
+        },
+        {
+          "type": "click",
+          "selector": "select[aria-label='Feature type to add'] + button"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Block stroke color mode']",
+          "value": "color"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Block stroke color']",
+          "value": "#000000"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Block Stroke Width']",
+          "value": 1
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Line stroke color mode']",
+          "value": "color"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Line stroke color']",
+          "value": "#d3d3d3"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Line Stroke Width']",
+          "value": 2
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Axis stroke color mode']",
+          "value": "color"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Axis stroke color']",
+          "value": "#808080"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Axis Stroke Width']",
+          "value": 3
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Circular Label Spacing']",
+          "value": 3
+        },
+        {
+          "type": "select",
+          "selector": "#legend-position",
+          "value": "upper_left"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Default font size']",
+          "value": 28
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp",
+            "src": "./media/tobacco-chloroplast/manual-08-01-layout-options.webp",
+            "alt": "Circular Layout options with Separate Strands selected and Multi-Record Canvas cleared.",
+            "caption": "Clear Multi-Record Canvas; Separate Strands stays on."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 8,
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'chloroplast-layout-summary'; options.dataset.capture = 'chloroplast-layout-options'; card.scrollIntoView({ block: 'start' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='chloroplast-layout-summary']",
+              "[data-capture='chloroplast-layout-options']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": false,
+              "form.separate_strands": true
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-capture='chloroplast-layout-options'] input[aria-label='Separate Strands']",
+                "checked": true
+              },
+              {
+                "selector": "[data-capture='chloroplast-layout-options'] input[data-circular-canvas-setting]",
+                "checked": false
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-08-02-chloroplast-preview.webp",
             "alt": "Completed Nicotiana tabacum chloroplast map with four tinted regions named on curved labels, chloroplast feature colors, radial gene labels, an inner GC-content track, record metadata, and one entry per legend category.",
             "caption": "The completed map shows the four region tints, their curved names, chloroplast feature colors, radial gene labels, the inner GC-content track, and one entry per legend category."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
-            "selector": "svg[data-capture-chloroplast-final='true']",
+            "replayThrough": 8,
             "viewport": {
               "width": 1400,
-              "height": 1000
+              "height": 1400
             },
-            "cropPadding": 12,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Nicotiana tabacum') || !content.includes('data-gbdraw-annotation-id=\"lsc\"') || content.includes('photosystem I (1)') || app?.form?.legend !== 'upper_left') throw new Error('Restored chloroplast SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1000; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-final', 'true');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); if (!content.includes('Nicotiana tabacum') || !content.includes('data-gbdraw-annotation-id=\"lsc\"') || content.includes('photosystem I (1)') || app?.form?.legend !== 'upper_left') throw new Error('The chloroplast SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-preview', 'true');"
               },
               {
                 "type": "waitForFunction",
                 "script": "() => ['lsc','irb','ssc','ira','lsc_tint','irb_tint','ssc_tint','ira_tint'].every((id) => document.querySelector(`[data-gbdraw-annotation-id='${id}']`))"
+              },
+              {
+                "type": "wait",
+                "ms": 100
               }
             ],
-            "waitForSelector": "[data-gbdraw-annotation-id='lsc']",
+            "selector": "svg[data-capture-chloroplast-preview='true']",
+            "cropPadding": 12,
             "assertAppState": {
               "mode": "circular",
               "form.legend": "upper_left",
+              "form.multi_record_canvas": false,
               "annotationSets.0.id": "plastome_regions",
-              "adv.circular_track_slots_enabled": true
+              "adv.circular_track_slots_enabled": true,
+              "adv.features": [
+                "CDS",
+                "rRNA",
+                "tRNA",
+                "tmRNA",
+                "ncRNA",
+                "misc_RNA",
+                "rep_origin"
+              ]
             },
             "visibleText": [
               "Nicotiana tabacum",

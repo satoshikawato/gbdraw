@@ -18,8 +18,8 @@ for (const sample of cases) {
     await page.evaluate((key) => {
       const a = window.__GBDRAW_APP__;
       a.form.labels_mode = 'out';
-      if (key === 'blacklist') a.filterMode = 'Blacklist';
-      if (key === 'whitelist') a.filterMode = 'Whitelist';
+      if (key === 'blacklist') a.setLabelFilterMode('Blacklist');
+      if (key === 'whitelist') a.setLabelFilterMode('Whitelist');
     }, sample.key);
     const inspect = () => page.evaluate((key) => {
       const a = window.__GBDRAW_APP__;
@@ -89,13 +89,13 @@ for (const sample of removeCases) {
         }
       }
       if (key === 'whitelist') {
-        a.filterMode = 'Whitelist';
+        a.setLabelFilterMode('Whitelist');
         a.addWhitelistRule();
-        a.editWhitelistRule(0, 'key', 'mine');
+        a.setWhitelistRuleField(a.manualWhitelist[0], 'key', 'mine');
       }
       if (key === 'blacklist') {
-        a.filterMode = 'Blacklist';
-        a.manualBlacklist = 'hypothetical';
+        a.setLabelFilterMode('Blacklist');
+        a.setBlacklistText('hypothetical');
       }
     }, sample.key);
     const before = await inspect();
@@ -142,7 +142,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   const page = await load(browser);
   const circular = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const drawing = state.drawings.circular;
+    const drawing = state.drawingOfMode('circular');
     return {
       rules: drawing.manualSpecificRules.map((rule) => [rule.val, Boolean(rule.fromFile)]),
       legend: drawing.legendEntries.value.map((entry) => entry.caption).filter((caption) => ['Hand', 'Imported'].includes(caption))
@@ -177,7 +177,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   const linear = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
-      legend: state.drawings.linear.legendEntries.value.map((entry) => entry.caption),
+      legend: state.drawingOfMode('linear').legendEntries.value.map((entry) => entry.caption),
       svg: state.svgContainer.value?.querySelector('svg')?.outerHTML ?? ''
     };
   });
@@ -200,19 +200,19 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   await switchMode(page, 'circular');
   await expect.poll(shownLegend, { timeout: 120_000 }).toEqual(['Hand']);
   await expect.poll(circular).toEqual(removed);
-  // REVIEW-4 N-1: back in Linear, Undo of the Remove (after the steps of the
-  // two switches) brings the file's rows back while Circular is not shown;
-  // shown again, its figure, last shown without them, is drawn with them.
+  // REVIEW-4 N-1: back in Linear, one Undo of the Remove (a project step:
+  // a switch is no step, D-15-51) brings the file's rows back while Circular
+  // is not shown; shown again, its figure, last shown without them, is drawn
+  // with them.
   await switchMode(page, 'linear');
-  // Each Undo is waited for by the History stacks it changes.
   const stacks = () => page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()].join('/'));
-  for (let step = 0; step < 8 && await undoCount() >= removedAt; step += 1) {
-    const before = await stacks();
-    // Undo of a mode switch waits while a rerender or binding runs, and its
-    // button is disabled for that time (OV-1339): the click waits for it.
-    await page.getByRole('button', { name: 'Undo', exact: true }).click();
-    await expect.poll(stacks, { timeout: 60_000 }).not.toBe(before);
-  }
+  const beforeUndo = await stacks();
+  // The click waits while a rerender keeps the Undo button disabled (OV-1339).
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(stacks, { timeout: 60_000 }).not.toBe(beforeUndo);
+  expect(await undoCount()).toBe(removedAt - 1);
+  // The rules and their Legend rows come back now, while Circular is not
+  // shown (OV-1655).
   await expect.poll(circular).toEqual(loaded);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await switchMode(page, 'circular');
@@ -237,8 +237,8 @@ test('Reset Settings removes each table card with the settings it loaded, and Un
     // The Whitelist and Blacklist cards show under their filter mode.
     await page.evaluate((key) => {
       const a = window.__GBDRAW_APP__;
-      if (key === 'whitelist') a.filterMode = 'Whitelist';
-      if (key === 'blacklist') a.filterMode = 'Blacklist';
+      if (key === 'whitelist') a.setLabelFilterMode('Whitelist');
+      if (key === 'blacklist') a.setLabelFilterMode('Blacklist');
     }, sample.key);
     await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: `${sample.key}.tsv`, mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
     await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);

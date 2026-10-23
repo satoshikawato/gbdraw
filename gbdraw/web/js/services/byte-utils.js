@@ -15,23 +15,78 @@ export const asBytes = (value) => (
   value instanceof Uint8Array ? value : new Uint8Array(value || [])
 );
 
-/** @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value */
-export const bytesToBase64 = (value) => {
-  const bytes = asBytes(value);
-  /** @type {string[]} */
-  const chunks = [];
-  // Complete triplets let encoded chunks concatenate without interior padding.
-  const chunkSize = 0x6000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    chunks.push(btoa(String.fromCharCode(...bytes.subarray(index, index + chunkSize))));
+const BASE64_CODES = Uint8Array.from(BASE64_ALPHABET, (character) => character.charCodeAt(0));
+const PADDING_CODE = 0x3D;
+
+// Older engines write the ASCII text into one buffer; a binary-string btoa
+// path runs at about 16 MB/s and freezes the first Generate of a large File.
+/** @param {Uint8Array} bytes */
+const bytesToBase64Portable = (bytes) => {
+  const length = bytes.length;
+  const output = new Uint8Array(Math.ceil(length / 3) * 4);
+  const whole = length - (length % 3);
+  let out = 0;
+  for (let index = 0; index < whole; index += 3) {
+    const triplet = (bytes[index] << 16) | (bytes[index + 1] << 8) | bytes[index + 2];
+    output[out] = BASE64_CODES[triplet >> 18];
+    output[out + 1] = BASE64_CODES[(triplet >> 12) & 63];
+    output[out + 2] = BASE64_CODES[(triplet >> 6) & 63];
+    output[out + 3] = BASE64_CODES[triplet & 63];
+    out += 4;
   }
-  return chunks.join('');
+  if (whole < length) {
+    const second = whole + 1 < length ? bytes[whole + 1] : 0;
+    const triplet = (bytes[whole] << 16) | (second << 8);
+    output[out] = BASE64_CODES[triplet >> 18];
+    output[out + 1] = BASE64_CODES[(triplet >> 12) & 63];
+    output[out + 2] = whole + 1 < length ? BASE64_CODES[(triplet >> 6) & 63] : PADDING_CODE;
+    output[out + 3] = PADDING_CODE;
+  }
+  return new TextDecoder().decode(output);
 };
 
-/** @param {string | null | undefined} value */
+/**
+ * The one base64 encoder for resources and text tables. Engines with
+ * `Uint8Array.prototype.toBase64` encode natively; both paths give the same
+ * padded standard-alphabet text.
+ * @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value
+ */
+export const bytesToBase64 = (value) => {
+  const bytes = asBytes(value);
+  return typeof bytes.toBase64 === 'function'
+    ? bytes.toBase64()
+    : bytesToBase64Portable(bytes);
+};
+
+
+/**
+ * Decodes with `atob` in bounded chunks straight into the final buffer; it
+ * accepts and refuses what one `atob` of the whole text does.
+ * @param {string | null | undefined} value
+ */
 export const base64ToBytes = (value) => {
-  const binary = atob(String(value || ''));
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const raw = String(value || '');
+  const encoded = /[ \t\n\f\r]/.test(raw) ? raw.replace(/[ \t\n\f\r]/g, '') : raw;
+  const firstPadding = encoded.indexOf('=');
+  if (firstPadding >= 0 && firstPadding < encoded.length - 2) {
+    // Padding inside the text: the whole-text `atob` throws its own error.
+    atob(encoded);
+    throw new Error('Invalid base64 padding.');
+  }
+  const padding = encoded.length % 4 === 0
+    ? (encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0)
+    : 0;
+  const bytes = new Uint8Array(Math.max(0, Math.floor(encoded.length * 3 / 4) - padding));
+  const chunkSize = 0x10000; // A multiple of four keeps each nonfinal chunk unpadded.
+  let offset = 0;
+  for (let start = 0; start < encoded.length; start += chunkSize) {
+    const binary = atob(encoded.slice(start, start + chunkSize));
+    if (offset + binary.length > bytes.length) throw new Error('Invalid base64 length.');
+    for (let index = 0; index < binary.length; index += 1) bytes[offset + index] = binary.charCodeAt(index);
+    offset += binary.length;
+  }
+  if (offset !== bytes.length) throw new Error('Invalid base64 length.');
+  return bytes;
 };
 
 // Modern engines decode large adopted resources directly into their final

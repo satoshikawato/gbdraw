@@ -1,77 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'services'));
-await mkdir(join(tempDir, 'utils'));
-await writeFile(
-  join(tempDir, 'services', 'feature-utils.js'),
-  await readFile('gbdraw/web/js/services/feature-utils.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'feature-sequence-fasta.js'),
-  await readFile('gbdraw/web/js/services/feature-sequence-fasta.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'utils', 'i18n.js'),
-  await readFile('gbdraw/web/js/utils/i18n.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'utils', 'color-utils.js'),
-  await readFile('gbdraw/web/js/utils/color-utils.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'utils', 'named-colors.js'),
-  await readFile('gbdraw/web/js/utils/named-colors.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'genbank-header.js'),
-  await readFile('gbdraw/web/js/services/genbank-header.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'conservation-series.js'),
-  await readFile('gbdraw/web/js/services/conservation-series.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'match-sequences.js'),
-  await readFile('gbdraw/web/js/services/match-sequences.js', 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'record-source-coordinates.js'),
-  await readFile('gbdraw/web/js/services/record-source-coordinates.js', 'utf8'),
-  'utf8'
-);
-// match-sequences.js reads the region rule of record-options.js.
-for (const name of ['record-options.js', 'record-draw-selection.js']) {
-  await writeFile(join(tempDir, 'services', name), await readFile(`gbdraw/web/js/services/${name}`, 'utf8'), 'utf8');
-}
-for (const name of ['optional-positive-number.js', 'error-normalization.js', 'download-names.js']) {
-  await writeFile(
-    join(tempDir, 'utils', name),
-    await readFile(`gbdraw/web/js/utils/${name}`, 'utf8'),
-    'utf8'
-  );
-}
-await writeFile(
-  join(tempDir, 'services', 'file-content-cache.js'),
-  'export const readFileText = (file) => file.text();\n',
-  'utf8'
-);
-
-const {
+import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
   buildMatchSequenceBundle,
@@ -79,13 +8,75 @@ const {
   extractMatchedSpan,
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
-} = await import(pathToFileURL(join(tempDir, 'services', 'match-sequences.js')));
-const { readRecordSourceSpan, recordSourceInterval } = await import(
-  pathToFileURL(join(tempDir, 'services', 'record-source-coordinates.js'))
-);
+} from '../../gbdraw/web/js/services/match-sequences.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../../gbdraw/web/js/services/record-source-coordinates.js';
+import { parseSequenceRecordsFast } from '../../gbdraw/web/js/services/record-discovery.js';
+import { EXPECTED_WEB_RUNTIME_CAPABILITIES } from '../../gbdraw/web/js/services/runtime-capabilities.js';
 
-const textFile = (value) => ({ text: async () => value });
-const namedTextFile = (name, value) => ({ name, text: async () => value });
+// The restore reads Linear record files, the Circular reference and comparison genomes through the shared browser
+// sequence reader (`readParsedSequenceRecords`, once per File object) or, when it declines, the Worker's reader:
+// the loader's for record files, the ring search's comparison reader for comparison genomes. This Worker stands
+// for the two Python readers: `read_comparison_sequence_file` opens the file as utf-8-sig (a byte order mark is
+// dropped), writes `>ID` and the sequence, and names each record's ID; the loader reads the mark as content, so
+// Biopython skips the first record. Biopython names a FASTA entry without an ID '' (the browser reader record_N).
+// A file whose text contains 'malformed reply' gets a reply without its record IDs.
+const helperCalls = [];
+const bytesOf = (payload) => new Uint8Array(payload.files[0].bytes);
+const hasByteOrderMark = (bytes) => bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+const formatOf = (text) => (text.trimStart().startsWith('LOCUS') ? 'genbank' : 'fasta');
+const pythonId = ({ id, aliases }) => (aliases.length === 1 && /^record_\d+$/.test(id) ? '' : id);
+const pythonReplies = {
+  readComparisonSequence: (payload) => {
+    const text = new TextDecoder().decode(bytesOf(payload));
+    const records = parseSequenceRecordsFast(text, formatOf(text));
+    if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
+    const fasta = records.map((record) => `>${pythonId(record)}\n${record.sequence}\n`).join('');
+    if (text.includes('malformed reply')) return { fasta, format: 'fasta', recordLabel: null };
+    return { fasta, format: formatOf(text), recordLabel: null, recordIds: records.map(pythonId) };
+  },
+  readAllSequenceRecords: (payload) => {
+    const bytes = bytesOf(payload);
+    const records = parseSequenceRecordsFast(
+      new TextDecoder().decode(hasByteOrderMark(bytes) ? bytes.slice(3) : bytes), payload.format
+    ).slice(hasByteOrderMark(bytes) ? 1 : 0);
+    if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
+    return { records: records.map((record) => ({
+      id: pythonId(record), aliases: [...record.aliases], sequence: record.sequence
+    })) };
+  }
+};
+class PythonReadersWorker {
+  constructor() { this.listeners = new Set(); }
+  addEventListener(type, listener) { if (type === 'message') this.listeners.add(listener); }
+  removeEventListener(type, listener) { this.listeners.delete(listener); }
+  emit(data) { this.listeners.forEach((listener) => listener({ data })); }
+  terminate() {}
+  postMessage(message) {
+    if (message.type === 'init') {
+      queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true,
+        capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
+    } else if (message.type === 'helper') {
+      helperCalls.push(message.operation);
+      const result = pythonReplies[message.operation](message.payload);
+      queueMicrotask(() => this.emit({ type: 'helper', requestId: message.requestId, ok: true, result }));
+    }
+  }
+}
+globalThis.Worker = PythonReadersWorker;
+// The Worker client resolves its runtime assets against the page location.
+globalThis.location = { href: 'https://example.test/gbdraw/web/' };
+
+const textFile = (value) => new File([value], 'input.txt');
+const namedTextFile = (name, value) => new File([value], name);
+const byteOrderMarkFile = (name, value) => new File([new Uint8Array([0xef, 0xbb, 0xbf]), value], name);
+const REFERENCE_GB = `LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`;
+const restoredComparisons = (comparisonFiles) => buildRestoredMatchSequenceSources({
+  mode: 'circular',
+  cInputType: 'gb',
+  files: { c_gb: textFile(REFERENCE_GB), c_conservation_fastas: comparisonFiles },
+  circularConservation: { source: 'losat', series: comparisonFiles.map((_file, sourceIndex) => ({ sourceIndex })) }
+});
+const sourceRows = (sources) => sources.map(({ key, recordId, sequence }) => ({ key, recordId, sequence }));
 
 const analyzeCircularHomologyCoverage = ({
   comparisonSource,
@@ -644,4 +635,142 @@ test('uses BLAST identity rather than stale source indexes for upload companions
       { recordId: 'comparison_a', sequence: 'AAAACCCC', sourceIndex: 1 }
     ]
   );
+});
+
+// OV-1680: a restored Linear card selects its record among every record the Python reader reads. A GenBank
+// record without a sequence (a CON record) keeps its place, so `#2` names the record the drawing drew.
+test('a restored record selector counts a record without a sequence (OV-1680)', async () => {
+  const record = (name, division, body) => [
+    `LOCUS       ${name}                       8 bp    DNA     linear   ${division} 01-JAN-1980`,
+    'DEFINITION  x.', `ACCESSION   ${name}`, `VERSION     ${name}`, 'FEATURES             Location/Qualifiers',
+    body, '//'
+  ].join('\n');
+  const gb = textFile([
+    record('BBB', 'CON', 'CONTIG      join(AAA:1..8)'),
+    record('DUP', 'UNK', 'ORIGIN\n        1 aaaaaaaa'),
+    record('DUP', 'UNK', 'ORIGIN\n        1 cccccccc')
+  ].join('\n') + '\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb, region_record_id: '#2' }, { gb, region_record_id: '#1' }]
+  });
+  // Python: `#2` is the first DUP; `#1` is BBB, which has no sequence to register.
+  assert.deepEqual(sources.map(({ key, recordId, sequence }) => ({ key, recordId, sequence })), [
+    { key: 'linear:record:0', recordId: 'DUP', sequence: 'AAAAAAAA' }
+  ]);
+});
+
+// OV-1681: a restored GFF3 card's `#N` counts the records the GFF3 names, as the drawing's loader does.
+test('a restored GFF3 record selector counts the records the GFF3 names (OV-1681)', async () => {
+  const gff = namedTextFile('named.gff',
+    '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\nG2\t.\tCDS\t1\t9\t.\t+\t0\tID=c2\n');
+  const fasta = namedTextFile('extra.fasta', '>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff', linearSeqs: [{ gff, fasta, region_record_id: '#2' }]
+  });
+  assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'G2', sequence: 'ATGGGGTAA' }
+  ]);
+});
+
+// OV-1681: the automatic record of a restored GFF3 card is the first record the GFF3 names, and a card without
+// both files keeps its selector, so the other cards keep their sources.
+test('a restored GFF3 automatic record is the first record the GFF3 names (OV-1681)', async () => {
+  const gff = namedTextFile('g1-only.gff', '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n');
+  const fasta = namedTextFile('x-first.fasta', '>X\nCCCCCCCCC\n>G1\nATGAAATAA\n');
+  const automatic = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff', linearSeqs: [{ gff, fasta, region_record_id: '' }]
+  });
+  assert.deepEqual(automatic.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'G1', sequence: 'ATGAAATAA' }
+  ]);
+  const missingGff = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gff',
+    linearSeqs: [{ gff, fasta, region_record_id: 'G1' }, { gff: null, fasta, region_record_id: '#1' }]
+  });
+  assert.deepEqual(missingGff.map(({ key, recordId }) => ({ key, recordId })), [
+    { key: 'linear:record:0', recordId: 'G1' },
+    { key: 'linear:record:1', recordId: 'X' }
+  ]);
+});
+
+// OV-1599: a file that starts with a UTF-8 byte order mark is read by the Worker's all-records reader (Biopython
+// skips its first record), so a restored `#1` names the record the drawing reads, not the one the browser's text
+// decoder would read.
+test('a restored byte-order-mark file names the records the Python loader reads (OV-1599)', async () => {
+  helperCalls.splice(0);
+  const gb = byteOrderMarkFile('bom.gb', ['BOM1', 'BOM2'].map((id, index) => [
+    `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['aaaaaaaa', 'cccccccc'][index]}`, '//'
+  ].join('\n')).join('\n') + '\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb, region_record_id: '#1' }]
+  });
+  assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
+  assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'BOM2', sequence: 'CCCCCCCC' }
+  ]);
+});
+
+// The comparison genomes of a Circular drawing are the records the ring search read. The browser reads a FASTA
+// file it reads exactly, with no Worker, as before; the comparison reader the ring search uses reads the others: it
+// keeps the first record of a byte-order-mark file, reads GenBank, and names an entry without an ID ''.
+test('restored comparison genomes are the records the ring search read, byte order mark or not (OV-1599)', async () => {
+  helperCalls.splice(0);
+  const plain = await restoredComparisons([namedTextFile('plain.fasta', '>seq1 first genome\nacgtACGT\n>seq2\nTTTT\n')]);
+  assert.deepEqual(helperCalls, []);
+  assert.deepEqual(plain.slice(1).map(({ recordId, aliases, sequence }) => ({ recordId, aliases, sequence })), [
+    { recordId: 'seq1', aliases: ['seq1'], sequence: 'ACGTACGT' },
+    { recordId: 'seq2', aliases: ['seq2'], sequence: 'TTTT' }
+  ]);
+
+  const single = await restoredComparisons([byteOrderMarkFile('one.fasta', '>seq1\nACGTACGT\n')]);
+  assert.deepEqual(sourceRows(single), [
+    { key: 'circular:record:0', recordId: 'REF.1', sequence: 'AACCGGTT' },
+    { key: 'homology:comparison:0:seq1', recordId: 'seq1', sequence: 'ACGTACGT' }
+  ]);
+  assert.deepEqual(helperCalls, ['readComparisonSequence']);
+
+  const multiple = await restoredComparisons([byteOrderMarkFile('two.fasta', '>seq1\nACGTACGT\n>seq2\nTTTTCCCC\n')]);
+  assert.deepEqual(sourceRows(multiple).slice(1), [
+    { key: 'homology:comparison:0:seq1', recordId: 'seq1', sequence: 'ACGTACGT' },
+    { key: 'homology:comparison:0:seq2', recordId: 'seq2', sequence: 'TTTTCCCC' }
+  ]);
+
+  const genbank = await restoredComparisons([byteOrderMarkFile('cmp.gbk', [
+    'LOCUS       CMP 8 bp DNA', 'ACCESSION   CMP', 'VERSION     CMP.1', 'ORIGIN', '        1 ggggaaaa', '//', ''
+  ].join('\n'))]);
+  assert.deepEqual(sourceRows(genbank).slice(1), [
+    { key: 'homology:comparison:0:CMP.1', recordId: 'CMP.1', sequence: 'GGGGAAAA' }
+  ]);
+
+  helperCalls.splice(0);
+  const unnamed = await restoredComparisons([namedTextFile('unnamed.fasta', '>A\nAAAA\n>\nCCCC\n')]);
+  assert.deepEqual(helperCalls, ['readComparisonSequence']);
+  assert.deepEqual(unnamed.slice(1).map(({ recordId, sequence }) => ({ recordId, sequence })), [
+    { recordId: 'A', sequence: 'AAAA' },
+    { recordId: '', sequence: 'CCCC' }
+  ]);
+});
+
+// A comparison file the comparison reader refuses gives no sources; the reference keeps its own.
+test('a comparison file the reader refuses leaves the other restored sources', async () => {
+  const sources = await restoredComparisons([
+    textFile('not a sequence file\n'),
+    byteOrderMarkFile('reply.fasta', '>dropped malformed reply\nGGGG\n'),
+    textFile('>kept\nAAAATTTT\n')
+  ]);
+  assert.deepEqual(sourceRows(sources), [
+    { key: 'circular:record:0', recordId: 'REF.1', sequence: 'AACCGGTT' },
+    { key: 'homology:comparison:2:kept', recordId: 'kept', sequence: 'AAAATTTT' }
+  ]);
+});
+
+// The browser reader names a FASTA entry without an ID record_N; Python names it ''. Such a file goes to the Worker.
+test('a FASTA entry without an ID is read by the Python loader (OV-1599)', async () => {
+  helperCalls.splice(0);
+  const fasta = namedTextFile('bare.fasta', '>A\nAAAA\n>\nCCCC\n');
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'circular', cInputType: 'gff', files: { c_fasta: fasta }
+  });
+  assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
+  assert.deepEqual(sources.map(({ recordId }) => recordId), ['A', '']);
 });

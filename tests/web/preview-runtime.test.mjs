@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,8 +10,12 @@ const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', '
 const serviceNames = [
   'current-worker-result-source.js',
   'drawn-groups.js',
+  'card-row-marks.js',
   'file-imports.js',
   'legend-row-names.js',
+  'drawing/paint.js',
+  'drawing/slice-handle.js',
+  'json-clone.js',
   'legend-svg.js',
   'result-paint-bases.js',
   'rule-matchers.js',
@@ -25,9 +29,11 @@ const serviceNames = [
   'svg-transform.js'
 ];
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
 await Promise.all(serviceNames.map(async (name) => {
@@ -36,7 +42,7 @@ await Promise.all(serviceNames.map(async (name) => {
 }));
 
 await mkdir(join(tempDir, 'utils'), { recursive: true });
-await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'i18n.js', 'named-colors.js', 'own-entry.js', 'tsv-cell.js', 'vue-raw.js'].map(async (name) => {
+await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'i18n.js', 'named-colors.js', 'own-entry.js', 'reactivity.js', 'tsv-cell.js', 'vue-raw.js'].map(async (name) => {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');
 }));
 

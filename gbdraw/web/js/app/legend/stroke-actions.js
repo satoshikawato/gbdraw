@@ -1,5 +1,6 @@
 // @ts-check
-import { drawnLegendRowStroke, legendEntryKey, legendRowKeys } from '../../services/legend-svg.js';
+import { drawnLegendRowStroke, legendRowKeys } from '../../services/legend-svg.js';
+import { clearStrokes, legendEntryKey, setLegendStroke } from '../../services/drawing/paint.js';
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @typedef {{ caption?: unknown, originalCaption?: unknown }} StrokedLegendEntry A listed Legend row. */
 
@@ -73,10 +74,10 @@ export const createLegendStrokeActions = ({ state }) => {
     row.keys.forEach((key) => {
       // A key is free text: only an own entry is an override (OV-532).
       const existing = Object.hasOwn(drawing.legendStrokeOverrides, key) ? drawing.legendStrokeOverrides[key] : undefined;
-      drawing.legendStrokeOverrides[key] = {
+      setLegendStroke(drawing.slices.paint, key, {
         ...(existing || { ...drawnSwatchStroke(key), strokeColor: '', strokeWidth: '' }),
         [field]: value
-      };
+      });
     });
     return true;
   };
@@ -108,9 +109,9 @@ export const createLegendStrokeActions = ({ state }) => {
     if (value !== null) return updateLegendEntryStrokeColor(idx, String(value || '').trim());
     const stroked = row.keys.filter((key) => Object.hasOwn(drawing.legendStrokeOverrides[key] || {}, 'strokeColor'));
     stroked.forEach((key) => {
-      const override = drawing.legendStrokeOverrides[key];
-      delete override.strokeColor;
-      if (override.strokeWidth === undefined || override.strokeWidth === '') delete drawing.legendStrokeOverrides[key];
+      const { strokeColor: _removed, ...override } = drawing.legendStrokeOverrides[key];
+      const width = override.strokeWidth === undefined || override.strokeWidth === '';
+      setLegendStroke(drawing.slices.paint, key, width ? null : override);
     });
     return stroked.length > 0;
   };
@@ -121,7 +122,7 @@ export const createLegendStrokeActions = ({ state }) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const stroked = (rowAt(idx)?.keys || []).filter((key) => Object.hasOwn(drawing.legendStrokeOverrides, key));
-    stroked.forEach((key) => { delete drawing.legendStrokeOverrides[key]; });
+    stroked.forEach((key) => setLegendStroke(drawing.slices.paint, key, null));
     return stroked.length > 0;
   };
 
@@ -129,12 +130,7 @@ export const createLegendStrokeActions = ({ state }) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const overridesRemoved =
-      Object.keys(drawing.legendStrokeOverrides).length > 0 ||
-      Object.keys(drawing.featureStrokeOverrides).length > 0;
-    Object.keys(drawing.legendStrokeOverrides).forEach((key) => delete drawing.legendStrokeOverrides[key]);
-    Object.keys(drawing.featureStrokeOverrides).forEach((key) => delete drawing.featureStrokeOverrides[key]);
-    return overridesRemoved;
+    return clearStrokes(drawing.slices.paint);
   };
 
   return {

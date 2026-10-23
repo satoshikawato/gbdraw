@@ -12,9 +12,12 @@ import {
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { featureEditsOf } from '../../services/drawing/feature-edits.js';
+import { errorText } from '../../utils/error-text.js';
 import { joinSentences, t, tn } from '../../utils/i18n.js';
 /** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
-/** @import { FeatureOverrideDraft, FeatureRequestRecord } from '../../services/feature-placement.js' */
+/** @import { FeatureRequestRecord } from '../../services/feature-placement.js' */
+/** @import { FeatureEditsSlice } from '../../services/drawing/feature-edits.js' */
 /** @import { CanonicalFeatureOverride } from '../../contracts/request.generated.js' */
 /** @import { LabelTableInput } from './label-actions.js' */
 
@@ -53,15 +56,15 @@ export const admitFeatureOverrideTable = (result, records) => {
 // Load replaces the edits of the committed request's records, as Load Label
 // TSV replaces the label edits; edits of other records stay (R2).
 /**
- * @param {FeatureOverrideDraft} featureOverrides
+ * @param {FeatureEditsSlice} slice `drawing.slices.featureEdits`.
  * @param {Array<CanonicalFeatureOverride | FeatureOverrideDraftRow>} rows
  * @param {FeatureRequestRecord[]} records
  */
-export const replaceFeatureEdits = (featureOverrides, rows, records) => {
-  Object.values(featureOverrides).forEach((row) => {
-    if (rowBelongsToRequest(row, records)) updateFeatureOverride(featureOverrides, row, CLEARED_EDITS);
+export const replaceFeatureEdits = (slice, rows, records) => {
+  Object.values(featureEditsOf(slice).featureOverrides).forEach((row) => {
+    if (rowBelongsToRequest(row, records)) updateFeatureOverride(slice, row, CLEARED_EDITS);
   });
-  rows.forEach((row) => updateFeatureOverride(featureOverrides, row, editsOf(row)));
+  rows.forEach((row) => updateFeatureOverride(slice, row, editsOf(row)));
 };
 
 /**
@@ -102,8 +105,8 @@ export const createFeatureEditTableActions = ({
     const { text, reason } = await buildFeatureOverrideTable({
       renderRequest: committed.renderRequest, resources: committed.resources, rows, readResourceRecordCount
     });
-    if (!text) {
-      showNotice({ text: t('Cannot export feature edits: {reason}', { reason: String(reason) }), tone: 'warning' });
+    if (reason) {
+      showNotice({ text: t('Cannot export feature edits: {reason}', { reason: errorText([reason]) }), tone: 'warning' });
       return false;
     }
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
@@ -148,7 +151,7 @@ export const createFeatureEditTableActions = ({
       // A Generate that finished meanwhile names other records.
       if (getCommittedSession() !== committed || state.sessionOperationAvailability?.()) return false;
       const { rows, unmatchedRows } = admitFeatureOverrideTable(response?.result, records);
-      replaceFeatureEdits(drawing.featureOverrides, rows, records);
+      replaceFeatureEdits(drawing.slices.featureEdits, rows, records);
       await projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;

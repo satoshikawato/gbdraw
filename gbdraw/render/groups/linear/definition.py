@@ -15,9 +15,8 @@ from ....config.models.objects import ObjectsDefinitionLinearConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.numeric import compensated_sum
 from ....core.text import (
-    calculate_bbox_dimensions,
-    calculate_svg_bbox_dimensions,
     create_text_element,
+    measure_mixed_text_line,
     parse_mixed_content_text,
 )
 from ....layout.spatial import Aabb, union_aabbs
@@ -243,23 +242,14 @@ class DefinitionGroup:
         font_style: str = "normal",
     ) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for styled text."""
-        _, height = calculate_bbox_dimensions(
-            text,
+        return measure_mixed_text_line(
+            [(text, font_style)],
             style.font_family,
             style.font_size,
             self.dpi,
             font_weight=style.font_weight,
-            font_style=font_style,
+            layout_height=True,
         )
-        width, _ = calculate_svg_bbox_dimensions(
-            text,
-            style.font_family,
-            style.font_size,
-            self.dpi,
-            font_weight=style.font_weight,
-            font_style=font_style,
-        )
-        return width, height
 
     def _measure_line(self, kind: str, text: str) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for a definition line."""
@@ -277,20 +267,18 @@ class DefinitionGroup:
     ) -> tuple[float, float]:
         """Measure mixed regular/italic definition content as rendered tspans."""
         style = self._style_for_line(kind)
-        total_width = 0.0
-        max_height = 0.0
-        for part in parts:
-            part_text = part.get("text")
-            if part_text is None:
-                continue
-            width, height = self._measure_text(
-                str(part_text),
-                style=style,
-                font_style="italic" if part.get("italic") else "normal",
-            )
-            total_width += width
-            max_height = max(max_height, height)
-
+        total_width, max_height = measure_mixed_text_line(
+            (
+                (str(part_text), "italic" if part.get("italic") else "normal")
+                for part in parts
+                if (part_text := part.get("text")) is not None
+            ),
+            style.font_family,
+            style.font_size,
+            self.dpi,
+            font_weight=style.font_weight,
+            layout_height=True,
+        )
         if max_height == 0.0 and plain_text:
             _, max_height = self._measure_line(kind, plain_text)
         return total_width, max_height

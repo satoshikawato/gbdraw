@@ -24,7 +24,7 @@ import {
   serializeQualifierPriorityRules,
   serializeSpecificRules,
   withImportedBlacklistWords,
-  withImportedDefaultColors
+  importedDefaultColors
 } from './file-imports.js';
 /** @import { FileImports } from './file-imports.js' */
 import {
@@ -189,6 +189,7 @@ import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
+  getResourcePayloadIdentity,
   getResourcePayloadOwner,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
@@ -1077,10 +1078,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const encodedEntry = adoptedSource?.descriptor || entry;
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
-    const owner = getResourcePayloadOwner(entry);
-    const identity = /** @type {SessionResourceSource | null} */ (
-      getSessionResourceSource(owner)
-    )?.descriptor || owner;
+    const identity = getResourcePayloadIdentity(entry);
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
     /** @type {RawSessionResourceDescriptor} */
@@ -1267,6 +1265,42 @@ const linearSeqRecordFields = (record) => ({
 });
 
 /**
+ * The source of the drawn Linear record at `index`, its files added to `resources`: the first record that reads a
+ * file names its resource (`addFile`).
+ * @param {ResourceBuilder} resources
+ * @param {unknown} inputType `gff` for a GFF3 and FASTA pair, otherwise GenBank.
+ * @param {RequestLinearSeq} seq
+ * @param {number} index
+ * @returns {CanonicalRecord['source']}
+ */
+const linearRecordSource = (resources, inputType, seq, index) => (inputType === 'gff'
+  ? {
+      kind: 'gffFasta',
+      gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', seq.gff),
+      fastaResourceId: resources.addFile(`record-${index + 1}-fasta`, 'fasta', seq.fasta)
+    }
+  : { kind: 'genbank', resourceId: resources.addFile(`record-${index + 1}-genbank`, 'genbank', seq.gb) });
+
+/**
+ * The record-source resources the next Generate's request names for these drawn Linear cards, under the same ids
+ * (`linearRecordSource`). The descriptors hold no bytes: their payload owner is the File, which a helper stages
+ * under that id so the Generate finds its bytes and parsed records in the Worker (OV-1595). Null when a card lacks
+ * a file the request needs.
+ * @param {readonly RequestLinearSeq[]} linearSeqs The drawn cards, in request order.
+ * @param {unknown} inputType
+ * @returns {Readonly<Record<string, RawSessionResourceDescriptor>> | null}
+ */
+export const linearRecordSourceResources = (linearSeqs, inputType) => {
+  const resources = createResourceBuilder({ encode: false });
+  try {
+    linearSeqs.forEach((seq, index) => linearRecordSource(resources, inputType, seq, index));
+  } catch {
+    return null;
+  }
+  return resources.resources;
+};
+
+/**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData, resources: ResourceBuilder }} input
  */
 const buildRecords = ({ state, drawing, filesData, resources }) => {
@@ -1283,17 +1317,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     );
     /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
-      /** @type {CanonicalRecord['source']} */
-      const source = state.lInputType.value === 'gff'
-        ? {
-            kind: 'gffFasta',
-            gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', seq.gff),
-            fastaResourceId: resources.addFile(`record-${index + 1}-fasta`, 'fasta', seq.fasta)
-          }
-        : {
-            kind: 'genbank',
-            resourceId: resources.addFile(`record-${index + 1}-genbank`, 'genbank', seq.gb)
-          };
+      const source = linearRecordSource(resources, state.lInputType.value, seq, index);
       const region = linearRegionPayload(seq);
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
@@ -5715,7 +5739,7 @@ export const projectCanonicalSessionRequest = ({
   /** @type {FileImports} */
   const projectedFileImports = {};
   if (fromCardFiles && defaultColorsRef?.resourceId) {
-    projectedFileImports.d_color = withImportedDefaultColors({}, projectedDefaultColors, () => null).imported;
+    projectedFileImports.d_color = importedDefaultColors(projectedDefaultColors, () => null);
   }
   // A CLI blacklist file gives every word of the text the request holds.
   const blacklistImport = fromCardFiles && explicitBindings?.blacklist != null

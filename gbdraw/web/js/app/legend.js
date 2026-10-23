@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../state.js' */
+/** @import { DrawingState } from '../state.js' */
+/** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { SpecificRuleBuild } from '../services/specific-color-rules.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
@@ -10,9 +11,9 @@ import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal,
-  legendEntryKey,
   legendRowKeys
 } from '../services/legend-svg.js';
+import { legendEntryKey } from '../services/drawing/paint.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
 import { registeredLegendFaces } from '../services/font-store.js';
@@ -21,7 +22,7 @@ import { msg } from '../utils/i18n.js';
 /**
  * @typedef {object} LegendManagerOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(build: SpecificRuleBuild, label?: string, options?: { afterCommit?: () => void }) => Promise<any>} commitLegendRowRules
+ * @property {(build: SpecificRuleBuild, label?: string, options?: { drawing?: DrawingState, afterCommit?: () => void }) => Promise<any>} commitLegendRowRules
  *   The rule owner's write of the rule table (`commitSpecificRules`).
  *   The rule owner's commit of the specific-color rules that a Legend row edit changes (R13).
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
@@ -66,7 +67,7 @@ export const createLegendManager = ({
   // key among Python's rows (OV-294).
   /** @param {DrawingState} drawing @param {number} index */
   const rowRulesAt = (drawing, index) => {
-    /** @type {LegendEntry | undefined} */
+    /** @type {LegendRow | undefined} */
     const entry = drawing.legendEntries.value[index];
     if (!entry) return [];
     const context = displayedLegendRowContext(state, drawing);
@@ -91,12 +92,13 @@ export const createLegendManager = ({
     legendRowHasRules: (index) => rowRulesAt(state.activeDrawing(), index).some((row) => row.rules.length > 0),
     /** @param {number} index @param {string} color */
     updateLegendEntryColor: (index, color) => {
-      const rows = rowRulesAt(state.activeDrawing(), index);
+      const drawing = state.activeDrawing();
+      const rows = rowRulesAt(drawing, index);
       const rowRules = rows.flatMap((row) => row.rules);
       if (rowRules.length) {
         const legendOnly = rows.filter((row) => row.rules.length === 0).map((row) => row.key);
         return commitLegendRowRules((current, revise) => current.map(rule => (rowRules.includes(rule) ? revise(rule, { color }) : rule)), msg('Change legend color'),
-          { afterCommit: () => entryActions.writeLegendRowColor(legendOnly, color) });
+          { drawing, afterCommit: () => entryActions.writeLegendRowColor(drawing, legendOnly, color) });
       }
       return entryActions.updateLegendEntryColor(index, color);
     },

@@ -61,7 +61,7 @@ for (const parityCase of cases) {
 
 assert.deepEqual(
   cases.map((parityCase) => parityCase.name),
-  ['dock', 'overlay', 'title_stack', 'no_legend', 'canvas_growth']
+  ['dock', 'overlay', 'title_stack', 'no_legend', 'canvas_growth', 'canvas_growth_title']
 );
 
 console.log('Python and JavaScript composition runtime parity tests passed');

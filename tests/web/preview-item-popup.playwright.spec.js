@@ -169,7 +169,7 @@ test('a Legend row of color None shows empty and None; its popup Color still col
   const genome = (name) => readFileSync(resolve(__dirname, '../../examples', name), 'utf8');
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));

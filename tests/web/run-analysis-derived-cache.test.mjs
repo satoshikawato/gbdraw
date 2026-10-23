@@ -61,9 +61,19 @@ for (const appearanceOnly of [
 assert.equal(Object.hasOwn(runAnalysis, 'buildLosatDerivedPayloadCachePayload'), false);
 {
   const source = await readFile(runAnalysisPath, 'utf8');
-  assert.match(source, /\(\{ keys: proteinCacheKeys, derivedKey: derivedCacheKey \} = requireProteinLosatCacheKeys\(/);
+  // The checked reply, or the one kept for the same manifest and request (OV-1553).
+  assert.match(source, /const \{ keys, derivedKey \} = requireProteinLosatCacheKeys\(/);
+  assert.match(source, /\(\{ keys: proteinCacheKeys, derivedKey: derivedCacheKey \} = builtKeys\);/);
   assert.match(source, /getLosatDerivedCacheEntry\(\s*derivedCacheMap,\s*derivedCacheKey,/);
   assert.doesNotMatch(source, /derived-option-conformance/);
+}
+
+// OV-1566: Generate digests text with the one SHA-256 owner (byte-utils.js). Generate needs Web Crypto anyway (the
+// Worker digests every reply), so no weaker FNV key stands in for a SHA-256 one.
+{
+  const source = await readFile(runAnalysisPath, 'utf8');
+  assert.match(source, /const hashText = \(text\) => sha256Hex\(textToBytes\(text\)\);/);
+  assert.doesNotMatch(source, /fnv1a|2166136261|crypto\.subtle/);
 }
 
 // Review F3: a converter whose identity key differs from the looked-up key is

@@ -362,7 +362,7 @@ test('a 0.13.0 Gallery Session loads, and with its Custom Track Slots turned on 
   await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const adv = state.drawings.circular.adv;
+    const adv = state.drawingOf('circular').adv;
     return { enabled: adv.circular_track_slots_enabled, spacing: adv.circular_track_slots.some((slot) => Object.hasOwn(slot, 'spacing')) };
   })).toEqual({ enabled: true, spacing: false });
 });
@@ -385,9 +385,9 @@ for (const [name, resultMode, shownMode] of [
       mode: window.__GBDRAW_APP__.mode, results: (window.__GBDRAW_APP__.results || []).length
     }));
     expect(await shown()).toEqual({ mode: resultMode, results: 1 });
-    expect(await page.evaluate((mode) => window.__GBDRAW_APP__.setDiagramMode(mode), shownMode)).toEqual({ status: 'ok' });
+    expect(await page.evaluate((mode) => window.__GBDRAW_APP__.selectDrawing(mode), shownMode)).toEqual({ status: 'ok' });
     await expect.poll(shown).toEqual({ mode: shownMode, results: 0 });
-    expect(await page.evaluate((mode) => window.__GBDRAW_APP__.setDiagramMode(mode), resultMode)).toEqual({ status: 'ok' });
+    expect(await page.evaluate((mode) => window.__GBDRAW_APP__.selectDrawing(mode), resultMode)).toEqual({ status: 'ok' });
     await expect.poll(shown).toEqual({ mode: resultMode, results: 1 });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   });
@@ -704,11 +704,11 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   await expect(page.locator('[data-app-notice-announcer]')).toHaveText(/^Session loaded/);
   await generateAndWaitForResult(page);
   await expect(notice).toContainText('Session loaded');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'))).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
   await expect(notice).toHaveCount(0);
   await expect(page.locator('[data-app-notice-announcer]')).toHaveCount(1);
 
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'))).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
   const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });

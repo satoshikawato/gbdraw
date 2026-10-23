@@ -26,7 +26,7 @@ pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sessions/HmmtDNA_basic_circular.issue-469.json.gz"
 SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
-OUTPUT_SHA = "96efbd45f967ee658d8899afa88ee5af93532b225d68f681fd6d355ef21b35cb"
+OUTPUT_SHA = "e0503332f9a48545417cc75da80e57fd50af7726aa1fb46b6985995a0eb81b90"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
@@ -125,11 +125,11 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
             width = page.evaluate("""async () => {
                 const m = await import('./js/services/diagram-generation.js');
                 const helper = await m.runDiagramHelperOperation(
-                    m.DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-                    { caption: 'lazy worker reuse', fontFamily: 'Arial', fontSize: 14 });
-                return helper.result.width;
+                    m.DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+                    { features: [], rules: [], kind: 'color' });
+                return Array.isArray(helper.result.matches);
             }""")
-            assert width > 0
+            assert width is True
             assert page.evaluate("window.__GBDRAW_APP__.runAnalysis()") == {"status": "ok"}
             second = snapshot("second")
             assert second["committed"] == generated["committed"]

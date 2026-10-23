@@ -918,8 +918,15 @@ def _overlay_legend_bounds_for_collision(
     legend_measurement: LegendMeasurement,
     primary_bounds: Aabb,
     placement: LegendPlacement,
+    record_obstacles: Sequence[Aabb],
 ) -> Aabb:
-    """Return the composer's requested corner bounds before label adjustment."""
+    """Return where the composer puts a corner legend before label adjustment.
+
+    ``record_obstacles`` are the obstacles of the final plan that labels cannot
+    clear (the record and its tracks), so the predicted corner is one the final
+    plan can take; labels are left out because they move off the prediction
+    (OV-1609).
+    """
     if not placement.is_overlay:
         raise ValueError("collision bounds require an overlay legend placement")
     plan = render_stage(
@@ -929,6 +936,7 @@ def _overlay_legend_bounds_for_collision(
             primary=CompositionItem("primary", primary_bounds),
             legend=CompositionItem("legend", legend_measurement.local_bounds),
             legend_placement=placement,
+            overlay_obstacles=tuple(record_obstacles),
         ),
     )
     primary = plan.placement_for("primary")
@@ -2728,6 +2736,24 @@ def add_record_on_circular_canvas(
             for label in labels
         )
 
+    # A corner legend must also clear the record and its tracks, even when
+    # every label has moved outside and the interior has no label obstacles.
+    # The record is an obstacle whatever this record's own legend position:
+    # a grid places its legend over records drawn without one, and the Web
+    # moves a drawn legend to a corner with these obstacles. The label pass
+    # predicts the corner with it before the centre definition is drawn.
+    def record_obstacle(definition: Group | None = None) -> Aabb:
+        return _collect_circular_primary_bounds(
+            radial_layout=radial_layout,
+            canvas_config=canvas_config,
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            depth_config=depth_config,
+            overlay_obstacles=(),
+            definition_target=definition,
+        )
+
     annotation_labels, annotation_label_obstacles = place_annotation_labels()
     overlay_obstacles = (
         *_external_label_obstacles_on_canvas(precalculated_labels or (), len(gb_record.seq), canvas_config),
@@ -2759,6 +2785,7 @@ def add_record_on_circular_canvas(
             legend_measurement=legend_measurement,
             primary_bounds=source_content_bounds,
             placement=legend_placement,
+            record_obstacles=(record_obstacle(),),
         )
         if precalculated_labels:
             _resolve_label_legend_collisions(
@@ -2920,20 +2947,7 @@ def add_record_on_circular_canvas(
         overlay_obstacles=overlay_obstacles,
         definition_target=definition_target,
     )
-    # A corner legend must also clear the record and its tracks, even when
-    # every label has moved outside and the interior has no label obstacles.
-    if legend_placement.is_overlay:
-        radial_bounds = _collect_circular_primary_bounds(
-            radial_layout=radial_layout,
-            canvas_config=canvas_config,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
-            depth_config=depth_config,
-            overlay_obstacles=(),
-            definition_target=definition_target,
-        )
-        overlay_obstacles = (*overlay_obstacles, radial_bounds)
+    overlay_obstacles = (*overlay_obstacles, record_obstacle(definition_target))
     primary_targets = tuple(
         element
         for element in getattr(canvas, "elements", [])[primary_target_start:]

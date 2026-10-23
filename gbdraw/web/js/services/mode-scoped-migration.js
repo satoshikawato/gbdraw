@@ -11,7 +11,7 @@
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 // `FLAT_DRAFT_TOP_LEVEL_FIELDS`: the top-level homes that Session 46 moved into `modes`.
 import { FLAT_DRAFT_TOP_LEVEL_FIELDS, ROW_KEYED_LEGEND_SESSION_VERSION } from '../contracts/schema.generated.js';
-import { legendEntryKey } from './legend-svg.js';
+import { legendEntryKey } from './drawing/paint.js';
 import { normalizeDefaultColor, normalizePaletteColors } from '../utils/color-utils.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
 /** @import { LegendEditsUnread } from './style-overrides.js' */

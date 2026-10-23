@@ -266,11 +266,11 @@ const controlState = (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
   const { state } = await import('./js/state.js');
   return {
-    overlaps: state.drawings.circular.adv.resolve_overlaps,
+    overlaps: state.drawingOf('circular').adv.resolve_overlaps,
     input: app.cInputType,
-    prefix: state.drawings.circular.form.prefix,
+    prefix: state.drawingOf('circular').form.prefix,
     mode: app.mode,
-    labels: state.drawings.circular.form.labels_mode
+    labels: state.drawingOf('circular').form.labels_mode
   };
 });
 const historyCounts = (page) => page.evaluate(() => [
@@ -326,7 +326,12 @@ test('each discrete control change records one step for every input means and fo
   await prefix.press('End');
   await page.keyboard.type('Y');
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await expectSteps('mode button after typed text', { prefix: `${initial.prefix}XY` }, { mode: 'linear' });
+  // PD-OI-090: the mode buttons are navigation. The click ends the typed
+  // text's step in the Circular History and records no step of its own.
+  await expect.poll(() => controlState(page), { message: 'mode button after typed text' })
+    .toEqual({ ...states.at(-1), prefix: `${initial.prefix}XY`, mode: 'linear' });
+  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await expectSteps('the Circular step of the text typed before the switch', { prefix: `${initial.prefix}XY` });
 
   // Undo returns through every recorded state in reverse order.
   const undo = page.getByRole('button', { name: 'Undo', exact: true });

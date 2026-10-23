@@ -107,7 +107,11 @@ def test_fresh_process_oracles_repeat_and_measure_existing_work(tmp_path):
         outputs.append(json.loads(output.read_text()))
     assert benchmark.compare_reports(*outputs)[1] == 0
     cases = outputs[0]["cases"]
-    assert cases["cache-64"]["stages"]["cache_cycle"]["summary"]["warmParses"] == 64
+    cache = cases["cache-64"]["stages"]["cache_cycle"]["summary"]
+    # A comparison larger than the payload cache's 64 entries keeps every table: a display-only change reuses all
+    # of them, a threshold change filters again, and the next conversion replaces the hold.
+    assert (cache["coldMisses"], cache["displayOnlyHits"], cache["displayOnlyMisses"]) == (64, 64, 0)
+    assert (cache["thresholdMisses"], cache["heldTablesAfterSmaller"]) == (64, 1)
     assert cases["path-8"]["stages"]["selector"]["summary"]["paths"] == 64
     merge = cases["merge-edges"]["stages"]
     assert merge["max_conflicts_0"]["semanticSha256"] != merge["max_conflicts_1"]["semanticSha256"]

@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
-/** @import { FileImports, PriorityRuleRow } from './services/file-imports.js' */
+/** @import { FileImports } from './services/file-imports.js' */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
@@ -37,6 +37,18 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
+import { computed as typedComputed, ref as typedRef } from './utils/reactivity.js';
+import { CANVAS_SLICE } from './services/drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
+import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
+import { PALETTE_SLICE } from './services/drawing/palette.js';
+import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
+import { PAINT_SLICE } from './services/drawing/paint.js';
+import { SETTINGS_SLICE } from './services/drawing/settings.js';
+import { drawingIdOfMode } from './services/drawing-view.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -104,8 +116,12 @@ const canvasPan = reactive({ x: 0, y: 0 });
 const canvasContainerRef = ref(null);
 
 // App State
-const mode = ref('circular');
-const suppressCircularMultiRecordDefaults = ref(false);
+// The shown drawing, by its ID: `installShownDrawing` (services/config.js) is
+// its one writer. The shown mode is the shown drawing's (`drawing.mode`), so
+// nothing writes `mode`.
+/** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
+const activeDrawingId = typedRef(drawingIdOfMode('circular'));
+const mode = typedComputed(() => activeDrawing().mode);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const files = reactive({
@@ -244,20 +260,12 @@ export const createDefaultPriorityRule = () => ({
   order: 'product,gene,locus_tag'
 });
 
+// The app's palette state; a drawing's palette is its palette slice's
+// (services/drawing/palette.js).
 export const createDefaultPaletteDraftState = () => ({
-  selectedPalette: 'default',
-  currentColors: {},
   paletteInstantPreviewEnabled: false,
   appliedPaletteName: 'default',
-  appliedPaletteColors: {},
-  pendingPaletteName: '',
-  pendingPaletteColors: {}
-});
-
-export const createDefaultLabelFilterState = () => ({
-  filterMode: 'None',
-  manualBlacklist: 'hypothetical, uncharacterized, putative, unknown',
-  manualWhitelist: []
+  appliedPaletteColors: {}
 });
 
 export const createDefaultEditorDraftState = () => ({
@@ -953,33 +961,10 @@ export const sessionOperationAvailability = (
 
 /** @import { ModeProfileName } from './mode-profiles.js' */
 /** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
+/** @import { DrawingId } from './services/drawing-view.js' */
 
-/** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
-/** @import { FeatureVisibilityRuleDraft, VisibilityFeature } from './services/feature-visibility.js' */
-/** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
-/**
- * The color a Legend row records, never its identity (OV-288): one the user
- * set (a Legend color, an editor row's color, the color of a rule's row), or,
- * for a row the palette colors, the swatch the displayed Result showed when
- * its Legend list was last extracted (a Generate, a Result display, Settings
- * Reset). That can be a draft palette color, not Python's swatch, and a
- * palette, Default colors or Reset edit does not refresh it by itself. A row
- * shows `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
- * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
- */
-/**
- * A row of a drawing's Legend list. Its identity is Python's key
- * (`originalCaption`; an editor row's own caption); the caption and the
- * recorded color are display values their writers own (rename, Legend color),
- * never a row's identity or the features it reaches (OV-288).
- * @typedef {object} LegendEntry
- * @property {LegendCaption} caption
- * @property {PythonLegendKey} originalCaption
- * @property {RecordedLegendColor} color
- * @property {number} xPos
- * @property {number} yPos
- * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.
- */
+/** @import { PythonLegendKey } from './services/legend-svg.js' */
+/** @import { VisibilityFeature } from './services/feature-visibility.js' */
 
 // The drawing of a diagram mode: its settings, its editor edits, and the
 // values derived from them, under their former `state` names and kinds (a ref
@@ -990,12 +975,40 @@ export const sessionOperationAvailability = (
 // writes neither (R10). A drawing holds the complete default `form` and `adv`
 // of its mode, so every reader stays valid; its `form.legend` and
 // `adv.plot_title_position` read and write its own mode's layout slot.
+// A drawing's settings as a new drawing and Reset Settings hold them, fresh
+// on each call (services/drawing/settings.js keeps those Reset does not return).
 /** @param {DiagramMode} drawingMode */
-const createDrawingState = (drawingMode) => {
-  const form = reactive(createDefaultForm());
-  const adv = reactive(createDefaultAdv(drawingMode));
-  const layoutPreferences = reactive(createDefaultLayoutPreferences());
-  const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
+const settingsDefaults = (drawingMode) => () => ({
+  form: createDefaultForm(),
+  adv: createDefaultAdv(drawingMode),
+  losat: createDefaultLosat(),
+  losatProgram: 'blastn', // 'blastn' | 'tblastx' | 'blastp'
+  circularConservation: createDefaultCircularConservation(),
+  linearComparisonPlan: createDefaultLinearComparisonPlan(),
+  linearRecordLayoutEnabled: WEB_UX_PROFILE.linear.arrangeInRowsByDefault,
+  linearRecordGap: DEFAULT_LINEAR_RECORD_GAP_PX,
+  linearRecordRows: [],
+  recordDisplayDrafts: [],
+  recordsOff: [],
+  unmanagedConfigOverrides: {},
+  importedComparisonIntent: createImportedComparisonIntentState(),
+  layoutPreferences: createDefaultLayoutPreferences(),
+  linearTypographyLinked: true,
+  // What the Default colors and Blacklist files set, for their Remove (OV-1280).
+  fileImports: /** @type {FileImports} */ ({})
+});
+
+/**
+ * @param {DrawingId} id
+ * @param {DiagramMode} drawingMode
+ */
+const createDrawingState = (id, drawingMode) => {
+  const defaults = settingsDefaults(drawingMode);
+  const initial = defaults();
+  const form = reactive(initial.form);
+  const adv = reactive(initial.adv);
+  const layoutPreferences = reactive(initial.layoutPreferences);
+  const activeLayoutPreferences = typedComputed(() => resolveActiveLayoutPreference(
     layoutPreferences,
     drawingMode,
     form.multi_record_canvas
@@ -1014,17 +1027,17 @@ const createDrawingState = (drawingMode) => {
       updateActiveLayoutPreference(layoutPreferences, drawingMode, form.multi_record_canvas, { plotTitlePosition: value });
     }
   });
-  const losat = reactive(createDefaultLosat());
-  const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
-  const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
-  const linearRecordLayoutEnabled = ref(WEB_UX_PROFILE.linear.arrangeInRowsByDefault);
-  const linearRecordRows = reactive([]);
+  const losat = reactive(initial.losat);
+  const losatProgram = ref(initial.losatProgram);
+  const linearComparisonPlan = reactive(initial.linearComparisonPlan);
+  const linearRecordLayoutEnabled = ref(initial.linearRecordLayoutEnabled);
+  const linearRecordRows = reactive(initial.linearRecordRows);
   // The keys of the records this drawing leaves out (record-selection D-02):
   // Linear card uids or Circular source selectors `#N`
   // (services/record-draw-selection.js).
   /** @type {string[]} */
-  const recordsOff = reactive([]);
-  const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
+  const recordsOff = reactive(initial.recordsOff);
+  const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
     plan: linearComparisonPlan,
     sequences: linearSeqs,
     recordsOff,
@@ -1032,95 +1045,117 @@ const createDrawingState = (drawingMode) => {
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode
   }));
-  /** @type {FeatureVisibilityRuleDraft[]} */
-  const featureVisibilityManualRules = reactive([]);
-  const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
-  const labelFilters = createDefaultLabelFilterState();
-  return Object.freeze({
-    // Settings
+  // The settings: the controls write them; Load, History, and Reset install
+  // them whole through their slice.
+  const settings = SETTINGS_SLICE.create({
     form,
     adv,
     losat,
     losatProgram,
-    circularConservation: reactive(createDefaultCircularConservation()),
+    circularConservation: reactive(initial.circularConservation),
     linearComparisonPlan,
     linearRecordLayoutEnabled,
-    linearRecordGap: ref(DEFAULT_LINEAR_RECORD_GAP_PX),
+    linearRecordGap: ref(initial.linearRecordGap),
     linearRecordRows,
-    recordDisplayDrafts: reactive([]),
+    recordDisplayDrafts: reactive(initial.recordDisplayDrafts),
     recordsOff,
-    unmanagedConfigOverrides: reactive({}),
-    importedComparisonIntent: reactive(createImportedComparisonIntentState()),
+    unmanagedConfigOverrides: reactive(initial.unmanagedConfigOverrides),
+    importedComparisonIntent: reactive(initial.importedComparisonIntent),
     layoutPreferences,
-    linearTypographyLinked: ref(true),
-    // Editor edits
-    // Per-feature edits keyed by original-source identity (design Q4, R2):
-    // {JSON.stringify([recordKey, biologicalFeatureId]): {recordKey,
-    // biologicalFeatureId, featureVisibility, labelVisibility, labelText,
-    // labelSourceText}} (services/feature-placement.js owns the row shape).
-    featureOverrides: reactive({}),
-    featurePlacementOverrides: reactive({}),
-    featureColorOverrides: reactive({}), // {featureKey: color}
-    // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
-    featureStrokeOverrides: reactive({}),
-    featureVisibilityManualRules,
-    labelTextBulkOverrides: reactive({}), // { sourceText: text }
-    canonicalLabelOverrideRows: ref([]),
-    legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
-    deletedLegendEntries: ref([]),
-    // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
-    // off); their renames apply again when a Generate draws the row.
-    dormantLegendEntries: ref([]),
-    legendColorOverrides: reactive({}), // { caption: color }
-    // { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
-    legendStrokeOverrides: reactive({}),
-    addedLegendCaptions: ref(new Set()),
-    fileLegendCaptions: ref(new Set()),
-    manualSpecificRules: reactive([]),
-    manualPriorityRules: reactive(/** @type {PriorityRuleRow[]} */ ([])),
-    // What the Default colors and Blacklist files set, for their Remove (OV-1280).
-    fileImports: reactive(/** @type {FileImports} */ ({})),
-    filterMode: ref(labelFilters.filterMode),
-    manualBlacklist: ref(labelFilters.manualBlacklist),
-    manualWhitelist: reactive(labelFilters.manualWhitelist),
-    selectedPalette: ref(defaultPaletteDraftState.selectedPalette),
-    currentColors: ref({ ...defaultPaletteDraftState.currentColors }),
-    pendingPaletteName,
-    pendingPaletteColors: ref({ ...defaultPaletteDraftState.pendingPaletteColors }),
-    annotationSets: reactive([]),
-    orthogroupNameOverrides: reactive({}),
-    orthogroupDescriptionOverrides: reactive({}),
-    // User names of groups whose members no longer form one group, keyed by member set (D-21).
-    orthogroupDormantOverrides: reactive({}),
-    canvasPadding: reactive({ top: 0, right: 0, bottom: 0, left: 0 }),
+    linearTypographyLinked: ref(initial.linearTypographyLinked),
+    fileImports: reactive(initial.fileImports)
+  }, defaults);
+  const visibilityRules = VISIBILITY_RULES_SLICE.create();
+  const colorRules = COLOR_RULES_SLICE.create();
+  const { featureVisibilityManualRules } = visibilityRules.view;
+  const palette = PALETTE_SLICE.create();
+  const { pendingPaletteName } = palette.view;
+  const labelTables = LABEL_TABLES_SLICE.create();
+  // The editor edits a slice owns (services/drawing/): the drawing shows its
+  // view's members, and only the slice writes them, through its handle.
+  const canvas = CANVAS_SLICE.create();
+  const annotationSets = ANNOTATION_SETS_SLICE.create();
+  const groupNames = GROUP_NAMES_SLICE.create();
+  const featureEdits = FEATURE_EDITS_SLICE.create();
+  const paint = PAINT_SLICE.create();
+  return Object.freeze({
+    // Identity, constant: the drawing's key in `state.drawings` and its mode.
+    id,
+    mode: drawingMode,
+    // Settings
+    ...settings.view,
+    // Editor edits, slice by slice (services/drawing/): the visibility and
+    // color rules, the palette, the label tables, the annotation sets, the
+    // Similarity group names and dormant names keyed by member set (D-21), the
+    // canvas padding, the per-feature edits and Feature placements keyed by
+    // original-source identity (design Q4, R2), and the paint intent (R2):
+    // feature and Legend colors and strokes, and the Legend rows, with the
+    // renamed rows the last Generate did not draw (OV-120).
+    ...visibilityRules.view,
+    ...colorRules.view,
+    ...palette.view,
+    ...labelTables.view,
+    ...annotationSets.view,
+    ...groupNames.view,
+    ...canvas.view,
+    ...featureEdits.view,
+    ...paint.view,
     // Derived from the members above
     activeLayoutPreferences,
     // The Linear record cards a Generate draws, in file order (read-only; the
     // cards are project inputs that both drawings read).
     // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
-    drawnLinearSeqs: /** @type {{ readonly value: LinearSeq[] }} */ (
-      computed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff)))
-    ),
+    drawnLinearSeqs: typedComputed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff))),
     linearComparisonResolution,
-    hasLinearComparisonIntent: computed(() => linearComparisonResolution.value.hasComparisonIntent),
-    hasActiveLinearLosatIntent: computed(() => linearComparisonResolution.value.hasLosatIntent),
-    hasActiveLinearUploadIntent: computed(() => linearComparisonResolution.value.hasUploadIntent),
+    hasLinearComparisonIntent: typedComputed(() => linearComparisonResolution.value.hasComparisonIntent),
+    hasActiveLinearLosatIntent: typedComputed(() => linearComparisonResolution.value.hasLosatIntent),
+    hasActiveLinearUploadIntent: typedComputed(() => linearComparisonResolution.value.hasUploadIntent),
     // The visibility table carries rules only; per-feature edits are featureOverrides.
-    featureVisibilityRules: computed(() => featureVisibilityManualRules
+    featureVisibilityRules: typedComputed(() => featureVisibilityManualRules
       .map((rule) => normalizeFeatureVisibilityRule(rule))),
-    hasPendingPaletteDraft: computed(
+    hasPendingPaletteDraft: typedComputed(
       () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
-    )
+    ),
+    // The handles a slice's writers take.
+    slices: Object.freeze({
+      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle,
+      featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle })
   });
 };
-const circularDrawing = createDrawingState('circular');
+const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
-/** @type {Readonly<Record<DiagramMode, DrawingState>>} */
-const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState('linear') });
-/** @returns {DrawingState} */
-const activeDrawing = () => drawings[mode.value === 'linear' ? 'linear' : 'circular'];
+/**
+ * Every drawing by ID, in creation order (circular, then linear). Not reactive
+ * itself; no writer adds or removes a drawing in A.
+ * @type {ReadonlyMap<DrawingId, DrawingState>}
+ */
+const drawings = new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d]));
+/** @returns {readonly DrawingState[]} Every drawing, in creation order. */
+const drawingList = () => [...drawings.values()];
+/**
+ * The one lookup invariant: a drawing ID names a drawing.
+ * @param {DrawingId} id
+ * @returns {DrawingState}
+ */
+const drawingOf = (id) => {
+  const drawing = drawings.get(id);
+  if (!drawing) throw new Error(`Unknown drawing: ${id}`);
+  return drawing;
+};
+/**
+ * The drawing of a diagram mode: until a project holds several drawings of one
+ * mode, each mode has one, named by the mode. The one mode lookup; like
+ * `drawingOf`, it throws for a value that names no drawing. B replaces each
+ * call with `activeDrawing()` or the drawing's `DrawingId`
+ * (`tests/web/drawing-slices.test.mjs` caps the calls).
+ * @param {ModeProfileName} mode
+ * @returns {DrawingState}
+ */
+const drawingOfMode = (mode) => drawingOf(drawingIdOfMode(mode));
+/** @returns {DrawingState} The shown drawing. */
+const activeDrawing = () => drawingOf(activeDrawingId.value);
 
-export const state = {
+export const state = Object.freeze({
   processing,
   processingStatus,
   sessionSavePending,
@@ -1155,10 +1190,12 @@ export const state = {
   panStart,
   canvasPan,
   canvasContainerRef,
+  activeDrawingId,
   mode,
-  drawings,
+  drawingList,
+  drawingOf,
+  drawingOfMode,
   activeDrawing,
-  suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
   files,
@@ -1319,7 +1356,7 @@ export const state = {
   featureListState,
   filteredFeatures,
   filteredEditableLabels
-};
+});
 
 /**
  * The Web state, for a module that receives it as a parameter. A member whose

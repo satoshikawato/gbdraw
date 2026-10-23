@@ -1,4 +1,6 @@
 // @ts-check
+import { getSessionResourceSource } from './file-content-cache.js';
+
 /**
  * What owns a resource's payload bytes: the File the user chose, or another
  * object (the descriptor itself when no owner was set).
@@ -34,4 +36,16 @@ export const setResourcePayloadOwner = (descriptor, owner) => {
 export const getResourcePayloadOwner = (descriptor) => {
   const key = objectKey(descriptor);
   return (key && payloadOwners.get(key)) || key;
+};
+
+/**
+ * The object whose bytes a File, a Session resource view or a descriptor
+ * stands for: every view of one Session resource stands for its source
+ * descriptor, anything else for its payload owner.
+ * @param {object} value
+ * @returns {object}
+ */
+export const getResourcePayloadIdentity = (value) => {
+  const owner = /** @type {object} */ (getResourcePayloadOwner(value));
+  return /** @type {{ descriptor?: object } | null} */ (getSessionResourceSource(owner))?.descriptor || owner;
 };

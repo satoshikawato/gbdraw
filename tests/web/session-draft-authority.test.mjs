@@ -2,6 +2,8 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -26,6 +28,7 @@ globalThis.alert = (message) => alerts.push(String(message));
 
 installSessionImportWorker();
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildConfigData,
   buildEditorStateData,
@@ -33,15 +36,16 @@ const {
   buildOrthogroupStateData,
   buildRunStateData,
   buildUiStateData,
-  importSession,
   restoreCurrentWriterActiveConfig,
-  serializeActiveRenderFiles
-} = await import('../../gbdraw/web/js/services/config.js');
+  serializeActiveRenderFiles,
+  installShownDrawing
+} = sessionConfig;
 const {
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 const { floatSettingsSection, returnSettingsSection } = await import('../../gbdraw/web/js/services/settings-pane-state.js');
 const {
   buildCanonicalRenderRequest,
@@ -555,8 +559,8 @@ delete preservedFontSlice.config.adv.font_family;
 preservedFontSlice.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'DejaVu Serif', serif" };
 const preservedFontImport = await importPayload(preservedFontSession);
 assert.equal(preservedFontImport.status, 'ok', preservedFontImport.error?.message);
-assert.equal(state.drawings.linear.adv.font_family, "'DejaVu Serif', serif");
-assert.deepEqual({ ...state.drawings.linear.unmanagedConfigOverrides }, {});
+assert.equal(modeDrawing(state, 'linear').adv.font_family, "'DejaVu Serif', serif");
+assert.deepEqual({ ...modeDrawing(state, 'linear').unmanagedConfigOverrides }, {});
 
 const decisionRequiredSession = structuredClone(divergentSession);
 decisionRequiredSession.renderRequest.comparisons = [{
@@ -1033,7 +1037,20 @@ assert.deepEqual(
 // gbdraw...`); the service shows no native alert.
 assert.deepEqual(alerts, []);
 
-state.mode.value = 'circular';
+// D-15-47 (A2 W1): a configuration that turns the shown Circular drawing's
+// Multi-Record Canvas on keeps the single-record sides in the multi-record
+// slot, as one step of the import (no watcher, no flag).
+installShownDrawing('circular');
+modeDrawing(state, 'circular').form.multi_record_canvas = false;
+Object.assign(modeDrawing(state, 'circular').layoutPreferences.circular.single, { legend: 'right', plotTitlePosition: 'top' });
+Object.assign(modeDrawing(state, 'circular').layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+const canvasOnImport = await importPayload({ form: { multi_record_canvas: true } });
+assert.equal(canvasOnImport.status, 'legacy');
+assert.equal(modeDrawing(state, 'circular').form.multi_record_canvas, true);
+assert.deepEqual({ ...modeDrawing(state, 'circular').layoutPreferences.circular.multi }, { legend: 'right', plotTitlePosition: 'top' });
+alerts.length = 0;
+
+installShownDrawing('circular');
 state.activeDrawing().form.multi_record_canvas = false;
 state.activeDrawing().form.legend = 'left';
 state.activeDrawing().adv.plot_title_position = 'none';
@@ -1043,7 +1060,6 @@ Object.assign(state.activeDrawing().canvasPadding, { top: 7, right: 8, bottom: 9
 Object.assign(state.canvasPan, { x: 27, y: 28 });
 state.zoom.value = 1.25;
 state.skipCaptureBaseConfig.value = false;
-state.suppressCircularMultiRecordDefaults.value = true;
 state.linearReorderNotice.value = 'keep reorder notice';
 state.showRightDrawer.value = true;
 state.rightDrawerTab.value = 'legend';
@@ -1061,7 +1077,6 @@ Object.assign(state.newPriorityRule, { qualifier: 'product', priority: 7 });
 state.newColorFeat.value = 'repeat_region';
 state.newColorVal.value = '#123456';
 state.newFeatureToAdd.value = 'misc_feature';
-state.activeDrawing().fileLegendCaptions.value = new Set(['Keep file legend']);
 state.featureSearch.value = 'keep feature search';
 state.labelSearch.value = 'keep label search';
 state.selectedFeatureIds.value = new Set(['keep-feature-a', 'keep-feature-b']);
@@ -1139,23 +1154,25 @@ state.featureListScrollTop.value = 144;
 state.semanticFileWatchersSuppressed.value = true;
 
 const depthTrackUiCounts = { circular: 2 };
-const depthTracks = [
-  { label: 'Keep depth 1' },
-  { label: 'Keep depth 2' }
-];
+const keptDepthSeries = (label, color) => ({
+  label, color, height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+});
+state.activeDrawing().adv.depth_tracks.splice(0, state.activeDrawing().adv.depth_tracks.length,
+  keptDepthSeries('Keep depth 1', '#4A90E2'), keptDepthSeries('Keep depth 2', '#E45756'));
 const featureListScrollRef = { value: { scrollTop: 144 } };
 const selectedPairwiseBlockOrthogroupId = { value: 'keep-orthogroup' };
 // E1: the other mode's stashed artifact comes back by reference.
-const stashedLinearArtifact = Object.freeze({ mode: 'linear' });
-const artifactSlots = { circular: null, linear: stashedLinearArtifact };
-const displayedArtifact = Object.freeze({ mode: 'circular' });
+const stashedLinearArtifact = Object.freeze({ drawingId: 'linear' });
+const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const artifactSlots = createArtifactSlotStore();
+artifactSlots.replaceLoaded(stashedLinearArtifact);
+const displayedArtifact = Object.freeze({ drawingId: 'circular' });
 const installedArtifacts = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
   artifactSlots,
   captureDisplayedArtifact: () => displayedArtifact,
   installDisplayedArtifact: (slot) => installedArtifacts.push(slot),
   depthTrackUiCounts,
-  depthTracks,
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId
@@ -1180,7 +1197,6 @@ const rollbackState = () => ({
   semanticFileWatchersSuppressed: state.semanticFileWatchersSuppressed.value,
   sessionImportRollbackInProgress: state.sessionImportRollbackInProgress.value,
   skipCaptureBaseConfig: state.skipCaptureBaseConfig.value,
-  suppressCircularMultiRecordDefaults: state.suppressCircularMultiRecordDefaults.value,
   linearReorderNotice: state.linearReorderNotice.value,
   showRightDrawer: state.showRightDrawer.value,
   rightDrawerTab: state.rightDrawerTab.value,
@@ -1195,7 +1211,6 @@ const rollbackState = () => ({
   newColorFeat: state.newColorFeat.value,
   newColorVal: state.newColorVal.value,
   newFeatureToAdd: state.newFeatureToAdd.value,
-  fileLegendCaptions: [...state.activeDrawing().fileLegendCaptions.value],
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
   selectedFeatureIds: [...state.selectedFeatureIds.value],
@@ -1230,7 +1245,6 @@ const rollbackState = () => ({
   plotTitleDragStart: { ...state.plotTitleDragStart },
   plotTitleAutoTransform: structuredClone(state.plotTitleAutoTransform.value),
   circularDepthTrackUiCount: depthTrackUiCounts.circular,
-  depthTracks: structuredClone(depthTracks),
   featureListScrollTop: state.featureListScrollTop.value,
   featureListElementScrollTop: featureListScrollRef.value.scrollTop,
   selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
@@ -1314,14 +1328,15 @@ try {
       afterLoad: async () => {
         // The pane closes its popup while the load shows no Result.
         returnSettingsSection(state);
-        artifactSlots.linear = null;
+        artifactSlots.replaceLoaded(null);
         depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;
         selectedPairwiseBlockOrthogroupId.value = '';
-        depthTracks.splice(
+        // OV-1165: the restored document brings back the drawing's series.
+        state.activeDrawing().adv.depth_tracks.splice(
           0,
-          depthTracks.length,
+          state.activeDrawing().adv.depth_tracks.length,
           ...Array.from({ length: 5 }, (_, index) => ({
             label: `Imported depth ${index + 1}`
           }))
@@ -1344,9 +1359,9 @@ assert.equal(failedImport.status, 'error');
 assert.equal(failedImport.error.code, 'INPUT_INVALID');
 assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
-assert.strictEqual(artifactSlots.linear, stashedLinearArtifact);
+assert.deepEqual(artifactSlots.kept(), [stashedLinearArtifact]);
+assert.strictEqual(artifactSlots.kept()[0], stashedLinearArtifact);
 assert.deepEqual(installedArtifacts, [displayedArtifact]);
-assert.equal(artifactSlots.circular, null);
 assert.equal(alerts.length, 0);
 assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
@@ -1379,7 +1394,8 @@ assert.equal(state.errorLog.value,laterAlert);
 assert.deepEqual(rollbackState(),beforeLateRead);
 
 // The same sole Session owner keeps a late Save error from replacing a newer alert.
-const { exportSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession } = callerSession(sessionConfig2, state);
 let failLateSave;
 const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
   failLateSave = reject;

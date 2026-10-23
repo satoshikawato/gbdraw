@@ -4,7 +4,6 @@ import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/l
 import { t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { specificRulesFileCaptions } from './file-imports.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
@@ -62,9 +61,11 @@ import {
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   normalizeLinearPlotTitlePosition,
-  replaceLayoutPreferences,
   resolveActiveLayoutPreference,
-  restoredLayoutPreferences
+  resolveCircularLayoutPreference,
+  restoredLayoutPreferences,
+  hasStoredCircularMultiRecordLayout,
+  updateActiveLayoutPreference
 } from './layout-preferences.js';
 import {
   serializeFeatureVisibilityRules,
@@ -122,8 +123,10 @@ import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
   bytesToBase64,
+  fileDescriptorOf,
   getSessionResourceSource,
-  readFileBytes
+  readFileBytes,
+  rememberFileDescriptor
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
@@ -171,7 +174,11 @@ import {
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
-import { legendEntryKey, rekeyLegendRecords } from './legend-svg.js';
+import { rekeyLegendRecords } from './legend-svg.js';
+import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, clearSessionPaint, legendEntryKey } from './drawing/paint.js';
+import { SETTINGS_SLICE } from './drawing/settings.js';
+/** @import { SettingsSlice } from './drawing/settings.js' */
+/** @import { FeatureFill } from './drawing/paint.js' */
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
   buildValidatedProteinIdentityIndex,
@@ -262,6 +269,17 @@ import {
   unscopedDraftRows,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
+import { CANVAS_SLICE } from './drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
+import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
+import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
+import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE, clearFeatureOverrides } from './drawing/feature-edits.js';
+import { inputTypeKeyOf } from './drawing-view.js';
+/** @import { FeaturePlacementDraft } from './feature-placement.js' */
+/** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
 const { nextTick, ref } = window.Vue;
 
@@ -296,9 +314,10 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
-/** @import { ArtifactSlot } from './artifact-slot.js' */
-/** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { ArtifactSlot, LoadedArtifactSlots } from './artifact-slot.js' */
+/** @import { LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -428,6 +447,18 @@ const paletteColorsFromDefinitions = (paletteName) => {
 /** @param {unknown} source */
 const cloneStringMap = (source) => readStringMap(source).value;
 
+// A drawing's group names as a Session saves them (`config.webEdits`, the
+// History fallback's `orthogroupState`).
+/** @param {DrawingState} drawing */
+const buildGroupNamesData = (drawing) => {
+  const names = GROUP_NAMES_SLICE.capture(drawing.slices.groupNames);
+  return {
+    orthogroupNameOverrides: cloneStringMap(names.orthogroupNameOverrides),
+    orthogroupDescriptionOverrides: cloneStringMap(names.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(names.orthogroupDormantOverrides)
+  };
+};
+
 /** @param {unknown} rules */
 const normalizeFeatureVisibilityRulesForSession = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
@@ -478,28 +509,13 @@ const sanitizeExtractedFeaturesForSession = (features) => {
   return features.map((feature) => sanitizeExtractedFeatureForSession(feature));
 };
 
-/**
- * @param {Record<string, string>} target
- * @param {unknown} source
- */
-const replaceStringMap = (target, source) => {
-  Object.keys(target).forEach((key) => delete target[key]);
-  Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
-    target[key] = value;
-  });
-};
-
 
 /**
  * @param {DrawingState} drawing
  * @param {unknown} rules
  */
 const replaceQualifierPriorityRules = (drawing, rules) => {
-  drawing.manualPriorityRules.splice(
-    0,
-    drawing.manualPriorityRules.length,
-    ...readQualifierPriorityRules(rules).value
-  );
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, { manualPriorityRules: readQualifierPriorityRules(rules).value });
 };
 
 /** @param {unknown} value */
@@ -839,16 +855,12 @@ const cloneCanonicalSession = (canonical) => {
 };
 
 /**
- * @param {LinearComparisonPlan} target
- * @param {unknown} source
+ * @param {{ readonly slices: { readonly settings: SettingsSlice } }} drawing
+ * @param {unknown} source A plan, unvalidated.
  */
-const replaceLinearComparisonPlan = (target, source) => {
-  const normalized = normalizeLinearComparisonPlan(source);
-  target.mode = normalized.mode;
-  target.defaultSource = normalized.defaultSource;
-  if (!Array.isArray(target.edges)) target.edges = [];
-  target.edges.splice(0, target.edges.length, ...normalized.edges);
-};
+const installComparisonPlan = (drawing, source) => SETTINGS_SLICE.install(drawing.slices.settings, {
+  linearComparisonPlan: normalizeLinearComparisonPlan(source)
+});
 
 /** @param {unknown} plan */
 const serializeLinearComparisonPlan = (plan) => {
@@ -885,21 +897,21 @@ export const buildConfigData = (drawing) => ({
     }
   },
   losat: cloneJsonData(drawing.losat || {}),
-  colors: drawing.currentColors.value,
+  colors: PALETTE_SLICE.capture(drawing.slices.palette).currentColors,
   palette: drawing.selectedPalette.value,
-  rules: drawing.manualSpecificRules,
+  rules: COLOR_RULES_SLICE.capture(drawing.slices.colorRules).manualSpecificRules,
   qualifierPriorityRules: readQualifierPriorityRules(drawing.manualPriorityRules).value,
   filterMode: drawing.filterMode.value,
-  whitelist: drawing.manualWhitelist,
+  whitelist: LABEL_TABLES_SLICE.capture(drawing.slices.labelTables).manualWhitelist,
   blacklistText: drawing.manualBlacklist.value,
   fileImports: cloneJsonData(drawing.fileImports),
   losatProgram: drawing.losatProgram.value,
   circularConservation: drawing.circularConservation,
-  annotationSets: normalizeAnnotationSets(drawing.annotationSets),
+  annotationSets: normalizeAnnotationSets(ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets).annotationSets),
   recordDisplayDrafts: cloneJsonData(drawing.recordDisplayDrafts),
   // Written only when a record is OFF: a Session with every record ON keeps its bytes (omission = all ON).
   ...(drawing.recordsOff?.length ? { recordsOff: [...drawing.recordsOff] } : {}),
-  featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
+  featurePlacementOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
     recordGap: Number(draftLinearRecordGap(drawing.linearRecordGap.value)) || 0,
@@ -911,11 +923,7 @@ export const buildConfigData = (drawing) => ({
     drawing.importedComparisonIntent
   ),
   unmanagedConfigOverrides: cloneJsonData(drawing.unmanagedConfigOverrides || {}),
-  webEdits: {
-    orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
-    orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
-    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(drawing.orthogroupDormantOverrides)
-  }
+  webEdits: buildGroupNamesData(drawing)
 });
 
 const defaultEditorStateData = () => ({
@@ -952,29 +960,30 @@ const admittedFeatureCatalog = (catalog) => {
 };
 
 /** @param {DrawingState} drawing */
-export const buildEditorStateData = (drawing) => ({
-  legend: {
-    entries: cloneJsonArray(drawing.legendEntries.value),
-    deletedEntries: cloneJsonArray(drawing.deletedLegendEntries.value),
-    dormantEntries: cloneJsonArray(drawing.dormantLegendEntries.value),
-    originalOrder: cloneJsonArray(state.originalLegendOrder.value),
-    originalColors: cloneStringMap(state.originalLegendColors.value),
-    colorOverrides: cloneJsonObject(drawing.legendColorOverrides),
-    strokeOverrides: cloneJsonObject(drawing.legendStrokeOverrides),
-    addedCaptions: Array.from(drawing.addedLegendCaptions.value || [])
-      .map((caption) => String(caption || '').trim())
-      .filter(Boolean)
-  },
-  featureStrokes: {
-    overrides: cloneJsonObject(drawing.featureStrokeOverrides)
-  },
-  originalSvgStroke: {
-    color: state.originalSvgStroke.value?.color ?? null,
-    width: state.originalSvgStroke.value?.width ?? null
-  },
-  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
-  featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
-});
+export const buildEditorStateData = (drawing) => {
+  const paint = captureLegendPaint(drawing.slices.paint);
+  return {
+    legend: {
+      entries: paint.legendEntries,
+      deletedEntries: paint.deletedLegendEntries,
+      dormantEntries: paint.dormantLegendEntries,
+      originalOrder: cloneJsonArray(state.originalLegendOrder.value),
+      originalColors: cloneStringMap(state.originalLegendColors.value),
+      colorOverrides: paint.legendColorOverrides,
+      strokeOverrides: paint.legendStrokeOverrides,
+      addedCaptions: paint.addedLegendCaptions.map((caption) => String(caption || '').trim()).filter(Boolean)
+    },
+    featureStrokes: {
+      overrides: paint.featureStrokeOverrides
+    },
+    originalSvgStroke: {
+      color: state.originalSvgStroke.value?.color ?? null,
+      width: state.originalSvgStroke.value?.width ?? null
+    },
+    alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
+    featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
+  };
+};
 
 /**
  * The losses of a stroke override map read at `at` (a dropped entry is
@@ -1129,12 +1138,20 @@ const replacePlainObject = (target, source) => {
  */
 /** @type {ConfigCheckPort | null} */
 let unmanagedConfigOverrideValidator = null;
+// The overrides the validator accepted, by the JSON of its whole request: its
+// reply is a function of that request, so Load and every Save ask once per
+// distinct request. A refusal or a failed call is not kept; the entries are
+// bounded and belong to the port that answered them.
+const ACCEPTED_CONFIG_CHECKS_LIMIT = 16;
+/** @type {Map<string, Record<string, unknown>>} */
+const acceptedConfigChecks = new Map();
 
 /** @param {typeof unmanagedConfigOverrideValidator} validator */
 export const setUnmanagedConfigOverrideValidator = (validator) => {
   unmanagedConfigOverrideValidator = typeof validator === 'function'
     ? validator
     : null;
+  acceptedConfigChecks.clear();
 };
 
 /**
@@ -1175,13 +1192,13 @@ const checkUnmanagedConfigOverrides = async ({
   if (!unmanagedConfigOverrideValidator) {
     throw new Error('Configuration validation service is unavailable.');
   }
-  const result = await unmanagedConfigOverrideValidator({
-    mode,
-    config,
-    configOverrides: overrides,
-    managedPaths,
-    source
-  });
+  /** @type {ConfigCheckRequest} */
+  const request = { mode, config, configOverrides: overrides, managedPaths, source };
+  const requestKey = JSON.stringify(request);
+  const accepted = acceptedConfigChecks.get(requestKey);
+  if (accepted) return { overrides: cloneJsonData(accepted) };
+  const validator = unmanagedConfigOverrideValidator;
+  const result = await validator(request);
   if (result?.result?.error && typeof result.result.error === 'object') {
     return { refusal: Object.assign(new Error('Configuration validation failed.'), result.result.error) };
   }
@@ -1193,7 +1210,15 @@ const checkUnmanagedConfigOverrides = async ({
     throw new Error('Configuration validation returned an invalid preserved-settings result.');
   }
   // The cast: `isPlainObject(preserved)` above (this module's predicate is no type guard).
-  return { overrides: cloneJsonData(/** @type {Record<string, unknown>} */ (preserved)) };
+  const kept = cloneJsonData(/** @type {Record<string, unknown>} */ (preserved));
+  if (validator === unmanagedConfigOverrideValidator) {
+    acceptedConfigChecks.delete(requestKey);
+    acceptedConfigChecks.set(requestKey, kept);
+    if (acceptedConfigChecks.size > ACCEPTED_CONFIG_CHECKS_LIMIT) {
+      acceptedConfigChecks.delete(/** @type {string} */ (acceptedConfigChecks.keys().next().value));
+    }
+  }
+  return { overrides: cloneJsonData(kept) };
 };
 
 /**
@@ -1266,13 +1291,16 @@ const applyEditorArtifactData = (normalized) => {
  * @param {Record<string, any>} normalized The result of `normalizeEditorStateData`.
  */
 const applyDrawingEditorData = (drawing, normalized) => {
-  drawing.legendEntries.value = normalized.legend.entries;
-  drawing.deletedLegendEntries.value = normalized.legend.deletedEntries;
-  drawing.dormantLegendEntries.value = normalized.legend.dormantEntries;
-  replacePlainObject(drawing.legendColorOverrides, normalized.legend.colorOverrides);
-  replacePlainObject(drawing.legendStrokeOverrides, normalized.legend.strokeOverrides);
-  drawing.addedLegendCaptions.value = new Set(normalized.legend.addedCaptions);
-  replacePlainObject(drawing.featureStrokeOverrides, normalized.featureStrokes.overrides);
+  const { legend, featureStrokes } = normalized;
+  PAINT_SLICE.install(drawing.slices.paint, {
+    legendEntries: legend.entries,
+    deletedLegendEntries: legend.deletedEntries,
+    dormantLegendEntries: legend.dormantEntries,
+    legendColorOverrides: legend.colorOverrides,
+    legendStrokeOverrides: legend.strokeOverrides,
+    addedLegendCaptions: legend.addedCaptions,
+    featureStrokeOverrides: featureStrokes.overrides
+  });
 };
 
 // ---- Session 46: one drawing's slice (`modes.<m>`, PD-OI-086) ----
@@ -1290,11 +1318,10 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
   return {
     config: cloneJsonData(buildConfigData(drawing)),
     features: {
-      featureOverrides: featureOverridesForState(drawing.featureOverrides),
-      featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
-      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(drawing.featureVisibilityManualRules),
-      labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
-      labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
+      featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
+      featureColorOverrides: captureFeatureFills(drawing.slices.paint),
+      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
+      ...labelTextEditsData(drawing.slices.labelTables)
     },
     editorState: {
       legend: {
@@ -1308,9 +1335,8 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     },
     ui: {
       layoutPreferences: cloneJsonData(drawing.layoutPreferences[mode]),
-      canvasPadding: { ...drawing.canvasPadding },
-      pendingPaletteName: drawing.pendingPaletteName.value,
-      pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value),
+      canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
+      ...queuedPaletteData(drawing.slices.palette),
       linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
       selectedFeatureRecordIdx
     }
@@ -1371,11 +1397,13 @@ const applyModeSliceData = (drawing, mode, slice, {
   applyDrawingEditorData(drawing, editorState);
   const ui = isPlainObject(slice.ui) ? slice.ui : {};
   if (isPlainObject(ui.layoutPreferences)) {
-    replaceLayoutPreferences(drawing.layoutPreferences, {
+    SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
       ...cloneJsonData(drawing.layoutPreferences), [mode]: cloneJsonData(ui.layoutPreferences)
-    });
+    }) });
   }
-  if (applyCanvasPadding && ui.canvasPadding !== undefined) Object.assign(drawing.canvasPadding, readCanvasPadding(ui.canvasPadding).value);
+  if (applyCanvasPadding && ui.canvasPadding !== undefined) {
+    CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
+  }
   restorePendingPaletteFromSession(drawing, ui);
   reconcileImportedLinearTypographyLink({ adv: drawing.adv, linked: drawing.linearTypographyLinked, ui });
 };
@@ -1791,22 +1819,18 @@ const withBoundLinearRecordsOff = (config, linearSeqs) => {
 
 /** @param {DrawingState} drawing @param {Record<string, unknown>} config What `readLegacyConfigPayload` read. */
 const applyLegacyConfigPayload = (drawing, config) => {
-  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
-    drawing, /** @type {UnvalidatedFields<'multi_record_canvas'>} */ (config.form)
-  );
+  // D-15-47: a configuration that turns the shown Circular drawing's
+  // Multi-Record Canvas on keeps the single-record sides in the multi-record
+  // slot (none stored), so a later toggle stores no smart defaults.
+  const turnsCanvasOn = drawing.mode === 'circular' && drawing.id === state.activeDrawingId.value
+    && drawing.form.multi_record_canvas === false
+    && isPlainObject(config.form) && config.form.multi_record_canvas === true;
   applyConfigData(drawing, config);
+  if (turnsCanvasOn && !hasStoredCircularMultiRecordLayout(drawing.layoutPreferences)) {
+    updateActiveLayoutPreference(drawing.layoutPreferences, 'circular', true,
+      resolveCircularLayoutPreference(drawing.layoutPreferences, false));
+  }
   restorePaletteStateAfterConfigImport(drawing);
-};
-
-/**
- * @param {DrawingState} drawing
- * @param {UnvalidatedFields<'multi_record_canvas'>} incomingForm
- */
-const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
-  if (state.mode.value !== 'circular') return false;
-  if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
-  if (!Object.prototype.hasOwnProperty.call(incomingForm, 'multi_record_canvas')) return false;
-  return drawing.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
 /**
@@ -2682,7 +2706,8 @@ const buildLoadedArtifactSlot = (set, {
   const generatedLegend = readLegendPositionOfMode(ui.generatedLegendPosition, mode, 'otherModeResult.ui.generatedLegendPosition');
   repairs?.push(...generatedLegend.repairs, ...sessionUiFieldRepairs(ui, 'otherModeResult.ui'));
   return createArtifactSlot({
-    mode,
+    // The drawing of the set's mode.
+    drawing: state.drawingOfMode(mode),
     values: {
       results,
       selectedResultIndex: Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
@@ -2731,12 +2756,12 @@ const buildLoadedArtifactSlot = (set, {
  * @param {{ projected?: StoredLayoutPreferences | null }} [options] The layout projected from the committed request.
  */
 const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) => {
-  replaceLayoutPreferences(drawing.layoutPreferences, restoredLayoutPreferences(ui, {
+  SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences(restoredLayoutPreferences(ui, {
     mode: state.mode.value,
     multiRecord: Boolean(drawing.form.multi_record_canvas),
     projected,
     active: { legend: drawing.form.legend, plotTitlePosition: drawing.adv.plot_title_position }
-  }));
+  })) });
 };
 
 // The draft fields a label fit row may write: the fields of the config paths
@@ -2790,7 +2815,7 @@ export const applyLabelFitValues = (drawing, values, mode) => {
  *   settings the app wrote (`applyCapturedConfigData`).
  */
 const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true, captured = false } = {}) => {
-  const mode = drawing === state.drawings.linear ? 'linear' : 'circular';
+  const mode = drawing === state.drawingOfMode('linear') ? 'linear' : 'circular';
   // The execution settings of a Session 44 or older draft or of a request
   // projection are app-level (`state.losatExecution`); the drawing keeps the
   // search settings. A group of no object holds none.
@@ -2802,31 +2827,34 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // The stored settings' merge and readers (Load lists what they cannot restore first).
   const { arrowRatios } = installStoredSettings(drawing, data, mode, { captured });
   if (arrowRatios) Object.assign(drawing.adv, arrowRatios);
-  replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
-  drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(readRecordDisplayDrafts(data.recordDisplayDrafts).value));
-  // Omitted: every record is drawn.
-  drawing.recordsOff.splice(0, drawing.recordsOff.length, ...recordsOffReader(mode)(data.recordsOff).value);
-  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(featurePlacementsReader(mode)(data.featurePlacementOverrides).value));
-  drawing.annotationSets.splice(0, drawing.annotationSets.length, ...readAnnotationSets(data.annotationSets).value);
   const linearLayout = readPlainObject(data.linearRecordLayout).value;
-  // Omission takes the fresh default in every Session version.
-  drawing.linearRecordLayoutEnabled.value = readLinearRecordLayoutEnabled(linearLayout.enabled).value;
-  drawing.linearRecordGap.value = readLinearRecordGap(linearLayout.recordGap).value;
-  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...readLinearRecordRows(linearLayout.rows).value);
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    unmanagedConfigOverrides: readPlainObject(data.unmanagedConfigOverrides).value,
+    recordDisplayDrafts: readRecordDisplayDrafts(data.recordDisplayDrafts).value,
+    // Omitted: every record is drawn.
+    recordsOff: recordsOffReader(mode)(data.recordsOff).value,
+    // Omission takes the fresh default in every Session version.
+    linearRecordLayoutEnabled: readLinearRecordLayoutEnabled(linearLayout.enabled).value,
+    linearRecordGap: readLinearRecordGap(linearLayout.recordGap).value,
+    linearRecordRows: readLinearRecordRows(linearLayout.rows).value,
+    linearComparisonPlan: normalizeLinearComparisonPlan(data.linearComparisonPlan || createDefaultLinearComparisonPlan()),
+    losatProgram: data.losatProgram ? readLosatProgram(data.losatProgram).value : undefined
+  });
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, {
+    // The reader keeps the placement rows of this mode (the cast).
+    featurePlacementOverrides: /** @type {FeaturePlacementDraft} */ (featurePlacementsReader(mode)(data.featurePlacementOverrides).value)
+  });
+  ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: readAnnotationSets(data.annotationSets).value });
   // The record translations and alignment plan are the Linear mode's
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
-  const ownsAlignment = applyAlignment && drawing === state.drawings.linear;
+  const ownsAlignment = applyAlignment && drawing === state.drawingOfMode('linear');
   if (state.linearRecordTranslations && ownsAlignment) {
     state.linearRecordTranslations.value = cloneJsonData(readList(linearLayout.recordTranslations).value);
   }
   if (state.similarityAlignmentPlan && ownsAlignment) {
     state.similarityAlignmentPlan.value = cloneJsonData(readSimilarityAlignment(linearLayout.similarityAlignment).value);
   }
-  replaceLinearComparisonPlan(
-    drawing.linearComparisonPlan,
-    data.linearComparisonPlan || createDefaultLinearComparisonPlan()
-  );
   drawing.importedComparisonIntent.action = readImportedComparisonAction(readPlainObject(data.importedComparisonResolution).value.action).value;
   drawing.form.plot_title = String(drawing.form.plot_title || '');
   // `form.legend` and `adv.plot_title_position` are accessors over
@@ -2853,56 +2881,43 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }
-  const importedPalette = readPalette(data.palette).value;
-  if (importedPalette) drawing.selectedPalette.value = importedPalette;
+  const importedPalette = readPalette(data.palette).value || undefined;
+  const paletteName = importedPalette ?? drawing.selectedPalette.value;
   const storedColors = readPlainObject(data.colors).value;
+  // Without colors of its own, the drawing takes its palette's colors.
+  let colors = paletteColorsFromDefinitions(paletteName) || undefined;
   if (hasColorEntries(storedColors)) {
-    if (data.colorsAreOverrides) {
-      const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value) || {};
-      drawing.currentColors.value = normalizePaletteColors({
-        ...paletteColors,
-        ...normalizeColorMap(storedColors)
-      });
-    } else {
-      drawing.currentColors.value = normalizePaletteColors(normalizeColorMap(storedColors));
-    }
-  } else {
-    const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value);
-    if (paletteColors) drawing.currentColors.value = paletteColors;
+    colors = normalizePaletteColors({ ...(data.colorsAreOverrides ? colors : {}), ...normalizeColorMap(storedColors) });
   }
+  PALETTE_SLICE.install(drawing.slices.palette, { selectedPalette: importedPalette, currentColors: colors });
 
   const storedRules = readColorRules(data.rules);
   if (!storedRules.kept) {
-    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...storedRules.value);
-    drawing.fileLegendCaptions.value = specificRulesFileCaptions(storedRules.value);
+    replaceColorRules(drawing.slices.colorRules, storedRules.value);
   }
   if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
     replaceQualifierPriorityRules(drawing, data.qualifierPriorityRules);
   } else if (Object.prototype.hasOwnProperty.call(data, 'priorityRules')) {
     replaceQualifierPriorityRules(drawing, data.priorityRules);
   }
-  if (data.filterMode) drawing.filterMode.value = readFilterMode(data.filterMode).value;
   const storedWhitelist = readWhitelistRules(data.whitelist);
-  if (!storedWhitelist.kept) {
-    drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...storedWhitelist.value);
-  }
-  if (data.blacklistText !== undefined) drawing.manualBlacklist.value = readBlacklistText(data.blacklistText).value;
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
+    filterMode: data.filterMode ? readFilterMode(data.filterMode).value : undefined,
+    manualWhitelist: storedWhitelist.kept ? undefined : storedWhitelist.value,
+    manualBlacklist: data.blacklistText === undefined ? undefined : readBlacklistText(data.blacklistText).value
+  });
   // Absent before Session 48: no file's colors or words to take back (OV-1280).
-  replacePlainObject(drawing.fileImports, readFileImports(data.fileImports).value);
-  if (data.losatProgram) {
-    drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
-  }
+  SETTINGS_SLICE.install(drawing.slices.settings, { fileImports: readFileImports(data.fileImports).value });
   drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
   const webEdits = readPlainObject(data.webEdits).value;
-  if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
-    replaceStringMap(drawing.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
-  }
-  if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
-    replaceStringMap(drawing.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
-  }
-  // Absent in older Sessions: no dormant names (D-21).
-  clearObject(drawing.orthogroupDormantOverrides);
-  Object.assign(drawing.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
+  GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
+    ...(Object.hasOwn(webEdits, 'orthogroupNameOverrides')
+      ? { orthogroupNameOverrides: cloneStringMap(webEdits.orthogroupNameOverrides) } : {}),
+    ...(Object.hasOwn(webEdits, 'orthogroupDescriptionOverrides')
+      ? { orthogroupDescriptionOverrides: cloneStringMap(webEdits.orthogroupDescriptionOverrides) } : {}),
+    // Absent in older Sessions: no dormant names (D-21).
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides)
+  });
 };
 
 /**
@@ -2930,13 +2945,11 @@ const restorePaletteStateAfterConfigImport = (drawing) => {
   ) {
     state.appliedPaletteName.value = draftPaletteName;
     state.appliedPaletteColors.value = draftColors;
-    drawing.pendingPaletteName.value = '';
-    drawing.pendingPaletteColors.value = {};
+    clearQueuedPalette(drawing.slices.palette);
     return;
   }
 
-  drawing.pendingPaletteName.value = draftPaletteName;
-  drawing.pendingPaletteColors.value = draftColors;
+  queuePalette(drawing.slices.palette, draftPaletteName, draftColors);
 };
 
 // The palette the shown Result was drawn with (an artifact value), or else
@@ -2967,28 +2980,12 @@ const restorePendingPaletteFromSession = (drawing, ui = {}) => {
   const savedPendingPaletteName = pendingPaletteName(ui);
   const savedPendingPaletteColors = readPaletteColors(ui.pendingPaletteColors).value ?? draftColors;
   if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
-    drawing.pendingPaletteName.value = savedPendingPaletteName;
-    drawing.pendingPaletteColors.value = normalizePaletteColors(cloneColors(savedPendingPaletteColors));
+    queuePalette(drawing.slices.palette, savedPendingPaletteName, normalizePaletteColors(cloneColors(savedPendingPaletteColors)));
   } else {
-    drawing.pendingPaletteName.value = '';
-    drawing.pendingPaletteColors.value = {};
+    clearQueuedPalette(drawing.slices.palette);
   }
 };
 
-/**
- * @param {DrawingState} drawing
- * @param {SavedPaletteFields} [ui]
- */
-const restorePaletteStateFromSession = (drawing, ui = {}) => {
-  restoreAppliedPaletteFromSession(drawing, ui);
-  restorePendingPaletteFromSession(drawing, ui);
-};
-
-/**
- * The descriptor each file was saved or loaded as, keyed by that file.
- * @type {WeakMap<object, RawSessionResourceDescriptor>}
- */
-const serializedFileDescriptors = new WeakMap();
 /**
  * @template {RawSessionResourceDescriptor} D
  * @param {object} file A `File`, or another object whose bytes were read.
@@ -2997,8 +2994,7 @@ const serializedFileDescriptors = new WeakMap();
  */
 const cacheSerializedFileDescriptor = (file, descriptor) => {
   setResourcePayloadOwner(descriptor, file);
-  serializedFileDescriptors.set(file, descriptor);
-  return descriptor;
+  return rememberFileDescriptor(file, descriptor);
 };
 
 /**
@@ -3019,15 +3015,12 @@ const serializeFile = async (file) => {
     setResourcePayloadOwner(descriptor, file);
     return descriptor;
   }
-  // A key is an object (functions included): any other value has no entry.
-  const cached = typeof file === 'object' || typeof file === 'function'
-    ? serializedFileDescriptors.get(/** @type {object} */ (file))
-    : undefined;
+  const cached = fileDescriptorOf(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
   // `readFileBytes` resolves only for an object (or a function) with `arrayBuffer()`.
   const owner = /** @type {object} */ (file);
-  const shared = serializedFileDescriptors.get(owner);
+  const shared = fileDescriptorOf(owner);
   if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(view?.name || 'file')
@@ -3546,24 +3539,26 @@ export const applyOrthogroupStateData = (
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
 
-  replaceStringMap(drawing.orthogroupNameOverrides, orthogroupEditsOf(orthogroupState.orthogroupNameOverrides, groupIdSet).value);
-  replaceStringMap(drawing.orthogroupDescriptionOverrides,
-    orthogroupEditsOf(orthogroupState.orthogroupDescriptionOverrides, groupIdSet).value);
-  if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
-    clearObject(drawing.orthogroupDormantOverrides);
-    Object.assign(drawing.orthogroupDormantOverrides,
-      normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides));
-  }
+  GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
+    orthogroupNameOverrides: cloneStringMap(orthogroupEditsOf(orthogroupState.orthogroupNameOverrides, groupIdSet).value),
+    orthogroupDescriptionOverrides: cloneStringMap(
+      orthogroupEditsOf(orthogroupState.orthogroupDescriptionOverrides, groupIdSet).value
+    ),
+    ...(Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')
+      ? { orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides) }
+      : {})
+  });
 };
 
 /**
- * The one check that the active mode has its biological inputs; Generate and
- * Save from the draft both use it, so both explain the same missing input.
- * @param {string} [mode] The mode to check; the Generate port passes a drawing's mode as text.
+ * The one check that a drawing has its biological inputs; Generate and Save
+ * from the draft both use it, so both explain the same missing input. The
+ * caller passes the drawing it resolved.
+ * @param {{ readonly mode: string, readonly recordsOff: readonly string[] }} drawing
  */
-export const assertActiveModeInputs = (mode = state.mode.value, sourceState = state) => {
+export const assertDrawingInputs = (drawing, sourceState = state) => {
   const files = sourceState.files || {};
-  if (mode === 'circular') {
+  if (drawing.mode === 'circular') {
     const gff = sourceState.cInputType?.value === 'gff';
     if (!(gff ? files.c_gff : files.c_gb)) throw diagnosticError('INPUT_REQUIRED');
     if (gff && !files.c_fasta) throw diagnosticError('FASTA_REQUIRED');
@@ -3577,7 +3572,7 @@ export const assertActiveModeInputs = (mode = state.mode.value, sourceState = st
   });
   // Only a hand-edited Session turns every record OFF (D-06 asks first).
   if (sequences.length > 0
-    && drawnLinearSequences(sequences, sourceState.drawings?.linear?.recordsOff).length === 0) {
+    && drawnLinearSequences(sequences, drawing.recordsOff).length === 0) {
     throw diagnosticError('RECORD_SELECTION', { reason: 'NONE_DRAWN' });
   }
 };
@@ -3795,6 +3790,7 @@ const deserializeCanonicalComparisons = (
  * @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown }} canonical A Generate candidate:
  *   the request it built or projected, its resources and Web file bindings.
  * @param {{ adoptOwnedRequest?: boolean }} [options]
+ * @returns {boolean} Whether it installed the Circular drawing's ring files (a LOSAT-cache result).
  */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
@@ -3819,7 +3815,7 @@ export const adoptCanonicalRenderArtifacts = (
   /** @type {ReturnType<typeof deserializeCanonicalComparisons> | null} */
   let nextLinearComparisons = null;
   // The Circular conservation settings belong to the Circular drawing.
-  const drawing = state.drawings.circular;
+  const drawing = state.drawingOfMode('circular');
   /** @type {{
    *   blasts: any[], fastas: any[], sequenceSources: any[],
    *   projectedConservation: Record<string, any> | undefined, series: Record<string, any>[]
@@ -3885,6 +3881,7 @@ export const adoptCanonicalRenderArtifacts = (
       );
     }
   }
+  return Boolean(nextCircularState);
 };
 
 /** @returns {CanonicalRenderRequest | null} */
@@ -3901,7 +3898,7 @@ export const getCommittedCanonicalRenderRequest = () => {
  */
 export const committedLiveSettingApplies = (requestPath) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingApplies(request, requestPath, state.drawings[request.mode === 'linear' ? 'linear' : 'circular']);
+  return !request || liveSettingApplies(request, requestPath, state.drawingOfMode(request.mode));
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
@@ -4018,7 +4015,9 @@ const convertLoadedProteinResultFrames = async (version, keptSlot) => {
     });
   }
   return keptSlot && nextKept && nextKept !== kept
-    ? createArtifactSlot({ ...keptSlot, runtimeState: { ...keptSlot.runtimeState, canonical: nextKept } }) : null;
+    ? createArtifactSlot({
+      ...keptSlot, drawing: state.drawingOf(keptSlot.drawingId), runtimeState: { ...keptSlot.runtimeState, canonical: nextKept }
+    }) : null;
 };
 
 /**
@@ -4155,7 +4154,7 @@ const readFileList = (stored, path, repairs) => (Array.isArray(stored) ? stored 
  * @param {Record<string, any> | null} filesData
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
- *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>,
+ *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'> & { readonly slices: { readonly settings: SettingsSlice } },
  *   repairs?: LoadRepair[] | null, at?: string
  * }} options `repairs`: Load lists what it drops from the saved inputs, at
  *   `at`, where the inputs are in the file (`files`, `webFiles.bindings`).
@@ -4187,11 +4186,10 @@ const applyFiles = (filesData, {
 
   if (!filesData) {
     targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
-    targetDrawing.linearRecordRows.splice(0);
-    replaceLinearComparisonPlan(
-      targetDrawing.linearComparisonPlan,
-      reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs)
-    );
+    SETTINGS_SLICE.install(targetDrawing.slices.settings, {
+      linearRecordRows: [],
+      linearComparisonPlan: normalizeLinearComparisonPlan(reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs))
+    });
     return { collapsedLinearSeqs: false };
   }
 
@@ -4276,10 +4274,8 @@ const applyFiles = (filesData, {
     if (resolveRecordInputs) {
       // A saved row, unvalidated (OV-568): the lines below test each field they keep.
       const rowByUid = new Map(targetDrawing.linearRecordRows.map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => [String(entry?.uid || ''), entry]));
-      targetDrawing.linearRecordRows.splice(
-        0,
-        targetDrawing.linearRecordRows.length,
-        ...targetState.linearSeqs.map((/** @type {LinearSeq} */ seq, /** @type {number} */ index) => {
+      SETTINGS_SLICE.install(targetDrawing.slices.settings, {
+        linearRecordRows: targetState.linearSeqs.map((/** @type {LinearSeq} */ seq, /** @type {number} */ index) => {
           const saved = rowByUid.get(seq.uid);
           const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
             ? Number(saved.row) : index + 1;
@@ -4293,7 +4289,7 @@ const applyFiles = (filesData, {
               : {})
           };
         })
-      );
+      });
     }
     const comparisonFiles = new Map(
       /** @type {[string, any][]} */ ((Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
@@ -4311,18 +4307,12 @@ const applyFiles = (filesData, {
       if (file) edge.file = file;
       else setComparisonEdgeFile(edge, null);
     });
-    replaceLinearComparisonPlan(
-      targetDrawing.linearComparisonPlan,
-      reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs)
-    );
+    installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs));
     return { collapsedLinearSeqs };
   }
 
   targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
-  replaceLinearComparisonPlan(
-    targetDrawing.linearComparisonPlan,
-    reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs)
-  );
+  installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs));
   return { collapsedLinearSeqs: false };
 };
 
@@ -4436,12 +4426,10 @@ const cloneLiveFileState = (drawing) => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
   })),
-  linearRecordRows: drawing.linearRecordRows.map((/** @type {LinearRecordRow} */ entry) => ({ ...entry })),
-  linearComparisonPlan: {
-    mode: drawing.linearComparisonPlan.mode,
-    defaultSource: drawing.linearComparisonPlan.defaultSource,
-    edges: drawing.linearComparisonPlan.edges.map((/** @type {LinearComparisonEdge} */ edge) => ({ ...edge }))
-  }
+  // The settings slice is untyped (the cast): it copies the rows and plan as they are.
+  .../** @type {{ linearRecordRows: LinearRecordRow[], linearComparisonPlan: LinearComparisonPlan }} */ (
+    SETTINGS_SLICE.capture(drawing.slices.settings, ['linearRecordRows', 'linearComparisonPlan'])
+  )
 });
 
 /**
@@ -4459,8 +4447,10 @@ const restoreLiveFileState = (drawing, snapshot) => {
   state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
   Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);
   state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
-  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...snapshot.linearRecordRows);
-  replaceLinearComparisonPlan(drawing.linearComparisonPlan, snapshot.linearComparisonPlan);
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    linearRecordRows: snapshot.linearRecordRows,
+    linearComparisonPlan: normalizeLinearComparisonPlan(snapshot.linearComparisonPlan)
+  });
 };
 
 const captureSessionImportTransientState = () => ({
@@ -4468,9 +4458,6 @@ const captureSessionImportTransientState = () => ({
     state.semanticFileWatchersSuppressed.value
   ),
   skipCaptureBaseConfig: Boolean(state.skipCaptureBaseConfig.value),
-  suppressCircularMultiRecordDefaults: Boolean(
-    state.suppressCircularMultiRecordDefaults.value
-  ),
   linearReorderNotice: state.linearReorderNotice.value,
   linearFoldedSources: [...state.linearFoldedSources],
   rightDrawer: captureRightDrawerState(state),
@@ -4527,8 +4514,6 @@ const captureSessionImportTransientState = () => ({
 
 /** @param {ReturnType<typeof captureSessionImportTransientState>} snapshot */
 const restoreSessionImportTransientState = (snapshot) => {
-  state.suppressCircularMultiRecordDefaults.value =
-    snapshot.suppressCircularMultiRecordDefaults;
   state.linearReorderNotice.value = snapshot.linearReorderNotice;
   restoreFoldedLinearSources(state.linearFoldedSources, snapshot.linearFoldedSources);
   restoreRightDrawerState(state, snapshot.rightDrawer);
@@ -4598,20 +4583,16 @@ const captureDrawingImportSnapshot = (drawing) => ({
   features: buildFeatureStateData(drawing),
   editorState: buildEditorStateData(drawing),
   orthogroupState: buildOrthogroupStateData(drawing),
-  importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent),
-  fileLegendCaptions: Array.from(drawing.fileLegendCaptions.value || [])
+  importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent)
 });
 
+// Load's rollback snapshot of the store: each drawing by ID and the ID of the
+// shown one (`state.activeDrawingId`), which the rollback shows again.
 const captureSessionImportSnapshot = () => ({
-  drawings: {
-    circular: captureDrawingImportSnapshot(state.drawings.circular),
-    linear: captureDrawingImportSnapshot(state.drawings.linear)
-  },
-  // The cast: outside a Load the shown mode is a drawing's ('circular' or 'linear'), and a Load replaces
-  // the saved mode it writes first before it returns (no `await` between).
-  ui: cloneJsonData(buildUiStateData(state.drawings[/** @type {DiagramMode} */ (state.mode.value)])),
+  drawingSnapshots: new Map(state.drawingList().map((drawing) => [drawing.id, captureDrawingImportSnapshot(drawing)])),
+  shownDrawingId: state.activeDrawingId.value,
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
-  files: cloneLiveFileState(state.drawings.linear),
+  files: cloneLiveFileState(state.drawingOfMode('linear')),
   results: state.results.value,
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
@@ -4637,23 +4618,25 @@ const captureSessionImportSnapshot = () => ({
 
 /** @param {ReturnType<typeof captureSessionImportSnapshot>} snapshot */
 const restoreSessionImportSnapshot = async (snapshot) => {
-  const shownMode = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-  /** @type {Array<'circular' | 'linear'>} */
-  const restoreOrder = shownMode === 'linear' ? ['circular', 'linear'] : ['linear', 'circular'];
+  /** @param {DrawingState} drawing */
+  const savedOf = (drawing) => /** @type {ReturnType<typeof captureDrawingImportSnapshot>} */ (
+    snapshot.drawingSnapshots.get(drawing.id));
   state.sessionImportRollbackInProgress.value = true;
   try {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
-    state.mode.value = shownMode;
-    restoreOrder.forEach((drawingMode) => {
-      const drawing = state.drawings[drawingMode];
-      const saved = snapshot.drawings[drawingMode];
+    const shownDrawing = installShownDrawing(snapshot.shownDrawingId);
+    const shownUi = savedOf(shownDrawing).ui;
+    // The shown drawing last, so its app-level values win.
+    const restoreOrder = [...state.drawingList().filter((drawing) => drawing !== shownDrawing), shownDrawing];
+    restoreOrder.forEach((drawing) => {
+      const saved = savedOf(drawing);
       applyCapturedConfigData(drawing, saved.config, { resolveTrackPlacements: false });
       applyUiStateData(drawing, saved.ui);
     });
-    applyUiStateData(state.drawings[shownMode], snapshot.ui);
+    applyUiStateData(shownDrawing, shownUi);
     state.richFeaturePopup.value = snapshot.richFeaturePopup;
-    restoreLiveFileState(state.drawings.linear, snapshot.files);
+    restoreLiveFileState(state.drawingOfMode('linear'), snapshot.files);
     state.losatCache.value = snapshot.losatCache;
     state.losatDerivedCache.value = snapshot.losatDerivedCache;
     adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
@@ -4669,10 +4652,9 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       : cloneCanonicalSession(snapshot.committedCanonicalSession));
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
     state.skipCaptureBaseConfig.value = true;
-    applyResultsData(snapshot.results, snapshot.ui);
-    restoreOrder.forEach((drawingMode) => {
-      const drawing = state.drawings[drawingMode];
-      const saved = snapshot.drawings[drawingMode];
+    applyResultsData(snapshot.results, shownUi);
+    restoreOrder.forEach((drawing) => {
+      const saved = savedOf(drawing);
       Object.assign(
         drawing.importedComparisonIntent,
         createImportedComparisonIntentState(),
@@ -4681,7 +4663,6 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       applyFeatureStateData(drawing, saved.features);
       applyOrthogroupStateData(drawing, saved.orthogroupState);
       applyEditorStateData(drawing, saved.editorState, { normalized: true });
-      drawing.fileLegendCaptions.value = new Set(saved.fileLegendCaptions);
     });
     state.collinearGroups.value = snapshot.collinearGroups;
     applyRunStateData(snapshot.runState);
@@ -4697,11 +4678,18 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   }
 };
 
-/** @param {Record<string, unknown>} target */
-const clearObject = (target) => {
-  Object.keys(target).forEach((key) => {
-    delete target[key];
-  });
+// The one writer of the shown drawing (`state.activeDrawingId`); the shown
+// mode follows it. Each caller installs the drawing where it shows another
+// one: the mode transition (app/app-setup.js), a new Session's baseline,
+// Session Load and its rollback. The caller installs the drawing's artifact.
+/**
+ * @param {DrawingId} id
+ * @returns {DrawingState} The drawing it shows.
+ */
+export const installShownDrawing = (id) => {
+  const drawing = state.drawingOf(id);
+  state.activeDrawingId.value = id;
+  return drawing;
 };
 
 // Both drawings return to their defaults before a Session installs its own.
@@ -4718,8 +4706,8 @@ const resetSessionBaseline = () => {
   resetRightDrawerState(state);
   // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
   // every record its slices do not turn OFF (PD-OI-091).
-  for (const drawing of Object.values(state.drawings)) drawing.recordsOff.splice(0);
-  state.mode.value = 'circular';
+  for (const drawing of state.drawingList()) SETTINGS_SLICE.install(drawing.slices.settings, { recordsOff: [] });
+  installShownDrawing(state.drawingOfMode('circular').id);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.sessionTitle.value = '';
@@ -4735,7 +4723,7 @@ const resetSessionBaseline = () => {
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
-  applyFiles(null, { targetDrawing: state.drawings.linear });
+  applyFiles(null, { targetDrawing: state.drawingOfMode('linear') });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
@@ -4751,19 +4739,13 @@ const resetSessionBaseline = () => {
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
-  Object.values(state.drawings).forEach((/** @type {DrawingState} */ drawing) => {
-    Object.assign(drawing.importedComparisonIntent, createImportedComparisonIntentState());
-    clearObject(drawing.orthogroupNameOverrides);
-    clearObject(drawing.orthogroupDescriptionOverrides);
-    clearObject(drawing.orthogroupDormantOverrides);
-    clearObject(drawing.featureColorOverrides);
-    drawing.featureVisibilityManualRules.splice(0);
-    clearObject(drawing.featureOverrides);
-    clearObject(drawing.featureStrokeOverrides);
-    drawing.canonicalLabelOverrideRows.value = [];
-    clearObject(drawing.labelTextBulkOverrides);
-    drawing.legendEntries.value = [];
-    drawing.dormantLegendEntries.value = [];
+  state.drawingList().forEach((/** @type {DrawingState} */ drawing) => {
+    SETTINGS_SLICE.install(drawing.slices.settings, { importedComparisonIntent: createImportedComparisonIntentState() });
+    GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
+    VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
+    clearFeatureOverrides(drawing.slices.featureEdits);
+    clearLabelTextEdits(drawing.slices.labelTables);
+    clearSessionPaint(drawing.slices.paint);
   });
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
@@ -4794,7 +4776,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
   const ui = {
     title: String(state.sessionTitle.value || ''),
     mode: state.mode.value,
-    canvasPadding: { ...drawing.canvasPadding },
+    canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
     selectedResultIndex: state.selectedResultIndex.value,
     generatedLegendPosition: state.generatedLegendPosition.value,
     generatedMode: state.generatedMode.value,
@@ -4817,8 +4799,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     losatExecution: buildLosatExecutionData(),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-    pendingPaletteName: drawing.pendingPaletteName.value,
-    pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value),
+    ...queuedPaletteData(drawing.slices.palette),
     legendCurrentOffset: { ...state.legendCurrentOffset },
     diagramOffset: { ...state.diagramOffset },
     lengthBarUserOffset: { ...state.lengthBarUserOffset },
@@ -4830,34 +4811,44 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
   return ui;
 };
 
-// `mode` is not restored here: History restores run the mode transition
-// first, and Session rollback sets it with the restored document.
-/**
- * @param {DrawingState} drawing
- * @param {SavedUiFields} [ui] What `buildUiStateData` wrote (History, the Load rollback).
- * @param {{ restorePreviewNavigation?: boolean }} [options]
- */
-export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
+// The Session-level values of `buildUiStateData`, which no drawing owns; each
+// one present is written (History's project stream restores them, R15-23).
+/** @param {SavedUiFields} ui */
+export const applySessionUiData = (ui) => {
   if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
-  if (ui.cInputType) state.cInputType.value = ui.cInputType;
-  if (ui.lInputType) state.lInputType.value = ui.lInputType;
-  if (ui.losatProgram) {
-    const program = String(ui.losatProgram);
-    drawing.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
-  }
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
-  state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
-  reconcileImportedLinearTypographyLink({
-    adv: drawing.adv,
-    linked: drawing.linearTypographyLinked,
-    ui
-  });
-  state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
+  if (Object.hasOwn(ui, 'autoLabelReflow')) state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+  if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
   // The cast: a plain object, and every field of the type is an optional unknown.
   if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
   if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
     state.featurePanelTab.value = ui.featurePanelTab;
   }
+};
+
+// `mode` is not restored here: History restores run the mode transition
+// first, and Session rollback sets it with the restored document.
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedUiFields} [ui] What `buildUiStateData` wrote (History, the Load rollback).
+ * @param {{ restorePreviewNavigation?: boolean, artifact?: boolean }} [options] `artifact: false`: the
+ *   drawing is not shown, so its artifact slot values (the applied palette) are its slot's, not the displayed
+ *   artifact's; History writes them there (OV-1168).
+ */
+export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true, artifact = true } = {}) => {
+  applySessionUiData(ui);
+  // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
+  const inputType = inputTypeKeyOf(drawing);
+  if (ui[inputType]) state[inputType].value = ui[inputType];
+  if (ui.losatProgram) {
+    const program = String(ui.losatProgram);
+    SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
+  }
+  reconcileImportedLinearTypographyLink({
+    adv: drawing.adv,
+    linked: drawing.linearTypographyLinked,
+    ui
+  });
 
   if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
   if (ui.generatedLegendPosition) {
@@ -4874,7 +4865,8 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
   }
 
-  restorePaletteStateFromSession(drawing, ui);
+  if (artifact) restoreAppliedPaletteFromSession(drawing, ui);
+  restorePendingPaletteFromSession(drawing, ui);
   restoreLayoutPreferences(drawing, ui);
 
   if (ui.legendCurrentOffset) {
@@ -4894,7 +4886,7 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
     state.plotTitleUserOffset.y = Number(ui.plotTitleUserOffset.y) || 0;
   }
 
-  if (ui.canvasPadding) Object.assign(drawing.canvasPadding, readCanvasPadding(ui.canvasPadding).value);
+  if (ui.canvasPadding) CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
   if (restorePreviewNavigation) {
     if (ui.canvasPan) {
       state.canvasPan.x = Number(ui.canvasPan.x) || 0;
@@ -4954,11 +4946,10 @@ export const buildFeatureStateData = (drawing) => ({
   biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
-  featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
-  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(drawing.featureVisibilityManualRules),
-  featureOverrides: featureOverridesForState(drawing.featureOverrides),
-  labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
-  labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
+  featureColorOverrides: captureFeatureFills(drawing.slices.paint),
+  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
+  featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
+  ...labelTextEditsData(drawing.slices.labelTables)
 });
 
 // The catalog features of the shown Result (artifact values).
@@ -4998,24 +4989,26 @@ export const applyFeatureStateData = (drawing, features = {}) => {
  */
 const applyDrawingFeatureData = (drawing, features = {}) => {
   // The readers Load lists what they cannot restore with (`sliceFieldRepairs`).
-  replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(readFeatureColorEdits(features.featureColorOverrides).value));
-  drawing.featureVisibilityManualRules.splice(
-    0,
-    drawing.featureVisibilityManualRules.length,
-    ...normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
-  );
-  replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
-  drawing.canonicalLabelOverrideRows.value = cloneJsonData(readLabelOverrideRows(features.labelOverrideRows).value);
-  replacePlainObject(drawing.labelTextBulkOverrides, readStringMap(features.labelTextBulkOverrides).value);
+  PAINT_SLICE.install(drawing.slices.paint, {
+    // The edits the reader kept hold a color (`readCommittedPaint`): feature fills.
+    featureColorOverrides: /** @type {Record<string, FeatureFill>} */ (readFeatureColorEdits(features.featureColorOverrides).value)
+  });
+  VISIBILITY_RULES_SLICE.install(drawing.slices.visibilityRules, {
+    featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
+  });
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: featureOverridesForState(features.featureOverrides) });
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
+    // The rows the reader kept are label table rows.
+    canonicalLabelOverrideRows: /** @type {StoredLabelOverrideRow[]} */ (readLabelOverrideRows(features.labelOverrideRows).value),
+    labelTextBulkOverrides: readStringMap(features.labelTextBulkOverrides).value
+  });
 };
 
 /** @param {DrawingState} drawing */
 export const buildOrthogroupStateData = (drawing) => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(toRaw(state.orthogroups.value)) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-  orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
-  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(drawing.orthogroupDormantOverrides)
+  ...buildGroupNamesData(drawing)
 });
 
 export const buildRunStateData = () => ({
@@ -5105,9 +5098,9 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
-// E1: one mode's generated artifact as Save reads it: the installed artifact
-// of the displayed mode, or the other mode's slot, which the composition root
-// keeps while that mode is not shown.
+// E1: one drawing's generated artifact as Save reads it: the installed
+// artifact of the shown drawing, or the slot of a drawing not shown, which
+// the composition root keeps. `mode` is the artifact's diagram mode.
 /**
  * @typedef {Readonly<Record<string, any>> & {
  *   mode: 'circular' | 'linear',
@@ -5130,7 +5123,7 @@ const displayedArtifactView = () => Object.freeze({
 const stashedArtifactView = (slot) => Object.freeze({
   ...slot.values,
   originalLegendOrder: slot.legendInventory,
-  mode: slot.mode,
+  mode: state.drawingOf(slot.drawingId).mode,
   committedCanonicalSession: slot.runtimeState?.canonical?.committedCanonicalSession ?? null,
   activeSessionResourceTable: slot.runtimeState?.canonical?.activeSessionResourceTable ?? null
 });
@@ -5138,11 +5131,13 @@ const stashedArtifactView = (slot) => Object.freeze({
 const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
 // Save writes every Result (Owner, 2026-10-07). The top level holds the shown
 // mode's set when it has a Result, otherwise the other mode's set;
-// `otherModeResult` holds the remaining set only when it has a Result.
-/** @param {Readonly<ArtifactSlot> | null} otherSlot */
-const chooseSessionArtifacts = (otherSlot) => {
+// `otherModeResult` holds the remaining set only when it has a Result. A
+// Session holds one set per mode: the other set is the kept artifact of a
+// drawing of the other mode.
+/** @param {readonly Readonly<ArtifactSlot>[]} keptSlots The kept artifacts of the drawings not shown. */
+const chooseSessionArtifacts = (keptSlots) => {
   const displayed = displayedArtifactView();
-  const other = otherSlot && otherSlot.mode !== displayed.mode ? stashedArtifactView(otherSlot) : null;
+  const other = keptSlots.map(stashedArtifactView).find((view) => view.mode !== displayed.mode) ?? null;
   if (!other || !artifactHasResult(other)) return { artifact: displayed, otherArtifact: null };
   if (!artifactHasResult(displayed)) return { artifact: other, otherArtifact: null };
   return { artifact: displayed, otherArtifact: other };
@@ -5399,7 +5394,7 @@ const exportSessionDocument = async (
       omitUnsourcedDepth: true
     });
   }
-  const canonical = await assembleSessionResources(state, committed, state.drawings.linear, other?.committed ?? null);
+  const canonical = await assembleSessionResources(state, committed, state.drawingOfMode('linear'), other?.committed ?? null);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   if (other) {
     await validateSimilarityAlignmentResetReceipt(other.editorState.alignmentResetReceipt, {
@@ -5549,8 +5544,9 @@ const importSessionDocument = async (e, options = {}) => {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure
       // rolls back (OV-710); its History is not restarted.
-      const legacyMode = state.mode.value === 'linear' ? 'linear' : 'circular';
-      const legacyConfig = readLegacyConfigPayload(parsed, state.drawings[legacyMode], legacyMode);
+      const legacyDrawing = /** @type {SessionLoadOptions} */ (options).shownDrawing();
+      const legacyMode = legacyDrawing.mode;
+      const legacyConfig = readLegacyConfigPayload(parsed, legacyDrawing, legacyMode);
       const legacyRepairs = [...legacyConfig.repairs];
       const legacyOverrides = readPlainObject(legacyConfig.value.unmanagedConfigOverrides).value;
       if (Object.keys(legacyOverrides).length > 0) {
@@ -5568,7 +5564,7 @@ const importSessionDocument = async (e, options = {}) => {
         rollbackExtensionSnapshot = rollbackStateExtension.capture();
       }
       commitStarted = true;
-      applyLegacyConfigPayload(state.drawings[legacyMode], legacyConfig.value);
+      applyLegacyConfigPayload(legacyDrawing, legacyConfig.value);
       return { status: 'legacy', repairs: Object.freeze(legacyRepairs) };
     }
 
@@ -5674,14 +5670,21 @@ const importSessionDocument = async (e, options = {}) => {
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     // Where the input files are in the file.
     const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';
+    // The Linear record layout `applyFiles` reconciles, in a settings slice of
+    // its own until the Load commits it. Read as the drawing reads them (a
+    // list of another kind failed the Load).
+    const candidateLayout = SETTINGS_SLICE.create({
+      linearRecordRows: readLinearRecordRows(linearDraftConfig?.linearRecordLayout?.rows).value,
+      linearComparisonPlan: normalizeLinearComparisonPlan(linearDraftConfig?.linearComparisonPlan)
+    });
     const candidateFiles = {
       // `applyFiles` fills the file slots.
       files: /** @type {Record<string, unknown>} */ ({}), linearSeqs: [], circularRecordList: { value: [] },
       circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
       cInputType: { value: inputTypes.cInputType },
-      // Read as the drawing reads them (a list of another kind failed the Load).
-      linearRecordRows: readLinearRecordRows(linearDraftConfig?.linearRecordLayout?.rows).value,
-      linearComparisonPlan: normalizeLinearComparisonPlan(linearDraftConfig?.linearComparisonPlan)
+      linearRecordRows: candidateLayout.view.linearRecordRows,
+      linearComparisonPlan: candidateLayout.view.linearComparisonPlan,
+      slices: { settings: candidateLayout.handle }
     };
     recordSessionLifecycleEvent('session-candidate-files-start');
     const { collapsedLinearSeqs } = applyFiles(
@@ -6354,7 +6357,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
-    if (ui.mode) state.mode.value = ui.mode;
+    if (ui.mode) installShownDrawing(state.drawingOfMode(candidateMode).id);
     state.cInputType.value = inputTypes.cInputType;
     state.lInputType.value = inputTypes.lInputType;
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
@@ -6371,20 +6374,17 @@ const importSessionDocument = async (e, options = {}) => {
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
     state.generatedCircularPlotTitlePosition.value = readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value;
 
-    state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
-      state.drawings.circular,
-      modeConfigs.circular.form
-    );
     // Each drawing over its mode's defaults (resetSessionBaseline); the shown
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
-    for (const mode of SLICE_MODES) {
+    for (const drawing of state.drawingList()) {
+      const { mode } = drawing;
       // The committed mode's slice takes its request's per-feature edits where
       // it has none (OV-220).
       const features = mode === generatedMode && canonicalSession && !settingsOnly
         ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
-      applyModeSliceData(state.drawings[mode], mode, {
+      applyModeSliceData(drawing, mode, {
         ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
       }, {
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(mode),
@@ -6396,8 +6396,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
     preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
-    state.mode.value = displayMode;
-    const shownDrawing = state.drawings[displayMode];
+    const shownDrawing = installShownDrawing(state.drawingOfMode(displayMode).id);
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
       state.linearRecordTranslations.value = cloneJsonData(
@@ -6415,17 +6414,17 @@ const importSessionDocument = async (e, options = {}) => {
     // 27-44 keeps one set, read once, which both drawings take.
     if (modeScopedSession) {
       if (projectedLayout && !isPlainObject(modeSlices[generatedMode].ui?.layoutPreferences)) {
-        const drawingOfCommit = state.drawings[generatedMode];
-        replaceLayoutPreferences(drawingOfCommit.layoutPreferences, {
+        const drawingOfCommit = state.drawingOfMode(generatedMode);
+        SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
           ...cloneJsonData(drawingOfCommit.layoutPreferences),
           [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
-        });
+        }) });
       }
     } else {
-      SLICE_MODES.forEach((mode) => restoreLayoutPreferences(state.drawings[mode], ui, { projected: projectedLayout }));
+      state.drawingList().forEach((drawing) => restoreLayoutPreferences(drawing, ui, { projected: projectedLayout }));
     }
 
-    restoreLiveFileState(state.drawings.linear, {
+    restoreLiveFileState(state.drawingOfMode('linear'), {
       files: candidateFiles.files,
       linearSeqs: candidateFiles.linearSeqs,
       circularRecordList: candidateFiles.circularRecordList.value,
@@ -6440,16 +6439,16 @@ const importSessionDocument = async (e, options = {}) => {
     );
     // The comparisons are the Linear drawing's.
     restoreImportedComparisonIntent(
-      state.drawings.linear.importedComparisonIntent,
+      state.drawingOfMode('linear').importedComparisonIntent,
       comparisonClassification,
       linearDraftConfig?.importedComparisonResolution
     );
     if (!settingsOnly) {
-      SLICE_MODES.forEach((mode) => reconcileDepthTrackStateAfterSessionFiles(state.drawings[mode], mode));
+      state.drawingList().forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(drawing, drawing.mode));
     }
     if (canonicalSession) {
       applyLosatCache(
-        state.drawings.linear,
+        state.drawingOfMode('linear'),
         projectionResult.artifactState.losatCache?.entries,
         projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
         {
@@ -6468,7 +6467,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        state.drawings.linear,
+        state.drawingOfMode('linear'),
         /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries,
         legacyArtifacts?.proteinRawCandidates
       );
@@ -6499,7 +6498,7 @@ const importSessionDocument = async (e, options = {}) => {
 
     // Group names are the Linear drawing's (Session 46 `webEdits`).
     applyOrthogroupStateData(
-      state.drawings.linear,
+      state.drawingOfMode('linear'),
       loadedOrthogroupState,
       {
         legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
@@ -6508,7 +6507,7 @@ const importSessionDocument = async (e, options = {}) => {
     );
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(generatedMode)) });
     if (legacyFeatureRecoveryPlan) {
-      applySessionFeatureRecoveryPlan(state.drawings[generatedMode], legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+      applySessionFeatureRecoveryPlan(state.drawingOfMode(generatedMode), legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
 
     let desiredResultIndex = (
@@ -6536,7 +6535,7 @@ const importSessionDocument = async (e, options = {}) => {
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
     // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
-    /** @type {((slots: { opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }) => void) | undefined} */
+    /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
     {
       installLoadedArtifactSlots?.(opensOtherSet
@@ -6565,7 +6564,9 @@ const importSessionDocument = async (e, options = {}) => {
     }
 
     const shownPadding = modeSlices[displayMode].ui?.canvasPadding;
-    if (shownPadding !== undefined) Object.assign(shownDrawing.canvasPadding, readCanvasPadding(shownPadding).value);
+    if (shownPadding !== undefined) {
+      CANVAS_SLICE.install(shownDrawing.slices.canvas, { canvasPadding: readCanvasPadding(shownPadding).value });
+    }
     if (ui.canvasPan) {
       state.canvasPan.x = ui.canvasPan.x || 0;
       state.canvasPan.y = ui.canvasPan.y || 0;
@@ -6622,7 +6623,7 @@ const importSessionDocument = async (e, options = {}) => {
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
-      comparisonDisposition: state.drawings.linear.importedComparisonIntent.disposition
+      comparisonDisposition: state.drawingOfMode('linear').importedComparisonIntent.disposition
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
@@ -6683,20 +6684,23 @@ export const disposeSessionOperations = () => {
   state.sessionImportPending.value = false;
 };
 
+// `options.shownDrawing` returns the drawing shown at the time Save reads it
+// (the caller resolves it; a service never does);
 // `options.availability` is the Save and Load availability the composition
 // root composes from `sessionOperationAvailability` and the edits still
 // applying (R13); `options.recordDisplayRows` are the record display rows of
 // both drawings' sources, on which Save writes their drafts;
-// `options.readOtherModeArtifact` returns the other mode's artifact slot that
-// the root keeps (E1), `options.beforeExport` learns whether Save projects
+// `options.readKeptArtifacts` returns the artifact slots the root keeps for
+// the drawings not shown (E1), `options.beforeExport` learns whether Save projects
 // the draft request, and `options.onSaved` runs once the download is handed off.
 /**
  * What the composition root passes to `exportSession`.
  * @typedef {object} SessionSaveOptions
+ * @property {() => DrawingState} shownDrawing
  * @property {(operation: 'save' | 'load') => SessionBusy | null} [availability]
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]
- * @property {() => Readonly<ArtifactSlot> | null} [readOtherModeArtifact]
+ * @property {() => readonly Readonly<ArtifactSlot>[]} [readKeptArtifacts]
  * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
@@ -6705,10 +6709,10 @@ export const disposeSessionOperations = () => {
  */
 
 /**
- * @param {string | null} [titleOverride]
- * @param {SessionSaveOptions} [options]
+ * @param {string | null} titleOverride
+ * @param {SessionSaveOptions} options
  */
-export const exportSession = (titleOverride = null, options = {}) => {
+export const exportSession = (titleOverride = null, options) => {
   if (sessionSaveInFlight) {
     recordSessionLifecycleEvent('session-save-joined');
     return sessionSaveInFlight.promise;
@@ -6732,36 +6736,36 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // Only mutable draft configuration/navigation is copied. Adopted biological
     // payloads, resources, catalogs, caches and Results retain their existing owner.
     // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
-    // Features-list record is the shown Result's. `drawing` is the shown mode's.
-    // The cast: outside a Load the shown mode is a drawing's (see `captureSessionImportSnapshot`).
-    const drawing = state.drawings[/** @type {DiagramMode} */ (state.mode.value)];
+    // Features-list record is the shown Result's. `drawing` is the shown one,
+    // which the caller resolves.
+    const drawing = options.shownDrawing();
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
     const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];
-    /** @param {'circular' | 'linear'} mode @returns {DrawingState} */
-    const savedDrawing = (mode) => {
-      const live = state.drawings[mode];
+    /** @type {DrawingState[]} */
+    const savedDrawings = state.drawingList().map((live) => {
       const drafts = bindRecordDisplayDrafts(live.recordDisplayDrafts, recordDisplayRows);
       return drafts === live.recordDisplayDrafts ? live : { ...live, recordDisplayDrafts: drafts };
-    };
+    });
     // Each drawing is checked as it is, before the JSON copy, so a value JSON
     // cannot write (Infinity, NaN) fails Save instead of being written as null.
-    SLICE_MODES.forEach((mode) => validateCurrentWriterActiveConfig({
-      mode, storedConfig: buildConfigData(savedDrawing(mode))
+    savedDrawings.forEach((saved) => validateCurrentWriterActiveConfig({
+      mode: saved.mode, storedConfig: buildConfigData(saved)
     }));
-    /** @param {'circular' | 'linear'} mode */
-    const sliceOf = (mode) => buildModeSliceData(savedDrawing(mode), mode, {
-      selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+    /** @type {Partial<Record<DiagramMode, ReturnType<typeof buildModeSliceData>>>} */
+    const slices = {};
+    savedDrawings.forEach((saved) => {
+      slices[saved.mode] = buildModeSliceData(saved, saved.mode, {
+        selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+      });
     });
-    const modes = { circular: sliceOf('circular'), linear: sliceOf('linear') };
+    const modes = /** @type {Record<DiagramMode, ReturnType<typeof buildModeSliceData>>} */ (slices);
     SLICE_MODES.forEach((mode) => validateModeSliceFields(modes[mode]));
-    const readArtifacts = () => chooseSessionArtifacts(
-      /** @type {{ readOtherModeArtifact?: () => Readonly<ArtifactSlot> | null }} */ (options).readOtherModeArtifact?.() ?? null
-    );
+    const readArtifacts = () => chooseSessionArtifacts(options?.readKeptArtifacts?.() ?? []);
     let { artifact, otherArtifact } = readArtifacts();
     if (!artifact.committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
-      assertActiveModeInputs();
+      assertDrawingInputs(drawing);
     }
     const artifactUi = artifactUiState(artifact);
     const savedUi = {
@@ -6818,12 +6822,13 @@ export const exportSession = (titleOverride = null, options = {}) => {
  * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
  */
 /**
- * What the composition root passes to `importSession`: the Save and Load availability (as `SessionSaveOptions`
- * has it) and a step to run before the Load starts, both read here; the required Load port
+ * What the composition root passes to `importSession`: the Save and Load availability and the shown drawing
+ * (as `SessionSaveOptions` has them; a legacy configuration is the shown drawing's settings) and a step to run
+ * before the Load starts, both read here; the required Load port
  * `confirmLoadRepairs`, which shows the list of what the file cannot fully restore and answers [Load] or
  * [Cancel] (every caller that loads decides; there is no default); every other option is passed on to
  * `importSessionDocument` unread.
- * @typedef {Pick<SessionSaveOptions, 'availability'> & { beforeImport?: () => void | Promise<void>,
+ * @typedef {Pick<SessionSaveOptions, 'availability' | 'shownDrawing'> & { beforeImport?: () => void | Promise<void>,
  *   confirmLoadRepairs: ConfirmLoadRepairs } & Record<string, unknown>} SessionLoadOptions
  */
 /**

@@ -62,8 +62,10 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "'data-gbdraw-role'" in sanitization_source
     assert "'data-gbdraw-orientation'" in sanitization_source
     # Each mode's drawing resets to its own mode's defaults (PR-1: one drawing
-    # per mode, so no profile swaps values on a mode switch).
-    assert "createDefaultAdv(mode)" in reset_source
+    # per mode, so no profile swaps values on a mode switch): its settings
+    # slice installs the defaults of the drawing's mode.
+    assert "adv: createDefaultAdv(drawingMode)" in state_source
+    assert "SETTINGS_SLICE.reset(drawing.slices.settings)" in reset_source
     assert "modeProfileStateManager" not in reset_source
     assert "modeProfileStateManager" not in state_source
 

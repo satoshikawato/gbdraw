@@ -17,6 +17,11 @@ const modulePaths = [
   'gbdraw/web/js/services/match-sequences.js',
   'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',
+  'gbdraw/web/js/services/drawing/feature-edits.js',
+  'gbdraw/web/js/services/drawing/paint.js',
+  'gbdraw/web/js/services/drawing/slice-handle.js',
+  'gbdraw/web/js/services/json-clone.js',
+  'gbdraw/web/js/utils/reactivity.js',
   'gbdraw/web/js/utils/download-names.js',
   'gbdraw/web/js/services/record-source-coordinates.js',
   'gbdraw/web/js/services/genbank-header.js',
@@ -48,6 +53,14 @@ for (const relativePath of modulePaths) {
     : await readFile(new URL(relativePath, repoRoot), 'utf8');
   await writeFile(target, source, 'utf8');
 }
+// match-sequences.js reads restored Session files through record-discovery.js, which this test does not use.
+await writeFile(join(tempRoot, 'gbdraw/web/js/services/record-discovery.js'), [
+  "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };",
+  'export const gffFastaReaderSelector = unused;',
+  'export const readAllSequenceRecords = unused;',
+  'export const readComparisonSequenceRecords = unused;',
+  ''
+].join('\n'), 'utf8');
 
 const popupPath = join(tempRoot, 'gbdraw/web/js/app/pairwise-match-popup.js');
 const instrumentedPopupPath = join(

@@ -25,10 +25,25 @@ export {
   textToBytes
 };
 
-/** @import { FileLike } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+
+/**
+ * The sha256 hex of a resource's bytes: the Worker's cache key for them, so
+ * equal bytes share one token whatever resource IDs name them.
+ * @typedef {string & { readonly __brand: 'ResourceContentToken' }} ResourceContentToken
+ */
 
 /** @type {WeakMap<object, Promise<Uint8Array>>} */
 const fileByteCache = new WeakMap();
+// A File's bytes never change, so its token outlives the release of its bytes.
+/** @type {WeakMap<object, Promise<ResourceContentToken>>} */
+const fileContentTokenCache = new WeakMap();
+/**
+ * The descriptor each File was encoded or loaded as, keyed by that File. A
+ * File never changes its bytes, so the File object is the key.
+ * @type {WeakMap<object, RawSessionResourceDescriptor>}
+ */
+const fileDescriptors = new WeakMap();
 
 /**
  * @param {unknown} file
@@ -93,8 +108,69 @@ export const readFileText = async (file) => {
   throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
 };
 
+/**
+ * @param {Uint8Array | ArrayBuffer} bytes
+ * @returns {Promise<ResourceContentToken>}
+ */
+export const resourceContentToken = async (bytes) => /** @type {ResourceContentToken} */ (await sha256Hex(bytes));
+
+/**
+ * The content token of a File or Session resource view, hashed once per object.
+ * @param {FileLike} file
+ * @returns {Promise<ResourceContentToken>}
+ */
+export const readFileContentToken = (file) => {
+  let pending = fileContentTokenCache.get(file);
+  if (!pending) {
+    pending = readFileBytes(file).then(resourceContentToken);
+    fileContentTokenCache.set(file, pending);
+    pending.catch(() => {
+      if (fileContentTokenCache.get(file) === pending) fileContentTokenCache.delete(file);
+    });
+  }
+  return pending;
+};
+
 /** @param {unknown} file */
 export const getSessionResourceSource = (file) => sessionResourceSource(file);
+
+/**
+ * @template {RawSessionResourceDescriptor} D
+ * @param {object} file A `File`, or another object whose bytes were read.
+ * @param {D} descriptor
+ * @returns {D}
+ */
+export const rememberFileDescriptor = (file, descriptor) => {
+  fileDescriptors.set(file, descriptor);
+  return descriptor;
+};
+
+/**
+ * @param {unknown} file
+ * @returns {RawSessionResourceDescriptor | null} The descriptor `file` was encoded or loaded as.
+ */
+export const fileDescriptorOf = (file) => {
+  const key = asCacheKey(file);
+  return (key && fileDescriptors.get(key)) || null;
+};
+
+/**
+ * The base64 text a File was encoded or loaded as, when its byte size matches.
+ * @typedef {Readonly<{ encoding: 'base64', data: string, size: number }>} EncodedFilePayload
+ */
+/**
+ * @param {FileLike} file
+ * @returns {EncodedFilePayload | null}
+ */
+export const encodedFilePayloadOf = (file) => {
+  const descriptor = fileDescriptorOf(file);
+  const size = descriptor?.size;
+  if (
+    !descriptor || descriptor.encoding !== 'base64' || typeof descriptor.data !== 'string'
+    || typeof size !== 'number' || size !== file.size
+  ) return null;
+  return Object.freeze({ encoding: 'base64', data: descriptor.data, size });
+};
 
 /** @param {FileLike | null | undefined} file */
 export const releaseFileContentCache = (file) => {

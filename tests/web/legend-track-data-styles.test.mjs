@@ -5,6 +5,10 @@ import {
   buildLegendStyleRetirement,
   trackDataLegendCaptions
 } from '../../gbdraw/web/js/app/legend/track-data-styles.js';
+import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
+
+// A drawing whose paint is these members (the fixture's own objects).
+const paintDrawing = (members) => ({ slices: { paint: PAINT_SLICE.create(members).handle } });
 import { getDepthTrackFileBaseName, isDepthTrackAutoLabel } from '../../gbdraw/web/js/app/depth-tracks.js';
 import { depthSeriesLegendCaptions, ensureDepthTrackConfigCount } from '../../gbdraw/web/js/services/depth-track-state.js';
 
@@ -64,9 +68,7 @@ test('styles follow the caption: a data change retires only the captions the dat
   const legendColorOverrides = { Keep: '#111111', Drop: '#222222', Feature: '#333333' };
   const legendStrokeOverrides = { Drop: { strokeColor: '#000000' }, Feature: { strokeWidth: 2 } };
   const retire = buildLegendStyleRetirement({
-    legendColorOverrides,
-    legendStrokeOverrides,
-    legendEntries: { value: [] },
+    drawing: paintDrawing({ legendColorOverrides, legendStrokeOverrides, legendEntries: { value: [] } }),
     projectLegendEntries: () => assert.fail('no rename to retire'),
     namedCaptions: () => trackDataLegendCaptions({ annotationSets: sets })
   });
@@ -83,9 +85,7 @@ test('a change that keeps every caption retires nothing', () => {
   const legendColorOverrides = { Keep: '#111111' };
   const legendEntries = { value: [{ caption: 'Kept name', originalCaption: 'Keep' }] };
   const retire = buildLegendStyleRetirement({
-    legendColorOverrides,
-    legendStrokeOverrides: {},
-    legendEntries,
+    drawing: paintDrawing({ legendColorOverrides, legendStrokeOverrides: {}, legendEntries }),
     projectLegendEntries: () => assert.fail('no rename to retire'),
     namedCaptions: () => new Set(['Keep'])
   });
@@ -108,9 +108,7 @@ test('a data change retires the Legend rename of a caption it stops naming, and 
   const legendEntries = { value: entries };
   let projections = 0;
   const retire = buildLegendStyleRetirement({
-    legendColorOverrides,
-    legendStrokeOverrides,
-    legendEntries,
+    drawing: paintDrawing({ legendColorOverrides, legendStrokeOverrides, legendEntries }),
     projectLegendEntries: () => { projections += 1; },
     namedCaptions: () => new Set(named)
   });
@@ -129,9 +127,7 @@ test('a new name that the new data names keeps its styles when the rename is ret
   const legendColorOverrides = { Coverage: '#7b2cbf' };
   const legendEntries = { value: [{ caption: 'Coverage', originalCaption: 'depth' }] };
   const retire = buildLegendStyleRetirement({
-    legendColorOverrides,
-    legendStrokeOverrides: {},
-    legendEntries,
+    drawing: paintDrawing({ legendColorOverrides, legendStrokeOverrides: {}, legendEntries }),
     projectLegendEntries: () => {},
     namedCaptions: () => new Set(named)
   });
@@ -153,10 +149,7 @@ test('a data change retires a waiting Legend rename of a caption it stops naming
     ]
   };
   const retire = buildLegendStyleRetirement({
-    legendColorOverrides,
-    legendStrokeOverrides,
-    legendEntries: { value: [] },
-    dormantLegendEntries,
+    drawing: paintDrawing({ legendColorOverrides, legendStrokeOverrides, legendEntries: { value: [] }, dormantLegendEntries }),
     projectLegendEntries: () => assert.fail('no shown rename to retire'),
     namedCaptions: () => new Set(named)
   });
@@ -178,10 +171,7 @@ const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'G
   const keyOf = (entry) => entry.originalCaption || entry.caption;
   const renameOf = (key, list) => list.find((entry) => keyOf(entry) === key && entry.caption !== key)?.caption;
   const run = buildLegendStyleRetirement({
-    legendColorOverrides: {},
-    legendStrokeOverrides: {},
-    legendEntries,
-    dormantLegendEntries,
+    drawing: paintDrawing({ legendColorOverrides: {}, legendStrokeOverrides: {}, legendEntries, dormantLegendEntries }),
     namedCaptions: () => new Set(),
     hiddenRows: () => (state.hidden ? ['depth'] : []),
     relistLegendEntries: () => {

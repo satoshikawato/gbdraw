@@ -61,9 +61,16 @@ request, runs the whole render path, and writes a complete SVG document; it
 writes it as ordered pieces: the root start tag, each top-level element, and
 the end tag. A placed group is its start tag, its children text, and that
 text's revision (its sha256). Joined in order, the pieces are the document. The
-Generate rebuilds every part whose inputs changed. Publish cache fills only
-after the full render succeeds, and release them with the Worker; never reuse
-a final reply.
+Generate rebuilds every part whose inputs changed. A Generate publishes the
+decoded resources and parsed sources it built (they depend only on the
+resource bytes and their key) when it ends, also when its render fails, unless
+the request changed them; it publishes resolved records and render-stage
+results only after the full render succeeds. The blastp protein extraction
+helper and the Circular ring search-frame helper
+(`convertRingTablesToSearchFrame`) also publish, when they end, the decoded
+resources and parsed sources they built for the files they staged, unless they
+changed them; any other helper lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
+reply.
 
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page
@@ -443,7 +450,11 @@ special case, when the paths disagree.
 Comparison evidence uses three frames: F, the search frame (the selected and
 cropped record on its source strand, which is the LOSAT output); V, the display
 frame (F with the effective reverse complement applied); and Src, input-file
-coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F. Every comparison
+coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F, except for Circular
+similarity rings: their LOSAT database is the whole reference file (uncropped),
+so their raw rows and **Save Raw LOSAT TSV** are that search's output in Src,
+and the Python owner `ring_rows_in_search_frame` converts them to F before they
+become ring tables. Every comparison
 table is read in F, and only the Python planner projects orientation to V.
 Human-readable coordinates (popups, FASTA headers) lead with Src. The Linear
 orientation owner is the File card's `region_reverse`, written by
@@ -582,7 +593,10 @@ bindings at the end of a record discovery and a drawing switch
 (`rebindAnnotationRecords` in `app/app-setup.js`). An auxiliary table import
 (default colors, color table, qualifier priority, whitelist, blacklist) is a
 transition of its file input (`importAuxiliaryTable` in `app/watchers.js`)
-that writes the drawing it resolved, through that drawing's slices.
+that writes through the slices of each drawing it changes. Until each drawing
+binds its own auxiliary file cards, a card's file is shared by every drawing:
+choosing, replacing, or removing it takes the earlier file's rows out of every
+drawing, and the new file's rows go into the shown drawing.
 
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
 Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
@@ -608,7 +622,9 @@ or Reset Settings).
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is an operation
-  on every drawing (Reset Settings, which resets all drawings, in one step) or
+  on every drawing (Reset Settings, which resets all drawings, in one step;
+  until each drawing binds its own auxiliary file cards, a card's import,
+  Remove, and Retry, R10) or
   a step that changes only Session-level values (the Session title, Auto
   Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
   Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
@@ -639,10 +655,13 @@ or Reset Settings).
   and a file picker opened by another button record the same one step
   (`app/history-inputs.js`).
 - A file input whose change ends with asynchronous work is
-  `data-history-managed` and owns one `runUndoable` step that commits after
-  that work: a `file-uploader` `afterChange` import, and **Add Seq**
+  `data-history-managed` and owns one step that commits after that work: a
+  `file-uploader` `afterChange` import, and **Add Seq**
   (`addCircularConservationComparisonFile`), whose step holds the ring record
-  label read by the Python reader.
+  label read by the Python reader. Add Seq is a step of its drawing
+  (`runUndoable`); an auxiliary file card's import and its Retry are one
+  project step (`runProjectStep`) while the card's file is shared by every
+  drawing (R10).
 - An undoable action started while another action still runs on the open step
   applies at once and names that step (`runUndoable`); nothing waits. What an
   action writes after another caller committed its step is a step of its own

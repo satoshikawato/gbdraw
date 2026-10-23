@@ -33,6 +33,8 @@ import { createHash } from 'node:crypto';
 import { File, Blob } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { modeDrawing } from './drawing-state.mjs';
+import { callerSession } from './session-caller.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -78,9 +80,8 @@ globalThis.alert = () => {};
 const { installSessionImportWorker } = await import(treeUrl('tests/web/helpers/session-import-node.mjs'));
 installSessionImportWorker();
 
-const { importSession, exportSession, setUnmanagedConfigOverrideValidator, getCommittedCanonicalSession } = await import(
-  treeUrl('gbdraw/web/js/services/config.js')
-);
+const sessionConfig = await import(treeUrl('gbdraw/web/js/services/config.js'));
+const { setUnmanagedConfigOverrideValidator, getCommittedCanonicalSession } = sessionConfig;
 const validatorCalls = [];
 // The Worker's configuration check, run by Python (as load-repair-dialog does).
 setUnmanagedConfigOverrideValidator((payload) => {
@@ -100,6 +101,7 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
 });
 const { transformLegacyResultSvg } = await import(treeUrl('gbdraw/web/js/app/app-setup.js'));
 const { state } = await import(treeUrl('gbdraw/web/js/state.js'));
+const { importSession, exportSession } = callerSession(sessionConfig, state);
 
 const readInput = (arg) => {
   if (arg.startsWith('git:')) {
@@ -157,10 +159,12 @@ const resolveFileDigests = async () => {
 };
 
 // The document state a Load sets (state.js), by area. A drawing's derived
-// members (computed from the others) are left out.
+// members (computed from the others), its slice handles (no state), and its
+// identity (constant: no Load sets it) are left out.
 const DERIVED_DRAWING_KEYS = new Set([
   'activeLayoutPreferences', 'drawnLinearSeqs', 'linearComparisonResolution', 'hasLinearComparisonIntent',
-  'hasActiveLinearLosatIntent', 'hasActiveLinearUploadIntent', 'featureVisibilityRules', 'hasPendingPaletteDraft'
+  'hasActiveLinearLosatIntent', 'hasActiveLinearUploadIntent', 'featureVisibilityRules', 'hasPendingPaletteDraft',
+  'slices', 'id', 'mode'
 ]);
 const DOCUMENT_KEYS = [
   'mode', 'sessionTitle', 'results', 'selectedResultIndex', 'cInputType', 'lInputType', 'files', 'linearSeqs',
@@ -175,14 +179,14 @@ const DOCUMENT_KEYS = [
   // What Load reports and the Result artifacts it restores.
   'errorLog', 'comparisonWarnings', 'annotationWarnings', 'featureIdentityNotices', 'originalLegendOrder',
   'originalLegendColors', 'originalSvgStroke', 'matchSequenceRegistry', 'pairwiseMatchFactors', 'featureOrthogroupIndex',
-  'linearReorderNotice', 'circularRecordDiscovery', 'suppressCircularMultiRecordDefaults', 'featureEditRemovalCount',
+  'linearReorderNotice', 'circularRecordDiscovery', 'featureEditRemovalCount',
   'generationFailureRecovery', 'svgContent'
 ];
 const stateAreas = () => {
   const areas = {};
   for (const key of DOCUMENT_KEYS) areas[`state.${key}`] = key in state ? canon(state[key]) : { '#absent': true };
   for (const mode of ['circular', 'linear']) {
-    const drawing = state.drawings[mode];
+    const drawing = modeDrawing(state, mode);
     for (const key of Object.keys(drawing).sort()) {
       if (!DERIVED_DRAWING_KEYS.has(key)) areas[`drawings.${mode}.${key}`] = canon(drawing[key]);
     }

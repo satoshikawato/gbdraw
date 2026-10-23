@@ -18,6 +18,7 @@ import gbdraw.analysis.collinearity as collinearity_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
+import gbdraw.io.comparisons as comparisons_io_module
 from gbdraw.legend.sources import ComparisonLegendSource
 from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.analysis.collinearity import (
@@ -3412,7 +3413,8 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
     def fake_read_comparison_table(_blast_file):
         return frame
 
-    monkeypatch.setattr(linear_assemble_module, "read_comparison_table", fake_read_comparison_table)
+    # Linear assembly reads the table through read_comparison_resource, which parses with this reader.
+    monkeypatch.setattr(comparisons_io_module, "read_comparison_table", fake_read_comparison_table)
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],

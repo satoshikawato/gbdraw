@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { DrawingState } from '../../state.js' */
+/** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
@@ -9,7 +10,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
-import { isCardRow, parseSpecificRules, serializeSpecificRules, specificRulesFileCaptions, unmarkCardRow, withoutImportedRows } from '../../services/file-imports.js';
+import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
@@ -27,11 +28,24 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+import { replaceColorRules } from '../../services/drawing/color-rules.js';
+import {
+  addWhitelistRules, removePriorityRule as removeDrawingPriorityRule, removeWhitelistRule as removeDrawingWhitelistRule,
+  setBlacklistText as setDrawingBlacklistText, setLabelFilterMode as setDrawingLabelFilterMode, setPriorityRules, setWhitelistRuleField as setDrawingWhitelistRuleField
+} from '../../services/drawing/label-tables.js';
+/** @import { StoredWhitelistRule } from '../../services/config-field-readers.js' */
 import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
-import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import { legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import {
+  legendEntryKey,
+  replaceAddedLegendCaptions,
+  replaceFeatureFills,
+  setFeatureFill,
+  setLegendColor
+} from '../../services/drawing/paint.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
 /** @import { ColorFeature } from './color-actions.js' */
 
@@ -47,6 +61,12 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
  * @property {(drawing: DrawingState) => boolean} isRedrawOwed
  *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
+ */
+
+/**
+ * The Results owner's default color edit (app/results.js): it sets the
+ * drawing's colors and, in the shown drawing, syncs the palette draft.
+ * @typedef {(drawing: DrawingState, colors: Record<string, string>) => void} EditDefaultColorsPort
  */
 
 /**
@@ -79,7 +99,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * drawing not shown, it also drops the records of the `removed` rows (with
  * the Legend colors that copy them, `legendColorCopies`) and writes the
  * drawing's Legend list.
- * @typedef {(drawing: DrawingState, entries: LegendEntry[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
+ * @typedef {(drawing: DrawingState, entries: readonly LegendRow[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
  *   hidden?: { removed: readonly RuleRowColor[] } | null) => unknown} MoveLegendRecordsPort
  */
 
@@ -97,6 +117,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {RuleActionsPorts} ports
+ * @property {EditDefaultColorsPort} editDefaultColors
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {(value?: any) => { value: any }} ref Vue `ref`
@@ -110,7 +131,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -163,7 +184,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // `rekeyed` are the rows both rule tables hold under another key (OV-645).
   /**
    * @param {DrawingState} drawing
-   * @param {Partial<SpecificColorRule>[]} candidateRules
+   * @param {readonly Partial<SpecificColorRule>[]} candidateRules
    * @param {Array<{ caption?: string, color?: string }>} retiredLegendIntents
    */
   const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
@@ -179,7 +200,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     /** @type {Array<{ caption: PythonLegendKey, color: string }>} */
     const ruleRows = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap)
       .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
-    /** @type {LegendEntry[]} */
+    /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
       .map(entry => ({ caption: legendEntryKey(entry), color: entry.color }));
@@ -198,7 +219,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // merge into a new row, an unknown match, or a row of another batch Result.
   // Python then redraws the rows, their order, and the "other <type>s" rows.
   // The rows are read with the current Feature visibility before and after.
-  /** @param {DrawingState} drawing @param {Partial<SpecificColorRule>[]} rules */
+  /** @param {DrawingState} drawing @param {readonly Partial<SpecificColorRule>[]} rules */
   const legendSourceContext = (drawing, rules) => ({
     ...featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions }),
     colorRules: rules
@@ -208,14 +229,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // A change that removes the last such rule of a type makes Python draw the
   // default row again, which the live removal of the rule row does not; the
   // automatic rerender draws it.
-  /** @param {Record<string, any>[]} rules */
+  /** @param {readonly Record<string, any>[]} rules */
   const typeRowCaptions = (rules) => new Set(rules
     .filter(rule => String(rule?.cap ?? '').trim() && rule.cap === rule.feat)
     .map(rule => rule.cap));
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, any>[]} before
-   * @param {Record<string, any>[]} after
+   * @param {readonly Record<string, any>[]} before
+   * @param {readonly Record<string, any>[]} after
    * @param {{ rows?: import('../candidate-render.js').RuleLegendRows | null, replaced?: ReadonlyMap<string, string>, holdsRow?: (caption: string) => boolean }} [options]
    *   `rows`: the rows the commit's own show adds and retires on the displayed
    *   Result (else the Result shows what History restored); `replaced`: the
@@ -300,15 +321,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {DrawingState} drawing
    * @param {{ caption: string, color: string }[]} intents
    * @param {readonly RuleRowColor[]} removedRuleRows
+   * @returns {PythonLegendKey[]} The keys of the Legend colors the commit retires.
    */
-  const retireSupersededLegendColors = (drawing, intents, removedRuleRows) => {
+  const supersededLegendColors = (drawing, intents, removedRuleRows) => {
     const overrides = drawing.legendColorOverrides;
-    for (const { caption, color } of intents) {
-      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) !== resolveColorToHex(color)) {
-        delete overrides[caption];
-      }
-    }
-    legendColorCopies(overrides, removedRuleRows).forEach((key) => { delete overrides[key]; });
+    /** @param {string} caption @param {string} color */
+    const recolors = (caption, color) => Object.hasOwn(overrides, caption)
+      && resolveColorToHex(overrides[caption]) !== resolveColorToHex(color);
+    // An intent's `caption` is its row's key.
+    return [
+      .../** @type {PythonLegendKey[]} */ (intents.filter(({ caption, color }) => recolors(caption, color)).map(({ caption }) => caption)),
+      ...legendColorCopies(overrides, removedRuleRows)
+    ];
   };
   // OV-444 (OV-443, OV-445): this owner is the one writer of the rule table,
   // and every write goes through one line (`queueRuleWrite`), in the order it
@@ -324,6 +348,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   let appliedWrites = 0;
   /** @type {Set<{ cancelled: () => boolean, leave: () => void }>} */
   const cancellableWrites = new Set();
+  // OV-1100 (R15-19 B, OIC-030): the writes on the line that have not left
+  // it. A drawing switch waits while one is matched (`ruleWritePending`).
+  const writesOnLine = ref(0);
   /**
    * @template T
    * @param {() => Promise<T>} write Runs at the write's turn.
@@ -334,7 +361,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (!cancelled) patternDrafts.suspend();
     const turn = writeLine.then(write);
     const entry = { cancelled: cancelled || (() => false), leave: () => {} };
-    writeLine = Promise.all([writeLine, new Promise((resolve) => { entry.leave = () => resolve(undefined); })]);
+    writesOnLine.value += 1;
+    writeLine = Promise.all([writeLine, new Promise((resolve) => {
+      let left = false;
+      entry.leave = () => {
+        if (!left) writesOnLine.value -= 1;
+        left = true;
+        resolve(undefined);
+      };
+    })]);
     cancellableWrites.add(entry);
     const settle = () => { cancellableWrites.delete(entry); entry.leave(); };
     turn.then(settle, settle);
@@ -380,7 +415,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     });
     if (!rules) return false;
     // The row each rule is written into, so a kept or revised row keeps its identity.
-    const sourceRows = rules.map(rule => revised.get(rule) || (current.includes(rule) ? rule : null));
+    const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
     for (let attempt = 0; ; attempt += 1) {
       const results = state.results.value;
       const table = JSON.stringify(drawing.manualSpecificRules);
@@ -425,7 +460,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   /**
    * @param {DrawingState} drawing
    * @param {Partial<SpecificColorRule>[]} rules
-   * @param {(Record<string, any> | null)[]} sourceRows The row each rule is written into, or null for a new row.
+   * @param {readonly (Readonly<SpecificColorRule> | null)[]} sourceRows The row each rule is written into, or null for a new row.
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
    */
@@ -447,7 +482,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
     const inPlace = new Map([...rekeyed, ...replaced]);
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
-      .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
+      .some((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
@@ -473,21 +508,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // is shown, while the step is the last one (`keepRedrawnResult`).
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
-      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
-        const row = sourceRows[index];
-        if (!row) return rule;
-        Object.assign(row, rule);
-        if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
-        return row;
-      }));
+      // `prepareRules` without `asGiven` wrote each rule as `normalizeSpecificRule` does.
+      replaceColorRules(drawing.slices.colorRules, /** @type {readonly SpecificColorRule[]} */ (candidate.rules), sourceRows);
       patternDrafts.reconcile();
-      drawing.fileLegendCaptions.value = specificRulesFileCaptions(candidate.rules);
-      drawing.addedLegendCaptions.value = new Set([
+      replaceAddedLegendCaptions(drawing.slices.paint, [
         ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
-      refreshFeatureOverrides(extractedFeatures.value);
-      retireSupersededLegendColors(drawing, intents, removedRuleRows);
+      refreshFeatureOverrides(drawing, extractedFeatures.value);
+      supersededLegendColors(drawing, intents, removedRuleRows).forEach((key) => setLegendColor(drawing.slices.paint, key, null));
       afterCommit(intents);
       applied = true;
       const legendRows = legend.apply();
@@ -547,8 +576,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const applySpecificRulePattern = async (drawing, row, value) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()
-      || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
+    if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()) return false;
     patternDrafts.suspend();
     const token = patternDrafts.begin(row, value);
     // OV-1133 (S4-Q5): the edit stays current while its draft does. A Result
@@ -703,10 +731,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
-    drawing.currentColors.value = {
-      ...drawing.currentColors.value,
-      [newColorFeat.value]: newColorVal.value
-    };
+    editDefaultColors(drawing, { [newColorFeat.value]: newColorVal.value });
   };
 
   /** @param {string} value */
@@ -714,28 +739,30 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.filterMode.value = value;
+    setDrawingLabelFilterMode(drawing.slices.labelTables, value);
+  };
+  /** @param {string} text */
+  const setBlacklistText = (text) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    setDrawingBlacklistText(state.activeDrawing().slices.labelTables, text);
   };
   const addWhitelistRule = () => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
+    addWhitelistRules(drawing.slices.labelTables, [{ feat: 'CDS', qual: 'product', key: '' }]);
   };
-  // An edited row is the user's: it loses its file card (OV-1280).
   /**
-   * @param {number} index
+   * @param {Readonly<StoredWhitelistRule>} rule A row of the drawing's whitelist.
    * @param {'feat' | 'qual' | 'key'} field
    * @param {string} value
    */
-  const editWhitelistRule = (index, field, value) => {
+  const setWhitelistRuleField = (rule, field, value) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    const row = drawing.manualWhitelist[index];
-    if (!row) return undefined;
-    row[field] = value;
-    unmarkCardRow(row, 'whitelist');
+    setDrawingWhitelistRuleField(drawing.slices.labelTables, rule, field, value);
     return undefined;
   };
   /** @param {number} index */
@@ -743,14 +770,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.manualWhitelist.splice(index, 1);
+    removeDrawingWhitelistRule(drawing.slices.labelTables, index);
   };
   /** @param {number} index */
   const removePriorityRule = (index) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.manualPriorityRules.splice(index, 1);
+    removeDrawingPriorityRule(drawing.slices.labelTables, index);
   };
 
   const addPriorityRule = () => {
@@ -758,13 +785,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
-    const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat?: string, order?: string }} */ r) => r.feat === newPriorityRule.feat);
-    if (idx >= 0) {
-      // The row is the user's now: it loses its file card (OV-1280).
-      drawing.manualPriorityRules.splice(idx, 1, { feat: newPriorityRule.feat, order: newPriorityRule.order });
-    } else {
-      drawing.manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
-    }
+    setPriorityRules(drawing.slices.labelTables, [{ feat: newPriorityRule.feat, order: newPriorityRule.order }]);
   };
 
   const addSpecificRule = async () => {
@@ -838,12 +859,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     /** @type {SpecificColorRule[]} */
     const before = [...drawing.manualSpecificRules];
     const kept = withoutImportedRows(before, 't_color');
-    /** @type {LegendEntry[][]} */
-    const [entries, deletedEntries, dormantEntries] = [drawing.legendEntries, drawing.deletedLegendEntries, drawing.dormantLegendEntries]
-      .map((list) => list.value || []);
-    const { gone, rekeyed } = listedRuleRowRemoval(before, kept, [...entries, ...deletedEntries, ...dormantEntries].map(legendEntryKey));
-    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
-    drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
+    const entries = drawing.legendEntries.value;
+    const listedKeys = [...entries, ...drawing.deletedLegendEntries.value, ...drawing.dormantLegendEntries.value].map(legendEntryKey);
+    const { gone, rekeyed } = listedRuleRowRemoval(before, kept, listedKeys);
+    replaceColorRules(drawing.slices.colorRules, kept);
     moveLegendRecords(drawing, entries, rekeyed, { removed: gone });
   };
   /** @param {DrawingState} drawing */
@@ -888,7 +907,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
             if (presetId === 'bakta') {
-              drawing.currentColors.value = { ...drawing.currentColors.value, CDS: '#cccccc' };
+              editDefaultColors(drawing, { CDS: '#cccccc' });
               drawing.adv.legend_box_size = 12;
               drawing.adv.legend_font_size = 12;
             }
@@ -1000,20 +1019,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     };
   };
 
-  /** @param {ColorFeature[] | null | undefined} features */
-  const refreshFeatureOverrides = (features) => {
-    const drawing = state.activeDrawing();
+  /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
+  const refreshFeatureOverrides = (drawing, features) => {
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
     if (!features || features.length === 0 || !ruleMatches.ready(features)) return;
-    migrateLegacyFeatureOverrides(drawing.featureColorOverrides, features);
+    // Edits stored under a legacy feature key move to the feature's key first.
+    const fills = { ...drawing.featureColorOverrides };
+    if (migrateLegacyFeatureOverrides(fills, features).migrated > 0) replaceFeatureFills(drawing.slices.paint, fills);
 
     for (const feat of features) {
       const rule = ruleMatches.first(feat);
       const key = featureOverrideKey(feat);
-      if (key) {
-        if (rule) drawing.featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
-        else delete drawing.featureColorOverrides[key];
-      }
+      if (key) setFeatureFill(drawing.slices.paint, key, rule ? { color: rule.color, caption: rule.cap } : null);
     }
   };
 
@@ -1108,9 +1125,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     setFeatureShape,
     addPriorityRule,
     setLabelFilterMode,
+    setBlacklistText,
     addWhitelistRule,
+    setWhitelistRuleField,
     removeWhitelistRule,
-    editWhitelistRule,
     removePriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
@@ -1119,6 +1137,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       return commitPrepared(drawing, () => [], msg('Clear specific color rules'));
     },
     commitSpecificRules,
+    /** Whether a rule table write is waiting or being matched (OIC-030). */
+    ruleWritePending: () => writesOnLine.value > 0,
     importSpecificRules,
     removeImportedSpecificRules,
     followRestoredRules,

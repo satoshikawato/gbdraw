@@ -244,7 +244,7 @@ test('a Generate keeps the held catalog only while its build is current', async 
     // Pw-9: a failed Load rolls back to the same object, still current.
     await keepShown(page, 'c3');
     const rollback = await evaluateWithRetainedPromise(page, async () => {
-      const config = await import('./js/services/config.js');
+      const config = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
       const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).arrayBuffer()], 'replacement.json');
       const result = await config.importSession({ target: { files: [file], value: 'selected' } }, {
         beforePreviewMount() { throw new Error('Catalog reuse rollback probe'); }
@@ -467,7 +467,7 @@ const livePalette = (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('./js/state.js');
   state.paletteInstantPreviewEnabled.value = true;
   await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
-    state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: '#123456' };
+    window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
     await window.Vue.nextTick();
   });
 });

@@ -1,12 +1,17 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
-/** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
+/** @import { CircularDiscoveryState, ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
+/** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
+/** @import { GenerationPayload } from '../services/diagram-generation.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
@@ -17,7 +22,6 @@ import { regionWithinRecord } from '../services/record-options.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
-  restorePlacements,
   validateFeatureIdentityNotices
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
@@ -34,6 +38,7 @@ import {
   DiagramGenerationCanceledError,
   isDiagramGenerationCanceled,
   runDiagramGeneration,
+  resourceIdOwnedBy,
   runDiagramHelperOperation,
   selectHeldRenderState
 } from '../services/diagram-generation.js';
@@ -43,13 +48,13 @@ import {
   bindCanonicalTypedResource,
   isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
+  linearRecordSourceResources,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
-  requestLabelTableTsv,
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
@@ -80,7 +85,6 @@ import {
   shapeDepthTracksForGenerate,
   syncDepthSlotLabels
 } from '../services/depth-track-state.js';
-import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   CustomTrackPlanValidationError,
   customTrackPlanIssues,
@@ -94,16 +98,6 @@ import {
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
-  buildDefaultColorOverrideTsv,
-  normalizePaletteColors
-} from '../utils/color-utils.js';
-import {
-  serializeLabelWhitelistRules,
-  serializeQualifierPriorityRules,
-  serializeSpecificRules,
-  specificRulesFileCaptions
-} from '../services/file-imports.js';
-import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
 } from '../services/feature-visibility.js';
@@ -115,7 +109,8 @@ import { requireLinearLabelVisibilityMode } from '../services/linear-label-visib
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
-import { bytesToBase64, bytesToText } from '../services/byte-utils.js';
+import { base64ToBytes, bytesToBase64, bytesToText, sha256Hex, textToBytes } from '../services/byte-utils.js';
+import { readConvertedResources, withConvertedResources } from '../services/main-session-comparison-frame.js';
 import { askBeforeLargeDownload, downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -147,11 +142,16 @@ import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
-  discoveryErrorIsFinal
+  discoveryErrorIsFinal,
+  gffFastaReaderSelector,
+  parseSequenceRecordsFast,
+  readAllSequenceRecords,
+  readComparisonSequence,
+  readComparisonSequenceDigest,
+  readOncePerFile,
+  readParsedSequenceRecords
 } from '../services/record-discovery.js';
-import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
-  buildValidatedProteinIdentityIndex,
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
   getCurrentRawLosatCacheEntry,
@@ -160,7 +160,6 @@ import {
   isLosatDerivedCacheEntry,
   mergeProteinIdentityManifests,
   normalizeLosatArgs,
-  releaseValidatedProteinIdentityIndex,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
   losatEdgeFilename,
@@ -178,11 +177,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
-import {
-  cloneFileBytesForTransfer,
-  readFileBytes,
-  readFileText
-} from '../services/file-content-cache.js';
+import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 import {
   admitFeatureCatalog
 } from '../services/feature-catalog.js';
@@ -195,6 +190,9 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
+import { GROUP_NAMES_SLICE } from '../services/drawing/group-names.js';
+import { FEATURE_EDITS_SLICE } from '../services/drawing/feature-edits.js';
+import { replaceDormantLegendRows, replaceFeatureFills } from '../services/drawing/paint.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
@@ -219,10 +217,10 @@ import {
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
-/** @import { LegendEntry } from '../state.js' */
+/** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
-/** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalRecordSource, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
@@ -264,21 +262,10 @@ export const afterFrame = ({ requestFrame = globalThis.requestAnimationFrame } =
   return new Promise((resolve) => requestFrame(resolve));
 };
 
+// The SHA-256 of a text's UTF-8 bytes, from the one SHA-256 owner (OV-1566). Generate needs Web Crypto anyway:
+// the Worker digests every reply (`buildGeneratedArtifactTransportIdentity`), so no weaker fallback key exists.
 /** @param {string} text */
-const hashText = async (text) => {
-  if (globalThis.crypto?.subtle) {
-    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-  let hash = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `fnv1a-${(hash >>> 0).toString(16)}`;
-};
+const hashText = (text) => sha256Hex(textToBytes(text));
 
 // Label visibility On draws the label whatever Show Labels and the label
 // filters select, so it must bind, unless the request cannot draw it: a feature
@@ -320,15 +307,27 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @property {string} [runtimeBindingHash]
  * @property {string} [displayBindingHash]
  * @property {unknown} [identityManifest]
- * @property {string} [sequenceKey]
- * @property {string} [hash]
+ * @property {string} [hash] The SHA-256 of `fasta`, which a protein extraction carries.
  */
-/** @type {WeakMap<FileLike, Map<string, LosatSeqEntry>>} */
-const fastaExtractionCache = new WeakMap();
-const FASTA_EXTRACTION_CACHE_LIMIT = 12;
-/** @type {WeakMap<FileLike, Map<string, LosatSeqEntry>>} */
-const proteinExtractionCache = new WeakMap();
-const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
+/**
+ * Values kept per owner object (an admitted, frozen manifest) and the settings of the call that built them.
+ * @template T
+ * @typedef {{ byOwner: WeakMap<object, Map<string, T>>, limit: number }} FileReadCache
+ */
+// What Generate reads from an input File is kept per File in `services/record-discovery.js` (`readOncePerFile`,
+// OV-1587): each sequence file parsed once by format (OV-1556), the LOSAT FASTA of a record and region and,
+// once a search needs it, its SHA-256, the blastp protein extraction, and the Circular similarity ring reference
+// with its SHA-256 (OV-1545, OV-1565). Each held value is frozen: its readers never write to it (OV-1594).
+/** The blastp protein extractions kept per source File (or GFF3 and FASTA pair). */
+const PROTEIN_EXTRACTIONS_PER_FILE = 16;
+/** The LOSAT FASTA texts, and their digests, kept per source File: one per record and region a card names. */
+const LOSAT_FASTA_READS_PER_FILE = 64;
+/**
+ * The checked BUILD_PROTEIN_LOSAT_CACHE_KEYS replies of an admitted merged manifest, by the rest of the request
+ * (its pairs and derived records), which with the manifest is every input of the reply (OV-1553).
+ * @type {FileReadCache<Readonly<{ keys: readonly string[], derivedKey: string }>>}
+ */
+const proteinCacheKeysCache = { byOwner: new WeakMap(), limit: 8 };
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 export const LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
@@ -444,6 +443,51 @@ export const buildLosatCachePayload = ({
  * }} LosatSourceJob
  */
 
+// The Worker conversion of Generate's ring LOSAT rows (`circular_ring_tables_in_search_frame_json`).
+const RING_TABLE_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation: 'convertRingTablesToSearchFrame' });
+
+/**
+ * The ring tables of a request in the search frame of its drawn records, by ring table resource ID. Python
+ * converts each ring's whole-file LOSAT rows once per raw search and frame: the conversion is kept on the reference
+ * File (or GFF3 and FASTA pair), whose bytes never change, under the ring's raw cache key (which names immutable
+ * search output) and the records' selector, crop and orientation. Each ring keeps its last frame only, and a failed
+ * conversion is not kept, nor one of a ring without current search output (`cacheKey` null).
+ * @param {readonly [FileLike] | readonly [FileLike, FileLike]} referenceFiles The Files the request's records read.
+ * @param {{ renderRequest: unknown, records: readonly unknown[], resources: GenerationPayload['resources'] }} request
+ * @param {readonly { resourceId: string, cacheKey: string | null }[]} rings
+ * @returns {Promise<Map<string, ConvertedResource>>}
+ */
+const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, records, resources }, rings) => {
+  const frameKey = JSON.stringify(records);
+  /** @type {string[]} */
+  const missing = [];
+  /** @type {(resourceIds: string[]) => void} */
+  let startConversion = () => {};
+  const conversion = new Promise((resolve) => { startConversion = resolve; }).then(
+    /** @param {string[]} resourceIds */
+    async (resourceIds) => (resourceIds.length === 0 ? new Map() : readConvertedResources(
+      await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME, {
+        resourceIds, canonicalRequest: renderRequest, resources
+      }),
+      RING_TABLE_CONVERSION
+    ))
+  );
+  const tables = rings.map(({ resourceId, cacheKey }, index) => {
+    const convert = async () => {
+      missing.push(resourceId);
+      const table = (await conversion).get(resourceId);
+      if (!table) throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
+      return Object.freeze(table);
+    };
+    return cacheKey === null
+      ? convert()
+      : readOncePerFile(referenceFiles, `ring-search-frame-${index}:${cacheKey}\n${frameKey}`, convert, 1);
+  });
+  startConversion(missing);
+  const converted = await Promise.all(tables);
+  return new Map(rings.map(({ resourceId }, index) => [resourceId, converted[index]]));
+};
+
 /**
  * One circular conservation comparison, resolved to the BLAST text the request carries.
  * @typedef {{ name: string, text: string, sourceIndex: number, label: string, color: string }} ResolvedCircularConservation
@@ -460,12 +504,11 @@ export const buildLosatCachePayload = ({
  * @param {string} cacheKey
  * @param {LosatCacheMetadata} metadata
  * @param {Record<string, any> | null} [manifest]
- * @param {object | null} [identityIndex]
  * @returns {TextKeyedLosatCacheMatch | null}
  */
-const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
+const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
   if (!cacheMap) return null;
-  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
+  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest);
   // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
   if (direct) return /** @type {TextKeyedLosatCacheMatch} */ (direct);
   if (metadata?.identityKind === 'protein') return null;
@@ -661,7 +704,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
  *   current schema (Load reads a stored one to schema 9; Generate and the rerender commit the one they built).
- * @param {LinearSeq[]} options.sequences
+ * @param {readonly LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
 const canReuseResolvedProteinArtifacts = ({
@@ -961,9 +1004,10 @@ const wrapFastaSequence = (sequence) => {
   return lines.join('\n');
 };
 /**
- * @typedef {{ id: string, sequence: string }} ParsedSequenceRecord
+ * A record's sequence as the LOSAT search reads it.
+ * @typedef {{ id: string, sequence: string }} LosatSequence
  */
-/** @param {ParsedSequenceRecord} record */
+/** @param {LosatSequence} record */
 const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
 /** @param {unknown} fasta */
 const getFastaSequenceLength = (fasta) =>
@@ -973,7 +1017,7 @@ const getFastaSequenceLength = (fasta) =>
     .join('')
     .replace(/\s+/g, '').length;
 /**
- * @param {ParsedSequenceRecord[]} records
+ * @param {readonly ParsedSequenceRecord[]} records
  * @param {unknown} selectorRaw
  */
 const selectParsedRecord = (records, selectorRaw) => {
@@ -992,42 +1036,13 @@ const selectParsedRecord = (records, selectorRaw) => {
   if (matches.length > 1) throw new Error(`Record selector '${selector}' matched multiple records. Use #index to disambiguate.`);
   return matches[0];
 };
-/** @param {unknown} text */
-const parseFastaRecordsFast = (text) => {
-  /** @type {ParsedSequenceRecord[]} */
-  const records = [];
-  let current = /** @type {{ id: string, parts: string[] } | null} */ (null);
-  String(text || '').split(/\r?\n/).forEach((line) => {
-    if (line.startsWith('>')) {
-      if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
-      const header = line.slice(1).trim();
-      current = { id: header.split(/\s+/)[0] || `record_${records.length + 1}`, parts: [] };
-      return;
-    }
-    if (current && line.trim()) current.parts.push(line.replace(/\s+/g, ''));
-  });
-  if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
-  return records;
-};
-/** @param {unknown} text */
-const parseGenbankRecordsFast = (text) => {
-  /** @type {ParsedSequenceRecord[]} */
-  const records = [];
-  const recordChunks = String(text || '').split(/^\/\/\s*$/m);
-  recordChunks.forEach((chunk) => {
-    const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    const header = originMatch ? genbankHeaderIds(chunk) : null;
-    if (!header || !originMatch) return;
-    const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
-    if (sequence) records.push({ id: header.recordId, sequence });
-  });
-  return records;
-};
 /**
  * @param {ParsedSequenceRecord} record
  * @param {unknown} regionSpec
+ * @returns {LosatSequence}
  */
 const applyLosatSequenceTransforms = (record, regionSpec) => {
+  if (record.sequence === null) throw new Error(`Record ${record.id} has no sequence for the browser reader.`);
   const region = parseRegionText(regionSpec);
   let sequence = record.sequence;
   if (region) {
@@ -1042,58 +1057,28 @@ const applyLosatSequenceTransforms = (record, regionSpec) => {
   return { id: record.id, sequence };
 };
 /**
- * @param {FileLike} file
+ * @template T
+ * @param {FileReadCache<T>} cache
+ * @param {object} owner
  * @param {string} key
+ * @returns {T | null}
  */
-const getCachedFastaExtraction = (file, key) => {
-  const byKey = fastaExtractionCache.get(file);
-  return byKey?.get(key) || null;
-};
+const getCachedFileRead = (cache, owner, key) => cache.byOwner.get(owner)?.get(key) ?? null;
 /**
- * @param {FileLike} file
+ * @template T
+ * @param {FileReadCache<T>} cache
+ * @param {object} owner
  * @param {string} key
- * @param {LosatSeqEntry} value
+ * @param {T} value
  */
-const setCachedFastaExtraction = (file, key, value) => {
-  let byKey = fastaExtractionCache.get(file);
+const setCachedFileRead = (cache, owner, key, value) => {
+  let byKey = cache.byOwner.get(owner);
   if (!byKey) {
     byKey = new Map();
-    fastaExtractionCache.set(file, byKey);
+    cache.byOwner.set(owner, byKey);
   }
-  if (byKey.size >= FASTA_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
-  byKey.set(key, value);
-};
-/** @param {FileLike | null | undefined} file */
-const getFileFingerprint = (file) => {
-  if (!file) return null;
-  return {
-    name: String(file.name || ''),
-    size: Number(file.size || 0),
-    lastModified: Number(file.lastModified || 0)
-  };
-};
-/**
- * @param {FileLike | null | undefined} file
- * @param {string} key
- */
-const getCachedProteinExtraction = (file, key) => {
-  if (!file) return null;
-  const byKey = proteinExtractionCache.get(file);
-  return byKey?.get(key) || null;
-};
-/**
- * @param {FileLike | null | undefined} file
- * @param {string} key
- * @param {LosatSeqEntry & { error?: unknown }} value
- */
-const setCachedProteinExtraction = (file, key, value) => {
-  if (!file || value?.error) return;
-  let byKey = proteinExtractionCache.get(file);
-  if (!byKey) {
-    byKey = new Map();
-    proteinExtractionCache.set(file, byKey);
-  }
-  if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
+  const oldestKey = byKey.keys().next().value;
+  if (byKey.size >= cache.limit && oldestKey !== undefined) byKey.delete(oldestKey);
   byKey.set(key, value);
 };
 /**
@@ -1122,29 +1107,68 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 /**
- * @param {{ file?: FileLike | null, text?: string | null, fmt: string, regionSpec: unknown, recordSelector: unknown }} options
+ * The source of a Linear record as a request names it, with its resources, when the request draws these files
+ * (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources, or
+ *   those the next Generate's request names (`linearRecordSourceResources`).
+ * @param {FileLike} sourceFile
+ * @param {FileLike | null} fastaFile
+ * @returns {{ recordSource: CanonicalRecordSource, resources: NonNullable<GenerationPayload['resources']> } | null}
  */
-export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector }) => {
-  const sourceText = typeof text === 'string' ? text : await readFileText(file);
-  const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
-  const selected = selectParsedRecord(records, recordSelector);
-  const transformed = applyLosatSequenceTransforms(selected, regionSpec);
+const requestRecordSource = (resources, sourceFile, fastaFile) => {
+  if (!resources) return null;
+  /** @type {CanonicalRecordSource | null} */
+  let recordSource = null;
+  if (!fastaFile) {
+    const resourceId = resourceIdOwnedBy(resources, sourceFile, 'genbank');
+    if (resourceId) recordSource = { kind: 'genbank', resourceId };
+  } else {
+    const gffResourceId = resourceIdOwnedBy(resources, sourceFile, 'gff3');
+    const fastaResourceId = resourceIdOwnedBy(resources, fastaFile, 'fasta');
+    if (gffResourceId && fastaResourceId) recordSource = { kind: 'gffFasta', gffResourceId, fastaResourceId };
+  }
+  if (!recordSource) return null;
+  const ids = recordSource.kind === 'genbank'
+    ? [recordSource.resourceId] : [recordSource.gffResourceId, recordSource.fastaResourceId];
+  // The transport validates each descriptor when it stages it.
+  return {
+    recordSource,
+    resources: Object.fromEntries(ids.map((id) => [id, /** @type {NonNullable<GenerationPayload['resources']>[string]} */ (resources[id])]))
+  };
+};
+/**
+ * @param {ParsedSequenceRecord} record
+ * @param {unknown} regionSpec
+ * @returns {LosatSeqEntry}
+ */
+const losatSeqEntryFromRecord = (record, regionSpec) => {
+  const transformed = applyLosatSequenceTransforms(record, regionSpec);
   return {
     fasta: buildFastaText(transformed),
     recordId: transformed.id,
     canonicalLength: transformed.sequence.length
   };
 };
-/** @param {{ file?: any, text?: string | null, fmt: string }} options */
-const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
-  const sourceText = typeof text === 'string' ? text : await readFileText(file);
-  const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
+/**
+ * The LOSAT FASTA of one record of a sequence text; Generate reads the same records through
+ * `readParsedSequenceRecords`, and the Python twin is `losat_search_frame_fasta`.
+ * @param {{ text: string, fmt: string, regionSpec: unknown, recordSelector: unknown }} options
+ */
+export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
+  losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
+);
+/**
+ * The LOSAT FASTA of every record of the Circular reference: the subject database of the conservation rings, the
+ * records the CLI loader reads (OV-1599). A record without a sequence is left out.
+ * @param {FileLike} file
+ * @param {string} fmt
+ */
+const readAllLosatFasta = async (file, fmt) => {
+  /** @type {LosatSequence[]} */
+  const records = (await readAllSequenceRecords(file, fmt))
+    .flatMap(({ id, sequence }) => (sequence === null ? [] : [{ id, sequence }]));
   if (!records.length) throw new Error('No records found for circular conservation reference.');
-  return {
-    fasta: records.map((record) => buildFastaText(record)).join(''),
-    recordIds: records.map((record) => record.id),
-    canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
-  };
+  return records.map((record) => buildFastaText(record)).join('');
 };
 /**
  * @param {FileLike | FileLike[] | null | undefined} sourceFiles
@@ -1299,6 +1323,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  *   renders; when this render reuses its build, the reply says so and the page keeps it.
  * @property {readonly unknown[] | null} [heldResults] The drawing's committed Results; Python
  *   omits the children texts whose sanitized segments they keep.
+ * @property {DrawingId | null} [drawingId] The drawing it renders: the Worker keeps the prepared
+ *   inputs of each drawing's last request (A4b).
  */
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
@@ -1316,7 +1342,8 @@ export const executeCanonicalRenderCandidate = async ({
   timingEntries = [],
   resultNames = null,
   heldFeatureCatalog = null,
-  heldResults = null
+  heldResults = null,
+  drawingId = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
@@ -1332,7 +1359,7 @@ export const executeCanonicalRenderCandidate = async ({
     : await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress: onProgress, held });
+      }, { onProgress: onProgress, held, drawingId });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
     return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
@@ -1432,15 +1459,20 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
+ *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
  *   The Session owner's commit of the live setting values an automatic rerender drew (R1 (c)).
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
- * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
+ * @property {(drawing: DrawingState) => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact, with the edits of `drawing`.
+ * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
  * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: unknown[]) => void }) => void} installRedrawnArtifact
+ *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
@@ -1461,7 +1493,7 @@ export const executeCanonicalRenderCandidate = async ({
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
  *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
- * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
+ * @property {((drawing: DrawingState, state: any) => void) | null} [assertDrawingInputs]
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
@@ -1484,13 +1516,16 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
+  setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
   commitLiveSettingValues = () => {},
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
+  displayedArtifactDrawing,
   captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet,
+  installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
@@ -1510,7 +1545,7 @@ export const createRunAnalysis = ({
   // D12, OV-1193: the input reads still applying settle before Generate reads the drawing.
   settlePendingInputs = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
-  assertActiveModeInputs = null,
+  assertDrawingInputs = null,
   readDraftSignature = null,
   readHistoryStepSerial = () => 0,
   adoptDrawnWrite = (write) => write(),
@@ -1538,7 +1573,6 @@ export const createRunAnalysis = ({
     zoom,
     skipCaptureBaseConfig,
     matchSequenceRegistry,
-    paletteDefinitions,
     appliedPaletteName,
     appliedPaletteColors,
     mode,
@@ -1562,7 +1596,6 @@ export const createRunAnalysis = ({
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
-    labelFitReports,
     featureEditRemovalCount,
     featureEditorStatus,
     featureExtractionPending,
@@ -1576,6 +1609,7 @@ export const createRunAnalysis = ({
     typeof captureGeneratedArtifactHandle !== 'function'
     || typeof captureGeneratedArtifactOwnerSet !== 'function'
     || typeof installGeneratedArtifactOwnerSet !== 'function'
+    || typeof installRedrawnArtifact !== 'function'
     || typeof restoreGeneratedArtifactHandle !== 'function'
   ) {
     throw new Error('createRunAnalysis requires generated artifact transaction handlers.');
@@ -1599,7 +1633,8 @@ export const createRunAnalysis = ({
     return executeCanonicalRenderCandidate({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
-      heldResults: shown.results ?? null
+      heldResults: shown.results ?? null,
+      drawingId: state.activeDrawingId.value
     });
   };
   /**
@@ -1629,10 +1664,6 @@ export const createRunAnalysis = ({
           slots: request.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
         })
   );
-  // A target-record transform and a label reflow draw the committed Results
-  // again, with the settings and edits of the committed request's mode.
-  /** @param {Record<string, any> | null | undefined} committed */
-  const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   // The latest request that makes the running iteration stale: an editor
@@ -1866,17 +1897,17 @@ export const createRunAnalysis = ({
   /** @type {ReadonlySet<string>} */
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
-   * Record discovery read every source input of `drawingMode`: a shown
-   * Generate failure about those inputs no longer holds, so it ends here,
-   * whether the inputs now give records or the inspection line says why
-   * they do not (OV-1257).
-   * @param {string} drawingMode
+   * Record discovery read every source input of `drawing`: a shown Generate
+   * failure about those inputs no longer holds, so it ends here, whether the
+   * inputs now give records or the inspection line says why they do not
+   * (OV-1257).
+   * @param {DrawingState} drawing
    */
-  const releaseSourceInputFailure = (drawingMode) => {
-    if (!sourceInputFailure || sourceInputFailure.mode !== drawingMode
+  const releaseSourceInputFailure = (drawing) => {
+    if (!sourceInputFailure || sourceInputFailure.mode !== drawing.mode
       || errorLog.value !== sourceInputFailure.error) return;
     try {
-      assertActiveModeInputs?.(drawingMode, state);
+      assertDrawingInputs?.(drawing, state);
     } catch (_) {
       return;
     }
@@ -1923,12 +1954,11 @@ export const createRunAnalysis = ({
    * @param {string} cacheKey
    * @param {LosatCacheMetadata} metadata
    * @param {Record<string, any> | null} [manifest]
-   * @param {object | null} [identityIndex]
    */
-  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
+  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
     if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
-    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, identityIndex)
-      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest, identityIndex);
+    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest)
+      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest);
   };
   /**
    * @param {Map<string, RawLosatCacheEntry>} cacheMap
@@ -1992,10 +2022,10 @@ export const createRunAnalysis = ({
       descriptions: drawing.orthogroupDescriptionOverrides,
       dormant: drawing.orthogroupDormantOverrides
     });
-    [[drawing.orthogroupNameOverrides, next.names], [drawing.orthogroupDescriptionOverrides, next.descriptions],
-      [drawing.orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
-      Object.keys(target).forEach((key) => delete target[key]);
-      Object.assign(target, values);
+    GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
+      orthogroupNameOverrides: next.names,
+      orthogroupDescriptionOverrides: next.descriptions,
+      orthogroupDormantOverrides: next.dormant
     });
   };
 
@@ -2092,7 +2122,7 @@ export const createRunAnalysis = ({
    * @param {{ recordId?: string } | null} [subjectEntry]
    */
   const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
@@ -2145,8 +2175,9 @@ export const createRunAnalysis = ({
   /**
    * @param {unknown} cacheKey
    * @param {RawLosatCacheEntry} cached
+   * @param {unknown} [identityManifest] A copy of the current manifest; Download all copies it once for every table.
    */
-  const hydrateLosatDownloadText = async (cacheKey, cached) => {
+  const hydrateLosatDownloadText = async (cacheKey, cached, identityManifest = cloneJsonData(proteinIdentityManifest.value)) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
       return {
         text: String(cached?.text || ''),
@@ -2157,7 +2188,7 @@ export const createRunAnalysis = ({
       DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV,
       {
         entry: cloneJsonData({ ...cached, key: String(cacheKey || '') }),
-        identityManifest: cloneJsonData(proteinIdentityManifest.value)
+        identityManifest
       }
     );
     const result = response.result;
@@ -2178,7 +2209,7 @@ export const createRunAnalysis = ({
    * @param {unknown} customName
    */
   const downloadLosatPair = async (edgeKey, customName) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
@@ -2210,7 +2241,7 @@ export const createRunAnalysis = ({
    * @param {unknown} customName
    */
   const setLosatPairFilename = (edgeKey, customName) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
@@ -2293,7 +2324,7 @@ export const createRunAnalysis = ({
   };
 
   const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawing = state.drawings.circular;
+    const drawing = state.drawingOfMode('circular');
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (mode.value !== 'circular') {
@@ -2398,7 +2429,7 @@ export const createRunAnalysis = ({
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
-      if (nextRecords.length > 0) releaseSourceInputFailure('circular');
+      if (nextRecords.length > 0) releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
@@ -2420,7 +2451,7 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.status = 'error';
       circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
-      releaseSourceInputFailure('circular');
+      releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
     }
   };
@@ -2470,7 +2501,8 @@ export const createRunAnalysis = ({
     if (!rulePreparation) return { rules: drawing.manualSpecificRules, shouldAdmit: isCurrent };
     const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
-    return { rules: candidate.rules, shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
+    // Without `asGiven`, the preparation wrote each rule as `normalizeSpecificRule` does.
+    return { rules: /** @type {readonly SpecificColorRule[]} */ (candidate.rules), shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
   };
 
   // A render of the committed Session draws the drawing's live editor paint (PD-OI-102): the
@@ -2561,7 +2593,7 @@ export const createRunAnalysis = ({
     let generationAbortController = null;
     /** @type {AbortSignal | null} */
     let generationAbortSignal = null;
-    const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle();
+    const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle(drawing);
     /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedGeneratedArtifactCandidate = null;
     /** @type {ReadyReceipt | null} */
@@ -2583,7 +2615,7 @@ export const createRunAnalysis = ({
       || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
       || Object.keys(drawing.featureStrokeOverrides).length > 0
       || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
-      || drawing.legendEntries.value.some((/** @type {LegendEntry} */ entry) => entry.originalCaption && /** @type {string} */ (entry.originalCaption) !== entry.caption)
+      || drawing.legendEntries.value.some((/** @type {LegendRow} */ entry) => entry.originalCaption && /** @type {string} */ (entry.originalCaption) !== entry.caption)
       || drawing.dormantLegendEntries.value.length > 0;
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
@@ -2784,7 +2816,12 @@ export const createRunAnalysis = ({
       const resolvedComparisons = [];
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
-      const runInfoFileMap = new Map();
+      /**
+       * Each ring LOSAT search, in ring order: its raw cache key (null without current search output) and the
+       * Source recipe's generated BLAST table.
+       * @type {{ cacheKey: string | null, path: string, name: string, slot: string }[]}
+       */
+      const circularRingSearches = [];
       /** @type {Map<string, GeneratedCliFile>} */
       const generatedCliFileMap = new Map();
       const textEncoder = new TextEncoder();
@@ -2796,38 +2833,6 @@ export const createRunAnalysis = ({
       const getPayloadName = (path, fallback = 'input') => {
         const name = String(path || '').split('/').filter(Boolean).pop();
         return name || fallback;
-      };
-      /** @param {unknown} path */
-      const generatedSlotForPath = (path) => {
-        const normalizedPath = String(path || '').trim();
-        if (normalizedPath === '/combined_d.tsv') return 'generatedFiles.combined_d';
-        if (normalizedPath === '/combined_t.tsv') return 'generatedFiles.combined_t';
-        if (normalizedPath === '/manual_wl.tsv') return 'generatedFiles.manual_wl';
-        if (normalizedPath === '/priority.tsv') return 'generatedFiles.priority';
-        if (normalizedPath === '/web_label_table.tsv') return 'generatedFiles.web_label_table';
-        if (normalizedPath === '/web_feature_visibility_table.tsv') return 'generatedFiles.web_feature_visibility_table';
-        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_visibility_table';
-        if (normalizedPath === '/web_annotations.tsv') return 'generatedFiles.web_annotations';
-        const conservationMatch = normalizedPath.match(/^\/conservation_blast_(\d+)\.txt$/);
-        if (conservationMatch) return `generatedFiles.circular_conservation_blasts[${Number(conservationMatch[1])}]`;
-        const blastMatch = normalizedPath.match(/^\/blast_(\d+)\.txt$/);
-        if (blastMatch) return `generatedFiles.losat_blasts[${Number(blastMatch[1])}]`;
-        return normalizedPath ? `generatedFiles.${getPayloadName(normalizedPath).replace(/[^\w]+/g, '_')}` : '';
-      };
-      /**
-       * @param {unknown} path
-       * @param {{ name?: unknown, slot?: unknown, kind?: string }} [options]
-       */
-      const registerRunInfoFile = (path, { name = '', slot = '', kind = 'uploaded' } = {}) => {
-        const normalizedPath = String(path || '').trim();
-        if (!normalizedPath) return;
-        const displayName = String(name || getPayloadName(normalizedPath)).trim() || getPayloadName(normalizedPath);
-        runInfoFileMap.set(normalizedPath, {
-          path: normalizedPath,
-          name: displayName,
-          slot: String(slot || '').trim(),
-          kind: kind === 'generated' ? 'generated' : 'uploaded'
-        });
       };
       /**
        * @param {unknown} path
@@ -2870,104 +2875,14 @@ export const createRunAnalysis = ({
           buildData
         });
       };
-      /**
-       * @param {string} path
-       * @param {unknown} text
-       * @param {{ name?: string, slot?: string }} [options]
-       */
-      const stageTextFile = (
-        path,
-        text,
-        { name = '', slot = '' } = {}
-      ) => {
-        throwIfGenerationCanceled();
-        const displayName = name || getPayloadName(path);
-        const resolvedSlot = slot || generatedSlotForPath(path);
-        registerRunInfoFile(path, {
-          name: displayName,
-          slot: resolvedSlot,
-          kind: 'generated'
-        });
-        recordGeneratedCliFile(path, text, {
-          name: displayName,
-          slot: resolvedSlot
-        });
-      };
-      /**
-       * @param {File | null | undefined} fileObj
-       * @param {string} path
-       * @param {{ cacheText?: boolean, textCache?: WeakMap<WeakKey, any> | null, slot?: string }} [options]
-       */
-      const stageUploadedFile = async (fileObj, path, {
-        cacheText = false,
-        textCache = null,
-        slot = ''
-      } = {}) => {
-        if (!fileObj) return false;
-        throwIfGenerationCanceled();
-        const bytes = await readFileBytes(fileObj);
-        throwIfGenerationCanceled();
-        if (cacheText && textCache) {
-          textCache.set(fileObj, textDecoder.decode(bytes));
-        }
-        registerRunInfoFile(path, {
-          name: fileObj.name || getPayloadName(path),
-          slot,
-          kind: 'uploaded'
-        });
-        return true;
-      };
-
       const normalizedOutputPrefix = String(drawing.form.prefix || '').trim();
 
-      const activePaletteName = String(
-        drawing.selectedPalette?.value || appliedPaletteName.value || 'default'
-      ).trim() || 'default';
-      const paletteBaseColors = normalizePaletteColors(
-        paletteDefinitions.value?.[activePaletteName] ||
-        paletteDefinitions.value?.default ||
-        {}
-      );
-      const dContent = buildDefaultColorOverrideTsv({
-        colors: activeRunColors,
-        paletteColors: paletteBaseColors
-      });
-      if (dContent.trim() !== '') {
-        stageTextFile('/combined_d.tsv', `${dContent}\n`);
-      }
-
-      const tContent = serializeSpecificRules(candidateRules);
-      if (tContent.trim() !== '') {
-        stageTextFile('/combined_t.tsv', tContent);
-      }
-
-      if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
-          name: 'annotations.tsv',
-          slot: 'generatedFiles.web_annotations'
-        });
-      }
-
-      if (drawing.filterMode.value === 'Whitelist') {
-        const wlContent = serializeLabelWhitelistRules(drawing.manualWhitelist);
-        if (wlContent) {
-          stageTextFile('/manual_wl.tsv', wlContent);
-        }
-      }
-
-      const pContent = serializeQualifierPriorityRules(drawing.manualPriorityRules);
-      if (pContent.trim() !== '') {
-        stageTextFile('/priority.tsv', pContent);
-      }
-
-      // The staged label table is the request's: label rules only; per-feature
-      // label edits travel as featureOverrides rows (design Q4). One projection
-      // per Generate serves the staged copy and the request (CW-02).
+      // The annotation, color, whitelist, priority, label and feature visibility tables reach Run Info from the
+      // request (the Source recipe writes its own copies), so Generate stages no copy of them (OV-1573, OV-1589).
+      // The request's label table holds label rules only; per-feature label
+      // edits travel as featureOverrides rows (design Q4). One projection per
+      // Generate serves the request (CW-02).
       generatedLabelProjection = requestLabelProjection(state, requestDrawing);
-      const labelTableTsv = requestLabelTableTsv(state, requestDrawing, generatedLabelProjection);
-      if (labelTableTsv) {
-        stageTextFile('/web_label_table.tsv', labelTableTsv);
-      }
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
       /** @param {string[]} recordKeys */
@@ -2975,15 +2890,9 @@ export const createRunAnalysis = ({
         drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
-      /** @type {string | null} */
-      let featureVisibilityTablePath = null;
-      let featureVisibilityCacheKey = '';
       const featureVisibilityTsv = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
-      if (featureVisibilityTsv.trim()) {
-        featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
-        featureVisibilityCacheKey = featureVisibilityTsv;
-        stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
-      }
+      // The rules table the protein helper reads, and part of its cache key; '' when there are no rules.
+      const featureVisibilityCacheKey = featureVisibilityTsv.trim() ? featureVisibilityTsv : '';
       const validateDepthStyleSettings = () => {
         if (
           drawing.adv.depth_min !== null &&
@@ -3216,7 +3125,7 @@ export const createRunAnalysis = ({
           ? normalizeFileList(files.c_conservation_blasts)
           : normalizeFileList(files.c_conservation_fastas);
         const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
-        drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
+        setCircularConservationEnabled(drawing, shouldDrawCircularPairwiseComparisons);
 
         if (shouldDrawCircularPairwiseComparisons) {
           setProcessingStatus(t('Preparing sequence comparisons for the circular diagram...'));
@@ -3247,13 +3156,14 @@ export const createRunAnalysis = ({
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
-            const subjectEntry = await extractAllLosatFastaFast({
-              file: subjectFile,
-              fmt: subjectFmt
-            });
-            const subjectHash = await hashText(subjectEntry.fasta);
+            const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
+              [subjectFile], `ring-subject:${subjectFmt}`, async () => {
+                const fasta = await readAllLosatFasta(/** @type {FileLike} */ (subjectFile), subjectFmt);
+                return Object.freeze({ fasta, hash: await hashText(fasta) });
+              }
+            );
             const subjectSequenceKey = `circular-subject:${subjectHash}`;
-            const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectEntry.fasta]]);
+            const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectFasta]]);
             const cacheMap = new Map(losatCache.value || []);
             /** @type {LosatCacheInfoEntry[]} */
             const cacheInfo = [];
@@ -3269,13 +3179,8 @@ export const createRunAnalysis = ({
               const fileObj = comparisonEntry?.file || comparisonEntry;
               // One sequence reader (D12): the Python helper reads FASTA, GenBank
               // or DDBJ and returns the query FASTA that the CLI ring hashes.
-              const sequenceResponse = await runDiagramHelperOperation(
-                DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
-                { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(fileObj) }] }
-              );
-              if (sequenceResponse.result?.error) throw sequenceResponse.result.error;
-              const queryFasta = String(sequenceResponse.result?.fasta || '');
-              const queryHash = await hashText(queryFasta);
+              const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
+              const queryHash = await readComparisonSequenceDigest({ file: fileObj });
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
@@ -3372,9 +3277,14 @@ export const createRunAnalysis = ({
             const resolved = [];
             for (const pair of losatPairs) {
               const cached = cacheMap.get(pair.cacheKey);
-              const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
+              const current = isCurrentRawLosatCacheEntry(cached);
+              const blastText = current ? cached.text : '';
               const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
-              stageTextFile(blastPath, blastText, {
+              // Its name is the Source recipe's name for this ring's generated BLAST table, recorded once the
+              // request holds the table in the search frame.
+              circularRingSearches.push({
+                cacheKey: current ? pair.cacheKey : null,
+                path: blastPath,
                 name: pair.filename,
                 slot: `generatedFiles.circular_conservation_blasts[${pair.sourceIndex}]`
               });
@@ -3667,10 +3577,12 @@ export const createRunAnalysis = ({
         // `losatSearch.drawnCount` is a position in the drawn list.
         const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
         const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
+        /**
+         * Each record's LOSAT FASTA in this Generate, and the read of its SHA-256 (OV-1594).
+         * @type {Map<number, { entry: LosatSeqEntry, readDigest: () => Promise<string> }>}
+         */
         const fastaCache = new Map();
-        const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
-        const linearFileTextCache = new WeakMap();
         if (!reuseResolvedProteinArtifacts) {
           if (useOrthogroupBlastp) {
             workingOrthogroups = [];
@@ -3688,7 +3600,6 @@ export const createRunAnalysis = ({
           : null;
         const losatTiming = useLosat
           ? {
-              inputWriteMs: 0,
               fastaExtractionMs: 0,
               cacheHashMs: 0,
               jobBuildMs: 0,
@@ -3743,6 +3654,13 @@ export const createRunAnalysis = ({
 
         /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
+        /** @type {Readonly<Record<string, unknown>> | null | undefined} */
+        let nextResources;
+        // The record sources this Generate's request will name, read once (OV-1595).
+        const nextRecordResources = () => {
+          if (nextResources === undefined) nextResources = linearRecordSourceResources(linearSeqs, lInputType.value);
+          return nextResources;
+        };
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
@@ -3765,18 +3683,23 @@ export const createRunAnalysis = ({
          */
         const getSeqEntry = async (idx) => {
           throwIfGenerationCanceled();
-          if (fastaCache.has(idx)) return fastaCache.get(idx);
+          const held = fastaCache.get(idx);
+          if (held) return held.entry;
           const startedAt = getNow();
           const fmt = lInputType.value === 'gb'
             ? 'genbank'
             : (useProteinBlastp ? 'gff' : 'fasta');
           const regionSpec = regionSpecs[idx]?.file || null;
-          const recordSelector = recordSelectors[idx] ?? '';
+          // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
+          const recordSelector = !useProteinBlastp && lInputType.value === 'gff'
+            ? await gffFastaReaderSelector({
+                gffFile: losatSeqs[idx]?.gff, fastaFile: losatSeqs[idx]?.fasta, selector: recordSelectors[idx] ?? ''
+              })
+            : (recordSelectors[idx] ?? '');
           const reverseFlag = /** @type {string} */ ('0');
           const sourceFile = lInputType.value === 'gb'
             ? losatSeqs[idx]?.gb
             : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta);
-          const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
           const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
             ? losatSeqs[idx]?.fasta
             : null;
@@ -3784,10 +3707,11 @@ export const createRunAnalysis = ({
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
             : '';
           const recordVisibilityRows = useProteinBlastp ? proteinVisibilityRows([recordInstanceKey]) : [];
+          // What is read from the source File (or GFF3 and FASTA pair), kept per File (OV-1587): the protein
+          // extraction, or the LOSAT FASTA of this record and region.
           const persistentCacheKey = useProteinBlastp
             ? JSON.stringify({
                 inputFormat: lInputType.value,
-                pairedFastaFile: getFileFingerprint(pairedFastaFile),
                 regionSpec,
                 recordSelector,
                 recordInstanceKey,
@@ -3797,34 +3721,35 @@ export const createRunAnalysis = ({
                 proteinMapSchema: 4
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
-          const usePersistentFastaCache = !useProteinBlastp;
-          const cachedEntry = sourceFile
-            ? (
-                useProteinBlastp
-                  ? getCachedProteinExtraction(sourceFile, persistentCacheKey)
-                  : (usePersistentFastaCache ? getCachedFastaExtraction(sourceFile, persistentCacheKey) : null)
-              )
-            : null;
-          let entry = cachedEntry;
-
-          if (entry) {
-            if (losatTiming) {
-              if (useProteinBlastp) losatTiming.proteinExtractionCacheHits += 1;
-              else losatTiming.fastaCacheHits += 1;
-            }
-          } else {
-            if (useProteinBlastp) {
-              const helperFiles = [{
-                role: 'source',
-                bytes: await cloneFileBytesForTransfer(sourceFile)
-              }];
-              if (pairedFastaFile) {
-                helperFiles.push({
-                  role: 'fasta',
-                  bytes: await cloneFileBytesForTransfer(pairedFastaFile)
-                });
+          const readFiles = /** @type {[FileLike] | [FileLike, FileLike]} */ (
+            pairedFastaFile ? [sourceFile, pairedFastaFile] : [sourceFile]
+          );
+          let extracted = false;
+          /** @type {LosatSeqEntry} */
+          let entry;
+          if (useProteinBlastp) {
+            entry = await readOncePerFile(readFiles, `protein-fasta:${persistentCacheKey}`, async () => {
+              extracted = true;
+              // A source is staged under the resource ids this Generate's request names, so it crosses once and
+              // is parsed once for every card and the render (OV-1595); when the request repeats the last one, the
+              // Worker already holds its bytes and the records the last Generate parsed (OV-1555). Only when the
+              // request cannot be named (a card lacks a file) are the committed drawing's ids used. Another file
+              // (of a record turned off only) is sent.
+              const committed = requestRecordSource(
+                nextRecordResources() ?? (
+                  typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
+                ),
+                /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null
+              );
+              /** @type {{ role: string, bytes: ArrayBuffer }[]} */
+              const helperFiles = [];
+              if (!committed) {
+                helperFiles.push({ role: 'source', bytes: await cloneFileBytesForTransfer(sourceFile) });
+                if (pairedFastaFile) {
+                  helperFiles.push({ role: 'fasta', bytes: await cloneFileBytesForTransfer(pairedFastaFile) });
+                }
               }
-              if (featureVisibilityTablePath && featureVisibilityCacheKey) {
+              if (featureVisibilityCacheKey) {
                 helperFiles.push({
                   role: 'visibility',
                   bytes: textEncoder.encode(featureVisibilityCacheKey).buffer
@@ -3834,6 +3759,7 @@ export const createRunAnalysis = ({
                 DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA,
                 {
                   files: helperFiles,
+                  ...committed,
                   format: fmt,
                   regionSpec,
                   recordSelector,
@@ -3845,8 +3771,7 @@ export const createRunAnalysis = ({
               );
               const res = response.result;
               if (res.error) throw res.error;
-              const fastaHash = await hashText(res.fasta || '');
-              entry = {
+              return Object.freeze({
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
                 canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
@@ -3858,21 +3783,18 @@ export const createRunAnalysis = ({
                 runtimeBindingHash: String(res.runtime_binding_hash || ''),
                 displayBindingHash: String(res.display_binding_hash || ''),
                 identityManifest: res.identity_manifest || null,
-                sequenceKey: `protein:${fastaHash}`,
-                hash: fastaHash
-              };
-              if (losatTiming) losatTiming.fastaWorkerFallbacks += 1;
-            } else {
-              try {
-                entry = await extractLosatFastaFast({
-                  file: sourceFile,
-                  text: sourceText,
-                  fmt,
-                  regionSpec,
-                  recordSelector
-                });
-                if (losatTiming) losatTiming.fastaJsExtractions += 1;
-              } catch (fastError) {
+                hash: await hashText(res.fasta || '')
+              });
+            }, PROTEIN_EXTRACTIONS_PER_FILE);
+            if (losatTiming) {
+              if (extracted) losatTiming.fastaWorkerFallbacks += 1;
+              else losatTiming.proteinExtractionCacheHits += 1;
+            }
+          } else {
+            entry = await readOncePerFile(readFiles, `losat-fasta:${persistentCacheKey}`, async () => {
+              extracted = true;
+              /** @param {unknown} [reason] Why the browser reader did not serve the file (none: it has no reader for it). */
+              const extractWithWorker = async (reason) => {
                 const response = await runDiagramHelperOperation(
                   DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA,
                   {
@@ -3888,24 +3810,49 @@ export const createRunAnalysis = ({
                 );
                 const res = response.result;
                 if (res.error) throw res.error;
-                entry = {
+                if (losatTiming) {
+                  losatTiming.fastaWorkerFallbacks += 1;
+                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', reason ? formatError(reason) : '');
+                }
+                return Object.freeze({
                   fasta: res.fasta,
                   recordId: res.record_id || `seq_${idx + 1}`,
                   canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
-                };
-                if (losatTiming) {
-                  losatTiming.fastaWorkerFallbacks += 1;
-                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', formatError(fastError));
+                });
+              };
+              try {
+                // One parse per file (OV-1556); each card slices its record and region from it.
+                const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
+                if (records) {
+                  if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
+                  return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
                 }
+              } catch (fastError) {
+                return await extractWithWorker(fastError);
               }
-            }
-            if (sourceFile && useProteinBlastp) {
-              setCachedProteinExtraction(sourceFile, persistentCacheKey, entry);
-            } else if (sourceFile && usePersistentFastaCache) {
-              setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
-            }
+              return await extractWithWorker();
+            }, LOSAT_FASTA_READS_PER_FILE);
+            if (!extracted && losatTiming) losatTiming.fastaCacheHits += 1;
           }
-          fastaCache.set(idx, entry);
+          const fasta = entry.fasta;
+          const proteinHash = entry.hash;
+          fastaCache.set(idx, {
+            entry,
+            // A protein extraction carries its digest. A nucleotide FASTA is digested on first need, once per File
+            // and key beside its entry: the records of a searched database that no pair names are never digested.
+            readDigest: proteinHash ? async () => proteinHash : async () => {
+              let digested = false;
+              const hash = await readOncePerFile(readFiles, `losat-fasta-sha256:${persistentCacheKey}`, async () => {
+                digested = true;
+                const digestStartedAt = getNow();
+                const digest = await hashText(fasta);
+                if (losatTiming) losatTiming.cacheHashMs += getNow() - digestStartedAt;
+                return digest;
+              }, LOSAT_FASTA_READS_PER_FILE);
+              if (!digested && losatTiming) losatTiming.cacheHashHits += 1;
+              return hash;
+            }
+          });
           if (losatTiming) {
             losatTiming.fastaExtractionMs += getNow() - startedAt;
             losatTiming.totalFastaChars += entry.fasta.length;
@@ -3914,36 +3861,19 @@ export const createRunAnalysis = ({
         };
 
         /**
-         * @param {File | null | undefined} fileObj
-         * @param {string} path
-         * @param {{ cacheText?: boolean, slot?: string }} [options]
+         * The SHA-256 of a record's LOSAT FASTA.
+         * @param {number} idx
+         * @returns {Promise<string>}
          */
-        const prepareLinearFile = async (fileObj, path, { cacheText = false, slot = '' } = {}) => {
-          return stageUploadedFile(fileObj, path, {
-            cacheText,
-            textCache: linearFileTextCache,
-            slot
-          });
-        };
-
-        /** @param {number} idx */
         const getSeqHash = async (idx) => {
-          if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
-          const entry = await getSeqEntry(idx);
-          if (entry.hash) {
-            if (losatTiming) losatTiming.cacheHashHits += 1;
-            if (!entry.sequenceKey) entry.sequenceKey = `seq:${entry.hash}`;
-            fastaHashCache.set(idx, entry.hash);
-            return entry.hash;
-          }
-          const startedAt = getNow();
-          const hash = await hashText(entry.fasta);
-          if (losatTiming) losatTiming.cacheHashMs += getNow() - startedAt;
-          entry.hash = hash;
-          if (!entry.sequenceKey) entry.sequenceKey = `seq:${hash}`;
-          fastaHashCache.set(idx, hash);
-          return hash;
+          await getSeqEntry(idx);
+          return /** @type {{ readDigest: () => Promise<string> }} */ (fastaCache.get(idx)).readDigest();
         };
+        /**
+         * The key a record's FASTA is passed to the search under: its kind and SHA-256.
+         * @param {string} hash
+         */
+        const losatSequenceKey = (hash) => `${useProteinBlastp ? 'protein' : 'seq'}:${hash}`;
 
         /** @param {number} idx */
         const getViewTransform = async (idx) => {
@@ -3991,15 +3921,13 @@ export const createRunAnalysis = ({
         };
 
         /**
-         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry,
-         *   identityIndex: object | null }} candidate
+         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry }} candidate
          */
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
           metadata,
           queryEntry,
-          subjectEntry,
-          identityIndex
+          subjectEntry
         }) => {
           if (
             metadata?.identityKind !== 'protein' ||
@@ -4067,8 +3995,7 @@ export const createRunAnalysis = ({
             cacheMap,
             cacheKey,
             metadata,
-            workingProteinIdentityManifest,
-            { identityIndex }
+            workingProteinIdentityManifest
           );
           if (!verified) {
             cacheMap.delete(cacheKey);
@@ -4152,37 +4079,6 @@ export const createRunAnalysis = ({
           }
           return args;
         };
-
-        {
-          const inputWriteStartedAt = getNow();
-          const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-            ? new Set(linearSeqs.map((_, index) => index))
-            : new Set(comparisonResolution.edges
-                .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
-                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex]));
-          for (let i = 0; i < linearSeqs.length; i++) {
-            const seq = linearSeqs[i];
-            if (lInputType.value === 'gb') {
-              if (useLosat && losatRecordIndexes.has(i)) {
-                await prepareLinearFile(seq.gb, `/seq_${i}.gb`, {
-                  cacheText: true,
-                  slot: `files.linearSeqs[${i}].gb`
-                });
-              }
-            } else {
-              if (useLosat && losatRecordIndexes.has(i)) {
-                await prepareLinearFile(seq.gff, `/seq_${i}.gff`, {
-                  slot: `files.linearSeqs[${i}].gff`
-                });
-                await prepareLinearFile(seq.fasta, `/seq_${i}.fasta`, {
-                  cacheText: true,
-                  slot: `files.linearSeqs[${i}].fasta`
-                });
-              }
-            }
-          }
-          if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
-        }
 
         regionSpecs = losatSeqs.map((seq) => buildRegionSpec(seq));
         if (useLosat && useProteinBlastp) {
@@ -4279,6 +4175,7 @@ export const createRunAnalysis = ({
             ...losatSearch,
             specs: jobSpecs,
             getEntry: getSeqEntry,
+            getDigest: getSeqHash,
             buildArgs: buildLosatArgs,
             hashText,
             protein: useProteinBlastp
@@ -4331,7 +4228,7 @@ export const createRunAnalysis = ({
             ? linearSeqs.map((_, index) => index)
             : Array.from(new Set(preparedJobs.flatMap(({ spec }) => [spec.queryIndex, spec.subjectIndex])))
               .sort((left, right) => left - right);
-          /** @type {string[] | null} */
+          /** @type {readonly string[] | null} */
           let proteinCacheKeys = null;
           // The key of the derived payload these raw results convert to (similarity groups and Collinear).
           let derivedCacheKey = '';
@@ -4348,89 +4245,117 @@ export const createRunAnalysis = ({
                 });
               }
             }
-            const response = await runDiagramHelperOperation(
-              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS,
-              {
-                identityManifest: cloneJsonData(workingProteinIdentityManifest),
-                pairs: preparedJobs.map(({ cacheMetadata }) => ({
-                  queryRecordInstanceKey: cacheMetadata.queryRecordInstanceKey,
-                  subjectRecordInstanceKey: cacheMetadata.subjectRecordInstanceKey,
-                  expectedOptions: {
-                    program: cacheMetadata.program,
-                    outfmt: cacheMetadata.outfmt,
-                    args: normalizeLosatArgs(cacheMetadata.args),
-                    ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {})
-                  }
-                })),
-                ...(useDerivedProteinPayloadCache
-                  ? { derived: { settings: derivedSettings, records: derivedRecords, pairs: pairNumbers } }
-                  : {})
-              }
-            );
-            throwIfGenerationCanceled();
-            ({ keys: proteinCacheKeys, derivedKey: derivedCacheKey } = requireProteinLosatCacheKeys(
-              response.result, preparedJobs.length, { derived: useDerivedProteinPayloadCache }
-            ));
+            const keyRequest = {
+              pairs: preparedJobs.map(({ cacheMetadata }) => ({
+                queryRecordInstanceKey: cacheMetadata.queryRecordInstanceKey,
+                subjectRecordInstanceKey: cacheMetadata.subjectRecordInstanceKey,
+                expectedOptions: {
+                  program: cacheMetadata.program,
+                  outfmt: cacheMetadata.outfmt,
+                  args: normalizeLosatArgs(cacheMetadata.args),
+                  ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {})
+                }
+              })),
+              ...(useDerivedProteinPayloadCache
+                ? { derived: { settings: derivedSettings, records: derivedRecords, pairs: pairNumbers } }
+                : {})
+            };
+            const keyRequestText = JSON.stringify(keyRequest);
+            let builtKeys = getCachedFileRead(proteinCacheKeysCache, workingProteinIdentityManifest, keyRequestText);
+            if (!builtKeys) {
+              // The merged manifest is frozen, so the helper call reads it without a copy.
+              const response = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS,
+                { identityManifest: workingProteinIdentityManifest, ...keyRequest }
+              );
+              throwIfGenerationCanceled();
+              const { keys, derivedKey } = requireProteinLosatCacheKeys(
+                response.result, preparedJobs.length, { derived: useDerivedProteinPayloadCache }
+              );
+              builtKeys = Object.freeze({ keys: Object.freeze(keys), derivedKey });
+              setCachedFileRead(proteinCacheKeysCache, workingProteinIdentityManifest, keyRequestText, builtKeys);
+            }
+            ({ keys: proteinCacheKeys, derivedKey: derivedCacheKey } = builtKeys);
           }
 
-          // mergeProteinIdentityManifests made a private deep copy for this run.
-          // Nothing mutates or publishes it during this loop; helper calls receive
-          // clones, including legacy promotion. Release before search/render and
-          // publication so no index can outlive input, Session or History changes.
-          const identityIndex = useProteinBlastp && preparedJobs.length > 0
-            ? buildValidatedProteinIdentityIndex(workingProteinIdentityManifest)
-            : null;
-          if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
-            throw new Error('Protein comparison identity manifest is invalid.');
-          }
-          try {
-            for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
-              throwIfGenerationCanceled();
-              const queryEntry = await getSeqEntry(spec.queryIndex);
-              throwIfGenerationCanceled();
-              const subjectEntry = await getSeqEntry(spec.subjectIndex);
-              throwIfGenerationCanceled();
-              const cacheKey = useProteinBlastp
-                // The loop runs only for a non-empty `preparedJobs`, and then `proteinCacheKeys` was set above for a protein run.
-                ? /** @type {string[]} */ (proteinCacheKeys)[jobIndex]
-                : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
-              throwIfGenerationCanceled();
-              const queryCanonicalHash = await getSeqHash(spec.queryIndex);
-              throwIfGenerationCanceled();
-              const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
-              throwIfGenerationCanceled();
-              if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
-                throw new Error('LOSAT sequence cache key was not prepared.');
-              }
-              sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
-              sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
-              let cached = getReusableLosatCacheEntry(
-                cacheMap,
+          // The merged manifest is admitted (validated once and frozen), so the raw-entry checks below read its
+          // identity from `losat-cache.js` without a per-run index (OV-1553).
+          for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
+            throwIfGenerationCanceled();
+            const queryEntry = await getSeqEntry(spec.queryIndex);
+            throwIfGenerationCanceled();
+            const subjectEntry = await getSeqEntry(spec.subjectIndex);
+            throwIfGenerationCanceled();
+            const cacheKey = useProteinBlastp
+              // The loop runs only for a non-empty `preparedJobs`, and then `proteinCacheKeys` was set above for a protein run.
+              ? /** @type {readonly string[]} */ (proteinCacheKeys)[jobIndex]
+              : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
+            throwIfGenerationCanceled();
+            const queryCanonicalHash = await getSeqHash(spec.queryIndex);
+            throwIfGenerationCanceled();
+            const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
+            throwIfGenerationCanceled();
+            const querySequenceKey = losatSequenceKey(queryCanonicalHash);
+            const subjectSequenceKey = losatSequenceKey(subjectCanonicalHash);
+            sequenceEntriesByKey.set(querySequenceKey, queryEntry.fasta);
+            sequenceEntriesByKey.set(subjectSequenceKey, subjectEntry.fasta);
+            let cached = getReusableLosatCacheEntry(
+              cacheMap,
+              cacheKey,
+              cacheMetadata,
+              workingProteinIdentityManifest
+            );
+            if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
+              cached = await tryPromoteLegacyProteinEntry({
                 cacheKey,
-                cacheMetadata,
-                workingProteinIdentityManifest,
-                identityIndex
-              );
-              if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
-                cached = await tryPromoteLegacyProteinEntry({
-                  cacheKey,
-                  metadata: cacheMetadata,
-                  queryEntry,
-                  subjectEntry,
-                  identityIndex
-                });
-                throwIfGenerationCanceled();
-              }
-              const hasCachedText = Boolean(cached);
-              if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
-              losatTiming.totalPairs += 1;
-              if (hasCachedText) losatTiming.cacheHits += 1;
-              else losatTiming.cacheMisses += 1;
-              const resolvedEdge = comparisonResolution.edges.find(
-                (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
-              );
-              const { displayPair: isResolvedDisplayPair, pairIndex } = pairNumbers[jobIndex];
-              const pair = {
+                metadata: cacheMetadata,
+                queryEntry,
+                subjectEntry
+              });
+              throwIfGenerationCanceled();
+            }
+            const hasCachedText = Boolean(cached);
+            if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
+            losatTiming.totalPairs += 1;
+            if (hasCachedText) losatTiming.cacheHits += 1;
+            else losatTiming.cacheMisses += 1;
+            const resolvedEdge = comparisonResolution.edges.find(
+              (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
+            );
+            const { displayPair: isResolvedDisplayPair, pairIndex } = pairNumbers[jobIndex];
+            const pair = {
+              pairIndex,
+              ordinal: spec.ordinal,
+              edgeKey: spec.edgeKey,
+              queryUid: spec.queryUid,
+              subjectUid: spec.subjectUid,
+              queryIndex: spec.queryIndex,
+              subjectIndex: spec.subjectIndex,
+              cacheKey,
+              filename: buildCacheFilename(spec, queryEntry, subjectEntry),
+              displayPair: isResolvedDisplayPair
+            };
+            losatPairs.push(pair);
+            if (
+              isResolvedDisplayPair &&
+              !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
+            ) {
+              cacheInfo.push({
+                key: cacheKey,
+                filename: pair.filename,
+                display: true,
+                edgeKey: spec.edgeKey,
+                ordinal: spec.ordinal,
+                queryUid: resolvedEdge.queryUid,
+                subjectUid: resolvedEdge.subjectUid,
+                queryIndex: resolvedEdge.queryIndex,
+                subjectIndex: resolvedEdge.subjectIndex
+              });
+            }
+
+            if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
+              pendingJobKeys.add(cacheKey);
+              losatJobs.push({
                 pairIndex,
                 ordinal: spec.ordinal,
                 edgeKey: spec.edgeKey,
@@ -4439,52 +4364,17 @@ export const createRunAnalysis = ({
                 queryIndex: spec.queryIndex,
                 subjectIndex: spec.subjectIndex,
                 cacheKey,
-                filename: buildCacheFilename(spec, queryEntry, subjectEntry),
-                displayPair: isResolvedDisplayPair
-              };
-              losatPairs.push(pair);
-              if (
-                isResolvedDisplayPair &&
-                !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
-              ) {
-                cacheInfo.push({
-                  key: cacheKey,
-                  filename: pair.filename,
-                  display: true,
-                  edgeKey: spec.edgeKey,
-                  ordinal: spec.ordinal,
-                  queryUid: resolvedEdge.queryUid,
-                  subjectUid: resolvedEdge.subjectUid,
-                  queryIndex: resolvedEdge.queryIndex,
-                  subjectIndex: resolvedEdge.subjectIndex
-                });
-              }
-
-              if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
-                pendingJobKeys.add(cacheKey);
-                losatJobs.push({
-                  pairIndex,
-                  ordinal: spec.ordinal,
-                  edgeKey: spec.edgeKey,
-                  queryUid: spec.queryUid,
-                  subjectUid: spec.subjectUid,
-                  queryIndex: spec.queryIndex,
-                  subjectIndex: spec.subjectIndex,
-                  cacheKey,
-                  program: drawing.losatProgram.value,
-                  querySequenceKey: queryEntry.sequenceKey,
-                  subjectSequenceKey: subjectEntry.sequenceKey,
-                  queryCanonicalHash,
-                  subjectCanonicalHash,
-                  outfmt: drawing.losat.outfmt || '6',
-                  extraArgs: losatArgs,
-                  cacheMetadata,
-                  batch
-                });
-              }
+                program: drawing.losatProgram.value,
+                querySequenceKey,
+                subjectSequenceKey,
+                queryCanonicalHash,
+                subjectCanonicalHash,
+                outfmt: drawing.losat.outfmt || '6',
+                extraArgs: losatArgs,
+                cacheMetadata,
+                batch
+              });
             }
-          } finally {
-            releaseValidatedProteinIdentityIndex(identityIndex);
           }
           /** @type {LosatSourceJob[]} */
           const sourceJobs = [];
@@ -4754,11 +4644,6 @@ export const createRunAnalysis = ({
                 losatPairs.find((pair) => pair.pairIndex === pairIndex);
               const blastName = sourcePair?.filename || getPayloadName(blastPath);
               const blastSlot = `generatedFiles.losat_blasts[${pairIndex}]`;
-              registerRunInfoFile(blastPath, {
-                name: blastName,
-                slot: blastSlot,
-                kind: 'generated'
-              });
               recordGeneratedCliFile(blastPath, converted.tsv || '', {
                 name: blastName,
                 slot: blastSlot
@@ -4787,11 +4672,6 @@ export const createRunAnalysis = ({
               const blastPath = `/blast_${pair.pairIndex}.txt`;
               const blastName = pair.filename || getPayloadName(blastPath);
               const blastSlot = `generatedFiles.losat_blasts[${pair.pairIndex}]`;
-              registerRunInfoFile(blastPath, {
-                name: blastName,
-                slot: blastSlot,
-                kind: 'generated'
-              });
               recordGeneratedCliFile(blastPath, blastText, {
                 name: blastName,
                 slot: blastSlot
@@ -4897,7 +4777,6 @@ export const createRunAnalysis = ({
               `cache hits=${losatTiming.cacheHits}`,
               `misses=${losatTiming.cacheMisses}`,
               `unique jobs=${losatTiming.uniqueJobs}`,
-              `input FS write=${formatDuration(losatTiming.inputWriteMs)}`,
               `FASTA extraction=${formatDuration(losatTiming.fastaExtractionMs)}`,
               `FASTA cache hits=${losatTiming.fastaCacheHits}`,
               `protein extraction cache hits=${losatTiming.proteinExtractionCacheHits}`,
@@ -4958,13 +4837,6 @@ export const createRunAnalysis = ({
         }
       }
 
-      if (drawing.annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
-          name: 'annotations.tsv',
-          slot: 'generatedFiles.web_annotations'
-        });
-      }
-
       throwIfGenerationCanceled();
       setProcessingStatus(t('Preparing render inputs and session...'));
       await nextTick();
@@ -5011,6 +4883,34 @@ export const createRunAnalysis = ({
         inheritCommittedComparisonIntent({
           candidate: canonical,
           committed: getCommittedCanonicalSession()
+        });
+      }
+      // A ring LOSAT search reports positions on the whole reference file (D-25); Python puts its rows in the
+      // search frame of the records this request draws, as every ring table is (PD-OI-073), before the request
+      // renders or is saved. The raw LOSAT cache keeps the search output.
+      if (circularRingSearches.length > 0) {
+        const ringTables = canonical.renderRequest.mode === 'circular'
+          ? canonical.renderRequest.diagramOptions.conservationBlastFiles : null;
+        if (!Array.isArray(ringTables) || ringTables.length !== circularRingSearches.length) {
+          throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
+        }
+        const converted = await convertRingTablesOncePerFrame(
+          /** @type {[FileLike] | [FileLike, FileLike]} */ (cInputType.value === 'gb' ? [files.c_gb] : [files.c_gff, files.c_fasta]),
+          {
+            renderRequest: canonical.renderRequest,
+            // The frame of each drawn record: its source, selector, crop and orientation.
+            records: canonical.renderRequest.records.map(({ source, selector, region, presentation }) => (
+              [source, selector, region, presentation.reverseComplement]
+            )),
+            resources: canonical.resources
+          },
+          ringTables.map(({ resourceId }, index) => ({ resourceId, cacheKey: circularRingSearches[index].cacheKey }))
+        );
+        throwIfGenerationCanceled();
+        canonical.resources = await withConvertedResources(canonical.resources, converted);
+        ringTables.forEach(({ resourceId }, index) => {
+          const { path, cacheKey: _cacheKey, ...file } = circularRingSearches[index];
+          recordGeneratedCliFile(path, bytesToText(base64ToBytes(/** @type {ConvertedResource} */ (converted.get(resourceId)).data)), file);
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');
@@ -5060,11 +4960,14 @@ export const createRunAnalysis = ({
         resources: canonical.resources,
         publishedArtifact: publishedReplayArtifact
       });
-      registerRunInfoFile(canonicalReplayPath, {
+      // Run Info names the files of its exact replay, the canonical Session (`buildRunInfo` keeps only those);
+      // the Source recipe carries its own file names (OV-1591).
+      const runInfoFileMap = new Map([[canonicalReplayPath, {
+        path: canonicalReplayPath,
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
         kind: 'generated'
-      });
+      }]]);
       recordDeferredGeneratedCliFile(canonicalReplayPath, buildCanonicalReplayText, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
@@ -5230,7 +5133,6 @@ export const createRunAnalysis = ({
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
-        fileLegendCaptions: specificRulesFileCaptions(candidateRules),
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
         legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
@@ -5333,11 +5235,8 @@ export const createRunAnalysis = ({
       selectedOrthogroupId.value = workingSelectedOrthogroupId;
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
-      Object.keys(drawing.featureColorOverrides).forEach((key) => delete drawing.featureColorOverrides[key]);
-      Object.assign(
-        drawing.featureColorOverrides,
-        cloneJsonValue(candidateCommit.featureColorOverrides, {})
-      );
+      // The compiler keeps the edits that hold a color (`normalizedFeatureColorOverrides`).
+      replaceFeatureFills(drawing.slices.paint, /** @type {Record<string, FeatureFill>} */ (cloneJsonValue(candidateCommit.featureColorOverrides, {})));
       // Feature strokes stay in the draft when this Result does not draw their
       // feature (the other mode's, or one this request leaves out); the next
       // Generate that draws the feature draws them again (R2, OIPC-C06, OV-84).
@@ -5380,9 +5279,8 @@ export const createRunAnalysis = ({
       // source removes only the edits whose feature that source no longer has,
       // and the edits of records the request dropped; Python names them.
       featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
-        featureOverrides: drawing.featureOverrides,
-        featurePlacementOverrides: drawing.featurePlacementOverrides,
-        featureStrokeOverrides: drawing.featureStrokeOverrides,
+        featureEdits: drawing.slices.featureEdits,
+        paint: drawing.slices.paint,
         notices: canonicalExecution.featureIdentityNotices,
         replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
           .map((feature) => String(feature.record_key)),
@@ -5393,7 +5291,7 @@ export const createRunAnalysis = ({
       }) : 0;
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
-      if (sourceReplaced) drawing.dormantLegendEntries.value = [];
+      if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -5512,7 +5410,7 @@ export const createRunAnalysis = ({
       // UI-07: the active mode's input check runs before anything here starts
       // the diagram Worker, so a missing input is named at once.
       try {
-        assertActiveModeInputs?.(mode.value, state);
+        assertDrawingInputs?.(drawing, state);
       } catch (cause) {
         outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
           isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
@@ -5551,12 +5449,12 @@ export const createRunAnalysis = ({
               // part of the Result, so Undo and Redo restore them, and the
               // removal count, with this step.
               captureIntentCheckpoint: () => ({
-                placements: cloneJsonData(drawing.featurePlacementOverrides) || {},
+                placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
               // The checkpoint is what `captureIntentCheckpoint` above returned.
               restoreIntentCheckpoint: (/** @type {{ placements: FeaturePlacementDraft, removed: number }} */ { placements, removed }) => {
-                restorePlacements(drawing.featurePlacementOverrides, placements);
+                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
                 featureEditRemovalCount.value = removed;
               },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
@@ -5584,7 +5482,7 @@ export const createRunAnalysis = ({
               }
             }
           )
-        : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
+        : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle(drawing));
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
         completedLosatSearch = null;
@@ -5649,7 +5547,7 @@ export const createRunAnalysis = ({
     const generationAbortSignal = generationAbortController?.signal || null;
     activeLosatAbortController = generationAbortController;
     const committedArtifactHandle = generatedArtifactHandle
-      || await captureGeneratedArtifactHandle();
+      || await captureGeneratedArtifactHandle(drawing);
     /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedCandidate = null;
     /** @type {ReadyReceipt | null} */
@@ -5887,7 +5785,9 @@ export const createRunAnalysis = ({
     alignmentResetReceipt = undefined,
     operation = 'generate'
   }) => {
-    const drawing = committedDrawing(canonical);
+    // A target-record transform and a label reflow draw the committed Results
+    // again, with the settings and edits of the drawing they belong to.
+    const drawing = displayedArtifactDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     /** @type {Record<string, any> | null} */
@@ -5939,7 +5839,7 @@ export const createRunAnalysis = ({
               historyRecovery = beforeHandle.ownerSet.results.length ? 'restored' : 'no-result';
             }
           })
-        : await execute(await captureGeneratedArtifactHandle());
+        : await execute(await captureGeneratedArtifactHandle(drawing));
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
       }
@@ -6125,13 +6025,20 @@ export const createRunAnalysis = ({
       // OV-873: the new Results have new identities, which key the Legend and
       // title moves History records; the rerender draws the same moves, so a
       // step begun after its request takes the change as drawn (D-40).
+      // OV-111: they install into the artifact of the drawing whose Result they draw.
       adoptDrawnWrite(() => {
-        featureCatalog.value = execution.catalog;
-        extractedFeatures.value = execution.commit.featureState.extractedFeatures;
-        biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
-        results.value = execution.commit.results;
-        // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
-        labelFitReports.value = execution.labelFitReports;
+        installRedrawnArtifact(drawing.id, {
+          featureCatalog: execution.catalog,
+          extractedFeatures: execution.commit.featureState.extractedFeatures,
+          biologicalFeatures: execution.commit.featureState.biologicalFeatures,
+          results: execution.commit.results,
+          // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
+          labelFitReports: execution.labelFitReports
+        }, {
+          installResults(nextResults) {
+            results.value = nextResults;
+          }
+        });
         // The preview owner selects the Result (R13). It registers readiness only
         // when fewer Results leave the selection out of range; the reflow's own
         // expectation, registered next, replaces it, so the binder reports a
@@ -6173,7 +6080,6 @@ export const createRunAnalysis = ({
    *   it, an editor edit's rerender.
    */
   const runLabelReflow = async ({ settings } = {}) => {
-    const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!settings) editorRerenderRequested = true;
@@ -6192,6 +6098,8 @@ export const createRunAnalysis = ({
       while (!reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
         const historyRequestedAt = pendingReflowRequestedAt;
+        // Each iteration draws the drawing of the committed Session it starts from.
+        const drawing = displayedArtifactDrawing();
         let decorationContinuity;
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
@@ -6257,7 +6165,7 @@ export const createRunAnalysis = ({
   const requestLiveSettingApply = (requestPaths, mode) => {
     const committed = getCommittedCanonicalSession?.();
     if (requestPaths.length === 0 || !committed || committed.renderRequest?.mode !== mode) return false;
-    const pending = pendingLiveSettingsOf(committedDrawing(committed));
+    const pending = pendingLiveSettingsOf(displayedArtifactDrawing());
     requestPaths.forEach((path) => pending.add(path));
     labelReflowLastError.value = null;
     void runLabelReflow({ settings: requestPaths });
@@ -6297,6 +6205,7 @@ export const createRunAnalysis = ({
     if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
+    const identityManifest = cloneJsonData(proteinIdentityManifest.value);
     const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (/** @type {LosatCacheInfoEntry} */ entry, /** @type {number} */ idx) => {
       const cached = cacheMap.get(entry.key);
       if (!isCurrentRawLosatCacheEntry(cached)) return null;
@@ -6304,7 +6213,7 @@ export const createRunAnalysis = ({
         entry,
         cached,
         idx,
-        hydrated: await hydrateLosatDownloadText(entry.key, cached)
+        hydrated: await hydrateLosatDownloadText(entry.key, cached, identityManifest)
       };
     }))).filter(Boolean);
     const totalBytes = totalHydratedLosatExportBytes(

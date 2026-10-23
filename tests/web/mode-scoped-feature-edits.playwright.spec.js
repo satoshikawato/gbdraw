@@ -91,7 +91,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   expect(linear.drafts).toEqual([[], []]);
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const drawing = state.drawings.circular;
+    const drawing = state.drawingOf('circular');
     return [Object.keys(drawing.featurePlacementOverrides), Object.keys(drawing.featureOverrides)];
   })).toEqual([[key], [key]]);
 

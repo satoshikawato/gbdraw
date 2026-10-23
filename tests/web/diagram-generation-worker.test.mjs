@@ -5,6 +5,7 @@ globalThis.self = {};
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
+  buildPreparedInputRetention,
   buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
@@ -14,10 +15,14 @@ const {
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 const { readHeldSegments } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
 
+// A resource's cache token is the sha256 hex of its bytes.
+const TOKEN_7 = '7'.repeat(64);
+const TOKEN_1 = '1'.repeat(64);
+const TOKEN_2 = '2'.repeat(64);
 const preparedIdentities = buildPreparedResourceIdentityMap([
   {
     resourceId: 'record-1-genbank',
-    cacheToken: 'render-resource-7',
+    cacheToken: TOKEN_7,
     size: 1234,
     name: 'secret-name.gbk',
     path: '/temporary/workspace/0001.bin',
@@ -25,23 +30,26 @@ const preparedIdentities = buildPreparedResourceIdentityMap([
   }
 ]);
 assert.deepEqual(preparedIdentities, {
-  'record-1-genbank': { cacheToken: 'render-resource-7', size: 1234 }
+  'record-1-genbank': { cacheToken: TOKEN_7, size: 1234 }
 });
 assert.equal(JSON.stringify(preparedIdentities).includes('secret-name.gbk'), false);
+// A4b: Python keeps each drawing's prepared inputs while the retain set names their resources.
+assert.deepEqual(buildPreparedInputRetention('linear', [TOKEN_1, TOKEN_2]), {
+  drawing: 'linear', resourceTokens: [TOKEN_1, TOKEN_2]
+});
+assert.deepEqual(buildPreparedInputRetention('circular', undefined), { drawing: 'circular', resourceTokens: [] });
+assert.equal(buildPreparedInputRetention(null, [TOKEN_1]), null);
+assert.equal(buildPreparedInputRetention(undefined, [TOKEN_1]), null);
+for (const drawingId of ['', 'Circular', 'circular/linear', 7]) {
+  assert.throws(() => buildPreparedInputRetention(drawingId, []), (error) => error.code === 'HELPER_PROTOCOL');
+}
 assert.equal(JSON.stringify(preparedIdentities).includes('/temporary/workspace'), false);
-assert.throws(
-  () => buildPreparedResourceIdentityMap([
-    { resourceId: 'record-1-genbank', cacheToken: 'bad-token', size: 1 }
-  ]),
-  /Invalid cache token/
-);
-assert.throws(
-  () => buildPreparedResourceIdentityMap([
-    { resourceId: 'record-1-genbank', cacheToken: 'render-resource-1', size: 1 },
-    { resourceId: 'record-1-genbank', cacheToken: 'render-resource-2', size: 1 }
-  ]),
-  /duplicate/
-);
+for (const cacheToken of ['bad-token', 'render-resource-1']) {
+  assert.throws(
+    () => buildPreparedResourceIdentityMap([{ resourceId: 'record-1-genbank', cacheToken, size: 1 }]),
+    /Invalid cache token/
+  );
+}
 
 const encoder = new TextEncoder();
 const sha256 = async (bytes) => Array.from(
@@ -263,4 +271,27 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+// Every helper that stages resources accepts each key the page's resource
+// staging writes into its payload (PR #1313 CI: `extractCdsProteinFasta` and
+// `convertStoredProteinResultFrames` refused `retainedResourceTokens`).
+{
+  const { helperPayloadKeys } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
+  const { DIAGRAM_HELPER_OPERATIONS, DIAGRAM_HELPER_STAGING_OPERATIONS } = await import(
+    '../../gbdraw/web/js/services/diagram-worker-protocol.js'
+  );
+  const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const prepared = await createDiagramResourceTransport().prepare({
+    request: { records: [], diagramOptions: {} }, resources: {}, retain: true
+  });
+  const stagedKeys = Object.keys(prepared).filter((key) => typeof prepared[key] !== 'function');
+  assert.ok(stagedKeys.includes('retainedResourceTokens'));
+  assert.ok(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA));
+  for (const operation of DIAGRAM_HELPER_STAGING_OPERATIONS) {
+    const accepted = helperPayloadKeys(operation);
+    for (const key of stagedKeys) assert.ok(accepted?.includes(key), `${operation} accepts ${key}`);
+  }
+  assert.equal(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES)?.includes('stagedResources'), false);
+  assert.equal(helperPayloadKeys('notAHelper'), null);
 }

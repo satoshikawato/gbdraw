@@ -98,6 +98,7 @@ def run_browser(root, payload, expected_keys, samples):
                     const specs = all.filter(x => infer || x.queryIndex !== x.subjectIndex);
                     const plan = await prepareLosatSourceBatches({sequences, specs,
                       getEntry: async i => ({fasta: `>protein-${i}\\nMKK\\n`}),
+                      getDigest: async i => hashText(`>protein-${i}\\nMKK\\n`),
                       buildArgs: () => [], hashText, protein: true, excludeSelfComparisons: !infer});
                     if (!infer && plan.batches.some(b => b.query.indexes.some(i => b.subject.indexes.includes(i)))) {
                       throw new Error('OFF source batch searches a record against itself');
@@ -171,7 +172,7 @@ _s06_json.dumps({"armed": True})
 _s06_retained, _s06_peak = _s06_trace.get_traced_memory()
 _s06_json.dumps({"pythonRetainedBytes": _s06_retained, "pythonPeakBytes": _s06_peak,
                  "operations": _s06_counts,
-                 "filteredEntries": len(_WEB_LOSATP_FILTERED_HIT_CACHE),
+                 "filteredEntries": len(_WEB_LOSATP_HIT_TABLES),
                  "convertedEntries": len(_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE),
                  "convertedUtf8Bytes": sum(len(v.encode()) for v in _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE.values())})
 `)));

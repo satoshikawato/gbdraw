@@ -1200,7 +1200,9 @@ the figure opens nothing. While **Review alignment** is open, these elements
 open nothing and the preview does not read that line.
 
 Ctrl-click selects features for bulk color, legend name, visibility, and
-stroke edits. Use the visible **Apply** action to make an edit part of the
+stroke edits. A press that moves more than a few pixels before its release,
+such as a pan of the figure, is not a click: wherever it ends, it opens no
+feature or match popup and selects or clears no feature. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the name of another
 entry of a different color or feature type, or of a deleted entry, opens the
 **Legend Name Conflict** dialog with **Merge into "<name>"**, **Keep both**, or

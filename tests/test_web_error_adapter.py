@@ -118,8 +118,8 @@ def test_unknown_and_unmapped_validation_are_distinct_and_private(helpers, capsy
         print(sentinel)
         logging.error(sentinel)
         raise error
-    helpers['_WEB_JSON_HELPERS']['measure_legend_text_json'] = (fail, 'measureLegendText')
-    result = json.loads(helpers['call_web_json_helper']('measure_legend_text_json'))
+    helpers['_WEB_JSON_HELPERS']['evaluate_rules_json'] = (fail, 'evaluateRules')
+    result = json.loads(helpers['call_web_json_helper']('evaluate_rules_json'))
     assert result['error']['code'] == 'UNKNOWN'
     assert sentinel not in json.dumps(result)
     assert capsys.readouterr() == ('', '')

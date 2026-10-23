@@ -14,6 +14,8 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.core.color import normalize_hex_color, tint_color
+from gbdraw.annotations.resolve import _source_interval_to_local
+from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
@@ -22,6 +24,7 @@ from gbdraw.io.comparisons import (
     ComparisonFilter,
     filter_comparison_dataframe,
     normalize_comparison_dataframe,
+    read_comparison_resource,
     read_comparison_table,
 )
 
@@ -91,7 +94,7 @@ def _read_conservation_input(source: ConservationInput) -> ConservationTable:
     if isinstance(source, ConservationTable):
         return source
     # Deferred: gbdraw.api imports this module.
-    from gbdraw.api.prepared import register_prepared_resource_value, register_prepared_value_identity
+    from gbdraw.api.prepared import register_prepared_value_identity
 
     try:
         if isinstance(source, ConservationSearchResult):
@@ -102,7 +105,7 @@ def _read_conservation_input(source: ConservationInput) -> ConservationTable:
                 ("conservation_search_result", source.name, hashlib.sha256(source.text.encode("utf-8")).hexdigest()),
             )
         else:
-            rows = register_prepared_resource_value(read_comparison_table(source), source)
+            rows = read_comparison_resource(source)
     except ValidationError as exc:
         return ConservationTable(_input_name(source), None, str(exc))
     return ConservationTable(_input_name(source), rows)
@@ -468,6 +471,11 @@ def _normalize_source_hits_for_record(
     record_len = len(record.seq)
     if record_len <= 0:
         return empty_normalized_conservation_hits()
+    # Rows are in the search frame (PD-OI-073): the drawn record after its
+    # crop, on its source strand, 1-based. A reverse complemented record draws
+    # them through its coordinate map (OV-1683).
+    coord_base, coord_step = _read_coord_map(record)
+    frame_start = _record_source_start(record)
 
     start_column, end_column, id_column = (
         ("qstart", "qend", "query")
@@ -488,11 +496,20 @@ def _normalize_source_hits_for_record(
                 continue
             start = min(raw_start, raw_end)
             end = max(raw_start, raw_end)
-            draw_start = max(0.0, start - 1.0)
-            draw_end = min(float(record_len), end)
-            if draw_start >= draw_end:
+            # outfmt 6 positions are whole bases. A row outside the record is
+            # reported (PD-OI-073); one that crosses its end is clipped.
+            (local_start, local_end), _clipped = _source_interval_to_local(
+                frame_start + int(start) - 1,
+                frame_start + int(end) - 1,
+                coord_base=coord_base,
+                coord_step=coord_step,
+                record_length=record_len,
+            )
+            if local_end <= local_start:
                 dropped += 1
                 continue
+            draw_start = float(local_start)
+            draw_end = float(local_end)
             orientation = "forward" if raw_start <= raw_end else "reverse"
             rows.append(
                 {

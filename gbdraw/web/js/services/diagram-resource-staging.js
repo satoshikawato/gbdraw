@@ -1,14 +1,18 @@
 // @ts-check
+import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
-import { takeFileBytesForTransfer } from './file-content-cache.js';
-import { getResourcePayloadOwner } from './resource-payload-owner.js';
+import {
+  readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
+} from './file-content-cache.js';
+import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
+/** @import { ResourceContentToken } from './file-content-cache.js' */
 /** @import { ResourcePayloadOwner } from './resource-payload-owner.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
 
@@ -23,34 +27,22 @@ import {
  *   A descriptor as the depth codec reads it; base64 `data` is a string, which never matches the codec's `schema`.
  */
 
-const BASE64_CHUNK_CHARACTERS = 1024 * 1024;
-
+// The base64 text of a resource is decoded by the one decoder a Session
+// resource backing also uses: native chunks that yield to paint where the
+// engine has them. `prepare` checks the decoded size against the descriptor.
 /**
  * @param {unknown} encoded
- * @param {number} declaredSize
  * @param {string} resourceId
+ * @returns {Promise<ArrayBuffer>}
  */
-const decodeBase64ForTransfer = (encoded, declaredSize, resourceId) => {
-  const source = String(encoded || '');
-  if (source.length % 4 !== 0 || /\s/.test(source)) {
-    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`);
+const decodeBase64ForTransfer = async (encoded, resourceId) => {
+  try {
+    const bytes = await base64ToBytesInTasks(/** @type {string | null | undefined} */ (encoded));
+    // The decoder writes into a buffer of exactly the decoded length.
+    return /** @type {ArrayBuffer} */ (bytes.buffer);
+  } catch (error) {
+    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
-  const bytes = new Uint8Array(declaredSize);
-  let byteOffset = 0;
-  for (let offset = 0; offset < source.length; offset += BASE64_CHUNK_CHARACTERS) {
-    const chunk = atob(source.slice(offset, offset + BASE64_CHUNK_CHARACTERS));
-    if (byteOffset + chunk.length > bytes.byteLength) {
-      throw new Error(`Canonical resource ${resourceId} exceeds its declared byte size.`);
-    }
-    for (let index = 0; index < chunk.length; index += 1) {
-      bytes[byteOffset + index] = chunk.charCodeAt(index);
-    }
-    byteOffset += chunk.length;
-  }
-  if (byteOffset !== declaredSize) {
-    throw new Error(`Canonical resource ${resourceId} byte size does not match its descriptor.`);
-  }
-  return bytes.buffer;
 };
 
 /**
@@ -92,27 +84,106 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
     return bytes.buffer;
   }
   recordStructuralMetric('base64DecodeCount', 1, { resourceId });
-  const buffer = decodeBase64ForTransfer(descriptor.data, descriptor.size, resourceId);
+  const buffer = await decodeBase64ForTransfer(descriptor.data, resourceId);
   recordStructuralMetric('decodedByteCount', buffer.byteLength, { resourceId });
   return buffer;
 };
 
-export const createDiagramResourceTransport = () => {
-  let cachedResources = new Map();
-  let nextCacheToken = 1;
+/**
+ * The id of the resource of `resources` whose bytes `file` stands for (the
+ * File the user chose, or a Session resource view), of this kind, or null. A
+ * request that names it stages the bytes the Worker holds under that id
+ * (OV-1555).
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {object | null | undefined} file
+ * @param {string} kind
+ * @returns {string | null}
+ */
+export const resourceIdOwnedBy = (resources, file, kind) => {
+  if (!resources || !file) return null;
+  const identity = getResourcePayloadIdentity(file);
+  return Object.keys(resources).find((resourceId) => {
+    const descriptor = resources[resourceId];
+    return typeof descriptor === 'object' && descriptor !== null
+      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadIdentity(descriptor) === identity;
+  }) ?? null;
+};
+
+/**
+ * A request a drawing has committed, with the resources it names.
+ * @typedef {{ request: unknown, resources: Readonly<Record<string, unknown>> | null | undefined }} CommittedResourceSet
+ */
+/**
+ * The committed request of every drawing; the Worker keeps the resources they
+ * name. The composition root supplies it.
+ * @callback ReadCommittedResourceSets
+ * @returns {Iterable<CommittedResourceSet>}
+ */
+
+/**
+ * What names a payload's bytes until they change: the base64 text, or the
+ * object that owns them (the File the user chose, a Session resource view, or
+ * the descriptor itself).
+ * @param {ResourceDescriptor} descriptor
+ * @returns {string | ResourcePayloadOwner}
+ */
+const payloadIdentityOf = (descriptor) => (
+  typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadOwner(descriptor) ?? descriptor
+);
+
+/** @param {{ readCommittedResourceSets?: ReadCommittedResourceSets }} [ports] */
+export const createDiagramResourceTransport = ({ readCommittedResourceSets = () => [] } = {}) => {
+  // The tokens the Worker holds after the last acknowledged request.
+  /** @type {ReadonlySet<ResourceContentToken>} */
+  let heldTokens = new Set();
+  // The token of each payload identity seen whose bytes the Worker holds.
+  /** @type {Map<string | ResourcePayloadOwner, ResourceContentToken>} */
+  let knownTokens = new Map();
+  // A new Worker holds nothing: a helper staging prepared before the reset records nothing.
+  let workerEpoch = 0;
 
   const reset = () => {
-    cachedResources = new Map();
-    nextCacheToken = 1;
+    heldTokens = new Set();
+    knownTokens = new Map();
+    workerEpoch += 1;
   };
 
-  /** @param {{ request?: unknown, resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null }} [payload] */
-  const prepare = async ({ request, resources } = {}) => {
-    const previousCachedResources = cachedResources;
+  // The held tokens a drawing's committed request names. Only tokens already
+  // known count: hashing a payload here would read bytes the Worker may not hold.
+  const committedHeldTokens = () => {
+    /** @type {Set<ResourceContentToken>} */
+    const retained = new Set();
+    for (const { request, resources } of readCommittedResourceSets()) {
+      for (const resourceId of collectCanonicalResourceIds(request)) {
+        const descriptor = resources && Object.hasOwn(resources, resourceId) ? resources[resourceId] : null;
+        if (!descriptor || typeof descriptor !== 'object') continue;
+        const token = knownTokens.get(payloadIdentityOf(/** @type {ResourceDescriptor} */ (descriptor)));
+        if (token && heldTokens.has(token)) retained.add(token);
+      }
+    }
+    return retained;
+  };
+
+  // A render stages what its request names, and the Worker then holds only that.
+  // A helper (`retain`) stages the resources it reads, and the Worker keeps the
+  // rest for the next Generate (OV-1590), so the held tokens keep them too.
+  /**
+   * @param {{
+   *   request?: unknown,
+   *   resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null,
+   *   retain?: boolean
+   * }} [payload]
+   */
+  const prepare = async ({ request, resources, retain = false } = {}) => {
+    const previousHeldTokens = heldTokens;
+    const preparedEpoch = workerEpoch;
+    const retained = committedHeldTokens();
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
+    /** @type {{ resourceId: string, cacheToken: ResourceContentToken, bytes: ArrayBuffer }[]} */
     const stagedResources = [];
-    const nextCachedResources = new Map();
+    /** @type {Set<ResourceContentToken>} */
+    const manifestTokens = new Set();
     let referencedDeclaredBytes = 0;
     let bytesTransferred = 0;
     let materializationCount = 0;
@@ -123,18 +194,22 @@ export const createDiagramResourceTransport = () => {
     for (const resourceId of referencedIds) {
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
-      const payloadIdentity = typeof descriptor.data === 'string'
-        ? descriptor.data
-        : owner;
-      const previous = previousCachedResources.get(resourceId);
-      const cacheHit = Boolean(
-        previous
-        && previous.payloadIdentity === payloadIdentity
-        && previous.size === descriptor.size
-      );
-      const cacheToken = cacheHit
-        ? previous.cacheToken
-        : `render-resource-${nextCacheToken++}`;
+      const identity = payloadIdentityOf(descriptor);
+      /** @type {ArrayBufferLike | null} */
+      let bytes = null;
+      let cacheToken = knownTokens.get(identity);
+      let hashedFile = false;
+      if (!cacheToken) {
+        if (owner && owner !== descriptor) {
+          hashedFile = true;
+          // The File's digest, cached on it: its bytes stay cached until the transfer below takes them.
+          cacheToken = await readFileContentToken(/** @type {FileLike} */ (owner));
+        } else {
+          bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
+          cacheToken = await resourceContentToken(new Uint8Array(bytes));
+        }
+        knownTokens.set(identity, cacheToken);
+      }
       referencedDeclaredBytes += descriptor.size;
       resourceManifest.push({
         resourceId,
@@ -145,17 +220,18 @@ export const createDiagramResourceTransport = () => {
         size: descriptor.size,
         lastModified: Number(descriptor.lastModified) || 0
       });
-      nextCachedResources.set(resourceId, {
-        cacheToken,
-        payloadIdentity,
-        size: descriptor.size
-      });
+      // Equal bytes under another resource ID of this request travel once, and bytes a helper
+      // staged from a File stay held for the Generate that encodes that File (OV-1595).
+      const cacheHit = previousHeldTokens.has(cacheToken) || manifestTokens.has(cacheToken);
+      manifestTokens.add(cacheToken);
       if (cacheHit) {
+        // A File read for its digest alone gives its bytes back, as a transfer would.
+        if (hashedFile) releaseFileContentCache(/** @type {FileLike} */ (owner));
         recordStructuralMetric('workerResourceCacheHitCount', 1, { resourceId });
         continue;
       }
 
-      const bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
+      bytes ??= await descriptorTransferBuffer(resourceId, descriptor, owner);
       if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== descriptor.size) {
         throw new Error(`Canonical render resource ${resourceId} byte size does not match.`);
       }
@@ -175,10 +251,18 @@ export const createDiagramResourceTransport = () => {
     return {
       resourceManifest,
       stagedResources,
+      // The held tokens the Worker keeps besides this request's: it releases the rest.
+      retainedResourceTokens: [...retained].filter((token) => !manifestTokens.has(token)),
       commit() {
+        if (retain) {
+          if (workerEpoch !== preparedEpoch) return false;
+          heldTokens = new Set([...heldTokens, ...stagedResources.map(({ cacheToken }) => cacheToken)]);
+          return true;
+        }
         // A reset or another acknowledged request supersedes this preparation.
-        if (cachedResources !== previousCachedResources) return false;
-        cachedResources = nextCachedResources;
+        if (heldTokens !== previousHeldTokens) return false;
+        heldTokens = new Set([...manifestTokens, ...retained]);
+        knownTokens = new Map([...knownTokens].filter(([, token]) => heldTokens.has(token)));
         return true;
       }
     };

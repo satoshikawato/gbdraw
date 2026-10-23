@@ -537,26 +537,28 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
     tutorialPanel.getByRole('heading', { name: 'Annotate the four regions of a tobacco chloroplast genome' })
   ).toBeVisible();
   await expect(tutorialPanel.getByText('Switch to Circular mode', { exact: true })).toBeVisible();
-  await expect(tutorialPanel.getByText('Import the four plastome regions', { exact: true })).toBeVisible();
-  await expect(tutorialPanel.getByText('Bind the annotation set to the circular track stack', { exact: true })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'LSC 1 86,686 86,686 bp Line, label LSC Highlight' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp Line, label IRb Highlight' })).toBeVisible();
+  await expect(tutorialPanel.getByText('Generate with the defaults', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('Import the four regions and put them on a ring', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('Tint the regions', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Circular Label Placement Radial' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'plastome_tint Annotations Overlay anchor — — Set: plastome_tint; Anchor: features; Underlay; Extend to: gc_content; Marks: Highlight; Labels: off; padding: 0'
+      name: 'plastome_tint Annotations Annotation set: plastome_tint; Annotation placement: overlay; Enabled drawable anchor: features; Annotation layer: underlay; Extend to: gc_content; Show annotation labels: off; Padding: 0'
     })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'plastome_regions Annotations Inside 0.65 ×R 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
+      name: 'plastome_regions Annotations Inside 0.65 ×R 20 px Annotation set: plastome_regions; Show annotation labels: on; Overflow: Compress; Padding: 1; Inner and Outer gap: 1'
     })
   ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Multi-Record Canvas Off' })).toBeVisible();
   const tutorialImages = tutorialPanel.getByRole('img');
-  await expect(tutorialImages).toHaveCount(11);
+  await expect(tutorialImages).toHaveCount(17);
   await expect(tutorialPanel.locator('img[src$="thumbnails/tobacco-chloroplast.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-03-01-default-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-06-01-region-annotations.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-custom-track-slots.webp"]')).toHaveCount(1);
-  const finalPreview = tutorialPanel.locator('img[src$="manual-08-01-chloroplast-preview.webp"]');
+  const finalPreview = tutorialPanel.locator('img[src$="manual-08-02-chloroplast-preview.webp"]');
   await expect(finalPreview).toHaveCount(1);
   await finalPreview.scrollIntoViewIfNeeded();
   await expect.poll(() => finalPreview.evaluate((element) => element.naturalWidth)).toBeGreaterThan(3000);
@@ -587,7 +589,9 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
     page.getByRole('heading', { name: 'Add an AT skew ring to the human mitochondrial genome map' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByText('Open Custom Track Slots', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('Generate with the defaults', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('Build a custom track stack', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Multi-Record Canvas Off' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: 'gc_content Dinucleotide content inside Width: 0.1'
@@ -605,18 +609,18 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Stack position Last, after a_skew_2' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(13);
-  await expect(tutorialPanel.locator('img[src$="manual-05-01-middle-template.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-05-01-open-custom-track-slots.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-05-02-middle-template-stack.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-09-01-atskew-preview.webp"]')).toHaveCount(1);
+  await expect(mediaImages).toHaveCount(17);
+  await expect(tutorialPanel.locator('img[src$="manual-03-01-default-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-middle-template.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-02-middle-stack-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-09-02-atskew-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveAttribute(
     'alt',
     /highlighted l-rRNA feature/
   );
-  const atSkewSlotImage = tutorialPanel.locator('img[src$="manual-06-01-at-skew-slot-context.webp"]');
-  const tickTrackImage = tutorialPanel.locator('img[src$="manual-07-01-tick-track-context.webp"]');
+  const atSkewSlotImage = tutorialPanel.locator('img[src$="manual-08-01-at-skew-slot-context.webp"]');
+  const tickTrackImage = tutorialPanel.locator('img[src$="manual-09-01-tick-track-context.webp"]');
   await expect(atSkewSlotImage).toHaveCount(1);
   await expect(tickTrackImage).toHaveCount(1);
   await expect.poll(() => atSkewSlotImage.evaluate((element) => element.naturalHeight)).toBeGreaterThan(1000);
@@ -728,28 +732,22 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toHaveCount(0);
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rules' })).toHaveCount(0);
   await expect(tutorialPanel.getByRole('heading', { name: 'Post-generation edits' })).toHaveCount(0);
-  await expect(tutorialPanel.getByText('Set up the Multi-Record Canvas')).toBeVisible();
   await expect(tutorialPanel.getByText('Upload the GenBank file')).toBeVisible();
-  await expect(tutorialPanel.getByText('Set the circular layout')).toBeVisible();
+  await expect(tutorialPanel.getByText('Generate with the defaults')).toBeVisible();
+  await expect(tutorialPanel.getByText('Put the plasmids in their own row')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'Track Preset Tuckin'
-    })
-  ).toBeVisible();
-  await expect(
-    tutorialPanel.getByRole('row', {
-      name: 'Record Order #1@1, #2@1, #3@2, #4@2, #5@2, #6@2'
+      name: 'Record Order, record #3 (pVNTG1) Row 2'
     })
   ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(10);
-  await expect(tutorialPanel.locator('img[src$="manual-03-00-circular-layout-settings.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-03-03-selected-features.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-00-multirecord-toggle.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-01-multirecord-canvas.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-06-01-multirecord-preview.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-07-01-files-tab.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-08-01-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-01-default-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-01-record-order.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-plasmid-row-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-05-02-orchid-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-02-multirecord-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src*="/post-"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-record-positions.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {

@@ -1913,7 +1913,7 @@ test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP m
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   const linearBlastp = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    const { mode, candidateLimit } = state.drawings.linear.losat.blastp;
+    const { mode, candidateLimit } = state.drawingOf('linear').losat.blastp;
     return { mode, candidateLimit };
   });
   expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });

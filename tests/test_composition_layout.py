@@ -467,6 +467,58 @@ def test_overlay_canvas_growth_fallback_is_exact_and_deterministic() -> None:
     assert first.primary_bounds.min_x - _bounds(first, "legend").max_x == 8.0
 
 
+@pytest.mark.parametrize(
+    ("legend_placement", "title_placement"),
+    [
+        (LegendPlacement.UPPER_LEFT, TitlePlacement.TOP),
+        (LegendPlacement.UPPER_RIGHT, TitlePlacement.TOP),
+        (LegendPlacement.LOWER_LEFT, TitlePlacement.BOTTOM),
+        (LegendPlacement.LOWER_RIGHT, TitlePlacement.BOTTOM),
+    ],
+)
+def test_title_moves_outward_of_a_corner_legend_grown_onto_its_side(
+    legend_placement: LegendPlacement,
+    title_placement: TitlePlacement,
+) -> None:
+    """A title that meets the Legend's final bounds stacks outside it, whatever the Legend placement."""
+    plan = plan_composition(
+        CompositionRequest(
+            # Taller than wide, so growing the canvas vertically adds less area.
+            primary=_item("primary", Aabb(0, 0, 40, 60)),
+            legend=_item("legend", Aabb(0, 0, 20, 20)),
+            legend_placement=legend_placement,
+            overlay_obstacles=(Aabb(0, 0, 40, 60),),
+            title=_item("title", Aabb(0, 0, 60, 10)),
+            title_placement=title_placement,
+        )
+    )
+    primary = plan.primary_bounds
+    legend = _bounds(plan, "legend")
+    title = _bounds(plan, "title")
+    assert plan.overlay_resolution is OverlayResolution.CANVAS_GROWTH
+    assert not title.intersects(legend)
+    if title_placement is TitlePlacement.TOP:
+        assert primary.min_y - legend.max_y == 8.0
+        assert legend.min_y - title.max_y == 20.0
+    else:
+        assert legend.min_y - primary.max_y == 8.0
+        assert title.min_y - legend.max_y == 20.0
+    assert title.min_x + title.max_x == primary.min_x + primary.max_x
+
+
+def test_title_keeps_its_gap_from_the_primary_when_a_corner_legend_stays_inside() -> None:
+    plan = plan_composition(
+        _request(
+            legend=_item("legend", LEGEND_BOUNDS),
+            legend_placement=LegendPlacement.UPPER_LEFT,
+            title=_item("title", TITLE_BOUNDS),
+            title_placement=TitlePlacement.TOP,
+        )
+    )
+    assert plan.overlay_resolution is OverlayResolution.ANCHORED
+    assert plan.primary_bounds.min_y - _bounds(plan, "title").max_y == 20.0
+
+
 def test_request_freezes_obstacles_and_planning_does_not_mutate_inputs() -> None:
     obstacle_list = [Aabb(0, 0, 10, 10)]
     primary = _item("primary", Aabb(-5, -7, 95, 73))

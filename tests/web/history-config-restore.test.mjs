@@ -1,19 +1,26 @@
 import assert from 'node:assert/strict';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = { Vue: {
   ref: value => ({ value }), reactive: value => value,
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { buildConfigData, applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
-const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+const { createHistoryManager, createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+// One History per drawing, as the app has (PD-OI-090): the router walks the shown drawing's.
+const routerOver = (snapshotService, options = {}) => createHistoryRouter({
+  drawingIds: ['circular', 'linear'],
+  activeDrawingId: () => state.activeDrawingId.value,
+  managerOptions: (drawingId) => ({ ...snapshotService.drawingHistory(drawingId), ...options }),
+  sessionHistory: snapshotService.sessionHistory()
+});
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const snapshots = createHistorySnapshotService({
   state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
-const history = createHistoryManager({
-  buildIntent: snapshots.buildHistoryIntent, applyIntent: snapshots.applyHistoryIntent,
+const history = routerOver(snapshots, {
   buildCheckpoint: () => assert.fail('Form edits must use intent History'),
   applyCheckpoint: () => assert.fail('Form edits must use intent History')
 });
@@ -39,7 +46,7 @@ for (const [domain, key, first, second] of [
 // R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
 // Undo and Redo install it as captured; only Load reads a file's stack.
 {
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   const slot = () => drawing.adv.circular_track_slots.find(({ id }) => id === 'gc_content');
   const original = structuredClone(slot().width ?? null);
   await history.initializeIntentBaseline();
@@ -76,17 +83,19 @@ for (const [domain, key, first, second] of [
 {
   const config = await import('../../gbdraw/web/js/services/config.js');
   const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const { removeAnnotations } = await import('../../gbdraw/web/js/services/drawing/annotation-sets.js');
   const editorSnapshots = createHistorySnapshotService({
     state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
     buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
   });
-  const editorHistory = createHistoryManager({
-    buildIntent: editorSnapshots.buildHistoryIntent, applyIntent: editorSnapshots.applyHistoryIntent,
+  const editorHistory = routerOver(editorSnapshots, {
     buildCheckpoint: () => assert.fail('Delete settings must use intent History'),
     applyCheckpoint: () => assert.fail('Delete settings must use intent History')
   });
-  const drawing = state.drawings.linear;
+  // The record settings are the Linear drawing's: its History records them.
+  installShownDrawing('linear');
+  const drawing = modeDrawing(state, 'linear');
   const card = state.linearSeqs[0];
   const uid = card.uid;
   card.definition = 'Kept organism';
@@ -103,7 +112,8 @@ for (const [domain, key, first, second] of [
   await editorHistory.initializeIntentBaseline();
   await editorHistory.runUndoable('Delete record settings', () => {
     removeRecordEdits([{ key: uid, requestKeys: [uid], ownsExpansions: true, bindingKeys: [], displaySource: uid, displaySelector: null }],
-      { featureOverrides: drawing.featureOverrides, annotationSets: drawing.annotationSets, annotationBindingField: 'binding' });
+      { featureEdits: drawing.slices.featureEdits, annotationSets: drawing.annotationSets, annotationBindingField: 'binding',
+        removeAnnotation: (annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]) });
     Object.assign(card, RECORD_SETTINGS_DEFAULTS);
   });
   assert.equal(card.definition, '');
@@ -119,6 +129,7 @@ for (const [domain, key, first, second] of [
   drawing.recordsOff.splice(0);
   drawing.annotationSets.splice(0);
   delete drawing.featureOverrides[key];
+  installShownDrawing('circular');
 }
 
 applyCapturedConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
@@ -135,6 +146,8 @@ state.similarityAlignmentPlan.value = {
   },
   records: []
 };
+// The alignment is the Linear drawing's: its History records it.
+installShownDrawing('linear');
 state.linearRecordTranslations.value = [{ recordKey: 'record-a', x: 12, y: -3 }];
 await history.initializeIntentBaseline();
 await history.runUndoable('Clear alignment', () => {
@@ -154,22 +167,22 @@ assert.deepEqual(state.linearRecordTranslations.value, [
 // OV-383: Undo and Redo of a Linear setting keep the active alignment. The
 // config a History step restores carries no alignment, so restoring it must
 // not clear the plan or the record translations.
-state.mode.value = 'linear';
+installShownDrawing('linear');
 const keptPlan = { schema: 1, mode: 'position', groupId: 'og-ov383',
   reference: { recordKey: 'record-a', biologicalFeatureId: 'feature-a', sourceFeatureIndex: 0, stableFeatureSvgId: 'feature-a' },
   records: [] };
 const keptTranslations = [{ recordKey: 'record-a', x: 12, y: -3 }];
 state.similarityAlignmentPlan.value = keptPlan;
 state.linearRecordTranslations.value = keptTranslations;
-const shaftBefore = state.drawings.linear.adv.arrow_shaft_width_ratio;
+const shaftBefore = modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio;
 await history.initializeIntentBaseline();
-await history.runUndoable('Arrow shaft', () => { state.drawings.linear.adv.arrow_shaft_width_ratio = 0.6; });
+await history.runUndoable('Arrow shaft', () => { modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio = 0.6; });
 await history.undo();
-assert.equal(state.drawings.linear.adv.arrow_shaft_width_ratio, shaftBefore);
+assert.equal(modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio, shaftBefore);
 assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-ov383', 'Undo keeps the alignment plan');
 assert.deepEqual(state.linearRecordTranslations.value, keptTranslations, 'Undo keeps the record translations');
 await history.redo();
-assert.equal(state.drawings.linear.adv.arrow_shaft_width_ratio, 0.6);
+assert.equal(modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio, 0.6);
 assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-ov383', 'Redo keeps the alignment plan');
 assert.deepEqual(state.linearRecordTranslations.value, keptTranslations, 'Redo keeps the record translations');
 console.log('History restores nullable config values and preserves key guards.');
@@ -197,7 +210,7 @@ console.log('History restores nullable config values and preserves key guards.')
       orthogroups: [], annotations: [], comparisonMatches: [], sequenceSources: []
     }]
   }, [{ name: 'diagram.svg', content: '<svg />' }], { adopt: true, mode: 'circular' }).catalog;
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
   state.featureCatalog.value = catalog;
   const liveCatalog = () => window.Vue.toRaw?.(state.featureCatalog.value) ?? state.featureCatalog.value;
@@ -208,10 +221,7 @@ console.log('History restores nullable config values and preserves key guards.')
     buildEditorStateData, applyEditorStateData
   });
   const artifactHistory = createHistoryManager({
-    buildIntent: artifactSnapshots.buildHistoryIntent,
-    applyIntent: artifactSnapshots.applyHistoryIntent,
-    buildCheckpoint: artifactSnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: artifactSnapshots.applyArtifactCheckpoint,
+    ...artifactSnapshots.drawingHistory(state.activeDrawing().id),
     signatureFor: artifactSnapshots.snapshotSignature
   });
   await artifactHistory.captureBaseline();
@@ -243,7 +253,7 @@ console.log('History restores nullable config values and preserves key guards.')
   const {
     buildEditorStateData, applyEditorStateData, buildUiStateData, applyUiStateData
   } = await import('../../gbdraw/web/js/services/config.js');
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.activeDrawing().adv.circular_track_slots.forEach((slot) => {
     slot.side = null;
     delete slot.params.lane_direction;
@@ -277,10 +287,7 @@ console.log('History restores nullable config values and preserves key guards.')
     buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
   });
   const restoreHistory = createHistoryManager({
-    buildIntent: restoreSnapshots.buildHistoryIntent,
-    applyIntent: restoreSnapshots.applyHistoryIntent,
-    buildCheckpoint: restoreSnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: restoreSnapshots.applyArtifactCheckpoint,
+    ...restoreSnapshots.drawingHistory(state.activeDrawing().id),
     signatureFor: restoreSnapshots.snapshotSignature
   });
   await restoreHistory.captureBaseline();
@@ -336,8 +343,7 @@ console.log('History restores nullable config values and preserves key guards.')
     state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
   });
   const preferenceHistory = createHistoryManager({
-    buildIntent: preferenceSnapshots.buildHistoryIntent,
-    applyIntent: preferenceSnapshots.applyHistoryIntent,
+    ...preferenceSnapshots.drawingHistory(state.activeDrawing().id),
     buildCheckpoint: () => assert.fail('a setting edit uses intent History'),
     applyCheckpoint: () => assert.fail('a setting edit uses intent History')
   });
@@ -345,7 +351,7 @@ console.log('History restores nullable config values and preserves key guards.')
   state.richFeaturePopup.value = true;
   drawing.form.labels_mode = 'out';
   await preferenceHistory.initializeIntentBaseline();
-  assert.equal(Object.hasOwn(preferenceSnapshots.buildHistoryIntent().ui, 'richFeaturePopup'), false,
+  assert.equal(Object.hasOwn(preferenceSnapshots.drawingHistory(state.activeDrawing().id).buildIntent().ui, 'richFeaturePopup'), false,
     'the History intent does not hold the preference');
   await preferenceHistory.runUndoable('Label Mode', () => { drawing.form.labels_mode = 'both'; });
   const steps = preferenceHistory.getUndoCount();

@@ -11,6 +11,9 @@ import {
   replaceFeatureEdits
 } from '../../gbdraw/web/js/app/feature-editor/feature-edit-table.js';
 import { featureIdentityKey } from '../../gbdraw/web/js/services/feature-placement.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 const record = (recordKey, cardinality = 'exactly_one') => ({
   recordKey, cardinality, source: { kind: 'genbank', resourceId: `source-${recordKey}` }
@@ -31,17 +34,17 @@ test('the export writes the Source recipe table: #index of the request record an
   });
   assert.deepEqual(table, {
     text: `${HEADER}\n#1\thash=f1\t\t\t" Text ""quoted"" "\n#3\thash=f2~1\toff\ton\t\n`,
-    reason: ''
+    reason: null
   });
   // An input of several records shifts every later #index, so no table carries it.
   counts['source-b'] = 2;
   assert.deepEqual(await buildFeatureOverrideTable({
     renderRequest, resources: {}, rows: [row('c', 'f2', { featureVisibility: 'off' })],
     readResourceRecordCount: async (resourceId) => counts[resourceId]
-  }), { text: '', reason: 'feature placements and feature edits require exact materialized records.' });
+  }), { text: '', reason: { text: 'feature placements and feature edits require exact materialized records.' } });
   assert.deepEqual(await buildFeatureOverrideTable({
     renderRequest: { records: [record('a')] }, resources: {}, rows: [row('b:2', 'f1', { featureVisibility: 'off' })]
-  }), { text: '', reason: 'a feature edit names a feature identity that no table row can carry.' });
+  }), { text: '', reason: { text: 'a feature edit names a feature identity that no table row can carry.' } });
 });
 
 test('a loaded table must return request rows of the committed records', () => {
@@ -74,7 +77,7 @@ test('a load replaces the edits of the committed records and keeps the other rec
   put({ ...row('linear-other', 'f1', { labelText: 'Other record' }), labelSourceText: null });
   const circular = { [featureIdentityKey('a', 'gone')]: { ...row('a', 'gone', { labelText: 'Same key' }), labelSourceText: null } };
   const circularBefore = structuredClone(circular);
-  replaceFeatureEdits(draft, [row('a', 'old', { labelText: 'New' }), row('a', 'f9', { featureVisibility: 'exclude_matching' })],
+  replaceFeatureEdits(editsOf(draft), [row('a', 'old', { labelText: 'New' }), row('a', 'f9', { featureVisibility: 'exclude_matching' })],
     [record('a')]);
   assert.deepEqual(Object.values(draft).map((value) => [value.recordKey, value.biologicalFeatureId,
     value.featureVisibility, value.labelVisibility, value.labelText, value.labelSourceText]).sort(), [

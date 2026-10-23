@@ -16,10 +16,9 @@ from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasGeometry
 from ....config.models import GbdrawConfig
 from ....core.record_metadata import RecordSourceMetadata, infer_record_source_metadata
-from ....core.numeric import compensated_sum
 from ....core.text import (
     calculate_bbox_dimensions,
-    calculate_svg_bbox_dimensions,
+    measure_mixed_text_line,
     parse_mixed_content_text,
 )
 from ....layout.spatial import Aabb, union_aabbs
@@ -455,22 +454,13 @@ class DefinitionGroup:
             font_family = str(attribs.get("font-family", self.font))
             font_size = float(attribs.get("font-size", self.font_size))
             font_weight = str(attribs.get("font-weight", "normal"))
-            widths: list[float] = []
-            heights: list[float] = []
-            for text, font_style in parts:
-                width, height = calculate_svg_bbox_dimensions(
-                    text,
-                    font_family,
-                    font_size,
-                    self.geometry.dpi,
-                    font_weight=font_weight,
-                    font_style=font_style,
-                )
-                widths.append(float(width))
-                heights.append(float(height))
-
-            width = compensated_sum(widths)
-            height = max(heights, default=font_size)
+            width, height = measure_mixed_text_line(
+                parts,
+                font_family,
+                font_size,
+                self.geometry.dpi,
+                font_weight=font_weight,
+            )
             text_anchor = str(attribs.get("text-anchor", "start")).strip().lower()
             if text_anchor == "middle":
                 left = x - (0.5 * width)
