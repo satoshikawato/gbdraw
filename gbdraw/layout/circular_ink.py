@@ -43,6 +43,10 @@ class CircularInkRing:
         outer = np.where(inside, float(self.band.outer_px), -np.inf)
         return inner, outer
 
+    @property
+    def nearest_px(self) -> float:
+        return float(self.band.inner_px)
+
     def ray_turns(self) -> NDArray[np.float64]:
         if self.end_turn - self.start_turn >= 1.0:
             return np.empty(0)
@@ -85,6 +89,10 @@ class CircularInkProfile:
         inner = np.interp(turns, self.turns, self.inner_px, period=1.0)
         outer = np.interp(turns, self.turns, self.outer_px, period=1.0)
         return inner, outer
+
+    @property
+    def nearest_px(self) -> float:
+        return float(self.inner_px.min()) if self.inner_px.size else math.inf
 
     def ray_turns(self) -> NDArray[np.float64]:
         return self.turns
@@ -161,7 +169,12 @@ def box_meets_ink(box: Aabb, inks: Sequence[CircularInk], *, threshold_px: float
     inner = Aabb(
         box.min_x + threshold_px, box.min_y + threshold_px, box.max_x - threshold_px, box.max_y - threshold_px
     ) if box.max_x - box.min_x > 2 * threshold_px and box.max_y - box.min_y > 2 * threshold_px else None
-    if inner is None or not inks:
+    if inner is None:
+        return False
+    # Only paint that comes nearer the centre than the box's farthest corner can meet it.
+    reach = max(math.hypot(x, y) for x in (inner.min_x, inner.max_x) for y in (inner.min_y, inner.max_y))
+    inks = [ink for ink in inks if ink.nearest_px <= reach]
+    if not inks:
         return False
     turns = _ray_turns(inner, inks)
     entry, exit_ = _ray_box(inner, turns)
