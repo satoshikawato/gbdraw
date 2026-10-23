@@ -3785,7 +3785,7 @@ export const createRunAnalysis = ({
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
                 const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
-                if (!records) throw new Error('This file needs the Python reader.');
+                if (!records) throw diagnosticError('INPUT_UNREADABLE');
                 if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
                 return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
               } catch (fastError) {
