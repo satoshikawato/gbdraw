@@ -113,7 +113,7 @@ const createState = ({
   conservationEnabled = false,
   conservationFiles = []
 } = {}) => ({
-  mode: { value: 'circular' },
+  mode: 'circular',
   form: {
     track_type: 'tuckin',
     show_depth: showDepth,

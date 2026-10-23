@@ -44,6 +44,7 @@ const renderRequest = {
 };
 const state = () => ({
   ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
+  activeDrawing: () => ({ mode: 'linear', recordsOff: [] }),
   mode: ref('linear'),
   featureCatalog: ref({ items: [{
     recordKeys: ['a', 'b', 'c'],

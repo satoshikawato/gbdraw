@@ -14,6 +14,11 @@ import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.j
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
+// The drawings a record source belongs to, found by kind: the Circular file card is the Circular drawing's, the
+// Linear cards the Linear drawing's. The fixtures' drawings carry no `mode` string, so the list names the two IDs.
+const withSourceDrawings = (state) => Object.defineProperty(state, 'drawingList', {
+  value: () => [{ id: 'circular', mode: 'circular' }, { id: 'linear', mode: 'linear' }], configurable: true });
+
 const source = {};
 const records = [
   { selector: '#1', recordId: 'same', recordLength: 100, detectedTopology: 'circular' },
@@ -181,7 +186,8 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
-  const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: history.runUndoable, getCommittedRequest,
+  withSourceDrawings(withDrawings(state));
+  const actions = createFeaturePlacementActions({ state, runUndoable: history.runUndoable, getCommittedRequest,
     isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
@@ -492,7 +498,9 @@ test('an alignment checkpoint restores the Linear drafts and leaves the Circular
     // Not yet on its record's row (OV-278): only an edit of the Circular drawing moves it.
     recordDisplayDrafts: [{ sourceUid: 'circular', selector: '#1', recordId: 'second', topologyOverride: null,
       startCoordinate: 7, reverseComplementOverride: null, anchorIntent: null }] };
+  Object.defineProperty(model.state, 'id', { value: 'linear', configurable: true });
   withModeDrawings(model.state, { circular, linear: model.state });
+  withSourceDrawings(model.state);
   const circularBefore = structuredClone(circular.recordDisplayDrafts);
   const rows = model.controls.allRows.value.filter((row) => row.scope === 'linear');
   model.controls.setStart(rows[0], 25);
@@ -582,7 +590,7 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
     featurePlacementOverrides: {}, circularRecordList: { value: [] },
     circularRecordDiscovery: { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
     featureCatalog: { value: { items: [] } } };
-  const controls = createRecordDisplayControls({ state: withDrawings(state), computed: (fn) => ({ get value() { return fn(); } }),
+  const controls = createRecordDisplayControls({ state: withSourceDrawings(withDrawings(state)), computed: (fn) => ({ get value() { return fn(); } }),
     watch: () => {}, linearRecordsFor: () => [
       { selector: '#1', recordId: 'first', recordLength: 100, detectedTopology: 'circular' },
       { selector: '#2', recordId: 'second', recordLength: 100, detectedTopology: 'circular' }],
@@ -648,6 +656,7 @@ const sourceControls = () => {
     files: { c_gb: new Blob(['c']) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
     linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: new Blob([uid]), region_record_id: '', region_reverse: false })) },
   { circular, linear });
+  withSourceDrawings(state);
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
     watch: (_source, callback) => { callbacks.push(callback); }, linearRecordsFor: () => [],
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '', runUndoable: (_label, fn) => fn(),

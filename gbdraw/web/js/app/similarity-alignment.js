@@ -1317,7 +1317,11 @@ export const createSimilarityAlignmentActions = ({
   clearCandidatePreview = null,
   onError = null
 }) => {
-  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawingOfMode('linear').recordsOff);
+  // The cards the shown Linear drawing draws; none when another drawing is shown. Resolved at each read.
+  const drawnLinearCards = () => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === 'linear' ? drawnLinearSequences(state.linearSeqs, drawing.recordsOff) : [];
+  };
   if (
     !state
     || typeof getOrthogroupById !== 'function'
