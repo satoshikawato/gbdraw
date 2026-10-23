@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "図を生成中です。生成が終わってから再試行してください。",
   "Generation Error": "生成エラー",
   "Genes": "遺伝子",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "リングごとに比較配列ファイルを1つ指定し、BLASTの表は使わず、表示中のレコードをサブジェクトにしてください。",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "リングごとに比較配列ファイルを1つ指定し、BLASTの表は使わず、参照ファイルをサブジェクトにしてください。",
   "Global title shown once for the whole linear plot.": "直鎖状図全体に1回だけ表示される共通のタイトルです。",
   "Go to {section}": "{section}へ移動",
   "Group path ID": "グループパスID",

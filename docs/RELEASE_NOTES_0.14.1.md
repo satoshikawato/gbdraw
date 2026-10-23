@@ -50,8 +50,25 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 - A Circular corner legend that cannot sit beside the circle no longer moves
   feature labels.
 
+- A Circular figure keeps its inside rows (GC content, skews, ticks) packed
+  below the features when its center definition becomes smaller, for example
+  after adding only a plot title. In 0.14.0 the rows could jump to the preset's
+  lanes when the figure had an inside row the preset lacks, such as a second
+  skew, and the tick labels overlapped. The preset's lanes are now used only
+  while every enabled inside row belongs to the preset's own stack.
+- A record drawn from another start (`--display_start_coordinate`, a records
+  table start, or **Rotate record using this feature**) shows its length in the
+  definition, for example `16,569 bp`, in Circular and Linear. It showed the
+  wrapped source spans, such as `[3,307..16,569], [1..3,306] bp`.
+
 ### Web app
 
+- A legend or plot title that you moved stays inside the canvas: the canvas
+  grows to hold it, and **Reset Layout** returns the automatic canvas.
+- A Circular **Inner gap** or **Outer gap** typed as `1px` is stored as `1`, so
+  Save and a fresh Load agree.
+- The HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 Gallery
+  tutorials start from the Web defaults and generate after each change.
 - The compact Result Preview layout and the width of **Reset zoom** apply in
   every UI language; they applied only in English.
 - The Run info tab, the feature popup's label note, the Label Not Shown dialog,
@@ -135,8 +152,6 @@ New in this release:
   rows. Its ring draws as in 0.14.0 on a forward crop, and at another
   unconverted place on a reverse-complemented crop, until the next **Generate
   Diagram**, which reuses the raw LOSAT cache and converts the rows.
-- A Circular **Inner gap** or **Outer gap** typed as `1px` is saved as typed and
-  comes back as `1` after a fresh-page Load (OV-1656).
 
 Carried from 0.14.0:
 

@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "Génération du diagramme en cours. Réessayez une fois la génération terminée.",
   "Generation Error": "Erreur de génération",
   "Genes": "Gènes",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "Fournissez un fichier de séquences de comparaison par anneau, sans tables BLAST, et utilisez les enregistrements affichés comme sujet.",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "Fournissez un fichier de séquences de comparaison par anneau, sans tables BLAST, et utilisez le fichier de référence comme sujet.",
   "Global title shown once for the whole linear plot.": "Titre global affiché une seule fois pour l’ensemble du diagramme linéaire.",
   "Go to {section}": "Aller à {section}",
   "Group path ID": "ID du chemin de groupe",

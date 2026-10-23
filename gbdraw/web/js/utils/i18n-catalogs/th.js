@@ -935,7 +935,7 @@ export default Object.freeze({
   "Generating diagram. Retry after generation finishes.": "กำลังสร้างแผนภาพ ลองอีกครั้งหลังจากสร้างเสร็จ",
   "Generation Error": "ข้อผิดพลาดในการสร้าง",
   "Genes": "ยีน",
-  "Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.": "ระบุไฟล์ลำดับสำหรับการเปรียบเทียบ 1 ไฟล์ต่อวงโดยไม่มีตาราง BLAST และใช้ระเบียนที่แสดงเป็น Subject",
+  "Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.": "ระบุไฟล์ลำดับสำหรับการเปรียบเทียบ 1 ไฟล์ต่อวงโดยไม่มีตาราง BLAST และใช้ไฟล์อ้างอิงเป็น Subject",
   "Global title shown once for the whole linear plot.": "ชื่อเรื่องรวมที่แสดงครั้งเดียวสำหรับแผนภาพแบบเส้นตรงทั้งหมด",
   "Go to {section}": "ไปที่ {section}",
   "Group path ID": "รหัสเส้นทางของกลุ่ม",

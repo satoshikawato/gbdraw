@@ -99,6 +99,18 @@ write-up of a release.
   `16,569 bp`, in Circular and Linear; it showed the wrapped source spans, for
   example `[3,307..16,569], [1..3,306] bp` (OV-1694). Rulers and ticks keep
   their source coordinates.
+- Fixed: a Circular figure whose center definition is smaller than before (for
+  example after adding only a plot title) keeps its inside rows packed below the
+  features, as in 0.13.0. In 0.14.0 it moved GC content, skews, and ticks to the
+  preset's lanes whenever the figure had an inside row the preset lacks (for
+  example a second skew), so tick labels overlapped. The preset's lanes are used
+  only while every enabled inside row belongs to the preset's own stack
+  (OV-1710, #1329).
+- Fixed: in the web app, a legend or plot title that you moved stays inside the
+  canvas: the canvas grows to hold it with the usual 16 px edge margin, and
+  **Reset Layout** returns the automatic canvas (OV-1631, OV-1642, #1319).
+- Fixed: a Circular **Inner gap** or **Outer gap** typed as `1px` is stored as
+  `1`, so Save and a fresh Load agree (OV-1656, #1326).
 - Changed: the web app keeps one Undo/Redo History per drawing, plus a project
   stream (#1313).
   - A mode switch (Circular or Linear) shows the other drawing, writes
