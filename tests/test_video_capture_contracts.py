@@ -369,7 +369,7 @@ def _screen_text() -> set[str]:
 
     strings: set[str] = {'NC_012920.1.svg downloaded (89 KB)', 'fast'}
     strings |= {source.name for journey in journeys().values() for source in journey.sources}
-    for module in ('walkthrough.py', 'tutorials.py'):
+    for module in ('walkthrough.py', 'tutorials.py', 'promo.py'):
         tree = ast.parse((CAPTURE_ROOT / 'video' / module).read_text(encoding='utf-8'))
         for node in ast.walk(tree):
             # Captions come from ``rec.caption`` and from helpers that caption a view, such as ``_show_figure``.
@@ -382,6 +382,7 @@ def _screen_text() -> set[str]:
     render = walkthrough_render
     strings |= {text for text in (*render.FINALE_TEXT, *render.MONTAGE_CAPTION[1:])}
     strings |= {text for story in STORIES.values() for text in story.intro}
+    strings |= {text for story in STORIES.values() for text in story.outro}
     strings |= {row[0] for row in render.Composer.OUTRO_ROWS}
     return {text for text in strings if text}
 

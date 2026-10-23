@@ -162,10 +162,11 @@ def _center(box: dict) -> tuple[float, float]:
 class Recorder:
     """Drive one page like a person and log everything the editor needs."""
 
-    def __init__(self, page: Page, raw: Path, *, portrait: bool = False) -> None:
+    def __init__(self, page: Page, raw: Path, *, portrait: bool = False, paced: bool = False) -> None:
         self.page = page
         self.app = page                     # the app's tab; ``page`` follows an opened file
         self.portrait = portrait            # a take for the tall video
+        self.paced = paced                  # pointer moves keep their duration on a slow page
         self.frames_dir = raw / "frames"
         self.frames_dir.mkdir(parents=True, exist_ok=True)
         self.frames: list[list] = []
@@ -347,12 +348,18 @@ class Recorder:
         # A small perpendicular bow keeps the path from looking mechanical.
         bow = min(60.0, distance * 0.12)
         nx, ny = -(y - sy) / distance, (x - sx) / distance
+        start = time.time()
         for index in range(1, steps + 1):
-            p = _ease(index / steps)
+            # A paced move places each step by the time spent, so a page slow to
+            # take pointer events skips steps instead of stretching the move.
+            progress = min(1.0, (time.time() - start) / duration) if self.paced and index < steps else index / steps
+            p = _ease(progress)
             arc = 4 * p * (1 - p) * bow
             px, py = sx + (x - sx) * p + nx * arc, sy + (y - sy) * p + ny * arc
             self.page.mouse.move(px - self.origin[0], py - self.origin[1])
             self.event("move", x=round(px, 1), y=round(py, 1))
+            if self.paced and progress >= 1.0:
+                break
             self.page.wait_for_timeout(duration * 1000 / steps)
         self.x, self.y = x, y
 
@@ -396,13 +403,18 @@ class Recorder:
         self.event("up", x=round(ex, 1), y=round(ey, 1))
         self.hold(0.3)
 
-    def choose(self, select: Locator, value: str, *, in_svg: bool = False) -> None:
+    def choose(self, select: Locator, value: str, *, in_svg: bool = False, rows: int = MENU_ROWS,
+               linger: float = 0.2, keeps: bool = True) -> None:
         """Select an option.
 
         Headless Chromium never paints native popups, so the option list and
         the chosen row are logged for the editor to draw. ``in_svg`` marks a
         control inside an SVG document, such as an opened Interactive SVG,
         where Playwright's form helpers do not recognize HTML controls.
+        ``rows`` is the most rows the drawn list shows, and ``linger`` how long
+        it stays open before the row is pointed at. ``keeps`` False marks an
+        action option, such as Load font file…, after which the select shows
+        its previous value again.
         """
 
         box = select.bounding_box()
@@ -412,14 +424,14 @@ class Recorder:
         if options["selected"] < 0:
             raise AssertionError(f"{value!r} is not an option of the select")
         labels, selected = options["labels"], options["selected"]
-        rows = min(MENU_ROWS, len(labels))
+        rows = min(rows, len(labels))
         first = min(max(0, selected - rows // 2), len(labels) - rows)
         x, y = _center(box)
         self._press(x, y, real=False)
         sx, sy = self._stage(box["x"], box["y"])
         self.event("menu", x=sx, y=sy, width=box["width"], height=box["height"],
-                   options=labels, selected=selected, window=[first, rows], duration=1.05)
-        self.hold(0.2)
+                   options=labels, selected=selected, window=[first, rows], duration=0.85 + linger)
+        self.hold(linger)
         # Point at the chosen row of the drawn menu (22 CSS px rows below the box).
         row_y = box["y"] + box["height"] + 6 + (selected - first + 0.5) * 22
         self._press(box["x"] + min(box["width"], 120) * 0.5, row_y, real=False)
@@ -428,7 +440,8 @@ class Recorder:
                 raise AssertionError(f"{value!r} could not be selected")
         else:
             select.select_option(value)
-            expect(select).to_have_value(value)
+            if keeps:
+                expect(select).to_have_value(value)
         self.hold(0.45)
 
     def pick_color(self, swatch: Locator, value: str) -> None:
@@ -522,12 +535,14 @@ class Recorder:
         expect(box).to_be_checked(checked=checked)
 
     def generate(self, *, target: float | None = 1.4, timeout_ms: int = GENERATION_TIMEOUT_MS,
-                 stages: bool = False) -> None:
+                 stages: bool = False, after: float = 0, close: bool = False) -> None:
         """Press Generate Diagram and wait for the result.
 
         ``target`` fast-forwards the wait to about that many seconds; None
         keeps it at normal speed. ``stages`` frames the stage line that the
-        progress overlay shows while Generate runs.
+        progress overlay shows while Generate runs. ``after`` plays that many
+        seconds of the wait at normal speed before the fast-forward starts.
+        ``close`` has a tall take frame the stage line alone, large enough to read.
         """
 
         def press(button: Locator) -> None:
@@ -537,11 +552,13 @@ class Recorder:
                 # The overlay is centered; its stage line changes width as it runs.
                 status.wait_for(state="visible", timeout=ACTION_TIMEOUT_MS)
                 cx, cy = _center(status.bounding_box())
-                self.camera({"x": cx - 400, "y": cy - 190, "width": 800, "height": 300}, zoom=2.4, duration=0.6)
+                self.camera({"x": cx - 400, "y": cy - 190, "width": 800, "height": 300}, zoom=2.4, duration=0.6,
+                            portrait={"x": cx - 170, "y": cy - 110, "width": 340, "height": 200} if close else None)
             else:
                 # Pull back so the progress overlay and then the result are in view.
                 self.camera(duration=0.8)
             if target is not None:
+                self.hold(after)
                 self.fast_forward(target=target)
 
         button = self.page.get_by_role("button", name=self.t("Generate Diagram"), exact=True)
@@ -881,6 +898,9 @@ class Journey:
     gallery: bool = False                   # render the Gallery tiles for the highlights
     vector_zoom: bool = True                # end on the 7x zoom into the exported file
     portrait: bool = False                  # a take shaped for the tall video
+    paced: bool = False                     # pointer moves keep their duration on a slow page (Recorder.paced)
+    # How a take in another UI language switches the app to it on camera, before ``run``.
+    switch: Callable[[Recorder, str], None] = switch_language
 
 
 MEET_GBDRAW = Journey("meet-gbdraw", (HUMAN_MITOCHONDRION_PATH,), _meet_gbdraw, _inspect_export,
@@ -888,9 +908,10 @@ MEET_GBDRAW = Journey("meet-gbdraw", (HUMAN_MITOCHONDRION_PATH,), _meet_gbdraw, 
 
 
 def journeys() -> dict[str, Journey]:
-    from video.tutorials import TUTORIALS  # built on this module, so imported late
+    from video.promo import PROMOS  # built on this module, so imported late
+    from video.tutorials import TUTORIALS
 
-    return {journey.name: journey for journey in (MEET_GBDRAW, *TUTORIALS)}
+    return {journey.name: journey for journey in (MEET_GBDRAW, *TUTORIALS, *PROMOS)}
 
 
 def _render_finale(browser, svg: Path, out: Path, size: tuple[int, int], text: str) -> dict:
@@ -996,11 +1017,11 @@ def record_walkthrough(run: Path, name: str) -> Path:
             page.mouse.move(SETTINGS_RIGHT_EDGE, _center(handle)[1], steps=8)
             page.mouse.up()
             page.wait_for_function("() => document.fonts.status === 'loaded'")
-            recorder = Recorder(page, raw, portrait=journey.portrait)
+            recorder = Recorder(page, raw, portrait=journey.portrait, paced=journey.paced)
             recorder.start()
             language = STORIES[name].language
             if language != "en":
-                switch_language(recorder, language)
+                journey.switch(recorder, language)
             exported = journey.run(recorder, raw / "downloads")
             recorder.stop()
             capture.assert_clean()

@@ -15,7 +15,7 @@ import math
 import os
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from fontTools.ttLib import TTCollection, TTFont
@@ -146,6 +146,7 @@ class Story:
     intro: tuple[str, str]
     outputs: tuple[tuple[str, Layout, str], ...]   # (edit, layout, file stem without the language suffix)
     language: str = "en"
+    outro: tuple[str, ...] = ()   # the outro's title and lines; empty keeps ``Composer.OUTRO_ROWS``
 
 
 TUTORIAL_IDS = ("HmmtDNA_ATskew", "tobacco-chloroplast", "BGC0000708-BGC0000713",
@@ -180,6 +181,14 @@ def _tutorial(example_id: str, *, vertical: bool = False, language: str = "en") 
     return Story((title, TUTORIAL_NOTE), (output,), language)
 
 
+# The 0.14.0 promotion: one tall take in Simplified Chinese, without a sound track
+# (``video.promo`` records it).
+PROMO_ID = "promo-zh-0140-vertical"
+PROMO_STORY = Story(
+    ("gbdraw 0.14.0: what is new", "Microbial and organelle genome maps · now with a Simplified Chinese interface"),
+    (("walkthrough", replace(PORTRAIT, audio=False), "gbdraw-0.14.0-vertical"),), "zh-Hans",
+    outro=("gbdraw.app", "Command line: pip install gbdraw"))
+
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
 STORIES = {
     "meet-gbdraw": Story(INTRO_LINES, (
@@ -189,6 +198,7 @@ STORIES = {
     )),
     **{take_name(name, vertical=vertical, language=language): _tutorial(name, vertical=vertical, language=language)
        for name in TUTORIAL_IDS for vertical in (False, True) for language in TUTORIAL_LANGUAGES[name]},
+    PROMO_ID: PROMO_STORY,
 }
 
 
@@ -274,6 +284,28 @@ class Type:
         missing = {char for char in text if ord(char) not in self._cmap and char not in "\n"}
         if missing:
             raise ValueError(f"{self.name} lacks glyphs {sorted(missing)!r} in {text!r}")
+
+    def label_font(self, text: str, size: int) -> ImageFont.FreeTypeFont:
+        """The regular face for app text such as a menu option; text it cannot show takes a system face that can.
+
+        The Language menu names each language in its own script (ไทย, 한국어),
+        which the caption face may lack; fontconfig picks a face for them.
+        """
+
+        missing = sorted({ord(char) for char in text if ord(char) not in self._cmap})
+        if not missing:
+            return self.font(400, size)
+        key = ("fallback", tuple(missing), size)
+        if key not in self._cache:
+            charset = " ".join(f"{code:x}" for code in missing)
+            try:
+                found = subprocess.run(["fc-match", "-f", "%{file}|%{index}", f"sans-serif:charset={charset}"],
+                                       capture_output=True, text=True, check=True).stdout
+                path, index = found.rsplit("|", 1)
+                self._cache[key] = ImageFont.truetype(path, size, index=int(index))
+            except (OSError, ValueError, subprocess.CalledProcessError):
+                self._cache[key] = self.font(400, size)
+        return self._cache[key]
 
 
 class Language:
@@ -686,8 +718,13 @@ class Overlay:
         if key in self._cache:
             return self._cache[key]
         self.type.check(text)
-        font = self.type.font(500, 26)
         probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        # A long file name takes a smaller type so the toast stays inside the window.
+        room = (self.layout.card[2] - 24) / self.layout.ui_scale - 150
+        size = 26
+        while size > 16 and probe.textlength(text, font=self.type.font(500, size)) > room:
+            size -= 1
+        font = self.type.font(500, size)
         width = int(probe.textlength(text, font=font)) + 110
         scale = 3
         layer = Image.new("RGBA", ((width + 40) * scale, 108 * scale), (0, 0, 0, 0))
@@ -709,7 +746,7 @@ class Overlay:
             draw.line([(cx - 8 * scale, cy), (cx - 2 * scale, cy + 6 * scale), (cx + 9 * scale, cy - 6 * scale)],
                       fill="white", width=4 * scale, joint="curve")
         layer = layer.resize((width + 40, 108), Image.Resampling.LANCZOS)
-        ImageDraw.Draw(layer).text((90, 33), text, font=font, fill=(15, 23, 42, 255))
+        ImageDraw.Draw(layer).text((90, 33 + (26 - size) / 2), text, font=font, fill=(15, 23, 42, 255))
         self._cache[key] = self._scaled(layer)
         return self._cache[key]
 
@@ -826,7 +863,8 @@ def _menu(draw: ImageDraw.ImageDraw, type_: Type, event: dict, to_screen, scale:
         if chosen:
             draw.rounded_rectangle((left + 4 * scale, y, left + width - 4 * scale, y + row - 2 * scale),
                                    4 * scale, fill=(37, 99, 235, a))
-        draw.text((left + 12 * scale, y + row / 2 - 1 * scale), label, font=font, anchor="lm",
+        draw.text((left + 12 * scale, y + row / 2 - 1 * scale), label, font=type_.label_font(label, font.size),
+                  anchor="lm",
                   fill=(255, 255, 255, a) if chosen else (30, 41, 59, a))
 
 
@@ -1379,8 +1417,17 @@ class Composer:
                   ("Genome files stay on your machine", 400, 32, MUTED, 1.2),
                   ("SVG, PNG, and PDF, plus a CLI and Python API", 400, 32, MUTED, 1.35))
 
+    def _outro_rows(self) -> tuple[tuple[str, int, int, tuple, float], ...]:
+        """The outro's rows: a story's own text in the default rows' styles, or the default rows."""
+
+        texts = self.recording.story.outro
+        if len(texts) > len(self.OUTRO_ROWS):
+            raise ValueError(f"An outro has at most {len(self.OUTRO_ROWS)} rows: {texts!r}")
+        return tuple((text, *row[1:]) for text, row in zip(texts, self.OUTRO_ROWS)) if texts else self.OUTRO_ROWS
+
     def _outro_frame(self, local: int) -> Image.Image:
         t = local / FPS
+        outro_rows = self._outro_rows()
         canvas = self.background.copy().convert("RGBA")
         width, height = self.layout.size
         p = _ease(t / 0.7)
@@ -1389,13 +1436,13 @@ class Composer:
             card = self._outro_card((box[2], 600))
             logo = _white_logo(430)
             # Center the group on the window area, so a wide, short figure leaves no empty foot.
-            rows = sum(size + (30 if weight == 700 else 16) for _, weight, size, _, _ in self.OUTRO_ROWS)
+            rows = sum(size + (30 if weight == 700 else 16) for _, weight, size, _, _ in outro_rows)
             top = box[1] + max(0, (box[3] - (card.height + 50 + logo.height + 30 + rows)) // 2)
             canvas.alpha_composite(_fade(card, p), ((width - card.width) // 2, top + round((1 - p) * 20)))
             y = top + card.height + 50
             canvas.alpha_composite(_fade(logo, _ease((t - 0.3) / 0.7)), ((width - logo.width) // 2, y))
             y += logo.height + 30
-            for text, weight, size, color, delay in self.OUTRO_ROWS:
+            for text, weight, size, color, delay in outro_rows:
                 self._text(canvas, self.lang(text), weight, size, color, _ease((t - delay) / 0.5), (width / 2, y),
                            center=True, rise=0)
                 y += size + (30 if weight == 700 else 16)
@@ -1406,7 +1453,7 @@ class Composer:
         logo = _white_logo(560)
         canvas.alpha_composite(_fade(logo, _ease((t - 0.3) / 0.7)), (right, 250))
         y = 250 + logo.height + 50
-        for text, weight, size, color, delay in self.OUTRO_ROWS:
+        for text, weight, size, color, delay in outro_rows:
             self._text(canvas, self.lang(text), weight, size, color, _ease((t - delay) / 0.5), (right, y), rise=0)
             y += size + (34 if weight == 700 else 22)
         return canvas.convert("RGB")

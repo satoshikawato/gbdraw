@@ -25,7 +25,8 @@ jobs:
                   HmmtDNA_ATskew-vertical, tobacco-chloroplast-vertical, BGC0000708-BGC0000713-vertical,
                   Vnig_TUMSAT-TG-2018-vertical, hepatoplasmataceae_collinear-vertical, vibrio-harveyi-group-collinear-vertical,
                   BGC0000708-BGC0000713.zh-Hans, BGC0000708-BGC0000713-vertical.zh-Hans,
-                  vibrio-harveyi-group-collinear.zh-Hans, vibrio-harveyi-group-collinear-vertical.zh-Hans]
+                  vibrio-harveyi-group-collinear.zh-Hans, vibrio-harveyi-group-collinear-vertical.zh-Hans,
+                  promo-zh-0140-vertical]
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v4
