@@ -237,8 +237,8 @@ test('Reset Settings removes each table card with the settings it loaded, and Un
     // The Whitelist and Blacklist cards show under their filter mode.
     await page.evaluate((key) => {
       const a = window.__GBDRAW_APP__;
-      if (key === 'whitelist') a.filterMode = 'Whitelist';
-      if (key === 'blacklist') a.filterMode = 'Blacklist';
+      if (key === 'whitelist') a.setLabelFilterMode('Whitelist');
+      if (key === 'blacklist') a.setLabelFilterMode('Blacklist');
     }, sample.key);
     await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: `${sample.key}.tsv`, mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
     await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);

@@ -3,6 +3,8 @@ import { sha256Hex } from '../services/byte-utils.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
+  DIAGRAM_HELPER_STAGING_OPERATIONS,
+  STAGED_RESOURCE_PAYLOAD_KEYS,
   readFeatureCatalogRevision,
   readHeldSegments,
   readSvgDocumentParts
@@ -689,7 +691,7 @@ const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
-    keys: ['request', 'projection', 'resourceManifest', 'stagedResources', 'retainedResourceTokens'],
+    keys: ['request', 'projection'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => {
       let resourcePaths = {};
@@ -711,7 +713,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   // Load Feature Edits TSV: Python reads the table against the records of the
   // committed request, staged as Generate stages them (design Q4 6.4, R4).
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: {
-    keys: ['files', 'canonicalRequest', 'resourceManifest', 'stagedResources', 'retainedResourceTokens'],
+    keys: ['files', 'canonicalRequest'],
     fileRoles: ['featureOverrides'],
     run: async (pyodide, payload, paths, operation, workspace) => callJsonHelper(
       pyodide, 'read_feature_override_table_json', [
@@ -816,9 +818,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'recordIndex',
       'recordInstanceKey',
       'featureOverrides',
-      'recordSource',
-      'resourceManifest',
-      'stagedResources'
+      'recordSource'
     ],
     fileRoles: ['source', 'fasta', 'visibility'],
     // A record of the drawing is staged under its resource ids, so Python reads
@@ -986,7 +986,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   // in the drawn frame: Python returns their bytes in the search frame by
   // stored resource ID (OV-1145), from the drawing's request and its staged files.
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: {
-    keys: ['version', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    keys: ['version', 'canonicalRequest'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'stored_protein_results_to_search_frame_json', [
@@ -1041,26 +1041,32 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   }
 });
 
+/**
+ * The payload keys a helper accepts: its own, and the staged resource keys of a
+ * helper the page stages resources for. `null`: no such helper.
+ * @param {string} operation
+ * @returns {string[] | null}
+ */
+export const helperPayloadKeys = (operation) => {
+  if (!Object.hasOwn(HELPER_OPERATION_SPECS, operation)) return null;
+  const spec = HELPER_OPERATION_SPECS[/** @type {keyof typeof HELPER_OPERATION_SPECS} */ (operation)];
+  return [...spec.keys, ...(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(operation) ? STAGED_RESOURCE_PAYLOAD_KEYS : [])];
+};
+
 const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
   if (!runtime?.pyodide) {
     throw serializeError({ code: 'WORKER_INIT', operation, stage: 'initialization' });
   }
   const normalizedOperation = String(operation || '').trim();
-  const spec = Object.prototype.hasOwnProperty.call(
-    HELPER_OPERATION_SPECS,
-    normalizedOperation
-  )
-    ? HELPER_OPERATION_SPECS[normalizedOperation]
-    : null;
-  if (!spec) {
+  const allowedKeys = helperPayloadKeys(normalizedOperation);
+  const spec = allowedKeys ? HELPER_OPERATION_SPECS[normalizedOperation] : null;
+  if (!spec || !allowedKeys) {
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' });
   }
   let failureStage = 'request-validation';
   try {
     const normalizedPayload = requirePayloadObject(payload, normalizedOperation);
-    assertAllowedPayloadKeys(normalizedPayload, normalizedOperation, [
-      ...spec.keys
-    ]);
+    assertAllowedPayloadKeys(normalizedPayload, normalizedOperation, allowedKeys);
     failureStage = 'resource-staging';
     return await withRequestWorkspace(
       runtime.pyodide,

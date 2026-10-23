@@ -272,3 +272,26 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     globalThis.fetch = originalFetch;
   }
 }
+
+// Every helper that stages resources accepts each key the page's resource
+// staging writes into its payload (PR #1313 CI: `extractCdsProteinFasta` and
+// `convertStoredProteinResultFrames` refused `retainedResourceTokens`).
+{
+  const { helperPayloadKeys } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
+  const { DIAGRAM_HELPER_OPERATIONS, DIAGRAM_HELPER_STAGING_OPERATIONS } = await import(
+    '../../gbdraw/web/js/services/diagram-worker-protocol.js'
+  );
+  const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const prepared = await createDiagramResourceTransport().prepare({
+    request: { records: [], diagramOptions: {} }, resources: {}, retain: true
+  });
+  const stagedKeys = Object.keys(prepared).filter((key) => typeof prepared[key] !== 'function');
+  assert.ok(stagedKeys.includes('retainedResourceTokens'));
+  assert.ok(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA));
+  for (const operation of DIAGRAM_HELPER_STAGING_OPERATIONS) {
+    const accepted = helperPayloadKeys(operation);
+    for (const key of stagedKeys) assert.ok(accepted?.includes(key), `${operation} accepts ${key}`);
+  }
+  assert.equal(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES)?.includes('stagedResources'), false);
+  assert.equal(helperPayloadKeys('notAHelper'), null);
+}

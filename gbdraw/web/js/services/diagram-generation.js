@@ -5,7 +5,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
-  DIAGRAM_HELPER_OPERATIONS,
+  stagedHelperReferences,
   readFeatureCatalogRevision,
   readSvgDocumentParts
 } from './diagram-worker-protocol.js';
@@ -1064,22 +1064,13 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
     return Promise.reject(deserializeWorkerError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' }));
   }
   recordStructuralMetric('diagramHelperRequest', 1, { operation: normalizedOperation });
-  // Helpers that read the records of a committed request stage the resources it
-  // names; the blastp extraction stages the one record source it reads (OV-1555).
-  /** @type {readonly string[]} */
-  const stagingOperations = [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE,
-    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES];
-  const staging = stagingOperations.includes(normalizedOperation) ? { references: payload.canonicalRequest }
-    : normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT && payload.projection
-      ? { references: payload.projection.canonicalRequest }
-      : normalizedOperation === DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA && payload.recordSource
-        ? { references: payload.recordSource } : null;
+  const references = stagedHelperReferences(normalizedOperation, payload);
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
     type: 'helper', operation: normalizedOperation,
-    payload: staging ? helperPayload : payload,
-    prepareResources: staging ? () => resourceTransport.prepare({
-      request: staging.references, resources, retain: true
+    payload: references ? helperPayload : payload,
+    prepareResources: references ? () => resourceTransport.prepare({
+      request: references, resources, retain: true
     }) : null,
     activeRequests: activeHelperRequests,
     onProgress
