@@ -5,6 +5,7 @@ from pandas import DataFrame
 from gbdraw.svg.elements import Circle, Group, Line, Path, Text
 
 from ....analysis.gc import gc_content_percent_df
+from ....layout.circular import RadialBand
 from ....layout.circular_depth_axis import (
     DEPTH_AXIS_SMALL_TICK_SIZE_PX,
     DEPTH_AXIS_STROKE_WIDTH_PX,
@@ -17,7 +18,9 @@ from ....layout.scalar_axis import (
     scalar_axis_tick_values,
     scaled_scalar_fraction,
 )
+from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, stroke_pad_px
 from ....svg.circular_tracks import (
+    circular_gc_content_line,
     generate_circular_gc_content_path_desc,
     generate_circular_scalar_area_path_desc,
 )
@@ -193,6 +196,33 @@ class GcContentDrawer:
 
         group.add(axis_group)
         return group
+
+    def ink(
+        self,
+        radius: float,
+        gc_df: DataFrame,
+        record_len: int,
+        track_width: float,
+        norm_factor: float,
+        dinucleotide: str,
+        record_transform: RecordDisplayTransform | None = None,
+    ) -> tuple[CircularInk, ...]:
+        """What ``draw`` paints with the same arguments: the percent ring, or the area between the baseline circle
+        and the content line, with half the stroke."""
+
+        if self.mode == "percent":
+            baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
+            pad = 0.5 * max(self.percent_border_width, 0.0)
+            return (CircularInkRing(RadialBand(baseline_radius - pad, outer_radius + pad)),)
+        line = circular_gc_content_line(
+            radius, record_len, gc_df, track_width, norm_factor, dinucleotide, record_transform
+        )
+        if line is None:
+            return ()
+        base = float(radius) * float(norm_factor)
+        pad = stroke_pad_px(self.gc_path_stroke_color, self.gc_path_stroke_width)
+        area = CircularInkProfile.between(*line, record_length=record_len, base_px=base, pad_px=pad)
+        return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
 
     def draw(
         self,

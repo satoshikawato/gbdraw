@@ -52,7 +52,7 @@ from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
-from ...config.modify import with_config_overrides
+from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
@@ -71,22 +71,25 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_fit import CircularLabelFitProbe, CircularLabelLayout
+from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
 from ...labels.circular_types import CircularLabel, CircularLabelCandidate, CircularLabelCandidateCache
-from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
+from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
     CircularAxisLayout,
     CircularFeatureLaneDirection,
+    CircularFeatureLayout,
     CircularRadialLayout,
     CircularRecordRenderContext,
     CircularResolvedSlot,
     CircularTickLayout,
     RadialBand,
+    feature_radius_intervals,
 )
 from ...layout.circular_depth_axis import DepthAxisStyle, depth_axis_tick_font_size_px
+from ...layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink, stroke_pad_px
 from ...layout.composition import (
     CompositionItem,
     CompositionPlan,
@@ -127,6 +130,8 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
+from ...render.drawers.circular.gc_content import GcContentDrawer
+from ...render.drawers.circular.gc_skew import SkewDrawer
 from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
     CircularLabelObstacles,
@@ -747,26 +752,119 @@ def _region_labels_on_other_tracks(
     tracks around it whatever the radii, so they are not counted.
     """
 
-    def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
-        return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
+    tracks = _track_bands(radial_layout)
+    count = 0
+    for slot in radial_layout.slots:
+        own = slot.draw_band_px
+        if own is None or (slot.side == "overlay" and not slot.span_keeps_label_room):
+            continue
+        others = [
+            band for track, band in tracks if track is not slot and not _reaches_band(own.inner_px, own.outer_px, band)
+        ]
+        count += sum(
+            1 for label in labels.get(slot.id, ()) if any(_reaches_band(*label.ink_radii, band) for band in others)
+        )
+    return count
 
-    tracks = [
+
+def _track_bands(radial_layout: CircularRadialLayout) -> list[tuple[CircularResolvedSlot, RadialBand]]:
+    """The band each drawn track takes (``own_reserved_band_px``: its drawing with its tick or axis labels and its
+    own labels' room); annotation overlays draw over other tracks and take none."""
+
+    return [
         (slot, band)
         for slot in radial_layout.slots
         if slot.draw_band_px is not None
         and not (slot.renderer == "annotations" and slot.side == "overlay")
         and (band := slot.own_reserved_band_px) is not None
     ]
-    count = 0
+
+
+def _reaches_band(inner: float, outer: float, band: RadialBand) -> bool:
+    """Whether ink between radii ``inner`` and ``outer`` reaches more than the threshold into ``band``."""
+
+    return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
+
+
+def _record_track_ink(
+    radial_layout: CircularRadialLayout,
+    *,
+    canvas_radius: float,
+    record_length: int,
+    record_transform: RecordDisplayTransform | None,
+    gc_df: DataFrame,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    dinucleotide_dataframes: dict[str, DataFrame] | None,
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None,
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None,
+    feature_dict: Mapping[str, FeatureObject],
+    feature_config: FeatureDrawingConfigurator,
+) -> tuple[CircularInk, ...]:
+    """What the record's tracks paint, from the owners that draw them (D-18).
+
+    The GC content and skew areas come from their drawers, the feature blocks from the intervals the labels
+    clear (``feature_radius_intervals``), and the axis circle from its paint band. A track with no such owner
+    (depth, conservation, annotation and tick slots) counts its whole band, as before.
+    """
+
+    inks: list[CircularInk] = [CircularInkRing(radial_layout.axis.paint_band_px)]
     for slot in radial_layout.slots:
-        own = slot.draw_band_px
-        if own is None or (slot.side == "overlay" and not slot.span_keeps_label_room):
+        renderer = str(slot.renderer)
+        if slot.draw_band_px is None or (renderer == "annotations" and slot.side == "overlay"):
             continue
-        others = [band for track, band in tracks if track is not slot and not overlaps(own.inner_px, own.outer_px, band)]
-        count += sum(
-            1 for label in labels.get(slot.id, ()) if any(overlaps(*label.ink_radii, band) for band in others)
-        )
-    return count
+        norm_factor = float(slot.anchor_radius_px or 0.0) / float(canvas_radius)
+        if renderer == "dinucleotide_content":
+            _, content_df, content_config = _slot_content_source(
+                slot,
+                gc_df=gc_df,
+                gc_config=gc_config,
+                dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+                tick_font_size_override=None,
+            )
+            if content_df is not None:
+                inks.extend(
+                    GcContentDrawer(content_config).ink(
+                        canvas_radius, content_df, record_length, slot.draw_width_px, norm_factor,
+                        content_config.dinucleotide, record_transform,
+                    )
+                )
+        elif renderer == "dinucleotide_skew":
+            _, skew_df, slot_skew_config = _slot_skew_source(
+                slot,
+                gc_df=gc_df,
+                gc_config=gc_config,
+                skew_config=skew_config,
+                dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+            )
+            if skew_df is not None:
+                inks.extend(
+                    SkewDrawer(slot_skew_config).ink(
+                        canvas_radius, skew_df, record_length, slot.draw_width_px, norm_factor,
+                        slot_skew_config.dinucleotide, record_transform,
+                    )
+                )
+        elif renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
+            pad = stroke_pad_px(feature_config.block_stroke_color, feature_config.block_stroke_width)
+            inks.extend(
+                CircularInkRing(RadialBand(inner - pad, outer + pad), start / record_length, end / record_length)
+                for start, end, inner, outer in feature_radius_intervals(feature_dict, record_length, slot.payload)
+            )
+        elif (band := slot.own_reserved_band_px) is not None:
+            inks.append(CircularInkRing(band))
+    return tuple(inks)
+
+
+def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Sequence[Aabb]) -> int:
+    """How many lines of the centre definition text meet what a track paints (D-18).
+
+    ``definition_text`` holds the painted line boxes centred on the record
+    (``_centre_definition_text``); a line counts when its box reaches more than
+    the threshold that region labels use (LP-D86) into a track's paint
+    (``_record_track_ink``). The figure is drawn as before and warns.
+    """
+
+    return sum(1 for box in definition_text if box_meets_ink(box, inks, threshold_px=REGION_TRACK_MIN_OVERLAP_PX))
 
 
 def _feature_label_obstacles(
@@ -1492,6 +1590,40 @@ def _slot_dataframe_for_nt(
     return DataFrame()
 
 
+def _slot_content_source(
+    resolved_slot: CircularResolvedSlot,
+    *,
+    gc_df: DataFrame,
+    gc_config: GcContentConfigurator,
+    dataframes: dict[str, DataFrame] | None,
+    tick_font_size_override: float | None,
+) -> tuple[str, DataFrame | None, GcContentConfigurator]:
+    """The dinucleotide, data (``None`` when there are none) and settings a content slot draws with."""
+
+    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    nt = slot_dinucleotide(resolved_slot.params, default_nt)
+    slot_df = _slot_dataframe_for_nt(nt=nt, default_df=gc_df, default_nt=default_nt, dinucleotide_dataframes=dataframes)
+    config = _slot_gc_config_with_axis_font_size(gc_config, nt, tick_font_size_override)
+    return nt, slot_df if f"{nt} content" in slot_df.columns else None, config
+
+
+def _slot_skew_source(
+    resolved_slot: CircularResolvedSlot,
+    *,
+    gc_df: DataFrame,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    dataframes: dict[str, DataFrame] | None,
+) -> tuple[str, DataFrame | None, GcSkewConfigurator]:
+    """The dinucleotide, data (``None`` when there are none) and settings a skew slot draws with."""
+
+    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    nt = slot_dinucleotide(resolved_slot.params, default_nt)
+    slot_df = _slot_dataframe_for_nt(nt=nt, default_df=gc_df, default_nt=default_nt, dinucleotide_dataframes=dataframes)
+    config = _slot_skew_config(skew_config, resolved_slot, nt)
+    return nt, slot_df if f"{nt} skew" in slot_df.columns else None, config
+
+
 
 
 def _sync_legend_table_for_circular_slots(
@@ -1862,16 +1994,15 @@ def _draw_resolved_circular_slot(
             **conservation_kwargs,
         )
 
-    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
-    nt = slot_dinucleotide(resolved_slot.params, default_nt)
     if renderer == "dinucleotide_content":
-        slot_df = _slot_dataframe_for_nt(
-            nt=nt,
-            default_df=gc_df,
-            default_nt=default_nt,
-            dinucleotide_dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+        nt, slot_df, slot_gc_config = _slot_content_source(
+            resolved_slot,
+            gc_df=gc_df,
+            gc_config=gc_config,
+            dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+            tick_font_size_override=gc_content_tick_font_size_override,
         )
-        if f"{nt} content" not in slot_df.columns:
+        if slot_df is None:
             logger.warning(
                 "Skipping circular content slot '%s' because %s data are unavailable.",
                 resolved_slot.id,
@@ -1892,11 +2023,6 @@ def _draw_resolved_circular_slot(
                 renderer=renderer,
                 slot_index=int(resolved_slot.slot_index),
             )
-        slot_gc_config = _slot_gc_config_with_axis_font_size(
-            gc_config,
-            nt,
-            gc_content_tick_font_size_override,
-        )
         return add_gc_content_group_on_canvas(
             canvas,
             gb_record,
@@ -1908,13 +2034,14 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "dinucleotide_skew":
-        slot_df = _slot_dataframe_for_nt(
-            nt=nt,
-            default_df=gc_df,
-            default_nt=default_nt,
-            dinucleotide_dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+        nt, slot_df, slot_skew_config = _slot_skew_source(
+            resolved_slot,
+            gc_df=gc_df,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
         )
-        if f"{nt} skew" not in slot_df.columns:
+        if slot_df is None:
             logger.warning(
                 "Skipping circular skew slot '%s' because %s data are unavailable.",
                 resolved_slot.id,
@@ -1940,7 +2067,7 @@ def _draw_resolved_circular_slot(
             gb_record,
             slot_df,
             canvas_config,
-            _slot_skew_config(skew_config, resolved_slot, nt),
+            slot_skew_config,
             **skew_kwargs,
             record_transform=record_transform,
         )
@@ -1995,11 +2122,15 @@ def _record_label_layout(
     radial_refused: bool,
     region_labels: Sequence[CircularAnnotationLabel] = (),
     region_track_overlaps: int = 0,
+    definition_track_overlaps: int = 0,
+    definition_probe: CircularDefinitionFitProbe | None = None,
 ) -> CircularLabelLayout | None:
     """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
 
     Region labels cut to fit their circle (LP-D87) or lying on another track
-    (LP-D86) are a ``circular_region`` kind that only warns.
+    (LP-D86) are a ``circular_region`` kind that only warns, and so are the
+    lines of the centre definition text that reach into a track (D-12,
+    ``circular_definition``).
     """
 
     total_length = len(gb_record.seq)
@@ -2015,7 +2146,7 @@ def _record_label_layout(
         label_counts[kind] = label_counts.get(kind, 0) + 1
     placed = bool(label_counts) and place_labels is not None
     cuts = sum(label.cut for label in region_labels)
-    if not placed and not cuts and not region_track_overlaps:
+    if not placed and not cuts and not region_track_overlaps and not definition_track_overlaps:
         return None
     cfg = profile.config
     horizontal = profile.label_placement == "horizontal"
@@ -2040,6 +2171,9 @@ def _record_label_layout(
     if cuts or region_track_overlaps:
         counts["circular_region"] = len(region_labels)
         kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts, region_track_overlaps=region_track_overlaps)
+    if definition_track_overlaps:
+        counts["circular_definition"] = definition_track_overlaps
+        kind_fits["circular_definition"] = LabelFit(0, 0, definition_track_overlaps=definition_track_overlaps)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
     return CircularLabelLayout(
@@ -2055,6 +2189,8 @@ def _record_label_layout(
         features_separated=bool(profile.resolve_overlaps),
         probe=probe,
         region_font_size=max((label.font_size for label in region_labels), default=0.0),
+        definition_font_size=float(cfg.objects.definition.circular.font_size) if definition_track_overlaps else 0.0,
+        definition_probe=definition_probe if definition_track_overlaps else None,
     )
 
 
@@ -2587,12 +2723,14 @@ def add_record_on_circular_canvas(
         record_length=len(gb_record.seq),
         font_family=str(cfg.objects.text.font_family),
     )
-    radial_layout, definition_reserved_radius_px, species_line_count = (
-        _resolve_radial_layout_fitting_definition(
+    # The tracks around the definition, and the definition text as drawn, for a config: the figure's own, or a
+    # smaller definition font that the definition row probes (D-12).
+    def place_around_definition(layout_cfg: GbdrawConfig) -> tuple[CircularRadialLayout, float | None, int]:
+        return _resolve_radial_layout_fitting_definition(
             lambda reserved_radius_px: resolve_circular_radial_layout(
                 total_length=len(gb_record.seq),
                 geometry=canvas_config.geometry(),
-                cfg=cfg,
+                cfg=layout_cfg,
                 slots=layout_slots,
                 feature_dict=layout_feature_dict,
                 definition_reserved_radius_px=reserved_radius_px,
@@ -2605,7 +2743,7 @@ def add_record_on_circular_canvas(
             ),
             gb_record=gb_record,
             geometry=canvas_config.geometry(),
-            cfg=cfg,
+            cfg=layout_cfg,
             species=species,
             strain=strain,
             plot_title=plot_title,
@@ -2614,7 +2752,53 @@ def add_record_on_circular_canvas(
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,
         )
-    )
+
+    def centre_definition_text(text_cfg: GbdrawConfig, line_count: int) -> tuple[Aabb, ...]:
+        if str(definition_position) != "center" or str(definition_profile) == "shared_common":
+            return ()
+        return _centre_definition_text(
+            DefinitionGroup(
+                gb_record,
+                canvas_config.geometry(),
+                style=CircularDefinitionStyle.of(text_cfg, definition_profile),
+                species=species,
+                strain=strain,
+                plot_title=plot_title,
+                record_index=int(annotation_record_index),
+                record_count=int(definition_record_count),
+                species_line_count=line_count,
+                record_presentation=record_presentation,
+            )
+        )
+
+    def definition_lines_on_tracks(layout: CircularRadialLayout, definition_lines: Sequence[Aabb]) -> int:
+        inks = _record_track_ink(
+            layout,
+            canvas_radius=float(canvas_config.radius),
+            record_length=len(gb_record.seq),
+            record_transform=record_transform,
+            gc_df=gc_df,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            dinucleotide_dataframes=dinucleotide_dataframes,
+            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
+            feature_dict=layout_feature_dict,
+            feature_config=feature_config,
+        )
+        return _definition_lines_on_tracks(inks, definition_lines)
+
+    def definition_clears_tracks(font_size: float) -> bool:
+        """A hint for the definition row: the tracks and the text at ``font_size`` before the labels are placed."""
+
+        probe_cfg = with_fit_row_overrides(cfg, {DEFINITION_FONT_PATH: font_size})
+        try:
+            layout, _, line_count = place_around_definition(probe_cfg)
+        except ValidationError:
+            return False
+        return definition_lines_on_tracks(layout, centre_definition_text(probe_cfg, line_count)) == 0
+
+    radial_layout, definition_reserved_radius_px, species_line_count = place_around_definition(cfg)
     if radial_layout.features is not None:
         resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
         feature_track_ratio_factor_override = (
@@ -2624,27 +2808,9 @@ def add_record_on_circular_canvas(
     # External labels: separate group (label arena). Embedded labels remain in the record group.
     # Add labels BEFORE features so leader lines appear behind features.
     precalculated_labels: list[CircularLabel] | None = None
-    # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title).
-    definition_text: tuple[Aabb, ...] = (
-        _centre_definition_text(
-            DefinitionGroup(
-                gb_record,
-                canvas_config.geometry(),
-                style=CircularDefinitionStyle.of(canvas_config.profile.config, definition_profile),
-                species=species,
-                strain=strain,
-                plot_title=plot_title,
-                record_index=int(annotation_record_index),
-                record_count=int(definition_record_count),
-                species_line_count=species_line_count,
-                record_presentation=record_presentation,
-            )
-        )
-        if show_external_labels
-        and str(definition_position) == "center"
-        and str(definition_profile) != "shared_common"
-        else ()
-    )
+    # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title); D-12: the
+    # text over a track.
+    definition_text = centre_definition_text(cfg, species_line_count)
     radial_refused = False
     label_state: _CircularLabelState | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
@@ -2929,6 +3095,8 @@ def add_record_on_circular_canvas(
         radial_refused=radial_refused,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
+        definition_track_overlaps=definition_lines_on_tracks(radial_layout, definition_text) if definition_text else 0,
+        definition_probe=definition_clears_tracks,
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,

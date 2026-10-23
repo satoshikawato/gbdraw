@@ -163,7 +163,9 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
     request = _request(mode, _record(), start, reverse, {"canvas.show_gc": True, "canvas.show_skew": True})
     request = replace(request, options=replace(request.options, depth_table=depth, depth_window=2500, depth_step=2500))
     _, root = _svg(request)
-    assert len(observed) == 3
+    # Three series (GC content, GC skew, depth); the Circular definition check reads the GC content and skew
+    # lines again through the same owner (D-18).
+    assert len({(tuple(positions), tuple(values)) for positions, values, _ in observed}) == 3
     for positions, values, segments in observed:
         segment, = segments
         assert positions == [0, 2500, 5000, 7500]

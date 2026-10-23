@@ -141,8 +141,10 @@ tracks leave, so gbdraw stopped instead of drawing them. Run the command again
 with one of the settings the message lists, for example
 `--outer_label_y_radius_offset 1.15` to move outer labels outward,
 `--label_font_size 12` to make the labels smaller, or `--labels out` to move
-inner labels outside. If only leader lines cross or labels cover the definition
-text, the figure is drawn and the same settings are shown as a warning. See
+inner labels outside. If only leader lines cross, labels cover the definition
+text, or the Circular definition text overlaps a track, the figure is drawn and
+the same settings are shown as a warning (for the definition text, for example
+`--definition_font_size 17.5`). See
 [Labels that do not
 fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 

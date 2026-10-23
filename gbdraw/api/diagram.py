@@ -118,7 +118,7 @@ from gbdraw.config.models.labels import LabelsFilteringConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.config.modify import with_config_overrides
+from gbdraw.config.modify import with_config_overrides, with_fit_row_overrides
 from gbdraw.configurators import (
     BlastMatchConfigurator,
     DepthConfigurator,
@@ -3705,7 +3705,7 @@ def build_circular_diagram(
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_record(
             gb_record,
-            cfg=with_config_overrides(cfg, overrides),
+            cfg=with_fit_row_overrides(cfg, overrides),
             selected_features_set=options.selected_features_set,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
@@ -4050,7 +4050,7 @@ def build_circular_multi_diagram(
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_records(
             records,
-            cfg=with_config_overrides(cfg, overrides),
+            cfg=with_fit_row_overrides(cfg, overrides),
             conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,

@@ -5,7 +5,8 @@ Labels fit when no two labels overlap and no two leader polylines cross
 crossing (LP-D49 ``DEF-WARN``). A Linear region (annotation) label over other
 labels or lines is counted by its placer and only warns (LP-D68), and so does a
 Circular region label cut to fit its circle (LP-D87) or lying on another track
-because set radii leave it no room (LP-D86). The counts take plain shapes: each label kind
+because set radii leave it no room (LP-D86). The centre definition text of a Circular record
+that reaches into a track's band only warns too (D-12, ``circular_definition``). The counts take plain shapes: each label kind
 has one adapter next to its owner that turns the drawn labels into
 :class:`LabelShape` values, and one record's labels of every kind are counted
 together (LP-D48 ``SCOPE-ALL-LABELS``).
@@ -24,7 +25,13 @@ from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_pairs
 from ..layout.text_geometry import Point, convex_polygons_intersect, segments_intersect
 
 LabelKind: TypeAlias = Literal[
-    "circular_outer", "circular_inner", "circular_embedded", "circular_region", "linear", "linear_region"
+    "circular_outer",
+    "circular_inner",
+    "circular_embedded",
+    "circular_region",
+    "circular_definition",
+    "linear",
+    "linear_region",
 ]
 LabelFitOutcome: TypeAlias = Literal["fits", "warn", "stop"]
 LabelFitRowKind: TypeAlias = Literal[
@@ -37,6 +44,7 @@ LabelFitRowKind: TypeAlias = Literal[
     "labels_out",
     "radial",
     "separate_features",
+    "smaller_definition_font",
 ]
 # ``found``: ``values`` fit; ``found_with_notice``: ``values`` leave no
 # overlapping labels but leave crossing leaders or labels over the definition
@@ -52,7 +60,13 @@ Polyline: TypeAlias = Sequence[Point]
 
 # A pair of labels of two kinds counts once, for the first kind in this order.
 _KIND_ORDER: tuple[LabelKind, ...] = (
-    "circular_inner", "circular_outer", "circular_embedded", "circular_region", "linear", "linear_region"
+    "circular_inner",
+    "circular_outer",
+    "circular_embedded",
+    "circular_region",
+    "circular_definition",
+    "linear",
+    "linear_region",
 )
 # A label covers the definition text when they overlap by more than this in x and y.
 DEFINITION_TEXT_MIN_OVERLAP_PX = 0.5
@@ -67,6 +81,8 @@ SPACING_PATH = "labels.spacing.circular"
 SCOPE_PATH = "labels.circular.scope"
 PLACEMENT_PATH = "labels.circular.placement"
 SEPARATE_FEATURES_PATH = "canvas.resolve_overlaps"
+# ``--definition_font_size``: the Circular centre definition's font (its line interval follows it).
+DEFINITION_FONT_PATH = "objects.definition.circular.font_size"
 # The switch rows' values: every label outside (``--labels out``), radial
 # labels, and overlapping features on separate tracks (``--resolve_overlaps``).
 ALL_OUTSIDE_SCOPE = "outer"
@@ -99,10 +115,12 @@ class LabelFit:
     """Overlapping label pairs, crossing leader pairs, labels over the definition text,
     Linear region labels over other labels or lines (``region_overlaps``: pairs of a
     region label and what it covers, LP-D68), Circular region labels cut to fit
-    their circle (``region_cuts``, LP-D87), and Circular region labels whose letters
-    lie on another track's band (``region_track_overlaps``, LP-D86).
+    their circle (``region_cuts``, LP-D87), Circular region labels whose letters
+    lie on another track's band (``region_track_overlaps``, LP-D86), and lines of a
+    Circular record's centre definition text that reach into a track's band
+    (``definition_track_overlaps``, D-12).
 
-    The labels fit when all six are 0.
+    The labels fit when all seven are 0.
     """
 
     overlap_pairs: int
@@ -111,6 +129,7 @@ class LabelFit:
     region_overlaps: int = 0
     region_cuts: int = 0
     region_track_overlaps: int = 0
+    definition_track_overlaps: int = 0
 
     @property
     def fits(self) -> bool:
@@ -121,6 +140,7 @@ class LabelFit:
             and self.region_overlaps == 0
             and self.region_cuts == 0
             and self.region_track_overlaps == 0
+            and self.definition_track_overlaps == 0
         )
 
     def __add__(self, other: LabelFit) -> LabelFit:
@@ -131,6 +151,7 @@ class LabelFit:
             self.region_overlaps + other.region_overlaps,
             self.region_cuts + other.region_cuts,
             self.region_track_overlaps + other.region_track_overlaps,
+            self.definition_track_overlaps + other.definition_track_overlaps,
         )
 
 
@@ -442,6 +463,10 @@ class LabelFitReport:
     def region_track_overlaps(self) -> int:
         return sum(record.fit.region_track_overlaps for record in self.records)
 
+    @property
+    def definition_track_overlaps(self) -> int:
+        return sum(record.fit.definition_track_overlaps for record in self.records)
+
 
 class LabelFitRows(Protocol):
     """Computes one row of a report on request; a ``time.monotonic()`` deadline may stop it (``not_computed``)."""
@@ -459,6 +484,7 @@ _CLI_OPTIONS: Mapping[str, str] = {
     SCOPE_PATH: "--labels",
     PLACEMENT_PATH: "--label_placement",
     SEPARATE_FEATURES_PATH: "--resolve_overlaps",
+    DEFINITION_FONT_PATH: "--definition_font_size",
 }
 # The CLI spells the all-outside scope ``out``.
 _CLI_WORDS: Mapping[str, str] = {ALL_OUTSIDE_SCOPE: "out"}
@@ -472,6 +498,7 @@ ROW_TITLES: Mapping[LabelFitRowKind, str] = {
     "labels_out": "all labels outside",
     "radial": "radial labels",
     "separate_features": "separate overlapping features",
+    "smaller_definition_font": "smaller definition font",
 }
 _ROW_NAMES: Mapping[LabelFitRowKind, str] = {
     "outward_both": "outward in both directions",
@@ -483,12 +510,14 @@ _ROW_NAMES: Mapping[LabelFitRowKind, str] = {
     "labels_out": "all labels outside",
     "radial": "radial labels",
     "separate_features": "separating overlapping features",
+    "smaller_definition_font": "a smaller definition font",
 }
 _KIND_WORDS: Mapping[LabelKind, str] = {
     "circular_outer": "outer",
     "circular_inner": "inner",
     "circular_embedded": "embedded",
     "circular_region": "region",
+    "circular_definition": "definition",
     "linear": "Linear",
     "linear_region": "region",
 }
@@ -500,8 +529,11 @@ def _counted(count: int, singular: str, plural: str) -> str:
 
 def fit_counts(fit: LabelFit) -> str:
     counts: list[str] = []
-    # Region labels are counted on their own record (LP-D68, LP-D87, LP-D86), which has no other counts.
-    if fit.overlap_pairs or fit.crossing_pairs or not (fit.region_overlaps or fit.region_cuts or fit.region_track_overlaps):
+    # Region labels (LP-D68, LP-D87, LP-D86) and the definition text over a track (D-12) are counted on their own
+    # record, which has no other counts.
+    if fit.overlap_pairs or fit.crossing_pairs or not (
+        fit.region_overlaps or fit.region_cuts or fit.region_track_overlaps or fit.definition_track_overlaps
+    ):
         counts.append(_counted(fit.overlap_pairs, "label pair overlaps", "label pairs overlap"))
         counts.append(_counted(fit.crossing_pairs, "leader pair crosses", "leader pairs cross"))
     if fit.definition_overlaps:
@@ -512,6 +544,8 @@ def fit_counts(fit: LabelFit) -> str:
         counts.append(_counted(fit.region_cuts, "region label cut", "region labels cut"))
     if fit.region_track_overlaps:
         counts.append(_counted(fit.region_track_overlaps, "region label on another track", "region labels on other tracks"))
+    if fit.definition_track_overlaps:
+        counts.append(_counted(fit.definition_track_overlaps, "line overlaps a track", "lines overlap a track"))
     return ", ".join(counts)
 
 
@@ -548,6 +582,10 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
         sentences.append(
             f"Region labels lie on other tracks: the set track radii leave them no room ({report.region_track_overlaps})."
         )
+    if report.definition_track_overlaps:
+        sentences.append(
+            f"The definition text overlaps a track ({_counted(report.definition_track_overlaps, 'line', 'lines')})."
+        )
     return tuple(sentences)
 
 
@@ -581,6 +619,21 @@ def label_kind_words(record: LabelFitRecord) -> str:
     return f"radial {words}" if record.refused else words
 
 
+def label_kind_nouns(record: LabelFitRecord) -> tuple[str, str]:
+    """The singular and plural noun of a record's counted items: ``outer label(s)``, ``definition line(s)``."""
+
+    words = label_kind_words(record)
+    noun = "line" if record.label_kind == "circular_definition" else "label"
+    return f"{words} {noun}", f"{words} {noun}s"
+
+
+def label_kind_title(record: LabelFitRecord) -> str:
+    """A record's counted items as the Web dialog lists them (``outer labels``, ``definition line``)."""
+
+    singular, plural = label_kind_nouns(record)
+    return singular if record.label_count == 1 else plural
+
+
 def _cli_value(value: LabelFitValue) -> str:
     return _CLI_WORDS.get(value, value) if isinstance(value, str) else f"{value:g}"
 
@@ -609,22 +662,23 @@ def _first_line(report: LabelFitReport) -> str:
     records = report.records
     if len(records) == 1:
         (record,) = records
-        words = label_kind_words(record)
+        singular, plural = label_kind_nouns(record)
         return (
-            f"{_counted(record.label_count, f'{words} label does', f'{words} labels do')} not fit at "
+            f"{_counted(record.label_count, f'{singular} does', f'{plural} do')} not fit at "
             f"{record.font_size:g} pt ({label_fit_record_counts(record)}). {outcome}"
         )
-    kinds = {label_kind_words(record) for record in records}
+    kinds = {label_kind_nouns(record) for record in records}
     if len(kinds) == 1 and len({record.record_id for record in records}) == len(records):
+        singular, plural = next(iter(kinds))
+        noun = singular.rsplit(" ", 1)[-1]
         listed = "; ".join(
-            f"{record.record_id} ({_counted(record.label_count, 'label', 'labels')} at {record.font_size:g} pt: "
+            f"{record.record_id} ({_counted(record.label_count, noun, f'{noun}s')} at {record.font_size:g} pt: "
             f"{label_fit_record_counts(record)})"
             for record in records
         )
-        words = next(iter(kinds))
-        return f"{words[0].upper()}{words[1:]} labels do not fit in {len(records)} records: {listed}. {outcome}"
+        return f"{plural[0].upper()}{plural[1:]} do not fit in {len(records)} records: {listed}. {outcome}"
     listed = "; ".join(
-        f"{record.record_id}: {_counted(record.label_count, f'{label_kind_words(record)} label', f'{label_kind_words(record)} labels')} at "
+        f"{record.record_id}: {_counted(record.label_count, *label_kind_nouns(record))} at "
         f"{record.font_size:g} pt ({label_fit_record_counts(record)})"
         for record in records
     )
@@ -679,6 +733,7 @@ def raise_or_warn(
 
 __all__ = [
     "ALL_OUTSIDE_SCOPE",
+    "DEFINITION_FONT_PATH",
     "DEFINITION_TEXT_MIN_OVERLAP_PX",
     "FITS",
     "FONT_SIZE_PATHS",
@@ -716,6 +771,8 @@ __all__ = [
     "label_fit_outcome",
     "label_fit_record_counts",
     "label_fits_by_kind",
+    "label_kind_nouns",
+    "label_kind_title",
     "label_kind_words",
     "overlapping_pairs",
     "polyline_crossing_count",

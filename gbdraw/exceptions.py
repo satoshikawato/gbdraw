@@ -104,7 +104,8 @@ class LabelsDoNotFitError(GbdrawError):
 
 
 class LabelLeadersCrossWarning(UserWarning):
-    """Label leaders cross or labels cover the definition text; the figure was drawn anyway.
+    """Label leaders cross, labels cover the definition text, or the Circular definition text overlaps a track;
+    the figure was drawn anyway.
 
     ``report`` names the records and the settings that remove the crossings.
     """
