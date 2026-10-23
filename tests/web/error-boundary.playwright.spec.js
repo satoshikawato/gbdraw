@@ -392,7 +392,7 @@ test('a GFF3 without features names the GFF3 file, and replacing an input ends t
 test('a Linear Generate failure about a File card ends when its file is read again', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'))).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
   const card = page.locator('[data-linear-source-card]').first();
   const noSequence = (name) => card.locator('input[type="file"]').first().setInputFiles({
     name, mimeType: 'text/plain', buffer: Buffer.from('LOCUS       X 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')

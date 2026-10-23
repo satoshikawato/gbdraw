@@ -764,7 +764,8 @@ def _validate_prepared_input_retention(
         return None
     if not cache_requested:
         raise ValidationError(
-            "A prepared input retention requires a prepared input cache."
+            "A prepared input retention requires a prepared input cache.",
+            diagnostic={"code": "HELPER_PROTOCOL"},
         )
     drawing = value.get("drawing") if isinstance(value, Mapping) else None
     tokens = value.get("resourceTokens") if isinstance(value, Mapping) else None
@@ -779,7 +780,9 @@ def _validate_prepared_input_retention(
             for token in tokens
         )
     ):
-        raise ValidationError("Invalid prepared input retention.")
+        raise ValidationError(
+            "Invalid prepared input retention.", diagnostic={"code": "HELPER_PROTOCOL"}
+        )
     return PreparedInputRetention(drawing=drawing, resource_tokens=frozenset(tokens))
 
 

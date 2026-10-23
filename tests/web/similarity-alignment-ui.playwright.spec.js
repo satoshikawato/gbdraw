@@ -3179,7 +3179,7 @@ test('a Linear review ended in Circular gives the Linear view back to no other f
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   const { before, dialog } = await openReviewOverOwnView(page);
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
-  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
   await expect.poll(shownMode).toBe('circular');
   // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
   // its panel has no Result area to dock in), and Escape ends it there.

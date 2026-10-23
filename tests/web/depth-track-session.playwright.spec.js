@@ -465,7 +465,7 @@ test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface th
   await page.evaluate((source) => {
     const app = window.__GBDRAW_APP__;
     const [first, second] = new Function(`return (${source})`)()();
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.addLinearSeq();
     app.setLinearDepthFile(app.linearSeqs[0], 0, first);
     app.addLinearDepthTrack();
@@ -500,7 +500,7 @@ test('two unnamed Depth series are named Depth 1 and Depth 2 on every surface th
   await page.evaluate((source) => {
     const app = window.__GBDRAW_APP__;
     const [first, second] = new Function(`return (${source})`)()();
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.setCircularDepthFile(0, first);
     app.addCircularDepthTrack();
     app.setCircularDepthFile(1, second);
@@ -535,7 +535,7 @@ test('Linear Generate gives Depth series the settings a series edit gives them',
       `NC_001454.1\t1\t${n * 10}\n` +
       `NC_001454.1\t80\t${n * 10 + 5}\n`
     ], `series-${n}.tsv`, { type: 'text/tab-separated-values', lastModified: 30 + n });
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'repeat-region.gbk', {
       type: 'text/plain',
@@ -2670,7 +2670,7 @@ for (const mode of ['circular', 'linear']) {
     await openApp(page);
     await page.evaluate(async ({ diagramMode, genbankText }) => {
       const app = window.__GBDRAW_APP__;
-      app.setDiagramMode(diagramMode);
+      app.selectDrawing(diagramMode);
       const file = new File([genbankText], 'extend-to.gbk', { type: 'text/plain', lastModified: 41 });
       if (diagramMode === 'circular') {
         app.cInputType = 'gb';
