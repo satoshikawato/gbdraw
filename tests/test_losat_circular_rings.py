@@ -512,3 +512,262 @@ def test_a_session_without_a_precomputed_ring_label_keeps_the_file_name(
         svgs[variant] = (tmp_path / f"{variant}.svg").read_bytes()
     assert _ring_label_texts(svgs["stored"]) == {drawn_label}
     assert svgs["stored"] == svgs["labelled"]
+
+
+# The subject database is the whole subject-side source file (Owner D-25, OV-1682).
+
+_SUBJECT_SEQUENCES = {
+    "SUBA": "acgtacgtac" * 7,
+    "SUBB": "ggccttaagg" * 9,
+    "SUBC": "ttgacatgca" * 8,
+    "SUBD": "catgcatgaa" * 6,
+}
+_CON_RECORD = """LOCUS       SUBCON                    20 bp    DNA     linear   CON 01-JAN-1980
+DEFINITION  contig record without a sequence.
+ACCESSION   SUBCON
+VERSION     SUBCON.1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+CONTIG      join(SUBA.1:1..10,SUBB.1:1..10)
+//
+"""
+
+
+def _genbank_text(record_id: str, sequence: str) -> str:
+    from io import StringIO
+
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    record = SeqRecord(
+        Seq(sequence), id=record_id, name=record_id, description=f"{record_id} record",
+        annotations={"molecule_type": "DNA", "topology": "linear"},
+    )
+    handle = StringIO()
+    SeqIO.write([record], handle, "genbank")
+    return handle.getvalue()
+
+
+def _subject_file(tmp_path: Path, *, name: str = "subject.gb", con: bool = True, bom: bool = False) -> Path:
+    """SUBA, SUBB, a CON record (no sequence), SUBC."""
+
+    texts = [_genbank_text("SUBA", _SUBJECT_SEQUENCES["SUBA"]), _genbank_text("SUBB", _SUBJECT_SEQUENCES["SUBB"])]
+    if con:
+        texts.append(_CON_RECORD)
+    texts.append(_genbank_text("SUBC", _SUBJECT_SEQUENCES["SUBC"]))
+    path = tmp_path / name
+    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + "".join(texts).encode("ascii"))
+    return path
+
+
+def _expected_database(*record_ids: str) -> str:
+    from gbdraw.comparisons.losat_jobs import losat_fasta_text
+
+    return "".join(losat_fasta_text(record_id, _SUBJECT_SEQUENCES[record_id]) for record_id in record_ids)
+
+
+@pytest.fixture
+def captured_ring_searches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """The (query, subject) FASTA of every ring search; the search returns no rows."""
+
+    import gbdraw.comparisons.circular_losat as circular_losat_module
+
+    searches: list[tuple[str, str]] = []
+
+    def fake_search(_spec, query_fasta, subject_fasta, **_kwargs):
+        searches.append((query_fasta, subject_fasta))
+        return ""
+
+    monkeypatch.setattr(circular_losat_module, "run_losat_search", fake_search)
+    return searches
+
+
+def _ring_request(tmp_path: Path, *inputs: RecordInput) -> CircularDiagramRequest:
+    query = tmp_path / "query.fasta"
+    query.write_text(">QUERY1\nACGTACGTACGTACGTACGT\n", encoding="ascii")
+    return CircularDiagramRequest(
+        records=tuple(inputs),
+        options=CircularDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatn"),
+            conservation_sequence_files=[str(query)],
+        ),
+    )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    "case",
+    ["records not drawn", "single presentation", "crop", "reverse complement crop"],
+)
+def test_ring_database_is_the_whole_reference_file(
+    case: str, tmp_path: Path, captured_ring_searches: list[tuple[str, str]]
+) -> None:
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.api.requests import RecordPresentation
+    from gbdraw.comparisons.losat_jobs import nucleotide_losat_cache_key, sha256_text
+    from gbdraw.io.record_select import parse_record_selector
+    from gbdraw.io.regions import parse_region_spec
+
+    source = GenBankInputSource(path=str(_subject_file(tmp_path)))
+    inputs = {
+        # SUBB is OFF: only SUBA and SUBC are drawn.
+        "records not drawn": (
+            RecordInput(source=source, selector=parse_record_selector("#1")),
+            RecordInput(source=source, selector=parse_record_selector("#4")),
+        ),
+        "single presentation": (RecordInput(source=source, selector=parse_record_selector("#2")),),
+        "crop": (RecordInput(source=source, region=parse_region_spec("SUBB:11-50")),),
+        "reverse complement crop": (
+            RecordInput(
+                source=source, region=parse_region_spec("SUBB:11-50"),
+                presentation=RecordPresentation(reverse_complement=True),
+            ),
+        ),
+    }[case]
+    plan = plan_circular_request(_ring_request(tmp_path, *inputs))
+
+    expected = _expected_database("SUBA", "SUBB", "SUBC")
+    assert [subject for _query, subject in captured_ring_searches] == [expected]
+    (entry,) = plan.losat_cache_entries
+    assert entry["subjectCanonicalHash"] == sha256_text(expected)
+    assert entry["key"] == nucleotide_losat_cache_key(
+        program="blastn", args=("--task", "megablast"),
+        query_hash=sha256_text(">QUERY1\nACGTACGTACGTACGTACGT\n"),
+        subject_hash=sha256_text(expected), flow="circular-conservation",
+    )
+
+
+@pytest.mark.circular
+def test_ring_database_reads_the_reference_file_once(
+    tmp_path: Path, captured_ring_searches: list[tuple[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The planner's parse of the GenBank source is the database: no second parse in one request."""
+
+    import gbdraw.io.genome as genome_module
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.io.record_select import parse_record_selector
+
+    parses: list[str] = []
+    real_parse = genome_module.SeqIO.parse
+
+    def counting_parse(handle, fmt, *args, **kwargs):
+        parses.append(fmt)
+        return real_parse(handle, fmt, *args, **kwargs)
+
+    monkeypatch.setattr(genome_module.SeqIO, "parse", counting_parse)
+    source = GenBankInputSource(path=str(_subject_file(tmp_path)))
+    plan_circular_request(_ring_request(tmp_path, RecordInput(source=source, selector=parse_record_selector("#2"))))
+    # The comparison FASTA is parsed too; the reference GenBank file once.
+    assert [fmt for fmt in parses if fmt == "genbank"] == ["genbank"]
+    assert [subject for _query, subject in captured_ring_searches] == [_expected_database("SUBA", "SUBB", "SUBC")]
+
+
+@pytest.mark.circular
+def test_ring_database_of_gff3_is_every_fasta_entry(
+    tmp_path: Path, captured_ring_searches: list[tuple[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GFF3 mode searches every entry of the FASTA file, also one the GFF3 file does not name."""
+
+    import gbdraw.io.genome as genome_module
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.api.requests import GffFastaInputSource
+
+    gff = tmp_path / "subject.gff3"
+    gff.write_text(
+        "##gff-version 3\nSUBB\t.\tgene\t5\t40\t.\t+\t.\tID=gene1\n",
+        encoding="ascii",
+    )
+    fasta = tmp_path / "subject.fasta"
+    fasta.write_text(
+        "".join(f">{record_id} entry\n{_SUBJECT_SEQUENCES[record_id]}\n" for record_id in ("SUBA", "SUBB")),
+        encoding="ascii",
+    )
+    fasta_reads: list[str] = []
+    real_reader = genome_module._read_fasta_records
+
+    def counting_reader(path):
+        fasta_reads.append(str(path))
+        return real_reader(path)
+
+    monkeypatch.setattr(genome_module, "_read_fasta_records", counting_reader)
+    plan_circular_request(_ring_request(tmp_path, RecordInput(source=GffFastaInputSource(gff, fasta))))
+    assert [subject for _query, subject in captured_ring_searches] == [_expected_database("SUBA", "SUBB")]
+    # The GFF3 parse keeps only the entries the GFF3 names, so the database reads the FASTA file a second time.
+    assert fasta_reads == [str(fasta), str(fasta)]
+
+
+@pytest.mark.circular
+def test_ring_database_of_a_file_with_a_byte_order_mark_is_what_the_loader_reads(
+    tmp_path: Path, captured_ring_searches: list[tuple[str, str]]
+) -> None:
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.io.genome import load_gbks
+    from gbdraw.io.record_select import parse_record_selector
+
+    path = _subject_file(tmp_path, con=False, bom=True)
+    loaded = [str(record.id) for record in load_gbks([str(path)])]
+    plan_circular_request(_ring_request(
+        tmp_path, RecordInput(source=GenBankInputSource(path=str(path)), selector=parse_record_selector("#1")),
+    ))
+    assert [subject for _query, subject in captured_ring_searches] == [_expected_database(*loaded)]
+
+
+@pytest.mark.circular
+def test_ring_database_of_several_sources_is_each_file_whole_in_request_order(
+    tmp_path: Path, captured_ring_searches: list[tuple[str, str]]
+) -> None:
+    from gbdraw.api.request_render import plan_circular_batch_request
+    from gbdraw.api.requests import CircularBatchRequest
+    from gbdraw.io.record_select import parse_record_selector
+
+    first = tmp_path / "first.gb"
+    first.write_text(_genbank_text("SUBD", _SUBJECT_SEQUENCES["SUBD"]), encoding="ascii")
+    second = _subject_file(tmp_path, con=False)
+    single = _ring_request(
+        tmp_path,
+        RecordInput(source=GenBankInputSource(path=str(first))),
+        RecordInput(source=GenBankInputSource(path=str(second)), selector=parse_record_selector("#2")),
+        RecordInput(source=GenBankInputSource(path=str(first))),
+    )
+    # The first file is named twice and searched once.
+    expected = _expected_database("SUBD", "SUBA", "SUBB", "SUBC")
+    from gbdraw.api.request_render import plan_circular_request
+
+    plan_circular_request(single)
+    batch = CircularBatchRequest(
+        records=single.records, options=single.options,
+        outputs=tuple(RenderOutputRequest(output_prefix=f"item{index}") for index in range(3)),
+    )
+    plan_circular_batch_request(batch)
+    assert [subject for _query, subject in captured_ring_searches] == [expected, expected]
+
+
+@pytest.mark.circular
+def test_ring_database_of_in_memory_records_is_the_records_given(
+    tmp_path: Path, captured_ring_searches: list[tuple[str, str]]
+) -> None:
+    """The Python API passes records, not files: each record is its own source, as given."""
+
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.api.requests import InMemoryRecordSource
+
+    records = read_genbank(_subject_file(tmp_path, con=False))
+    plan_circular_request(_ring_request(
+        tmp_path, *(RecordInput(source=InMemoryRecordSource(record)) for record in (records[2], records[0])),
+    ))
+    assert [subject for _query, subject in captured_ring_searches] == [_expected_database("SUBC", "SUBA")]
+
+
+def test_ring_database_without_a_sequence_stops_the_search() -> None:
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.comparisons.circular_losat import ring_subject_fasta
+
+    with pytest.raises(ValidationError, match="no record with a sequence") as excinfo:
+        ring_subject_fasta([SeqRecord(Seq(None, length=20), id="SUBCON")])
+    assert _diagnostic(excinfo)["reason"] == "SEQUENCE_MISSING"

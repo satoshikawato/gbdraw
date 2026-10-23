@@ -73,7 +73,7 @@ from gbdraw.annotations import (
     read_annotation_options,
     resolve_annotations,
 )
-from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
+from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat, ring_subject_records
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
 from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
 from gbdraw.exceptions import ValidationError
@@ -173,6 +173,7 @@ from .record_planning import (
     _load_source_records,
     _prepared_source_cache_spec,
     _similarity_candidate_from_orthogroup_member,
+    _source_key,
     effective_record_presentation,
     project_similarity_alignment_centers,
     comparison_record_bindings,
@@ -1403,13 +1404,15 @@ def read_request_feature_override_table(
 def _load_request_records(
     request: _RequestT,
     inputs: PreparedDiagramInputs,
+    parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] | None = None,
 ) -> tuple[_RequestT, ResolvedRecordCollection]:
     """Load the records and turn identity tables into exact rows against them.
 
     Tables resolve before the GFF3 check below, so a table row and an exact row
-    load the same features.
+    load the same features. ``parsed_sources`` receives the source parses for a
+    caller that reads the sources again (the ring subject database).
     """
-    inputs = replace(inputs, parsed_sources={})
+    inputs = replace(inputs, parsed_sources={} if parsed_sources is None else parsed_sources)
     collection = _coerce_resolved_collection(request, _normalize_request_records(request, inputs))
     request = _materialize_identity_tables(request, collection)
     shown_types: set[str] = _gff_types_named_by_visibility_rows(request.options.feature_overrides, collection)
@@ -1831,17 +1834,26 @@ def _materialize_feature_inputs(
 
 def _resolve_ring_losat(
     options: CircularDiagramOptions,
-    records: Sequence[SeqRecord],
+    record_inputs: Sequence[RecordInput],
+    parsed_sources: Mapping[tuple[object, ...], ParsedRecordInputs],
     inputs: PreparedDiagramInputs,
 ) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Replace ring LOSATN / TLOSATX intent with ring rows (design 3.3).
 
-    The subject database is every displayed record; each comparison genome is
-    read once through the request's memoized reader.
+    The subject database is every subject-side source file of the request,
+    whole (Owner D-25), from the parses the record load made; each comparison
+    genome is read once through the request's memoized reader.
     """
 
     if options.losat_search is None:
         return options, ()
+
+    def genbank_records(source: GenBankInputSource) -> tuple[SeqRecord, ...]:
+        parsed = parsed_sources.get(_source_key(source))
+        # A request served from the prepared resolved-record cache made no parse
+        # here: the prepared parsed source holds it.
+        return (parsed if parsed is not None else load_render_source_records(source)).records
+
     sources = inputs.comparison_sequences or _ComparisonSequenceSources(
         tuple(options.conservation_sequence_files or ())
     )
@@ -1850,7 +1862,11 @@ def _resolve_ring_losat(
         return tuple(file for file in sources.files() if file is not None)
 
     return resolve_circular_conservation_losat(
-        options, records=records, load_sequences=load_sequences
+        options,
+        subject_records=ring_subject_records(
+            (item.source for item in record_inputs), genbank_records=genbank_records
+        ),
+        load_sequences=load_sequences,
     )
 
 
@@ -1874,8 +1890,9 @@ def plan_circular_request(
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
         unresolved_request = _with_prepared_colors(unresolved_request, inputs)
+    parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
-        unresolved_request, collection = _load_request_records(unresolved_request, inputs)
+        unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
@@ -1897,7 +1914,7 @@ def plan_circular_request(
             else projected_request
         )
         ring_options, losat_cache_entries = _resolve_ring_losat(
-            materialized_request.options, records, inputs
+            materialized_request.options, unresolved_request.records, parsed_sources, inputs
         )
         if ring_options is not materialized_request.options:
             materialized_request = replace(materialized_request, options=ring_options)
@@ -1934,8 +1951,9 @@ def plan_circular_batch_request(
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
         unresolved_request = _with_prepared_colors(unresolved_request, inputs)
+    parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
-        unresolved_request, collection = _load_request_records(unresolved_request, inputs)
+        unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
@@ -1961,7 +1979,7 @@ def plan_circular_batch_request(
             )
         )
         ring_options, losat_cache_entries = _resolve_ring_losat(
-            materialized_request.options, records, inputs
+            materialized_request.options, unresolved_request.records, parsed_sources, inputs
         )
         if ring_options is not materialized_request.options:
             materialized_request = replace(materialized_request, options=ring_options)
