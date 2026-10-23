@@ -54,6 +54,7 @@ ACCENT = (59, 130, 246)
 PORTRAIT_MAX_ZOOM = 2.6
 PORTRAIT_PAD = 1.2  # portrait: margin around a framed target
 FRAME_PAD = 1.08    # a clip's still view: margin around the rects it keeps whole
+BAND_PAD = 4        # page px a framed cue keeps around its rects; the page outside them is blanked
 PORTRAIT_ZOOM_SLACK = 1.35  # portrait: a zoomed tall target shows at most this much more height
 PROGRESS_GAP = 22  # portrait: step bar distance below the window
 INSET_MARGIN = 18  # overview inset: distance from the window's edges
@@ -491,7 +492,9 @@ class Camera:
         self.aspect = layout.aspect
         self.max_h = layout.whole_view(viewport)
         self.cues = []
-        self._wide: list[bool] = []   # per cue: a still frame, which may show more rows than the page has
+        # Per cue: the rects of a still frame (None for other cues). The view may show more rows than the page has,
+        # so the page outside the rects, where the app's header, toolbar and panels are, is blanked.
+        self._bands: list[dict | None] = []
         mark_rects_by_name = mark_rects(events)
         # The page rect the camera stays inside, from each output time on.
         whole = (0.0, 0.0, float(viewport[0]), float(viewport[1]))
@@ -504,7 +507,7 @@ class Camera:
             elif event["kind"] == "camera":
                 self.cues.append((timemap.out(event["t"]), *self._target(event, self._stages[-1], mark_rects_by_name),
                                   event["duration"]))
-                self._wide.append(bool(layout.portrait and event.get("frame")))
+                self._bands.append(self._frame_rect(event, mark_rects_by_name) if layout.portrait else None)
         self.starts = [cue[0] for cue in self.cues]
         self._states = []
         state = self._clamp(viewport[0] / 2, viewport[1] / 2, self.max_h)
@@ -512,6 +515,17 @@ class Camera:
             if index:
                 state = self._at(index - 1, self.starts[index])
             self._states.append(state)
+
+    @staticmethod
+    def _frame_rect(event: dict, marks: dict[str, list[dict]] | None) -> dict | None:
+        """The union of the rects the marks a cue's ``frame`` names logged; None for a cue without a frame."""
+
+        if not event.get("frame"):
+            return None
+        rects = [rect for name in event["frame"] for rect in (marks or {}).get(name, ())]
+        if not rects:
+            raise ValueError(f"Recording logged no rect on marks {event['frame']!r}")
+        return _union(rects)
 
     def _target(self, event: dict, stage: tuple[float, float, float, float],
                 marks: dict[str, list[dict]] | None = None) -> tuple[tuple[float, float, float], str | None]:
@@ -524,10 +538,7 @@ class Camera:
         if not self.layout.portrait:
             return self._clamp(event["cx"], event["cy"], self.viewport[1] / max(1.0, event["zoom"]), stage), None
         if event.get("frame"):
-            rects = [rect for name in event["frame"] for rect in (marks or {}).get(name, ())]
-            if not rects:
-                raise ValueError(f"Recording logged no rect on marks {event['frame']!r}")
-            view, (corner, _) = self.fixed(_union(rects))
+            view, (corner, _) = self.fixed(self._frame_rect(event, marks))
             return view, corner
         rect = event.get("portrait") or event["rect"]
         subject = event.get("subject")
@@ -589,10 +600,26 @@ class Camera:
         if index < 0:
             return self._clamp(self.viewport[0] / 2, self.viewport[1] / 2, self.max_h)
         state = self._at(index, output)
-        if self._wide[index] or (index and self._wide[index - 1]):
+        if self._bands[index] or (index and self._bands[index - 1]):
             # From or to a still frame the view may be taller than the page: only sideways it stays inside.
             return self._sideways(*state)
         return self._clamp(*state, self._stage_at(output))
+
+    def band(self, output: float) -> tuple[dict | None, float]:
+        """The rect a still frame keeps at ``output`` and how much of the page outside it is blanked (0 to 1).
+
+        The blanking fades in as the camera moves into a framed cue and out as it leaves.
+        """
+
+        index = bisect.bisect_right(self.starts, output) - 1
+        if index < 0:
+            return None, 0.0
+        now, before = self._bands[index], self._bands[index - 1] if index else None
+        if now and before:
+            return now, 1.0
+        start, _, _, duration = self.cues[index]
+        p = 1.0 if duration <= 0 else _ease((output - start) / duration)
+        return (now, p) if now else (before, 1 - p) if before else (None, 0.0)
 
     def _sideways(self, cx: float, cy: float, height: float) -> tuple[float, float, float]:
         """The view ``(cx, cy, height)`` shifted to stay inside the page's width; its rows may pass the page's."""
@@ -1611,8 +1638,8 @@ class Composer:
                 self.overlay.caption(step if edit.numbered else None, lang(title), lang(subtitle))
 
     # recording ------------------------------------------------------------
-    def _screen(self, moment: float, view: tuple[float, float, float], inset: tuple[str | None, float]
-                ) -> Image.Image:
+    def _screen(self, moment: float, view: tuple[float, float, float], inset: tuple[str | None, float],
+                band: tuple[dict | None, float] = (None, 0.0)) -> Image.Image:
         rec = self.recording
         frame = rec.source_frame(moment)
         cx, cy, vh = view
@@ -1627,6 +1654,14 @@ class Composer:
         def to_screen(x: float, y: float) -> tuple[float, float]:
             return (x - left) * scale, (y - top) * scale
 
+        rect, blank = band
+        if rect and blank > 0:
+            # A still frame shows the drawing only: the page around it (header, toolbar, panels) is blanked.
+            x0, y0 = to_screen(rect["x"] - BAND_PAD, rect["y"] - BAND_PAD)
+            x1, y1 = to_screen(rect["x"] + rect["width"] + BAND_PAD, rect["y"] + rect["height"] + BAND_PAD)
+            keep = Image.new("L", screen.size, round(255 * blank))
+            ImageDraw.Draw(keep).rectangle((round(x0), round(y0), round(x1) - 1, round(y1) - 1), fill=0)
+            screen.paste(Image.new("RGB", screen.size, (255, 255, 255)), (0, 0), keep)
         self._inset(screen, moment, view, inset)
         draw = ImageDraw.Draw(screen, "RGBA")
         for start, stop, event in rec.popovers:
@@ -1776,7 +1811,8 @@ class Composer:
             caption, caption_in, previous = piece.caption, 1.0 if piece.caption_held else local / FPS / 0.35, None
         else:
             caption, caption_in, previous = rec.caption_at(moment, piece.start)
-        return self._compose_card(self._screen(moment, view, inset), caption, caption_in, previous,
+        band = (None, 0.0) if piece.view else self.camera.band(moment)
+        return self._compose_card(self._screen(moment, view, inset, band), caption, caption_in, previous,
                                   extras, edit)
 
     def _finale_frame(self, piece: Piece, local: int, edit: Edit) -> Image.Image:

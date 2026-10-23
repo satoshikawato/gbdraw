@@ -168,6 +168,8 @@ def test_a_camera_cue_with_a_frame_holds_the_marks_rects_in_the_still_view() -> 
     assert camera.at(3.0) == pytest.approx(expected) and expected[2] > 1080
     # The next plain cue is clamped to the page again.
     assert camera.at(6.0)[2] == pytest.approx(camera.cues[1][1][2]) and camera.cues[1][1][2] <= 1080
+    # Only the framed cue blanks the page outside the rects (the app's header and panels), and it fades out after it.
+    assert camera.band(3.0) == (figure, 1.0) and camera.band(6.0)[1] == 0.0
     # A frame naming marks that logged nothing fails the render instead of framing the wrong part.
     events[1]['frame'] = ['hl-missing']
     with pytest.raises(ValueError, match='no rect'):
