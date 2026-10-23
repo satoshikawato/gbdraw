@@ -151,7 +151,8 @@ const STACK = {
 for (const mode of MODES) {
   test(`${mode} stack editor writes the feature-slot inputs only through the transition (R10)`, () => {
     const fixture = (offAxis) => {
-      const state = draftState(mode);
+      // The fixture is the drawing the editor reads, so it names its mode.
+      const state = Object.assign(draftState(mode), { mode });
       state.adv.linear_track_slots.push(
         { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'below', params: { nt: 'GC' } },
         { id: 'gap', renderer: 'spacer', enabled: true, side: 'below', height: '12px', params: {} });

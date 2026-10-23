@@ -59,7 +59,7 @@ const circularState = (slots, { showDepth = false, depthFiles = [] } = {}) => wi
 });
 
 const linearState = (slots, { showDepth = false, depthFiles = [] } = {}) => withDrawings({
-  form: { linear_track_layout: 'middle', show_depth: showDepth, show_gc: true, show_skew: true },
+  mode: 'linear', form: { linear_track_layout: 'middle', show_depth: showDepth, show_gc: true, show_skew: true },
   adv: {
     nt: 'GC',
     linear_track_slots_enabled: true,

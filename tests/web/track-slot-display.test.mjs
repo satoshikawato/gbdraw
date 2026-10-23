@@ -207,7 +207,7 @@ test('Linear editor requests resolved geometry with each public slot ID', () => 
   };
   const linearEditor = createLinearTrackSlotEditor({
     state: withDrawings({
-      form: { linear_track_layout: 'middle', show_depth: true },
+      mode: 'linear', form: { linear_track_layout: 'middle', show_depth: true },
       adv: {
         linear_track_slots: linearSlots,
         linear_track_slots_axis_index: 1,
@@ -358,7 +358,7 @@ test('an Overlay annotation row names the rows it follows until Generate resolve
   ];
   const linearEditor = createLinearTrackSlotEditor({
     state: withDrawings({
-      form: { linear_track_layout: 'middle', show_depth: false },
+      mode: 'linear', form: { linear_track_layout: 'middle', show_depth: false },
       adv: { linear_track_slots: linearSlots, linear_track_slots_axis_index: 0, depth_tracks: [],
         depth_color: '#4A90E2', depth_height: null, gc_height: null, nt: 'GC' },
       files: { linearSeqs: [] },
@@ -455,7 +455,7 @@ test('disabled rows show their estimate in both editors', () => {
   ];
   const linearEditor = createLinearTrackSlotEditor({
     state: withDrawings({
-      form: { linear_track_layout: 'middle', show_depth: false },
+      mode: 'linear', form: { linear_track_layout: 'middle', show_depth: false },
       adv: {
         linear_track_slots: linearSlots,
         linear_track_slots_axis_index: 0,

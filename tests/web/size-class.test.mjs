@@ -182,7 +182,7 @@ const MITOGENOME = Object.freeze([{ selector: '#1', record_id: 'mito', record_le
 /** @param {DiscoveredRecords} records @param {ReturnType<typeof circularDrawing>} drawing */
 const featureWidthEstimate = (records, drawing, shownRequest = null, resultIndex = 0) => {
   const state = withDrawings({
-    mode: { value: 'circular' }, ...drawing,
+    mode: 'circular', ...drawing,
     form: { ...createDefaultForm(), ...drawing.form }, adv: { ...createDefaultAdv('circular'), ...drawing.adv }
   });
   const editor = createCircularTrackSlotEditor({
