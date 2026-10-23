@@ -54,6 +54,19 @@ write-up of a release.
   `lower_left`, `lower_right`) on a Multi-Record Canvas, which the web app
   uses by default, was drawn over the records; it now clears them and the
   canvas grows as on a single-record canvas.
+- Fixed: diagram layout collisions.
+  - A top or bottom plot title is drawn outside a corner legend that was
+    moved above or below the diagram, in the drawing and in the web app's
+    live preview; it was drawn through the legend rows.
+  - A one-gradient legend block (for example "Pairwise match identity") is as
+    wide as its title, with the bar centred under it, in Linear legends and in
+    top or bottom Circular legends; a title wider than the bar was cut off at
+    the canvas edge or ran out of the legend.
+  - A Linear plot title's box is the drawn width and height of its text,
+    italic parts included; a title wider than the records reached the canvas
+    edge.
+  - A Circular corner legend that cannot sit beside the circle no longer moves
+    feature labels.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
