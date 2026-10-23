@@ -4,7 +4,8 @@ import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-/** @import { LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
+/** @import { DrawingState, LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -111,6 +112,7 @@ const sanitizePathSegment = (value) =>
  * @typedef {object} LinearRecordSelectorState
  * @property {{ value: string }} lInputType
  * @property {{ value: DiagramMode }} mode
+ * @property {() => Pick<DrawingState, 'id' | 'mode'>} activeDrawing the shown drawing, which a discovery runs for
  * @property {LinearSeq[]} linearSeqs
  * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
  * @property {{ value: boolean }} [sessionImportRollbackInProgress]
@@ -122,8 +124,9 @@ const sanitizePathSegment = (value) =>
  * @property {LinearRecordSelectorState} state
  * @property {(initial: Record<string, RecordSelectorState>) => Record<string, RecordSelectorState>} reactive
  * @property {(request: LinearRecordReadRequest) => Promise<SequenceRecord[]>} recordReader
- * @property {((discovered: { uid: string, records: SequenceRecord[] }) => boolean | void) | null} [onRecordsDiscovered]
- *   Returns true when it expanded the rows, which restarts the refresh.
+ * @property {((discovered: { drawingId: DrawingId, uid: string, records: SequenceRecord[] }) => boolean | void) | null} [onRecordsDiscovered]
+ *   The records of one card, for the drawing the discovery ran for. Returns
+ *   true when it expanded the rows, which restarts the refresh.
  * @property {{ warn?: (...args: unknown[]) => void }} [logger]
  */
 
@@ -255,8 +258,11 @@ export const createLinearRecordSelector = ({
     if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
 
-    // An inactive Linear source keeps its records, as an inactive Circular one does.
-    if (state.mode.value !== 'linear') return;
+    // An inactive Linear source keeps its records, as an inactive Circular one
+    // does. The drawing this discovery runs for is pinned before its first
+    // read: its records land in that drawing.
+    const drawing = state.activeDrawing();
+    if (drawing.mode !== 'linear') return;
 
     const inputType = state.lInputType.value;
     /** @type {{ uid: string, primaryFile: InputFileRef, pairedFile: InputFileRef | null }[]} */
@@ -298,7 +304,7 @@ export const createLinearRecordSelector = ({
         replaceState(uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
-        if (onRecordsDiscovered?.({ uid, records }) === true) return true;
+        if (onRecordsDiscovered?.({ drawingId: drawing.id, uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();

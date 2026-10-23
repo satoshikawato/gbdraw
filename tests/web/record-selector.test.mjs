@@ -156,6 +156,10 @@ await assert.rejects(
 );
 
 const ref = (value) => ({ value });
+// One drawing per mode, as in state.js: the shown drawing follows `mode`.
+const withShownDrawing = (fixture) => Object.assign(fixture, {
+  activeDrawing: () => ({ id: fixture.mode.value, mode: fixture.mode.value })
+});
 const fileA = { name: 'a.gb' };
 const fileB = { name: 'b.gb' };
 const state = {
@@ -166,7 +170,7 @@ const state = {
 const pending = new Map();
 const recordReader = ({ primaryFile }) => new Promise((resolve) => pending.set(primaryFile, resolve));
 const controller = createLinearRecordSelector({
-  state,
+  state: withShownDrawing(state),
   reactive: (value) => value,
   recordReader,
   logger: { warn: () => {} }
@@ -217,7 +221,7 @@ const errorState = {
 };
 const loggedErrors = [];
 const errorController = createLinearRecordSelector({
-  state: errorState,
+  state: withShownDrawing(errorState),
   reactive: (value) => value,
   recordReader: async () => { throw {code:'INPUT_UNREADABLE',operation:'listSequenceRecords',stage:'helper',message:'PRIVATE_PARSE_SENTINEL'}; },
   logger: { warn: (...args) => loggedErrors.push(args) }
@@ -243,7 +247,7 @@ const lazyState = {
 };
 let lazyReaderCalls = 0;
 const lazyController = createLinearRecordSelector({
-  state: lazyState,
+  state: withShownDrawing(lazyState),
   reactive: (value) => value,
   recordReader: async () => {
     lazyReaderCalls += 1;
@@ -270,7 +274,7 @@ const rollbackState = {
 };
 let rejectStaleSelectorRead;
 const rollbackController = createLinearRecordSelector({
-  state: rollbackState,
+  state: withShownDrawing(rollbackState),
   reactive: (value) => value,
   recordReader: () => new Promise((_resolve, reject) => {
     rejectStaleSelectorRead = reject;
@@ -306,7 +310,7 @@ let reuseOutcome = () => {
   throw { code: 'FASTA_REQUIRED', operation: 'listGffFastaRecords', stage: 'helper', context: { reason: 'GFF_FASTA_MATCH' } };
 };
 const reuseController = createLinearRecordSelector({
-  state: reuseState,
+  state: withShownDrawing(reuseState),
   reactive: (value) => value,
   recordReader: async ({ primaryFile, pairedFile }) => {
     reuseReads.push([primaryFile, pairedFile]);
@@ -340,7 +344,7 @@ assert.equal(reuseReads.length, 6);
 
 const discoveredRows = [];
 const readyController = createLinearRecordSelector({
-  state: reuseState,
+  state: withShownDrawing(reuseState),
   reactive: (value) => value,
   recordReader: async ({ primaryFile, pairedFile }) => {
     reuseReads.push([primaryFile, pairedFile]);
@@ -378,7 +382,7 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
     linearSeqs: [{ uid: 'trip-a', gb: fileA }, { uid: 'trip-b', gb: fileB }]
   };
   const trip = createLinearRecordSelector({
-    state: tripState,
+    state: withShownDrawing(tripState),
     reactive: (value) => value,
     recordReader: ({ primaryFile }) => discoverSequenceRecords({ file: primaryFile, format: 'genbank' })
   });
@@ -452,6 +456,32 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
   });
   assert.deepEqual(formats, ['fasta'], 'the Session resource goes to the Python reader');
   assert.deepEqual(records.map(({ recordId }) => recordId), ['F2']);
+}
+
+// D-15-91 (survey commit 4): a discovery's records go to the drawing it ran
+// for, pinned before its read, also when another drawing of the mode is shown
+// by the time the read ends.
+{
+  let shownId = 'linear';
+  const pinState = {
+    mode: ref('linear'), lInputType: ref('gb'), activeDrawing: () => ({ id: shownId, mode: 'linear' }),
+    linearSeqs: [{ uid: 'pin-a', gb: { name: 'pin.gb' }, fasta: null, region_record_id: '' }]
+  };
+  /** @type {((records: unknown[]) => void)[]} */
+  const reads = [];
+  const discovered = [];
+  const pinned = createLinearRecordSelector({
+    state: pinState,
+    reactive: (value) => value,
+    recordReader: () => new Promise((resolve) => { reads.push(resolve); }),
+    onRecordsDiscovered: ({ drawingId, uid }) => { discovered.push([drawingId, uid]); }
+  });
+  const refreshing = pinned.refresh();
+  while (!reads.length) await new Promise((resolve) => { setImmediate(resolve); });
+  shownId = 'linear-2';
+  reads[0]([{ selector: '#1', recordId: 'Pin', recordLength: 10 }]);
+  await refreshing;
+  assert.deepEqual(discovered, [['linear', 'pin-a']], 'the records name the drawing the discovery ran for');
 }
 
 console.log('record selector tests passed');

@@ -21,7 +21,9 @@ import { msg } from '../utils/i18n.js';
  * @property {string} name The file name(s) the dialogs show.
  * @property {RecordListEntry[]} records
  * @typedef {(mode: RecordSelectionMode) => RecordDrawKey[]} RecordsOffPort
- *   The reactive OFF list of the mode's drawing, which this owner rewrites.
+ *   The reactive OFF list of the shown drawing when it is of `mode`, which this owner rewrites; an
+ *   empty list when another mode's drawing is shown (the lists and checkboxes are in the shown
+ *   drawing's panel, and every other port acts on the shown drawing).
  * @typedef {(mode: RecordSelectionMode, sourceKey: string) => RecordSource | null} RecordSourcePort
  *   One source of the mode with its records, or null when it is gone.
  * @typedef {(label: string, change: () => unknown) => Promise<unknown>} RunUndoablePort History's one step.

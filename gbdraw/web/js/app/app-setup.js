@@ -1439,9 +1439,9 @@ export const createAppSetup = () => {
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
   };
-  /** @param {{ uid: string, records: SequenceRecord[] }} discovered */
-  const handleLinearRecordsDiscovered = ({ uid, records }) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {{ drawingId: DrawingId, uid: string, records: SequenceRecord[] }} discovered the records of one card, for the drawing the discovery ran for */
+  const handleLinearRecordsDiscovered = ({ drawingId, uid, records }) => {
+    const drawing = state.drawingOf(drawingId);
     const isRollbackOrSessionLoad = Boolean(
       state.sessionImportRollbackInProgress?.value ||
       state.sessionResourceDiscoveryDeferred?.value
@@ -1530,25 +1530,33 @@ export const createAppSetup = () => {
       records: linearRecordSelector.recordsFor(seq)
     };
   };
-  /** @param {AnnotationCatalogSource[] | null} [linearSourcesOverride] */
-  const getAnnotationRecordCatalog = (linearSourcesOverride = null) => {
-    const drawing = state.drawingOfMode('circular');
-    const circularDiscovery = getCircularRecordDiscoveryState();
-    const circularRecordSet = circularDrawingRecordSet(circularDiscovery.records, drawing);
-    const linearRecordsOff = new Set(state.drawingOfMode('linear').recordsOff);
-    return buildAnnotationRecordCatalog(/** @type {any} */ ({
-      mode: mode.value,
-      circularSource: {
+  /**
+   * The records one drawing's annotations can name: a Circular drawing's
+   * record set, or a Linear drawing's drawn cards (`linearSourcesOverride`
+   * replaces the cards a Linear drawing reads).
+   * @param {DrawingState} drawing
+   * @param {AnnotationCatalogSource[] | null} [linearSourcesOverride]
+   */
+  const getAnnotationRecordCatalog = (drawing, linearSourcesOverride = null) => {
+    const circularSource = () => {
+      const circularDiscovery = getCircularRecordDiscoveryState();
+      const circularRecordSet = circularDrawingRecordSet(circularDiscovery.records, drawing);
+      return {
         sourceKey: circularAnnotationSourceKey(),
         hasInput: circularDiscovery.hasInput,
         status: circularDiscovery.status,
         error: circularDiscovery.error,
         records: circularRecordSet.records,
         omittedRecords: circularRecordSet.omittedRecords
-      },
-      linearSources: linearSourcesOverride
-        || linearSeqs.map((seq) => linearAnnotationSource(seq, !linearRecordsOff.has(seq.uid)))
-    }));
+      };
+    };
+    const linearSources = () => {
+      const recordsOff = new Set(drawing.recordsOff);
+      return linearSourcesOverride || linearSeqs.map((seq) => linearAnnotationSource(seq, !recordsOff.has(seq.uid)));
+    };
+    return buildAnnotationRecordCatalog(/** @type {any} */ (drawing.mode === 'linear'
+      ? { mode: 'linear', linearSources: linearSources() }
+      : { mode: 'circular', circularSource: circularSource() }));
   };
   // R10 (D-15-46): each transition that changes the annotation record catalog
   // (a discovery that ends, a mode switch, record selection, a Linear source
@@ -1561,12 +1569,13 @@ export const createAppSetup = () => {
   // after Save or at the end of Load), as the former catalog watcher did.
   let reboundCatalog = '';
   const rebindAnnotationRecords = () => {
-    const catalog = getAnnotationRecordCatalog();
+    const drawing = state.activeDrawing();
+    const catalog = getAnnotationRecordCatalog(drawing);
     const seen = `${catalog.status}:${catalog.signature}`;
     if (seen === reboundCatalog) return;
     reboundCatalog = seen;
     if (catalog.status === 'ready' && !sessionOperationAvailability()) {
-      reconcileAnnotationRecordBindings(state.activeDrawing(), catalog);
+      reconcileAnnotationRecordBindings(drawing, catalog);
     }
   };
   // A Circular drawing whose Multi-Record Canvas is on and has no multi-record
@@ -2190,7 +2199,7 @@ export const createAppSetup = () => {
   });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
+    state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions, askChoice,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   // The Show Depth, and Linear Show GC Content and Show GC Skew, checkboxes:
@@ -3469,11 +3478,11 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     validateAnnotationTargets: () => {
       const drawing = state.activeDrawing();
-      const catalog = getAnnotationRecordCatalog();
+      const catalog = getAnnotationRecordCatalog(drawing);
       reconcileAnnotationRecordBindings(drawing, catalog);
       return validateAnnotationRecordTargets(drawing.annotationSets, catalog);
     },
-    omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
+    omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog(state.activeDrawing()).omittedRecordKeys || [],
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
   // D-15-89: the panel actions (the template, `window.__GBDRAW_APP__`, the
@@ -4762,18 +4771,18 @@ export const createAppSetup = () => {
           return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
         }
       }));
-      const catalog = getAnnotationRecordCatalog(sources);
+      const catalog = getAnnotationRecordCatalog(drawing, sources);
       return catalog.status === 'ready' ? { catalog, error: '' }
         : { catalog: null, error: catalogIssueError(catalog) };
     }
-    let catalog = getAnnotationRecordCatalog();
+    let catalog = getAnnotationRecordCatalog(drawing);
     if (catalog.status !== 'ready') {
       try {
         await linearRecordSelector.refresh();
       } catch (error) {
         return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
-      catalog = getAnnotationRecordCatalog();
+      catalog = getAnnotationRecordCatalog(drawing);
     }
     return catalog.status === 'ready'
       ? { catalog, error: '' }
@@ -4946,7 +4955,7 @@ export const createAppSetup = () => {
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
     selectedOrthogroupDetail: orthogroupActions.selectedOrthogroupDetail,
-    getRecordCatalog: getAnnotationRecordCatalog,
+    getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()),
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
     projectCommittedAlignment: /** @type {any} */ (projectCommittedSimilarityAlignment),
@@ -5946,6 +5955,8 @@ export const createAppSetup = () => {
       return title;
     },
     beforeExport: async (/** @type {{ draftRequest: boolean }} */ { draftRequest }) => {
+      // The drawing Save writes, pinned before the first await.
+      const drawing = state.activeDrawing();
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
@@ -5969,7 +5980,7 @@ export const createAppSetup = () => {
       if (error) throw error;
       return {
         linearRecordCatalog: catalog,
-        omittedAnnotationRecordKeys: draftRequest ? getAnnotationRecordCatalog().omittedRecordKeys || [] : []
+        omittedAnnotationRecordKeys: draftRequest ? getAnnotationRecordCatalog(drawing).omittedRecordKeys || [] : []
       };
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
@@ -6178,7 +6189,7 @@ export const createAppSetup = () => {
     const previous = files[field];
     const nextRef = state.inputFiles.registerFile(nextValue);
     if (previous === nextRef) return;
-    changeRecordSources(() => { bindInputFile(state.inputFiles, files, field, nextValue); });
+    changeRecordSources(drawing, () => { bindInputFile(state.inputFiles, files, field, nextValue); });
     if (nextRef) pendingCircularUpload = nextRef;
     // An upload into an empty slot starts reading another input (after an
     // Input switch), whose records the OFF list does not name.
@@ -6371,7 +6382,7 @@ export const createAppSetup = () => {
     }
     // Removing a File can remove the last source of a Depth series.
     retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
-      changeRecordSources(() => linearSeqs.splice(0, linearSeqs.length, ...next));
+      changeRecordSources(drawing, () => linearSeqs.splice(0, linearSeqs.length, ...next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((_, uid) => {
@@ -6684,7 +6695,12 @@ export const createAppSetup = () => {
   const recordSelection = createRecordSelection({
     reactive,
     computed,
-    recordsOff: (listMode) => state.drawingOfMode(listMode).recordsOff,
+    // The OFF list of the shown drawing when it is of `listMode` (every port
+    // here acts on the shown drawing; the lists and checkboxes are in its panel).
+    recordsOff: (listMode) => {
+      const drawing = shownDrawingOfMode(listMode);
+      return drawing ? drawing.recordsOff : [];
+    },
     source: recordSourceOf,
     runUndoable: history.runUndoable,
     withDialogChoice: dialogChoice.withHistory,
@@ -6767,7 +6783,7 @@ export const createAppSetup = () => {
     if (!drawing) return { status: 'unavailable' };
     const next = value === 'gff' ? 'gff' : 'gb';
     if (cInputType.value === next) return { status: 'ok' };
-    changeRecordSources(() => { cInputType.value = next; });
+    changeRecordSources(drawing, () => { cInputType.value = next; });
     // The other input's records are not the ones the OFF list names.
     if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
     return { status: 'ok' };
@@ -6777,10 +6793,12 @@ export const createAppSetup = () => {
   const setLinearInputType = (value) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return false;
     const next = value === 'gff' ? 'gff' : 'gb';
     if (lInputType.value === next) return false;
     similarityAlignmentActions?.clearForMutation?.(msg('source type changed.'));
-    changeRecordSources(() => { lInputType.value = next; });
+    changeRecordSources(drawing, () => { lInputType.value = next; });
     return true;
   };
 

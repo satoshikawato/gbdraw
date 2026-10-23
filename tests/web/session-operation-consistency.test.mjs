@@ -271,7 +271,7 @@ test('late source discovery cannot expand the live source set during Session', a
   const source = { uid: 'source', gb: file, region_record_id: '' };
   const selector = createLinearRecordSelector({
     state: { mode: { value: 'linear' }, lInputType: { value: 'gb' },
-      linearSeqs: [source], sessionOperationAvailability },
+      activeDrawing: () => ({ id: 'linear', mode: 'linear' }), linearSeqs: [source], sessionOperationAvailability },
     reactive: value => value, recordReader: () => read.promise,
     onRecordsDiscovered: () => { expanded += 1; }
   });

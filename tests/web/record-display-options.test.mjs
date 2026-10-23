@@ -15,10 +15,18 @@ import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
-// The drawings a record source belongs to, found by kind: the Circular file card is the Circular drawing's, the
-// Linear cards the Linear drawing's. The fixtures' drawings carry no `mode` string, so the list names the two IDs.
-const withSourceDrawings = (state) => Object.defineProperty(state, 'drawingList', {
-  value: () => [{ id: 'circular', mode: 'circular' }, { id: 'linear', mode: 'linear' }], configurable: true });
+// The drawing store with each drawing's ID and mode, as state.js gives them: the record sources are a drawing's
+// (`sourcesOf(drawing)`). The fixtures' drawings name neither (a fixture that is also the state has the `mode` ref),
+// so each store read returns a view that names them and reads every other member from the fixture's drawing.
+const withSourceDrawings = (state) => {
+  const views = new Map(['circular', 'linear'].map((mode) => [mode,
+    Object.create(state.drawingOfMode(mode), { id: { value: mode }, mode: { value: mode } })]));
+  return Object.defineProperties(state, {
+    drawingList: { value: () => [...views.values()], configurable: true },
+    drawingOf: { value: (id) => views.get(id), configurable: true },
+    activeDrawing: { value: () => views.get(state.mode.value), configurable: true }
+  });
+};
 
 const source = {};
 const records = [
@@ -683,10 +691,24 @@ test('no watcher of the record sources drops drafts (A2 W5)', () => {
 
 test('a replaced Linear source drops its own drafts only, in its transition (A2 W5)', () => {
   const { state, controls, circular, linear, uids } = sourceControls();
-  controls.changeRecordSources(() => { state.linearSeqs[0].gb = new Blob(['x']); });
+  controls.changeRecordSources(state.drawingOf('linear'), () => { state.linearSeqs[0].gb = new Blob(['x']); });
   assert.deepEqual(uids(linear), ['record-2']);
   assert.deepEqual(uids(circular), ['circular']);
-  controls.changeRecordSources(() => { state.cInputType.value = 'gff'; });
+  controls.changeRecordSources(state.drawingOf('circular'), () => { state.cInputType.value = 'gff'; });
   assert.deepEqual(uids(circular), [], 'the input type switch replaced the Circular source');
   assert.deepEqual(uids(linear), ['record-2']);
+});
+
+// D-15-91 (survey commit 4): the Circular file card is the Circular drawing's
+// source, so its rows carry that drawing's crop and orientation, also while
+// the Linear drawing is shown (the shown drawing's form answered before).
+test('the Circular rows carry the Circular drawing crop and orientation while Linear is shown', () => {
+  const { state, controls, circular } = sourceControls();
+  state.circularRecordList.value = [{ record_id: 'c1', record_length: 100, selector: '#1', detectedTopology: 'circular' }];
+  Object.assign(circular.form, { circular_reverse: true, multi_record_canvas: false, circular_region_start: 1, circular_region_end: 50 });
+  const [row] = controls.allRows.value.filter((entry) => entry.scope === 'circular');
+  assert.equal(row.drawingId, 'circular');
+  assert.equal(row.reverse, true, 'the Circular drawing orientation');
+  assert.equal(row.cropped, true, 'the Circular drawing region');
+  assert.deepEqual(controls.rows.value.filter((entry) => entry.scope === 'circular'), [], 'the rows are the shown drawing');
 });

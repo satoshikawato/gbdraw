@@ -25,11 +25,11 @@ import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
-/** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from '../services/record-display-model.js' */
+/** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow, RecordDisplayScope } from '../services/record-display-model.js' */
+/** @import { RecordEntryInput } from '../services/record-options.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
 // current source whose records are not read yet. That popup target failure is
@@ -48,6 +48,21 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {number | null} [recordLength]
  * @property {unknown} [detectedTopology]
  * @property {string} [recordKey]
+ */
+
+/**
+ * A record source of one drawing (`sourcesOf`): a File card and its records,
+ * named by the drawing's ID.
+ * @typedef {object} DrawingRecordSource
+ * @property {RecordDisplayScope} scope
+ * @property {DrawingId} drawingId
+ * @property {string} sourceUid
+ * @property {unknown} source
+ * @property {unknown} paired
+ * @property {RecordEntryInput[]} records
+ * @property {unknown} selector
+ * @property {boolean} cropped
+ * @property {boolean} reverse
  */
 
 /**
@@ -128,36 +143,34 @@ export const createRecordDisplayControls = ({
   let boundRequest = null;
   /** @type {RecordDisplaySource[]} */
   let boundSources = [];
-  // The drawing a source belongs to, by the drawing's own ID: the Circular file
-  // card is the Circular drawing's input, the Linear cards the Linear drawing's
-  // (B2d moves the inputs into their drawings and ends this lookup).
-  /** @param {string} kind @returns {DrawingId} */
-  const drawingIdOfSource = (kind) => {
-    const drawing = state.drawingList().find((/** @type {DrawingState} */ entry) => entry.mode === kind);
-    if (!drawing) throw diagnosticError('INPUT_INVALID', { field: 'drawing', reason: 'RECORD_SOURCE' });
-    return drawing.id;
-  };
-  const sources = computed(() => {
-    const drawing = state.activeDrawing();
-    return [
-      { scope: 'circular', drawingId: drawingIdOfSource('circular'), sourceUid: 'circular',
+  // The record sources of one drawing, each named by that drawing's ID: a
+  // Circular drawing's file card with its crop and orientation, a Linear
+  // drawing's cards. The inputs are still the project's (the inputs move
+  // reads them from the drawing).
+  /** @param {DrawingState} drawing @returns {DrawingRecordSource[]} */
+  const sourcesOf = (drawing) => (drawing.mode === 'circular'
+    ? [{ scope: 'circular', drawingId: drawing.id, sourceUid: 'circular',
         source: state.cInputType.value === 'gff' ? state.files.c_gff : state.files.c_gb,
         paired: state.cInputType.value === 'gff' ? state.files.c_fasta : null,
         records: state.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
         cropped: circularDrawingCropped(state.circularRecordList.value, drawing),
-        reverse: drawing.form.circular_reverse },
-      ...state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawingIdOfSource('linear'), sourceUid: seq.uid,
+        reverse: drawing.form.circular_reverse }]
+    : state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
         source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,
         paired: state.lInputType.value === 'gff' ? seq.fasta : null,
         records: linearRecordsFor(seq), selector: seq.region_record_id,
-        cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse }))
-    ];
+        cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse })));
+  // The sources of every drawing, in the drawings' order.
+  const sources = computed(() => {
+    /** @type {DrawingState[]} */
+    const drawings = state.drawingList();
+    return drawings.flatMap(sourcesOf);
   });
   const allRows = computed(() => sources.value.flatMap((source) => source.source
     ? buildRecordDisplayRows({ ...source, selector: '' }).map((row) => ({ ...row, drawingId: source.drawingId,
         cropped: source.cropped, reverse: source.reverse, paired: source.paired })) : []));
-  const rows = computed(() => sources.value.filter((source) => source.scope === state.mode.value)
+  const rows = computed(() => sourcesOf(state.activeDrawing())
     .flatMap((source) => {
       try {
         return source.source ? buildRecordDisplayRows(source).map((row) => ({ ...row, drawingId: source.drawingId,
@@ -347,22 +360,20 @@ export const createRecordDisplayControls = ({
     });
   };
   watch([() => state.featureCatalog.value, () => state.processing?.value, allRows], refreshCommittedRows, { flush: 'post' });
-  /** @returns {(RecordDisplaySource & { drawingId: DrawingId })[]} */
-  const sourceTuples = () => sources.value.map(({ scope, drawingId, sourceUid, source, paired }) => ({ scope, drawingId, sourceUid, source, paired }));
-  // The transition of every write of a row source (a file, an input type, the
-  // Linear cards): `mutate` writes it, then the drafts of each source it
-  // replaced or removed go from that source's mode's drawing (R10). Load, its
+  // The transition of every write of a drawing's row source (a file, an input
+  // type, the Linear cards): `mutate` writes it, then the drafts of each source
+  // of `drawing` it replaced or removed go from `drawing` (R10). Load, its
   // rollback, and a History restore install the drafts they read or captured.
-  /** @template T @param {() => T} mutate @returns {T} */
-  const changeRecordSources = (mutate) => {
-    const previous = sourceTuples();
+  /** @template T @param {DrawingState} drawing @param {() => T} mutate @returns {T} */
+  const changeRecordSources = (drawing, mutate) => {
+    const previous = sourcesOf(drawing);
     const result = mutate();
-    const current = sourceTuples();
+    const current = sourcesOf(drawing);
+    const drafts = drawing.recordDisplayDrafts;
     previous.filter((old) => {
-      const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
+      const next = current.find((entry) => entry.sourceUid === old.sourceUid);
       return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
     }).forEach((replaced) => {
-      const drafts = state.drawingOf(replaced.drawingId).recordDisplayDrafts;
       for (let index = drafts.length - 1; index >= 0; index -= 1) {
         if (drafts[index].sourceUid === replaced.sourceUid) drafts.splice(index, 1);
       }
@@ -384,7 +395,7 @@ export const createRecordDisplayControls = ({
       try { return requestFeaturePlacements(drawing.featurePlacementOverrides, request.mode, request.records || []).length; }
       catch { return -1; }
     };
-    if (request.mode !== state.mode.value || tolerance !== draftFeatureOverlapTolerance(drawing.adv)
+    if (request.mode !== drawing.mode || tolerance !== draftFeatureOverlapTolerance(drawing.adv)
       || placements.length !== draftPlacementCount()
       || placements.some((/** @type {{ recordKey: string, biologicalFeatureId: string, placement: Record<string, unknown> }} */ row) => {
         const target = drawing.featurePlacementOverrides[

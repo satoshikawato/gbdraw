@@ -69,6 +69,7 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
   const state = {
     mode: ref('linear'),
     lInputType: ref('gb'),
+    activeDrawing: () => ({ id: 'linear', mode: 'linear' }),
     linearSeqs: [{ uid: 'row-a', gb: { name: 'a.gb' }, fasta: null, region_record_id: '' }]
   };
   let resolveRead;
