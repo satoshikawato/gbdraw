@@ -124,15 +124,16 @@ in the same change.
 | The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`, and `drawingOfMode` until B; R15) |
 | The slices of a drawing's editor edits and settings, their only writers, and their install, capture, and reset for Session Load, History, and Reset | `js/services/drawing/` (R15) |
 | Typed Vue reactivity for drawing members (`ref`, `reactive`, `computed`) | `js/utils/reactivity.js` (R14) |
-| Registry of what a mode's Session slice holds | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
-| Session 46 mode slices and the split of a Session 27–44 draft into them | `js/services/mode-scoped-migration.js` (Python twin: `split_draft_into_modes` in `gbdraw/session_io.py`) |
+| Registry of what a drawing holds in a Session, by mode | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
+| Session 46 mode slices and the split of a Session 27–44 draft into them; once the Session format holds a list of drawings, Python alone converts a Session 27–44, once at Load | `js/services/mode-scoped-migration.js` until then (Python: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | When each setting reaches the Result: the application class and note of every settings control (R1) | `js/services/setting-application.js` (`SETTING_APPLICATION`; `SettingNote` in `js/components.js` renders the note) |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
-| Historical Gallery session migration | `js/services/gallery-session-migration.js` |
+| Historical Gallery session migration; its Session 27–44 conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/gallery-session-migration.js` until then |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
-| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes | `js/services/feature-edit-migration.js` (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
+| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes; this conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/feature-edit-migration.js` until then (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
+| Check of scoped Feature placements in the current writer's config (`validateScopedFeaturePlacements`; not a migration, so it stays when the migrations go) | `js/services/feature-edit-migration.js` (imported by `services/session-active-config-contract.js`) |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | Load's reading of saved color and stroke edits (a Legend row's `colorOverrides` and `strokeOverrides`, a feature's stroke overrides) for Session Load and the Session 46 Legend reading | `js/services/style-overrides.js` (Python: `_legend_color_overrides`, `_stroke_override_map`, `_stroke_width` in `gbdraw/session_io.py`) |
@@ -323,7 +324,7 @@ change through `showEditorIntent` (R3):
   feature fill, a Legend row fill that rules draw, and the Legend rows, names,
   and colors the rules draw;
 - a Change Scope choice;
-- the Specific rules file card Remove for a drawing that is not shown, which
+- until each drawing binds its own auxiliary file cards, the Specific rules file card Remove for a drawing that is not shown, which
   calls `moveLegendRecords` (`takeBackFileRulesOfHiddenDrawing` in
   `app/feature-editor/rule-actions.js`);
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
@@ -612,7 +613,9 @@ transition of its file input (`importAuxiliaryTable` in `app/watchers.js`)
 that writes through the slices of each drawing it changes. Until each drawing
 binds its own auxiliary file cards, a card's file is shared by every drawing:
 choosing, replacing, or removing it takes the earlier file's rows out of every
-drawing, and the new file's rows go into the shown drawing.
+drawing, and the new file's rows go into the shown drawing. Once each drawing binds its own
+auxiliary file cards, a card shows the shown drawing's file, a file chosen in it goes into the
+shown drawing, and its Remove changes only that drawing's rows (PD-OI-090).
 
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
 Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
@@ -631,22 +634,29 @@ or Reset Settings).
   composition root creates. A transaction, `undo`, `redo`, and availability go
   to the shown drawing's History; a step closes in the History that opened it,
   also after a drawing switch. Undo and Redo walk only the shown drawing's
-  steps and the project steps, and never switch or change another drawing
+  steps and the project steps, one step per operation, and never undo a step of
+  another drawing; the Undo or Redo of a drawing's step never switches the shown drawing
   (PD-OI-090, OIC-030): Undo takes the newer top step of the two, Redo the
   older. A new project step clears every Redo; a new drawing step clears its
   own and the project's.
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is an operation
-  on every drawing (Reset Settings, which resets all drawings, in one step;
-  until each drawing binds its own auxiliary file cards, a card's import,
-  Remove, and Retry, R10) or
+  on the drawing list (adding, duplicating, renaming, moving, or deleting a
+  drawing), Reset all drawings (until the Reset dialog offers Reset this drawing, Reset
+  Settings resets all drawings), until each drawing binds its own auxiliary file cards a
+  card's import, Remove, and Retry (R10), or
   a step that changes only Session-level values (the Session title, Auto
   Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
   Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
   the Session-level changes made since it opened. A Session-level change made
   outside any step marks nothing unsaved and rides with the next step; the
-  drawing switch's own transient reset is no change.
+  drawing switch's own transient reset is no change. Each operation is one step. Reset
+  this drawing is one step of the shown drawing, Reset all drawings is the only step that
+  resets more than the shown drawing, and the Reset dialog's Cancel records nothing
+  (OIC-030). Deleting a drawing that has a Result or edits asks first, and the last
+  drawing cannot be deleted. A new drawing, a Duplicate included, starts with an empty
+  History (PD-OI-090).
 - Turning Instant Preview on is one project step with a part for each
   drawing: it applies every drawing's queued palette, and its Undo brings each
   queue back (R15-23 Q-DR-5, OV-1160). Turning it off changes only the flag.
@@ -677,7 +687,7 @@ or Reset Settings).
   label read by the Python reader. Add Seq is a step of its drawing
   (`runUndoable`); an auxiliary file card's import and its Retry are one
   project step (`runProjectStep`) while the card's file is shared by every
-  drawing (R10).
+  drawing (R10); once each drawing binds its own cards, they are steps of the shown drawing.
 - An undoable action started while another action still runs on the open step
   applies at once and names that step (`runUndoable`); nothing waits. What an
   action writes after another caller committed its step is a step of its own
@@ -696,8 +706,7 @@ or Reset Settings).
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`) of the shown drawing's History, busy while an artifact replacement or checkpoint is
   open or an action owns the open intent. Undo and Redo, and their enabled state, also read one check of the
-  step they would take, the top of their stack (`topStepAvailability`): an Undo or Redo of a mode switch is
-  busy while the mode buttons are.
+  step they would take, the top of their stack (`topStepAvailability`).
 - A drawing's History intent holds, by reference (`buildIntentFilesData` in
   `services/history-snapshot.js`), the file bindings of the input slots its
   drawing uses and the auxiliary table files its own steps imported, the BLAST
@@ -946,8 +955,9 @@ A project has one or more drawings, held by ID in the drawing store of
 `state.drawingList()`, `state.drawingOf(id)`, and `state.drawingOfMode(mode)`
 read. `state.activeDrawingId` names the shown
 drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
-is given when it is created and never changes, and its `mode` is fixed at
-creation (PD-OI-090). A drawing holds its settings (`form`, `adv`, the LOSAT
+comes from the kind it is created as (`circular`, `linear`, `linear-2`, …) and never
+changes, and its `mode` is fixed at creation; once the Session format holds a list of
+drawings, several drawings can have one mode (PD-OI-090). A drawing holds its settings (`form`, `adv`, the LOSAT
 search fields, the comparison plan, record display, the layout slot), its
 editor edits (per-feature edits and placements, colors and color rules, label
 tables and filters, Legend edits, annotation sets, canvas padding), and the
@@ -970,7 +980,9 @@ one drawing never reaches another (PD-OI-090).
 - Settings stay written by their controls and owner transitions (R7, R10).
   Only their install, capture, and reset go through the settings slice.
 
-- `state` keeps only what every drawing shares: the input files, the LOSAT
+- `state` keeps only what every drawing shares: the input files (once the Session format
+  holds a list of drawings, only their content: each drawing binds the files, records, and
+  regions it draws), the LOSAT
   caches, the LOSAT execution and thread settings, app settings (Auto Reflow,
   PNG DPI, palette Instant Preview), the Session title, the shown drawing's
   Result and artifacts (the artifacts of each drawing that is not shown wait
@@ -1011,19 +1023,28 @@ one drawing never reaches another (PD-OI-090).
   the drawings `circular` and `linear` (read through `state.drawingList()`,
   `state.drawingOf(id)`, and `state.drawingOfMode(mode)`), and Save writes them as
   `modes.circular` and `modes.linear`.
+- Once the Session format holds a list of drawings (Session 49), a new Session starts with
+  one Circular drawing. Save Session writes, as one document, every drawing that has a
+  file, a changed setting, an edit, or a Result, the drawing that is shown, and only the
+  files a saved drawing uses. Load installs every drawing or changes nothing, shows each
+  saved Result without Generate, and shows the drawing that was shown at Save (PD-OI-090).
 - A Session 46 saves each drawing as `modes.circular` and `modes.linear`.
   `gbdraw/web_support/mode_scoped_settings.py` is the one registry of what a
   slice holds (domain, path, modes, row key, migration token);
   `tools/generate_mode_scoped_settings.py` writes it into
   `js/mode-scoped-settings.generated.js`, which is never edited by hand. Load
-  rebuilds each drawing from the projection of that mode's committed request,
-  then the slice's stored values, then the mode's defaults.
-  `services/mode-scoped-migration.js` splits a Session 27–44 draft into the two
-  slices, and `split_draft_into_modes` in `gbdraw/session_io.py` is its Python
-  twin. A Session 45 is not read.
+  rebuilds each drawing from the projection of its committed request,
+  then its stored values, then its mode's defaults.
+  Until the Session format holds a list of drawings, `services/mode-scoped-migration.js`
+  splits a Session 27–44 draft into the two slices, and `split_draft_into_modes` in
+  `gbdraw/session_io.py` is its Python twin; then Python alone converts a Session 27–44,
+  once at Load. A Session 46, 47, or 48 moves to the list without Python, and Load makes
+  the drawing of a mode that has no Result only when the Session shows that mode was used
+  (its input files, a Save while it was shown, or a setting that differs from the default
+  and from the other mode's). A Session 45 is not read.
 
-Guards: `tests/web/drawing-context.test.mjs` (the key classes, one drawing per
-mode, no drawing key read from `state`, no `activeDrawing` identifier in
+Guards: `tests/web/drawing-context.test.mjs` (the key classes, the drawings that
+hold the drawing keys, no drawing key read from `state`, no `activeDrawing` identifier in
 `services/`, and Generate resolving it once);
 `tests/web/drawing-slices.test.mjs` (each member in exactly one slice, no
 module or template binding writing a slice member outside its slice,
@@ -1035,10 +1056,11 @@ naming a drawing ID by a mode; raising the cap or adding an owner is an
 authority-only change);
 `tests/web/per-mode-drawings.test.mjs` (no
 shared member object, and each mode's request carries its own drawing's
-values); `tests/web/mode-scoped-session.test.mjs` (the Session 46 round trip,
-and a Session 45 or a field outside the registry rejected);
+values); `tests/web/mode-scoped-session.test.mjs` (Save and Load of each drawing in
+the current format, a Session 46 read into its drawings, and a Session 45 or a field
+outside the registry rejected);
 `tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
-(the JavaScript and Python splits agree on shared vectors);
+(the Web Load of a Session 27–44 and Python's split agree on shared vectors);
 `tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
 equal to its Python source); and
 `tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,
@@ -1077,7 +1099,7 @@ state and the persisted/rendered model. It owns:
 - explicit track-slot projection;
 - per-feature edit and Feature placement rows (`diagramOptions.featureOverrides`
   and `featurePlacements`, built by `services/feature-placement.js`);
-- the layout-preference slot that a committed request sets in its mode's
+- the layout-preference slot that a committed request sets in its
   drawing (`modes.<mode>.ui.layoutPreferences` in a Session 46).
 
 `services/config.js` coordinates user-facing save and load actions. It must not
@@ -1087,7 +1109,8 @@ write retired fields into new sessions.
 
 `services/session-active-config-contract.js` is the DOM-free current writer
 contract used by normal restore and Gallery publication. Historical Gallery
-migration stays in `services/gallery-session-migration.js`; it does not clean up
+migration stays in `services/gallery-session-migration.js` until the Session format holds a
+list of drawings, then Python alone converts a Session 27–44, once at Load; it does not clean up
 current sessions. `services/gallery-session-publication.js` may align an admitted
 Gallery draft with its committed render intent, but ordinary import keeps its
 saved Result and active draft separate.
@@ -1110,6 +1133,11 @@ version-by-version history.
   target per item.
 - Linear renders one ordered multi-record layout. Record groups and explicit
   comparison pairs affect topology and must survive session round trips.
+- A region drawing, made with + New drawing from a feature, a whole record, or coordinates,
+  draws the region of the same record of the same file in source coordinates, 1-based and
+  inclusive; regions of several records make one Linear drawing with one region per record.
+  A region that crosses the origin of a circular record is refused with the reason. The
+  source drawing does not change (PD-OI-090).
 
 The preview and download layers consume render results; they must not infer a
 different grouping from the number of uploaded files.
