@@ -80,7 +80,7 @@ def _group(root, name):
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize("start", [None, 1, 10000, 4001])
-def test_source_tick_text_position_and_wrapped_definition(mode, reverse, start):
+def test_source_tick_text_position_and_record_length_definition(mode, reverse, start):
     plan, root = _svg(_request(mode, _record(), start, reverse, {
         "canvas.linear.ruler_on_axis": True, "objects.scale.interval": 1000,
         "objects.scale.style": "ruler",
@@ -88,16 +88,9 @@ def test_source_tick_text_position_and_wrapped_definition(mode, reverse, start):
     }))
     definition = next(n for n in root.iter() if n.get("data-gbdraw-role") == "record-definition")
     text = " ".join(definition.itertext())
-    if start is None:
-        assert "10,000 bp" in text and "[" not in text
-    else:
-        expected = {
-            (False, 1): "[1..10,000] bp", (False, 10000): "[10,000..10,000], [1..9,999] bp",
-            (False, 4001): "[4,001..10,000], [1..4,000] bp",
-            (True, 1): "[1..1], [10,000..2] bp", (True, 10000): "[10,000..1] bp",
-            (True, 4001): "[4,001..1], [10,000..4,002] bp",
-        }[reverse, start]
-        assert expected in text
+    # The length line is the record length whatever the display start or
+    # direction (OV-1694); only rulers and ticks carry source coordinates.
+    assert "10,000 bp" in text and "[" not in text
     if mode == "linear":
         record_group = next(n for n in root.iter() if n.get("data-gbdraw-record-id") == "duplicate"
                             and n.get("data-gbdraw-role") is None)
@@ -117,6 +110,16 @@ def test_source_tick_text_position_and_wrapped_definition(mode, reverse, start):
             radius = math.hypot(*points[0])
             assert points[0] == pytest.approx((radius * math.cos(angle), radius * math.sin(angle)))
     assert plan.transforms[0].start_coordinate == start
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_rotated_record_definition_matches_unrotated(mode, reverse):
+    """A display start changes no definition line, size, or place (OV-1694)."""
+    def definition(start):
+        _, root = _svg(_request(mode, _record(), start, reverse))
+        return ET.tostring(next(n for n in root.iter() if n.get("data-gbdraw-role") == "record-definition"))
+    assert definition(4001) == definition(None)
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
@@ -365,8 +368,9 @@ def test_multi_record_consumers_keep_instance_order_and_sparse_depth(mode, layou
     depth = [row for row in observed if row[3]]
     assert depth == [(10000, 4001, 1, True), (12000, 12000, -1, True)]
     defs = [n for root in roots for n in root.iter() if n.get("data-gbdraw-role") == "record-definition"]
-    assert any("[4,001..10,000], [1..4,000] bp" in " ".join(n.itertext()) for n in defs)
-    assert any("[12,000..1] bp" in " ".join(n.itertext()) for n in defs)
+    assert any("10,000 bp" in " ".join(n.itertext()) for n in defs)
+    assert any("12,000 bp" in " ".join(n.itertext()) for n in defs)
+    assert not any("[" in " ".join(n.itertext()) for n in defs)
     paths = [n for root in roots for n in root.iter() if n.tag.endswith("}path")]
     assert any(n.get("fill") == "#123456" for n in paths)
     assert any(n.get("fill") == "#654321" for n in paths)

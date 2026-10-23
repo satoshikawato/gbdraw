@@ -76,7 +76,6 @@ def _precalculate_definition_metrics(
     canvas_config,
     cfg: GbdrawConfig,
     line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
-    record_transforms: Sequence[RecordDisplayTransform] | None = None,
     record_presentations: Sequence[RecordPresentation | None] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
@@ -102,7 +101,6 @@ def _precalculate_definition_metrics(
             str(canvas_config.length_param),
             style=style,
             line_kinds=line_kinds,
-            record_transform=(record_transforms[index] if record_transforms is not None else None),
             record_presentation=(record_presentations[index] if record_presentations is not None else None),
         )
         if def_group.definition_bounding_box_width > max_definition_width:

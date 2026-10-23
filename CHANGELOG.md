@@ -83,6 +83,12 @@ write-up of a release.
     edge.
   - A Circular corner legend that cannot sit beside the circle no longer moves
     feature labels.
+- Fixed: a record drawn from another start (`--display_start_coordinate`, a
+  records table start, or the web app's **Rotate record using this feature**) shows
+  its length in the definition again, for example `16,569 bp`, in Circular and
+  Linear; it showed the wrapped source spans, for example
+  `[3,307..16,569], [1..3,306] bp` (OV-1694). Rulers and ticks keep their
+  source coordinates.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

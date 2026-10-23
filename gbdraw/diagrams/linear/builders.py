@@ -289,7 +289,6 @@ def add_record_definition_group(
     row_line_kinds: Collection[str] | None = None,
     record_index: int = 0,
     record_count: int = 1,
-    record_transform: RecordDisplayTransform | None = None,
     record_presentation: RecordPresentation | None = None,
     definition_column_left: float = 0.0,
     *,
@@ -325,7 +324,6 @@ def add_record_definition_group(
             line_kinds=local_line_kinds,
             record_index=record_index,
             record_count=record_count,
-            record_transform=record_transform,
             record_presentation=record_presentation,
         )
         local_measurement = _measurement(local_content)
@@ -368,7 +366,6 @@ def add_record_definition_group(
                 record_index=record_index,
                 record_count=record_count,
                 definition_part="row",
-                record_transform=record_transform,
                 record_presentation=record_presentation,
             )
             row_measurement = _measurement(row_content)
@@ -412,7 +409,6 @@ def add_record_definition_group(
         group_id=group_id,
         record_index=record_index,
         record_count=record_count,
-        record_transform=record_transform,
         record_presentation=record_presentation,
     )
     measurement = _measurement(content)

@@ -8,8 +8,6 @@ from svgwrite.container import Group
 from ....svg.text_path import generate_name_path, generate_text_path
 
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ....layout.record_labels import display_coordinate_label
 
 class DefinitionDrawer:
     """
@@ -39,7 +37,6 @@ class DefinitionDrawer:
         show_gc: bool = True,
         font_size: float | None = None,
         name_font_weight: str = "bold",
-        record_transform: RecordDisplayTransform | None = None,
         species_line_parts: list[list[dict]] | None = None,
     ) -> Group:
         lines: list[dict] = []
@@ -59,9 +56,7 @@ class DefinitionDrawer:
             lines.append({"kind": "plain", "text": accession})
 
         if show_length:
-            length_text = (display_coordinate_label(record_transform)
-                           if record_transform is not None and record_transform.start_coordinate is not None
-                           else "{:,} bp".format(record_length))
+            length_text = "{:,} bp".format(record_length)
             lines.append({"kind": "plain", "text": length_text})
 
         if show_gc:
