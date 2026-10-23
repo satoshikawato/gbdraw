@@ -96,7 +96,7 @@ import {
 } from '../services/main-session-comparison-frame.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
-import { createHistoryFileStore } from '../services/history-files.js';
+import { retainHistoryAndBoundFiles } from '../services/drawing/inputs.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
   groupLinearSourceRecords,
@@ -1592,12 +1592,11 @@ export const createAppSetup = () => {
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   setPreviewRuntime(previewRuntime);
 
-  const historyFileStore = createHistoryFileStore();
   // Before the History snapshot service, which clears its copy feedback (D-37).
   const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest });
   const historySnapshots = createHistorySnapshotService({
     state,
-    fileStore: historyFileStore,
+    fileStore: state.inputFiles,
     nextTick,
     normalizeLinearSeqList,
     buildConfigData,
@@ -1690,8 +1689,9 @@ export const createAppSetup = () => {
     // OV-1260: dropped older steps are told, not silent.
     onHistoryLimit: (text) => showNotice({ text: tm(text), tone: 'warning' }),
     makeRef: ref,
-    estimateFileBytes: historyFileStore.estimateBytes,
-    retainOnlyFiles: historyFileStore.retainOnly,
+    estimateFileBytes: state.inputFiles.estimateBytes,
+    // A file stays stored while any History step or binding names it (R11).
+    retainOnlyFiles: retainHistoryAndBoundFiles(state, state.inputFiles),
     managerOptions: (drawingId) => {
       const drawing = state.drawingOf(/** @type {DrawingId} */ (drawingId));
       const ports = historySnapshots.drawingHistory(drawing.id);

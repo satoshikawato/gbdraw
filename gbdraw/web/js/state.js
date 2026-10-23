@@ -17,6 +17,7 @@ import {
   updateActiveLayoutPreference
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
+import { createHistoryFileStore } from './services/history-files.js';
 import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
@@ -292,6 +293,9 @@ const losatThreadingStatus = ref({
   state: 'unknown',
   message: ''
 });
+// The project's input file store: History steps and the input bindings name
+// its files by `InputFileRef` (services/history-files.js).
+const inputFiles = createHistoryFileStore();
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
 const proteinIdentityManifest = ref({
@@ -1302,6 +1306,7 @@ export const state = Object.freeze({
   linearSeqs,
   losatCacheInfo,
   losatThreadingStatus,
+  inputFiles,
   losatCache,
   losatDerivedCache,
   proteinIdentityManifest,

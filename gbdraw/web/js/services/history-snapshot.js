@@ -1,8 +1,11 @@
 // @ts-check
+/** @import { InputFileStore } from './history-files.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
+import { boundInputFileIds } from './drawing/inputs.js';
+/** @import { InputBindings } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
@@ -809,54 +812,11 @@ const buildFilesData = (state, drawing, fileStore) => {
 };
 
 /**
+ * The input bindings of the app state.
  * @param {HistorySnapshotState} state
- * @param {HistorySnapshotFileStore} fileStore
+ * @returns {InputBindings}
  */
-const collectCurrentFileIds = (state, fileStore) => {
-  /** @type {Set<string>} */
-  const fileIds = new Set();
-  /** @param {unknown} value */
-  const register = (value) => {
-    if (Array.isArray(value)) {
-      value.forEach(register);
-      return;
-    }
-    const fileId = fileStore.registerFile(value);
-    if (fileId) fileIds.add(fileId);
-  };
-  const files = state.files || {};
-  [
-    files.c_gb,
-    files.c_gff,
-    files.c_fasta,
-    files.c_depth,
-    files.c_conservation_blasts,
-    files.c_conservation_fastas,
-    files.c_conservation_sequence_sources,
-    files.d_color,
-    files.t_color,
-    files.blacklist,
-    files.whitelist,
-    files.qualifier_priority
-  ].forEach(register);
-  (Array.isArray(files.linearCanonicalComparisons)
-    ? files.linearCanonicalComparisons
-    : []
-  ).forEach((/** @type {ResourceBackedComparison | null | undefined} */ comparison) => register(comparison?.file));
-  Array.from(state.linearSeqs || []).forEach((sequence) => {
-    register(sequence?.gb);
-    register(sequence?.gff);
-    register(sequence?.fasta);
-    register(sequence?.depth);
-  });
-  // Every drawing's comparison plan holds its uploaded comparison files.
-  /** @type {readonly DrawingView[]} */ (state.drawingList()).forEach((drawing) => {
-    Array.from(drawing.linearComparisonPlan?.edges || []).forEach((comparison) => {
-      register(comparison?.file);
-    });
-  });
-  return fileIds;
-};
+const inputBindingsOf = (state) => ({ files: state.files, linearSeqs: state.linearSeqs, drawingList: state.drawingList });
 
 /**
  * @param {Record<string, any>} state
@@ -939,15 +899,14 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
 
 /**
  * @typedef {object} HistorySnapshotFileStore
- *   The three functions of the History file store that the snapshot service
- *   calls (F-05). `services/history.js` calls two other functions of the same
- *   store, so the receivers share the object and no function.
+ *   The functions of the project's input file store (`state.inputFiles`)
+ *   that the snapshot service calls (F-05).
  * @property {(value: any) => any} describeValue
- *   A file, or an array of files, as the descriptors an intent holds (`null` for a non-file).
- * @property {(file: any) => string | null} registerFile
- *   Stores a file by reference and returns its id; `null` for a non-file.
+ *   A file, or an array of files, as the refs an intent holds (`null` for a non-file).
+ * @property {InputFileStore['registerFile']} registerFile
+ *   Stores a file by reference and returns its one ref; `null` for a non-file.
  * @property {(value: any) => any} restoreValue
- *   The stored file, or an array of them, that the descriptors name (`null` when none).
+ *   The stored file, or an array of them, that the refs name (`null` when none).
  *
  * @typedef {object} HistorySnapshotRuntimeOwner
  *   The generated-artifact runtime owner that the composition root registers (`app/app-setup.js`).
@@ -1553,7 +1512,7 @@ export const createHistorySnapshotService = ({
       runtimeState,
       transportIdentity,
       baseRetainedBytes: currentGeneratedArtifactRetainedBytes,
-      fileIds: Object.freeze([...collectCurrentFileIds(state, fileStore)]),
+      fileIds: Object.freeze([...boundInputFileIds(inputBindingsOf(state), fileStore)]),
       identity: Object.freeze({
         fingerprint: transportIdentity?.fingerprint || '',
         compactSignature
@@ -2123,7 +2082,7 @@ export const createHistorySnapshotService = ({
     captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet,
     clearGeneratedArtifactIdentity,
-    collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
+    collectCurrentFileIds: () => boundInputFileIds(inputBindingsOf(state), fileStore),
     compareGeneratedArtifactHandles,
     drawingHistory,
     sessionHistory,

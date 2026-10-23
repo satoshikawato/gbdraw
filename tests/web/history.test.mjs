@@ -777,14 +777,14 @@ const createLayoutPreferences = () => ({
 {
   const fileStore = createHistoryFileStore();
   const file = makeFile('a.gb', 100);
-  const first = fileStore.describeFile(file);
-  const second = fileStore.describeFile(file);
+  const first = fileStore.registerFile(file);
+  const second = fileStore.registerFile(file);
   assert.equal(first.fileId, second.fileId);
 
   let currentFile = file;
-  const buildState = async () => ({ file: fileStore.describeFile(currentFile) });
+  const buildState = async () => ({ file: fileStore.registerFile(currentFile) });
   const applyState = async (snapshot) => {
-    currentFile = fileStore.restoreFile(snapshot.file);
+    currentFile = fileStore.fileOf(snapshot.file);
   };
   const history = createHistoryManager({
     maxActions: 0,
@@ -1725,8 +1725,8 @@ const createLayoutPreferences = () => ({
     canonicalOrthogroups,
     canonicalCollinearity
   ];
-  const retainedIds = retainedFiles.map((file) => fileStore.describeFile(file).fileId);
-  const unreferencedId = fileStore.describeFile(unreferenced).fileId;
+  const retainedIds = retainedFiles.map((file) => fileStore.registerFile(file).fileId);
+  const unreferencedId = fileStore.registerFile(unreferenced).fileId;
   const state = {
     files: {
       c_gb: circularPrimary,
@@ -3523,11 +3523,11 @@ for (const previousSuppressed of [false, true]) {
       managerOptions: (drawingId) => {
         const buildState = () => ({
           value: values[drawingId],
-          file: files[drawingId] ? fileStore.describeFile(files[drawingId]) : null
+          file: files[drawingId] ? fileStore.registerFile(files[drawingId]) : null
         });
         const applyState = (snapshot) => {
           values[drawingId] = snapshot.value;
-          files[drawingId] = snapshot.file ? fileStore.restoreFile(snapshot.file) : null;
+          files[drawingId] = snapshot.file ? fileStore.fileOf(snapshot.file) : null;
         };
         return { buildIntent: buildState, applyIntent: applyState, buildCheckpoint: buildState, applyCheckpoint: applyState };
       }
