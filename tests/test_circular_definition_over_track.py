@@ -18,7 +18,7 @@ from Bio import SeqIO
 
 import gbdraw.labels.circular_fit as circular_fit_module
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from gbdraw.labels.circular_fit import CircularLabelLayout, check_circular_label_fit
+from gbdraw.labels.circular_fit import CircularLabelFitSearch, CircularLabelLayout, check_circular_label_fit
 from gbdraw.labels.fit import (
     DEFINITION_FONT_PATH,
     Y_OFFSET_PATH,
@@ -231,3 +231,87 @@ def test_the_probe_picks_the_first_step_to_verify_and_a_milder_verified_step_win
     assert checked[0].rows[0].values == {DEFINITION_FONT_PATH: 16.5}
     assert probed == [17.5, 17.0, 16.5, 16.0, 15.5]
     assert [call[DEFINITION_FONT_PATH] for call in calls] == [15.5, 16.0, 16.5, 17.0]
+
+
+def test_a_verified_definition_row_survives_the_deadline_and_a_later_ask_walks_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review F2: the walk to a milder step stops at the deadline; the step already verified is the row.
+
+    The probe says 16.5 pt and each full redraw takes 2 s of a 5 s budget: 16.5 and 17 are verified, 17.5 would
+    overrun. The row is 17 pt, not ``not_computed``, and is not kept: asked again without a deadline, it walks on to
+    the mildest step (17.5 pt).
+    """
+
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+    layout = dataclasses.replace(_definition_layout(), definition_probe=lambda value: value <= 16.5)
+    fits_below, calls = _verifier(17.5)
+
+    def verify(values: Mapping[str, LabelFitValue]) -> LabelFitVerification:
+        clock[0] += 2.0
+        return fits_below(values)
+
+    search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False, assembly_seconds=2.0)
+
+    row = search.row("smaller_definition_font", deadline=5.0)
+    assert (row.status, row.values) == ("found", {DEFINITION_FONT_PATH: 17.0})
+    assert [call[DEFINITION_FONT_PATH] for call in calls] == [16.5, 17.0]
+
+    row = search.row("smaller_definition_font")
+    assert (row.status, row.values) == ("found", {DEFINITION_FONT_PATH: 17.5})
+    assert [call[DEFINITION_FONT_PATH] for call in calls] == [16.5, 17.0, 17.5]
+
+
+def test_a_record_failing_only_by_its_definition_leaves_the_label_rows_alone() -> None:
+    """Review F5: the label font scan starts from the records whose labels fail, not from a definition-only one."""
+
+    definition_only = dataclasses.replace(_definition_layout("long"), font_size=10.0, label_spacing=1.0)
+    labels = CircularLabelLayout(
+        record_id="short",
+        placement="horizontal",
+        font_size=14.0,
+        label_counts={"circular_outer": 40},
+        kind_fits={"circular_outer": LabelFit(0, 2)},
+        x_radius_offset=1.0,
+        y_radius_offset=1.0,
+        label_spacing=3.0,
+    )
+    calls: list[dict[str, LabelFitValue]] = []
+
+    def verify(values: Mapping[str, LabelFitValue]) -> LabelFitVerification:
+        calls.append(dict(values))
+        return LabelFitVerification("fits", (1000.0, 1000.0), LabelFit(0, 0))
+
+    search = CircularLabelFitSearch([definition_only, labels], verify, offer_notice_rows=False)
+    row = search.row("smaller_font")
+
+    assert row.values == {"labels.font_size.short": 13.5, "labels.font_size.long": 13.5}
+
+
+@pytest.mark.circular
+def test_the_row_keeps_a_set_definition_interval_as_a_run_again_does() -> None:
+    """Review F4: with an interval the user set, the row is checked with that interval, so drawing again with the
+    row's font and the same interval does not warn."""
+
+    from gbdraw.api.diagram import build_circular_diagram, label_fit_row
+    from gbdraw.api.options import CircularDiagramOptions
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.modify import with_config_overrides
+    from gbdraw.config.toml import load_config_toml
+
+    record = SeqIO.read(str(AP027131), "genbank")
+    base = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    interval = {"objects.definition.circular.interval": 25}
+    with pytest.warns(LabelLeadersCrossWarning):
+        drawing = build_circular_diagram(
+            record, options=CircularDiagramOptions(config=with_config_overrides(base, interval))
+        )
+    row = label_fit_row(drawing, "smaller_definition_font")
+    assert row is not None and row.status == "found"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        build_circular_diagram(
+            record, options=CircularDiagramOptions(config=with_config_overrides(base, {**interval, **row.values}))
+        )

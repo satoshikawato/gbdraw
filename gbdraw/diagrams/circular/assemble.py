@@ -52,7 +52,7 @@ from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
-from ...config.modify import with_config_overrides
+from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
@@ -2681,7 +2681,7 @@ def add_record_on_circular_canvas(
     def definition_clears_tracks(font_size: float) -> bool:
         """A hint for the definition row: the tracks and the text at ``font_size`` before the labels are placed."""
 
-        probe_cfg = with_config_overrides(cfg, {DEFINITION_FONT_PATH: font_size})
+        probe_cfg = with_fit_row_overrides(cfg, {DEFINITION_FONT_PATH: font_size})
         try:
             layout, _, line_count = place_around_definition(probe_cfg)
         except ValidationError:

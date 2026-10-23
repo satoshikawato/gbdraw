@@ -180,6 +180,26 @@ def with_config_overrides(
     )
 
 
+def with_fit_row_overrides(
+    config: GbdrawConfig,
+    overrides: Mapping[str, object] | None,
+) -> GbdrawConfig:
+    """``config`` with a label-fit row's settings, as drawing again with them draws.
+
+    A row sets the Circular definition font alone. Drawing again keeps an interval the user set, while
+    ``with_config_overrides`` would derive one from the new font, so an interval that does not follow the
+    current font (``circular_definition_interval_for_font``) goes into the overrides. An interval set to the
+    value the font derives cannot be told apart and follows the new font.
+    """
+
+    if not overrides or _CIRCULAR_DEFINITION_FONT not in overrides or _CIRCULAR_DEFINITION_INTERVAL in overrides:
+        return with_config_overrides(config, overrides)
+    definition = config.objects.definition.circular
+    if definition.interval == circular_definition_interval_for_font(definition.font_size):
+        return with_config_overrides(config, overrides)
+    return with_config_overrides(config, {**overrides, _CIRCULAR_DEFINITION_INTERVAL: definition.interval})
+
+
 def _literal_value_matches(value: object, candidate: object) -> bool:
     return type(value) is type(candidate) and value == candidate
 
@@ -499,4 +519,5 @@ __all__ = [
     "modify_config_dict",
     "validate_config_overrides",
     "with_config_overrides",
+    "with_fit_row_overrides",
 ]

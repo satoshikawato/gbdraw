@@ -394,19 +394,22 @@ class CircularLabelFitSearch:
         self.layouts = tuple(layouts)
         self._offer_notice_rows = offer_notice_rows
         self.row_kinds = _applicable_rows(self.layouts, drawn=not offer_notice_rows)
-        self._outer_only = all(layout.outer_only for layout in self.layouts if not layout.definition_only)
+        # The label rows read only the records whose labels fail; a definition-only record has its own row.
+        label_layouts = [layout for layout in self.layouts if not layout.definition_only]
+        self._outer_only = all(layout.outer_only for layout in label_layouts)
+        label_layouts = label_layouts or list(self.layouts)
         self._verify_assembly = verify
         # A verification starts only if one more assembly fits before the deadline.
         self._assembly_seconds = float(assembly_seconds)
         # Multi-record rows start from the strongest current value among the failing records.
-        self._x_offset = max(layout.x_radius_offset for layout in self.layouts)
-        self._y_offset = max(layout.y_radius_offset for layout in self.layouts)
-        self._font_size = min(layout.font_size for layout in self.layouts)
+        self._x_offset = max(layout.x_radius_offset for layout in label_layouts)
+        self._y_offset = max(layout.y_radius_offset for layout in label_layouts)
+        self._font_size = min(layout.font_size for layout in label_layouts)
         self._definition_font_size = min(
             (layout.definition_font_size for layout in self.layouts if "circular_definition" in layout.failing_kinds),
             default=0.0,
         )
-        self._spacing = min(layout.label_spacing for layout in self.layouts)
+        self._spacing = min(layout.label_spacing for layout in label_layouts)
         self._probe_answers: list[dict[tuple[tuple[str, LabelFitValue], ...], LabelFit]] = [
             {} for _ in self.layouts
         ]
@@ -414,6 +417,8 @@ class CircularLabelFitSearch:
             tuple[tuple[str, LabelFitValue], ...], LabelFitVerification
         ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
+        # A row found before the deadline that a later ask may make milder is not kept in ``_rows``.
+        self._unfinished = False
         self._deadline: float | None = None
 
     def row(self, kind: LabelFitRowKind, *, deadline: float | None = None) -> LabelFitRow:
@@ -477,9 +482,13 @@ class CircularLabelFitSearch:
     # --- rows ---
 
     def _row(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
-        if kind not in self._rows:
-            self._rows[kind] = self._compute(kind)
-        return self._rows[kind]
+        if kind in self._rows:
+            return self._rows[kind]
+        self._unfinished = False
+        computed = self._compute(kind)
+        if not self._unfinished:
+            self._rows[kind] = computed
+        return computed
 
     def _compute(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in _SWITCH_VALUES:
@@ -548,9 +557,13 @@ class CircularLabelFitSearch:
             row = verified(index)
             if row is None:
                 continue
-            # The labels may widen the circle after the probe, so a milder step may fit too.
-            while index > 0 and (milder := verified(index - 1)) is not None:
-                index, row = index - 1, milder
+            # The labels may widen the circle after the probe, so a milder step may fit too. At the deadline the
+            # step already verified is the row, kept out of the cache so a later ask walks on.
+            try:
+                while index > 0 and (milder := verified(index - 1)) is not None:
+                    index, row = index - 1, milder
+            except _SearchStopped:
+                self._unfinished = True
             return row
         return LabelFitRow(
             "smaller_definition_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
