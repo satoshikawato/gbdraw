@@ -137,8 +137,9 @@ class _PreparedCacheTransaction:
     # A helper's lookup (``transaction(read_only=True)``): entries are read,
     # never published, pruned, evicted or reordered; misses build for the call.
     read_only: bool = False
-    # The protein extraction's lookup also publishes the input layers it built
-    # for the resources it staged, as a Generate does (OV-1595).
+    # The protein extraction's lookup and the ring search-frame conversion's
+    # lookup also publish the input layers they built for the resources they
+    # staged, as a Generate does (OV-1595).
     publish_inputs: bool = False
 
 
@@ -597,10 +598,11 @@ class PreparedBiologicalInputCache:
     value that serves only that call, and nothing is published, pruned,
     evicted or reordered, so the render-stage entries stay for the next
     Generate. The owners it read are checked when it ends, as a commit checks
-    them. The blastp protein extraction's lookup (``publish_inputs``) also
-    publishes the decoded resources and parsed sources it built, which the
-    page staged under the ids the next Generate names (OV-1595); it prunes
-    and evicts nothing.
+    them. The blastp protein extraction's lookup and the Circular ring
+    search-frame conversion's lookup (``publish_inputs``) also publish the
+    decoded resources and parsed sources they built, which the page staged
+    under the ids the next Generate names (OV-1595); they prune and evict
+    nothing.
     """
 
     def __init__(self) -> None:

@@ -1292,8 +1292,8 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             )
         if search.pairs is not None:
             raise ValidationError(
-                "Circular rings compare each comparison genome with the displayed "
-                "records; losat_search.pairs applies to Linear diagrams only.",
+                "Circular rings compare each comparison genome with the reference "
+                "file; losat_search.pairs applies to Linear diagrams only.",
                 diagnostic={"code": "COMPARISON_INPUT", "reason": "RING_LOSAT_INPUT", "field": "pairs"},
             )
         if len(tuple(search.record_gencodes)) > 1:

@@ -1837,11 +1837,13 @@ def _resolve_ring_losat(
     record_inputs: Sequence[RecordInput],
     parsed_sources: Mapping[tuple[object, ...], ParsedRecordInputs],
     inputs: PreparedDiagramInputs,
+    drawn_records: Sequence[SeqRecord],
 ) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Replace ring LOSATN / TLOSATX intent with ring rows (design 3.3).
 
     The subject database is every subject-side source file of the request,
-    whole (Owner D-25), from the parses the record load made; each comparison
+    whole (Owner D-25), from the parses the record load made; the ring rows are
+    in the search frame of ``drawn_records`` (PD-OI-073). Each comparison
     genome is read once through the request's memoized reader.
     """
 
@@ -1866,6 +1868,7 @@ def _resolve_ring_losat(
         subject_records=ring_subject_records(
             (item.source for item in record_inputs), genbank_records=genbank_records
         ),
+        drawn_records=drawn_records,
         load_sequences=load_sequences,
     )
 
@@ -1914,7 +1917,7 @@ def plan_circular_request(
             else projected_request
         )
         ring_options, losat_cache_entries = _resolve_ring_losat(
-            materialized_request.options, unresolved_request.records, parsed_sources, inputs
+            materialized_request.options, unresolved_request.records, parsed_sources, inputs, records
         )
         if ring_options is not materialized_request.options:
             materialized_request = replace(materialized_request, options=ring_options)
@@ -1979,7 +1982,7 @@ def plan_circular_batch_request(
             )
         )
         ring_options, losat_cache_entries = _resolve_ring_losat(
-            materialized_request.options, unresolved_request.records, parsed_sources, inputs
+            materialized_request.options, unresolved_request.records, parsed_sources, inputs, records
         )
         if ring_options is not materialized_request.options:
             materialized_request = replace(materialized_request, options=ring_options)

@@ -997,6 +997,21 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // Generate's ring search output in the search frame of the records its
+  // request draws (PD-OI-073): Python converts it from the staged request.
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: {
+    keys: ['resourceIds', 'canonicalRequest'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'circular_ring_tables_in_search_frame_json', [
+        jsonArgument(payload.resourceIds, []),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],

@@ -14,7 +14,8 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.core.color import normalize_hex_color, tint_color
-from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
+from gbdraw.annotations.resolve import _source_interval_to_local
+from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
@@ -470,14 +471,11 @@ def _normalize_source_hits_for_record(
     record_len = len(record.seq)
     if record_len <= 0:
         return empty_normalized_conservation_hits()
-    # Rows are in the coordinates of the whole source record, on its source
-    # strand (OV-1683); a cropped or reverse complemented record draws them
-    # through its coordinate map.
+    # Rows are in the search frame (PD-OI-073): the drawn record after its
+    # crop, on its source strand, 1-based. A reverse complemented record draws
+    # them through its coordinate map (OV-1683).
     coord_base, coord_step = _read_coord_map(record)
-    annotations = getattr(record, "annotations", None) or {}
-    source_len = float(annotations.get("gbdraw_source_length") or record_len)
-    last_source = coord_base + coord_step * (record_len - 1)
-    drawn_low, drawn_high = float(min(coord_base, last_source)), float(max(coord_base, last_source))
+    frame_start = _record_source_start(record)
 
     start_column, end_column, id_column = (
         ("qstart", "qend", "query")
@@ -498,19 +496,20 @@ def _normalize_source_hits_for_record(
                 continue
             start = min(raw_start, raw_end)
             end = max(raw_start, raw_end)
-            if max(0.0, start - 1.0) >= min(source_len, end):
+            # outfmt 6 positions are whole bases. A row outside the record is
+            # reported (PD-OI-073); one that crosses its end is clipped.
+            (local_start, local_end), _clipped = _source_interval_to_local(
+                frame_start + int(start) - 1,
+                frame_start + int(end) - 1,
+                coord_base=coord_base,
+                coord_step=coord_step,
+                record_length=record_len,
+            )
+            if local_end <= local_start:
                 dropped += 1
                 continue
-            low = max(start, drawn_low)
-            high = min(end, drawn_high)
-            if low > high:
-                # Outside the drawn region of the record.
-                continue
-            # outfmt 6 positions are whole bases.
-            first_local = _source_to_local_index(int(low), coord_base, coord_step)
-            last_local = _source_to_local_index(int(high), coord_base, coord_step)
-            draw_start = float(max(0, min(first_local, last_local)))
-            draw_end = float(min(record_len, max(first_local, last_local) + 1))
+            draw_start = float(local_start)
+            draw_end = float(local_end)
             orientation = "forward" if raw_start <= raw_end else "reverse"
             rows.append(
                 {

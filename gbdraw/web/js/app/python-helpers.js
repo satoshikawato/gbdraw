@@ -25,6 +25,7 @@ from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
+from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
 from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
 
@@ -1859,6 +1860,11 @@ _WEB_JSON_HELPERS = {
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
     "read_feature_override_table_json": (
         _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"
+    ),
+    # Generate converts its ring search output against the records it draws: the parse is kept for its render.
+    "circular_ring_tables_in_search_frame_json": (
+        _with_prepared_input_lookup(circular_ring_tables_in_search_frame_json, 2, publish_inputs=True),
+        "convertRingTablesToSearchFrame"
     ),
     "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
