@@ -809,7 +809,8 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
                                    DRAWINGS_SESSION_MIN_VERSION):
         raise ValidationError(
             "Web binding schema 2 requires session 41, 42, 44, 46, 47, "
-            f"{FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION} or {DRAWINGS_SESSION_MIN_VERSION}."
+            f"{FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION} or {DRAWINGS_SESSION_MIN_VERSION}.",
+            diagnostic=_SESSION_FIELDS_INVALID,
         )
     # A Session 49 drawing (its one-drawing view names its mode in ``ui.mode``)
     # binds its own mode's inputs; Sessions 41-48 bind both modes' and c_gb.
