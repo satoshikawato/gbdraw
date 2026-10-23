@@ -2,11 +2,12 @@
 
 One tall take (``walkthrough_render.PROMO_ID``) of the desktop app (1920x1080),
 framed for phone feeds. The header Language menu switches the app to 简体中文
-on camera; then two Gallery examples, opened with Load example, show the new
-features as they are: a loaded font with a Chinese plot title, a record rotated
-to start at a feature, a feature moved to a lane while Generate shows its
-stages, Save Session with Run info, and a similarity-group alignment. Captions are English source text; the take shows them
-only in zh-Hans (``docs/videos/meet-gbdraw/captions.zh-Hans.json``).
+on camera, with the settings pane shown before and after; then two Gallery
+examples, opened with Load example, show the new features as they are: a loaded
+font with a Chinese plot title, a record rotated to start at four genes in turn,
+four genes moved to lanes in turn (the first with Generate's stages), Save Session
+with Run info, and a similarity-group alignment. Captions are English source text;
+the take shows them only in zh-Hans (``docs/videos/meet-gbdraw/captions.zh-Hans.json``).
 """
 
 from __future__ import annotations
@@ -14,13 +15,14 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import nullcontext
 from pathlib import Path
 
 from playwright.sync_api import Locator, expect
 
 from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS
 from video.tutorials import (_button, _close_feature, _feature_point, _fit_preview, _frame_box, _frame_figure,
-                             _label, _look, _open_feature, _pick, _summary, _svg_id)
+                             _label, _look, _open_feature, _pick, _summary)
 from video.walkthrough import PREVIEW_REGION, SKIM, STAGES_SECONDS, Journey, Recorder, _center, _skimmed
 from video.walkthrough_render import FONT_CACHE, PORTRAIT_PAD, PROMO_ID
 
@@ -29,9 +31,18 @@ BGC_EXAMPLE = "BGC0000708-BGC0000713"
 BGC_RECORDS = ("BGC0000708", "BGC0000709", "BGC0000711", "BGC0000712", "BGC0000713")
 TITLE = "人类线粒体基因组"
 LANGUAGES = 11          # English and the ten translations
-LANE_GENE = "ATP8"      # a short gene whose outside label and leader line show the move
-LANE_LABEL = "ATP8"
 MENU_ROW = 22
+PANE_HEIGHT = 420       # the settings pane from its top to Basic: headings, Applies on Generate, GenBank, Click to Browse
+# The record starts at each gene in turn. The first rotation teaches it; the others are fast-forwarded repeats.
+ROTATE_GENES = ("COX1", "ND1", "CYTB", "ND5")
+ROTATE_MARKS = ("hl-rotate-1", "hl-rotate-2", "hl-rotate-3", "hl-rotate-4")
+# Genes put on a lane one after another (gene, Feature placement choice). ATP8 has an outside label and leader
+# line, so its label and leader stay true to "move with it"; the others lie on the COX2...ND4L arc around it.
+LANE_MOVES = (("ATP8", "outward"), ("COX3", "inward"), ("ND3", "outward"), ("ND4L", "inward"))
+LANE_MARKS = ("hl-lane-1", "hl-lane-2", "hl-lane-3", "hl-lane-4")
+LANE_ARC = ("COX2", "ATP8", "ATP6", "COX3", "ND3", "ND4L")
+REPEAT_SECONDS = 2.0    # one fast-forwarded repeat of a rotation or a lane move, as the viewer sees it
+VERSION_HOLD = 0.9      # the map held, popup closed, before a version's mark; the opening clip is its last 0.5 s
 
 _FONT_READY = """
 () => (document.querySelector('select[data-font-select]')?.selectedOptions[0]?.label || '') === 'Noto Sans SC'
@@ -50,12 +61,15 @@ _EXAMPLE_LOADED = """
 ([mode, before]) => { const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || '');
   return Boolean(app && app.mode === mode && !app.processing && content && content !== before); }
 """
-_BOUNDS = """
-([svgId, label]) => {
+_MAP_PART = """
+(genes) => {
   const region = document.querySelector('$REGION');
-  const boxes = [...region.querySelectorAll(`svg [data-gbdraw-feature-id="${svgId}"]`),
-                 ...[...region.querySelectorAll('svg text')].filter((node) => node.textContent === label)]
-    .map((node) => node.getBoundingClientRect()).filter((box) => box.width && box.height);
+  const ids = genes && new Set((window.__GBDRAW_APP__?.extractedFeatures || [])
+    .filter((item) => genes.includes(item.gene)).map((item) => item.svg_id));
+  const nodes = [...region.querySelectorAll('svg [data-gbdraw-feature-id]')]
+    .filter((node) => !ids || ids.has(node.getAttribute('data-gbdraw-feature-id')));
+  if (genes) nodes.push(...[...region.querySelectorAll('svg text')].filter((node) => genes.includes(node.textContent)));
+  const boxes = nodes.map((node) => node.getBoundingClientRect()).filter((box) => box.width && box.height);
   if (!boxes.length) return null;
   const left = Math.min(...boxes.map((b) => b.left)), top = Math.min(...boxes.map((b) => b.top));
   const right = Math.max(...boxes.map((b) => b.right)), bottom = Math.max(...boxes.map((b) => b.bottom));
@@ -147,27 +161,41 @@ def _generate(rec: Recorder, *, stages: bool = False) -> None:
 
 
 def _switch_to_chinese(rec: Recorder, code: str) -> None:
-    """Steps lang and lang2: the header Language menu, open on every language, then 简体中文."""
+    """Steps lang and lang2: the settings pane in English, the Language menu with every language, the pane in Chinese.
+
+    The pane and the menu are far apart on the page, so the camera frames the pane before and after the pick
+    (the same framing both times) and the menu in between.
+    """
 
     page = rec.page
+    # The pane first, with the fewest queries before it: the recording shows the whole page until the camera cue.
+    pane = {**page.locator(".settings-scroll").bounding_box(), "height": PANE_HEIGHT}
+    rec.camera(pane, zoom=1.6, duration=0, portrait=pane)
+    rec.caption(1, "The interface in Simplified Chinese",
+                "The Language menu in the header switches at once, without reloading")
     menu = page.locator("select[data-ui-language]")
     expect(menu.locator("option")).to_have_count(LANGUAGES)
     box = menu.bounding_box()
     # The menu and the list of every language drawn below it.
     area = {"x": box["x"] - 30, "y": box["y"] - 10, "width": box["width"] + 60,
             "height": box["height"] + MENU_ROW * LANGUAGES + 34}
-    rec.camera(area, zoom=2.4, duration=0, portrait=area)
-    rec.caption(1, "The interface in Simplified Chinese",
-                "The Language menu in the header switches at once, without reloading")
-    rec.hold(1.7)
+    rec.hold(1.4)
+    rec.mark("hl-lang-en")
+    rec.camera(area, zoom=2.4, duration=0.7, portrait=area)
     rec.caption(1, "11 interface languages", "Including Simplified and Traditional Chinese")
+    rec.hold(0.7)
     rec.choose(menu, code, rows=LANGUAGES, linger=2.0)
     page.wait_for_function("(code) => window.__GBDRAW_APP__.uiLocale.value === code", arg=code)
     page.wait_for_function("() => document.fonts.status === 'loaded'")
-    rec.hold(0.6)
-    rec.mark("hl-lang")
+    rec.hold(0.2)
+    rec.mark("hl-lang-pick")
+    rec.camera(pane, zoom=1.6, duration=0.7, portrait=pane)
+    rec.caption(1, "The interface in Simplified Chinese",
+                "The Language menu in the header switches at once, without reloading")
+    rec.hold(1.9)
+    rec.mark("hl-lang-zh")
     rec.camera(duration=0.8)
-    rec.hold(0.6)
+    rec.hold(0.4)
 
 
 def _wheel_into_view(rec: Recorder, area: dict, target: Locator) -> None:
@@ -261,69 +289,136 @@ def _font_and_title(rec: Recorder) -> None:
     rec.mark("hl-font")
 
 
-def _rotate(rec: Recorder) -> None:
-    """Step rotate: COX1 › Rotate record using this feature › Start of the record › Apply now."""
+def _map_frame(rec: Recorder, genes: tuple[str, ...] | None, *, pad: float) -> dict:
+    """The page rect of the map part that ``genes`` (or every feature) cover, padded; one framing for all versions."""
+
+    box = rec.page.evaluate(_MAP_PART, list(genes) if genes else None)
+    if box is None:
+        raise AssertionError(f"No drawn feature to frame: {genes}")
+    return {"x": box["x"] - pad, "y": box["y"] - pad, "width": box["width"] + 2 * pad, "height": box["height"] + 2 * pad}
+
+
+def _rotation_frame(rec: Recorder) -> dict:
+    """The top of the ring and its center text: where the record now starts and its new coordinates read.
+
+    The record starts at 12 o'clock, so a gene runs clockwise from there; the frame holds the arc to either side,
+    the labels above it, and the center text below it.
+    """
+
+    ring = _map_frame(rec, None, pad=0)
+    radius = (ring["width"] + ring["height"]) / 4
+    center = ring["x"] + ring["width"] / 2, ring["y"] + ring["height"] / 2
+    top = ring["y"] - 60
+    frame = {"x": center[0] - 0.72 * radius, "y": top, "width": 1.44 * radius, "height": center[1] + 0.25 * radius - top}
+    print(f"rotation frame: {frame}", flush=True)
+    return frame
+
+
+def _show_version(rec: Recorder, frame: dict, mark: str, seconds: float) -> None:
+    """Hold the map in ``frame``, popup closed, then mark it: an opening clip ends here."""
+
+    # The camera settles 0.5 s before the mark, so the opening clip (the last 0.5 s) holds still.
+    rec.camera(frame, zoom=2.0, duration=min(1.1, seconds - 0.5), portrait=frame)
+    rec.hold(seconds)
+    rec.mark(mark)
+
+
+def _rotate_to(rec: Recorder, gene: str, *, repeat: bool) -> None:
+    """``gene`` › Rotate record using this feature › Start of the record › Apply now; the popup is closed afterwards.
+
+    The first rotation plays at normal speed where it teaches; a repeat plays in about ``REPEAT_SECONDS``.
+    """
 
     page = rec.page
+    with _skimmed(rec, target=REPEAT_SECONDS) if repeat else nullcontext():
+        with _skimmed(rec):
+            popup = _open_feature(rec, _feature_point(rec, "(item) => item.gene === arg", gene), "Edit")
+            toggle = popup.locator("#feature-record-actions-toggle")
+            toggle.evaluate("node => node.scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(300)
+            _frame_box(rec, popup.bounding_box())
+            if toggle.get_attribute("aria-expanded") != "true":
+                rec.click(toggle, pause=0.4)
+            start = popup.locator("input[name='feature-record-rotation-position'][value='start']")
+            start.evaluate("node => node.scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(300)
+            # The popup is wider than the tall window reads: frame the choice and its preview.
+            preview = popup.locator("#feature-record-rotation-preview")
+            _frame_parts(rec, start.locator("xpath=ancestor::label[1]"), preview)
+        rec.set_checked(start, True, pause=0.6)
+        expect(preview).to_be_visible()
+        rec.hold(0.8)
+        apply = _button(rec, "Apply now", within=popup)
+        with _skimmed(rec):
+            before = _content(rec)
+            apply.evaluate("node => node.scrollIntoView({block: 'end'})")
+            page.wait_for_timeout(300)
+            # Cancel, Apply on Generate, and Apply now share one row.
+            _frame_parts(rec, apply.locator("xpath=../button[1]"), apply)
+        rec.hold(0.6)
+        rec.click(apply, pause=0.2)
+        with _skimmed(rec, target=0.8):
+            page.wait_for_function(_RESULT_CHANGED, arg=before, timeout=GENERATION_TIMEOUT_MS)
+            rec.hold(0.3)
+            _close_feature(rec)
+        # Off the map, so the held version shows no pointer.
+        with _skimmed(rec, target=0.4):
+            rec.move_to(230, 560)
+
+
+def _rotate(rec: Recorder) -> None:
+    """Step rotate: the record starts at COX1 (normal speed), then at three more genes in fast-forwarded repeats."""
+
     rec.caption(4, "Start a circular record at any base",
                 "Rotate record using this feature; the sequence and its coordinates stay the same")
-    with _skimmed(rec):
-        popup = _open_feature(rec, _feature_point(rec, "(item) => item.gene === arg", "COX1"), "Edit")
-        toggle = popup.locator("#feature-record-actions-toggle")
-        toggle.evaluate("node => node.scrollIntoView({block: 'center'})")
-        page.wait_for_timeout(300)
-        _frame_box(rec, popup.bounding_box())
-        rec.click(toggle, pause=0.4)
-        start = popup.locator("input[name='feature-record-rotation-position'][value='start']")
-        start.evaluate("node => node.scrollIntoView({block: 'center'})")
-        page.wait_for_timeout(300)
-        # The popup is wider than the tall window reads: frame the choice and its preview.
-        preview = popup.locator("#feature-record-rotation-preview")
-        _frame_parts(rec, start.locator("xpath=ancestor::label[1]"), preview)
-    rec.set_checked(start, True, pause=0.6)
-    expect(preview).to_contain_text("5,904")
-    rec.hold(0.8)
-    apply = _button(rec, "Apply now", within=popup)
-    with _skimmed(rec):
-        before = _content(rec)
-        apply.evaluate("node => node.scrollIntoView({block: 'end'})")
-        page.wait_for_timeout(300)
-        # Cancel, Apply on Generate, and Apply now share one row.
-        _frame_parts(rec, apply.locator("xpath=../button[1]"), apply)
-    rec.hold(0.6)
-    rec.click(apply, pause=0.2)
-    with _skimmed(rec, target=0.8):
-        page.wait_for_function(_RESULT_CHANGED, arg=before, timeout=GENERATION_TIMEOUT_MS)
-        rec.hold(0.3)
-        _close_feature(rec)
-    _frame_figure(rec)
-    rec.hold(2.4)
-    # COX1 now starts the record at the top of the map.
-    _look(rec, rec.text_bounds(r"^COX1$"), zoom=2.4, seconds=2.4, pad=110)
-    rec.mark("hl-rotate")
+    _rotate_to(rec, ROTATE_GENES[0], repeat=False)
+    frame = _rotation_frame(rec)
+    expect(rec.page.locator(PREVIEW_REGION)).to_contain_text("5,904")   # COX1 at the top; the center text says so
+    _show_version(rec, frame, ROTATE_MARKS[0], 2.4)
+    for gene, mark in zip(ROTATE_GENES[1:], ROTATE_MARKS[1:], strict=True):
+        _rotate_to(rec, gene, repeat=True)
+        _show_version(rec, frame, mark, VERSION_HOLD)
+
+
+def _lane_to(rec: Recorder, gene: str, side: str, *, repeat: bool) -> None:
+    """``gene`` › Feature placement › ``side`` lane 1, then Generate.
+
+    The first move plays at normal speed with the Generate stage line; a repeat, Generate included, plays in
+    about ``REPEAT_SECONDS``.
+    """
+
+    page = rec.page
+    with _skimmed(rec, target=REPEAT_SECONDS) if repeat else nullcontext():
+        with _skimmed(rec):
+            popup = _open_feature(rec, _feature_point(rec, "(item) => item.gene === arg", gene), "Edit")
+            placement = _label(rec, "Feature placement", within=popup)
+            placement.evaluate("node => node.scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(300)
+            rec.focus(placement, zoom=2.4, duration=0.6)
+        rec.choose(placement, side)
+        rec.hold(0.4)
+        with _skimmed(rec):
+            _close_feature(rec)
+        if not repeat:
+            rec.caption(5, "Generate shows each stage as it runs", "Preparing, rendering: progress at a glance")
+        _generate(rec, stages=not repeat)
+        # Off the map, so the held version shows no pointer.
+        with _skimmed(rec, target=0.4):
+            rec.move_to(230, 560)
 
 
 def _lane(rec: Recorder) -> None:
-    """Steps lane and stages: ATP8 › Feature placement › Outer lane 1, then Generate at normal speed."""
+    """Steps lane and stages: ATP8 › Outward lane 1 with the Generate stages, then three more genes on lanes."""
 
-    page = rec.page
     rec.caption(5, "Put a feature on the lane you choose", "Its label and leader line move with it")
-    svg_id = _svg_id(rec, "(item) => item.gene === arg", LANE_GENE)
-    _look(rec, page.evaluate(_BOUNDS, [svg_id, LANE_LABEL]), zoom=2.4, seconds=1.0, pad=60)
-    with _skimmed(rec):
-        popup = _open_feature(rec, _feature_point(rec, "(item) => item.gene === arg", LANE_GENE), "Edit")
-        placement = _label(rec, "Feature placement", within=popup)
-        placement.evaluate("node => node.scrollIntoView({block: 'center'})")
-        page.wait_for_timeout(300)
-        rec.focus(placement, zoom=2.4, duration=0.6)
-    rec.choose(placement, "outward")
-    rec.hold(0.4)
-    with _skimmed(rec):
-        _close_feature(rec)
-    rec.caption(5, "Generate shows each stage as it runs", "Preparing, rendering: progress at a glance")
-    _generate(rec, stages=True)
-    _look(rec, page.evaluate(_BOUNDS, [svg_id, LANE_LABEL]), zoom=2.4, seconds=2.6, pad=60)
-    rec.mark("hl-lane")
+    # The arc is framed before any move, with room for the lanes' labels; every version keeps this framing.
+    frame = _map_frame(rec, LANE_ARC, pad=45)
+    print(f"lane frame: {frame}", flush=True)
+    rec.camera(frame, zoom=2.0, duration=1.1, portrait=frame)
+    rec.hold(1.0)
+    for index, ((gene, side), mark) in enumerate(zip(LANE_MOVES, LANE_MARKS, strict=True)):
+        _lane_to(rec, gene, side, repeat=bool(index))
+        _show_version(rec, frame, mark, 2.6 if index == 0 else VERSION_HOLD)
 
 
 def _reset_alignment(rec: Recorder) -> None:

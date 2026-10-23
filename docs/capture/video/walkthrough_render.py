@@ -239,12 +239,16 @@ PROMO_STORY = Story(
     ("gbdraw 0.14.0: what is new", "Microbial and organelle genome maps · now with a Simplified Chinese interface"),
     (("walkthrough", replace(PORTRAIT, audio=False), "gbdraw-0.14.0-vertical"),), "zh-Hans",
     outro=("gbdraw.app", "Command line: pip install gbdraw"),
-    # The marks ``video.promo`` sets at the end of each result's hold.
-    opening=(Clip("hl-lang", -1.8, "hl-lang", 0.0, "Simplified Chinese interface"),
-             Clip("hl-font", -1.4, "hl-font", 0.0, "Chinese text in the figure"),
-             Clip("hl-rotate", -1.4, "hl-rotate", 0.0, "Start at any base"),
-             Clip("hl-lane", -1.4, "hl-lane", 0.0, "Features on lanes you choose"),
-             Clip("hl-align", -1.4, "hl-align", 0.0, "Similarity-group alignment")))
+    # The marks ``video.promo`` sets at the end of each result's hold. Clips of one label play as one highlight:
+    # the Language menu's before, pick, and after; a record started at four genes in turn (hl-rotate-1..4);
+    # and four genes put on lanes one after another (hl-lane-1..4).
+    opening=(Clip("hl-lang-en", -0.6, "hl-lang-en", 0.0, "Simplified Chinese interface"),
+             Clip("hl-lang-pick", -0.7, "hl-lang-pick", 0.0, "Simplified Chinese interface"),
+             Clip("hl-lang-zh", -0.9, "hl-lang-zh", 0.0, "Simplified Chinese interface"),
+             Clip("hl-font", -1.1, "hl-font", 0.0, "Chinese text in the figure"),
+             *(Clip(f"hl-rotate-{n}", -0.5, f"hl-rotate-{n}", 0.0, "Start at any base") for n in range(1, 5)),
+             *(Clip(f"hl-lane-{n}", -0.5, f"hl-lane-{n}", 0.0, "Features on lanes you choose") for n in range(1, 5)),
+             Clip("hl-align", -1.2, "hl-align", 0.0, "Similarity-group alignment")))
 
 # Keys are journey names; ``walkthrough.journeys()`` records the same set.
 STORIES = {
@@ -1372,6 +1376,7 @@ class Piece:
     speed: float = 1.0
     fade: int = 0             # frames of cross-dissolve from the previous piece
     caption: tuple | None = None   # recording pieces: a fixed caption instead of the recording's
+    caption_held: bool = False     # the fixed caption is already on screen from the piece before: no new fade-in
 
     @property
     def start(self) -> float:
@@ -1426,10 +1431,15 @@ CHAPTER_FADE = round(FADE_SECONDS * FPS)
 
 def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wait_speed: float,
                  first_fade: int) -> list[Piece]:
-    """One recording piece per clip, cut at the recording's marks; later clips dissolve in quickly."""
+    """One recording piece per clip, cut at the recording's marks; later clips dissolve in quickly.
+
+    Consecutive clips with one label are one highlight: its label shows once, steady, and they cut with no dissolve.
+    """
 
     pieces = []
     for index, clip in enumerate(clips):
+        # Clips that share a label read as one highlight: the label stays on screen and the clips cut quickly.
+        held = bool(index and clip.label and clip.label == clips[index - 1].label)
         missing = {clip.first, clip.last} - set(recording.marks)
         if missing:
             raise ValueError(f"Recording lacks marks {sorted(missing)}")
@@ -1439,8 +1449,8 @@ def _clip_pieces(recording: Recording, clips: tuple[Clip, ...], speed: float, wa
             raise ValueError(f"Clip {clip.first}->{clip.last} is empty")
         moments = _moments(recording.timemap, start, stop, speed, wait_speed)
         pieces.append(Piece("recording", len(moments), moments=moments, speed=speed,
-                            fade=first_fade if index == 0 else CUT_FADE,
-                            caption=(None, clip.label, "") if clip.label else None))
+                            fade=first_fade if index == 0 else 0 if held else CUT_FADE,
+                            caption=(None, clip.label, "") if clip.label else None, caption_held=held))
     return pieces
 
 
@@ -1669,7 +1679,7 @@ class Composer:
             badge = self.overlay.badge(factor)
             extras.append((badge, self.layout.badge_origin(badge.size)))
         if piece.caption:
-            caption, caption_in, previous = piece.caption, local / FPS / 0.35, None
+            caption, caption_in, previous = piece.caption, 1.0 if piece.caption_held else local / FPS / 0.35, None
         else:
             caption, caption_in, previous = rec.caption_at(moment, piece.start)
         return self._compose_card(self._screen(moment, self.camera.at(moment)), caption, caption_in, previous,

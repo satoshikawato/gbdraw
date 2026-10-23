@@ -37,6 +37,8 @@ def test_subtitle_cues_never_overlap_at_a_cut() -> None:
 def _marks(module: str) -> set[str]:
     source = (CAPTURE_ROOT / 'video' / module).read_text(encoding='utf-8')
     marks = set(re.findall(r'(?:rec\.mark\(|mark=)"([^"]+)"', source))
+    # A journey may keep the marks of repeated versions in one tuple and mark each in a loop.
+    marks |= set(re.findall(r'"(hl-[a-z0-9-]+)"', source))
     if 'rec.mark(f"rule-{index + 1}")' in source:
         marks |= {f'rule-{index}' for index in range(1, 5)}
     return marks
@@ -108,6 +110,40 @@ def test_an_opening_plays_labeled_clips_before_a_short_title_card() -> None:
     recording.story = dataclasses.replace(story, opening=())
     plain = full_edit(recording, 0).pieces
     assert plain[0].kind == 'intro' and plain[0].frames == round(INTRO_SECONDS * FPS)
+
+
+def test_clips_with_one_label_read_as_one_highlight() -> None:
+    clips = (Clip('a', -0.5, 'a', 0.0, 'Same'), Clip('b', -0.5, 'b', 0.0, 'Same'), Clip('c', -0.5, 'c', 0.0, 'Other'))
+    recording = SimpleNamespace(marks={'a': 5.0, 'b': 9.0, 'c': 12.0}, timemap=TimeMap.build([], 0.0, 20.0))
+    first, second, third = walkthrough_render._clip_pieces(recording, clips, 1.0, 1.0, 0)
+    # The label shows once and stays steady; the clips cut with no dissolve; a new label fades in as before.
+    assert (first.caption_held, second.caption_held, third.caption_held) == (False, True, False)
+    assert (first.fade, second.fade, third.fade) == (0, 0, walkthrough_render.CUT_FADE)
+    edit = walkthrough_render.Edit('walkthrough', [first, second, third], numbered=False, badge_from=1.3,
+                                   finale_caption=(None, '', ''))
+    cues = walkthrough_render.Composer.captions(SimpleNamespace(lang=lambda text: text), edit)
+    assert [text for *_, text in cues] == ['Same', 'Other']
+    assert cues[0][1] == cues[1][0] == pytest.approx(1.0, abs=0.1)   # one cue for both clips, no gap before the next
+
+
+def test_the_promotion_opens_with_animated_versions_of_rotation_and_lanes() -> None:
+    from video import promo
+
+    opening = STORIES[walkthrough_render.PROMO_ID].opening
+    for label, marks, genes in (('Start at any base', promo.ROTATE_MARKS, promo.ROTATE_GENES),
+                                ('Features on lanes you choose', promo.LANE_MARKS,
+                                 [gene for gene, _ in promo.LANE_MOVES])):
+        clips = [clip for clip in opening if clip.label == label]
+        # At least four versions, each a different gene, cut one after another under one label.
+        assert [clip.last for clip in clips] == list(marks) and len(set(genes)) == len(genes) >= 4
+        assert len(marks) == len(genes)
+        assert all(clip.first == clip.last and clip.after == 0.0 and -0.6 <= clip.before <= -0.4 for clip in clips)
+        indexes = [opening.index(clip) for clip in clips]
+        assert indexes == list(range(indexes[0], indexes[0] + len(clips)))
+    # The language highlight shows the pane before, the menu pick, and the pane after; the opening stays short.
+    assert [clip.last for clip in opening if clip.label == 'Simplified Chinese interface'] == [
+        'hl-lang-en', 'hl-lang-pick', 'hl-lang-zh']
+    assert sum(-clip.before + clip.after for clip in opening) <= 10.0
 
 
 def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
