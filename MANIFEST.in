@@ -16,4 +16,5 @@ recursive-include gbdraw/web/wasm *
 global-exclude *.py[cod] __pycache__ .DS_Store
 
 include gbdraw/data/losat-release.json
+include gbdraw/data/mode-slice-defaults.json
 prune gbdraw/bin
