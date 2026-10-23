@@ -1808,8 +1808,7 @@ export const createCircularTrackSlotEditor = ({
    * @param {unknown} text
    */
   const updateCircularTrackSlotGap = (slot, field, text) => {
-    const drawing = state.drawingOfMode('circular');
-    if (!['inner_gap_px', 'outer_gap_px'].includes(field) || !drawing.adv.circular_track_slots.includes(slot)) return;
+    if (!['inner_gap_px', 'outer_gap_px'].includes(field)) return;
     const normalized = normalizeGapText(typeof text === 'string' ? text.trim() : text, field);
     if (slot[field] !== normalized) slot[field] = /** @type {string | null} */ (normalized);
   };

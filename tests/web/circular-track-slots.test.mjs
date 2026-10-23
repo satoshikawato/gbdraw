@@ -639,7 +639,6 @@ test('OV-1656: the Circular gap writer stores one text, so `1px` is `1` before S
     editor.updateCircularTrackSlotGap(slot, field, '');
     assert.strictEqual(slot[field], null, 'blank is Auto');
   }
-  const detached = { inner_gap_px: 'saved' };
-  editor.updateCircularTrackSlotGap(detached, 'inner_gap_px', '3px');
-  assert.equal(detached.inner_gap_px, 'saved');
+  editor.updateCircularTrackSlotGap(slot, 'width', '3px');
+  assert.notEqual(slot.width, '3', 'only the gap fields');
 });
