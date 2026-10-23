@@ -1033,6 +1033,65 @@ def _replace_first_feature(records: tuple[SeqRecord, ...]) -> None:
     )
 
 
+def test_a_read_only_lookup_hits_and_never_publishes_prunes_or_reorders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A Worker helper's lookup (OV-1550): the entries a Generate stored are
+    # read under the same keys; a miss builds once for the call and is not
+    # kept; an entry the lookup does not name, and its order, stay.
+    first = (_record("first"),)
+    second = (_record("second"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"first": first, "second": second})
+    stage_key = ("render-stage", "test", identity)
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        get_or_build_parsed_source(("first", identity), frozenset({identity}), lambda: first)
+        get_or_build_parsed_source(("second", identity), frozenset({identity}), lambda: second)
+        transaction = prepared_module.active_render_stage_transaction()
+        assert transaction is not None
+        prepared_module.store_render_stage(transaction, stage_key, object(), frozenset())
+    before = {layer: list(entries.items()) for layer, entries in cache._layers.items()}
+
+    other_path = tmp_path / "other.bin"
+    other_path.write_bytes(b"other")
+    other = PreparedResourceIdentity("record-2", "render-resource-2", 5)
+    builds: list[str] = []
+    with cache.transaction(
+        resource_paths={other_path: other, path: identity}, diagnostics=None, read_only=True,
+    ):
+        # The first entry was stored before the second; a hit does not reorder.
+        assert get_or_build_parsed_source(
+            ("first", identity), frozenset({identity}), lambda: pytest.fail("a stored source was parsed again"),
+        ) is first
+        miss = get_or_build_parsed_source(
+            ("new", other), frozenset({other}), lambda: builds.append("new") or (_record("new"),),
+        )
+        assert get_or_build_parsed_source(("new", other), frozenset({other}), lambda: pytest.fail("parsed twice")) is miss
+        transaction = prepared_module.active_render_stage_transaction()
+        assert transaction is not None
+        # A stage result is not kept, so its key is not walked for identities.
+        with monkeypatch.context() as patch:
+            patch.setattr(prepared_module, "_key_resource_identities", lambda key: pytest.fail("key walked"))
+            prepared_module.store_render_stage(transaction, ("render-stage", "helper", other), object(), frozenset())
+    assert builds == ["new"]
+    assert {layer: list(entries.items()) for layer, entries in cache._layers.items()} == before
+
+
+def test_a_read_only_lookup_checks_the_owners_it_read(tmp_path: Path) -> None:
+    records = (_record("guarded"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    with pytest.raises(ValidationError, match="ownership was mutated"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None, read_only=True):
+            cached = get_or_build_parsed_source(
+                ("source", identity), frozenset({identity}), lambda: pytest.fail("parsed again"),
+            )
+            # A record built in the lookup makes the end check walk every feature.
+            get_or_build_parsed_source(("built", identity), frozenset({identity}), lambda: (_record("built"),))
+            _replace_first_feature(cached)
+    # The changed entry is dropped, and the next Generate checks in full.
+    assert ("source", identity) not in cache._layers["parsed"]
+    assert cache._previous_transaction_failed is True
+
+
 def test_structural_stamp_rejects_a_resized_feature_list_at_entry(
     tmp_path: Path,
 ) -> None:

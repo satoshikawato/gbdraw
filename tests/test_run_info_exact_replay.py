@@ -125,11 +125,11 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
             width = page.evaluate("""async () => {
                 const m = await import('./js/services/diagram-generation.js');
                 const helper = await m.runDiagramHelperOperation(
-                    m.DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-                    { caption: 'lazy worker reuse', fontFamily: 'Arial', fontSize: 14 });
-                return helper.result.width;
+                    m.DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+                    { features: [], rules: [], kind: 'color' });
+                return Array.isArray(helper.result.matches);
             }""")
-            assert width > 0
+            assert width is True
             assert page.evaluate("window.__GBDRAW_APP__.runAnalysis()") == {"status": "ok"}
             second = snapshot("second")
             assert second["committed"] == generated["committed"]

@@ -96,11 +96,11 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
 ) -> None:
-    from gbdraw.diagrams.linear import assemble
+    from gbdraw.io import comparisons
 
     marker = tmp_path / "keep.svg"
     marker.write_text("<svg />", encoding="utf-8")
-    original_loader = assemble.read_comparison_table
+    original_loader = comparisons.read_comparison_table
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
 
     payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
@@ -108,7 +108,7 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     assert payload["error"]["code"] == "RESOURCE_INVALID"
     assert payload["error"]["stage"] == "resource-staging"
     assert set(payload["error"]) == {"code", "operation", "stage", "context"}
-    assert assemble.read_comparison_table is original_loader
+    assert comparisons.read_comparison_table is original_loader
     assert marker.exists()
 
 

@@ -4035,12 +4035,24 @@ def _decode_comparisons(
                 subject_index = _non_negative_index(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
+                from gbdraw.api.prepared import (
+                    get_or_build_decoded_resource,
+                    register_prepared_resource_value,
+                )
+
                 # The resource text stays on the edge, so a re-saved Session
-                # writes the same nucleotideBlast resource.
-                try:
+                # writes the same nucleotideBlast resource. Both are read once
+                # per Worker resource.
+                def read_edge(
+                    resource_path: Path = resource_path,
+                    label: str = f"BLAST resource {item['resourceId']!r}",
+                ) -> tuple[str, DataFrame]:
                     text = resource_path.read_bytes().decode("utf-8")
-                    table = read_comparison_table(
-                        StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
+                    return text, read_comparison_table(StringIO(text), label=label)
+
+                try:
+                    text, table = get_or_build_decoded_resource(
+                        resource_path, ("nucleotide-blast-edge-v1",), read_edge
                     )
                 except (OSError, UnicodeError, ValidationError) as exc:
                     # The reader's diagnostic plus the record pair the Web names (CI-04).
@@ -4051,8 +4063,6 @@ def _decode_comparisons(
                         f"Could not decode {path}: {exc}",
                         diagnostic=cause and {**cause, "queryRecordIndex": query_index, "subjectRecordIndex": subject_index},
                     ) from exc
-                from gbdraw.api.prepared import register_prepared_resource_value
-
                 explicit_comparisons.append(
                     LinearComparison(
                         query_index,
@@ -4072,13 +4082,18 @@ def _decode_comparisons(
                 raise CanonicalRequestDecodingError(
                     f"Unsupported protein comparison encoding at {path}."
                 )
-            table = _read_canonical_table(
-                _resolve_resource(
-                    item["resourceId"],
-                    path=f"{path}.resourceId",
-                    resource_paths=resource_paths,
-                ),
-                context=path,
+            protein_path = _resolve_resource(
+                item["resourceId"],
+                path=f"{path}.resourceId",
+                resource_paths=resource_paths,
+            )
+            from gbdraw.api.prepared import get_or_build_decoded_resource
+
+            # Read once per Worker resource, like the nucleotide edges above.
+            table = get_or_build_decoded_resource(
+                protein_path,
+                ("canonical-protein-comparison-v1",),
+                lambda: _read_canonical_table(protein_path, context=path),
             )
             if schema >= 2:
                 query_index = _non_negative_index(

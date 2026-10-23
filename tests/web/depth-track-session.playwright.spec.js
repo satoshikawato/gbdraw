@@ -71,12 +71,12 @@ test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-
       runDiagramHelperOperation
     } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const response = await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-      { caption: 'Worker helper probe', fontFamily: 'Arial', fontSize: 14 }
+      DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+      { features: [], rules: [], kind: 'color' }
     );
     return response.result;
   });
-  expect(helperResult.width).toBeGreaterThan(0);
+  expect(Array.isArray(helperResult.matches)).toBe(true);
   const helperOnlyActivity = await getDiagramWorkerActivity(page);
   expect({
     constructions: helperOnlyActivity.constructions,

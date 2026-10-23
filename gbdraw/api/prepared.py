@@ -114,6 +114,9 @@ class _PreparedCacheTransaction:
     # that takes a record built (or ran uncacheable). Only then does the commit
     # check every used owner in full.
     record_touched: bool = False
+    # A helper's lookup (``transaction(read_only=True)``): entries are read,
+    # never published, pruned, evicted or reordered; misses build for the call.
+    read_only: bool = False
 
 
 # The first element of a resolved record's identity (``request_render``).
@@ -530,6 +533,14 @@ class PreparedBiologicalInputCache:
     that takes a record (O-2, D-07); otherwise a change is found by the next
     request that does. After a transaction that did not commit, the next one
     checks in full when it reads, too.
+
+    A Worker helper that plans the request the Worker staged (alignment
+    projection, Feature Edits TSV, stored protein frames) reads the cache in a
+    read-only transaction: a lookup hits under the same keys, a miss builds a
+    value that serves only that call, and nothing is published, pruned,
+    evicted or reordered, so the render-stage entries stay for the next
+    Generate. The owners it read are checked when it ends, as a commit checks
+    them.
     """
 
     def __init__(self) -> None:
@@ -584,8 +595,12 @@ class PreparedBiologicalInputCache:
         *,
         resource_paths: Mapping[str | Path, PreparedResourceIdentity],
         diagnostics: MutableMapping[str, Any] | None,
+        read_only: bool = False,
     ) -> Iterator[None]:
-        """Activate one transactional Web render against the active manifest."""
+        """Activate one transactional Web render against the active manifest.
+
+        ``read_only`` opens a helper's lookup instead (see the class docstring).
+        """
 
         if _ACTIVE_PREPARED_TRANSACTION.get() is not None:
             raise ValidationError("Prepared input cache transactions cannot be nested.")
@@ -599,6 +614,7 @@ class PreparedBiologicalInputCache:
             resource_paths=normalized_paths,
             active_identities=frozenset(resource_paths.values()),
             diagnostics=diagnostics,
+            read_only=read_only,
             font_environment=tuple(
                 sorted(
                     (font.family, font.weight, font.italic, font.face.content_id, font.face.index)
@@ -610,17 +626,23 @@ class PreparedBiologicalInputCache:
             metrics = diagnostics.setdefault("metrics", {})
             for name in _CACHE_METRICS:
                 metrics.setdefault(name, 0)
-        self._synchronize_resources(transaction)
+        if not read_only:
+            self._synchronize_resources(transaction)
         self._set_retained_metric(transaction)
         token = _ACTIVE_PREPARED_TRANSACTION.set(transaction)
         try:
             yield
-            self._commit(transaction)
+            if read_only:
+                self._verify_used_owners(transaction)
+            else:
+                self._commit(transaction)
         except BaseException:
             self._previous_transaction_failed = True
             raise
         else:
-            self._previous_transaction_failed = False
+            # A lookup checked only the owners it read.
+            if not read_only:
+                self._previous_transaction_failed = False
         finally:
             self._set_retained_metric(transaction)
             _ACTIVE_PREPARED_TRANSACTION.reset(token)
@@ -648,7 +670,8 @@ class PreparedBiologicalInputCache:
                 transaction,
                 walk_features=self._previous_transaction_failed,
             )
-        self._layers[layer].move_to_end(key)
+        if not transaction.read_only:
+            self._layers[layer].move_to_end(key)
         return entry
 
     def _verify_owner(
@@ -703,7 +726,7 @@ class PreparedBiologicalInputCache:
         transaction.accessed[layer][key] = value
         if _records_from_value(value) is not None:
             transaction.record_touched = True
-        if publish is not None and not publish(value):
+        if transaction.read_only or (publish is not None and not publish(value)):
             return value
         entry = _PreparedCacheEntry(
             value=value,
@@ -743,6 +766,9 @@ class PreparedBiologicalInputCache:
     ) -> None:
         """Stage one render-stage result; it is published if the render succeeds."""
 
+        # A helper's lookup publishes nothing, so it does not walk the key either.
+        if transaction.read_only:
+            return
         transaction.pending[_RENDER_STAGE_LAYER][key] = _PreparedCacheEntry(
             value=value,
             resource_identities=_key_resource_identities(key),
@@ -774,32 +800,45 @@ class PreparedBiologicalInputCache:
             return None
         return (self._epoch, entry.build_id)
 
-    def _commit(self, transaction: _PreparedCacheTransaction) -> None:
+    def _used_entries(
+        self,
+        layer: str,
+        transaction: _PreparedCacheTransaction,
+    ) -> Iterator[tuple[Hashable, _PreparedCacheEntry]]:
+        current = self._layers[layer]
+        pending = transaction.pending[layer]
+        for key in transaction.used[layer]:
+            entry = pending.get(key)
+            if entry is None:
+                entry = current.get(key)
+            if entry is not None:
+                yield key, entry
+
+    def _verify_used_owners(self, transaction: _PreparedCacheTransaction) -> None:
         # O-2: without a record built or read by a stage, the structure check
         # (made when each entry was read) is repeated, not the feature walk.
         walk_features = transaction.record_touched
+        for layer in self._layers:
+            # A render-stage entry has no owner to check (one constant stamp).
+            if layer == _RENDER_STAGE_LAYER:
+                continue
+            for key, entry in tuple(self._used_entries(layer, transaction)):
+                self._verify_owner(
+                    layer,
+                    key,
+                    entry,
+                    transaction,
+                    walk_features=walk_features,
+                )
+
+    def _commit(self, transaction: _PreparedCacheTransaction) -> None:
+        self._verify_used_owners(transaction)
         replacements: dict[str, tuple[OrderedDict[Hashable, _PreparedCacheEntry], int]] = {}
         for layer in self._layers:
             current = self._layers[layer]
-            pending = transaction.pending[layer]
-            # A render-stage entry has no owner to check (one constant stamp).
-            check_owner = layer != _RENDER_STAGE_LAYER
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
             kept = 0
-            for key in transaction.used[layer]:
-                entry = pending.get(key)
-                if entry is None:
-                    entry = current.get(key)
-                    if entry is None:
-                        continue
-                if check_owner:
-                    self._verify_owner(
-                        layer,
-                        key,
-                        entry,
-                        transaction,
-                        walk_features=walk_features,
-                    )
+            for key, entry in self._used_entries(layer, transaction):
                 retained[key] = entry
                 # A pending key is a new entry, not one kept from the layer.
                 if key in current:

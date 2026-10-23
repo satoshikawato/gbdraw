@@ -10,6 +10,7 @@ from gbdraw.web_support.feature_metadata import (
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
+    prepared_input_lookup,
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.exceptions import ValidationError
@@ -1739,22 +1740,6 @@ def register_web_fonts_json(fonts_json="[]"):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})
 
-def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
-    """Measure one legend caption at the DPI the renderer resolves from the request config."""
-    try:
-        from gbdraw.api.config import apply_config_overrides
-        from gbdraw.core.text import calculate_bbox_dimensions
-        cfg = apply_config_overrides(json.loads(str(config_json)), json.loads(str(overrides_json)))
-        width, _ = calculate_bbox_dimensions(
-            str(caption),
-            str(font_family or "Arial"),
-            float(font_size or 14),
-            int(cfg.canvas.dpi),
-        )
-        return json.dumps({"width": width})
-    except Exception as error:
-        return json.dumps({'error': serialize_web_error(error, operation='measureLegendText', stage="helper")})
-
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
@@ -1785,9 +1770,28 @@ def compute_label_fit_row_json(row_token, kind):
     return json.dumps({"row": _WEB_LABEL_FIT_SEARCHES.row(str(row_token), str(kind))}, ensure_ascii=False)
 
 
+def _with_prepared_input_lookup(helper, paths_argument):
+    """A helper that plans the request the Worker staged for it reads the inputs
+    the last Generate prepared (read-only: nothing is published, pruned or
+    evicted). The Worker passes the identities of the helper's resource
+    manifest after the helper's own arguments; paths_argument is the place
+    of its resource paths among them."""
+    def run(*arguments):
+        *helper_arguments, identities_json = arguments
+        with prepared_input_lookup(
+            _WEB_PREPARED_INPUT_CACHE,
+            resource_paths=json.loads(str(helper_arguments[paths_argument])),
+            resource_identities=json.loads(str(identities_json)),
+        ):
+            return helper(*helper_arguments)
+    return run
+
+
 _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
-    "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
+    "resolve_similarity_alignment_json": (
+        _with_prepared_input_lookup(resolve_similarity_alignment_json, 2), "resolveSimilarityAlignment"
+    ),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
@@ -1799,13 +1803,16 @@ _WEB_JSON_HELPERS = {
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
     "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
-    "stored_protein_results_to_search_frame_json": (stored_protein_results_to_search_frame_json, "convertStoredProteinResultFrames"),
+    "stored_protein_results_to_search_frame_json": (
+        _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
+    ),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
-    "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
-    "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
+    "read_feature_override_table_json": (
+        _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"
+    ),
     "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),

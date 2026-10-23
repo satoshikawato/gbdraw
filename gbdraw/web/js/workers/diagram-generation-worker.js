@@ -660,16 +660,18 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => {
       let resourcePaths = {};
+      let identities = {};
       if (payload.projection !== undefined) {
         resourcePaths = await prepareCanonicalResources(
           pyodide, `${workspace}/projection`, payload
         );
+        identities = buildPreparedResourceIdentityMap(payload.resourceManifest);
       } else if (payload.resourceManifest !== undefined || payload.stagedResources !== undefined) {
         throw new TypeError('Alignment resources require a projection context.');
       }
       return callJsonHelper(pyodide, 'resolve_similarity_alignment_json', [
         jsonArgument(payload.request, null), jsonArgument(payload.projection, null),
-        jsonArgument(resourcePaths, {}), workspace
+        jsonArgument(resourcePaths, {}), workspace, jsonArgument(identities, {})
       ]);
     }
   },
@@ -683,7 +685,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         requireHelperFile(paths, 'featureOverrides', operation),
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
-        `${workspace}/output`
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )
   },
@@ -935,7 +938,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       pyodide, 'stored_protein_results_to_search_frame_json', [
         jsonArgument({ version: payload.version, renderRequest: payload.canonicalRequest }, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
-        `${workspace}/output`
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )
   },
@@ -978,21 +982,6 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       [
         requireHelperFile(paths, 'gff', operation),
         requireHelperFile(paths, 'fasta', operation)
-      ]
-    )
-  },
-  [DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT]: {
-    keys: ['caption', 'fontFamily', 'fontSize', 'config', 'configOverrides'],
-    fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'measure_legend_text_json',
-      [
-        String(payload.caption || ''),
-        String(payload.fontFamily || 'Arial'),
-        payload.fontSize ?? 14,
-        jsonArgument(payload.config, null),
-        jsonArgument(payload.configOverrides, {})
       ]
     )
   }
