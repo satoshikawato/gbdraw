@@ -154,6 +154,52 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
 });
 
+// D-12 (OV-1606): AP027131 at the Web defaults draws its bold first definition line into the GC skew ring.
+// The figure is drawn; the notice offers the smaller definition font, and Apply writes Record Labels >
+// Default font size and Generates a figure without the notice.
+test('the definition text over a track: the notice offers a smaller definition font, and Apply draws without it', async ({ page }) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+    name: 'AP027131.gb', mimeType: 'text/plain',
+    buffer: readFileSync(join(process.cwd(), 'tests/test_inputs/AP027131.gb'))
+  });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
+  await generateAndWaitForResult(page);
+  const notice = page.getByTestId('label-fit-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('The definition text overlaps a track (1 line).');
+  await shot(notice, 'definition-notice.png');
+  await pageShots(page, 'definition-notice-page');
+
+  await notice.getByRole('button', { name: 'Choose a fix', exact: true }).click();
+  const dialog = page.locator('[data-label-fit-dialog]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[data-label-fit-records]')).toContainText('1 definition line at 18 pt (1 line overlaps a track)');
+  const row = dialog.locator('[data-label-fit-row="smaller_definition_font"]');
+  await expect(row).toHaveAttribute('data-label-fit-status', 'found', { timeout: 300000 });
+  expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font']);
+  await expect(row).toContainText('Default font size 16.5 pt');
+  await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
+
+  const undo = await undoCount(page);
+  // The only row with a fix is preselected.
+  await expect(row.locator('input[type="radio"]')).toBeChecked();
+  const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+  await dialog.getByRole('button', { name: 'Apply and Generate', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+  }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
+  await expect(notice).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(16.5);
+  // The row's setting is one step; the Generate that follows is its own.
+  expect(await undoCount(page)).toBe(undo + 2);
+  await pageShots(page, 'definition-fixed-page');
+});
+
 // A 6 kb linear record with the given CDS features ([location, product]).
 const genbank = (name, features) => {
   const sequence = 'acgt'.repeat(1500);

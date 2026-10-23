@@ -307,16 +307,17 @@ affected.
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a
   `GbdrawError`.
 - If leader lines cross, labels cover the definition text, Linear region
-  (annotation) labels overlap other labels or lines, or Circular region labels
-  are cut to fit their circle or lie on other tracks, but no labels overlap,
+  (annotation) labels overlap other labels or lines, Circular region labels
+  are cut to fit their circle or lie on other tracks, or the definition text
+  in the centre of a Circular record overlaps a track, but no labels overlap,
   the figure is drawn as before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
   `LabelLeadersCrossWarning`, a `UserWarning`.
 
 The message counts the overlapping label pairs, crossing leader pairs,
-labels over the definition text, region label overlaps, cut region labels, and
-region labels on other tracks of each record and side, and lists settings
-that make the labels fit. Each setting changes one thing and is checked by
+labels over the definition text, region label overlaps, cut region labels,
+region labels on other tracks, and definition lines over a track of each record
+and side, and lists settings that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
 | Row | Change | Offered for |
@@ -330,6 +331,7 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 | all labels outside | `--labels out` | records with inner labels, in either placement |
 | radial labels | `--label_placement radial` | inner and embedded labels |
 | separate overlapping features | `--resolve_overlaps` | labels drawn on features that are drawn on top of each other, Circular and Linear |
+| smaller definition font | `--definition_font_size`, in steps of 0.5 pt, down to 6 pt | the Circular definition text over a track, when the figure is drawn |
 
 Each row gives the mildest value that fits, or says that none fits within its
 limit. When nothing was drawn and a row has no value that fits, it gives the
@@ -350,6 +352,20 @@ more ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
 apart. Linear region labels and Circular region labels that are cut or lie
 on other tracks get no row.
+
+The definition text in the centre of a Circular record (not a plot title)
+overlaps a track when the box of one of its lines, as drawn (bold first line
+included), reaches more than 0.5 px into the band a track takes, measured to
+the box's corners; the bands are those of region labels on other tracks,
+below. Each such line counts once (`1 line overlaps a track`), and the Web app
+shows "The definition text overlaps a track (N lines)." with **Choose a fix**.
+The smaller definition font is the first size, going down from the current
+one, at which no definition line overlaps a track, checked by drawing the whole
+figure again; the inner tracks may then widen, because they make room for the
+definition text. Each row is checked for what it fixes: the label rows for the
+labels and the definition row for the definition text, and neither may stop the
+figure. A font you set stays as it is: the row only suggests a value. The rows
+do not include narrower GC content or GC skew tracks or a wrapped species name.
 
 A Circular region label with `label_orientation` `auto` or `arc` is drawn
 along its circle and can take just under a whole turn, less 1 em at each

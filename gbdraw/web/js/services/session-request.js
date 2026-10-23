@@ -830,6 +830,13 @@ const DRAFT_FIELD_OF_FLAT_CONFIG_KEY = Object.freeze({
   inner_label_x_radius_offset: 'inner_label_x_offset',
   inner_label_y_radius_offset: 'inner_label_y_offset'
 });
+// The flat config key of the definition font that `drawing.adv.def_font_size`
+// holds in each mode (the request projection and a label fit row read it).
+/** @type {Readonly<Record<ModeProfileName, string>>} */
+const DEFINITION_FONT_FLAT_CONFIG_KEY = Object.freeze({
+  circular: 'circular_definition_font_size',
+  linear: 'linear_definition_font_size'
+});
 
 /**
  * The draft fields that the request mapping projects to `values` (config
@@ -859,7 +866,7 @@ export const draftFieldsForConfigValues = (values, mode, adv) => {
         ? circularLabelsMode(value) : value;
       continue;
     }
-    const field = DRAFT_FIELD_OF_FLAT_CONFIG_KEY[key] || key;
+    const field = key === DEFINITION_FONT_FLAT_CONFIG_KEY[mode] ? 'def_font_size' : DRAFT_FIELD_OF_FLAT_CONFIG_KEY[key] || key;
     if (!Object.hasOwn(adv, field) || !['number', 'string', 'boolean'].includes(typeof value)) throw unknown();
     advFields[field] = value;
   }
@@ -5598,9 +5605,7 @@ export const projectCanonicalSessionRequest = ({
       ? (overrides.linear_label_spacing ?? null)
       : null,
     plot_title_font_size: options.plotTitleFontSize ?? overrides.plot_title_font_size ?? null,
-    def_font_size: renderRequest.mode === 'circular'
-      ? (overrides.circular_definition_font_size ?? null)
-      : (overrides.linear_definition_font_size ?? null),
+    def_font_size: overrides[DEFINITION_FONT_FLAT_CONFIG_KEY[renderRequest.mode === 'circular' ? 'circular' : 'linear']] ?? null,
     circular_definition_interval: renderRequest.mode === 'circular' ? (overrides.circular_definition_interval ?? null) : null,
     label_font_size: overrides.label_font_size ?? null,
     label_rotation: renderRequest.mode === 'linear' ? (overrides.label_rotation ?? null) : null,

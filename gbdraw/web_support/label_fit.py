@@ -23,6 +23,7 @@ from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
+    DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
     RADIAL_PLACEMENT,
@@ -41,7 +42,7 @@ from gbdraw.labels.fit import (
     LabelKind,
     label_fit_notice,
     label_fit_record_counts,
-    label_kind_words,
+    label_kind_title,
     row_note,
 )
 
@@ -62,6 +63,8 @@ _SETTING_NAMES: Mapping[str, tuple[str, str]] = {
     SPACING_PATH: ("Circular Label Spacing", "px"),
     SCOPE_PATH: ("Label Mode", ""),
     PLACEMENT_PATH: ("Circular Label Placement", ""),
+    # Record Labels > Default font size: the Circular centre definition's font (D-12).
+    DEFINITION_FONT_PATH: ("Default font size", "pt"),
 }
 # A control whose name differs by mode: the Circular and the Linear checkbox
 # of `canvas.resolve_overlaps`.
@@ -193,7 +196,7 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
     return {
         "recordId": record.record_id,
         "labelKind": record.label_kind,
-        "labelKindTitle": f"{label_kind_words(record)} label{'' if record.label_count == 1 else 's'}",
+        "labelKindTitle": label_kind_title(record),
         "labelCount": record.label_count,
         "fontSize": float(record.font_size),
         "overlapPairs": record.fit.overlap_pairs,

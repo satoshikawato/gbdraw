@@ -2765,9 +2765,10 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
 };
 
 // The draft fields a label fit row may write: the fields of the config paths
-// `gbdraw/labels/fit.py` names for the rows (the label settings and the
-// feature overlap switch of "separate overlapping features", LP-D52), never a
-// feature-slot input (R10).
+// `gbdraw/labels/fit.py` names for the rows (the label settings, the feature
+// overlap switch of "separate overlapping features", LP-D52, and the Circular
+// definition font of "smaller definition font", D-12), never a feature-slot
+// input (R10).
 /** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string | boolean) => void>>} */
 const LABEL_FIT_ADV_WRITERS = Object.freeze({
   outer_label_x_offset: (adv, value) => { adv.outer_label_x_offset = value; },
@@ -2775,7 +2776,8 @@ const LABEL_FIT_ADV_WRITERS = Object.freeze({
   label_font_size: (adv, value) => { adv.label_font_size = value; },
   circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
   circular_label_placement: (adv, value) => { adv.circular_label_placement = value; },
-  resolve_overlaps: (adv, value) => { adv.resolve_overlaps = value; }
+  resolve_overlaps: (adv, value) => { adv.resolve_overlaps = value; },
+  def_font_size: (adv, value) => { adv.def_font_size = value; }
 });
 /** @type {Readonly<Record<string, (form: Record<string, unknown>, value: string) => void>>} */
 const LABEL_FIT_FORM_WRITERS = Object.freeze({

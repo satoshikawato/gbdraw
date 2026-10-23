@@ -747,26 +747,60 @@ def _region_labels_on_other_tracks(
     tracks around it whatever the radii, so they are not counted.
     """
 
-    def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
-        return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
+    tracks = _track_bands(radial_layout)
+    count = 0
+    for slot in radial_layout.slots:
+        own = slot.draw_band_px
+        if own is None or (slot.side == "overlay" and not slot.span_keeps_label_room):
+            continue
+        others = [
+            band for track, band in tracks if track is not slot and not _reaches_band(own.inner_px, own.outer_px, band)
+        ]
+        count += sum(
+            1 for label in labels.get(slot.id, ()) if any(_reaches_band(*label.ink_radii, band) for band in others)
+        )
+    return count
 
-    tracks = [
+
+def _track_bands(radial_layout: CircularRadialLayout) -> list[tuple[CircularResolvedSlot, RadialBand]]:
+    """The band each drawn track takes (``own_reserved_band_px``: its drawing with its tick or axis labels and its
+    own labels' room); annotation overlays draw over other tracks and take none."""
+
+    return [
         (slot, band)
         for slot in radial_layout.slots
         if slot.draw_band_px is not None
         and not (slot.renderer == "annotations" and slot.side == "overlay")
         and (band := slot.own_reserved_band_px) is not None
     ]
-    count = 0
-    for slot in radial_layout.slots:
-        own = slot.draw_band_px
-        if own is None or (slot.side == "overlay" and not slot.span_keeps_label_room):
-            continue
-        others = [band for track, band in tracks if track is not slot and not overlaps(own.inner_px, own.outer_px, band)]
-        count += sum(
-            1 for label in labels.get(slot.id, ()) if any(overlaps(*label.ink_radii, band) for band in others)
-        )
-    return count
+
+
+def _reaches_band(inner: float, outer: float, band: RadialBand) -> bool:
+    """Whether ink between radii ``inner`` and ``outer`` reaches more than the threshold into ``band``."""
+
+    return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
+
+
+def _definition_lines_on_tracks(radial_layout: CircularRadialLayout, definition_text: Sequence[Aabb]) -> int:
+    """How many lines of the centre definition text reach into the band a track takes (D-12).
+
+    ``definition_text`` holds the painted line boxes centred on the record
+    (``_centre_definition_text``); a box reaches from its nearest point to its
+    farthest corner, so a line counts when it meets the ring of a track by
+    more than the threshold that region labels use (LP-D86). The figure is
+    drawn as before and warns.
+    """
+
+    bands = [band for _, band in _track_bands(radial_layout)]
+
+    def radii(box: Aabb) -> tuple[float, float]:
+        nearest_x = max(box.min_x, min(0.0, box.max_x))
+        nearest_y = max(box.min_y, min(0.0, box.max_y))
+        farthest_x = max(abs(box.min_x), abs(box.max_x))
+        farthest_y = max(abs(box.min_y), abs(box.max_y))
+        return math.hypot(nearest_x, nearest_y), math.hypot(farthest_x, farthest_y)
+
+    return sum(1 for box in definition_text if any(_reaches_band(*radii(box), band) for band in bands))
 
 
 def _feature_label_obstacles(
@@ -1995,11 +2029,14 @@ def _record_label_layout(
     radial_refused: bool,
     region_labels: Sequence[CircularAnnotationLabel] = (),
     region_track_overlaps: int = 0,
+    definition_track_overlaps: int = 0,
 ) -> CircularLabelLayout | None:
     """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
 
     Region labels cut to fit their circle (LP-D87) or lying on another track
-    (LP-D86) are a ``circular_region`` kind that only warns.
+    (LP-D86) are a ``circular_region`` kind that only warns, and so are the
+    lines of the centre definition text that reach into a track (D-12,
+    ``circular_definition``).
     """
 
     total_length = len(gb_record.seq)
@@ -2015,7 +2052,7 @@ def _record_label_layout(
         label_counts[kind] = label_counts.get(kind, 0) + 1
     placed = bool(label_counts) and place_labels is not None
     cuts = sum(label.cut for label in region_labels)
-    if not placed and not cuts and not region_track_overlaps:
+    if not placed and not cuts and not region_track_overlaps and not definition_track_overlaps:
         return None
     cfg = profile.config
     horizontal = profile.label_placement == "horizontal"
@@ -2040,6 +2077,9 @@ def _record_label_layout(
     if cuts or region_track_overlaps:
         counts["circular_region"] = len(region_labels)
         kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts, region_track_overlaps=region_track_overlaps)
+    if definition_track_overlaps:
+        counts["circular_definition"] = definition_track_overlaps
+        kind_fits["circular_definition"] = LabelFit(0, 0, definition_track_overlaps=definition_track_overlaps)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
     return CircularLabelLayout(
@@ -2055,6 +2095,7 @@ def _record_label_layout(
         features_separated=bool(profile.resolve_overlaps),
         probe=probe,
         region_font_size=max((label.font_size for label in region_labels), default=0.0),
+        definition_font_size=float(cfg.objects.definition.circular.font_size) if definition_track_overlaps else 0.0,
     )
 
 
@@ -2624,7 +2665,8 @@ def add_record_on_circular_canvas(
     # External labels: separate group (label arena). Embedded labels remain in the record group.
     # Add labels BEFORE features so leader lines appear behind features.
     precalculated_labels: list[CircularLabel] | None = None
-    # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title).
+    # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title); D-12: the
+    # text over a track.
     definition_text: tuple[Aabb, ...] = (
         _centre_definition_text(
             DefinitionGroup(
@@ -2640,9 +2682,7 @@ def add_record_on_circular_canvas(
                 record_presentation=record_presentation,
             )
         )
-        if show_external_labels
-        and str(definition_position) == "center"
-        and str(definition_profile) != "shared_common"
+        if str(definition_position) == "center" and str(definition_profile) != "shared_common"
         else ()
     )
     radial_refused = False
@@ -2929,6 +2969,7 @@ def add_record_on_circular_canvas(
         radial_refused=radial_refused,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
+        definition_track_overlaps=_definition_lines_on_tracks(radial_layout, definition_text),
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
