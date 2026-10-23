@@ -171,9 +171,7 @@ New in this release:
   several records on one Multi-Record Canvas, can move those rings and run the
   tick labels together. Give the rows explicit radii (**Radius**) in the track
   table: a pinned row keeps its radius, and one that would overlap the
-  definition is reported as an error. **Keep Full Definition with Plot Title**
-  affects only a titled Multi-Record Canvas, so it does not cover the other
-  edits.
+  definition is reported as an error.
 - A Session saved by 0.14.0 with a crop and ring LOSAT still holds unconverted
   rows. Its ring draws as in 0.14.0 on a forward crop, and at another
   unconverted place on a reverse-complemented crop, until the next **Generate
