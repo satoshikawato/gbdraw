@@ -61,9 +61,13 @@ request, runs the whole render path, and writes a complete SVG document; it
 writes it as ordered pieces: the root start tag, each top-level element, and
 the end tag. A placed group is its start tag, its children text, and that
 text's revision (its sha256). Joined in order, the pieces are the document. The
-Generate rebuilds every part whose inputs changed. Publish cache fills only
-after the full render succeeds, and release them with the Worker; never reuse
-a final reply.
+Generate rebuilds every part whose inputs changed. A Generate publishes the
+decoded resources and parsed sources it built (they depend only on the
+resource bytes and their key) when it ends, also when its render fails, unless
+the request changed them; it publishes resolved records and render-stage
+results only after the full render succeeds. A helper's read-only lookup
+publishes nothing. A build that failed is never kept. Release every cache fill
+with the Worker; never reuse a final reply.
 
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page

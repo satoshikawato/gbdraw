@@ -227,7 +227,7 @@ const {
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
 const {
-  readComparisonSequence, readComparisonSequenceDigest
+  readComparisonSequence, readComparisonSequenceDigest, readOncePerFile
 } = await import('../../gbdraw/web/js/services/record-discovery.js');
 
 const artifactSnapshots = createHistorySnapshotService({
@@ -461,15 +461,20 @@ const sha256Text = async (text) => {
   return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 };
 
-// Runs `generate` and returns its LOSAT timing line and how many SHA-256 digests of FASTA text it took.
+// Runs `generate` and returns its LOSAT timing line and how many SHA-256 digests of FASTA text it took, in
+// all and by text.
 const watchLosatPreparation = async (generate) => {
-  const watched = { fastaDigests: 0, timing: '' };
+  const watched = { fastaDigests: 0, digestsByText: new Map(), timing: '' };
   const { subtle } = globalThis.crypto;
   const ownDigest = Object.hasOwn(subtle, 'digest');
   const digest = subtle.digest;
   const info = console.info;
   subtle.digest = function digestWatched(algorithm, data) {
-    if (new TextDecoder().decode(data).startsWith('>')) watched.fastaDigests += 1;
+    const text = new TextDecoder().decode(data);
+    if (text.startsWith('>')) {
+      watched.fastaDigests += 1;
+      watched.digestsByText.set(text, (watched.digestsByText.get(text) || 0) + 1);
+    }
     return digest.call(this, algorithm, data);
   };
   console.info = (...args) => {
@@ -2296,8 +2301,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
     assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
 
-    // OV-1556, OV-1565: one GenBank file of 13 records drawn as 13 cards. Generate parses the file once and
-    // slices each card's record from it, and the next Generate parses nothing and digests no FASTA again.
+    // OV-1556, OV-1565: one GenBank file of 13 records drawn as 13 cards, and a 14th card that draws the first
+    // record again. Generate parses the file once and slices each card's record from it, and the next Generate
+    // parses nothing and digests no FASTA again.
     const recordIds = Array.from({ length: 13 }, (_, index) => `REC${index + 1}`);
     const bases = ['a', 'c', 'g', 't'];
     const thirteenFile = new AuditFile([recordIds.map((id, index) => [
@@ -2306,7 +2312,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       `        1 ${bases[index % 4].repeat(4)}${bases[(index + 1) % 4].repeat(4)}`,
       '//'
     ].join('\n')).join('\n') + '\n'], 'thirteen.gb');
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...recordIds.map((id, index) => ({
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
       uid: `card-${index + 1}`, gb: thirteenFile, gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
@@ -2342,9 +2348,22 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       )));
     }
     assert.equal(losatCalls, 3, 'the first Generate searched and the second reused its raw results');
-    assert.match(thirteenWatches[0].timing, /FASTA cache hits=0, .*JS FASTA=1, Worker FASTA=0/);
-    assert.match(thirteenWatches[1].timing, /FASTA cache hits=13, .*JS FASTA=0, Worker FASTA=0/);
+    assert.match(thirteenWatches[0].timing, /FASTA cache hits=1, .*JS FASTA=1, Worker FASTA=0/);
+    assert.match(thirteenWatches[1].timing, /FASTA cache hits=14, .*JS FASTA=0, Worker FASTA=0/);
     assert.equal(thirteenWatches[1].fastaDigests, 0);
+    // OV-1594: the held LOSAT FASTA of a record is frozen, and its SHA-256 is its own read beside it, so the
+    // Generates read the entries without writing to them. A record's FASTA is digested once for its entry,
+    // whatever its card count (the 14th card reads REC1's digest), and once as the query side of its search
+    // (`prepareLosatSourceBatches`; the 14th card is a query of none).
+    const heldLosatFasta = (id) => readOncePerFile([thirteenFile], `losat-fasta:${JSON.stringify({
+      fmt: 'genbank', regionSpec: null, recordSelector: id, reverseFlag: '0'
+    })}`, () => Promise.reject(new Error(`no held LOSAT FASTA for ${id}`)));
+    for (const id of recordIds) {
+      const entry = await heldLosatFasta(id);
+      assert.ok(Object.isFrozen(entry), id);
+      assert.deepEqual(Object.keys(entry).sort(), ['canonicalLength', 'fasta', 'recordId'], id);
+      assert.equal(thirteenWatches[0].digestsByText.get(entry.fasta), 2, id);
+    }
 
     // OV-1555, OV-1590: after a Generate, the blastp extraction of two of its records sends no
     // GenBank bytes. It stages the record source under the resource id and token the Worker
@@ -2391,6 +2410,68 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerResponses.push(response(afterProteins, validCatalog(afterProteins.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual(workerMessages.findLast(({ type }) => type === 'run').payload.stagedResources, []);
+
+    // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
+    // skips the first record), so the record list leaves the file to the Python reader, and the LOSAT FASTA
+    // does too. The browser's text decoder drops the mark and would search a record the drawing does not read.
+    const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
+    ].join('\n')).join('\n') + '\n'], 'bom.gb');
+    state.linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bomFile, region_record_id: `BOM${index + 1}` }));
+    ['BOM1', 'BOM2'].forEach((id) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${id}\nACGTACGT\n`, record_id: id, record_length: 8
+    } }));
+    const helpersBeforeBom = workerMessages.length;
+    const bomResult = result('bom.svg', 'bom');
+    workerResponses.push(response(bomResult, validCatalog(bomResult.name)));
+    const bomWatch = await watchLosatPreparation(async () => assert.deepEqual(
+      await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value)
+    ));
+    assert.match(bomWatch.timing, /JS FASTA=0, Worker FASTA=2/);
+    assert.deepEqual(workerMessages.slice(helpersBeforeBom)
+      .filter(({ type }) => type === 'helper').map(({ operation, payload }) => [operation, payload.recordSelector]),
+    [['extractFirstFasta', 'BOM1'], ['extractFirstFasta', 'BOM2']]);
+
+    // The GFF3 and FASTA pair of a drawn record: after a Generate, the blastp extraction names the committed
+    // GFF3 resource as the record's GFF3 file and the FASTA resource as its FASTA file, in that order.
+    const gffFile = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'pair.gff');
+    const pairedFasta = new AuditFile(['>G1\nATGAAATAA\n'], 'pair.fasta');
+    state.lInputType.value = 'gff';
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: gffFile, fasta: pairedFasta, region_record_id: 'G1' }));
+    const pairResult = result('gff-pair.svg', 'gff-pair');
+    workerResponses.push(response(pairResult, validCatalog(pairResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const pairRun = workerMessages.findLast(({ type }) => type === 'run').payload;
+    const pairTokens = Object.fromEntries(pairRun.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]));
+    state.activeDrawing().losatProgram.value = 'blastp';
+    const helpersBeforePair = workerMessages.length;
+    [0, 1].forEach((index) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>G1_p${index}\nMK\n`, record_id: 'G1', record_length: 9, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-${index}`, record_analysis_id: `G1-${index}`, record_instance_key: `card-${index + 1}`,
+      runtime_binding_hash: `rt-${index}`, display_binding_hash: `dp-${index}`, identity_manifest: null
+    } }));
+    assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram: 'blastp', blastpMode: 'pairwise'
+    }))).status, 'error');
+    const pairExtractions = workerMessages.slice(helpersBeforePair)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta');
+    assert.equal(pairExtractions.length, 2);
+    for (const { payload } of pairExtractions) {
+      assert.equal(payload.format, 'gff');
+      assert.deepEqual((payload.files || []).map(({ role }) => role).filter((role) => role !== 'visibility'), []);
+      assert.deepEqual(payload.recordSource,
+        { kind: 'gffFasta', gffResourceId: 'record-1-gff3', fastaResourceId: 'record-1-fasta' });
+      assert.deepEqual(payload.resourceManifest.map(({ resourceId, kind, cacheToken }) => [resourceId, kind, cacheToken]), [
+        ['record-1-gff3', 'gff3', pairTokens['record-1-gff3']],
+        ['record-1-fasta', 'fasta', pairTokens['record-1-fasta']]
+      ]);
+      assert.deepEqual(payload.stagedResources, []);
+    }
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.lInputType.value = 'gb';
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];

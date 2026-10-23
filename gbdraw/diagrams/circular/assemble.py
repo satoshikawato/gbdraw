@@ -2922,18 +2922,20 @@ def add_record_on_circular_canvas(
     )
     # A corner legend must also clear the record and its tracks, even when
     # every label has moved outside and the interior has no label obstacles.
-    if legend_placement.is_overlay:
-        radial_bounds = _collect_circular_primary_bounds(
-            radial_layout=radial_layout,
-            canvas_config=canvas_config,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
-            depth_config=depth_config,
-            overlay_obstacles=(),
-            definition_target=definition_target,
-        )
-        overlay_obstacles = (*overlay_obstacles, radial_bounds)
+    # The record is an obstacle whatever this record's own legend position:
+    # a grid places its legend over records drawn without one, and the Web
+    # moves a drawn legend to a corner with these obstacles.
+    radial_bounds = _collect_circular_primary_bounds(
+        radial_layout=radial_layout,
+        canvas_config=canvas_config,
+        feature_config=feature_config,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        depth_config=depth_config,
+        overlay_obstacles=(),
+        definition_target=definition_target,
+    )
+    overlay_obstacles = (*overlay_obstacles, radial_bounds)
     primary_targets = tuple(
         element
         for element in getattr(canvas, "elements", [])[primary_target_start:]

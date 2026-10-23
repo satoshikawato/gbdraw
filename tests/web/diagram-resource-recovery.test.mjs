@@ -14,7 +14,7 @@ const workerSource = (await readFile(workerUrl, 'utf8')).replace(
 );
 let workerNumber = 0;
 const loadStagingOwner = () => import(`data:text/javascript;base64,${Buffer.from(
-  `${workerSource}\nexport { prepareCanonicalResources };\n// instance ${++workerNumber}`
+  `${workerSource}\nexport { prepareCanonicalResources, HELPER_OPERATION_SPECS };\n// instance ${++workerNumber}`
 ).toString('base64')}`);
 
 class MemoryFS {
@@ -63,10 +63,20 @@ class StagingWorker {
       this.operation = this.run(structuredClone(message));
     }
   }
-  // A helper stages as the Worker's helpers do: it reads the cache and prunes nothing.
-  async stageForHelper({ requestId, payload }) {
+  // A helper stages as the Worker's helpers do: it reads the cache and prunes nothing. The blastp
+  // extraction runs the Worker's own operation, whose Python call answers with the text of each file it names.
+  async stageForHelper({ requestId, operation, payload }) {
     const workspace = `/helper-${requestId}`;
-    const { prepareCanonicalResources } = await this.owner;
+    const { prepareCanonicalResources, HELPER_OPERATION_SPECS } = await this.owner;
+    if (operation === 'extractCdsProteinFasta') {
+      const text = (path) => (path ? Buffer.from(this.fs.read(path)).toString() : null);
+      const callWebJsonHelper = (_name, source, format, fasta) => JSON.stringify({ source: text(source), format, fasta: text(fasta) });
+      const pyodide = { FS: this.fs, globals: { get: () => callWebJsonHelper } };
+      const result = await HELPER_OPERATION_SPECS[operation].run(pyodide, payload, new Map(), operation, workspace);
+      this.fs.cleanWorkspace(workspace);
+      this.emit({ type: 'helper', requestId, ok: true, result });
+      return;
+    }
     const paths = await prepareCanonicalResources({ FS: this.fs }, workspace, payload);
     this.fs.cleanWorkspace(workspace);
     this.emit({ type: 'helper', requestId, ok: true, result: { staged: Object.keys(paths) } });
@@ -291,6 +301,30 @@ test('a helper that stages part of the drawing leaves both staging caches to the
   helperLeavesCaches('readFeatureOverrideTable', { canonicalRequest: payload({ first: 'A' }).request })
 ));
 
-test('the blastp extraction stages one record source by its resource id (OV-1555)', () => (
-  helperLeavesCaches('extractCdsProteinFasta', { recordSource: { kind: 'genbank', resourceId: 'first' }, format: 'genbank' })
-));
+test('the blastp extraction stages one record source by its resource id (OV-1555)', async () => {
+  await run({ first: 'A', second: 'B' });
+  const worker = current();
+  const { resources } = payload({ first: 'A' });
+  const reply = await runDiagramHelperOperation('extractCdsProteinFasta', {
+    recordSource: { kind: 'genbank', resourceId: 'first' }, format: 'genbank', resources
+  });
+  assert.deepEqual(reply.result, { source: 'A', format: 'genbank', fasta: null });
+  assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
+  assert.deepEqual(content(await run({ first: 'A', second: 'B' })), { first: 'A', second: 'B' });
+  assert.deepEqual(transferred(worker), []);
+});
+
+// A GFF3 record source names two resources: the Worker passes the GFF3 file as the
+// record source and the FASTA file as its sequences, whichever order they were staged in.
+test('the blastp extraction reads a staged GFF3 and FASTA pair in their roles (OV-1555)', async () => {
+  const resource = (kind, name, text) => ({
+    name, kind, size: Buffer.byteLength(text), encoding: 'base64', data: Buffer.from(text).toString('base64')
+  });
+  const resources = { 'pair-fasta': resource('fasta', 'pair.fasta', '>G1\nATG\n'), 'pair-gff3': resource('gff3', 'pair.gff', '##gff-version 3\n') };
+  const recordSource = { kind: 'gffFasta', gffResourceId: 'pair-gff3', fastaResourceId: 'pair-fasta' };
+  await runDiagramGeneration({ request: { records: [{ source: recordSource }] }, resources });
+  const worker = current();
+  const reply = await runDiagramHelperOperation('extractCdsProteinFasta', { recordSource, format: 'gff', resources });
+  assert.deepEqual(reply.result, { source: '##gff-version 3\n', format: 'gff', fasta: '>G1\nATG\n' });
+  assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
+});

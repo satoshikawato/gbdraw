@@ -14,23 +14,23 @@
   "files": {
     "gallery/examples.json": {
       "bytes": 25126,
-      "sha256": "03d7796543a50019ed2e7743ba642200659b893f80b5cb73e417beed50929d7d"
+      "sha256": "a8dfb2d59929611be83ee22ffb8adc832563633fad66d00e11b30c7554c0c4e8"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1342896,
       "sha256": "4e5cc7f455bf4691532e0820899db942a8118ac5d25285beb7720b604ca72f6f"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
-      "bytes": 494817,
-      "sha256": "393dee14a54b3213829f1dec0c64404d0585ffd68fd642ebe156e44e840c7280"
+      "bytes": 494934,
+      "sha256": "61d2a8a77ba9d0e8fbddbd3c9d8fdef8064d1bac7735e2101846476be92a55b0"
     },
     "gallery/examples/HmmtDNA_basic_circular.svg": {
-      "bytes": 446928,
-      "sha256": "53e8b5f0395707af6190cb23f6f037457c06b53e2abe6e7099c10c0f8ba4c06c"
+      "bytes": 447057,
+      "sha256": "2c4e1420979937b9f237cdb7f3dbe2419754b344bd960747e0a0728d7f22fd45"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 28796737,
-      "sha256": "08290e29398817bba723beb0e1893f5a9e62c55d63ef2cafd316e9c31bb3dd5f"
+      "bytes": 28797527,
+      "sha256": "38cfa07a72d01f945313d6dd52936608d14b1865ec9d1670913606df3cd43908"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 16674676,
@@ -61,16 +61,16 @@
       "sha256": "fdcabff11870c294837e74b5de7d7604be9d40d00cafbc255042c89065d4ffed"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 325878,
-      "sha256": "dd536964e803b92e27a4852f2a44d4070c8347274d017476cbde32502452a738"
+      "bytes": 325995,
+      "sha256": "b3c1dfff6dafe24e64d53cd0cdfce962939f749f2b03b87b3e093ca6adda7f5d"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 272961,
-      "sha256": "c790ddb8469acf84838b080d6cddf96113986ae9c41ecb670cf75c1013f84e35"
+      "bytes": 273090,
+      "sha256": "b80805dc23a3ca83e9d05bc2792b7150bcdfee680a109839139dde34bca14fdd"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11897205,
-      "sha256": "f2d214fe8e585f761adf509587d8a053838a09435bb33b7986aec84d8538c71b"
+      "bytes": 11897390,
+      "sha256": "4f370df1bd3125c7d5fc9f343270cc11166501c8131a786ad24232f913a34ef5"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11692103,
@@ -101,16 +101,16 @@
       "sha256": "e14428e90a2a55d9b7ceed60f0addd9bd5b99a165c47543986edc4571305e475"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
-      "bytes": 135052,
-      "sha256": "3733a58b405ed59e9016dd4d66791bc0eb67eda6e38be3b2a8f5065c4a771686"
+      "bytes": 135169,
+      "sha256": "252fa033bb7c54f9bcf4c613edabd95bc9308c5f5452c6cf119b12f1a73a18fe"
     },
     "gallery/sources/HmmtDNA_basic_circular.svg": {
-      "bytes": 87147,
-      "sha256": "96efbd45f967ee658d8899afa88ee5af93532b225d68f681fd6d355ef21b35cb"
+      "bytes": 87276,
+      "sha256": "e0503332f9a48545417cc75da80e57fd50af7726aa1fb46b6985995a0eb81b90"
     },
     "gallery/sources/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 4154677,
-      "sha256": "6f80037047341b4f188d77ea8a63eb89b0ac8cb93ec78a2977f2027ce2ba924d"
+      "bytes": 4155467,
+      "sha256": "658acf99364c0d4cf877b96c15c1f36b0adbb40b122e5d6893e3ae8826fe51fd"
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 6323978,
