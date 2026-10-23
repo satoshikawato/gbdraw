@@ -21,7 +21,7 @@ from ....layout.scalar_axis import (
     scalar_axis_tick_values,
     scaled_scalar_fraction,
 )
-from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, stroke_pad_px
+from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, paint_shows, stroke_pad_px
 from ....svg.circular_tracks import (
     circular_gc_content_line,
     generate_circular_gc_content_path_desc,
@@ -248,9 +248,9 @@ class GcContentDrawer:
                                        pad_px=pad)
         ]
         outer_radius = baseline_radius + float(track_width)
-        if stroke_pad_px(self.percent_background_color, track_width) > 0 and self.percent_background_opacity > 0:
+        if float(track_width) > 0 and paint_shows(self.percent_background_color, self.percent_background_opacity):
             inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius)))
-        if self.percent_border_width > 0:
+        if self.percent_border_width > 0 and paint_shows(self.percent_border_color):
             half = 0.5 * self.percent_border_width
             inks.extend(CircularInkRing(RadialBand(edge - half, edge + half)) for edge in (baseline_radius, outer_radius))
         if self.show_axis:

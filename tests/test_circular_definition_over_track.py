@@ -548,3 +548,68 @@ def test_the_row_keeps_a_set_interval_equal_to_the_one_the_font_derives() -> Non
     with warnings.catch_warnings():
         warnings.simplefilter("error", LabelLeadersCrossWarning)
         build_circular_diagram(record, options=CircularDiagramOptions(config_overrides={**interval, **row.values}))
+
+
+def _base_config(overrides: Mapping[str, object] | None = None):
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.modify import modify_config_dict
+    from gbdraw.config.toml import load_config_toml
+
+    return GbdrawConfig.from_dict(modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), overrides or {}))
+
+
+@pytest.mark.parametrize(
+    ("background", "lines"),
+    [({}, 1), ({"background_opacity": 0}, 0), ({"background_color": "none"}, 0)],
+    ids=["shown", "transparent", "no-color"],
+)
+def test_a_conservation_background_counts_only_when_it_shows(background: Mapping[str, object], lines: int) -> None:
+    """Review of 5d358bd2: a background with no color or no opacity is not paint; the ring then counts its hits."""
+
+    import types
+
+    import pandas as pd
+
+    from gbdraw.render.groups.circular.conservation import conservation_ring_ink
+
+    cfg = _base_config({f"objects.conservation.{key}": value for key, value in background.items()})
+    track = types.SimpleNamespace(track_color=None, hits=pd.DataFrame())
+    inks = conservation_ring_ink(
+        track, total_length=1000, inner_radius_px=90.0, outer_radius_px=110.0, min_identity=70.0, cfg=cfg
+    )
+    assert _lines_at(inks, 100.0, 0.5) == lines
+
+
+@pytest.mark.parametrize(
+    ("style", "radius", "lines"),
+    [
+        ({"percent_background_color": "#737373"}, 100.0, 1),
+        ({"percent_background_opacity": 0.0}, 100.0, 0),
+        ({"percent_border_color": "#4b5563"}, 110.0, 1),
+        ({"percent_border_color": "none"}, 110.0, 0),
+    ],
+    ids=["background-shown", "background-transparent", "border-shown", "border-no-color"],
+)
+def test_a_percent_background_and_border_count_only_when_they_show(
+    style: Mapping[str, object], radius: float, lines: int
+) -> None:
+    """Review of 5d358bd2: the percent background and border circles are paint only with a color and opacity."""
+
+    import types
+
+    import pandas as pd
+
+    from gbdraw.render.drawers.circular.gc_content import GcContentDrawer
+
+    settings = {
+        "high_fill_color": "#000", "low_fill_color": "#000", "fill_color": "#000", "stroke_color": "none",
+        "stroke_width": 0.0, "fill_opacity": 1.0, "mode": "percent", "show_axis": False,
+        "percent_background_color": "none", "percent_background_opacity": 1.0,
+        "percent_border_color": "#4b5563", "percent_border_width": 2.0, **style,
+    }
+    if "percent_border_color" in style:
+        settings["percent_background_color"] = "none"
+    drawer = GcContentDrawer(types.SimpleNamespace(**settings))
+    gc_df = pd.DataFrame({"GC content": [0.0] * 4}, index=[0, 250, 500, 750])
+    inks = drawer.ink(100.0, gc_df, 1000, 20.0, 1.0, "GC", font_family="Liberation Sans")
+    assert _lines_at(inks, radius, 0.5) == lines

@@ -7,7 +7,7 @@ from gbdraw.svg.elements import Group, Path
 from ....analysis.conservation import ConservationTrack, conservation_track_gradient_colors
 from ....config.models import GbdrawConfig
 from ....layout.circular import RadialBand
-from ....layout.circular_ink import CircularInk, CircularInkRing
+from ....layout.circular_ink import CircularInk, CircularInkRing, paint_shows
 from ....render.drawers.circular.conservation import (
     ConservationDrawer,
     _safe_id_fragment,
@@ -44,10 +44,13 @@ def conservation_ring_ink(
     cfg: GbdrawConfig,
     record_transform: RecordDisplayTransform | None = None,
 ) -> tuple[CircularInk, ...]:
-    """What ``ConservationGroup`` paints with the same arguments: the background ring when it shows, else the
-    hits."""
+    """What ``ConservationGroup`` paints with the same arguments: the background ring when it shows (on, with a
+    color and an opacity), else the hits."""
 
-    if bool(cfg.objects.conservation.show_background):
+    conservation_cfg = cfg.objects.conservation
+    if bool(conservation_cfg.show_background) and paint_shows(
+        conservation_cfg.background_color, conservation_cfg.background_opacity
+    ):
         return (CircularInkRing(RadialBand(float(inner_radius_px), float(outer_radius_px))),)
     drawer = _conservation_drawer(cfg, str(track.track_color) if track.track_color else None, float(min_identity))
     return drawer.ink(

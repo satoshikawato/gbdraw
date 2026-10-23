@@ -169,10 +169,16 @@ def _segment_distance(start: tuple[float, float], end: tuple[float, float]) -> f
     return math.hypot(x1 + t * dx, y1 + t * dy)
 
 
+def paint_shows(color: str, opacity: float = 1.0) -> bool:
+    """Whether a fill or stroke of ``color`` at ``opacity`` paints at all."""
+
+    return str(color).strip().lower() != "none" and float(opacity) > 0
+
+
 def stroke_pad_px(color: str, width: float) -> float:
     """How far a stroke paints past its line: half its width, when it paints at all."""
 
-    return 0.5 * float(width) if float(width) > 0 and str(color).strip().lower() != "none" else 0.0
+    return 0.5 * float(width) if float(width) > 0 and paint_shows(color) else 0.0
 
 
 def _turns_of(angles: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -259,5 +265,6 @@ __all__ = [
     "CircularInkProfile",
     "CircularInkRing",
     "box_meets_ink",
+    "paint_shows",
     "stroke_pad_px",
 ]
