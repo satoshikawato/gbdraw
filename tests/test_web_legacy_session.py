@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import gzip
 import json
 from pathlib import Path
 
 import pytest
 
+import gbdraw.session as session_module
 from gbdraw.session import load_session_document, materialize_session, render_session
 from gbdraw.session_io import DRAWINGS_SESSION_MIN_VERSION, SessionDraftMigration
 from gbdraw.session_migration import session_draft_migration_repairs
@@ -33,8 +35,10 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
 ) -> None:
     source = json.loads(_text(name))
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
-    assert set(payload) == {"document", "warnings"}
+    assert set(payload) == {"document", "storedResults", "warnings"}
     assert payload["warnings"] == []
+    # A Session 40-44 keeps its Results with their catalog in the document.
+    assert payload["storedResults"] == {}
     document = payload["document"]
     assert document["version"] == DRAWINGS_SESSION_MIN_VERSION
     first = document["drawings"][0]
@@ -54,18 +58,43 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
 
 
 @pytest.mark.parametrize(
-    "name",
+    ("name", "mode"),
     [
-        # Results without a request or a feature catalog: a Session 49 cannot hold them (OV-1659).
-        "scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz",
-        "conservation-fasta.v39.gbdraw-session.json.gz",
+        # Results without a request (27-30) or a feature catalog (31-39): a Session 49 cannot hold
+        # them, so they travel beside the document, keyed by their drawing (OV-1659).
+        ("scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz", "circular"),
+        ("mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz", "circular"),
+        ("conservation-fasta.v39.gbdraw-session.json.gz", "circular"),
     ],
 )
-def test_a_session_whose_results_session_49_cannot_hold_is_refused_in_the_error_shape(name: str) -> None:
+def test_stored_results_session_49_cannot_hold_travel_beside_the_document(
+    name: str, mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Stand-in for B2a-1d (OV-1658): these files keep both mode slices, and deciding whether the other
+    # mode's was used needs each mode's defaults. With each slice as its own default, only the used
+    # drawings are made.
+    move = session_module.drawings_document_from_mode_scoped
+
+    def with_own_slices_as_defaults(data, *, slice_defaults=None):
+        return move(data, slice_defaults=slice_defaults or copy.deepcopy(dict(data["modes"])))
+
+    monkeypatch.setattr(session_module, "drawings_document_from_mode_scoped", with_own_slices_as_defaults)
+    source = json.loads(_text(name))
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
-    assert set(payload) == {"error"}
-    assert set(payload["error"]) == {"code", "operation", "stage", "context"}
-    assert payload["error"]["stage"] == "helper"
+    assert set(payload) == {"document", "storedResults", "warnings"}, payload.get("error")
+    document = payload["document"]
+    assert load_session_document(document).version == DRAWINGS_SESSION_MIN_VERSION
+    (drawing_id, stored), = payload["storedResults"].items()
+    (drawing,) = (drawing for drawing in document["drawings"] if drawing["id"] == drawing_id)
+    assert drawing["mode"] == mode
+    assert drawing["results"] == []
+    assert drawing["editorState"]["featureCatalog"] is None
+    if source["version"] < 31:
+        # A Session 27-30 has no request: an undrawn drawing that keeps its bindings.
+        assert drawing["renderRequest"] is None
+        assert drawing["webFiles"]["bindings"]["c_gb"]["resourceId"] in document["resources"]
+    # Every stored Result, byte for byte.
+    assert json.dumps(stored, sort_keys=True) == json.dumps(source["results"], sort_keys=True)
 
 
 def test_a_document_that_is_not_json_is_refused_in_the_error_shape() -> None:
