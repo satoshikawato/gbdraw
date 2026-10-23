@@ -15,8 +15,6 @@ from ....config.models.objects import ObjectsDefinitionLinearConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.numeric import compensated_sum
 from ....core.text import (
-    calculate_bbox_dimensions,
-    calculate_svg_bbox_dimensions,
     create_text_element,
     measure_mixed_text_line,
     parse_mixed_content_text,
@@ -244,23 +242,14 @@ class DefinitionGroup:
         font_style: str = "normal",
     ) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for styled text."""
-        _, height = calculate_bbox_dimensions(
-            text,
+        return measure_mixed_text_line(
+            [(text, font_style)],
             style.font_family,
             style.font_size,
             self.dpi,
             font_weight=style.font_weight,
-            font_style=font_style,
+            layout_height=True,
         )
-        width, _ = calculate_svg_bbox_dimensions(
-            text,
-            style.font_family,
-            style.font_size,
-            self.dpi,
-            font_weight=style.font_weight,
-            font_style=font_style,
-        )
-        return width, height
 
     def _measure_line(self, kind: str, text: str) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for a definition line."""
