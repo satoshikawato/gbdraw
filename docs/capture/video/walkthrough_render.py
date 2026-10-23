@@ -240,7 +240,7 @@ PROMO_STORY = Story(
     (("walkthrough", replace(PORTRAIT, audio=False), "gbdraw-0.14.0-vertical"),), "zh-Hans",
     outro=("gbdraw.app", "Command line: pip install gbdraw"),
     # The marks ``video.promo`` sets at the end of each result's hold.
-    opening=(Clip("hl-lang", -2.0, "hl-lang", -0.5, "Simplified Chinese interface"),
+    opening=(Clip("hl-lang", -1.8, "hl-lang", 0.0, "Simplified Chinese interface"),
              Clip("hl-font", -1.4, "hl-font", 0.0, "Chinese text in the figure"),
              Clip("hl-rotate", -1.4, "hl-rotate", 0.0, "Start at any base"),
              Clip("hl-lane", -1.4, "hl-lane", 0.0, "Features on lanes you choose"),
