@@ -624,6 +624,15 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode(drawingMode);
     return drawing ? action(drawing) : undefined;
   };
+  /**
+   * The drawing the displayed Result belongs to when it is the Linear one,
+   * else null (the group names are the Linear drawing's). Resolved at each call.
+   * @returns {DrawingState | null}
+   */
+  const displayedLinearDrawing = () => {
+    const drawing = historySnapshots.displayedArtifactDrawing();
+    return drawing.mode === 'linear' ? drawing : null;
+  };
   const linearTypography = createLinearTypographyController({
     shownDrawing: () => shownDrawingOfMode('linear'),
     mutationAvailability: sessionOperationAvailability
@@ -2019,11 +2028,14 @@ export const createAppSetup = () => {
     nextTick,
     computed,
     isActiveResultReady: previewRuntime.isActiveResultReady,
-    resolveOrthogroups: () => orthogroups.value.map((/** @type {OrthogroupGroup} */ group) => ({
-      ...group,
-      display_name: orthogroupActions.resolveOrthogroupName(group),
-      description: orthogroupActions.resolveOrthogroupDescription(group)
-    })),
+    resolveOrthogroups: () => {
+      const drawing = displayedLinearDrawing();
+      return orthogroups.value.map((/** @type {OrthogroupGroup} */ group) => ({
+        ...group,
+        display_name: orthogroupActions.resolveOrthogroupName(group, drawing),
+        description: orthogroupActions.resolveOrthogroupDescription(group, drawing)
+      }));
+    },
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature,
     focusSearchQuery: () => /** @type {HTMLElement | null} */ (document.querySelector('.preview-feature-search .gfs-query'))?.focus(),
     focusSearchToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('[data-preview-search-toggle]'))?.focus()
@@ -5261,7 +5273,7 @@ export const createAppSetup = () => {
     const recordCoverage = Number(group.record_coverage_count || membersByRecord.length || 0);
     return {
       id: orthogroupId,
-      displayName: orthogroupActions.resolveOrthogroupName(group),
+      displayName: orthogroupActions.resolveOrthogroupName(group, displayedLinearDrawing()),
       memberCount,
       recordCoverage,
       countText: groupCountText(memberCount, recordCoverage),
@@ -7289,7 +7301,9 @@ export const createAppSetup = () => {
     filteredOrthogroups: orthogroupActions.filteredOrthogroups,
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
     selectedOrthogroupDetail: orthogroupActions.selectedOrthogroupDetail,
-    resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
+    resolveOrthogroupName: (/** @type {import('./orthogroups.js').GroupOrId} */ groupOrId) => (
+      orthogroupActions.resolveOrthogroupName(groupOrId, shownDrawingOfMode('linear'))
+    ),
     orthogroupDescriptionFieldText: orthogroupActions.orthogroupDescriptionFieldText,
     orthogroupScope: orthogroupActions.orthogroupScope,
     orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,

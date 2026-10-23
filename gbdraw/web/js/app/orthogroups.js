@@ -517,9 +517,13 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return drawing.mode === 'linear' ? drawing : null;
   };
 
-  /** @param {GroupOrId} groupOrId */
-  const resolveOrthogroupName = (groupOrId) => {
-    const drawing = shownLinearDrawing();
+  // The group-name readers take the drawing their caller resolved: the shown
+  // Linear drawing, or null for any other.
+  /**
+   * @param {GroupOrId} groupOrId
+   * @param {OrthogroupEditorShownDrawing | null} drawing
+   */
+  const resolveOrthogroupName = (groupOrId, drawing) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
@@ -527,9 +531,11 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return normalizeText(drawing && ownEntry(drawing.orthogroupNameOverrides, id)) || normalizeText(group?.name) || id;
   };
 
-  /** @param {GroupOrId} groupOrId */
-  const resolveOrthogroupDescription = (groupOrId) => {
-    const drawing = shownLinearDrawing();
+  /**
+   * @param {GroupOrId} groupOrId
+   * @param {OrthogroupEditorShownDrawing | null} drawing
+   */
+  const resolveOrthogroupDescription = (groupOrId, drawing) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
@@ -583,6 +589,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
 
   /** @type {{ readonly value: OrthogroupGroup[] }} */
   const filteredOrthogroups = computed(() => {
+    const drawing = shownLinearDrawing();
     const query = normalizeLower(orthogroupSearch.value);
     const groups = resolvableOrthogroupEntries.value.map(({ group }) => group);
     const filtered = query
@@ -593,8 +600,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
             orthogroupIdValue(group),
             group?.name,
             group?.description,
-            resolveOrthogroupName(group),
-            resolveOrthogroupDescription(group),
+            resolveOrthogroupName(group, drawing),
+            resolveOrthogroupDescription(group, drawing),
             ...candidates.map(getCandidateSearchText),
             ...members.map(getMemberSearchText)
           ].map(normalizeLower).join(' ');
@@ -606,7 +613,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const mode = ['id', 'name', 'member_count', 'record_coverage'].includes(modeRaw) ? modeRaw : 'id';
     filtered.sort((left, right) => {
       if (mode === 'name') {
-        return resolveOrthogroupName(left).localeCompare(resolveOrthogroupName(right)) || compareOrthogroupId(left, right);
+        return resolveOrthogroupName(left, drawing).localeCompare(resolveOrthogroupName(right, drawing)) || compareOrthogroupId(left, right);
       }
       if (mode === 'member_count') {
         const leftCount = Number(left?.member_count || getGroupMembers(left).length || 0);
@@ -633,9 +640,10 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   const orthogroupRows = computed(() => {
     /** @type {(count: string, noun: string) => string} */
     const counted = (count, noun) => `${count} ${count === '1' ? noun : `${noun}s`}`;
+    const drawing = shownLinearDrawing();
     return filteredOrthogroups.value.map((group) => ({
       group, id: group.id,
-      name: resolveOrthogroupName(group),
+      name: resolveOrthogroupName(group, drawing),
       // Only a scope other than the usual cross-record group is worth a word on the row.
       scopeLabel: orthogroupScope(group) === 'global' ? '' : orthogroupScopeLabel(group),
       countsLabel: [
@@ -814,7 +822,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
-    const name = makeSafeFilename(resolveOrthogroupName(group) || id, id || 'orthogroup');
+    const name = makeSafeFilename(resolveOrthogroupName(group, shownLinearDrawing()) || id, id || 'orthogroup');
     const stem = makeSafeFilename(`${id || 'orthogroup'}_${name}_${sequenceKindLabel(sequenceKind)}`);
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };

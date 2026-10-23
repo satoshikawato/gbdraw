@@ -1456,7 +1456,7 @@ const aliasedEditorGroup = {
 };
 state.orthogroups.value = [aliasedEditorGroup];
 assert.equal(editor.getOrthogroupById('og_editor_alias'), aliasedEditorGroup);
-assert.equal(editor.resolveOrthogroupName(aliasedEditorGroup), 'og_editor_alias');
+assert.equal(editor.resolveOrthogroupName(aliasedEditorGroup, state), 'og_editor_alias');
 assert.equal(editor.orthogroupCount.value, 1);
 state.orthogroups.value = [{
   id: 'og_editor_conflict',
@@ -2028,8 +2028,8 @@ console.log('orthogroup stable identity tests passed');
   const protoState = { ...state, orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} };
   const protoEditor = createOrthogroupEditor({ state: withDrawings(protoState), runAnalysis: null });
   const protoGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
-  assert.equal(protoEditor.resolveOrthogroupName(protoGroup), 'Own name');
-  assert.equal(protoEditor.resolveOrthogroupDescription(protoGroup), 'Own description');
+  assert.equal(protoEditor.resolveOrthogroupName(protoGroup, protoState), 'Own name');
+  assert.equal(protoEditor.resolveOrthogroupDescription(protoGroup, protoState), 'Own description');
 }
 
 // OV-554: the source text is label text; only an own key of the bulk table is an edit.

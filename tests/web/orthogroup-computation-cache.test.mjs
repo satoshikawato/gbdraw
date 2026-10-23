@@ -80,8 +80,8 @@ test('the group list, a rendered name and the search follow the first rename of 
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
   const rendered = Vue.computed(() => [
-    editor.resolveOrthogroupName(editor.selectedOrthogroup.value),
-    editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value)
+    editor.resolveOrthogroupName(editor.selectedOrthogroup.value, state),
+    editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value, state)
   ]);
   assert.deepEqual([editor.orthogroupRows.value[0].name, ...rendered.value], ['LivB', 'LivB', 'Python text']);
   // One write at a time: each of the two reads keeps its own dependency.
