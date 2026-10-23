@@ -183,7 +183,7 @@ BGC_COMMAND = (
     "--pairwise_match_style curve --scale_style ruler "
     "--plot_title 'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.' "
     "--keep_definition_left_aligned --identity 30 --block_stroke_width 2 "
-    "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_color '#808080' --axis_stroke_width 5 "
+    "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 "
     "--legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 "
     "--arrow_shaft_width_ratio 0.6 --arrow_head_length_ratio 0.64 "
     "--ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold "
@@ -525,18 +525,26 @@ def _session_command(session: dict[str, Any]) -> str:
     return shlex.join(["gbdraw", mode, "--session", "session.gbdraw-session.json"])
 
 
-def _with_session_record_names(command: str, session: dict[str, Any]) -> str:
-    """Add the record names a Web-saved Session draws to its card command, after the --gbk files.
+# Settings a Web-saved Session stores as configuration overrides (key, with the Session's mode) and the CLI
+# reads from a flag. The card command takes them from the Session; a test ties each pair to the CLI.
+SESSION_CONFIG_FLAGS: tuple[tuple[str, str], ...] = (("objects.axis.{mode}.stroke_color", "--axis_stroke_color"),)
+
+
+def _with_session_values(command: str, session: dict[str, Any]) -> str:
+    """Add the values a Web-saved Session owns to its card command.
 
     The Web writes each record's name and subtitle into the Session's request; the CLI draws names
-    only from --record_label and --record_subtitle (OV-1698). The Session is their one owner, so
-    the declared command never repeats them by hand. A CLI-made Session draws its own command's names.
+    only from --record_label and --record_subtitle (OV-1698), so they follow the --gbk files. The
+    settings of SESSION_CONFIG_FLAGS follow them from the Session's configuration overrides (OV-1703).
+    The Session is the one owner of these values, so the declared command never repeats them by hand.
+    A CLI-made Session draws its own command's values.
     """
 
     if _session_cli_invocation(session):
         return command
     render_request = session.get("renderRequest")
-    records = render_request.get("records") if isinstance(render_request, dict) else None
+    request = render_request if isinstance(render_request, dict) else {}
+    records = request.get("records")
     presentations = [
         record.get("presentation") if isinstance(record, dict) and isinstance(record.get("presentation"), dict) else {}
         for record in (records if isinstance(records, list) else [])
@@ -546,21 +554,32 @@ def _with_session_record_names(command: str, session: dict[str, Any]) -> str:
         values = [str(presentation.get(key) or "") for presentation in presentations]
         if any(values):
             names.extend(f"{flag} {shlex.quote(value)}" for value in values)
-    if not names:
-        return command
+    diagram_options = request.get("diagramOptions")
+    overrides = diagram_options.get("configOverrides") if isinstance(diagram_options, dict) else None
+    settings = [
+        f"{flag} {shlex.quote(str(overrides[key]))}"
+        for key, flag in ((template.format(mode=request.get("mode")), flag) for template, flag in SESSION_CONFIG_FLAGS)
+        if isinstance(overrides, dict) and overrides.get(key) is not None
+    ]
     tokens = command.split(" ")
-    if "--gbk" not in tokens:
-        raise ValueError("A Web-saved Gallery command with record names must declare its --gbk files.")
-    end = tokens.index("--gbk") + 1
-    while end < len(tokens) and not tokens[end].startswith("-"):
-        end += 1
-    return " ".join([*tokens[:end], *names, *tokens[end:]])
+    if names:
+        if "--gbk" not in tokens:
+            raise ValueError("A Web-saved Gallery command with record names must declare its --gbk files.")
+        end = tokens.index("--gbk") + 1
+        while end < len(tokens) and not tokens[end].startswith("-"):
+            end += 1
+        tokens = [*tokens[:end], *names, *tokens[end:]]
+    if settings:
+        # Before the output prefix, which every card command declares last.
+        end = tokens.index("-o") if "-o" in tokens else len(tokens)
+        tokens = [*tokens[:end], *settings, *tokens[end:]]
+    return " ".join(tokens)
 
 
 def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
     command = example.command or _session_command(session)
     if example.command and not example.session_from_command:
-        command = _with_session_record_names(command, session)
+        command = _with_session_values(command, session)
     return command.replace("interactive-svg", "interactive_svg")
 
 

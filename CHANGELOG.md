@@ -17,10 +17,10 @@ write-up of a release.
   colors, layout), and its figure and Session now come from a fresh upload, so
   they show the organism name lines a reader's own upload shows. The card
   command of a Gallery figure saved in the Web app now declares the record
-  names its Session draws with `--record_label` and `--record_subtitle`, since
-  the CLI draws record names only from them; the BGC0000708-BGC0000713 command
-  also declares its gray axis (`--axis_stroke_color '#808080'`, OV-1703), so
-  it draws the Gallery figure.
+  names (`--record_label`, `--record_subtitle`) and the axis colour
+  (`--axis_stroke_color`) that its Session draws, so the command draws the
+  Gallery figure; the BGC0000708-BGC0000713 command lacked its gray axis
+  (OV-1703).
 - Gallery: a published Session made in the Web app keeps the File card rows
   that Save writes, so Load restores an inferred record name as inferred and
   **Reset Settings** no longer clears it (OV-1701).

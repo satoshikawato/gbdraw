@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import base64
+import json
+import os
+import subprocess
+import sys
 from collections.abc import Callable
 from functools import cache
 import math
@@ -21,7 +25,12 @@ from gbdraw.api import (
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample, _example_command
+from tools.prepare_interactive_gallery_assets import (
+    EXAMPLES,
+    SESSION_CONFIG_FLAGS,
+    GallerySessionExample,
+    _example_command,
+)
 
 
 pytestmark = pytest.mark.gallery
@@ -490,6 +499,33 @@ def test_web_saved_gallery_names_are_declared_in_the_card_command(
         values = [presentation[key] for presentation in presentations]
         assert _declared_values(command, flag) == ([] if not any(values) else values), (example_id, flag)
         assert _declared_values(example.command, flag) == [], (example_id, flag)
+    # The settings the Web stores as configuration overrides and the CLI reads from a flag (OV-1703).
+    overrides = _request(session)["diagramOptions"].get("configOverrides") or {}
+    for key_template, flag in SESSION_CONFIG_FLAGS:
+        value = overrides.get(key_template.format(mode=_request(session)["mode"]))
+        assert _declared_values(command, flag) == ([] if value is None else [str(value)]), (example_id, flag)
+        assert _declared_values(example.command, flag) == [], (example_id, flag)
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_session_config_flags_set_the_configuration_key_they_are_read_from(mode: str, tmp_path: Path) -> None:
+    """Each flag that a card command takes from a Web-saved Session's configuration sets, in the CLI,
+    the same configuration key, as the CLI records it in its own Session."""
+
+    values = {flag: f"#1234{index:02d}" for index, (_, flag) in enumerate(SESSION_CONFIG_FLAGS)}
+    session_path = tmp_path / "cli.gbdraw-session.json"
+    args = [mode, "--gbk", str(Path("tests/test_inputs/NC_001416.gb").resolve()), "-o", "cli", "-f", "svg",
+            "--session_output", str(session_path)]
+    for flag, value in values.items():
+        args += [flag, value]
+    subprocess.run([sys.executable, "-m", "gbdraw.cli", *args], cwd=tmp_path, check=True, capture_output=True,
+                   env={**os.environ, "PYTHONPATH": str(Path.cwd())}, timeout=600)
+    config = json.loads(session_path.read_text(encoding="utf-8"))["renderRequest"]["diagramOptions"]["config"]
+    for key_template, flag in SESSION_CONFIG_FLAGS:
+        node: Any = config
+        for part in key_template.format(mode=mode).split("."):
+            node = node[part]
+        assert node == values[flag], (mode, flag)
 
 
 def test_hepatoplasmataceae_collinear_session_is_a_fresh_upload_with_name_lines(
