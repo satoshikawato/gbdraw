@@ -95,7 +95,6 @@ const evaluate = evaluateWebOwnerGraphAt;
 const summaryColumns = (summary) => ({
   injectionEdges: summary.injectionEdges,
   forwardClosures: summary.forwardClosures,
-  stateBackdoors: summary.stateBackdoors,
   wholeObjectPorts: summary.wholeObjectPorts,
   triggerSites: summary.triggerSites,
   triggerModules: summary.triggerModules,

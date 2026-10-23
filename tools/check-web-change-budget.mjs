@@ -3468,7 +3468,7 @@ const report = [
       `- Registry: ${ownerGraphRegistryEvaluation.registry
         ? `${ownerGraphRegistryPath} from the trusted base`
         : ownerGraphRegistryEvaluation.error ? `malformed (${ownerGraphRegistryEvaluation.error})` : 'defaults (registry absent)'}`,
-      ...['injectionEdges', 'forwardClosures', 'stateBackdoors', 'wholeObjectPorts', 'triggerSites', 'triggerModules']
+      ...['injectionEdges', 'forwardClosures', 'wholeObjectPorts', 'triggerSites', 'triggerModules']
         .map((key) => `- ${key}: ${ownerGraphReport.base[key]} -> ${ownerGraphReport.head[key]}`),
       ...Object.keys(ownerGraphReport.head.projectionShapes).map((domain) => (
         `- shapes:${domain}: ${ownerGraphReport.base.projectionShapes[domain] ?? 0} -> ${ownerGraphReport.head.projectionShapes[domain]}`
