@@ -191,9 +191,35 @@ def test_a_cold_alignment_projection_parses_each_source_once_and_stores_nothing(
     assert isinstance(cache, PreparedBiologicalInputCache)
     parses = _count_parses(monkeypatch)
     _align(helpers, alignment)
-    # Three plans (before, after, flipped) share one parse of each source.
+    # The plans (before, after, flipped) share one parse of each source.
     assert len(parses) == alignment["sources"]
     assert all(not entries for entries in cache._layers.values())
+
+
+def test_alignment_without_orientations_plans_the_flipped_records_once(
+    helpers: dict[str, object], alignment: dict[str, object], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no orientations (the stale-target repair), the projected records are the flipped ones (OV-1585)."""
+
+    import gbdraw.web_support.similarity_alignment as alignment_module
+
+    plans: list[object] = []
+    original = alignment_module.plan_linear_request
+
+    def counting(request):  # type: ignore[no-untyped-def]
+        plans.append(request)
+        return original(request)
+
+    monkeypatch.setattr(alignment_module, "plan_linear_request", counting)
+    reset = _align(helpers, alignment)
+    assert len(plans) == 2
+    # Orientations that are not the flipped ones still plan the flipped records.
+    plans.clear()
+    current = {
+        key: not value for key, value in reset["projection"]["geometryOrientations"].items()
+    }
+    _align(helpers, {**alignment, "context": {**alignment["context"], "orientations": current}})  # type: ignore[dict-item]
+    assert len(plans) == 3
 
 
 def test_alignment_identities_must_match_the_staged_manifest(

@@ -337,42 +337,44 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
     )
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("Alignment projection requires a Linear request.")
-    keys = [record.record_key for record in request.records]
-    if len(set(keys)) != len(keys) or None in keys:
+    keys = [record.record_key for record in request.records if record.record_key is not None]
+    if len(set(keys)) != len(request.records):
         raise ValidationError("Alignment projection requires keyed records.")
     # The caller materializes current placements through the composition bridge.
     # The plan is deliberately removed for raw, untranslated placement facts.
     request = replace(request, similarity_alignment=None)
     before = plan_linear_request(request)
     before_collection = ResolvedRecordCollection(before.records, before.provenance)
+    # Counterfactual source transforms are always available for local direction edits.
+    flipped_orientations = {key: item.source_step == 1
+                            for key, item in zip(keys, before.transforms, strict=True)}
     orientations = raw["orientations"]
     if orientations is None:
-        orientations = {key: item.source_step == 1
-                        for key, item in zip(keys, before.transforms, strict=True)}
+        orientations = flipped_orientations
     else:
-        orientations = _object(orientations, set(cast("list[str]", keys)), "projection.orientations")
+        orientations = _object(orientations, set(keys), "projection.orientations")
         orientations = {key: _boolean(value, f"projection.orientations.{key}")
                         for key, value in orientations.items()}
+    after = plan_linear_request(_oriented_request(request, orientations))
+    # Without orientations (the stale-target repair) the requested records
+    # are the flipped ones: one plan serves both (OV-1585).
+    flipped = (after if orientations == flipped_orientations
+               else plan_linear_request(_oriented_request(request, flipped_orientations)))
+    return raw, before, before_collection, after, flipped, request.options.orthogroups, request
+
+
+def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str, bool]) -> LinearDiagramRequest:
+    """The request with each record drawn in the given absolute direction."""
+
     records = []
     for record in request.records:
-        reverse = orientations[record.record_key]
+        reverse = reverse_by_key[cast(str, record.record_key)]
         if record.region is not None:
             records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
                                    presentation=replace(record.presentation, reverse_complement=False)))
         else:
             records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
-    after = plan_linear_request(replace(request, records=tuple(records)))
-    # Counterfactual source transforms are always available for local direction edits.
-    flipped_records = []
-    for record, transform in zip(request.records, before.transforms, strict=True):
-        reverse = transform.source_step == 1
-        if record.region is not None:
-            flipped_records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
-                                           presentation=replace(record.presentation, reverse_complement=False)))
-        else:
-            flipped_records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
-    flipped = plan_linear_request(replace(request, records=tuple(flipped_records)))
-    return raw, before, before_collection, after, flipped, request.options.orthogroups, request
+    return replace(request, records=tuple(records))
 
 
 def _serialize_projection(context, candidates, raw_request):
