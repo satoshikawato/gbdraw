@@ -469,6 +469,7 @@ def circular_track_slots_from_preset_order(
                 renderer_has_blank_unmatched_duplicates[renderer] = True
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
+    adds_inside_row = False
 
     for slot in slots:
         renderer = _normalized_renderer(slot.renderer)
@@ -505,15 +506,17 @@ def circular_track_slots_from_preset_order(
             context=context,
         )
         layout_slots.append(overlaid)
-        if (
-            prefers_numeric_auto_group
-            and str(overlaid.side or "inside").strip().lower() == "inside"
-        ):
+        inside = str(overlaid.side or "inside").strip().lower() == "inside"
+        if prefers_numeric_auto_group and inside:
             preferred_ids.add(str(overlaid.id))
+        adds_inside_row = adds_inside_row or (slot.enabled and inside and geometry_slot is None)
 
+    # Preset lanes are the default stack's radii (GX-19). A stack with an inside
+    # row the preset does not have packs its inside rows from the features down,
+    # so the definition size never picks between the two placements (OV-1710).
     return CircularPresetRadialPlan(
         slots=tuple(layout_slots),
-        preferred_anchor_slot_ids=frozenset(preferred_ids),
+        preferred_anchor_slot_ids=frozenset() if adds_inside_row else frozenset(preferred_ids),
     )
 
 

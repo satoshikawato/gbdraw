@@ -340,6 +340,7 @@ def _capture_circular_radial_layout(
     circular_track_axis_index: int | None = None,
     center_reserved_radius: float | None = None,
     input_filename: str = "HmmtDNA.gbk",
+    plot_title: str | None = None,
 ):
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
@@ -365,6 +366,9 @@ def _capture_circular_radial_layout(
         kwargs["circular_track_axis_index"] = circular_track_axis_index
     if center_reserved_radius is not None:
         kwargs["center_reserved_radius"] = center_reserved_radius
+    if plot_title is not None:
+        kwargs["plot_title"] = plot_title
+        kwargs["plot_title_position"] = "top"
 
     assemble_circular_diagram_from_record(
         record,
@@ -2666,3 +2670,114 @@ def test_row_pinned_at_its_auto_radius_keeps_the_auto_layout(
     assert observed.keys() == expected.keys()
     for key, geometry in expected.items():
         assert observed[key] == pytest.approx(geometry, abs=1e-6), key
+
+
+# OV-1710: the HmmtDNA_ATskew Gallery stack (Middle) adds an AT skew row that the preset does not have.
+_EXTENDED_INSIDE_STACK = [
+    "features:features@lane_direction=split",
+    "gc_content:dinucleotide_content@side=inside,w=0.1",
+    "gc_skew:dinucleotide_skew@side=inside,w=0.1",
+    "a_skew_2:dinucleotide_skew@side=inside,w=0.1,nt=AT",
+    "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+]
+
+
+def _extended_stack_layout(monkeypatch: pytest.MonkeyPatch, **kwargs: object):
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="middle",
+        circular_track_slots=list(_EXTENDED_INSIDE_STACK),
+        circular_track_axis_index=0,
+        **kwargs,
+    )
+    monkeypatch.undo()
+    return layout
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [{"plot_title": "Human mitochondrial genome"}, {"center_reserved_radius": 0.0}, {"center_reserved_radius": 80.0}],
+    ids=["plot_title", "no_reservation", "small_reservation"],
+)
+def test_a_smaller_definition_does_not_move_the_inside_rows_of_an_extended_stack(
+    monkeypatch: pytest.MonkeyPatch,
+    definition: dict[str, object],
+) -> None:
+    # OV-1710: with a stack the preset does not have, the inside rows pack from
+    # the features down whatever the definition size; a smaller definition used
+    # to put gc_content and gc_skew on the Middle preset lanes (0.75 R, 0.55 R)
+    # and squeeze the AT skew row and the ticks toward the center.
+    expected = _slot_geometry(_extended_stack_layout(monkeypatch))
+    observed = _slot_geometry(_extended_stack_layout(monkeypatch, **definition))
+
+    assert observed.keys() == expected.keys()
+    for key, geometry in expected.items():
+        assert observed[key] == pytest.approx(geometry, abs=1e-6), key
+
+
+def test_a_definition_that_needs_more_room_still_bounds_the_extended_stack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-1710: the definition still bounds the inside rows from inside: the
+    # packed rows stay above a reservation that fits, and one that leaves the
+    # explicit-width rows no room fails and names the reservation.
+    reserved_px = 180.0
+    layout = _extended_stack_layout(monkeypatch, center_reserved_radius=reserved_px)
+    inside = [slot for slot in layout.slots if slot.side == "inside"]
+    assert inside
+    assert all(slot.reserved_band_px.inner_px >= reserved_px - 1e-6 for slot in inside)
+
+    with pytest.raises(ValidationError) as error:
+        _extended_stack_layout(monkeypatch, center_reserved_radius=250.0)
+    assert error.value.diagnostic["reason"] == "CENTER_RESERVED"
+
+
+def test_tick_labels_of_the_titled_extended_stack_do_not_overlap() -> None:
+    # OV-1710: with a plot title the ticks of this stack sat at 0.36 R and
+    # their 1 kbp labels ran into each other ("13 kbp14 kbp15 kbp").
+    import math
+    import xml.etree.ElementTree as ET
+
+    from gbdraw.core.text import calculate_bbox_dimensions
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"), "genbank")
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {"canvas.show_gc": True, "canvas.show_skew": True, "canvas.circular.track_type": "middle"},
+    )
+    drawing = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(config_dict),
+        default_colors=load_default_colors("", palette="default"),
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[parse_circular_track_slot(spec) for spec in _EXTENDED_INSIDE_STACK],
+        circular_track_axis_index=0,
+        plot_title="Human mitochondrial genome",
+        plot_title_position="top",
+    )
+    root = ET.fromstring(drawing.tostring())
+    paths = {
+        element.get("id"): element.get("d")
+        for element in root.iter()
+        if element.tag.endswith("path") and str(element.get("id", "")).startswith("circular_tick_label_path_")
+    }
+    labels = []
+    for element in root.iter():
+        if not element.tag.endswith("textPath"):
+            continue
+        path_id = next(value for key, value in element.attrib.items() if key.endswith("href")).lstrip("#")
+        numbers = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?(?:e-?\d+)?", paths[path_id])]
+        start_x, start_y, radius = numbers[0], numbers[1], numbers[2]
+        end_x, end_y = numbers[-2], numbers[-1]
+        start, end = math.atan2(start_y, start_x), math.atan2(end_y, end_x)
+        center = start + (((end - start) + math.pi) % (2.0 * math.pi) - math.pi) / 2.0
+        font_size = float(element.get("font-size"))
+        width_px, _height = calculate_bbox_dimensions(element.text or "", element.get("font-family"), font_size, 96)
+        labels.append((center % (2.0 * math.pi), 0.5 * float(width_px) / radius, 0.5 * font_size / radius, element.text))
+    labels.sort()
+    assert len(labels) > 3
+    # Neighbouring labels keep at least half an em of arc between them.
+    for (angle_a, half_a, space, text_a), (angle_b, half_b, _space, text_b) in zip(labels, labels[1:] + labels[:1]):
+        gap = (angle_b - angle_a) % (2.0 * math.pi)
+        assert gap - (half_a + half_b) >= space, (text_a, text_b)

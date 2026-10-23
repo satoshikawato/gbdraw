@@ -67,7 +67,9 @@ and blank means Auto. An inside `gc_content`, `gc_skew`, or `depth` row with a
 blank Radius is placed as in the default stack of the selected preset: at the
 preset's radius for that row when it fits, otherwise packed below the row
 above it, so a custom stack that repeats the default stack draws the same
-figure. A slot with a radius is drawn at that radius, and the
+figure. When the stack adds an inside row that the default stack does not
+have, such as a second skew row, every inside row packs from the features
+inward, so a shorter center definition does not move them. A slot with a radius is drawn at that radius, and the
 other rows on its side keep the stack order around it: rows before it are
 placed farther from the center, rows after it closer. When the inside rows do
 not fit, numeric rows with an Auto width are compressed together as in an Auto
