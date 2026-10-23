@@ -24,7 +24,7 @@ from playwright.sync_api import Locator, expect
 from config import ACTION_TIMEOUT_MS, GENERATION_TIMEOUT_MS
 from video.tutorials import (_button, _close_feature, _feature_point, _fit_preview, _frame_box, _frame_figure,
                              _label, _open_feature, _pick, _summary)
-from video.walkthrough import (PREVIEW_REGION, SKIM, STAGES_SECONDS, VIEWPORT, Journey, Recorder, _center,
+from video.walkthrough import (PREVIEW_REGION, SKIM, STAGES_SECONDS, Journey, Recorder, _center,
                                _skimmed, switch_language)
 from video.walkthrough_render import FONT_CACHE, PORTRAIT, PORTRAIT_PAD, PROMO_ID
 
@@ -48,8 +48,12 @@ ALIGN_CLICK_MARKS = ("hl-align-click-1", "hl-align-click-2", "hl-align-click-3")
 ALIGN_MARKS = ("hl-align-1", "hl-align-2", "hl-align-3")
 ALIGN_REPEAT_SECONDS = 1.0   # a fast-forwarded repeat of click and Align…, as the viewer sees it
 REPEAT_SECONDS = 1.5    # one fast-forwarded repeat of a rotation or a lane move, as the viewer sees it
-FONT_VIEW_HEIGHT = 470      # page px the Chinese title's view shows, from just below the search box
-LANE_ROOM = 45          # page px around the arc for an outward lane and its labels
+# The still views of the rotate and lane holds keep every label whole and the Legend out: they start a few px right of
+# the Legend's last letter, and end where a column of the figure holds no text (checked on the recorded frames).
+LEGEND_GAP = 7          # page px between the Legend's text and the left edge of a hold's view
+FIGURE_MARGIN = 15      # page px right of the figure in the rotate view; the figure's edge is blank
+LANE_VIEW_RIGHT = 0.83  # the lane view ends this far across the figure (a blank column right of the center text)
+VIEW_TOP = 7            # page px above the figure the holds' views start
 VERSION_HOLD = 0.9      # the map held, popup closed, before a version's mark; the opening clip is its last 0.5 s
 
 _FONT_READY = """
@@ -69,52 +73,9 @@ _EXAMPLE_LOADED = """
 ([mode, before]) => { const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || '');
   return Boolean(app && app.mode === mode && !app.processing && content && content !== before); }
 """
-_MAP_PART = """
-(genes) => {
-  const region = document.querySelector('$REGION');
-  const ids = genes && new Set((window.__GBDRAW_APP__?.extractedFeatures || [])
-    .filter((item) => genes.includes(item.gene)).map((item) => item.svg_id));
-  const nodes = [...region.querySelectorAll('svg [data-gbdraw-feature-id]')]
-    .filter((node) => !ids || ids.has(node.getAttribute('data-gbdraw-feature-id')));
-  if (genes) nodes.push(...[...region.querySelectorAll('svg text')].filter((node) => genes.includes(node.textContent)));
-  const boxes = nodes.map((node) => node.getBoundingClientRect()).filter((box) => box.width && box.height);
-  if (!boxes.length) return null;
-  const left = Math.min(...boxes.map((b) => b.left)), top = Math.min(...boxes.map((b) => b.top));
-  const right = Math.max(...boxes.map((b) => b.right)), bottom = Math.max(...boxes.map((b) => b.bottom));
-  return {x: left, y: top, width: right - left, height: bottom - top};
-}
-""".replace("$REGION", PREVIEW_REGION)
-
-
-_ANCHOR = """
-() => {
-  const svg = document.querySelector('$REGION svg');
-  const text = [...svg.querySelectorAll('text')].find((node) => node.textContent.startsWith('NC_'));
-  const box = text.getBoundingClientRect(), whole = svg.getBoundingClientRect();
-  return {x: box.left + box.width / 2, y: box.top + box.height / 2, scale: whole.width / svg.viewBox.baseVal.width};
-}
-""".replace("$REGION", PREVIEW_REGION)
-
-
 _LEGEND_RIGHT = """
-() => document.querySelector('$REGION svg #legend')?.getBoundingClientRect().right ?? null
-""".replace("$REGION", PREVIEW_REGION)
-
-
-
-_GROUP_BOUNDS = """
-(group) => {
-  const region = document.querySelector('$REGION');
-  const ids = (window.__GBDRAW_APP__?.extractedFeatures || []).filter((item) => item.orthogroupId === group)
-    .map((item) => item.svg_id);
-  const boxes = ids.flatMap((id) => [...region.querySelectorAll(`svg [data-gbdraw-feature-id="${id}"]`)])
-    .map((node) => node.getBoundingClientRect()).filter((box) => box.width && box.height);
-  if (!boxes.length) return null;
-  const top = Math.min(...boxes.map((b) => b.top)) - 40, bottom = Math.max(...boxes.map((b) => b.bottom)) + 40;
-  const middle = (Math.min(...boxes.map((b) => b.left)) + Math.max(...boxes.map((b) => b.right))) / 2;
-  const width = Math.max(320, (bottom - top) * 0.88);   // a column as wide as the tall window shows it
-  return {x: middle - width / 2, y: top, width, height: bottom - top};
-}
+() => Math.max(...[...document.querySelectorAll('$REGION svg #legend text')]
+  .map((node) => node.getBoundingClientRect().right))
 """.replace("$REGION", PREVIEW_REGION)
 
 
@@ -149,14 +110,15 @@ def _fit(rec: Recorder) -> None:
     _fit_preview(rec, skim=0.8)
 
 
-def _fit_to_window(rec: Recorder) -> None:
+def _fit_to_window(rec: Recorder, frame: tuple[str, ...] = ()) -> None:
     """Press the preview's Fit, skimmed: the figure fills the preview at one zoom (a new result starts at 100 %).
 
-    The align step keeps every cut at this zoom, so the drawing does not change size from one gene to the next.
+    The align step keeps every cut at this zoom, so the drawing does not change size from one gene to the next;
+    ``frame`` names the marks whose rects its tall view keeps whole.
     """
 
     with _skimmed(rec, target=0.8):
-        rec.camera(rec.page.locator(PREVIEW_REGION).bounding_box(), duration=0.5)
+        rec.camera(rec.page.locator(PREVIEW_REGION).bounding_box(), duration=0.5, frame=frame)
         rec.click(_button(rec, "Fit to preview"), pause=0.35)
         rec.page.wait_for_timeout(400)
 
@@ -288,24 +250,10 @@ def _font_and_title(rec: Recorder) -> None:
         rec.reveal(keep)
         rec.set_checked(keep, True, pause=0.3)
     _generate(rec)
-    title_box = rec.text_bounds(f"^{TITLE}$")
-    search = page.locator(".preview-feature-search")
-    # The toolbar and the search box sit above the figure: the view starts below them, so neither is cut.
-    top = search.bounding_box()["y"] + search.bounding_box()["height"] + 6 if search.count() and search.first.is_visible() \
-        else title_box["y"] - 40
-    view = _tall_view(title_box["x"] + title_box["width"] / 2 - FONT_VIEW_HEIGHT * PORTRAIT.aspect / 2, top, FONT_VIEW_HEIGHT)
+    view = _rotation_frame(rec)
     rec.camera(view, zoom=2.4, duration=1.1, portrait=view)
     rec.hold(2.4)
     rec.mark("hl-font")
-
-
-def _map_frame(rec: Recorder, genes: tuple[str, ...] | None, *, pad: float) -> dict:
-    """The page rect of the map part that ``genes`` (or every feature) cover, padded; one framing for all versions."""
-
-    box = rec.page.evaluate(_MAP_PART, list(genes) if genes else None)
-    if box is None:
-        raise AssertionError(f"No drawn feature to frame: {genes}")
-    return {"x": box["x"] - pad, "y": box["y"] - pad, "width": box["width"] + 2 * pad, "height": box["height"] + 2 * pad}
 
 
 def _tall_view(left: float, top: float, height: float) -> dict:
@@ -320,17 +268,17 @@ def _tall_view(left: float, top: float, height: float) -> dict:
 
 
 def _rotation_frame(rec: Recorder) -> dict:
-    """The top of the ring and its center text: where the record now starts and its new coordinates read.
+    """The whole map with every label, from just right of the Legend to the figure's right edge.
 
-    The record starts at 12 o'clock, so a gene runs clockwise from there; the frame holds the arc to either side,
-    the labels above it, and the center text below it.
+    The record starts at 12 o'clock, so a gene runs clockwise from there; the center text gives the new coordinates.
+    The view cuts no text at any edge: it starts between the Legend's last letter and the first label, and ends
+    past the last label.
     """
 
-    ring = _map_frame(rec, None, pad=0)
-    radius = (ring["width"] + ring["height"]) / 4
-    center = ring["x"] + ring["width"] / 2, ring["y"] + ring["height"] / 2
-    top = ring["y"] - 60
-    frame = {"x": center[0] - 0.72 * radius, "y": top, "width": 1.44 * radius, "height": center[1] + 0.25 * radius - top}
+    figure = rec.figure()
+    left = rec.page.evaluate(_LEGEND_RIGHT) + LEGEND_GAP
+    width = figure["x"] + figure["width"] + FIGURE_MARGIN - left
+    frame = _tall_view(left, figure["y"] - VIEW_TOP, width / PORTRAIT.aspect)
     print(f"rotation frame: {frame}", flush=True)
     return frame
 
@@ -434,46 +382,33 @@ def _lane_to(rec: Recorder, gene: str, *, repeat: bool) -> None:
 
 
 def _lane_frame(rec: Recorder) -> dict:
-    """The arc that holds the moved genes, tight: what the moves change fills the tall window.
+    """The left of the ring, where the moved genes stand: the Legend out, the center text in.
 
-    The view starts a lane's width left of the arc (or past the legend's edge when that is nearer), so the Legend
-    and the center text are out of it. The arc sits in the rows the overview inset leaves free. The frame is
-    returned relative to the ring's center text, in figure units: each Generate fits the figure afresh, so
-    ``_place`` puts the same part of it in view again.
+    It is made on the figure after the first move's Generate, whose layout (the lanes widen the figure) every later
+    Generate keeps. Its rows run from just above the figure, so no label is cut at the top, down to a blank row.
     """
 
-    arc = _map_frame(rec, LANE_GENES, pad=0)
-    legend_right = rec.page.evaluate(_LEGEND_RIGHT)
-    left = max(arc["x"] - LANE_ROOM, (legend_right or -1e9) + 8)
-    free = (lambda rows: rows[1] - rows[0])(PORTRAIT.free_band(VIEWPORT, "bottom"))
-    height = max((arc["height"] + 2 * LANE_ROOM) / free, VIEWPORT[1] / 2.6)
-    frame = _tall_view(left, arc["y"] - LANE_ROOM, height)
-    anchor = rec.page.evaluate(_ANCHOR)
-    print(f"lane arc: {arc} legend right: {legend_right} frame: {frame} anchor: {anchor}", flush=True)
-    return {"x": (frame["x"] - anchor["x"]) / anchor["scale"], "y": (frame["y"] - anchor["y"]) / anchor["scale"],
-            "width": frame["width"] / anchor["scale"], "height": frame["height"] / anchor["scale"]}
-
-
-def _place(rec: Recorder, relative: dict) -> dict:
-    """The page rect of a frame made by ``_lane_frame``, on the figure as it is drawn now."""
-
-    anchor = rec.page.evaluate(_ANCHOR)
-    return {"x": anchor["x"] + relative["x"] * anchor["scale"], "y": anchor["y"] + relative["y"] * anchor["scale"],
-            "width": relative["width"] * anchor["scale"], "height": relative["height"] * anchor["scale"]}
+    figure = rec.figure()
+    left = rec.page.evaluate(_LEGEND_RIGHT) + LEGEND_GAP
+    width = figure["x"] + LANE_VIEW_RIGHT * figure["width"] - left
+    frame = _tall_view(left, figure["y"] - VIEW_TOP, width / PORTRAIT.aspect)
+    print(f"lane frame: {frame}", flush=True)
+    return frame
 
 
 def _lane(rec: Recorder) -> None:
     """Steps lane and stages: ATP8 › Outward lane 1 with the Generate stages, then two more genes out, one by one."""
 
     rec.caption(5, "Put a feature on the lane you choose", "Its label and leader line move with it")
-    # The arc is framed before any move; every version keeps this framing.
-    relative = _lane_frame(rec)
-    frame = _place(rec, relative)
+    # Before any move the figure is the rotated one: the whole map, as the rotate holds show it.
+    frame = _rotation_frame(rec)
     rec.camera(frame, zoom=2.0, duration=1.1, portrait=frame)
     rec.hold(0.6)
+    lane = None
     for index, (gene, mark) in enumerate(zip(LANE_GENES, LANE_MARKS, strict=True)):
         _lane_to(rec, gene, repeat=bool(index))
-        _show_version(rec, _place(rec, relative), mark, 2.0 if index == 0 else VERSION_HOLD)
+        lane = lane or _lane_frame(rec)
+        _show_version(rec, lane, mark, 2.0 if index == 0 else VERSION_HOLD)
 
 
 def _reset_alignment(rec: Recorder) -> None:
@@ -502,14 +437,13 @@ def _reset_alignment(rec: Recorder) -> None:
     _fit(rec)
 
 
-def _show_rows(rec: Recorder, group_id: str, seconds: float, mark: str) -> None:
-    """Hold the column the group's genes now share across the five rows, then mark: an opening clip ends here.
+def _show_rows(rec: Recorder, seconds: float, mark: str) -> None:
+    """Hold the five rows the group's genes now share, in the align step's still view, then mark: a clip ends here.
 
     The camera settles 0.6 s before the mark, so the clip (its last 0.6 s) holds still.
     """
 
-    box = rec.page.evaluate(_GROUP_BOUNDS, group_id)
-    rec.camera(box, zoom=2.4, duration=min(1.0, seconds - 0.6), portrait=box)
+    rec.camera(duration=min(1.0, seconds - 0.6), frame=ALIGN_CLICK_MARKS)
     rec.hold(seconds)
     rec.mark(mark)
 
@@ -533,8 +467,7 @@ def _align_to(rec: Recorder, gene: str, group_id: str, click_mark: str, *, repea
         group.evaluate("node => node.scrollIntoView({block: 'center'})")
         page.wait_for_timeout(300)
         expect(group).to_contain_text(group_id)
-        _frame_parts(rec, group.locator("[data-similarity-summary]"), align.locator("xpath=../.."), zoom=2.4,
-                     max_width=640)
+        rec.camera(duration=0.9, frame=ALIGN_CLICK_MARKS)
         rec.move_to(*_center(align.bounding_box()))
     # The popup with the pointer on Align…; an opening clip ends at this mark.
     rec.hold(0.7 if repeat else 1.2)
@@ -545,8 +478,8 @@ def _align_to(rec: Recorder, gene: str, group_id: str, click_mark: str, *, repea
         page.wait_for_function(_RESULT_CHANGED, arg=before, timeout=GENERATION_TIMEOUT_MS)
         rec.hold(0.3)
         if popup.is_visible():
-            _close_feature(rec)
-        _fit_to_window(rec)
+            _close_feature(rec, frame=ALIGN_CLICK_MARKS)
+        _fit_to_window(rec, ALIGN_CLICK_MARKS)
 
 
 def _align(rec: Recorder) -> None:
@@ -557,14 +490,14 @@ def _align(rec: Recorder) -> None:
     # The header's Load example; the empty preview's button left with the first example.
     _load_example(rec, _button(rec, "Load example").first, BGC_EXAMPLE, "linear", repeat=True)
     _reset_alignment(rec)
-    _fit_to_window(rec)
-    _frame_figure(rec)
+    _fit_to_window(rec, ALIGN_CLICK_MARKS)
+    rec.camera(duration=0.9, frame=ALIGN_CLICK_MARKS)
     rec.hold(1.0)
     for index, ((gene, group_id), click_mark, mark) in enumerate(zip(ALIGN_GENES, ALIGN_CLICK_MARKS, ALIGN_MARKS,
                                                                        strict=True)):
         _align_to(rec, gene, group_id, click_mark, repeat=bool(index))
         # The rows re-aligned on the gene: the first result is held long enough to read.
-        _show_rows(rec, group_id, 2.4 if index == 0 else VERSION_HOLD, mark)
+        _show_rows(rec, 2.4 if index == 0 else VERSION_HOLD, mark)
 
 
 _TEXT_BOX = """

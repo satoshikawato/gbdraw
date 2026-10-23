@@ -428,12 +428,12 @@ def _scroll_popup_now(rec: Recorder, popup: Locator, text: str) -> None:
     rec.hold(0.3)
 
 
-def _close_feature(rec: Recorder) -> None:
-    """Close the feature popup and pull back: navigation, skimmed."""
+def _close_feature(rec: Recorder, frame: tuple[str, ...] = ()) -> None:
+    """Close the feature popup and pull back: navigation, skimmed (``frame``: see ``Recorder.camera``)."""
 
     with _skimmed(rec):
         rec.click(_label(rec, "Close feature popup"), pause=0.3)
-        rec.camera(duration=0.9)
+        rec.camera(duration=0.9, frame=frame)
         rec.hold(0.5)
 
 

@@ -286,12 +286,13 @@ class Recorder:
         self.event("caption", step=step, title=title, subtitle=subtitle)
 
     def camera(self, rect: dict | None = None, zoom: float = 1.0, duration: float = 0.9,
-               *, portrait: dict | None = None) -> None:
+               *, portrait: dict | None = None, frame: tuple[str, ...] = ()) -> None:
         """Frame ``rect`` (CSS px) at ``zoom``; no rect frames the whole page.
 
         The drawn diagram's bounds are logged as the subject, so tall outputs
         can frame the map where the wide output shows the whole page.
-        ``portrait`` overrides the tall framing explicitly.
+        ``portrait`` overrides the tall framing explicitly. ``frame`` names marks: a tall output keeps the union
+        of the rects those marks log whole in one still view, at one magnification wherever the cue is used.
         """
 
         if rect is None:
@@ -307,9 +308,11 @@ class Recorder:
             figure = self.figure()
             if figure and _contains(rect, figure):
                 portrait = figure
+        logged = {"frame": list(frame)} if frame else {}
         self.event("camera", cx=round(cx, 1), cy=round(cy, 1), zoom=zoom, duration=duration,
                    rect={key: round(rect[key], 1) for key in ("x", "y", "width", "height")},
-                   subject=subject, portrait=portrait and {key: round(portrait[key], 1) for key in portrait})
+                   subject=subject, portrait=portrait and {key: round(portrait[key], 1) for key in portrait},
+                   **logged)
 
     def figure(self) -> dict | None:
         """The preview figure's visible bounds on the stage, or None before the first result."""

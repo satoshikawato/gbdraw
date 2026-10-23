@@ -491,6 +491,8 @@ class Camera:
         self.aspect = layout.aspect
         self.max_h = layout.whole_view(viewport)
         self.cues = []
+        self._wide: list[bool] = []   # per cue: a still frame, which may show more rows than the page has
+        mark_rects_by_name = mark_rects(events)
         # The page rect the camera stays inside, from each output time on.
         whole = (0.0, 0.0, float(viewport[0]), float(viewport[1]))
         self._stage_starts, self._stages = [-math.inf], [whole]
@@ -500,8 +502,9 @@ class Camera:
                 self._stage_starts.append(timemap.out(event["t"]))
                 self._stages.append((rect["x"], rect["y"], rect["width"], rect["height"]))
             elif event["kind"] == "camera":
-                self.cues.append((timemap.out(event["t"]), *self._target(event, self._stages[-1]),
+                self.cues.append((timemap.out(event["t"]), *self._target(event, self._stages[-1], mark_rects_by_name),
                                   event["duration"]))
+                self._wide.append(bool(layout.portrait and event.get("frame")))
         self.starts = [cue[0] for cue in self.cues]
         self._states = []
         state = self._clamp(viewport[0] / 2, viewport[1] / 2, self.max_h)
@@ -510,12 +513,22 @@ class Camera:
                 state = self._at(index - 1, self.starts[index])
             self._states.append(state)
 
-    def _target(self, event: dict, stage: tuple[float, float, float, float]
-                ) -> tuple[tuple[float, float, float], str | None]:
-        """The cue's framing inside ``stage`` and the inset corner it leaves the target clear of (None: no inset)."""
+    def _target(self, event: dict, stage: tuple[float, float, float, float],
+                marks: dict[str, list[dict]] | None = None) -> tuple[tuple[float, float, float], str | None]:
+        """The cue's framing inside ``stage`` and the inset corner it leaves the target clear of (None: no inset).
+
+        A cue with a ``frame`` (mark names) keeps the union of the rects those marks logged whole in one still view
+        (``fixed``), as a clip's ``frame`` does.
+        """
 
         if not self.layout.portrait:
             return self._clamp(event["cx"], event["cy"], self.viewport[1] / max(1.0, event["zoom"]), stage), None
+        if event.get("frame"):
+            rects = [rect for name in event["frame"] for rect in (marks or {}).get(name, ())]
+            if not rects:
+                raise ValueError(f"Recording logged no rect on marks {event['frame']!r}")
+            view, (corner, _) = self.fixed(_union(rects))
+            return view, corner
         rect = event.get("portrait") or event["rect"]
         subject = event.get("subject")
         # An overview too wide for the tall window shows the diagram instead;
@@ -575,7 +588,17 @@ class Camera:
         index = bisect.bisect_right(self.starts, output) - 1
         if index < 0:
             return self._clamp(self.viewport[0] / 2, self.viewport[1] / 2, self.max_h)
-        return self._clamp(*self._at(index, output), self._stage_at(output))
+        state = self._at(index, output)
+        if self._wide[index] or (index and self._wide[index - 1]):
+            # From or to a still frame the view may be taller than the page: only sideways it stays inside.
+            return self._sideways(*state)
+        return self._clamp(*state, self._stage_at(output))
+
+    def _sideways(self, cx: float, cy: float, height: float) -> tuple[float, float, float]:
+        """The view ``(cx, cy, height)`` shifted to stay inside the page's width; its rows may pass the page's."""
+
+        width, page = height * self.aspect, self.viewport[0]
+        return (page / 2 if width >= page else min(max(cx, width / 2), page - width / 2)), cy, height
 
     def fixed(self, rect: dict) -> tuple[tuple[float, float, float], tuple[str | None, float]]:
         """The still view that keeps the whole ``rect`` centered, and its inset (corner, opacity).
@@ -585,11 +608,8 @@ class Camera:
         """
 
         height = max(rect["width"] * FRAME_PAD / self.aspect, rect["height"] * FRAME_PAD)
-        width, page = height * self.aspect, self.viewport[0]
         # Sideways the view stays inside the page (shifted when it would cross an edge); only up and down it extends.
-        cx = rect["x"] + rect["width"] / 2
-        cx = page / 2 if width >= page else min(max(cx, width / 2), page - width / 2)
-        view = (cx, rect["y"] + rect["height"] / 2, height)
+        view = self._sideways(rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2, height)
         if not self.layout.inset:
             return view, (None, 0.0)
         # The first corner that leaves the rect clear; both covering it keeps the default corner.
@@ -1372,8 +1392,7 @@ class Recording:
         self.popovers = [(out(e["t"]), out(e["t"] + e["duration"]), e)
                          for e in self.events if e["kind"] in ("menu", "swatch")]
         self.marks = {e["name"]: out(e["t"]) for e in self.events if e["kind"] == "mark"}
-        self.rects = {e["name"]: [e[key] for key in ("figure", "target") if e.get(key)]
-                      for e in self.events if e["kind"] == "mark"}
+        self.rects = mark_rects(self.events)
         self.steps = sorted({step for _, (step, _, _) in self.captions if step is not None})
         self._decoded: tuple[int, Image.Image] | None = None
 
@@ -1483,6 +1502,12 @@ def _extended(frame: Image.Image, box: tuple[float, float, float, float]
     canvas.paste(frame.getpixel((frame.width // 2, frame.height - 1)), (0, top + frame.height, canvas.width, canvas.height))
     canvas.paste(frame, (left, top))
     return canvas, (box[0] + left, box[1] + top, box[2] + left, box[3] + top)
+
+
+def mark_rects(events: list[dict]) -> dict[str, list[dict]]:
+    """The rects each mark logged: the drawing (``figure``) and the thing a viewer must see (``target``)."""
+
+    return {e["name"]: [e[key] for key in ("figure", "target") if e.get(key)] for e in events if e["kind"] == "mark"}
 
 
 def _union(rects: list[dict]) -> dict:

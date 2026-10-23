@@ -153,6 +153,36 @@ def test_a_clip_with_a_frame_keeps_the_logged_rects_in_one_still_view() -> None:
     assert cx + height * PORTRAIT.aspect / 2 == pytest.approx(1920.0) and cx < 600 + 1290 / 2
 
 
+def test_a_camera_cue_with_a_frame_holds_the_marks_rects_in_the_still_view() -> None:
+    figure = {'x': 474.0, 'y': 389.0, 'width': 1416.0, 'height': 453.0}
+    marks = {'hl-a': [figure, {'x': 1491.0, 'y': 602.0, 'width': 337.0, 'height': 32.0}]}
+    page = {'x': 0, 'y': 0, 'width': 1920, 'height': 1080}
+    events = [{'t': 1.0, 'kind': 'mark', 'name': 'hl-a', 'figure': figure, 'target': marks['hl-a'][1]},
+              {'t': 2.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0.0, 'rect': page,
+               'portrait': figure, 'frame': ['hl-a']},
+              {'t': 5.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0.0, 'rect': page,
+               'portrait': figure}]
+    camera = Camera(events, TimeMap.build(events, 0.0, 9.0), (1920, 1080), PORTRAIT)
+    # The framed cue shows the whole drawing at the magnification `fixed` gives, taller than the page, not clamped.
+    expected, _ = camera.fixed(figure)
+    assert camera.at(3.0) == pytest.approx(expected) and expected[2] > 1080
+    # The next plain cue is clamped to the page again.
+    assert camera.at(6.0)[2] == pytest.approx(camera.cues[1][1][2]) and camera.cues[1][1][2] <= 1080
+    # A frame naming marks that logged nothing fails the render instead of framing the wrong part.
+    events[1]['frame'] = ['hl-missing']
+    with pytest.raises(ValueError, match='no rect'):
+        Camera(events, TimeMap.build(events, 0.0, 9.0), (1920, 1080), PORTRAIT)
+
+
+def test_a_camera_logs_the_marks_a_still_frame_names(tmp_path: Path) -> None:
+    rec = Recorder(_StubPage(1920, 1080), tmp_path)
+    rec._origin = 0.0
+    rec.camera(duration=0.9, frame=('hl-x',))
+    rec.camera(duration=0.9)
+    framed, plain = [event for event in rec.events if event['kind'] == 'camera']
+    assert framed['frame'] == ['hl-x'] and 'frame' not in plain
+
+
 def test_the_titled_figure_keeps_its_full_center_definition() -> None:
     # A plot title shortens the center label unless the title's checkbox is on; the font step turns it on before Generate.
     tree = ast.parse((CAPTURE_ROOT / 'video' / 'promo.py').read_text(encoding='utf-8'))
