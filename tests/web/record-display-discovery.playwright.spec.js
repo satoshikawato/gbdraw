@@ -38,7 +38,8 @@ for (const mode of ['circular', 'linear']) {
     }
     const discovery = await page.evaluate(async mode => {
       const app = window.__GBDRAW_APP__;
-      const file = mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb;
+      const { state } = await import('./js/state.js');
+      const file = state.inputFiles.fileOf(mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb);
       const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/services/record-discovery.js');
       const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('./js/services/diagram-generation.js');
       const fast = await discoverSequenceRecords({ file, format: 'genbank' });
@@ -75,7 +76,7 @@ const snapshot = (page) => page.evaluate(async () => {
     status: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status,
     viewStatus: window.__GBDRAW_APP__.circularRecordDiscoveryState.status,
     rows: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordList.value.map(row => [row.selector, row.record_id]),
-    primary: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb?.name || state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gff?.name || null,
+    primary: state.drawingList().find((drawing) => drawing.mode === 'circular').state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb?.name || state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gff?.name || null,
     result: state.results.value[0]?.content || null,
     selector: state.activeDrawing().form.circular_record_selector,
     grouping: state.activeDrawing().adv.circular_grouping_intent,
