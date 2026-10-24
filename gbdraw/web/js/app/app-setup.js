@@ -1842,6 +1842,7 @@ export const createAppSetup = () => {
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
     evaluate: evaluateRules,
+    synthesize: async (request) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES, { request })).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;

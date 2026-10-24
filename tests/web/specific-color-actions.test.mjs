@@ -14,7 +14,7 @@ import {
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
-import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
+import { evaluatePythonRules, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 // A feature-edits slice over a draft map, so a writer writes the map.
@@ -55,7 +55,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   const transactions = [], transactionScopes = [];
   // `linear`: a second drawing; `state.mode.value` picks the shown one.
   const view = linear ? withModeDrawings(Object.assign(state, { mode: { value: 'circular' } }), { circular: state, linear }) : withDrawings(state);
-  const preparation = createRulePreparation({state: view, evaluate});
+  const preparation = createRulePreparation({state: view, evaluate, synthesize: synthesizePythonColorRules});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let lastRekeyed = null;
@@ -665,7 +665,7 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
         effectiveLegendCaptions: () => () => 'CDS',
         findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
         findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
-        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), getLabelSpecificRule: () => null,
+        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), groupColorRules: () => assert.fail('a merged rule row is recolored through its rule'),
         runWithRuleMatches: (_rules, commit) => commit()
       }
     });
@@ -812,7 +812,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   let rerenders = 0;
   const actions = createFeatureRuleActions({
     ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
-    rulePreparation: createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules }),
+    rulePreparation: createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules }),
     runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
     prepareFileLegendEntries: async (intents) => {
       const diff = diffLegendIntents(state.legendEntries.value, intents);

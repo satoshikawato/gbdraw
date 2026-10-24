@@ -16,7 +16,6 @@ import {
   buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
-import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
   featureOverrideKey,
@@ -408,12 +407,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = drawing.manualSpecificRules;
     /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
     const revised = new Map();
-    const rules = build(current, (row, patch) => {
+    const rules = await build(current, (row, patch) => {
       const next = { ...row, ...patch };
       revised.set(next, row);
       return next;
     });
-    if (!rules) return false;
+    // A build Python answers (`groupColorRules`) read the table at its turn; one
+    // that another owner replaced meanwhile (a History restore) writes nothing.
+    if (!rules || drawing.manualSpecificRules !== current) return false;
     // The row each rule is written into, so a kept or revised row keeps its identity.
     const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
     for (let attempt = 0; ; attempt += 1) {
@@ -1001,22 +1002,21 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return colorRuleHash ? { qual: 'hash', val: colorRuleHash } : null;
   };
 
-  /** @param {ColorFeature | null | undefined} feat @param {string} label */
-  const getLabelSpecificRule = (feat, label) => {
-    const drawing = state.activeDrawing();
-    if (!feat) return null;
-    const priorityRule = drawing.manualPriorityRules.find((/** @type {{ feat?: string, order?: string }} */ rule) => rule.feat === feat.type);
-    const priority = String(priorityRule?.order || '')
-      .split(',')
-      .map((qualifier) => qualifier.trim())
-      .filter(Boolean);
-    const selector = resolveFeatureLabelSelector(feat, label, { priority });
-    if (!selector) return null;
-    return {
-      feat: feat.type,
-      qual: selector.qualifier,
-      val: selector.pattern
-    };
+  // OV-244: the next table of a color edit is Python's. A group takes exact
+  // rules on the feature type and its product, gene, or a label text the
+  // features show, matching no unselected feature, and `hash` rules for the
+  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule.
+  /**
+   * @param {readonly ColorFeature[]} features
+   * @param {string} color
+   * @param {string} caption
+   * @param {import('../rule-matching.js').GroupColorEdit['scope']} scope
+   * @returns {SpecificRuleBuild}
+   */
+  const groupColorRules = (features, color, caption, scope) => async (current) => {
+    const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
+    const { table } = await rulePreparation.synthesizeGroup({ scope, features, labels, color, caption }, current);
+    return table.map((row) => (typeof row === 'number' ? current[row] : row));
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
@@ -1157,8 +1157,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
-    getLabelSpecificRule,
     getLegendRowRules,
+    groupColorRules,
     /** @param {number} index */
     moveSpecificRuleDown: (index) => {
       const drawing = state.activeDrawing();

@@ -13,6 +13,7 @@ import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 
 const ref = (value) => ({ value });
 
@@ -79,6 +80,7 @@ const setup = ({
   });
   const preparation = createRulePreparation({
     state,
+    synthesize: synthesizePythonColorRules,
     evaluate: (payload) => {
       stages.push(`worker:evaluateRules:${payload.kind}:${payload.rules.map((rule) => rule.qual).join('+')}`);
       return evaluateRules(payload);
@@ -111,9 +113,9 @@ const setup = ({
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
       commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
-        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+        const built = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         if (!await commit()) return false;
-        manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
+        manualSpecificRules.splice(0, manualSpecificRules.length, ...await built);
         return true;
       },
       countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
@@ -123,7 +125,7 @@ const setup = ({
       getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
       effectiveLegendCaptions: () => () => 'CDS',
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      getLabelSpecificRule: (feature, label) => (label ? { feat: feature.type, qual: 'product', val: `^${label}$` } : null),
+      groupColorRules: groupColorRulesOver(preparation, (feature) => [feature.qualifiers.product[0]]),
       getLegendRowRules: () => []
     }
   });
@@ -166,7 +168,7 @@ test('a popup color pick without a dialog prepares the rules it commits', async 
   await pick('#123456');
   assert.equal(dialogStages(), null);
   assert.deepEqual(stages, [
-    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash+product', 'commitSpecificRules',
+    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash', 'commitSpecificRules',
     'history:buildIntent', 'history:signature'
   ]);
 });
@@ -277,7 +279,7 @@ for (const queued of [false, true]) test(`Apply to all on a palette row sets the
   setup_.stages.length = 0;
   await setup_.choices.scope('caption');
   assert.deepEqual(setup_.stages, [
-    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash+product', 'setDefaultColor',
+    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash', 'setDefaultColor',
     'history:buildIntent', 'history:signature'
   ]);
   assert.equal(setup_.state.currentColors.value.CDS, '#123456');
