@@ -263,6 +263,20 @@ const publicationCanonicalRequest = (session, readRequest) => readRequest(sessio
   resourceIds: new Set(isObject(session.resources) ? Object.keys(session.resources) : [])
 });
 /**
+ * Save writes each Linear File card's own state into `webFiles.bindings.linearSeqs`, among it a record's typed
+ * name apart from its inferred one. A published Session keeps those rows, so Load and Reset Settings read the
+ * names as after that Save (OV-1701). The imported table files stay unpublished (OV-367): only the card rows and
+ * the Circular input are kept, and Session validation rejects a row that binds a file the Session does not hold.
+ * A CLI-written Session's rows are only initial values that its request overrides, so it publishes none.
+ * @param {PublicationSession} session
+ * @returns {{ schema: unknown, c_gb: unknown, linearSeqs: unknown[] } | null}
+ */
+const publishedCardBindings = (session) => {
+  const bindings = !isCliWritten(session) && isObject(session.webFiles) ? session.webFiles.bindings : null;
+  if (!isObject(bindings) || !Array.isArray(bindings.linearSeqs)) return null;
+  return { schema: bindings.schema, c_gb: bindings.c_gb ?? null, linearSeqs: bindings.linearSeqs };
+};
+/**
  * @param {PublicationSession} session
  * @param {GallerySessionPublicationOwners} owners
  */
@@ -456,11 +470,12 @@ export const createGallerySessionPublication = (owners) => {
   /** @param {PublicationSession} source */
   const prepare = async (source) => {
     const admitted = admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
+    const cards = publishedCardBindings(admitted);
     const session = {
       ...publishedSession(admitted, config, layout, projection, features),
       renderRequest: rebuilt.renderRequest,
       resources: rebuilt.resources,
-      webFiles: rebuilt.webFiles,
+      webFiles: cards ? { ...rebuilt.webFiles, bindings: cards } : rebuilt.webFiles,
       orthogroupState: currentOrthogroupState(admitted.orthogroupState)
     };
     return { session: validateCurrent(validateCurrentFields(session)), equivalence };

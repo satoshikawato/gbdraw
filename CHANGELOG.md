@@ -12,6 +12,23 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Gallery: like the other Gallery tutorials, hepatoplasmataceae_collinear now
+  generates after each step (defaults, LOSATP collinear blocks, identity
+  colors, layout), and its figure and Session now come from a fresh upload, so
+  they show the organism name lines a reader's own upload shows. The card
+  command of a Gallery figure saved in the Web app now declares the record
+  names (`--record_label`, `--record_subtitle`) and the axis colour
+  (`--axis_stroke_color`) that its Session draws, so the command draws the
+  Gallery figure; the BGC0000708-BGC0000713 command lacked its gray axis
+  (OV-1703).
+- Gallery: a published Session made in the Web app keeps the File card rows
+  that Save writes, so Load restores an inferred record name as inferred and
+  **Reset Settings** no longer clears it (OV-1701).
+- Web app: a record name inferred from a *Candidatus* organism now reads
+  `<i>Ca.</i> Tyloplasma litorale Fukuoka2020`: the abbreviation in italics
+  and the name upright, as nomenclature requires. It read `Candidatus
+  <i>Tyloplasma litorale</i> Fukuoka2020` (OV-1720).
+
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 
 - Patch release of 0.14.0. Session files are unchanged (Session version 48).
