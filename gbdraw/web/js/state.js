@@ -53,7 +53,7 @@ import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
-import { drawingIdOfMode } from './services/drawing-view.js';
+import { defaultDrawingName, drawingIdOfMode } from './services/drawing-view.js';
 import { diagnosticError } from './utils/error-normalization.js';
 import {
   DEFAULT_PNG_DPI,
@@ -1032,8 +1032,6 @@ const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circula
  * @type {Map<DrawingId, DrawingState>}
  */
 const drawings = new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d]));
-/** @param {DrawingState} drawing @returns {string} */
-const defaultDrawingName = (drawing) => (drawing.mode === 'linear' ? 'Linear' : 'Circular');
 /** @param {readonly DrawingTab[]} tabs @returns {readonly DrawingTab[]} */
 const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.freeze({ id, name: String(name) })));
 /**
@@ -1041,7 +1039,7 @@ const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.fre
  * of `drawingList()` reacts to it.
  * @type {import('./utils/reactivity.js').Ref<readonly DrawingTab[]>}
  */
-const drawingTabs = typedRef(freezeTabs([...drawings.values()].map((d) => ({ id: d.id, name: defaultDrawingName(d) }))));
+const drawingTabs = typedRef(freezeTabs([...drawings.values()].map((d) => ({ id: d.id, name: defaultDrawingName(d.mode, d.id) }))));
 /** @returns {readonly DrawingState[]} Every drawing, in tab order. */
 const drawingList = () => drawingTabs.value.map((tab) => drawingOf(tab.id));
 /**

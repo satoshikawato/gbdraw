@@ -112,3 +112,87 @@ test('a search typed in one Linear drawing is not shown in a second Linear drawi
   app.selectDrawing('linear');
   assert.equal(app.previewFeatureSearchQuery.value, 'dnaA', 'the first drawing keeps its own search');
 });
+
+// The operations on the drawing list (R11, R16-2): each is one project step
+// of `app/drawing-list.js`, and a new drawing starts with an empty History.
+const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web/js/services/drawing-view.js');
+const tabIds = () => state.drawingTabs.value.map((tab) => tab.id);
+const tabNameOf = (drawingId) => state.drawingTabs.value.find((tab) => tab.id === drawingId)?.name;
+/** @param {string} reason */
+const listRefusal = (reason) => (error) => (
+  error.code === 'INPUT_INVALID' && error.stage === 'drawing-list' && error.context.reason === reason);
+
+test('New is one project step: its Undo shows the drawing shown before, its Redo the new drawing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  app.selectDrawing('linear');
+  const before = tabIds();
+  const outcome = app.drawingList.newDrawing('circular');
+  assert.equal(outcome.status, 'ok');
+  const { drawingId } = outcome;
+  assert.equal(drawingId, allocateDrawingId('circular', before), 'the ID of its kind over the live drawings');
+  assert.deepEqual(tabIds(), [...before, drawingId], 'its tab comes last');
+  assert.equal(tabNameOf(drawingId), defaultDrawingName('circular', drawingId));
+  assert.equal(state.activeDrawingId.value, drawingId, 'the new drawing is shown');
+  const drawing = state.drawingOf(drawingId);
+  assert.equal(history.undoLabel(), 'New drawing');
+
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, 'linear', 'Undo shows the drawing shown before');
+  assert.deepEqual(tabIds(), before);
+  assert.throws(() => history.managerOf(drawingId), 'its History left the router with it');
+
+  await history.redo();
+  assert.equal(state.activeDrawingId.value, drawingId, 'Redo shows the new drawing');
+  assert.equal(state.drawingOf(drawingId), drawing, 'the same drawing comes back');
+  assert.deepEqual(tabIds(), [...before, drawingId]);
+  assert.equal(history.managerOf(drawingId).getUndoCount(), 0);
+});
+
+test('a new drawing starts with an empty History', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  app.selectDrawing('circular');
+  await history.runUndoable('Plot title', () => { modeDrawing(state, 'circular').form.plot_title = 'Edited'; });
+  assert.equal(history.getUndoCount(), 1, 'the shown drawing has a step');
+  const outcome = app.drawingList.newDrawing('linear');
+  assert.equal(outcome.status, 'ok');
+  const { drawingId } = outcome;
+  const own = history.managerOf(drawingId);
+  assert.equal(own.getUndoCount(), 0);
+  assert.equal(own.getRedoCount(), 0);
+  assert.equal(history.undoLabel(), 'New drawing', 'Undo from the new drawing takes the New step');
+  modeDrawing(state, 'circular').form.plot_title = '';
+});
+
+test('Rename refuses a blank or repeated name; a rename and a move are one step each', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const shown = state.activeDrawingId.value;
+  const name = tabNameOf('linear');
+  const other = tabNameOf('circular');
+  assert.throws(() => app.drawingList.renameDrawing('linear', ''), listRefusal('BLANK_NAME'));
+  assert.throws(() => app.drawingList.renameDrawing('linear', '   '), listRefusal('BLANK_NAME'));
+  assert.throws(() => app.drawingList.renameDrawing('linear', other.toUpperCase()), listRefusal('REPEATED_NAME'));
+  assert.throws(() => app.drawingList.renameDrawing('no-such-drawing', 'X'), listRefusal('UNKNOWN_DRAWING'));
+  assert.equal(tabNameOf('linear'), name, 'a refused rename changes nothing');
+  assert.equal(history.canUndo(), false, 'and records nothing');
+
+  assert.equal(app.drawingList.renameDrawing('linear', 'Phage comparison').status, 'ok');
+  assert.equal(tabNameOf('linear'), 'Phage comparison');
+  assert.equal(history.undoLabel(), 'Rename drawing');
+  await history.undo();
+  assert.equal(tabNameOf('linear'), name, 'Undo restores the name');
+  await history.redo();
+  assert.equal(tabNameOf('linear'), 'Phage comparison');
+
+  const order = tabIds();
+  app.drawingList.moveDrawing('linear', 0);
+  assert.equal(tabIds()[0], 'linear');
+  assert.equal(history.undoLabel(), 'Move drawing');
+  await history.undo();
+  assert.deepEqual(tabIds(), order, 'Undo restores the tab order');
+  assert.equal(history.undoLabel(), 'Rename drawing', 'the move was one step');
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, shown, 'neither step switches the shown drawing');
+});

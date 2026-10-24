@@ -10,6 +10,27 @@
     { "mode": "circular", "taken": ["circular-2"], "id": "circular" },
     { "mode": "circular", "taken": ["circular", "circular-2", "circular-4"], "id": "circular-3" }
   ],
+  "names": {
+    "defaults": [
+      { "mode": "circular", "taken": [], "id": "circular", "name": "Circular" },
+      { "mode": "linear", "taken": ["circular"], "id": "linear", "name": "Linear" },
+      { "mode": "linear", "taken": ["linear"], "id": "linear-2", "name": "Linear 2" },
+      { "mode": "circular", "taken": ["circular", "circular-2"], "id": "circular-3", "name": "Circular 3" },
+      { "mode": "linear", "taken": ["linear", "linear-2", "linear-3", "linear-4", "linear-5", "linear-6", "linear-7", "linear-8", "linear-9"], "id": "linear-10", "name": "Linear 10" }
+    ],
+    "identities": [
+      { "names": ["Circular", "Linear"], "valid": true },
+      { "names": ["Circular"], "valid": true },
+      { "names": ["Circular", "circular"], "valid": false },
+      { "names": ["Linear 2", "LINEAR 2"], "valid": false },
+      { "names": ["Circular", ""], "valid": false },
+      { "names": ["Circular", "  "], "valid": false },
+      { "names": ["Linear", "Linear "], "valid": true },
+      { "names": ["Straße", "STRASSE"], "valid": false },
+      { "names": ["ς", "Σ"], "valid": false },
+      { "names": ["Linear 2", "Linear 3"], "valid": true }
+    ]
+  },
   "upgrades": [
     {"name": "BGC0000708-BGC0000713.v47", "input": "tests/fixtures/sessions/BGC0000708-BGC0000713.v47.gbdraw-session.json.gz", "drawings": [{"id": "linear", "mode": "linear", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}], "activeDrawingId": "linear", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
     {"name": "cli-linear-blacklist-file.v47", "input": "tests/fixtures/sessions/cli-linear-blacklist-file.v47.gbdraw-session.json.gz", "drawings": [{"id": "linear", "mode": "linear", "keys": ["cliInvocation", "editorState", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "ui", "webFiles"]}], "activeDrawingId": "linear", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},

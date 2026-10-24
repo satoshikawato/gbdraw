@@ -50,7 +50,8 @@ import {
   createFeatureRecordRotationAction,
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
-import { state, sessionOperationAvailability } from '../state.js';
+import { createDrawingState, state, sessionOperationAvailability } from '../state.js';
+import { createDrawingList } from './drawing-list.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -4436,15 +4437,14 @@ export const createAppSetup = () => {
     || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null)
     || (featureActions.ruleWritePending() ? RULE_WRITE_BUSY : null);
   const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
-  // `false` when the drawing is unknown or already shown, the busy reason
-  // when a switch waits, else `{ status: 'ok' }`.
-  /** @param {unknown} drawingId */
-  const selectDrawing = (drawingId) => {
-    const arriving = state.drawingList().find((drawing) => drawing.id === drawingId);
+  // The switch work, steps 1-5, without the gate: `selectDrawing` and a step
+  // of the drawing list (`app/drawing-list.js`, which shows a drawing inside
+  // its project step, R16-2) call it. Showing the shown drawing does nothing.
+  /** @param {DrawingId} drawingId */
+  const showDrawingNow = (drawingId) => {
+    const arriving = state.drawingOf(drawingId);
     const departing = state.activeDrawing();
-    if (!arriving || arriving === departing) return false;
-    const busy = drawingSwitchBusy();
-    if (busy) return busy;
+    if (arriving === departing) return;
     // 1. Settle the departing drawing; its capture runs in this call.
     void history.settlePendingIntent();
     featureActions.suspendSpecificRulePatternDrafts();
@@ -4474,8 +4474,32 @@ export const createAppSetup = () => {
     rebindAnnotationRecords();
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
+  };
+  // `false` when the drawing is unknown or already shown, the busy reason
+  // when a switch waits, else `{ status: 'ok' }`.
+  /** @param {unknown} drawingId */
+  const selectDrawing = (drawingId) => {
+    const arriving = state.drawingList().find((drawing) => drawing.id === drawingId);
+    if (!arriving || arriving === state.activeDrawing()) return false;
+    const busy = drawingSwitchBusy();
+    if (busy) return busy;
+    showDrawingNow(arriving.id);
     return { status: 'ok' };
   };
+  // The operations on the drawing list, each one project step (R11, R16-2).
+  const drawingList = createDrawingList({
+    drawingTabs: () => state.drawingTabs.value,
+    shownDrawingId: () => state.activeDrawingId.value,
+    switchBusy: drawingSwitchBusy,
+    createDrawing: createDrawingState,
+    addDrawing: state.addDrawing,
+    removeDrawing: (drawingId) => state.removeDrawing(drawingId, artifactSlots),
+    renameDrawing: state.renameDrawing,
+    moveDrawing: state.moveDrawing,
+    addDrawingHistory: history.addMember,
+    runListStep: history.runListStep,
+    showDrawingNow
+  });
   // Session Load (E1): the loaded Session's artifact slots, before its preview
   // mounts. `opening` is the other Result set's slot when the Session opens on
   // that set's mode; `stashed` waits in its mode. The stash starts again with
@@ -7004,6 +7028,7 @@ export const createAppSetup = () => {
     canRetryInteractiveSvgExport,
     reloadAfterOperationError,
     selectDrawing,
+    drawingList,
     drawingSwitchAvailable,
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
