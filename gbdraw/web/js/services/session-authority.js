@@ -396,6 +396,30 @@ const withoutFields = (container, drop) => (isPlainObject(container) && Object.k
   ? /** @type {T} */ (Object.fromEntries(Object.entries(container).filter(([field]) => !drop(field)))) : container);
 
 /**
+ * A Result set holder's Web-only artifact fields (a Session 40+'s top level,
+ * a Session 49 drawing): a development-branch feature field is dropped with
+ * a row (J3), the derived orthogroup `groups` with none (A7c).
+ * @template {Record<string, unknown>} T
+ * @param {T} holder
+ * @param {string} at Where the holder is in the file (`''`: the top level; else ending in `.`).
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {T} `holder` itself when it holds none.
+ */
+const withoutArtifactWebOnlyFields = (holder, at, repairs) => {
+  const features = isPlainObject(holder.features) ? holder.features : {};
+  CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter((field) => Object.hasOwn(features, field)).forEach((field) => repairs.push(
+    loadRepair({ code: 'session-field-dropped', path: `${at}features.${field}`, effect: 'dropped' })
+  ));
+  const kept = {
+    features: withoutFields(holder.features, (field) => CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.includes(field)),
+    orthogroupState: withoutFields(holder.orthogroupState, (field) => field === 'groups')
+  };
+  return kept.features === holder.features && kept.orthogroupState === holder.orthogroupState ? holder
+    : /** @type {T} */ ({ ...holder, ...(Object.hasOwn(holder, 'features') ? { features: kept.features } : {}),
+      ...(Object.hasOwn(holder, 'orthogroupState') ? { orthogroupState: kept.orthogroupState } : {}) });
+};
+
+/**
  * The Web-only part of the band reader: what the description leaves open
  * that no writer of the version wrote. A Session 27-39 key no writer of its
  * version wrote is dropped with a row; a Session 46's retired homes, whose
@@ -416,12 +440,7 @@ const readWebOnlyFields = (document, repairs) => {
     unread.forEach((path) => repairs.push(loadRepair({ code: 'session-field-dropped', path, effect: 'dropped' })));
     next = withoutFields(next, (key) => unread.includes(key));
   } else {
-    const features = isPlainObject(next.features) ? next.features : {};
-    CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter((field) => Object.hasOwn(features, field)).forEach((field) => repairs.push(
-      loadRepair({ code: 'session-field-dropped', path: `features.${field}`, effect: 'dropped' })
-    ));
-    set('features', withoutFields(next.features, (field) => CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.includes(field)));
-    set('orthogroupState', withoutFields(next.orthogroupState, (field) => field === 'groups'));
+    next = withoutArtifactWebOnlyFields(next, '', repairs);
   }
   if (isModeScopedBand(document)) {
     RETIRED_MODE_SCOPED_FIELDS.forEach(([domain, fields]) => {
@@ -550,7 +569,12 @@ export const readSessionDocument = (value) => {
   // reads (R2).
   if (isDrawingsBand(checked)) {
     if (!drawingIdsAreUnique(checked)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
-    return { value: readSessionInputs(checked, repairs), repairs };
+    // Each drawing's Web-only artifact fields are read as a Session 40-48's top level's.
+    const entries = /** @type {Record<string, unknown>[]} */ (/** @type {Record<string, unknown>} */ (checked).drawings);
+    const read = entries.map((entry, index) => (isPlainObject(entry) ? withoutArtifactWebOnlyFields(entry, drawingSetPath(index), repairs) : entry));
+    const document = read.some((entry, index) => entry !== entries[index])
+      ? /** @type {SessionChecked} */ ({ ...checked, drawings: read }) : checked;
+    return { value: readSessionInputs(document, repairs), repairs };
   }
   return {
     value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(withNullRequestAsMissing(checked), repairs), repairs), repairs),

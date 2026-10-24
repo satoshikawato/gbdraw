@@ -811,3 +811,16 @@ test('a Session 49 without a Linear drawing gives the Linear drawing the app add
   assert.equal(linear.form.plot_title, createDefaultForm().plot_title);
   assert.equal(linear.adv.linear_track_layout, createDefaultAdv('linear').linear_track_layout);
 });
+
+test('a Session 49 drawing\'s Web-only artifact fields are dropped as a Session 40-48\'s top-level ones are', async () => {
+  const session = v49Session('drawings-circular-linear');
+  const index = session.drawings.findIndex((entry) => entry.id !== session.ui.activeDrawingId);
+  session.drawings[index].features = { ...session.drawings[index].features, extractedFeatures: [] };
+  session.drawings[index].orthogroupState = { ...session.drawings[index].orthogroupState, groups: [{ id: 'g1' }] };
+  resetDrawings();
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const paths = loaded.repairs.map((row) => row.path);
+  assert.ok(paths.includes(`drawings[${index}].features.extractedFeatures`), JSON.stringify(paths));
+  assert.equal(paths.some((path) => path.includes('orthogroupState')), false, JSON.stringify(paths));
+});

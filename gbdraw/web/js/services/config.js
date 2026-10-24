@@ -2361,7 +2361,7 @@ const readSettingsOnlyMode = (data, repairs) => {
 /**
  * @param {Session49} document
  * @param {SessionDrawing49} drawing
- * @param {Parameters<typeof projectCanonicalSessionRequest>[0]['sessionResourceTable']} sessionResourceTable
+ * @param {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
  * @returns {StoredDrawingInputs}
  */
 const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
@@ -3584,14 +3584,15 @@ const savedLosatCacheEntryKind = (entry) => {
 };
 
 /**
- * @param {DrawingState} drawing
- * @param {unknown} entries
+ * The project's raw LOSAT cache, from each drawing's saved entries (DESIGN
+ * §4.1: a Session 49 drawing's entries merge into the one cache, keyed by
+ * their content; a Session 27-48's one list is its Linear drawing's).
+ * @param {readonly { drawing: DrawingState, entries: unknown }[]} sources
  * @param {unknown} [legacyEnvelope]
  * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
  */
 const applyLosatCache = (
-  drawing,
-  entries,
+  sources,
   legacyEnvelope = null,
   { adoptCurrent = false, validatedManifest = null } = {}
 ) => {
@@ -3601,11 +3602,14 @@ const applyLosatCache = (
   /** @type {Record<string, unknown>[]} */
   const legacyEntries = [];
 
-  if (Array.isArray(entries)) {
+  sources.forEach(({ drawing, entries }) => {
+    if (!Array.isArray(entries)) return;
+    // An entry an earlier drawing holds (the same key, the same content) is read once.
+    const earlier = new Set(map.keys());
     entries.forEach((entry, idx) => {
       const kind = savedLosatCacheEntryKind(entry);
       if (kind === 'legacy') legacyEntries.push(entry);
-      if (kind !== 'current') return;
+      if (kind !== 'current' || earlier.has(entry.key)) return;
       const excludedFields = new Set([
         'key',
         'filename',
@@ -3633,7 +3637,7 @@ const applyLosatCache = (
         ...restoredLosatCacheInfoIdentity(drawing, entry)
       });
     });
-  }
+  });
 
   state.losatCache.value = map;
   state.losatCacheInfo.value = info;
@@ -3792,6 +3796,17 @@ export const applyOrthogroupStateData = (
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
 
+  installGroupNames(drawing, orthogroupState, groupIdSet);
+};
+
+/**
+ * A drawing's group name and description edits of the groups it holds (B47).
+ * @param {DrawingState} drawing
+ * @param {{ orthogroupNameOverrides?: unknown, orthogroupDescriptionOverrides?: unknown,
+ *   orthogroupDormantOverrides?: unknown }} orthogroupState
+ * @param {ReadonlySet<string>} groupIdSet
+ */
+const installGroupNames = (drawing, orthogroupState, groupIdSet) => {
   GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
     orthogroupNameOverrides: cloneStringMap(orthogroupEditsOf(orthogroupState.orthogroupNameOverrides, groupIdSet).value),
     orthogroupDescriptionOverrides: cloneStringMap(
@@ -6595,14 +6610,24 @@ const importSessionDocument = async (e, options = {}) => {
       }
     }
     // The similarity groups' state Load installs; a name or description edit
-    // of a group it does not hold is dropped and listed (B47).
+    // of a group it does not hold is dropped and listed (B47). The group
+    // names are the projected Session 49 drawing's, else the file's Linear part's.
+    const groupNamesDrawingId = projectedDrawingId ?? linearPartDrawingId;
+    /** @param {DrawingId} id */
+    const groupNamesOf = (id) => ({
+      orthogroupNameOverrides: draftOf(id).config.webEdits?.orthogroupNameOverrides || {},
+      orthogroupDescriptionOverrides: draftOf(id).config.webEdits?.orthogroupDescriptionOverrides || {}
+    });
+    /** @param {Record<string, unknown>} names @param {ReadonlySet<string>} groupIds @param {string} editsPath */
+    const groupNameRepairs = (names, groupIds, editsPath) => (
+      /** @type {const} */ (['orthogroupNameOverrides', 'orthogroupDescriptionOverrides'])).forEach((field) => {
+      const { dropped } = orthogroupEditsOf(names[field], groupIds);
+      if (dropped) repairs.push(loadRepair({ code: 'orthogroup-edit-dropped', path: `${editsPath}.${field}`, effect: 'dropped', count: dropped }));
+    });
     const loadedOrthogroupState = canonicalSession
       ? {
           ...projectionResult.artifactState.orthogroupState,
-          ...(modeScopedSession ? {
-            orthogroupNameOverrides: draftOf(linearPartDrawingId).config.webEdits?.orthogroupNameOverrides || {},
-            orthogroupDescriptionOverrides: draftOf(linearPartDrawingId).config.webEdits?.orthogroupDescriptionOverrides || {}
-          } : {}),
+          ...(modeScopedSession ? groupNamesOf(groupNamesDrawingId) : {}),
           ...(currentCatalogFeatureState
             ? { groups: currentCatalogFeatureState.orthogroups }
             : {})
@@ -6627,16 +6652,19 @@ const importSessionDocument = async (e, options = {}) => {
     {
       const groupIds = new Set(orthogroupIdsOf(loadedOrthogroupState.groups));
       const editsPath = canonicalSession
-        ? (modeScopedSession ? 'modes.linear.config.webEdits' : 'orthogroupState')
+        ? (modeScopedSession ? `${pathIn(draftPartOf(groupNamesDrawingId).at, 'config')}.webEdits` : 'orthogroupState')
         : (isPlainObject(data.orthogroupState) ? 'orthogroupState' : 'features');
-      /** @type {['orthogroupNameOverrides' | 'orthogroupDescriptionOverrides', unknown][]} */ ([
-        ['orthogroupNameOverrides', loadedOrthogroupState.orthogroupNameOverrides],
-        ['orthogroupDescriptionOverrides', loadedOrthogroupState.orthogroupDescriptionOverrides]
-      ]).forEach(([field, edits]) => {
-        const { dropped } = orthogroupEditsOf(edits, groupIds);
-        if (dropped) repairs.push(loadRepair({ code: 'orthogroup-edit-dropped', path: `${editsPath}.${field}`, effect: 'dropped', count: dropped }));
-      });
+      groupNameRepairs(loadedOrthogroupState, groupIds, editsPath);
     }
+    // Each other Session 49 drawing's group names, of the groups its own
+    // Result holds (its slot's), installed in it by drawing ID.
+    const storedGroupNames = (projectedDrawingId === null ? [] : loadedDrawings).filter(({ id }) => id !== projectedDrawingId)
+      .map(({ id }) => {
+        const names = groupNamesOf(id);
+        const groupIds = new Set(orthogroupIdsOf(storedSetSlots.find((slot) => slot.drawingId === id)?.values.orthogroups));
+        groupNameRepairs(names, groupIds, `${pathIn(draftPartOf(id).at, 'config')}.webEdits`);
+        return { id, names, groupIds };
+      });
     // The LOSAT caches and the protein identity manifest Load drops are
     // computed again by the next comparison: no dialog row (Q1, B46).
     const cacheSource = canonicalSession ? projectionResult.artifactState : data;
@@ -6819,20 +6847,35 @@ const importSessionDocument = async (e, options = {}) => {
     // Each drawing takes its own files; the cards are the shown drawing's (D-15-93).
     restoreLiveFileState(new Map(committed.map((drawing) => [drawing.id, liveFileStateOf(filesOf(drawing.id))])),
       liveFileStateOf(filesOf(plan.activeDrawingId)), committed);
-    // A Session 27-48 holds one Linear part (its comparisons, LOSAT caches
-    // and Similarity group names), which its drawing takes.
-    const linearDrawing = state.drawingOf(linearPartDrawingId);
+    // The Linear drawing the Files card list folds: the shown one, else a
+    // Session 27-48's Linear part's (a Session 49's first Linear drawing).
+    const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing : state.drawingOf(linearPartDrawingId);
     // The loaded File cards are new to the user: view state, reset with the document.
     foldLoadedLinearSources(
       state.linearFoldedSources, groupLinearSourceRecords(linearDrawing.linearSeqs),
       linearDrawing.inputType.value
     );
-    // The comparisons are the Linear drawing's.
-    restoreImportedComparisonIntent(
-      linearDrawing.importedComparisonIntent,
-      comparisonClassification,
-      draftConfigOf(linearPartDrawingId)?.importedComparisonResolution
-    );
+    // Each Linear drawing's comparisons, classified from its own request
+    // (a Session 27-48's one Linear part is its Linear drawing's).
+    committed.filter((drawing) => drawing.mode === 'linear').forEach((drawing) => restoreImportedComparisonIntent(
+      drawing.importedComparisonIntent,
+      projectedDrawingId === null || drawing.id === projectedDrawingId
+        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null,
+      draftConfigOf(drawing.id)?.importedComparisonResolution
+    ));
+    /**
+     * Each drawing's saved raw LOSAT entries: a Session 49's by drawing, the
+     * projected one first (its own are its view's), merged into the one
+     * cache (DESIGN §4.1); a Session 27-48's one list, its Linear part's.
+     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
+     */
+    const losatSourcesOf = (projectedEntries, field) => (projectedDrawingId !== null && upgraded
+      ? [{ drawing: shownDrawing.id === projectedDrawingId ? shownDrawing : state.drawingOf(projectedDrawingId), entries: projectedEntries },
+          ...upgraded.drawings.filter((entry) => entry.id !== projectedDrawingId).map((entry) => ({
+            drawing: state.drawingOf(/** @type {DrawingId} */ (entry.id)),
+            entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries
+          }))]
+      : [{ drawing: state.drawingOf(linearPartDrawingId), entries: projectedEntries }]);
     if (!settingsOnly) {
       // Each drawing's Depth tracks fit its own rows and files (DESIGN §9).
       committed.forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(
@@ -6841,8 +6884,7 @@ const importSessionDocument = async (e, options = {}) => {
     }
     if (canonicalSession) {
       applyLosatCache(
-        linearDrawing,
-        projectionResult.artifactState.losatCache?.entries,
+        losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),
         projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
         {
           adoptCurrent: currentSchemaSession,
@@ -6850,7 +6892,8 @@ const importSessionDocument = async (e, options = {}) => {
         }
       );
       applyLosatDerivedCache(
-        projectionResult.artifactState.losatDerivedCache?.entries,
+        losatSourcesOf(projectionResult.artifactState.losatDerivedCache?.entries, 'losatDerivedCache')
+          .flatMap(({ entries }) => (Array.isArray(entries) ? entries : [])),
         projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence,
         { adoptCurrent: currentSchemaSession }
       );
@@ -6860,8 +6903,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        linearDrawing,
-        /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries,
+        [{ drawing: state.drawingOf(linearPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries }],
         legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(
@@ -6890,15 +6932,18 @@ const importSessionDocument = async (e, options = {}) => {
       ...restoredFileSequenceSources
     ]);
 
-    // Group names are the Linear drawing's (Session 46 `webEdits`).
+    // The shown Result's groups; their names are the projected Session 49
+    // drawing's, else the Linear drawing's (Session 46 `webEdits`), and
+    // each other Session 49 drawing takes its own.
     applyOrthogroupStateData(
-      linearDrawing,
+      state.drawingOf(groupNamesDrawingId),
       loadedOrthogroupState,
       {
         legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
         catalogFeatureState: currentCatalogFeatureState
       }
     );
+    storedGroupNames.forEach(({ id, names, groupIds }) => installGroupNames(state.drawingOf(id), names, groupIds));
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
       applySessionFeatureRecoveryPlan(committedDrawing, legacyFeatureRecoveryPlan);
