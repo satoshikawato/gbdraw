@@ -201,29 +201,6 @@ const autoWidthPx = (renderer, lengthParam, drawing) => {
   return ownEntry(AUTO_SLOT_SIZES.widthPx[size], renderer) ?? null;
 };
 
-/** @param {DrawingState} drawing */
-const previewFeatureLaneCount = (drawing) => {
-  if (Boolean(drawing?.form?.separate_strands)) return 2;
-  return 1;
-};
-
-/** @param {unknown} preset @param {string} lengthParam @param {DrawingState} drawing */
-const previewFeatureRadiusRatio = (preset, lengthParam, drawing) => {
-  const normalized = normalizeCircularTrackPreset(preset);
-  const axisRadius = AUTO_SLOT_SIZES.axisRadiusPx;
-  const laneWidth = autoWidthPx('features', lengthParam, drawing) ?? 0;
-  const laneCount = previewFeatureLaneCount(drawing);
-  const spacing = AUTO_SLOT_SIZES.gapPx;
-  const bandWidth = (laneCount * laneWidth) + (Math.max(0, laneCount - 1) * spacing);
-  if (normalized === 'tuckin') {
-    return (axisRadius - spacing - (bandWidth / 2)) / axisRadius;
-  }
-  if (normalized === 'spreadout') {
-    return (axisRadius + spacing + (bandWidth / 2)) / axisRadius;
-  }
-  return 1.0;
-};
-
 /**
  * The size class of the estimates: that of the records they describe, and long
  * while no length is known.
@@ -487,79 +464,6 @@ const conservationEntries = (drawing) => {
     conservationSourceFiles(drawing),
     drawing.circularConservation
   );
-};
-
-/** @param {unknown} value */
-const positiveNumberOrNull = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
-
-/**
- * @param {TrackSlotStateView | null | undefined} state
- * @param {DrawingState} drawing
- * @param {number[]} recordLengths the lengths of the records the estimates describe
- */
-export const estimateCircularConservationLayoutWarning = (state, drawing, recordLengths) => {
-  const currentMode = String(state?.mode?.value ?? state?.mode ?? '').trim().toLowerCase();
-  if (currentMode && currentMode !== 'circular') return '';
-  if (drawing?.circularConservation?.enabled !== true) return '';
-
-  const entries = conservationEntries(drawing);
-  if (entries.length <= 0) return '';
-
-  const preset = normalizeCircularTrackPreset(drawing?.form?.track_type);
-  const lengthParam = getPreviewLengthParam(drawing, recordLengths);
-  const axisRadius = AUTO_SLOT_SIZES.axisRadiusPx;
-  const defaultSpacing = AUTO_SLOT_SIZES.gapPx;
-  /** @param {string} renderer */
-  const widthOf = (renderer) => autoWidthPx(renderer, lengthParam, drawing) ?? 0;
-  const lane = laneDirectionForPreset(preset);
-  const featureLaneCount = previewFeatureLaneCount(drawing);
-  const featureWidth = widthOf('features');
-  const featureBandWidth = (featureLaneCount * featureWidth) + (Math.max(0, featureLaneCount - 1) * defaultSpacing);
-  let availableInsidePx = axisRadius - defaultSpacing;
-  if (lane === 'inside') {
-    const featureCenter = previewFeatureRadiusRatio(preset, lengthParam, drawing) * axisRadius;
-    availableInsidePx = featureCenter - (featureBandWidth / 2) - defaultSpacing;
-  } else if (lane === 'split') {
-    availableInsidePx = axisRadius - (featureBandWidth / 2) - defaultSpacing;
-  }
-  availableInsidePx = Math.max(0, availableInsidePx);
-
-  const ringWidth = positiveNumberOrNull(drawing?.circularConservation?.ring_width)
-    ?? widthOf('sequence_conservation');
-  const ringGap = positiveNumberOrNull(drawing?.circularConservation?.ring_gap) ?? defaultSpacing;
-  const showGc = !Boolean(drawing?.form?.suppress_gc);
-  const showSkew = !Boolean(drawing?.form?.suppress_skew);
-  const showDepth = Boolean(drawing?.form?.show_depth);
-  const numericAfterConservationPx =
-    (showDepth ? widthOf('depth') + defaultSpacing : 0) +
-    (showGc ? widthOf('dinucleotide_content') + defaultSpacing : 0) +
-    (showSkew ? widthOf('dinucleotide_skew') + defaultSpacing : 0);
-  const requestedStackPx =
-    (entries.length * ringWidth) +
-    (Math.max(0, entries.length - 1) * ringGap) +
-    numericAfterConservationPx;
-  const compressedStackPx =
-    (entries.length * 4) +
-    (Math.max(0, entries.length - 1) * 1) +
-    (showDepth ? 10 + 1 : 0) +
-    (showGc ? 10 + 1 : 0) +
-    (showSkew ? 12 + 1 : 0);
-
-  if (compressedStackPx > availableInsidePx) {
-    return tn(entries.length,
-      'There is {count} inside pairwise comparison ring plus other circular tracks; even a compressed ring may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.',
-      'There are {count} inside pairwise comparison rings plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.');
-  }
-  if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
-    return tn(entries.length,
-      'There is {count} inside pairwise comparison ring; gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.',
-      'There are {count} inside pairwise comparison rings; gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.');
-  }
-  return '';
 };
 
 /**

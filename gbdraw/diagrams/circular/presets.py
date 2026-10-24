@@ -8,7 +8,7 @@ branching on the legacy preset name.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal, Sequence, TypedDict, cast
+from typing import Literal, Sequence, TypedDict, cast, get_args
 
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasGeometry
@@ -31,7 +31,7 @@ from ...svg.circular_ticks import (
 CircularTrackPreset = Literal["tuckin", "middle", "spreadout"]
 CircularFeatureLaneDirection = Literal["inside", "split", "outside"]
 
-_VALID_PRESETS: frozenset[str] = frozenset({"tuckin", "middle", "spreadout"})
+_VALID_PRESETS: frozenset[str] = frozenset(get_args(CircularTrackPreset))
 _NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"depth", "gc_content", "gc_skew"})
 _NON_NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"features", "ticks"})
 _RENDERER_ALIASES: dict[str, str] = {
@@ -84,7 +84,6 @@ class CircularAutoSlotSizes(TypedDict):
     preset's depth, GC content and GC skew rows.
     """
 
-    axisRadiusPx: float
     gapPx: float
     widthPx: dict[str, dict[str, float]]
     ticksWidthPx: dict[str, dict[str, dict[str, float]]]
@@ -100,15 +99,45 @@ def normalize_circular_track_preset(raw: str | None) -> CircularTrackPreset:
     return cast(CircularTrackPreset, preset)  # membership checked above
 
 
+_FEATURE_LANE_DIRECTION_BY_PRESET: dict[CircularTrackPreset, CircularFeatureLaneDirection] = {
+    "tuckin": "inside",
+    "middle": "split",
+    "spreadout": "outside",
+}
+_PRESET_BY_FEATURE_LANE_DIRECTION: dict[str, CircularTrackPreset] = {
+    direction: preset for preset, direction in _FEATURE_LANE_DIRECTION_BY_PRESET.items()
+}
+
+
+class CircularTrackPresetTable(TypedDict):
+    """The Circular track presets in menu order and the feature lane direction of each, for the Web."""
+
+    presets: list[CircularTrackPreset]
+    featureLaneDirection: dict[CircularTrackPreset, CircularFeatureLaneDirection]
+
+
 def circular_feature_lane_direction_for_preset(
     preset: str | None,
 ) -> CircularFeatureLaneDirection:
-    normalized = normalize_circular_track_preset(preset)
-    if normalized == "middle":
-        return "split"
-    if normalized == "spreadout":
-        return "outside"
-    return "inside"
+    """The feature lane direction of a preset: the one owner of this mapping."""
+
+    return _FEATURE_LANE_DIRECTION_BY_PRESET[normalize_circular_track_preset(preset)]
+
+
+def circular_preset_for_feature_lane_direction(lane_direction: str | None) -> CircularTrackPreset:
+    """The preset whose features take ``lane_direction``; ``tuckin`` for an unknown direction."""
+
+    return _PRESET_BY_FEATURE_LANE_DIRECTION.get(str(lane_direction or "inside").strip().lower(), "tuckin")
+
+
+def circular_track_preset_table() -> CircularTrackPresetTable:
+    presets = list(get_args(CircularTrackPreset))
+    return {
+        "presets": presets,
+        "featureLaneDirection": {
+            preset: circular_feature_lane_direction_for_preset(preset) for preset in presets
+        },
+    }
 
 
 def _scalar_factor(value: float) -> ScalarSpec:
@@ -372,7 +401,6 @@ def circular_auto_slot_sizes(cfg: GbdrawConfig) -> CircularAutoSlotSizes:
     if len(gaps) != 1:
         raise ValueError(f"The preset rows have more than one default gap: {sorted(gaps)}")
     return CircularAutoSlotSizes(
-        axisRadiusPx=float(circular.radius),
         gapPx=gaps.pop(),
         widthPx=width_px,
         ticksWidthPx=ticks_width_px,
@@ -614,10 +642,13 @@ __all__ = [
     "CircularPresetContext",
     "CircularPresetRadialPlan",
     "CircularTrackPreset",
+    "CircularTrackPresetTable",
     "circular_auto_slot_sizes",
     "circular_radial_plan_for_preset",
     "circular_feature_lane_direction_for_preset",
     "circular_feature_slot_defaults_for_preset",
+    "circular_preset_for_feature_lane_direction",
+    "circular_track_preset_table",
     "circular_track_slots_from_preset_order",
     "circular_track_slots_for_preset",
     "normalize_circular_track_preset",

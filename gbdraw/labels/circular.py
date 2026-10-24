@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, Literal, NamedTuple, TypeAlias, cast
+from typing import Any, Literal, NamedTuple, TypeAlias, cast, get_args
 
 from ..features.coordinates import get_strand
 from .filtering import label_filter_maps
@@ -22,6 +22,7 @@ from ..config.models import (
     GbdrawConfig,
 )
 from ..core.text import calculate_bbox_dimensions
+from ..diagrams.circular.presets import CircularTrackPreset, circular_feature_lane_direction_for_preset
 from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import (
@@ -89,16 +90,7 @@ LEADER_LABEL_MIN_ORDER_GAP_DEG = 0.05
 
 def _normalize_circular_track_preset(raw: object) -> str:
     preset = str(raw or "tuckin").strip().lower()
-    return preset if preset in {"tuckin", "middle", "spreadout"} else "tuckin"
-
-
-def _lane_direction_from_preset(raw: object) -> str:
-    preset = _normalize_circular_track_preset(raw)
-    if preset == "middle":
-        return "split"
-    if preset == "spreadout":
-        return "outside"
-    return "inside"
+    return preset if preset in get_args(CircularTrackPreset) else "tuckin"
 
 
 def _effective_outer_middle_anchor_clearance_px(
@@ -4949,10 +4941,10 @@ def prepare_label_list(
     lane_direction = (
         str(feature_lane_direction).strip().lower()
         if feature_lane_direction is not None
-        else _lane_direction_from_preset(track_type)
+        else circular_feature_lane_direction_for_preset(track_type)
     )
     if lane_direction not in {"inside", "outside", "split"}:
-        lane_direction = _lane_direction_from_preset(track_type)
+        lane_direction = circular_feature_lane_direction_for_preset(track_type)
     strandedness = profile.strandedness
     resolve_overlaps = profile.resolve_overlaps
     displaced_lanes = any(

@@ -185,10 +185,7 @@ import {
   resolveUniqueOrthogroupMemberForFeature
 } from './orthogroups.js';
 import { createRightDrawerController } from './right-drawer.js';
-import {
-  createCircularTrackSlotEditor,
-  estimateCircularConservationLayoutWarning
-} from './circular-track-slots.js';
+import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
@@ -2233,10 +2230,6 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const circularConservationLayoutWarning = computed(() => {
-    const drawing = shownDrawingOfMode('circular');
-    return drawing ? estimateCircularConservationLayoutWarning(state, drawing, circularEstimateRecordLengths.value) : '';
-  });
   const losatSettings = createLosatSettings({ state });
   /**
    * The record a Linear entry draws, once its records are read: the one its
@@ -7080,7 +7073,6 @@ export const createAppSetup = () => {
     annotationRecordMissingMessage: annotationEditor.recordMissingMessage,
     annotationRecordShowsSelect: annotationEditor.recordShowsSelect,
     annotationRecordCaption: annotationEditor.recordCaptionFor,
-    circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,
     setCircularConservationUploadFiles,

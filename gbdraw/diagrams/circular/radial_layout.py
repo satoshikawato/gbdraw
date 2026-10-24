@@ -41,7 +41,11 @@ from ...svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_radius_bounds,
 )
-from .presets import normalize_circular_track_preset
+from .presets import (
+    circular_feature_lane_direction_for_preset,
+    circular_preset_for_feature_lane_direction,
+    normalize_circular_track_preset,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -246,24 +250,6 @@ def _depth_reserved_band_for_draw_band(
     )
 
 
-def _lane_direction_from_legacy_track_type(track_type: str | None) -> str:
-    preset = normalize_circular_track_preset(track_type)
-    if preset == "middle":
-        return "split"
-    if preset == "spreadout":
-        return "outside"
-    return "inside"
-
-
-def _preset_from_lane_direction(lane_direction: str | None) -> str:
-    direction = str(lane_direction or "inside").strip().lower()
-    if direction == "split":
-        return "middle"
-    if direction == "outside":
-        return "spreadout"
-    return "tuckin"
-
-
 def _feature_track_ids(
     feature_dict: Mapping[str, Any] | None,
     *,
@@ -365,7 +351,7 @@ def measure_circular_feature_stack(
     normalized_preset = (
         normalize_circular_track_preset(preset)
         if preset is not None
-        else normalize_circular_track_preset(_preset_from_lane_direction(lane_direction))
+        else circular_preset_for_feature_lane_direction(lane_direction)
     )
     center = float(center_radius_px) if center_radius_px is not None else axis
 
@@ -462,7 +448,7 @@ def build_circular_feature_layout(
     direction = (
         str(lane_direction).strip().lower()
         if lane_direction is not None
-        else _lane_direction_from_legacy_track_type(track_type)
+        else circular_feature_lane_direction_for_preset(track_type)
     )
     track_ids = _feature_track_ids(
         feature_dict,

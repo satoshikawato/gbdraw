@@ -112,8 +112,7 @@ const visibleText = (node) => {
 // author name or visible text of the element that holds it, after the name of
 // the row group it is in (this function). The name comes from the page text,
 // so the tip reads it when it mounts and again after a UI locale switch has
-// re-rendered the page. `label` names a tip whose holder has no such text;
-// the layout warning beside Generate is named "Layout warning" (not help).
+// re-rendered the page. `label` names a tip whose holder has no such text.
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;

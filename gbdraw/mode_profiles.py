@@ -229,7 +229,7 @@ def mode_profiles_payload() -> dict[str, object]:
     # gbdraw.auto_sizes takes DiagramMode from this module.
     from gbdraw.auto_sizes import linear_label_size_records, tick_and_window_tiers
     from gbdraw.config.models import GbdrawConfig
-    from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes
+    from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
     from gbdraw.labels.label_style import (
         DEFAULT_LABEL_LINE,
         DEFAULT_LABEL_PROTECTION,
@@ -256,6 +256,8 @@ def mode_profiles_payload() -> dict[str, object]:
             "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},
             **tick_and_window_tiers(packaged_cfg),
         },
+        # The Circular track presets in menu order and their feature lane directions.
+        "circularTrackPresets": circular_track_preset_table(),
         "comparisonDomains": {
             _camel_threshold_name(name): {
                 "minimum": domain.minimum,

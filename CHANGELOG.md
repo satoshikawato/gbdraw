@@ -19,6 +19,11 @@ write-up of a release.
   are now the Auto sizes the Python layout starts from, so an Auto ticks row
   shows 7.8 px, as drawn, instead of 9.8 px; the layout can still narrow a
   width when the rows do not fit (OV-1712).
+- Web app: the Circular pairwise comparison ring warning above **Generate** and
+  in the **Pairwise Comparisons** card is gone. It was a browser estimate of
+  whether the rings fit, which did not follow the Python layout. A ring stack
+  that does not fit is still reported by Generate, and a ring width the layout
+  narrows shows in the drawn row's **Width** (OV-1712).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

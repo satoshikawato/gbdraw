@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `87`
+- Contract revision: `88`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -3073,6 +3073,49 @@ Status: active Product authority
   - This change is Contract-only: the Contract is the only changed path, and
     the Review is `REQUIRED`. The runtime that implements it follows in
     DRAWINGS-B (B2d, B4), which cites this authority on its base.
+- Revision 88 change: `PD-OI-093` is replaced for scenario revision `3`
+  (concern `web.settings-pane.display`; the outcome
+  `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH` is kept). The Circular
+  comparison-ring layout warning before Generate is retired, and with it the
+  Must preserve sentence on the rail's Layout warning mark. It comes from
+  replies of the Product Decision Owner `satoshikawato` of `2026-10-24` in the
+  Claude Code session of `OV-1712` (campaign `ov1712-20261024`, D-04 and
+  D-05). After pull request `#1344`, the Owner asked what the session would do
+  with the warning, and the session asked the question below, quoted with its
+  options as it wrote them, and then asked the Owner to approve the receipt.
+  Each reply is quoted as written.
+  - D-04. The session reported that the warning
+    (`estimateCircularConservationLayoutWarning`) reads only the simple
+    controls, not a custom stack, uses minimum widths without the fractions of
+    the Python layout, and ignores tick labels and the center definition, and
+    that the Python layout reports a row that does not fit at Generate with a
+    typed error. Options (line breaks omitted):
+    「- **A（推奨）**: 事前警告を消す。収まらなければ Generate のエラーで知らせ、縮小されたかどうかは Generate 後の Width 欄（例: 62.1 px (auto)）で分かります。二重実装は残りません。 - **B**: Generate 前に Worker で Python のレイアウトを試し、正確な警告を出す。D-02 の B と同じく大きな作業です。 - **C**: 今の判定を残す。最小値だけ Python から渡し、二重実装として `twins.json` に登録します（登録には Owner の承認が要ります）。不正確さは残ります。」
+    Reply: 「A（推奨）」.
+  - D-05. The session showed the changed fields of the scenario revision `3`
+    receipt (the Rationale and Accepted residual risk sentences added, the
+    Layout warning sentence removed from Must preserve, the May retire text,
+    and the decision date) with the full text in a file, and asked:
+    「この文面でよければ「承認」とだけお答えください。」
+    Reply: 「承認」. It approves the receipt recorded in `PD-OI-093` as written.
+  - Receipt changes in `PD-OI-093`: Scenario revision `2` becomes `3`. The
+    Rationale gains
+    「Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。」.
+    Must preserve loses
+    「Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。」.
+    May retire changes from 「none」 to
+    「Circular の比較リングの Generate 前の layout の警告（Pairwise Comparisons の欄の注意、Generate Diagram の上の注意と、列だけのときの Layout warning の印）。」.
+    Accepted residual risk gains
+    「比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。」.
+    The decision date becomes `2026-10-24`. Every other term of scenario
+    revision `2` is unchanged. Scenario revision `3` replaces scenario
+    revision `2` as a whole; Git history retains the former receipt.
+  - New receipt SHA-256: `PD-OI-093`
+    `907e3eadd2e6be561fe8f3f3638b42ddc05ea8a81aa5f2a76b5b208fa8154a67`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that remove the warning are in the same pull request,
+    and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -7769,45 +7812,47 @@ Decision date: 2026-10-13
 ### PD-OI-093: Settings pane display switch and icon rail
 
 - Concern key: `web.settings-pane.display`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-093`, scenario revision `1` (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-093`, scenario revision `2` (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`).
 - Status: `ACCEPTED`
 - Selected outcome: `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
-  Revision 51 entry above. The Owner approved the receipt text below as
+- Decision source: the Owner replies of `2026-10-24` quoted verbatim in the
+  Revision 88 entry above. The Owner approved the receipt text below as
   written. The receipt reproduces its fields without translation or
-  additional terms. Scenario revision `2` keeps the outcome and adds the Font item of the Revision 51 entry to the icon rail. The runtime, tests, and documentation that
-  implement it merge with it (static Product Contract co-change); this record
-  supplies no runtime acceptance evidence.
+  additional terms. Scenario revision `3` keeps the outcome and retires the
+  Circular comparison-ring layout warning before Generate, with the rail's
+  Layout warning mark that showed it. The runtime, tests, and documentation
+  that implement it merge with it (static Product Contract co-change); this
+  record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `81bf15fcf9788503b438545f62256e6eb72f8e21f9e0f1213245ea3f858316c0`.
+  `907e3eadd2e6be561fe8f3f3638b42ddc05ea8a81aa5f2a76b5b208fa8154a67`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.settings-pane.display
-Scenario revision: 2
+Scenario revision: 3
 Choice: A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH
-Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。
-Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
-May retire: none
-Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。
+Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。
+Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
+May retire: Circular の比較リングの Generate 前の layout の警告（Pairwise Comparisons の欄の注意、Generate Diagram の上の注意と、列だけのときの Layout warning の印）。
+Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。
 Owner: satoshikawato
-Decision date: 2026-10-13
+Decision date: 2026-10-24
 ```
 
 ```json
 {
   "concern": "web.settings-pane.display",
-  "scenarioRevision": 2,
+  "scenarioRevision": 3,
   "choice": "A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH",
-  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。",
-  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
-  "mayRetire": "none",
-  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。",
+  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。",
+  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
+  "mayRetire": "Circular の比較リングの Generate 前の layout の警告（Pairwise Comparisons の欄の注意、Generate Diagram の上の注意と、列だけのときの Layout warning の印）。",
+  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-13"
+  "decisionDate": "2026-10-24"
 }
 ```
 
