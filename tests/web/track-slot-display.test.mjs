@@ -531,13 +531,16 @@ const circularNoteEditor = (geometry) => {
 };
 
 // TK-15: before a render the note is an estimate and says so; a rendered row
-// shows the measured value. An Auto ticks row is never 0 px wide.
+// shows the measured value. An Auto ticks row is never 0 px wide. OV-1712: the
+// estimate is the Auto width and gaps of Python's preset rows (a long record,
+// Tuckin, Separate Strands), and a row shows no radius until Generate places it.
 test('Circular notes mark estimates and show measured values after a render (TK-15, GX-18)', () => {
   const estimated = circularNoteEditor(null);
-  assert.equal(estimated(1, 'width'), '≈ 9.8 px (estimate)');
-  for (const [index, field] of [[0, 'width'], [0, 'radius'], [1, 'radius'], [2, 'width'], [2, 'radius'], [2, 'inner_gap_px']]) {
-    assert.match(estimated(index, field), /^≈ [0-9.]+ (?:px|R) \(estimate\)$/, `${index} ${field}`);
-  }
+  assert.deepEqual([0, 1, 2].map((index) => estimated(index, 'width')),
+    ['≈ 18.5 px (estimate)', '≈ 7.8 px (estimate)', '≈ 74.1 px (estimate)']);
+  assert.deepEqual([0, 1, 2].map((index) => estimated(index, 'radius')), ['Auto', 'Auto', 'Auto']);
+  assert.equal(estimated(2, 'inner_gap_px'), '≈ 3.9 px (estimate)');
+  assert.equal(estimated(2, 'outer_gap_px'), '≈ 3.9 px (estimate)');
   const rendered = circularNoteEditor({
     mode: 'circular',
     records: [{ resultIndex: 0, recordIndex: 0, axisRadiusPx: 390, slots: [
