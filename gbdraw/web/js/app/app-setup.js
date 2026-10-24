@@ -25,7 +25,7 @@
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
-import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
+import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
@@ -1842,6 +1842,7 @@ export const createAppSetup = () => {
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
     evaluate: evaluateRules,
+    synthesize: async (request) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES, { request })).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
@@ -1857,7 +1858,7 @@ export const createAppSetup = () => {
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
-    readShownLegendColor: (entry) => legendEntryColor(entry),
+    readLegendRowColors: (drawing) => readLegendRowColors(drawing),
     readHiddenTrackRows: (drawing) => hiddenTrackLegendRows(drawing),
     legendRowNames: shallowRef(new Map()),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
@@ -1897,8 +1898,12 @@ export const createAppSetup = () => {
   // OV-276, OV-282 (D-26): a Legend panel row shows the color the palette
   // gives its swatch on the displayed Result (the live compile's, by Python's
   // rows), derived and never written into the rows. A new Result brings new
-  // Python rows.
+  // Python rows. The Legend and rule owners read the same cached colors
+  // through `readLegendRowColors`; a drawing that is not shown has no
+  // displayed Result, and its rows show the colors they record.
   const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing(), readDrawnTracks()));
+  /** @type {import('./candidate-render.js').ReadLegendRowColorsPort} */
+  const readLegendRowColors = (drawing) => (drawing === state.activeDrawing() ? legendRowColors.value : RECORDED_LEGEND_ROW_COLORS);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
   const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
@@ -1988,6 +1993,7 @@ export const createAppSetup = () => {
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
     moveLegendRecords: legendActions.moveLegendRecords,
+    readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     showEditorIntent: (options) => showEditorIntent(options),

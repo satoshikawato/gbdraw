@@ -16,7 +16,6 @@ import {
   buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
-import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
   featureOverrideKey,
@@ -110,6 +109,8 @@ import {
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {MoveLegendRecordsPort} moveLegendRecords
  *   The Legend owner's move of a drawing's Legend records; this owner calls it only for a drawing not shown.
+ * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
+ *   The root's colors of a drawing's Legend rows as they show (OV-282): a commit owns a listed row in that color.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
@@ -131,7 +132,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -202,8 +203,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
+    // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
+    const shown = readLegendRowColors(drawing);
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
-      .map(entry => ({ caption: legendEntryKey(entry), color: entry.color }));
+      .map(entry => ({ caption: legendEntryKey(entry), color: shown.listed(entry) }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
@@ -405,25 +408,36 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (busy) return busy;
     if (commitOptions.isCurrent?.() === false) return false;
     await rerenderIdle();
-    const current = drawing.manualSpecificRules;
-    /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
-    const revised = new Map();
-    const rules = build(current, (row, patch) => {
-      const next = { ...row, ...patch };
-      revised.set(next, row);
-      return next;
-    });
-    if (!rules) return false;
-    // The row each rule is written into, so a kept or revised row keeps its identity.
-    const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
     for (let attempt = 0; ; attempt += 1) {
+      // The table and the inputs the build reads. A build Python answers
+      // (`groupColorRules`) spans an await, and the table is one array that a
+      // History restore or a Load fills in place: a table whose content changed
+      // meanwhile writes nothing. Equal content in other rows (a Generate's
+      // activation reinstalls cloned rows) and changed inputs (it replaced the
+      // catalog) build again from the current rows, so the edit is not dropped
+      // and no rule is verified against a catalog it does not color.
+      const current = [...drawing.manualSpecificRules];
+      const table = JSON.stringify(current);
+      const contentChanged = () => JSON.stringify(drawing.manualSpecificRules) !== table;
+      const sameRows = () => drawing.manualSpecificRules.length === current.length
+        && current.every((row, index) => drawing.manualSpecificRules[index] === row);
       const results = state.results.value;
-      const table = JSON.stringify(drawing.manualSpecificRules);
       const inputs = rulePreparation.snapshot();
-      const outcome = await commitOnce(drawing, rules, sourceRows, label, commitOptions);
-      const stale = state.results.value !== results || !rulePreparation.isCurrent(inputs);
-      if (outcome || attempt === 2 || !stale
-        || JSON.stringify(drawing.manualSpecificRules) !== table
+      /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
+      const revised = new Map();
+      const rules = await build(current, (row, patch) => {
+        const next = { ...row, ...patch };
+        revised.set(next, row);
+        return next;
+      });
+      if (!rules || contentChanged()) return false;
+      // The row each rule is written into, so a kept or revised row keeps its identity.
+      const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
+      const reinstalled = !sameRows();
+      const outcome = !reinstalled && rulePreparation.isCurrent(inputs)
+        && await commitOnce(drawing, rules, sourceRows, label, commitOptions);
+      const stale = reinstalled || state.results.value !== results || !rulePreparation.isCurrent(inputs);
+      if (outcome || attempt === 2 || !stale || contentChanged()
         || commitOptions.isCurrent?.() === false
         || state.sessionOperationAvailability?.()) return outcome;
       await rerenderIdle();
@@ -1001,22 +1015,21 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return colorRuleHash ? { qual: 'hash', val: colorRuleHash } : null;
   };
 
-  /** @param {ColorFeature | null | undefined} feat @param {string} label */
-  const getLabelSpecificRule = (feat, label) => {
-    const drawing = state.activeDrawing();
-    if (!feat) return null;
-    const priorityRule = drawing.manualPriorityRules.find((/** @type {{ feat?: string, order?: string }} */ rule) => rule.feat === feat.type);
-    const priority = String(priorityRule?.order || '')
-      .split(',')
-      .map((qualifier) => qualifier.trim())
-      .filter(Boolean);
-    const selector = resolveFeatureLabelSelector(feat, label, { priority });
-    if (!selector) return null;
-    return {
-      feat: feat.type,
-      qual: selector.qualifier,
-      val: selector.pattern
-    };
+  // OV-244: the next table of a color edit is Python's. A group takes exact
+  // rules on the feature type and its product, gene, or a label text the
+  // features show, matching no unselected feature, and `hash` rules for the
+  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule.
+  /**
+   * @param {readonly ColorFeature[]} features
+   * @param {string} color
+   * @param {string} caption
+   * @param {import('../rule-matching.js').GroupColorEdit['scope']} scope
+   * @returns {SpecificRuleBuild}
+   */
+  const groupColorRules = (features, color, caption, scope) => async (current) => {
+    const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
+    const { table } = await rulePreparation.synthesizeGroup({ scope, features, labels, color, caption }, current);
+    return table.map((row) => (typeof row === 'number' ? current[row] : row));
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
@@ -1157,8 +1170,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
-    getLabelSpecificRule,
     getLegendRowRules,
+    groupColorRules,
     /** @param {number} index */
     moveSpecificRuleDown: (index) => {
       const drawing = state.activeDrawing();

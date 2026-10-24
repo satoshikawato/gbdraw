@@ -21,6 +21,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
+  SYNTHESIZE_COLOR_RULES: 'synthesizeColorRules',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'
 });
 

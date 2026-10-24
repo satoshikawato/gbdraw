@@ -1,4 +1,4 @@
-import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
+import { evaluatePythonRules, groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -23,7 +23,6 @@ const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
 const { getFeatureColorRuleHash } = await import(pathToFileURL(join(tempDir, 'services', 'feature-utils.js')));
-const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'services', 'feature-selector.js')));
 const { buildLegendIntents, colorRuleLegendGroups, legendRowRules } = await import(pathToFileURL(join(tempDir, 'services', 'specific-color-rules.js')));
 
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
@@ -130,7 +129,8 @@ const preparationState = { extractedFeatures, biologicalFeatures, manualSpecific
 let legendSiblings = [featureB, hashOnlyFeature];
 let matchingRegexRule = specificRule;
 const preparedRuleSets = [];
-const runWithRuleMatchesForActions = runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState);
+const actionsPreparation = createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules });
+const runWithRuleMatchesForActions = runWithRuleMatchesOf(actionsPreparation, preparationState);
 const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
   state: withDrawings({
     results: ref([]),
@@ -165,7 +165,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
       return runWithRuleMatchesForActions(rules, commit);
     },
     commitSpecificRules: async (build, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
-      const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+      const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
       if (!rules) return false;
       committedLegendIntents.push(previousLegendIntents);
       const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
@@ -207,12 +207,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
-    getLabelSpecificRule: (feature, label) => {
-      const selector = resolveFeatureLabelSelector(feature, label);
-      return selector
-        ? { feat: feature.type, qual: selector.qualifier, val: selector.pattern }
-        : null;
-    }
+    groupColorRules: groupColorRulesOver(actionsPreparation, (feature) => [feature.displayLabel || feature.product || '', feature.product || ''])
   },
   getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
   getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
@@ -279,8 +274,8 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
 
 // Each popup action prepares an allowlisted set of rules (OV-198): a stroke
 // edit reads only the saved rules, a color edit also the clicked feature's hash
-// rule and its label rules, once it commits; the scope dialog reads only the
-// saved rules (OV-225).
+// rule, once it commits; the scope dialog reads only the saved rules (OV-225).
+// A group edit's other rules are Python's (OV-244) and prepared at its commit.
 {
   const popupFeature = {
     id: 'popup-feature', svg_id: 'hash-popup', type: 'CDS', product: 'popup product',
@@ -289,13 +284,7 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
   const ruleKey = (rule) => `${rule.feat}|${rule.qual}|${rule.val}`;
   const savedRules = [specificRule, { feat: 'CDS', qual: 'hash', val: 'hash-z', color: '#444444', cap: 'Other' }];
   const savedKeys = savedRules.map(ruleKey);
-  const label = resolveFeatureLabelSelector(popupFeature, 'popup product');
-  assert.ok(label, 'the popup feature has a label rule');
-  const clickedKeys = [
-    ...savedKeys,
-    `CDS|hash|${getFeatureColorRuleHash(popupFeature)}`,
-    `CDS|${label.qualifier}|${label.pattern}`
-  ];
+  const clickedKeys = [...savedKeys, `CDS|hash|${getFeatureColorRuleHash(popupFeature)}`];
   const strokeScope = (kind) => () => {
     Object.assign(featureStyleScopeDialog, { show: true, kind, feat: popupFeature, color: '#123456', strokeColor: '#123456' });
     return actions.handleFeatureStyleScopeChoice('cancel');
@@ -316,7 +305,15 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
         matchingRegexRule = specificRule;
         legendSiblings = [featureB, hashOnlyFeature];
       }
-    }, clickedKeys]
+    }, clickedKeys],
+    // Review r1: Selected features writes Python's table, which Python verified,
+    // so it prepares only the saved rules before the synthesis, not a hash
+    // rule per selected feature that it no longer writes.
+    ['applyColorToSelectedFeatures', async () => {
+      await actions.applyColorToSelectedFeatures([featureA, featureB], '#13579b', 'Picked');
+      assert.deepEqual([featureA, featureB, hashOnlyFeature].map((feature) => firstMatchingRule(feature, manualSpecificRules)?.color),
+        ['#13579b', '#13579b', undefined], 'the selected features take the color, and no other feature does');
+    }, savedKeys]
   ];
   for (const [name, run, expected] of allowlist) {
     manualSpecificRules.splice(0, manualSpecificRules.length, ...savedRules);
@@ -460,6 +457,8 @@ const outsideLabelGroup = {
   id: 'label-feature-outside',
   svg_id: 'f33333333_record_2',
   rendered_feature_svg_id: 'f33333333_record_2',
+  // Its own feature: a feature that shares a hash is one target for Python (OV-244).
+  selector: { ...labelFeatureB.selector, hash: 'f33333333' },
   displayLabel: 'a different edited label'
 };
 manualSpecificRules.splice(0);
@@ -520,8 +519,9 @@ Object.assign(featureStyleScopeDialog, {
   displayLabelSiblingCount: 1
 });
 await actions.handleColorScopeChoice('displayLabel');
-assert.equal(manualSpecificRules.some((rule) => rule.qual === 'product'), false);
-assert.equal(manualSpecificRules.filter((rule) => rule.qual === 'hash').length, 2);
+// Python's matcher reads the product before the gene of these features, so the
+// product rule colors both and no other feature changes (OV-244, Owner R-07).
+assert.deepEqual(manualSpecificRules.map(({ qual, color }) => [qual, color]), [['gene', '#101010'], ['product', '#abcdef']]);
 
 manualSpecificRules.splice(0, manualSpecificRules.length, {
   feat: 'CDS',
@@ -532,8 +532,10 @@ manualSpecificRules.splice(0, manualSpecificRules.length, {
 });
 Object.assign(featureStyleScopeDialog, { show: true, feat: conflictingFeatureA, color: '#aabbcc' });
 await actions.handleColorScopeChoice('displayLabel');
-assert.equal(manualSpecificRules.some((rule) => rule.qual === 'product'), false);
-assert.equal(manualSpecificRules.filter((rule) => rule.qual === 'hash').length, 2);
+// The record rule wins over a product rule for feature A, which takes a hash rule.
+assert.deepEqual(manualSpecificRules.map(({ qual, val, color }) => [qual, qual === 'hash' ? val : '', color]), [
+  ['record_location', '', '#202020'], ['product', '', '#aabbcc'], ['hash', 'f11111111', '#aabbcc']
+]);
 
 const geneLabelFeature = {
   ...labelFeatureB,
@@ -554,8 +556,9 @@ Object.assign(featureStyleScopeDialog, {
   displayLabelSiblingCount: 1
 });
 await actions.handleColorScopeChoice('displayLabel');
-assert.equal(manualSpecificRules.every((rule) => rule.qual === 'hash'), true);
-assert.equal(manualSpecificRules.length, 2);
+// The label comes from another qualifier on each: one exact rule each (OV-244).
+assert.deepEqual(manualSpecificRules.map(({ qual, val }) => [qual, val]).sort(),
+  [['gene', '^wsv360-like protein$'], ['product', '^wsv360-like protein$']]);
 
 const duplicateFeatureA = {
   ...labelFeatureA,
@@ -847,7 +850,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     ruleActions: {
       runWithRuleMatches: runWithRuleMatchesOf(resetPreparation, { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
       commitSpecificRules: async (next) => {
-        committed.push(next(resetRules, (row, patch) => ({ ...row, ...patch })).map((rule) => ({ ...rule })));
+        committed.push((await next(resetRules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
         return true;
       },
       effectiveLegendCaptions: () => (feature) => feature.type,
@@ -858,7 +861,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       findFeaturesWithSameIndividualLabel: () => [],
       getDisplayedFeatureLabel: (feature) => feature.product,
       getIndividualFeatureLabel: (feature) => feature.product,
-      getLabelSpecificRule: () => null
+      groupColorRules: groupColorRulesOver(resetPreparation, (feature) => [feature.product])
     },
     getFeatureElements: () => [],
     getFeatureFillElements: () => []
@@ -920,6 +923,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
+    const renamePreparation = createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules });
     const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, findLegendRowNamed, keepBothNamesOf,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
@@ -935,9 +939,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       }),
       nextTick: async () => {},
       ruleActions: {
-        runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
+        runWithRuleMatches: runWithRuleMatchesOf(renamePreparation, renameState),
         commitSpecificRules: async (next, _label, options = {}) => {
-          committed.push(next(rules, (row, patch) => ({ ...row, ...patch })).map((rule) => ({ ...rule })));
+          committed.push((await next(rules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
           commitOptions.push(options);
           return true;
         },
@@ -951,7 +955,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
         findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
         findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
-        getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null,
+        getIndividualFeatureLabel: (feature) => feature.product,
+        groupColorRules: groupColorRulesOver(renamePreparation, (feature) => [feature.product]),
         ...ruleOverrides
       },
       getFeatureElements: () => [],
@@ -1153,6 +1158,25 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual([fixture.scopeDialog.displayLabelOffered, fixture.scopeDialog.annotationLabelOffered], offered, name);
   }
 
+  // Review r1 (OV-244): a group edit whose rule synthesis Python refuses shows
+  // the failure, on the Legend panel rename and on Selected features alike.
+  for (const [name, run] of [
+    ['the Legend panel rename', (fixture) => fixture.renameActions.renameLegendEntry(0, 'Leucine')],
+    ['Selected features', (fixture) => fixture.renameActions.applyColorToSelectedFeatures([{ ...trna, legendCaption: 'tRNA' }], '#123456', 'Leucine')]
+  ]) {
+    const synthesized = [];
+    const fixture = build({ entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }], order: ['tRNA'],
+      features: [{ ...trna, legendCaption: 'tRNA' }],
+      ruleOverrides: { groupColorRules: () => async () => {
+        synthesized.push(name);
+        throw new Error('The rule synthesis could not color the selected features.');
+      } } });
+    await run(fixture);
+    assert.deepEqual(synthesized, [name], `${name} asks Python for its rules`);
+    assert.notEqual(fixture.errorLog.value, null, `${name} reports the refused synthesis`);
+    assert.deepEqual(fixture.committed, [], `${name} writes no rules`);
+  }
+
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the
   // Legend owner's `keepBothNamesOf`). A row renamed whole keeps its place and
   // its key's records; a feature split off its row is placed right after the
@@ -1350,7 +1374,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   });
   await twinTyped.renameActions.renameLegendEntry(0, 'Twin');
   assert.notEqual(twinTyped.legendRenameDialog.show, true, 'the typed name and the row\'s color are a group\'s: nothing to ask');
-  assert.deepEqual(committedFor(twinTyped, 't1'), [['t1', 'Twin', '#222222']]);
+  // OV-244: the row's features are a group; Python writes the exact product rule that colors only them.
+  assert.deepEqual(committedFor(twinTyped, '^tRNA-Leu$'), [['^tRNA-Leu$', 'Twin', '#222222']]);
   const twinAsked = ruleRows({ rules: twins });
   await twinAsked.renameActions.renameLegendEntry(0, 'Twin');
   assert.deepEqual([twinAsked.legendRenameDialog.show, twinAsked.legendRenameDialog.targetColor, twinAsked.legendRenameDialog.reason],
@@ -1383,18 +1408,19 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(colorRuleLegendGroups([everyRule, cdsRule, ...mixedRules], 'tRNA').map(({ name, types }) => [name, types]),
     [['Everything', ['*']], ['Mixed', ['CDS', 'tRNA']]], 'the list offers the group of a rule for every type');
   const c1 = { id: 'c1', svg_id: 'c1', type: 'CDS', product: 'p', qualifiers: { product: ['p'] }, start: 100, end: 190, legendCaption: 'Mixed' };
-  for (const [rules, name, color, options] of [
+  // OV-244: where t1 is the only tRNA, Python writes the exact product rule that colors only it.
+  for (const [rules, name, color, options, ruleValue = 't1'] of [
     [[everyRule], 'Everything', '#123456', {}],
     [mixedRules, 'Mixed', '#00aa00', {}],
     [mixedRules, 'Mixed', '#00aa00', {
       entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Mixed', color: '#00aa00', featureIds: ['c1'] }],
       order: ['tRNA', 'Mixed'], features: [t1, c1]
-    }]
+    }, '^tRNA-Leu$']
   ]) {
     const picked = ruleRows({ rules, ...options });
     await picked.renameActions.joinLegendGroup(colorRuleLegendGroups(rules, 'tRNA')[0]);
     assert.notEqual(picked.legendRenameDialog.show, true, `a pick of ${name} asks nothing`);
-    assert.deepEqual(committedFor(picked, 't1'), [['t1', name, color]]);
+    assert.deepEqual(committedFor(picked, ruleValue), [[ruleValue, name, color]]);
     // A typed rename keeps the Merge rule of rows of one same feature type.
     const typed = ruleRows({ rules, ...options });
     await typed.renameActions.renameLegendEntry(0, name);
@@ -1558,7 +1584,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       findMatchingRegexRule: () => null,
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
       findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '',
-      getIndividualFeatureLabel: () => '', getLabelSpecificRule: () => null
+      getIndividualFeatureLabel: () => ''
     },
     getFeatureElements: () => [fl1Element],
     getFeatureFillElements: () => [fl1Element]

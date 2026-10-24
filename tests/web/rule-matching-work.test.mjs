@@ -10,6 +10,7 @@ import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
@@ -96,10 +97,11 @@ test('"All features with legend item" over K features with K hash rules does O(K
   for (const count of [50, 200]) {
     const count_ = counting();
     const { features, rules, state } = setup(count, count_);
-    const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
+    const preparation = createRulePreparation({ state, evaluate: evaluateHashRules, synthesize: synthesizePythonColorRules });
     assert.equal(await preparation.prepare(rules), true);
     let committed = null;
-    // Not a palette row (D-15): the choice writes one rule per feature.
+    // Not a palette row (D-15): Python writes one exact product rule per
+    // feature (each product is its own), in place of its `hash` rule (OV-244).
     const featureStyleScopeDialog = {
       show: true, feat: features[0], color: '#abcdef', legendName: 'CDS', defaultColorType: null
     };
@@ -116,19 +118,19 @@ test('"All features with legend item" over K features with K hash rules does O(K
       readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),
       ruleActions: {
         runWithRuleMatches: (_, commit) => commit(),
-        commitSpecificRules: async (build) => { committed = build(rules, (row, patch) => ({ ...row, ...patch })); return true; },
+        commitSpecificRules: async (build) => { committed = await build(rules, (row, patch) => ({ ...row, ...patch })); return true; },
         countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
         findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
         findFeaturesWithSameLegendItem: (feature) => features.filter((other) => other !== feature),
         findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
         getEffectiveLegendCaption: caption, effectiveLegendCaptions: () => caption,
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-        getLabelSpecificRule: () => null, getLegendRowRules: () => []
+        groupColorRules: groupColorRulesOver(preparation), getLegendRowRules: () => []
       }
     });
     measured.push(await count_.measure(() => actions.handleColorScopeChoice('caption')));
     assert.equal(committed.length, count);
-    assert.ok(committed.every((rule, index) => rule.val === hashOf(index) && rule.color === '#abcdef'));
+    assert.ok(committed.every((rule, index) => rule.qual === 'product' && rule.val === `^p${index}$` && rule.color === '#abcdef'));
   }
   linear(...measured);
 });
