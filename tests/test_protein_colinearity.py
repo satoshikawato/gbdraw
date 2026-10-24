@@ -1394,6 +1394,38 @@ def test_parse_losatp_outfmt6_returns_standard_columns() -> None:
     assert parsed.iloc[0]["bitscore"] == pytest.approx(150)
 
 
+@pytest.mark.parametrize("position", [0, 1, 2])
+@pytest.mark.parametrize(
+    ("column", "value", "error"),
+    [
+        ("identity", "1.", None),
+        ("identity", ".5", None),
+        ("evalue", "+1.5E-3", None),
+        ("qstart", "+1", None),
+        ("identity", ".", "non-numeric"),
+        ("evalue", "1e", "non-numeric"),
+        ("evalue", "e5", "non-numeric"),
+        ("bitscore", "1..2", "non-numeric"),
+        ("bitscore", " 150", "non-numeric"),
+        ("qstart", "1.0", "non-numeric"),
+        ("qstart", "1e3", "non-numeric"),
+        ("send", "43\t1", "does not match outfmt 6 columns"),
+    ],
+)
+def test_parse_losatp_outfmt6_accepts_only_the_strict_grammar_on_every_line(position, column, value, error) -> None:
+    from gbdraw.exceptions import ParseError
+
+    fields = "q1\ts1\t91.5\t42\t1\t0\t1\t42\t2\t43\t1e-20\t150".split("\t")
+    lines = ["\t".join(fields)] * 2
+    fields[COMPARISON_COLUMNS.index(column)] = value
+    lines.insert(position, "\t".join(fields))
+    if error is None:
+        assert len(parse_losatp_outfmt6("\n".join(lines) + "\n")) == 3
+    else:
+        with pytest.raises(ParseError, match=error):
+            parse_losatp_outfmt6("\n".join(lines) + "\n")
+
+
 def _protein_map_for_lengths(lengths: dict[str, int]) -> dict[str, protein_colinearity_module.CdsProtein]:
     return {
         protein_id: protein_colinearity_module.CdsProtein(
