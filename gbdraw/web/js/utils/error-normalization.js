@@ -380,6 +380,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {string} [featureCaption]
  * @property {string} [sessionTable]
  * @property {'circular' | 'linear'} [diagramMode]
+ * @property {string} [drawingId] the drawing whose Result the failure concerns, when it is not the one shown
  * @property {number} [featureStart]
  * @property {number} [featureEnd]
  * @property {number} [featureCount]
@@ -665,6 +666,7 @@ const contextFor = (value) => {
   }
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
+  if (typeof value.drawingId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.drawingId)) context.drawingId = value.drawingId;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
   if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
     context.labelFitCounts = value.labelFitCounts;

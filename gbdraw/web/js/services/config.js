@@ -13,7 +13,7 @@ import {
   resetRightDrawerState,
   restoreRightDrawerState
 } from './right-drawer-state.js';
-import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
 import {
   INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree,
   bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList,
@@ -4742,7 +4742,12 @@ const resetSessionBaseline = () => {
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
   adoptedProteinIdentityManifest = null;
-  resetSettingsState(state);
+  resetProject(state);
+  // Every drawing's Result takes the default palette applied; the shown
+  // artifact holds it (the Results are cleared below).
+  const [artifact] = state.drawingList().map((drawing) => resetDrawingSettings(state, drawing));
+  state.appliedPaletteName.value = artifact.appliedPaletteName;
+  state.appliedPaletteColors.value = artifact.appliedPaletteColors;
   resetLayoutState(state);
   resetRightDrawerState(state);
   // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws

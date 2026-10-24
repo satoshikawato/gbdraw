@@ -100,6 +100,40 @@ export const allocateDrawingId = (mode, takenIds) => {
   return /** @type {DrawingId} */ (id);
 };
 
+// The name of each mode's first drawing (Python's `DRAWING_NAMES`).
+/** @type {Readonly<Record<ModeProfileName, string>>} */
+const MODE_DRAWING_NAMES = Object.freeze({ circular: 'Circular', linear: 'Linear' });
+
+/**
+ * The name a new drawing gets: its mode's name, followed by its ID's number
+ * for a second drawing of the mode (`linear-2` is "Linear 2"). Python's
+ * `gbdraw.session_drawings.allocate_session_drawing` takes the same rule; both
+ * read the `names.defaults` vectors of
+ * `tests/fixtures/sessions/drawings-vectors.json`.
+ * @param {ModeProfileName} mode
+ * @param {DrawingId} drawingId
+ * @returns {string}
+ */
+export const defaultDrawingName = (mode, drawingId) => {
+  const number = String(drawingId).slice(String(mode).length + 1);
+  return MODE_DRAWING_NAMES[mode] + (number ? ` ${number}` : '');
+};
+
+/**
+ * Why `names` cannot name the drawings of a project, if they cannot: a blank
+ * name, or two names that differ only in case. Python's
+ * `gbdraw.session_drawings._identity_problem` takes the same rule (case
+ * folding as `str.casefold`); both read the `names.identities` vectors of
+ * `tests/fixtures/sessions/drawings-vectors.json`.
+ * @param {readonly string[]} names
+ * @returns {'BLANK_NAME' | 'REPEATED_NAME' | null}
+ */
+export const drawingNamesProblem = (names) => {
+  if (names.some((name) => name.trim() === '')) return 'BLANK_NAME';
+  const folded = names.map((name) => name.toUpperCase().toLowerCase());
+  return new Set(folded).size === folded.length ? null : 'REPEATED_NAME';
+};
+
 /**
  * The Session 48 and History `ui` key of a drawing's input type: the field of
  * its mode. A History restore of one drawing writes only its own (OIC-030).

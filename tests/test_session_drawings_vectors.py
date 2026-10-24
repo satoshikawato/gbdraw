@@ -3,7 +3,10 @@
 ``tests/fixtures/sessions/drawings-vectors.json`` pins the drawing ID rule:
 ``gbdraw.session_drawings.allocate_drawing_id`` here and
 ``allocateDrawingId`` in ``gbdraw/web/js/services/drawing-view.js``
-(``tests/web/drawing-ids.test.mjs``) read the same ``ids`` cases. Its
+(``tests/web/drawing-ids.test.mjs``) read the same ``ids`` cases, and its
+``names`` cases pin a new drawing's name (``allocate_session_drawing``) and
+the name rule (``_identity_problem``) against ``defaultDrawingName`` and
+``drawingNamesProblem`` there. Its
 ``upgrades`` cases pin the move of each Session 46-48 fixture to drawings
 (``gbdraw.session_drawings.drawings_document_from_mode_scoped``); the Web's
 ``upgradeModeScopedSession`` reads them from B2d on.
@@ -20,6 +23,7 @@ import pytest
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import SessionDocument
 from gbdraw.session_drawings import (
+    _identity_problem,
     allocate_drawing_id,
     allocate_session_drawing,
     drawings_document_from_mode_scoped,
@@ -39,7 +43,8 @@ def _load(path: Path) -> dict[str, object]:
 
 def test_vectors_declare_their_layout() -> None:
     assert VECTORS["schema"] == 1
-    assert set(VECTORS) == {"schema", "ids", "upgrades"}
+    assert set(VECTORS) == {"schema", "ids", "names", "upgrades"}
+    assert set(VECTORS["names"]) == {"defaults", "identities"}
 
 
 @pytest.mark.parametrize("case", VECTORS["ids"], ids=lambda case: f"{case['mode']}+{'.'.join(case['taken'])}")
@@ -47,6 +52,24 @@ def test_drawing_id_follows_the_shared_vectors(case: dict[str, object]) -> None:
     taken = case["taken"]
     assert isinstance(taken, list)
     assert allocate_drawing_id(str(case["mode"]), taken) == case["id"]
+
+
+@pytest.mark.parametrize("case", VECTORS["names"]["defaults"], ids=lambda case: str(case["id"]))
+def test_drawing_name_follows_the_shared_vectors(case: dict[str, object]) -> None:
+    taken = case["taken"]
+    assert isinstance(taken, list)
+    assert allocate_session_drawing(str(case["mode"]), requested_id=None, requested_name=None, taken_ids=taken) == (
+        case["id"],
+        case["name"],
+    )
+
+
+@pytest.mark.parametrize("case", VECTORS["names"]["identities"], ids=lambda case: "|".join(case["names"]))
+def test_drawing_name_rule_follows_the_shared_vectors(case: dict[str, object]) -> None:
+    names = case["names"]
+    assert isinstance(names, list)
+    ids = [f"drawing-{index}" for index in range(len(names))]
+    assert (_identity_problem(ids, names) is None) == case["valid"]
 
 
 def test_a_second_drawing_of_a_mode_is_numbered() -> None:
