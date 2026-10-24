@@ -6,6 +6,7 @@ import random
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 
 from gbdraw.analysis import protein_colinearity as pc, collinearity as cc
@@ -23,12 +24,36 @@ def row(q, s, score=1.0, coverage=1.0, **kwargs):
     return SimpleNamespace(**(bench.hit(q, s) | {"normalized_score": score, "min_coverage": coverage} | kwargs))
 
 
+def directed(best, pm):
+    """The live directed-hit records for the oracle's rows, keyed by direction."""
+    frame = pd.DataFrame([{"domain_only": False} | vars(item) for item in best.values()])
+    return pc._directed_hits_from_tables({(0, 1): frame}, pm)
+
+
+def ranked(hits):
+    return sorted(hits.values(), key=lambda hit: hit.rank)
+
+
+def view(candidate):
+    """Compare live and frozen candidates by value; the evidence by its direction."""
+    if candidate is None:
+        return None
+    fields = vars(candidate).copy()
+    evidence = fields.pop("evidence", None)
+    if evidence is None:
+        fields.pop("evidence_row")
+        evidence_key = (fields.pop("evidence_query_id"), fields.pop("evidence_subject_id"))
+    else:
+        evidence_key = (evidence.query, evidence.subject)
+    return fields | {"evidence": evidence_key}
+
+
 def candidate(pm, best, members, thresholds=None):
     ids = {pid: "og_1" for pid in members}
-    indexed = pc._index_core_support_evidence(best, ids).get("u", {}).get("og_1", ())
-    actual = pc._build_core_support_candidate("u", "og_1", indexed, thresholds or {}, pm)
+    indexed = pc._index_core_support_evidence(directed(best, pm), ids).get("u", {}).get("og_1", ())
+    actual = pc._build_core_support_candidate("u", "og_1", indexed, thresholds or {})
     expected = old._build_core_support_candidate("u", "og_1", members, best, thresholds or {}, pm)
-    assert actual == expected
+    assert view(actual) == view(expected)
     return actual
 
 
@@ -46,7 +71,7 @@ def test_direction_and_membership_diagnostic_priority(direction, record):
     result = candidate(pm, best, ["m", "domain", "m", "missing"])
     assert result.diagnostic_score == 10
     expected_pair = (("m", "u") if record == 0 else ("u", "m")) if direction == "both" else pairs[0]
-    assert result.evidence_row is best[expected_pair]
+    assert (result.evidence.query, result.evidence.subject) == expected_pair
     assert result.low_confidence_pass and not result.domain_only
     assert not result.high_confidence_pass
 
@@ -64,16 +89,16 @@ def test_seeded_candidate_and_local_competition_equivalence(seed):
                     best[q, s] = row(q, s, rng.choice([0., .4, 1., 1., 2.]), rng.choice([.1, .3, .7, 1.]), evalue=rng.choice([1e-20, 1e-30]))
     thresholds = {pid: pc._LocalThreshold(pid, rng.choice([.5, 1., 3.]), "fixture", 0, 0) for pid in pm if rng.random() < .6}
     mapping = {pid: gid for gid, members in groups.items() for pid in members}
-    index = pc._index_core_support_evidence(best, mapping)
+    index = pc._index_core_support_evidence(directed(best, pm), mapping)
     for u in ["u", "v"]:
         for gid, members in groups.items():
-            expected = old._build_core_support_candidate(u, gid, list(members), best, thresholds, pm)
+            expected = view(old._build_core_support_candidate(u, gid, list(members), best, thresholds, pm))
             evidence = index.get(u, {}).get(gid, ())
-            assert pc._build_core_support_candidate(u, gid, evidence, thresholds, pm) == expected
+            assert view(pc._build_core_support_candidate(u, gid, evidence, thresholds)) == expected
             # Full-rank ties include directional endpoint IDs; bucket insertion order is irrelevant.
-            assert pc._build_core_support_candidate(u, gid, list(reversed(evidence)), thresholds, pm) == expected
+            assert view(pc._build_core_support_candidate(u, gid, list(reversed(evidence)), thresholds)) == expected
     local = {"u": rng.choice([0., .5, 2., 5.]), "v": rng.choice([.5, 2., 5.])}
-    assert pc._record_local_component_has_competing_core_support(["u", "v"], True, index, thresholds, pm, local) == old._record_local_component_has_competing_core_support(["u", "v"], groups, best, thresholds, pm, local)
+    assert pc._record_local_component_has_competing_core_support(["u", "v"], True, index, thresholds, local) == old._record_local_component_has_competing_core_support(["u", "v"], groups, best, thresholds, pm, local)
 
 
 def test_fixed_core_then_expanded_competition_and_local_addition():
@@ -83,14 +108,15 @@ def test_fixed_core_then_expanded_competition_and_local_addition():
         (("a", "b"), 1.), (("b", "a"), 1.), (("a", "u"), 1.), (("u", "b"), 1.),
         (("u", "v"), 1.), (("v", "w"), 1.), (("w", "v"), 1.),
         (("x", "y"), 1.), (("y", "x"), 1.)]}
-    anchors = [pc._AnchorCoreEvidenceEdge("a", "b", best["a", "b"], 1., 1., "rbh")]
+    hits = directed(best, pm)
+    anchors = [pc._AnchorCoreEvidenceEdge("a", "b", hits["a", "b"], 1., 1., "rbh")]
     snapshots = []
     original = pc._index_core_support_evidence
     def observe(evidence, mapping):
         snapshots.append(dict(mapping))
         return original(evidence, mapping)
     with patch.object(pc, "_index_core_support_evidence", observe):
-        result = pc._build_anchor_core_orthogroups(best, anchors, pm, ranked_direction_rows=sorted(best.items(), key=lambda item: pc._anchor_core_hit_rank(item[1], pm)), include_singletons=False, max_related_edges_per_orthogroup=2)
+        result = pc._build_anchor_core_orthogroups(hits, anchors, pm, ranked_hits=ranked(hits), include_singletons=False, max_related_edges_per_orthogroup=2)
     assert "u" not in snapshots[0] and snapshots[1]["u"] == "og_1"
     assert result.member_by_protein_id["u"].role == "inparalog"
     # v cannot chain through u during assignment; u competes in the later local phase.
@@ -101,7 +127,7 @@ def test_fixed_core_then_expanded_competition_and_local_addition():
     # The early snapshot would miss this competing core evidence.
     core = {"og_1": {"a", "b"}}
     expanded = {"og_1": {"a", "b", "u"}}
-    thresholds = pc._derive_anchor_core_thresholds(best, anchors, pm)
+    thresholds = pc._derive_anchor_core_thresholds(hits, anchors)
     local = {"v": 1., "w": 1.}
     assert not old._record_local_component_has_competing_core_support(["v", "w"], core, best, thresholds, pm, local)
     assert old._record_local_component_has_competing_core_support(["v", "w"], expanded, best, thresholds, pm, local)
@@ -193,8 +219,9 @@ def test_complete_ties_best_second_confidence_and_related_order(cap):
     for pid in ["tie0", "tie1", "tie2"]:
         for member in ["a", "c"]:
             best[pid, member] = row(pid, member, .8)
-    anchors = [pc._AnchorCoreEvidenceEdge(q, s, best[q, s], 1., 1., "rbh") for q, s in [("a", "b"), ("c", "d")]]
-    result = pc._build_anchor_core_orthogroups(best, anchors, pm, ranked_direction_rows=sorted(best.items(), key=lambda item: pc._anchor_core_hit_rank(item[1], pm)), include_singletons=False, max_related_edges_per_orthogroup=cap)
+    hits = directed(best, pm)
+    anchors = [pc._AnchorCoreEvidenceEdge(q, s, hits[q, s], 1., 1., "rbh") for q, s in [("a", "b"), ("c", "d")]]
+    result = pc._build_anchor_core_orthogroups(hits, anchors, pm, ranked_hits=ranked(hits), include_singletons=False, max_related_edges_per_orthogroup=cap)
     assert (result.member_by_protein_id["high"].role, result.member_by_protein_id["high"].confidence) == ("inparalog", "high")
     assert (result.member_by_protein_id["low"].role, result.member_by_protein_id["low"].confidence) == ("low_confidence", "low")
     assert result.member_by_protein_id["low"].best_core_support == .15
@@ -204,20 +231,21 @@ def test_complete_ties_best_second_confidence_and_related_order(cap):
     assert len(edges) == cap
     assert [edge.query_protein_id for edge in edges] == [f"tie{i}" for i in range(cap)]
     assert all(edge.edge_kind == "ambiguous_paralog" for edge in edges)
-    thresholds = pc._derive_anchor_core_thresholds(best, anchors, pm)
+    thresholds = pc._derive_anchor_core_thresholds(hits, anchors)
     scores = [old._build_core_support_candidate("tie0", gid, members, best, thresholds, pm) for gid, members in [("og_1", ["a", "b"]), ("og_2", ["c", "d"])]]
     assert [(s.support, s.diagnostic_score) for s in scores] == [(.8, .8), (.8, .8)]
 
 
-@pytest.mark.parametrize("score", [0., -1., float("nan"), float("inf"), "bad"])
+# Normalized tables hold float scores; the record builder drops every non-positive one.
+@pytest.mark.parametrize("score", [0., -1., float("nan"), float("inf")])
 def test_empty_unknown_self_and_nonpositive_candidate_boundaries(score):
     pm = {"u": bench.protein(pc, "u", 0), "m": bench.protein(pc, "m", 1)}
     best = {("u", "m"): row("u", "m", score), ("u", "u"): row("u", "u", 20.),
             ("missing", "u"): row("missing", "u", 20.)}
     assert candidate(pm, best, ["m", "missing"]) is None
     assert candidate(pm, {}, []) is None
-    assert not pc._record_local_component_has_competing_core_support(["u"], False, {}, {}, pm, {})
-    assert pc._record_local_component_has_competing_core_support(["u"], True, {}, {}, pm, {})
+    assert not pc._record_local_component_has_competing_core_support(["u"], False, {}, {}, {})
+    assert pc._record_local_component_has_competing_core_support(["u"], True, {}, {}, {})
 
 
 def test_endpoint_index_consumes_each_edge_once_as_needed():

@@ -1,7 +1,8 @@
 """S07.6 frozen functions and independent small list oracles; never production.
 
 The gzip is the complete pre-change source. Load its functions with the current
-unchanged classes so typed encoders exercise the real class registry. Every
+unchanged classes so typed encoders exercise the real class registry; a private
+class the live module has since changed or removed comes from the gzip. Every
 function-to-function call stays in the frozen namespace.
 """
 import ast
@@ -49,15 +50,23 @@ class _FitSumsToCompensated(ast.NodeTransformer):
         return node
 
 
+def _changed_private_class(node, live_classes):
+    return (isinstance(node, ast.ClassDef) and node.name.startswith('_')
+            and (node.name not in live_classes or ast.dump(node) != ast.dump(live_classes[node.name])))
+
+
 def frozen_module():
     source = gzip.decompress(Path(__file__).with_name('protein_colinearity_s076.py.gz').read_bytes())
     module = ModuleType('protein_colinearity_s076')
     module.__dict__.update(vars(pc))
     tree = ast.parse(source)
+    live_classes = {node.name: node for node in ast.parse(Path(pc.__file__).read_bytes()).body
+                    if isinstance(node, ast.ClassDef)}
     tree.body = [_FitSumsToCompensated().visit(node) if getattr(node, 'name', None) == '_fit_expected_bitscore_model'
                  else node
                  for node in tree.body
-                 if isinstance(node, ast.FunctionDef) or _moved_runtime_global(node)]
+                 if isinstance(node, ast.FunctionDef) or _moved_runtime_global(node)
+                 or _changed_private_class(node, live_classes)]
     ast.fix_missing_locations(tree)
     exec(compile(tree, 'protein_colinearity_s076.py', 'exec'), module.__dict__)
     return module

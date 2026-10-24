@@ -1,21 +1,91 @@
 """S03 comparison oracle: pre-change aggregation from 9a4f7e29.
 
-Only the removed pair loop is frozen here. Rank/interval/empty-table owners are
-unchanged production helpers; this module must never be imported by production.
+The pair loop and its row helpers are frozen here; the empty-table owner is the
+unchanged production helper. This module must never be imported by production.
 """
 from __future__ import annotations
 
 import math
-from typing import Mapping
+import sys
+from typing import Mapping, Sequence, SupportsFloat, cast
 
 import pandas as pd
 from pandas import DataFrame
 
-from gbdraw.analysis.protein_colinearity import (
-    CdsProtein, _empty_normalized_hit_table, _raw_hsp_representative_rank,
-    _row_float, _coverage_interval_from_hsp, _covered_length,
-)
+from gbdraw.analysis.protein_colinearity import CdsProtein, _empty_normalized_hit_table
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+
+def _row_float(row: object, column: str, default: float = 0.0) -> float:
+    try:
+        return float(getattr(row, column))
+    except (TypeError, ValueError, AttributeError):
+        return float(default)
+
+
+def _coverage_coordinate(value: object) -> int | None:
+    try:
+        coordinate = float(cast(SupportsFloat, value))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(coordinate):
+        return None
+    return int(coordinate)
+
+
+def _coverage_interval_from_hsp(start: object, end: object, length: int) -> tuple[int, int] | None:
+    if int(length) <= 0:
+        return None
+    start_coordinate = _coverage_coordinate(start)
+    end_coordinate = _coverage_coordinate(end)
+    if start_coordinate is None or end_coordinate is None:
+        return None
+    low = min(start_coordinate, end_coordinate)
+    high = max(start_coordinate, end_coordinate)
+    clamped_low = max(1, low)
+    clamped_high = min(int(length), high)
+    if clamped_low > clamped_high:
+        return None
+    return clamped_low, clamped_high
+
+
+def _merge_coverage_intervals(intervals: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    cleaned = sorted((int(start), int(end)) for start, end in intervals if int(start) <= int(end))
+    if not cleaned:
+        return ()
+    merged: list[tuple[int, int]] = []
+    current_start, current_end = cleaned[0]
+    for start, end in cleaned[1:]:
+        if start <= current_end + 1:
+            current_end = max(current_end, end)
+            continue
+        merged.append((current_start, current_end))
+        current_start, current_end = start, end
+    merged.append((current_start, current_end))
+    return tuple(merged)
+
+
+def _covered_length(intervals: Sequence[tuple[int, int]]) -> int:
+    return sum(max(0, int(end) - int(start) + 1) for start, end in _merge_coverage_intervals(intervals))
+
+
+def _raw_hsp_coordinate_rank(row: object, column: str) -> int:
+    coordinate = _coverage_coordinate(getattr(row, column, None))
+    return coordinate if coordinate is not None else sys.maxsize
+
+
+def _raw_hsp_representative_rank(row: object, row_index: int) -> tuple[float, float, float, int, int, int, int, int, int]:
+    return (
+        -_row_float(row, "bitscore", 0.0),
+        _row_float(row, "evalue", float("inf")),
+        -_row_float(row, "identity", 0.0),
+        -int(_row_float(row, "alignment_length", 0.0)),
+        _raw_hsp_coordinate_rank(row, "qstart"),
+        _raw_hsp_coordinate_rank(row, "qend"),
+        _raw_hsp_coordinate_rank(row, "sstart"),
+        _raw_hsp_coordinate_rank(row, "send"),
+        int(row_index),
+    )
 
 
 def aggregate_hsps_baseline(
