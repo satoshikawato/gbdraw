@@ -34,6 +34,19 @@ write-up of a release.
   below them. Saved Results are not migrated: a Result saved by an earlier version keeps its Legend until its
   first Legend edit, which lays it out again, gradient scales included
   (OV-1741), and Generate redraws it (OV-165).
+- Web app: a group color edit (Selected features, the same Legend item, a label
+  scope, or the Legend rename of a row with features) writes rules that match
+  the edited features by feature type and their product, gene, or label text,
+  exactly, and hash rules only for the features no such rule fits. Before, it
+  wrote one hash rule per feature: coloring the 2761 "hypothetical protein" CDS
+  of NC_010162 now writes 1 rule instead of 2761. The colors drawn for the
+  loaded features do not change, but an exact rule also colors matching
+  features of files or records added later. On a large genome the first such
+  edit can take longer, by the time Python takes to write the rules (OV-244).
+- Web app: after a palette switch that is not generated yet, **Restore** brings
+  a deleted palette row back in the color the Legend shows, and a rule named
+  like such a row in that color is accepted instead of refused as a Legend row
+  conflict (OV-282).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 
