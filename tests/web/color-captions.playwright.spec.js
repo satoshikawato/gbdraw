@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
 const { load, generate, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 // A rule edit that changes the Legend asks for the automatic rerender (OV-42,
@@ -58,6 +59,7 @@ for(const width of [1440,390]) {
         return {ids,text:original+'\n'+ids.slice(0,2).map((id,i)=>['CDS','hash',id,['#112233','#445566'][i],'Color group'].join('\t')).join('\n')+'\n'};
       });
       const before=await inspect(page);
+      await showPhonePane(page,'settings');
       const input=page.getByLabel('Specific rules file',{exact:true});
       await reveal(input);
       const picker=page.getByRole('button',{name:'Choose Specific rules file',exact:true});
@@ -86,6 +88,7 @@ for(const width of [1440,390]) {
           .filter(element=>element.hasAttribute('fill')).map(element=>element.getAttribute('fill')))]);
       },source.ids);
       expect(fills).toEqual([['#112233'],['#445566'],['#778899']]);
+      await showPhonePane(page,'preview');
       const extents=await page.evaluate(captions=>{
         const svg=window.__GBDRAW_APP__.svgContainer.querySelector('svg'),bounds=svg.getBoundingClientRect();
         return captions.map(caption=>{

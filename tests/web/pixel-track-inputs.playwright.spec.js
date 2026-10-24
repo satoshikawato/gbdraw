@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
@@ -69,6 +70,7 @@ for (const width of [1440, 390]) {
       console.log(`pixel ${mode}/${width}: baseline Generate`);
       await generate(page);
       const source = await inspect(page, mode);
+      await showPhonePane(page, 'settings');
       // Focus shows the muted optional-unit placeholder; blur retains the resolved Auto hint.
       await inputs[0].fill('');
       await inputs[0].focus();
@@ -79,6 +81,7 @@ for (const width of [1440, 390]) {
       let control;
       let downloadControl;
       for (const text of ['10', '10px', '10PX', '10 px', '1e1px']) {
+        await showPhonePane(page, 'settings');
         for (const input of inputs) { await input.fill(text); await input.press('Tab'); }
         await expect(row.getByRole('alert')).toHaveCount(0);
         await generate(page);
@@ -110,6 +113,7 @@ for (const width of [1440, 390]) {
       // Each field reports its own constraint and retains invalid draft text.
       for (let index = 0; index < inputs.length; index += 1) {
         for (const invalid of ['px', '0x10', '1e309px', '10%', '10em', '-1px', ...(mode === 'linear' && index === 0 ? ['0'] : [])]) {
+          await showPhonePane(page, 'settings');
           await inputs[index].fill(invalid);
           await inputs[index].press('Tab');
           const relation = mode === 'linear' && index === 0 ? 'positive' : 'nonnegative';
@@ -134,13 +138,16 @@ for (const width of [1440, 390]) {
           expect(failed.runs).toBe(before.runs);
           expect(failed.slots.find(slot => slot.id === 'gc_content')[fields[index]]).toBe(invalid);
           if (invalid === 'px') {
+            await showPhonePane(page, 'settings');
             await row.getByRole('alert').evaluate(element => element.scrollIntoView({ block: 'center' }));
             await page.screenshot({ path: testInfo.outputPath(`pixel-error-${fields[index]}.png`) });
           }
         }
+        await showPhonePane(page, 'settings');
         await inputs[index].fill('10PX');
       }
       // Fractional and zero values keep their physical units, with height > 0.
+      await showPhonePane(page, 'settings');
       await inputs[0].fill('.5px');
       await inputs[1].fill('0PX');
       await generate(page);
@@ -148,6 +155,7 @@ for (const width of [1440, 390]) {
       const fractionSlot = fractional.dispatched.diagramOptions.tracks[`${mode}TrackSlots`].find(slot => slot.id === 'gc_content');
       expect(mode === 'linear' ? fractionSlot.height : fractionSlot.innerGapPx).toEqual(mode === 'linear' ? { value: .5, unit: 'px' } : .5);
       expect(mode === 'linear' ? fractionSlot.spacing : fractionSlot.outerGapPx).toEqual(mode === 'linear' ? { value: 0, unit: 'px' } : 0);
+      await showPhonePane(page, 'settings');
       for (const input of inputs) await input.fill('10PX');
       await generate(page);
       expect((await inspect(page, mode)).svg).toBe(control.svg);
@@ -157,6 +165,7 @@ for (const width of [1440, 390]) {
       // `to_slot=gc_content`) is turned off and on with it.
       const linked = (await inspect(page, mode)).slots.filter(slot => slot.enabled !== false
         && [slot.params?.to_slot, slot.params?.anchor_slot].includes('gc_content')).map(slot => slot.id);
+      await showPhonePane(page, 'settings');
       for (const id of [...linked, 'gc_content']) {
         await page.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Enabled', { exact: true }).uncheck();
       }

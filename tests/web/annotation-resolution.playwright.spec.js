@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFile, writeFile } = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { openApp, generateAndWaitForResult, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
@@ -46,6 +47,7 @@ for (const width of [1440, 390]) {
       rows.forEach((row) => { row.target = { ...featureTarget({ selector: 'gene=PRIVATE-MISSING' }), record }; });
       return { mixed, invalid, all: encodeAnnotationTable(sets), count: rows.length, setCounts: sets.map((set) => set.annotations.length) };
     });
+    await showPhonePane(page, 'settings');
     await panel(page).locator(':scope > summary').focus();
     await page.keyboard.press('Enter');
     const chooser = page.waitForEvent('filechooser');
@@ -83,6 +85,7 @@ for (const width of [1440, 390]) {
     await expect(status).toContainText('Skipped 2 annotation rows.');
 
     // A binding failure keeps this exact successful artifact and its notices.
+    await showPhonePane(page, 'settings');
     await panel(page).locator('input[type=file]').setInputFiles({ name: 'invalid-binding.tsv', mimeType: 'text/tab-separated-values',
       buffer: Buffer.from(tables.invalid) });
     await expect.poll(() => panel(page).locator('input[type=file]').inputValue()).toBe('');
@@ -104,6 +107,7 @@ for (const width of [1440, 390]) {
     const svgPath = testInfo.outputPath('all-missing.svg');
     await (await pendingSvg).saveAs(svgPath);
     expect(await readFile(svgPath, 'utf8')).not.toContain('data-gbdraw-annotation-id');
+    await showPhonePane(page, 'settings');
     const pendingTsv = page.waitForEvent('download');
     await panel(page).getByRole('button', { name: 'Download TSV', exact: true }).click();
     const tsvPath = testInfo.outputPath('all-missing.tsv');
