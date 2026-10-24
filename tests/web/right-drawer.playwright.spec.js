@@ -3,6 +3,7 @@ const { writeFileSync } = require('node:fs');
 const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mode-transition.cjs');
 const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const snapshot = async (page) => {
   // Opening an imported Editor hydrates transient DOM label bindings and its
@@ -378,6 +379,7 @@ for (const viewport of MOBILE_VIEWPORTS) {
       await page.setViewportSize(viewport);
       await expect(page.locator('.drawer-toggle')).toHaveCount(0);
       expect((await loadGallerySession(page, filename)).status).toBe('ok');
+      await showPhonePane(page, 'preview');
       const toggle = page.locator('.drawer-toggle');
       const drawer = page.locator('.right-drawer');
       const initialAccessibility = await toggle.ariaSnapshot();

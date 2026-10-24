@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { load, popup: openFromFeatureList, seeds } = require('./helpers/mode-transition.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 // Small UI fixes from the 2026-10-05 re-audit: panel wording that states what a
 // preset or the rule order does (FL-11, FL-12), and two overlays that must not
@@ -330,6 +331,7 @@ test('OV-496 at 390x844 a popup stays inside the window, also with the Result sc
   test.setTimeout(300000);
   const page = await load(browser, BGC, { width: 390, height: 844 });
   try {
+    await showPhonePane(page, 'preview');
     const featureSelector = `[data-gbdraw-feature-id="${LIVE}"]`;
     const expectInside = (popup, name) => expectInsideWindow(page, popup, name);
     const scrollAboveResult = async () => {

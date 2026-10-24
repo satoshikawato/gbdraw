@@ -3,7 +3,7 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, openLinearFileCards, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
@@ -214,6 +214,7 @@ test('OV-1098 at 390x844 the selected-feature bar stays reachable in a short pre
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   await loadSession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  await showPhonePane(page, 'preview');
   await page.locator('button[aria-label="Fit to preview"]').click();
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;

@@ -10,7 +10,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -47,6 +47,7 @@ const loadSession = async (page, file) => {
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
   await frames(page);
+  await showPhonePane(page, 'preview');
   // The whole figure in the preview, so that every drawn element can be pointed at.
   await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
 };

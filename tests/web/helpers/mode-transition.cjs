@@ -1,7 +1,7 @@
 const { expect, test } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { showDrawing } = require('./drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./drawing-bar.cjs');
 const { answerSessionTitle, assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
 
 const seeds = {
@@ -52,6 +52,7 @@ const switchMode = async (page, mode) => {
 };
 
 const popup = async (page, index = 0) => {
+  await showPhonePane(page, 'preview');
   if (!await page.locator('.right-drawer').isVisible()) await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).nth(index).click();
   await expect(page.locator('.feature-popup')).toBeVisible();
