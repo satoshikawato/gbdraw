@@ -37,6 +37,23 @@ test(`${TWIN_DETECTOR_ID} reports exactly the registered twins`, () => {
   assert.deepEqual(check.stale, [], 'a row whose twin the detector no longer finds: remove the row');
 });
 
+test('a vector in a subfolder of tests/fixtures is read, detected, and accepted as a row vector', () => {
+  const vector = 'tests/fixtures/sessions/sub_twin_vectors.json';
+  assert.ok(SOURCES.fixtures.some((path) => path.split('/').length > 3), 'readTwinSources lists subfolder vectors');
+  const found = detectTwins({
+    ...SOURCES,
+    fixtures: [vector],
+    tests: new Map([
+      ['tests/web/sub-twin.test.mjs', "load('sub_twin_vectors.json');\n"],
+      ['tests/test_sub_twin.py', 'load("sub_twin_vectors.json")\n']
+    ])
+  });
+  const detected = found.filter(({ id }) => id.startsWith('vector:'));
+  assert.deepEqual(detected.map(({ id }) => id), [`vector:${vector}`]);
+  const row = { id: `vector:${vector}`, concern: 'c', pythonOwner: ['a.py'], jsOwner: ['a.js'], vector, reason: 'r', retireWhen: 'w', source: 's' };
+  assert.deepEqual(checkTwinRegistry({ schemaVersion: 1, twins: [row] }, detected).errors, []);
+});
+
 test('every owner and vector a twin row that is not pending names exists', () => {
   const rows = /** @type {{ twins: { id: string, pythonOwner: string[], jsOwner: string[], vector: string | null, pending?: true }[] }} */ (REGISTRY).twins
     .filter(({ pending }) => pending !== true);
@@ -143,7 +160,7 @@ test('a malformed twin row is reported', () => {
   assert.deepEqual(check.errors, [
     'tools/twins.json: twins[0].pythonOwner: expected a non-empty list of paths',
     'tools/twins.json: twins[0].jsOwner: expected a non-empty list of paths',
-    'tools/twins.json: twins[0].vector: expected tests/fixtures/<name>.json or null',
+    'tools/twins.json: twins[0].vector: expected tests/fixtures/<path>.json or null',
     'tools/twins.json: twins[1].id: duplicate vector:x',
     'tools/twins.json: twins[1].concern: expected text',
     'tools/twins.json: twins[1].pythonOwner: expected a non-empty list of paths',
