@@ -577,3 +577,16 @@ test('a Load of a Session with a drawing of one mode keeps a new drawing of the 
   assert.equal(state.activeDrawing(), linear);
   installShownDrawing('circular');
 });
+
+test('Load reads each drawing\'s saved Result set from its own entry of the 49 document, not from `otherModeResult`', () => {
+  // The Load body after preflight reads the upgraded document's drawings; the
+  // file's location of a set beside the committed one is only a repair path.
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const body = source.slice(source.indexOf('const importSessionDocument = async'), source.indexOf('export const importSession ='));
+  assert.ok(body.length > 1000);
+  const reads = body.split('\n').filter((line) => /\botherModeResult\b/.test(line) && !/^\s*\/\/|^\s*\*/.test(line));
+  assert.deepEqual(reads.map((line) => line.trim()), ["const at = 'otherModeResult.';"]);
+  for (const name of ['otherSetMode', 'otherArtifactSlot', 'opensOtherSet', 'ofMode']) {
+    assert.equal(new RegExp(`\\b${name}\\b`).test(body), false, name);
+  }
+});

@@ -1163,7 +1163,7 @@ const selectedPairwiseBlockOrthogroupId = { value: 'keep-orthogroup' };
 const stashedLinearArtifact = Object.freeze({ drawingId: 'linear' });
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const artifactSlots = createArtifactSlotStore();
-artifactSlots.replaceLoaded(stashedLinearArtifact);
+artifactSlots.replaceLoaded([stashedLinearArtifact]);
 const displayedArtifact = Object.freeze({ drawingId: 'circular' });
 const installedArtifacts = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
@@ -1293,7 +1293,7 @@ try {
       afterLoad: async () => {
         // The pane closes its popup while the load shows no Result.
         returnSettingsSection(state);
-        artifactSlots.replaceLoaded(null);
+        artifactSlots.replaceLoaded([]);
         depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;

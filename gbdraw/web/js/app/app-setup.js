@@ -4522,10 +4522,10 @@ export const createAppSetup = () => {
   const drawingBarTabs = computed(() => drawingBar.tabs());
   // Why the tabs wait: the switch's own busy reason (R15).
   const drawingSwitchBusyReason = computed(() => tm(drawingSwitchBusy()?.reason || ''));
-  // Session Load (E1): the loaded Session's artifact slots, before its preview
-  // mounts. `opening` is the other Result set's slot when the Session opens on
-  // that set's mode; `stashed` waits in its mode. The stash starts again with
-  // the loaded Session.
+  // Session Load: the loaded Session's artifact slots, before its preview
+  // mounts. `opening` is the shown drawing's slot when its set is not the
+  // committed one; each `stashed` slot waits in its drawing. The stash starts
+  // again with the loaded Session.
   /** @param {LoadedArtifactSlots} slots */
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
     artifactSlots.replaceLoaded(stashed);

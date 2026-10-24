@@ -186,7 +186,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   assert.equal(kept.drawingId, 'linear');
   assert.equal(kept.values.generatedMode, modeDrawing(state, 'linear').mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
   const slots = createArtifactSlotStore();
-  slots.replaceLoaded(kept);
+  slots.replaceLoaded([kept]);
   /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */
   const selected = (id, shownId, shown) => slots.readOfDrawing(id, shownId, () => shown,
     (slot) => slot.values.results[slot.values.selectedResultIndex]);
@@ -244,7 +244,7 @@ test('the slot store keeps a hidden drawing\'s artifact through its named operat
   assert.strictEqual(written.values.results, linearSlot.values.results, 'the other values stay by reference');
   store.writeValues(circular, { appliedPaletteName: 'Vivid' });
   assert.deepEqual(store.kept().map((slot) => slot.drawingId), ['linear', 'circular'], 'an empty slot takes the values');
-  store.replaceLoaded(null);
+  store.replaceLoaded([]);
   assert.deepEqual(store.kept(), []);
   store.restore(before);
   assert.deepEqual(store.kept(), [linearSlot]);

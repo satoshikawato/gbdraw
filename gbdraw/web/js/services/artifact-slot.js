@@ -67,9 +67,9 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 
 /**
  * The artifact slots a Session Load installs before its preview mounts:
- * `opening`, the artifact the Session opens on when it is not the top-level
- * set's, and `stashed`, the one kept for a drawing not shown.
- * @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots
+ * `opening`, the artifact the Session opens on when it is not the committed
+ * set's, and `stashed`, the ones kept for the drawings not shown.
+ * @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: readonly Readonly<ArtifactSlot>[] }} LoadedArtifactSlots
  */
 
 /**
@@ -139,8 +139,8 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} swap
  *   The mode transition: keeps the departing drawing's artifact and takes out the arriving one's
  *   (null: it has none yet).
- * @property {(stashed: Readonly<ArtifactSlot> | null) => void} replaceLoaded
- *   Session Load: the loaded Session's kept artifact replaces every slot.
+ * @property {(stashed: readonly Readonly<ArtifactSlot>[]) => void} replaceLoaded
+ *   Session Load: the loaded Session's kept artifacts replace every slot.
  * @property {() => ArtifactSlotSnapshot} snapshot
  * @property {(snapshot: ArtifactSlotSnapshot) => void} restore The Load rollback.
  * @property {(drawing: DrawingIdentity, values: Readonly<Record<string, unknown>>) => void} writeValues
@@ -175,7 +175,7 @@ export const createArtifactSlotStore = () => {
     },
     replaceLoaded: (stashed) => {
       slots.clear();
-      if (stashed) keep(stashed);
+      stashed.forEach(keep);
     },
     snapshot: kept,
     restore: (snapshot) => {
