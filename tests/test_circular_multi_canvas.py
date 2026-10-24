@@ -3898,6 +3898,145 @@ def test_multi_record_side_legend_matches_upper_corner_edge_margin(
     assert legend_right <= viewbox_width + 1e-6
 
 
+def _axis_circle_squares(root: ET.Element) -> list[tuple[float, float, float, float]]:
+    """The canvas bounds of each record's axis circle, through every translate above it."""
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    parents = {child: parent for parent in root.iter() for child in parent}
+    squares: list[tuple[float, float, float, float]] = []
+    for circle in root.findall(".//svg:g[@id]/svg:circle", ns):
+        group = parents[circle]
+        if not str(group.attrib["id"]).startswith("Axis"):
+            continue
+        x = float(circle.attrib.get("cx", 0.0))
+        y = float(circle.attrib.get("cy", 0.0))
+        node: ET.Element | None = group
+        while node is not None:
+            assert "rotate" not in node.attrib.get("transform", "")
+            dx, dy = _parse_translate(node.attrib.get("transform", ""))
+            x, y = x + dx, y + dy
+            node = parents.get(node)
+        radius = float(circle.attrib["r"])
+        squares.append((x - radius, y - radius, x + radius, y + radius))
+    return squares
+
+
+def _legend_canvas_root(position: str, record_count: int | None) -> ET.Element:
+    """A Circular canvas without labels: one record alone (``None``) or a grid."""
+    records = [
+        _build_multi_feature_record_with_source(
+            f"legend_obstacles_{index}",
+            organism=f"Legend obstacle organism {index}",
+            strain=f"Strain {index}",
+            length=2600 - (500 * index),
+        )
+        for index in range(record_count or 1)
+    ]
+    options: dict[str, Any] = {
+        "cfg": apply_config_overrides(None, {"labels.circular.scope": "none"}),
+        "selected_features_set": ["CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
+        "legend": position,
+    }
+    canvas = (
+        diagram_api_module.assemble_circular_diagram_from_record(records[0], **options)
+        if record_count is None
+        else assemble_circular_diagram_from_records(records, **options)
+    )
+    return ET.fromstring(canvas.tostring())
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("record_count", [None, 1, 2], ids=["single", "grid-1", "grid-2"])
+@pytest.mark.parametrize("corner", ["upper_left", "upper_right", "lower_left", "lower_right"])
+def test_corner_legend_clears_every_record(corner: str, record_count: int | None) -> None:
+    root = _legend_canvas_root(corner, record_count)
+    legend = _composition_item_bounds(_composition_metadata(root), "legend")
+    squares = _axis_circle_squares(root)
+
+    assert len(squares) == (record_count or 1)
+    for square in squares:
+        assert (
+            legend[2] <= square[0] or square[2] <= legend[0]
+            or legend[3] <= square[1] or square[3] <= legend[1]
+        ), f"the {corner} Legend {legend} overlaps a record's axis circle {square}"
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("record_count", [None, 2], ids=["single", "grid-2"])
+def test_overlay_obstacles_do_not_depend_on_the_legend_position(record_count: int | None) -> None:
+    """The Web re-places a drawn Legend from these obstacles, also from a side to a corner."""
+
+    def local_obstacles(position: str) -> list[tuple[float, ...]]:
+        metadata = _composition_metadata(_legend_canvas_root(position, record_count))
+        primary = metadata["primary"]["finalBounds"]
+        return sorted(
+            tuple(
+                round(value, 6)
+                for value in (
+                    obstacle["x"] - primary["x"],
+                    obstacle["y"] - primary["y"],
+                    obstacle["width"],
+                    obstacle["height"],
+                )
+            )
+            for obstacle in metadata["overlayObstacles"]
+        )
+
+    corner = local_obstacles("upper_left")
+    assert corner
+    for position in ("right", "bottom", "none", "lower_right"):
+        assert local_obstacles(position) == corner, position
+
+
+_LONG_PLOT_TITLE = "Escherichia coli O157:H7 str. Sakai chromosome and plasmids"
+
+
+def _boxes_overlap(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    return (
+        first[0] < second[2] and second[0] < first[2]
+        and first[1] < second[3] and second[1] < first[3]
+    )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("grid", [False, True], ids=["single", "grid-3"])
+@pytest.mark.parametrize(
+    ("corner", "title_position"),
+    [("upper_left", "top"), ("lower_right", "bottom")],
+)
+def test_title_clears_a_corner_legend_grown_onto_its_side(
+    corner: str, title_position: str, grid: bool
+) -> None:
+    """A corner Legend that the planner moved above or below the records keeps the title outside it (OV-1605)."""
+    names = ("NC_001416.gb", "NC_005856.1.gb", "NC_005859.1.gb") if grid else ("NC_001416.gb",)
+    records = [next(SeqIO.parse(Path("tests/test_inputs") / name, "genbank")) for name in names]
+    options: dict[str, Any] = {
+        "cfg": apply_config_overrides(None, {}),
+        "legend": corner,
+        "plot_title": _LONG_PLOT_TITLE,
+        "plot_title_position": title_position,
+    }
+    canvas = (
+        assemble_circular_diagram_from_records(
+            records, multi_record_positions=["#1@1", "#2@2", "#3@3"], **options
+        )
+        if grid
+        else diagram_api_module.assemble_circular_diagram_from_record(records[0], **options)
+    )
+    metadata = _composition_metadata(ET.fromstring(canvas.tostring()))
+    primary = _composition_item_bounds(metadata, "primary")
+    legend = _composition_item_bounds(metadata, "legend")
+    title = _composition_item_bounds(metadata, "title")
+
+    # The planner grew the canvas on the title's side for the Legend.
+    assert legend[3] <= primary[1] if title_position == "top" else primary[3] <= legend[1]
+    assert not _boxes_overlap(title, legend), f"title {title} overlaps the Legend {legend}"
+    gap = legend[1] - title[3] if title_position == "top" else title[1] - legend[3]
+    assert gap == pytest.approx(DEFAULT_COMPOSITION_SPACING.stack_gap_px)
+
+
 @pytest.mark.circular
 def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
     record = SeqRecord(Seq("A" * 1600), id="legend_layout_top")

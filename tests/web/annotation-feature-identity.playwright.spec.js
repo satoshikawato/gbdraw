@@ -312,7 +312,7 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
   expect(await annotationTargets(page)).toEqual([]);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return JSON.parse(JSON.stringify(state.drawings.circular.annotationSets
+    return JSON.parse(JSON.stringify(state.drawingOf('circular').annotationSets
       .flatMap((set) => set.annotations.map((item) => item.target))));
   })).toEqual([target]);
 

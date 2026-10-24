@@ -501,7 +501,7 @@ def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
         """
         async ({ leftText, rightText }) => {
           const app = window.__GBDRAW_APP__;
-          app.setDiagramMode('linear');
+          app.selectDrawing('linear');
           app.lInputType = 'gb';
           if (app.linearSeqs.length < 2) {
             app.addLinearSeq();
@@ -766,18 +766,18 @@ def _run_browser_contract(contract: str) -> None:
                     runDiagramHelperOperation
                   } = await import('./js/services/diagram-generation.js');
                   const response = await runDiagramHelperOperation(
-                    DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-                    { caption: 'offline helper probe', fontFamily: 'Arial', fontSize: 14 }
+                    DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+                    { features: [], rules: [], kind: 'color' }
                   );
                   return response?.result || null;
                 }
                 """
             )
             if not isinstance(helper_result, dict) or not isinstance(
-                helper_result.get("width"), (int, float)
+                helper_result.get("matches"), list
             ):
                 raise RuntimeError(
-                    "Offline helper operation did not settle with a measured width: "
+                    "Offline helper operation did not settle with its rule matches: "
                     f"{helper_result!r}"
                 )
             _assert_diagram_worker_activity(
@@ -801,7 +801,7 @@ def _run_browser_contract(contract: str) -> None:
             """
             ({ gbText }) => {
               const app = window.__GBDRAW_APP__;
-              app.setDiagramMode('circular');
+              app.selectDrawing('circular');
               app.cInputType = 'gb';
               app.files.c_gb = new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' });
               app.files.c_gff = null;
@@ -998,7 +998,7 @@ def _run_browser_contract(contract: str) -> None:
 
               const originalPalette = String(app.selectedPalette || 'default');
               const originalDraftColor = String(app.currentColors?.[chosenFeature.type] || '');
-              app.paletteInstantPreviewEnabled = false;
+              app.setPaletteInstantPreview(false);
 
               let pendingPalette = '';
               let pendingDraftColor = '';
@@ -1041,7 +1041,7 @@ def _run_browser_contract(contract: str) -> None:
               let immediateColor = '';
               for (const paletteName of app.paletteNames || []) {
                 if (paletteName === String(app.selectedPalette || '')) continue;
-                app.paletteInstantPreviewEnabled = true;
+                app.setPaletteInstantPreview(true);
                 app.selectPalette(paletteName, 'palette');
                 const candidateColor = String(app.currentColors?.[chosenFeature.type] || '');
                 if (!candidateColor || candidateColor === appliedAfterGenerate) continue;

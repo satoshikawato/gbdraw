@@ -1056,8 +1056,8 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       runDiagramHelperOperation
     } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const helper = await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-      { caption: 'lazy worker reuse', fontFamily: 'Arial', fontSize: 14 }
+      DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES,
+      { features: [], rules: [], kind: 'color' }
     );
     const beforeSecond = history.getDiagnostics();
     const undoCountBeforeSecond = history.getUndoCount();
@@ -1134,7 +1134,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
         redoEdit,
         afterRedoEdit
       },
-      helperWidth: Number(helper?.result?.width || 0),
+      helperAnswered: Array.isArray(helper?.result?.matches),
       errorSummary: String(app.errorLog?.summary || '')
     };
   });
@@ -1143,7 +1143,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     second: { status: 'ok' },
     errorSummary: ''
   });
-  expect(generated.helperWidth).toBeGreaterThan(0);
+  expect(generated.helperAnswered).toBe(true);
   expect(generated.firstUndoCount).toBe(1);
   expect(generated.firstRedoCount).toBe(0);
   expect(generated.firstUndoLabel).toBe('Generate diagram');

@@ -8,14 +8,15 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   COMPUTE_LABEL_FIT_ROW: 'computeLabelFitRow',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',
   CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
+  CONVERT_RING_TABLES_TO_SEARCH_FRAME: 'convertRingTablesToSearchFrame',
   CONVERT_STORED_PROTEIN_RESULT_FRAMES: 'convertStoredProteinResultFrames',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
-  MEASURE_LEGEND_TEXT: 'measureLegendText',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
+  READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
@@ -25,6 +26,51 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
 
 export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
   Object.values(DIAGRAM_HELPER_OPERATIONS)
+);
+
+/**
+ * The payload fields a staging helper reads its resource references from.
+ * @typedef {object} StagingHelperPayload
+ * @property {unknown} [canonicalRequest]
+ * @property {{ canonicalRequest?: unknown } | null} [projection]
+ * @property {unknown} [recordSource]
+ */
+
+/**
+ * The helpers that read records of the drawing, each with the references it
+ * names: the page stages those resources as a Generate does and adds the
+ * staged payload keys; the Worker accepts those keys from these helpers only.
+ * A helper's references come from the committed request, from the request of
+ * a projection, or (blastp extraction, OV-1555) from the one record source it reads.
+ * @type {Readonly<Record<string, (payload: StagingHelperPayload) => unknown>>}
+ */
+const STAGED_HELPER_REFERENCES = Object.freeze({
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
+});
+
+/** @type {readonly string[]} */
+export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));
+
+/**
+ * The references a helper call stages, or `null` when it stages nothing.
+ * @param {string} operation
+ * @param {StagingHelperPayload} payload
+ * @returns {unknown}
+ */
+export const stagedHelperReferences = (operation, payload) => (
+  Object.hasOwn(STAGED_HELPER_REFERENCES, operation) ? STAGED_HELPER_REFERENCES[operation](payload) ?? null : null
+);
+
+/**
+ * The payload keys a resource staging adds (`PreparedResources` without `commit`).
+ * @type {readonly ['resourceManifest', 'stagedResources', 'retainedResourceTokens']}
+ */
+export const STAGED_RESOURCE_PAYLOAD_KEYS = Object.freeze(
+  /** @type {const} */ (['resourceManifest', 'stagedResources', 'retainedResourceTokens'])
 );
 
 /**

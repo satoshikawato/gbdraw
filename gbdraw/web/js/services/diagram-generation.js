@@ -5,7 +5,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
-  DIAGRAM_HELPER_OPERATIONS,
+  stagedHelperReferences,
   readFeatureCatalogRevision,
   readSvgDocumentParts
 } from './diagram-worker-protocol.js';
@@ -22,7 +22,8 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
-/** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
@@ -92,6 +93,7 @@ import { toRaw } from '../utils/vue-raw.js';
  * @property {GenerationPayload['resources']} [resources]
  * @property {unknown} [canonicalRequest]
  * @property {{ canonicalRequest?: unknown } | null} [projection]
+ * @property {CanonicalRecordSource} [recordSource] The record source of the drawing the blastp extraction reads.
  */
 
 /**
@@ -107,6 +109,7 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
+export { resourceIdOwnedBy } from './diagram-resource-staging.js';
 
 export class DiagramGenerationCanceledError extends Error {
   constructor(message = 'Diagram generation was canceled.') {
@@ -453,6 +456,7 @@ let activeRequest = null;
  *   for the Worker.
  * @property {unknown[]} resourceManifest
  * @property {TransferFile[]} stagedResources
+ * @property {readonly string[]} retainedResourceTokens The tokens the Worker keeps besides the manifest's.
  * @property {() => boolean} commit Acknowledges the staging; false when a reset
  *   or another acknowledged request superseded it.
  */
@@ -461,7 +465,21 @@ const activeFeatureRequests = new Set();
 /** @type {Set<AuxiliaryRequest>} */
 const activeHelperRequests = new Set();
 let nextRequestId = 1;
-const resourceTransport = createDiagramResourceTransport();
+/** @type {ReadCommittedResourceSets} */
+const NO_COMMITTED_RESOURCES = () => [];
+let readCommittedResourceSets = NO_COMMITTED_RESOURCES;
+const resourceTransport = createDiagramResourceTransport({
+  readCommittedResourceSets: () => readCommittedResourceSets()
+});
+
+/**
+ * Name the committed request of every drawing, so the Worker keeps the
+ * resources they name across Generates of other drawings.
+ * @param {ReadCommittedResourceSets | null} read Null when the app unmounts.
+ */
+export const setDiagramResourceRetainSource = (read) => {
+  readCommittedResourceSets = read || NO_COMMITTED_RESOURCES;
+};
 
 /** @type {ReadonlySet<string>} */
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
@@ -715,12 +733,14 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState> }} [options]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState>, drawingId?: string | null }} [options]
  *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
  *   catalog's revision and each segment's revision and byte count are posted.
+ *   `drawingId`: the drawing it renders; the Worker keeps each drawing's prepared inputs
+ *   while the retain set names their resources (A4b).
  * @returns {Promise<GenerationResponse>}
  */
-export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD } = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD, drawingId = null } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -776,6 +796,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
+        retainedResourceTokens: preparedResources.retainedResourceTokens,
+        drawingId,
         fontIdentities: requestFontIdentities(payload.request),
         heldFeatureCatalogRevision: held.catalog?.revision ?? null,
         heldSegments: heldSegmentList(held)
@@ -1001,7 +1023,8 @@ const runAuxiliaryWorkerRequest = ({
         preparedResources = await prepareResources();
         if (!activeRequests.has(request)) return;
         workerPayload = { ...payload, resourceManifest: preparedResources.resourceManifest,
-          stagedResources: preparedResources.stagedResources };
+          stagedResources: preparedResources.stagedResources,
+          retainedResourceTokens: preparedResources.retainedResourceTokens };
       }
       currentWorker.addEventListener('message', handleMessage);
       currentWorker.addEventListener('error', handleError);
@@ -1041,18 +1064,13 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
     return Promise.reject(deserializeWorkerError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' }));
   }
   recordStructuralMetric('diagramHelperRequest', 1, { operation: normalizedOperation });
-  // Helpers that read the records of a committed request stage its resources.
-  /** @type {readonly string[]} */
-  const stagingOperations = [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE,
-    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES];
-  const staging = stagingOperations.includes(normalizedOperation) ? payload
-    : (normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT ? payload.projection : undefined);
+  const references = stagedHelperReferences(normalizedOperation, payload);
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
     type: 'helper', operation: normalizedOperation,
-    payload: staging ? helperPayload : payload,
-    prepareResources: staging ? () => resourceTransport.prepare({
-      request: staging.canonicalRequest, resources
+    payload: references ? helperPayload : payload,
+    prepareResources: references ? () => resourceTransport.prepare({
+      request: references, resources, retain: true
     }) : null,
     activeRequests: activeHelperRequests,
     onProgress

@@ -328,7 +328,7 @@ test('Linear: Input docks without Comparison, Compare docks alone, and a mode ch
   await setMode(page, 'linear');
   await entry(page, 'Advanced comparison and layout').click();
   await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'advanced-comparison');
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'circular'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.selectDrawing('circular'); });
   await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'input-genomes');
   // An entry both modes have stays docked; the rail alone stays alone.
   await entry(page, 'Labels').click();
@@ -349,7 +349,7 @@ test('Linear: Input docks without Comparison, Compare docks alone, and a mode ch
   await setMode(page, 'linear');
   await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'linear-axis');
   expect(await paneState(page)).toMatchObject({ shown: ['linear-axis'], marked: ['Go to Axis & Scale'] });
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'circular'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.selectDrawing('circular'); });
   await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'circular-axis');
   expect(await paneState(page)).toMatchObject({ shown: ['circular-axis'], marked: ['Go to Axis & Scale'] });
 

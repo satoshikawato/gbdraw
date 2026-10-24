@@ -4,6 +4,7 @@ import { nextNumberedId } from './track-slot-validation.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
 
 /** @import { FeatureRequestRecord } from './feature-placement.js' */
+/** @import { DeepReadonly } from '../utils/reactivity.js' */
 
 /**
  * A record named by a target: a 0-based position or a record ID.
@@ -115,28 +116,30 @@ const normalizeTarget = (target) => {
   };
 };
 
+// The style and set factories read their input and copy it: a JSON copy is
+// the new value's own (the casts).
 /**
- * @param {Partial<AnnotationStyle> | null} [overrides]
+ * @param {DeepReadonly<Partial<AnnotationStyle>> | null} [overrides]
  * @returns {AnnotationStyle}
  */
 export const createDefaultAnnotationStyle = (overrides = {}) => ({
   ...DEFAULT_STYLE,
-  ...(overrides && typeof overrides === 'object' ? clone(overrides) : {})
+  ...(overrides && typeof overrides === 'object' ? /** @type {Partial<AnnotationStyle>} */ (clone(overrides)) : {})
 });
 
 /**
- * @param {Partial<AnnotationSet>} [overrides] A set from a Session, a table, or the editor.
+ * @param {DeepReadonly<Partial<AnnotationSet>>} [overrides] A set from a Session, a table, or the editor.
  * @returns {AnnotationSet}
  */
 export const createAnnotationSet = (overrides = {}) => ({
   id: cleanId(overrides.id, 'annotations'),
-  annotations: Array.isArray(overrides.annotations) ? clone(overrides.annotations) : [],
+  annotations: Array.isArray(overrides.annotations) ? /** @type {AnnotationItem[]} */ (clone(overrides.annotations)) : [],
   defaultStyle: createDefaultAnnotationStyle(overrides.defaultStyle),
   legendLabel: overrides.legendLabel == null ? null : String(overrides.legendLabel)
 });
 
 /**
- * @param {Partial<AnnotationSet>[] | null | undefined} sets
+ * @param {readonly DeepReadonly<Partial<AnnotationSet>>[] | null | undefined} sets
  * @returns {AnnotationSet[]}
  */
 export const normalizeAnnotationSets = (sets) => {
@@ -189,7 +192,7 @@ export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
 // for the records that draw them (design Q4 3.2, R2). A target bound to an OFF
 // record (`omittedRecordKeys` of the record catalog) waits the same way.
 /**
- * @param {Partial<AnnotationSet>[] | null | undefined} sets
+ * @param {readonly Partial<AnnotationSet>[] | null | undefined} sets
  * @param {FeatureRequestRecord[]} [records]
  * @param {Iterable<string>} [omittedRecordKeys]
  */

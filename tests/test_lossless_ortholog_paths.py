@@ -205,14 +205,22 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
     assert runner.canonical(actual) == runner.canonical(expected)
 
 
-# The post_search science of the s04 archive
-# (docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/
-# s04-current-timing-cursor-<case>.json.gz), with its e-values read exactly. The archive
+# The post_search science of each Gallery Session. gallery-orthogroup is the science of
+# the s04 archive (docs/internal/collinear_similarity_performance_plan_2026-09-15/results/
+# data/s04-current-timing-cursor-<case>.json.gz), with its e-values read exactly. The archive
 # read them with pandas' default float parser, which can miss by one unit in the last
 # place; since OV-1534 every pandas version reads them exactly. The two differ only in
 # those e-values: no ortholog, orthogroup, block, or order changes.
+# gallery-collinear is the science of the fresh-upload Hepatoplasmataceae collinear Session
+# (#1334, with the NZ_CP006932.1 revision snapshot). Its s04 value, ad52c06e..., held for
+# the earlier embedded files, and the current code still gives it from that Session. The
+# two Sessions hold the same proteins and the same LOSAT hits; their files differ in bytes,
+# which renames every content-hashed protein ID, and in 25 NZ_CP006932 product names. With
+# them the blocks, orthogroups, and names stay the same by protein; 27 record-local paralog
+# and co-ortholog edges take the opposite direction of the same protein pair, and member
+# products and core-support values follow.
 S04_SCIENCE_SHA256 = {
-    "gallery-collinear": "ad52c06ef3a74e2f5cb8a7bac7699167799317fe655ff09c73cea4b5bb89a9c1",
+    "gallery-collinear": "9552e6fb931a68cc52b2efa1ba1daf83aac4708e773f0dc3a3160ba8dfb1b303",
     "gallery-orthogroup": "86ba4bf37097529161babd24e4e2cd25c7e03e863aaef77f31ddb71514cd8d5b",
 }
 

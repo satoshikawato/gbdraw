@@ -11,7 +11,7 @@
 // --require-complete`, .claude/skills/translate-web-ui/SKILL.md).
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
@@ -219,6 +219,38 @@ test('a raw double quote inside a double-quoted attribute with a translation cal
 
 test('index.html has no raw double quote inside a double-quoted translated attribute', () => {
   assert.deepEqual(rawQuoteProblems(readFileSync(join(webRoot, 'index.html'), 'utf8'), 'index.html'), []);
+});
+
+// OV-1535: an aria-label, title, placeholder, alt or label is UI text that t()
+// translates, so a selector comparing its value matches only in English. A
+// stylesheet or a module styles and finds an element by a class or data
+// attribute that its template owns. A presence test such as [title] is fine.
+const TRANSLATED_ATTRIBUTE_SELECTOR = /\[\s*(?:aria-label|aria-description|aria-roledescription|aria-valuetext|title|placeholder|alt|label)\s*[~|^$*]?=/;
+/** @param {string} source @param {string} file @returns {string[]} one `file:line: selector` problem per line */
+const translatedSelectorProblems = (source, file) => source.split('\n').flatMap((line, index) => (
+  TRANSLATED_ATTRIBUTE_SELECTOR.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : []
+));
+const webStylesheets = () => readdirSync(webRoot, { recursive: true }).map((path) => String(path).split(sep).join('/'))
+  .filter((path) => path.endsWith('.css') && !path.startsWith('vendor/')).map((path) => join(webRoot, path));
+
+test('a selector that compares a translated attribute is refused; a class, data attribute or presence test is not', () => {
+  const css = [
+    '.result-pane > [aria-label="Result Preview"] { flex: none; }',
+    ".preview-controls [aria-label='Reset zoom'] { width: 3rem; }",
+    'input[placeholder^="Search"], img[ alt *= "logo" ], [title|=x] {}',
+    'abbr:where([title]) {} button[aria-pressed="true"] {} [data-result-preview] {} .preview-zoom-reset {}',
+    "document.querySelector('[aria-label]').getAttribute('aria-label');"
+  ].join('\n');
+  assert.deepEqual(translatedSelectorProblems(css, 'sample').map((problem) => problem.split(':').slice(0, 2).join(':')), [
+    'sample:1', 'sample:2', 'sample:3'
+  ]);
+});
+
+test('no stylesheet, template or module of the Web UI selects by a translated attribute value', () => {
+  const files = [...sourceFiles(), ...webStylesheets()];
+  assert.ok(files.some((path) => path.endsWith(join('css', 'tailwind.input.css'))), 'the Tailwind input is read');
+  const problems = files.flatMap((path) => translatedSelectorProblems(readFileSync(path, 'utf8'), webPath(path)));
+  assert.deepEqual(problems, []);
 });
 
 test('every t(), tn() and tx() call in the Web UI has a literal key', () => {
@@ -477,7 +509,7 @@ test('OV-1387: the Record Size Mode option Linear is its own key; the diagram mo
   const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
   const select = html.slice(html.indexOf('v-model="adv.multi_record_size_mode"'));
   assert.match(select.slice(0, select.indexOf('</select>')), /<option value="linear">\{\{ tx\('size scaling', 'Linear'\) \}\}<\/option>/);
-  assert.match(html, /@click="setDiagramMode\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
+  assert.match(html, /@click="selectDrawing\('linear'\)"[^\n]*\{\{ t\('Linear'\) \}\}/);
 });
 
 test('OV-1465: the Circular record selector has its own key; the topology checkbox keeps Circular record', () => {
@@ -712,4 +744,15 @@ test('OV-1415: the words a declined label table names as changed are a key, show
   assert.ok(new Set(sourceCalls().map((call) => call.key)).has(RULE_INPUT_CHANGE_WORDS));
   const source = readFileSync(join(jsRoot, 'app', 'feature-editor', 'label-actions.js'), 'utf8');
   assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
+});
+
+// OV-1690: the record list sentence ends inside its key, so a locale writes its
+// own punctuation, and the next sentence follows the locale's separator.
+test('OV-1690: the record list sentence is one key, joined to the next with the sentence separator', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<p id="record-list-description"');
+  const block = html.slice(start, html.indexOf('</p>', start));
+  assert.match(block, /<i18n-text :text="t\('\{file\}: \{records\}\.'\)">/);
+  assert.match(block, /sentenceSeparator\(\) \+ settingApplicationSentence\('inputs'\)/);
+  assert.doesNotMatch(block, /<\/span>\.|<\/strong>:/);
 });

@@ -63,11 +63,18 @@ The exact surface controls are listed in the [Web app](web-app.md),
 Circular slots use side, radius or width, gaps, z-order, and renderer
 parameters. In the Web app, Width and Radius use numeric fields with px/×R
 selectors; R is the base circle radius. A unit change preserves the number,
-and blank means Auto. An inside `gc_content`, `gc_skew`, or `depth` row with a
-blank Radius is placed as in the default stack of the selected preset: at the
-preset's radius for that row when it fits, otherwise packed below the row
-above it, so a custom stack that repeats the default stack draws the same
-figure. A slot with a radius is drawn at that radius, and the
+and blank means Auto. In a stack with only the preset's rows (in any order;
+depth series and comparison rings count as the preset's), an inside
+`gc_content`, `gc_skew`, or `depth` row with a blank Radius is placed as in the
+default stack of the selected preset:
+at the preset's radius for that row when it fits, otherwise packed below the
+row above it, so a custom stack that repeats the default stack draws the same
+figure. A stack that adds an inside row the preset does not have, such as an AT
+skew row or an inside annotation slot, packs its inside rows from the feature
+track toward the center. The Auto widths of such a stack follow the
+full definition the record draws alone, so a record draws these rows in the
+same place on a Multi-Record Canvas, where it shows only the record summary, or
+with a plot title. A slot with a radius is drawn at that radius, and the
 other rows on its side keep the stack order around it: rows before it are
 placed farther from the center, rows after it closer. When the inside rows do
 not fit, numeric rows with an Auto width are compressed together as in an Auto
@@ -307,16 +314,17 @@ affected.
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a
   `GbdrawError`.
 - If leader lines cross, labels cover the definition text, Linear region
-  (annotation) labels overlap other labels or lines, or Circular region labels
-  are cut to fit their circle or lie on other tracks, but no labels overlap,
+  (annotation) labels overlap other labels or lines, Circular region labels
+  are cut to fit their circle or lie on other tracks, or the definition text
+  in the centre of a Circular record overlaps a track, but no labels overlap,
   the figure is drawn as before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
   `LabelLeadersCrossWarning`, a `UserWarning`.
 
 The message counts the overlapping label pairs, crossing leader pairs,
-labels over the definition text, region label overlaps, cut region labels, and
-region labels on other tracks of each record and side, and lists settings
-that make the labels fit. Each setting changes one thing and is checked by
+labels over the definition text, region label overlaps, cut region labels,
+region labels on other tracks, and definition lines over a track of each record
+and side, and lists settings that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
 | Row | Change | Offered for |
@@ -330,6 +338,7 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 | all labels outside | `--labels out` | records with inner labels, in either placement |
 | radial labels | `--label_placement radial` | inner and embedded labels |
 | separate overlapping features | `--resolve_overlaps` | labels drawn on features that are drawn on top of each other, Circular and Linear |
+| smaller definition font | `--definition_font_size`, in steps of 0.5 pt, down to 6 pt | the Circular definition text over a track, when the figure is drawn |
 
 Each row gives the mildest value that fits, or says that none fits within its
 limit. When nothing was drawn and a row has no value that fits, it gives the
@@ -350,6 +359,26 @@ more ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
 apart. Linear region labels and Circular region labels that are cut or lie
 on other tracks get no row.
+
+The definition text in the centre of a Circular record (not a plot title)
+overlaps a track when the box of one of its lines, as drawn (bold first line
+included), reaches more than 0.5 px into what a track paints at the angles
+the box covers: the GC content, GC skew, and depth areas with their axes, the
+feature blocks, the conservation hits (the whole ring when its background
+shows), the annotation marks and labels, the tick marks and labels, and the
+axis circle. Text that enters a track's ring but stays clear of its paint does
+not count. Each such line counts once (`1 line overlaps a track`), and the Web app
+shows "The definition text overlaps a track (N lines)." with **Choose a fix**.
+The smaller definition font is the first size, going down from the current
+one, at which no definition line overlaps a track, checked by drawing the whole
+figure again; the inner tracks may then widen, because they make room for the
+definition text. Each row is checked for what it fixes: the label rows for the
+labels and the definition row for the definition text, and neither may stop the
+figure. A font you set stays as it is: the row only suggests a value, and a
+definition line interval you set is kept while the row is checked; one set in
+`config_overrides` or the Web app is kept even when it equals the one the font
+gives. The rows
+do not include narrower GC content or GC skew tracks or a wrapped species name.
 
 A Circular region label with `label_orientation` `auto` or `arc` is drawn
 along its circle and can take just under a whole turn, less 1 em at each

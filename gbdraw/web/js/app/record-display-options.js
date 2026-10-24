@@ -147,9 +147,6 @@ export const createRecordDisplayControls = ({
           cropped: source.cropped, reverse: source.reverse, paired: source.paired })) : [];
       } catch { return []; } // Existing selector control owns its visible validation error.
     }));
-  // A row's drafts are those of its mode's drawing.
-  /** @param {{ scope: string }} row @returns {DrawingState} */
-  const drawingOfRow = (row) => (row?.scope === 'linear' ? state.drawings.linear : state.drawings.circular);
   // A drawing's drafts on the rows of their sources (OV-278). An edit of a
   // draft first writes them there, within its own step.
   /** @param {DrawingState} drawing */
@@ -160,7 +157,7 @@ export const createRecordDisplayControls = ({
     if (bound !== drawing.recordDisplayDrafts) drawing.recordDisplayDrafts.splice(0, bound.length, ...bound);
   };
   /** @param {RecordDisplayRow} row */
-  const draftFor = (row) => boundDrafts(drawingOfRow(row)).find((/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === row.key) || {};
+  const draftFor = (row) => boundDrafts(state.drawingOfMode(row.scope)).find((/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === row.key) || {};
   // Linear orientation has one owner, the File card's region_reverse (CO-03,
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
@@ -204,7 +201,7 @@ export const createRecordDisplayControls = ({
   });
   /** @param {RecordDisplayRow} row @param {ResolvedRecordTransform} transform */
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
-    const drawing = drawingOfRow(row);
+    const drawing = state.drawingOfMode(row.scope);
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     if (typeof reverseComplement !== 'boolean') {
@@ -268,7 +265,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
   const captureAlignmentOrientationIntent = (orientations) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     // A draft names no mode (PD-OI-086): these are the Linear drawing's (OV-579).
     // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
     settleDrafts(drawing);
@@ -278,7 +275,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (checkpoints) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
       sequence.region_reverse = checkpoints[index].reverseComplement;
       checkpoints[index].drafts.forEach(restoreTargetDraft);
@@ -286,7 +283,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {AlignmentOrientation[]} orientations */
   const commitAlignmentOrientations = (orientations) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     alignmentRows(drawing, orientations).forEach(({sequence, orientation, drafts}) => {
       sequence.region_reverse = orientation.reverseComplement;
       drafts.forEach((/** @type {RecordDisplayDraft} */ draft) => { draft.reverseComplementOverride = null; });
@@ -335,21 +332,28 @@ export const createRecordDisplayControls = ({
     });
   };
   watch([() => state.featureCatalog.value, () => state.processing?.value, allRows], refreshCommittedRows, { flush: 'post' });
-  watch(() => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired })),
-    (/** @type {RecordDisplaySource[]} */ current, /** @type {RecordDisplaySource[]} */ previous = []) => {
-      if (state.semanticFileWatchersSuppressed?.value || state.sessionImportRollbackInProgress?.value) return;
-      const replaced = previous.filter((old) => {
-        const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
-        return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
-      });
-      // A replaced source's drafts go from its mode's drawing.
-      replaced.forEach((source) => {
-        const drafts = drawingOfRow(source).recordDisplayDrafts;
-        for (let index = drafts.length - 1; index >= 0; index -= 1) {
-          if (drafts[index].sourceUid === source.sourceUid) drafts.splice(index, 1);
-        }
-      });
-    }, { flush: 'sync' });
+  /** @returns {RecordDisplaySource[]} */
+  const sourceTuples = () => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired }));
+  // The transition of every write of a row source (a file, an input type, the
+  // Linear cards): `mutate` writes it, then the drafts of each source it
+  // replaced or removed go from that source's mode's drawing (R10). Load, its
+  // rollback, and a History restore install the drafts they read or captured.
+  /** @template T @param {() => T} mutate @returns {T} */
+  const changeRecordSources = (mutate) => {
+    const previous = sourceTuples();
+    const result = mutate();
+    const current = sourceTuples();
+    previous.filter((old) => {
+      const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
+      return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
+    }).forEach((replaced) => {
+      const drafts = state.drawingOfMode(replaced.scope).recordDisplayDrafts;
+      for (let index = drafts.length - 1; index >= 0; index -= 1) {
+        if (drafts[index].sourceUid === replaced.sourceUid) drafts.splice(index, 1);
+      }
+    });
+    return result;
+  };
   const hasPendingChanges = computed(() => {
     const drawing = state.activeDrawing();
     void state.processing?.value;
@@ -464,7 +468,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */
   const captureTargetDraft = (row) => {
-    const drawing = drawingOfRow(row);
+    const drawing = state.drawingOfMode(row.scope);
     settleDrafts(drawing);
     const key = recordDisplayKey(row);
     const index = drawing.recordDisplayDrafts.findIndex(
@@ -481,7 +485,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {TargetDraftCheckpoint} checkpoint */
   const restoreTargetDraft = (checkpoint) => {
-    const drawing = drawingOfRow(checkpoint);
+    const drawing = state.drawingOfMode(checkpoint.scope);
     if (checkpoint.ownerUid) {
       const owner = state.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === checkpoint.ownerUid);
       if (owner) owner.region_reverse = checkpoint.ownerReverse;
@@ -498,7 +502,7 @@ export const createRecordDisplayControls = ({
       drawing.recordDisplayDrafts.splice(insertAt, 0, cloneJsonData(checkpoint.draft));
     }
   };
-  return { rows, allRows, draftFor, surfaceFor, hasPendingChanges,
+  return { rows, allRows, draftFor, surfaceFor, hasPendingChanges, changeRecordSources,
     // The data of isCurrentFeature (services/feature-identity.js), refreshed
     // for the committed request before it is read (R13).
     sourceBinding: () => {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 import {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRequestState, buildCanonicalRenderRequest, canonicalFeaturePlacements,
   projectCanonicalSessionRequest, promoteCanonicalRenderRequestToCurrent
@@ -12,7 +13,7 @@ import {
 } from '../../gbdraw/web/js/services/record-display-model.js';
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import {
-  featureIdentityKeyOf, nameFeaturePlacementFailure, restorePlacements
+  featureIdentityKeyOf, nameFeaturePlacementFailure
 } from '../../gbdraw/web/js/services/feature-placement.js';
 
 import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/services/linear-comparisons.js';
@@ -164,12 +165,13 @@ test('a Generate intent checkpoint restores the placement draft through its owne
   const checkpoint = { [key]: kept };
   const removed = lane('record-2', 'inward');
   const overrides = { [featureIdentityKeyOf(removed)]: removed };
-  restorePlacements(overrides, checkpoint);
+  const edits = FEATURE_EDITS_SLICE.create({ featurePlacementOverrides: overrides }).handle;
+  FEATURE_EDITS_SLICE.install(edits, { featurePlacementOverrides: checkpoint });
   assert.deepEqual(overrides, checkpoint);
   // Undo and Redo restore the same checkpoint again, so the draft holds copies.
   overrides[key].placement.side = 'inward';
   assert.equal(checkpoint[key].placement.side, 'outward');
-  restorePlacements(overrides, null);
+  FEATURE_EDITS_SLICE.install(edits, { featurePlacementOverrides: {} });
   assert.deepEqual(overrides, {});
 });
 

@@ -5,12 +5,18 @@
 
 The Circular planners call :func:`resolve_circular_conservation_losat` once the
 records are loaded. Each comparison genome (all records of one file, the
-query) is searched against all displayed records (the subject database, design
-3.3), so every ring has the reference genome as its E-value database. The
-result replaces the search intent with :class:`ConservationSearchResult` rows
-and Web-identical ``flow: 'circular-conservation'`` raw cache entries, so
-Session replay needs no LOSAT. Rendering, thresholds and track slots are those
-of precomputed rings.
+query) is searched against the subject database: every record of the
+subject-side source files, whole (:func:`ring_subject_records`, Owner D-25), as
+the Web searches it. Records that are not drawn, a single presentation and a
+crop do not change it, so every ring has the reference genome as its E-value
+database and the raw cache keys equal the Web's. The raw cache entries keep
+the search output; :func:`ring_rows_in_search_frame` turns it into the ring
+rows of the drawn records, in their search frame like every ring table
+(PD-OI-073, Owner D-28), which replace the search intent as
+:class:`ConservationSearchResult` rows. Session replay needs no LOSAT.
+Rendering, thresholds and track slots are those of precomputed rings; the Web
+converts its search output through the same owner
+(``gbdraw.web_support.ring_search_frame``).
 """
 
 from __future__ import annotations
@@ -19,17 +25,17 @@ from dataclasses import replace
 import logging
 import os
 import re
-from typing import Any, Callable, Mapping, Sequence, cast
+from typing import Any, Callable, Hashable, Iterable, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.conservation import ConservationSearchResult
 from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.api.requests import GenBankInputSource, GffFastaInputSource, RecordInputSource
 from gbdraw.comparisons.losat_jobs import (
     LOSAT_OUTFMT,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     losat_fasta_text,
-    losat_search_frame_fasta,
     nucleotide_losat_cache_key,
     sha256_text,
 )
@@ -41,8 +47,10 @@ from gbdraw.comparisons.losat_runtime import (
     require_losat_task_support,
     run_losat_search,
 )
+from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparison_sequences import ComparisonSequenceFile, comparison_file_stem
+from gbdraw.io.genome import read_sequence_file_records, record_sequence_text
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +117,143 @@ def comparison_query_fasta(comparison: ComparisonSequenceFile, *, ordinal: int) 
     )
 
 
+def ring_subject_records(
+    sources: Iterable[RecordInputSource],
+    *,
+    genbank_records: Callable[[GenBankInputSource], Sequence[SeqRecord]],
+) -> tuple[SeqRecord, ...]:
+    """The records of the ring subject database, in request order (Owner D-25).
+
+    Every distinct subject-side source the request reads gives all of its
+    records, uncropped, in file order, on the file's strand, also records that
+    are not drawn. A GenBank file gives the records the render's loader read
+    (``genbank_records``: the planner's parse, so no source is parsed twice). A
+    GFF3/FASTA pair gives every entry of its FASTA file, also one the GFF3 file
+    does not name: the GFF3 parse keeps only named entries, so the FASTA file is
+    read again. An in-memory record (Python API) is its own source, as given.
+    """
+
+    seen: set[Hashable] = set()
+    records: list[SeqRecord] = []
+    for source in sources:
+        key: Hashable = (
+            ("genbank", str(source.path)) if isinstance(source, GenBankInputSource)
+            else ("fasta", str(source.fasta_path)) if isinstance(source, GffFastaInputSource)
+            else ("memory", id(source.record))
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        if isinstance(source, GenBankInputSource):
+            records.extend(genbank_records(source))
+        elif isinstance(source, GffFastaInputSource):
+            records.extend(read_sequence_file_records(str(source.fasta_path), "fasta"))
+        else:
+            records.append(source.record)
+    return tuple(records)
+
+
+def ring_subject_fasta(records: Iterable[SeqRecord]) -> str:
+    """LOSAT subject FASTA of the rings: each record that has a sequence, Web FASTA layout.
+
+    A record without a sequence (a CON record) is left out. The Web's
+    ``readAllLosatFasta`` writes the same text for the same file, so the
+    subject hash and the raw cache keys are the same on both surfaces.
+    """
+
+    fasta = "".join(
+        losat_fasta_text(str(record.id), sequence)
+        for record in records
+        if (sequence := record_sequence_text(record)) is not None
+    )
+    if not fasta:
+        raise ValidationError(
+            "The reference of the similarity rings has no record with a sequence.",
+            diagnostic={
+                "code": "INPUT_UNREADABLE",
+                "reason": "SEQUENCE_MISSING",
+                "field": "records",
+            },
+        )
+    return fasta
+
+
+def _fasta_id(record: SeqRecord) -> str:
+    """The ID a search reports for a record: the first word of its FASTA header."""
+
+    words = str(record.id).split()
+    return words[0] if words else ""
+
+
+def _one_frame_per_id(frames: Iterable[tuple[str, tuple[int, int]]]) -> dict[str, tuple[int, int]]:
+    by_id: dict[str, tuple[int, int]] = {}
+    for record_id, frame in frames:
+        if by_id.setdefault(record_id, frame) != frame:
+            raise ValidationError(
+                f"Similarity rings cannot place their hits on record {record_id}: the request has two records "
+                "with this ID that are cropped or oriented differently. Draw them in separate requests, or "
+                "give the records distinct IDs.",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "UNIQUE_IDS", "field": "records"},
+            )
+    return by_id
+
+
+def ring_rows_in_search_frame(
+    text: str,
+    *,
+    drawn_records: Sequence[SeqRecord],
+    subject_records: Sequence[SeqRecord] = (),
+) -> str:
+    """Ring search output as the ring rows of the drawn records, in their search frame.
+
+    Every ring table is in the search frame of its record (PD-OI-073, Owner
+    D-28): the drawn record after its crop, on its source strand, 1-based. The
+    search reports subject positions on the database records (the whole
+    reference files, :func:`ring_subject_records`), so each row is moved to
+    the search frame of the drawn record with its subject ID. Rows of records
+    that are not drawn, and rows wholly outside a cropped record, are left
+    out. A row that crosses the crop edge keeps its HSP with the subject span
+    clipped to the record (Owner-delegated); the query columns and the other
+    columns stay as the search reported them.
+
+    A database record read from a file is the whole source record. One passed
+    in memory (``subject_records``, Python API) is searched as given: its
+    coordinate map turns its positions into source positions, so an already
+    cropped or reverse complemented record converts correctly. Records not
+    named in ``subject_records`` are whole source records (the Web).
+    """
+
+    frames = _one_frame_per_id(
+        (_fasta_id(record), (_record_source_start(record), len(record.seq))) for record in drawn_records
+    )
+    database_maps = _one_frame_per_id((_fasta_id(record), _read_coord_map(record)) for record in subject_records)
+    rows: list[str] = []
+    for line_number, line in enumerate(re.split(r"\r?\n", str(text)), start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        columns = line.split("\t")
+        try:
+            positions = (int(columns[8]), int(columns[9])) if len(columns) == _OUTFMT6_COLUMNS else None
+        except ValueError:
+            positions = None
+        if positions is None:
+            raise ValidationError(
+                f"LOSAT result is not BLAST outfmt 6 rows (output line {line_number}).",
+                diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT", "row": line_number},
+            )
+        frame = frames.get(columns[1])
+        if frame is None:
+            continue
+        frame_start, length = frame
+        base, step = database_maps.get(columns[1], (1, 1))
+        ends = [base + step * (position - 1) - frame_start + 1 for position in positions]
+        if max(ends) < 1 or min(ends) > length:
+            continue
+        columns[8], columns[9] = (str(min(max(end, 1), length)) for end in ends)
+        rows.append("\t".join(columns) + "\n")
+    return "".join(rows)
+
+
 def _ring_gencodes(options: CircularDiagramOptions, count: int) -> list[int]:
     gencodes = tuple(options.conservation_losat_gencodes or ())
     if not gencodes:
@@ -121,13 +266,17 @@ def _ring_gencodes(options: CircularDiagramOptions, count: int) -> list[int]:
 def resolve_circular_conservation_losat(
     options: CircularDiagramOptions,
     *,
-    records: Sequence[SeqRecord],
+    subject_records: Sequence[SeqRecord],
+    drawn_records: Sequence[SeqRecord],
     load_sequences: Callable[[], Sequence[ComparisonSequenceFile]],
 ) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Run the ring searches and return resolved options and raw cache entries.
 
-    ``load_sequences`` returns the comparison genomes in ring order (the
-    request's memoized reader result).
+    ``subject_records`` are the subject database records
+    (:func:`ring_subject_records`); ``drawn_records`` the records the request
+    draws, whose search frame the ring rows are in
+    (:func:`ring_rows_in_search_frame`); ``load_sequences`` returns the
+    comparison genomes in ring order (the request's memoized reader result).
     """
 
     search = options.losat_search
@@ -148,8 +297,8 @@ def resolve_circular_conservation_losat(
             ncbi_blast_bin=runtime.ncbi_blast_executable,
         )
 
-    # The subject database: every displayed record, in its search frame.
-    subject_fasta = "".join(losat_search_frame_fasta(record) for record in records)
+    # The subject database: the whole subject-side source files (D-25).
+    subject_fasta = ring_subject_fasta(subject_records)
     subject_hash = sha256_text(subject_fasta)
     subject_ids = _fasta_ids(subject_fasta)
     reference_gencodes = tuple(search.record_gencodes)
@@ -190,9 +339,9 @@ def resolve_circular_conservation_losat(
             text = str(cached["text"])
         else:
             logger.info(
-                "INFO: %s ring %d/%d (%s against %d displayed record(s)).",
+                "INFO: %s ring %d/%d (%s against %d record(s) of the reference file(s)).",
                 search.program.upper(), index + 1, len(comparison_files),
-                os.path.basename(comparison.path), len(records),
+                os.path.basename(comparison.path), len(subject_ids),
             )
             runtime_records: list[dict[str, object]] = []
             text = _validated_rows(
@@ -228,7 +377,10 @@ def resolve_circular_conservation_losat(
                 runtime=runtime_records[0] if runtime_records else None,
                 filename=filename,
             )
-        results.append(ConservationSearchResult(name=filename, text=text))
+        results.append(ConservationSearchResult(
+            name=filename,
+            text=ring_rows_in_search_frame(text, drawn_records=drawn_records, subject_records=subject_records),
+        ))
 
     labels = (
         tuple(options.conservation_labels)
@@ -251,4 +403,7 @@ __all__ = [
     "comparison_query_fasta",
     "resolve_circular_conservation_losat",
     "ring_losat_filename",
+    "ring_rows_in_search_frame",
+    "ring_subject_fasta",
+    "ring_subject_records",
 ]

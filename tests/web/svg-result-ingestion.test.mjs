@@ -30,6 +30,7 @@ import {
   markCommittedSvgResultUnmounted,
   reconcileMountedResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
+import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 import { LEGEND_ORDER_RECORD, stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
 import {
   getLegendEntrySwatch as legendSwatch, legendRowKeys, legendRowTakesPlace, shownPythonLegendRow
@@ -865,18 +866,12 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   const mounted = buildSvgRoot();
   const added = { caption: 'GC content', color: '#aaaaaa', xPos: null, yPos: null };
   reconcileMountedResult(mounted, { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [added] });
-  const drawing = {
-    manualSpecificRules: [],
-    legendEntries: { value: [
-      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
-      { caption: 'CDS', originalCaption: 'GC content', color: '#aaaaaa' }
-    ] },
-    deletedLegendEntries: { value: [] },
-    dormantLegendEntries: { value: [] },
-    addedLegendCaptions: { value: new Set() },
-    legendColorOverrides: {},
-    legendStrokeOverrides: {}
-  };
+  const paint = PAINT_SLICE.create();
+  PAINT_SLICE.install(paint.handle, { legendEntries: [
+    { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+    { caption: 'CDS', originalCaption: 'GC content', color: '#aaaaaa' }
+  ] });
+  const drawing = { manualSpecificRules: [], ...paint.view, slices: { paint: paint.handle } };
   const strokeOptionsOpen = new Set();
   const state = {
     results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },

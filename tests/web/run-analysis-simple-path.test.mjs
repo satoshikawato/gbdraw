@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
-import { encodeAnnotationTable, parseAnnotationTable } from '../../gbdraw/web/js/app/annotations/table-codec.js';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -84,6 +85,33 @@ const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
 const workerResponses = [];
 const workerHelperResponses = [];
 const workerMessages = [];
+
+/** The bytes of every resource the page staged, by content token: a held resource is not staged again. */
+const stagedBytesByToken = () => new Map(workerMessages.flatMap(({ payload }) => (payload?.stagedResources || [])
+  .map(({ cacheToken, bytes }) => [cacheToken, bytes])));
+/** The latest ring table conversion message: its request, ring table IDs, and staged resources (base64 by ID). */
+const ringTableConversionInput = () => {
+  const { canonicalRequest, resourceIds, resourceManifest } = workerMessages
+    .findLast(({ type, operation }) => type === 'helper' && operation === 'convertRingTablesToSearchFrame').payload;
+  const bytes = stagedBytesByToken();
+  const resources = Object.fromEntries(resourceManifest.map(({ resourceId, cacheToken }) => [
+    resourceId, Buffer.from(bytes.get(cacheToken)).toString('base64')
+  ]));
+  return { canonicalRequest, resourceIds, resources };
+};
+/** The Worker's reply to a ring table conversion whose rows are already in the search frame. */
+const ringTablesUnchanged = {
+  then(resolve, reject) {
+    try {
+      const { resourceIds, resources } = ringTableConversionInput();
+      resolve({ ok: true, result: { resources: Object.fromEntries(resourceIds.map((resourceId) => [
+        resourceId, { data: resources[resourceId], size: Buffer.from(resources[resourceId], 'base64').length }
+      ])) } });
+    } catch (error) {
+      reject(error);
+    }
+  }
+};
 
 const assertDownloadedFilesMatchCommands = (runInfo, entries) => {
   const expected = runInfo.helperFiles.map(({ name }) => name).sort();
@@ -208,7 +236,8 @@ const {
   buildUiStateData,
   serializeActiveRenderFiles,
   serializeResults,
-  SESSION_VERSION
+  SESSION_VERSION,
+  installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
 const { createHistoryFileStore } = await import(
@@ -226,6 +255,9 @@ const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+const {
+  readComparisonSequence, readComparisonSequenceDigest, readOncePerFile
+} = await import('../../gbdraw/web/js/services/record-discovery.js');
 
 const artifactSnapshots = createHistorySnapshotService({
   state,
@@ -323,6 +355,8 @@ const generatedArtifactHandleOptions = {
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
+  installRedrawnArtifact: artifactSnapshots.installRedrawnArtifact,
+  displayedArtifactDrawing: artifactSnapshots.displayedArtifactDrawing,
   restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity,
   previewRuntime: immediatePreviewRuntime,
@@ -456,6 +490,36 @@ const sha256Text = async (text) => {
   return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 };
 
+// Runs `generate` and returns its LOSAT timing line and how many SHA-256 digests of FASTA text it took, in
+// all and by text.
+const watchLosatPreparation = async (generate) => {
+  const watched = { fastaDigests: 0, digestsByText: new Map(), timing: '' };
+  const { subtle } = globalThis.crypto;
+  const ownDigest = Object.hasOwn(subtle, 'digest');
+  const digest = subtle.digest;
+  const info = console.info;
+  subtle.digest = function digestWatched(algorithm, data) {
+    const text = new TextDecoder().decode(data);
+    if (text.startsWith('>')) {
+      watched.fastaDigests += 1;
+      watched.digestsByText.set(text, (watched.digestsByText.get(text) || 0) + 1);
+    }
+    return digest.call(this, algorithm, data);
+  };
+  console.info = (...args) => {
+    if (String(args[0]).startsWith('LOSAT timing')) watched.timing = String(args[0]);
+    return info.apply(console, args);
+  };
+  try {
+    await generate();
+  } finally {
+    if (ownDigest) subtle.digest = digest;
+    else delete subtle.digest;
+    console.info = info;
+  }
+  return watched;
+};
+
 test('afterPaint crosses one completed frame before resolving', async () => {
   const frames = [];
   let resolved = false;
@@ -557,7 +621,7 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 // One Circular GenBank input whose other slots hold files no run may read.
 /** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
 const installSimpleCircularInput = (primary, inactive) => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.files.c_gb = primary;
   state.files.c_gff = null;
@@ -625,6 +689,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     type: 'application/octet-stream',
     lastModified: 8
   });
+  // Discovery is shared per File (OV-1558): a scenario that needs its own
+  // pending or failing read uses a File no earlier scenario read.
+  const coalescedPrimary = new AuditFile(['record parser fallback'], 'coalesced.gb', {
+    type: 'application/octet-stream', lastModified: 8
+  });
+  const stalePrimary = new AuditFile(['record parser fallback'], 'stale.gb', {
+    type: 'application/octet-stream', lastModified: 8
+  });
   const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
 
   installSimpleCircularInput(primary, inactive);
@@ -641,7 +713,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     assert.equal(state.processing.value, true);
     assert.notEqual(state.processingStatus.value, '');
     lifecycleEvents.push('test.before-handle-capture');
-    return artifactSnapshots.captureGeneratedArtifactHandle(...args);
+    return artifactSnapshots.captureGeneratedArtifactHandle(args[0] ?? state.activeDrawing());
   };
   const generationHistory = createHistoryManager({
     buildIntent: async () => ({}),
@@ -714,6 +786,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       return serializeActiveRenderFiles(state.mode.value, state, drawing);
     },
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
         throw new Error('forced late canonical artifact adoption failure');
@@ -1091,7 +1164,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   // A failed readiness restoration must retain the initiating cause, and must
   // never advertise completed rollback merely because the old Results exist.
   const originalRestore = readinessRuntime.restorePreviousSelectedResult;
-  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle();
+  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   readinessRuntime.restorePreviousSelectedResult = async () => { throw new Error('PRIVATE_ROLLBACK_SENTINEL'); };
   failArtifactAdoption = true;
   const restoreFailureResult = result('restore-failure.svg', 'restore-failure');
@@ -1281,11 +1354,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     });
   }));
   state.circularRecordList.value = [];
+  state.files.c_gb = coalescedPrimary;
   Object.assign(state.circularRecordDiscovery, {
     status: 'loading',
     error: '',
     inputType: 'gb',
-    primaryFile: fallbackPrimary,
+    primaryFile: coalescedPrimary,
     pairedFile: null,
     canonicalRecordIdentities: [{
       selector: '#1',
@@ -1316,10 +1390,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     discovery: { ...state.circularRecordDiscovery }
   });
   const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   await runner.refreshCircularRecordOrder();
   await runner.refreshCircularRecordOrder({ automatic: true });
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(structuredClone({
     records: state.circularRecordList.value,
@@ -1335,19 +1409,19 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
   await runner.refreshCircularRecordOrder();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.files.c_gb = null;
   await runner.refreshCircularRecordOrder();
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(state.circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
@@ -1366,6 +1440,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
+  state.files.c_gb = fallbackPrimary;
   let releaseDiscovery;
   workerHelperResponses.push(new Promise((resolve) => {
     releaseDiscovery = () => resolve({
@@ -1395,7 +1470,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.files.c_gb = fallbackPrimary;
+  state.files.c_gb = stalePrimary;
   state.activeDrawing().adv.multi_record_positions.splice(
     0,
     state.activeDrawing().adv.multi_record_positions.length,
@@ -1430,6 +1505,49 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, discoveryStateBeforeRollback.positions);
   assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
   state.semanticFileWatchersSuppressed.value = false;
+});
+
+test('a ring comparison file is read once, and a failed read is read again', async () => {
+  const file = new File(['>ring\nacgt\n'], 'ring.fasta', { type: 'text/plain' });
+  const operations = [];
+  const replies = [
+    { result: { error: new Error('injected ring read failure') } },
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring' } },
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] } }
+  ];
+  const runHelperOperation = async (operation) => {
+    operations.push(operation);
+    return replies.shift();
+  };
+  await assert.rejects(readComparisonSequence({ file, runHelperOperation }), /injected ring read failure/);
+  // A reply without its record IDs is a protocol error, and it is not kept either.
+  await assert.rejects(readComparisonSequence({ file, runHelperOperation }), { code: 'HELPER_PROTOCOL' });
+  const read = await readComparisonSequence({ file, runHelperOperation });
+  assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] });
+  assert.equal(await readComparisonSequence({ file, runHelperOperation }), read);
+  assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']);
+});
+
+// OV-1587: one per-File reading owner. Every reader gets the same frozen value,
+// and the ring FASTA's SHA-256 is kept beside it, digested once per File.
+test('a ring comparison read is frozen and its digest is kept with it', async () => {
+  const file = new File(['>ring\nacgt\n'], 'ring-digest.fasta', { type: 'text/plain' });
+  const operations = [];
+  const runHelperOperation = async (operation) => {
+    operations.push(operation);
+    return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'] } };
+  };
+  const read = await readComparisonSequence({ file, runHelperOperation });
+  assert.equal(Object.isFrozen(read), true);
+  assert.throws(() => { read.fasta = '>other\n'; }, TypeError);
+  assert.equal((await readComparisonSequence({ file, runHelperOperation })).fasta, '>ring\nACGT\n');
+  const expected = await sha256Text('>ring\nACGT\n');
+  const watched = await watchLosatPreparation(async () => {
+    assert.equal(await readComparisonSequenceDigest({ file, runHelperOperation }), expected);
+    assert.equal(await readComparisonSequenceDigest({ file, runHelperOperation }), expected);
+  });
+  assert.equal(watched.fastaDigests, 1);
+  assert.deepEqual(operations, ['readComparisonSequence']);
 });
 
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
@@ -1496,7 +1614,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     lazyFields.forEach((field) => assert.equal(Object.hasOwn(file, field), false));
   }
 
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.activeDrawing().form.prefix = 'lazy-circular';
   state.activeDrawing().form.show_depth = false;
@@ -1590,6 +1708,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     recordDisplayRows,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
         throw new Error('injected LOSAT late artifact adoption failure');
@@ -1636,10 +1755,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       result: {
         fasta,
         format: index === 1 ? 'genbank' : 'fasta',
-        label: '',
+        recordLabel: null,
         recordIds: [fasta.slice(1).split('\n')[0]]
       }
     }));
+    // Add Seq reads the first ring file with the same reader before Generate,
+    // which reuses that read (OV-1545).
+    assert.equal((await readComparisonSequence({ file: comparisonViews[0] })).fasta, comparisonTexts[0]);
+    workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(),
@@ -1647,11 +1770,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
-    // Every ring file goes through the one Python reader (no JavaScript reader).
+    // Every ring file goes through the one Python reader (no JavaScript reader), once; Python then puts the
+    // ring rows in the search frame.
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
         .map(({ operation }) => operation),
-      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence', 'convertRingTablesToSearchFrame']
     );
     assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
@@ -1675,6 +1799,68 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         .payload.request.diagramOptions.conservationColors,
       ['#4e79a7', '#e15759', '#59a14f']
     );
+
+    // A second Generate on the same files reads no ring file again (OV-1545):
+    // neither the reference nor a comparison, and it sends the same LOSAT rows.
+    const firstConservation = workerMessages.filter(({ type }) => type === 'run').at(-1)
+      .payload.request.diagramOptions;
+    const helperMessagesBeforeRepeat = workerMessages.filter(({ type }) => type === 'helper').length;
+    resourceMetrics.splice(0);
+    const repeatResult = result('lazy-circular-repeat.svg', 'lazy-circular-repeat');
+    workerResponses.push(response(repeatResult, validCatalog(repeatResult.name)));
+    const repeatWatch = await watchLosatPreparation(async () => assert.deepEqual(
+      await runner.runAnalysis(),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    ));
+    // OV-1565: the ring sequences' digests are kept with their FASTA, so no ring FASTA is digested again.
+    assert.equal(repeatWatch.fastaDigests, 0);
+    assert.equal(losatCalls, 0);
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'helper').length,
+      helperMessagesBeforeRepeat
+    );
+    assert.deepEqual(
+      resourceMetrics.filter(({ name, resourceId }) => name === 'resourceTextReadCount'
+        || (name === 'resourceByteReadCount' && resourceId.startsWith('comparison-'))),
+      []
+    );
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'run').at(-1)
+        .payload.request.diagramOptions.conservationLabels,
+      firstConservation.conservationLabels
+    );
+
+    // OV-1599: a reference that starts with a UTF-8 byte order mark. The browser reader declines it, and the
+    // subject database of the rings is the records the Python loader reads (Biopython skips the first record
+    // of such a file), not the records the browser's text decoder would read.
+    const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
+    ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
+    state.files.c_gb = bomReference;
+    const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
+    // The record list of the new reference, then the subject database.
+    workerHelperResponses.push(
+      { ok: true, result: { records: [{ selector: '#1', record_id: 'BOMB', record_length: 8 }] } },
+      { ok: true, result: { records: [{ id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }] } },
+      ringTablesUnchanged
+    );
+    const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
+    workerResponses.push(response(bomReferenceResult, validCatalog(bomReferenceResult.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeBomReference)
+        .map(({ operation, payload }) => [operation, payload.format, payload.files?.map(({ role }) => role)]),
+      [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']],
+        ['convertRingTablesToSearchFrame', undefined, undefined]]
+    );
+    assert.equal(workerHelperResponses.length, 0);
+    assert.ok(capturedSequences.includes('>BOMB\nCCCCGGGG\n'), JSON.stringify(capturedSequences));
+    assert.ok(!capturedSequences.some((fasta) => fasta.includes('BOMA')), JSON.stringify(capturedSequences));
+    // The new subject searched once; the Linear section below counts its own searches.
+    assert.equal(losatCalls, 1);
+    losatCalls = 0;
+    state.files.c_gb = referenceView;
 
     const invalidFile = Object.freeze({
       name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
@@ -1727,7 +1913,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const multiView = createSessionResourceFileView(linearTable, 'multi');
     const middleView = createSessionResourceFileView(linearTable, 'middle');
     const thirdView = createSessionResourceFileView(linearTable, 'third');
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     state.lInputType.value = 'gb';
     state.activeDrawing().form.prefix = 'lazy-linear';
     state.activeDrawing().form.show_depth = false;
@@ -1841,7 +2027,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       version: null,
       source: 'wasm',
       path: null,
-      text: 'blastn: LOSAT, version not recorded (wasm)'
+      text: 'blastn: LOSAT, version not recorded (wasm)',
+      textParts: [{
+        text: '{program}: {name}, version not recorded ({origin})', params: { program: 'blastn', name: 'LOSAT', origin: 'wasm' }
+      }]
     }]);
     // Generated LOSATN rows stay in the search frame; the Python planner
     // projects the reversed record (PD-OI-073), so no Web conversion runs.
@@ -1917,6 +2106,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     state.activeDrawing().losat.blastn.task = 'blastn';
     failLateArtifactAdoption = true;
+    resourceMetrics.splice(0);
     workerHelperResponses.push({
       ok: true,
       result: {
@@ -1929,6 +2119,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       validCatalog(failedLinearResult.name)
     ));
     assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
+    // OV-1589: the LOSAT FASTA comes from the records parsed once per File and the
+    // Worker holds the sources, so no input file is read again.
+    assert.deepEqual(
+      resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount'),
+      []
+    );
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.activeDrawing().losat.blastn.task = 'megablast';
@@ -2172,6 +2368,302 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(state.results.value, committedAlignedResult);
     assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
     assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
+
+    // OV-1556, OV-1565: one GenBank file of 13 records drawn as 13 cards, and a 14th card that draws the first
+    // record again. Generate parses the file once and slices each card's record from it, and the next Generate
+    // parses nothing and digests no FASTA again.
+    const recordIds = Array.from({ length: 13 }, (_, index) => `REC${index + 1}`);
+    const bases = ['a', 'c', 'g', 't'];
+    const thirteenFile = new AuditFile([recordIds.map((id, index) => [
+      `LOCUS       ${id} 8 bp DNA`,
+      'ORIGIN',
+      `        1 ${bases[index % 4].repeat(4)}${bases[(index + 1) % 4].repeat(4)}`,
+      '//'
+    ].join('\n')).join('\n') + '\n'], 'thirteen.gb');
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
+      uid: `card-${index + 1}`, gb: thirteenFile, gff: null, fasta: null, depth: null, blast: null,
+      losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
+      region_start: null, region_end: null, region_reverse: false
+    })));
+    state.files.linearCanonicalComparisons = [];
+    state.similarityAlignmentPlan.value = null;
+    state.linearRecordTranslations.value = [];
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.activeDrawing().losat.blastn.task = 'megablast';
+    Object.assign(state.activeDrawing().linearComparisonPlan, { mode: 'adjacent', defaultSource: 'losat' });
+    state.activeDrawing().linearComparisonPlan.edges.splice(0);
+    const thirteenPlan = resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan,
+      sequences: state.linearSeqs,
+      layout: [],
+      losatProgram: 'blastn',
+      blastpMode: state.activeDrawing().losat.blastp.mode
+    });
+    globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+      losatCalls += 1;
+      return jobs.map((job) => ({ cacheKey: job.cacheKey, text: '' }));
+    };
+    const thirteenWatches = [];
+    for (const name of ['thirteen-first', 'thirteen-second']) {
+      const thirteenResult = result(`${name}.svg`, name);
+      workerResponses.push(response(thirteenResult, validCatalog(thirteenResult.name)));
+      thirteenWatches.push(await watchLosatPreparation(async () => assert.deepEqual(
+        await runner.runAnalysis(thirteenPlan),
+        { status: 'ok' },
+        JSON.stringify(state.errorLog.value)
+      )));
+    }
+    assert.equal(losatCalls, 3, 'the first Generate searched and the second reused its raw results');
+    assert.match(thirteenWatches[0].timing, /FASTA cache hits=1, .*JS FASTA=1, Worker FASTA=0/);
+    assert.match(thirteenWatches[1].timing, /FASTA cache hits=14, .*JS FASTA=0, Worker FASTA=0/);
+    assert.equal(thirteenWatches[1].fastaDigests, 0);
+    // OV-1594: the held LOSAT FASTA of a record is frozen, and its SHA-256 is its own read beside it, so the
+    // Generates read the entries without writing to them. A record's FASTA is digested once, whatever its card
+    // count (the 14th card reads REC1's digest); its single-record query side reads that same digest (OV-1598).
+    const heldLosatFasta = (id) => readOncePerFile([thirteenFile], `losat-fasta:${JSON.stringify({
+      fmt: 'genbank', regionSpec: null, recordSelector: id, reverseFlag: '0'
+    })}`, () => Promise.reject(new Error(`no held LOSAT FASTA for ${id}`)));
+    for (const id of recordIds) {
+      const entry = await heldLosatFasta(id);
+      assert.ok(Object.isFrozen(entry), id);
+      assert.deepEqual(Object.keys(entry).sort(), ['canonicalLength', 'fasta', 'recordId'], id);
+      assert.equal(thirteenWatches[0].digestsByText.get(entry.fasta), 1, id);
+    }
+
+    // OV-1555, OV-1590: after a Generate, the blastp extraction of two of its records sends no
+    // GenBank bytes. It stages the record source under the resource id and token the Worker
+    // holds, so Python reads the records that Generate parsed; and it leaves the staging cache
+    // as it was, so the next Generate sends nothing either.
+    state.linearSeqs.splice(2);
+    const twoPlan = resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
+    });
+    const twoResult = result('two-cards.svg', 'two-cards');
+    workerResponses.push(response(twoResult, validCatalog(twoResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const drawnRun = workerMessages.findLast(({ type }) => type === 'run').payload;
+    const drawnToken = drawnRun.resourceManifest.find(({ resourceId }) => resourceId === 'record-1-genbank').cacheToken;
+    state.activeDrawing().losatProgram.value = 'blastp';
+    state.activeDrawing().losat.blastp.mode = 'pairwise';
+    state.files.linearCanonicalComparisons = [];
+    const helpersBeforeProteins = workerMessages.length;
+    workerHelperResponses.splice(0);
+    ['REC1', 'REC2'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${recordId}_p1\nMK\n`, record_id: recordId, record_length: 8, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-${recordId}`, record_analysis_id: recordId, record_instance_key: recordId,
+      runtime_binding_hash: `rt-${recordId}`, display_binding_hash: `dp-${recordId}`, identity_manifest: null
+    } }));
+    // The Generate stops after the extractions: these replies carry no protein identity manifest.
+    assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram: 'blastp', blastpMode: 'pairwise'
+    }))).status, 'error');
+    const extractions = workerMessages.slice(helpersBeforeProteins)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta');
+    assert.equal(extractions.length, 2);
+    for (const { payload } of extractions) {
+      assert.deepEqual((payload.files || []).map(({ role }) => role).filter((role) => role !== 'visibility'), []);
+      assert.deepEqual(payload.recordSource, { kind: 'genbank', resourceId: 'record-1-genbank' });
+      assert.deepEqual(payload.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
+        [['record-1-genbank', drawnToken]]);
+      assert.deepEqual(payload.stagedResources, []);
+    }
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    const afterProteins = result('two-cards-after.svg', 'two-cards-after');
+    workerResponses.push(response(afterProteins, validCatalog(afterProteins.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(workerMessages.findLast(({ type }) => type === 'run').payload.stagedResources, []);
+
+    // OV-1595: the first blastp Generate after an upload sends the new file once. Its first extraction stages
+    // it under the id the request names (record-1-genbank), so the other cards and the Generate that follows
+    // send nothing, and Python parses it once for all of them.
+    const uploadFile = new AuditFile([['UP1', 'UP2', 'UP3'].map((id) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
+    ].join('\n')).join('\n') + '\n'], 'upload.gb', { lastModified: 7 });
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
+      uid: `upload-${index + 1}`, gb: uploadFile, gff: null, fasta: null, depth: null, blast: null,
+      losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
+      region_start: null, region_end: null, region_reverse: false
+    })));
+    const uploadPlan = (losatProgram) => resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram, blastpMode: 'pairwise'
+    });
+    state.activeDrawing().losatProgram.value = 'blastp';
+    const messagesBeforeUpload = workerMessages.length;
+    ['UP1', 'UP2', 'UP3'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${recordId}_p1\nMK\n`, record_id: recordId, record_length: 8, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-${recordId}`, record_analysis_id: recordId, record_instance_key: recordId,
+      runtime_binding_hash: `rt-${recordId}`, display_binding_hash: `dp-${recordId}`, identity_manifest: null
+    } }));
+    assert.equal((await runner.runAnalysis(uploadPlan('blastp'))).status, 'error');
+    const uploadExtractions = workerMessages.slice(messagesBeforeUpload)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta');
+    assert.equal(uploadExtractions.length, 3);
+    const uploadToken = uploadExtractions[0].payload.resourceManifest?.[0]?.cacheToken;
+    assert.notEqual(uploadToken, drawnToken);
+    assert.deepEqual(uploadExtractions.map(({ payload }) => [
+      payload.recordSource,
+      (payload.files || []).map(({ role }) => role).filter((role) => role !== 'visibility'),
+      (payload.resourceManifest ?? []).map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
+      (payload.stagedResources ?? []).map(({ resourceId }) => resourceId)
+    ]), [0, 1, 2].map((index) => [
+      { kind: 'genbank', resourceId: 'record-1-genbank' },
+      [],
+      [['record-1-genbank', uploadToken]],
+      index === 0 ? ['record-1-genbank'] : []
+    ]));
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    const uploadResult = result('upload.svg', 'upload');
+    workerResponses.push(response(uploadResult, validCatalog(uploadResult.name)));
+    assert.deepEqual(await runner.runAnalysis(uploadPlan('blastn')), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const uploadRun = workerMessages.findLast(({ type }) => type === 'run').payload;
+    assert.equal(
+      uploadRun.resourceManifest.find(({ resourceId }) => resourceId === 'record-1-genbank').cacheToken,
+      uploadToken
+    );
+    // Only the comparison table of the new third pair is new to the Worker.
+    assert.deepEqual(uploadRun.stagedResources.map(({ resourceId }) => resourceId)
+      .filter((resourceId) => resourceId.startsWith('record-')), []);
+    const uploadBytesSent = workerMessages.slice(messagesBeforeUpload)
+      .flatMap(({ payload }) => payload?.stagedResources ?? [])
+      .filter(({ resourceId }) => resourceId.startsWith('record-'))
+      .reduce((total, { bytes }) => total + bytes.byteLength, 0);
+    assert.equal(uploadBytesSent, uploadFile.size);
+
+    // A new file inserted before the committed one: the next request names it record-1 and the committed file
+    // record-2. The new file is staged once; the committed file's bytes stay held under their content token, so
+    // its new id sends nothing, and the render sends neither again.
+    const insertedFile = new AuditFile([
+      'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
+    ], 'inserted.gb', { lastModified: 9 });
+    state.linearSeqs.unshift({
+      uid: 'inserted-1', gb: insertedFile, gff: null, fasta: null, depth: null, blast: null,
+      losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
+      region_start: null, region_end: null, region_reverse: false
+    });
+    state.activeDrawing().losatProgram.value = 'blastp';
+    const messagesBeforeInsert = workerMessages.length;
+    ['NEW1', 'UP1', 'UP2', 'UP3'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${recordId}_p1\nMK\n`, record_id: recordId, record_length: 8, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-i-${recordId}`, record_analysis_id: `i-${recordId}`, record_instance_key: `i-${recordId}`,
+      runtime_binding_hash: `rt-i-${recordId}`, display_binding_hash: `dp-i-${recordId}`, identity_manifest: null
+    } }));
+    assert.equal((await runner.runAnalysis(uploadPlan('blastp'))).status, 'error');
+    assert.deepEqual(workerMessages.slice(messagesBeforeInsert)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta')
+      .map(({ payload }) => [payload.recordSource.resourceId, payload.stagedResources.map(({ resourceId }) => resourceId)]), [
+      ['record-1-genbank', ['record-1-genbank']],
+      ['record-2-genbank', []],
+      ['record-2-genbank', []],
+      ['record-2-genbank', []]
+    ]);
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+    const insertedResult = result('inserted.svg', 'inserted');
+    workerResponses.push(response(insertedResult, validCatalog(insertedResult.name)));
+    assert.deepEqual(await runner.runAnalysis(uploadPlan('blastn')), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const recordBytesSent = workerMessages.slice(messagesBeforeInsert)
+      .flatMap(({ payload }) => payload?.stagedResources ?? [])
+      .filter(({ resourceId }) => resourceId.startsWith('record-'))
+      .reduce((total, { bytes }) => total + bytes.byteLength, 0);
+    assert.equal(recordBytesSent, insertedFile.size);
+    state.linearSeqs.splice(2);
+
+    // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
+    // skips the first record), so the record list leaves the file to the Python reader, and the LOSAT FASTA
+    // does too. The browser's text decoder drops the mark and would search a record the drawing does not read.
+    const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
+    ].join('\n')).join('\n') + '\n'], 'bom.gb');
+    state.linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bomFile, region_record_id: `BOM${index + 1}` }));
+    ['BOM1', 'BOM2'].forEach((id) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>${id}\nACGTACGT\n`, record_id: id, record_length: 8
+    } }));
+    const helpersBeforeBom = workerMessages.length;
+    const bomResult = result('bom.svg', 'bom');
+    workerResponses.push(response(bomResult, validCatalog(bomResult.name)));
+    const bomWatch = await watchLosatPreparation(async () => assert.deepEqual(
+      await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value)
+    ));
+    assert.match(bomWatch.timing, /JS FASTA=0, Worker FASTA=2/);
+    assert.deepEqual(workerMessages.slice(helpersBeforeBom)
+      .filter(({ type }) => type === 'helper').map(({ operation, payload }) => [operation, payload.recordSelector]),
+    [['extractFirstFasta', 'BOM1'], ['extractFirstFasta', 'BOM2']]);
+
+    // The GFF3 and FASTA pair of a drawn record: after a Generate, the blastp extraction names the committed
+    // GFF3 resource as the record's GFF3 file and the FASTA resource as its FASTA file, in that order.
+    const gffFile = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'pair.gff');
+    const pairedFasta = new AuditFile(['>G1\nATGAAATAA\n'], 'pair.fasta');
+    state.lInputType.value = 'gff';
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: gffFile, fasta: pairedFasta, region_record_id: 'G1' }));
+    const pairResult = result('gff-pair.svg', 'gff-pair');
+    workerResponses.push(response(pairResult, validCatalog(pairResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const pairRun = workerMessages.findLast(({ type }) => type === 'run').payload;
+    const pairTokens = Object.fromEntries(pairRun.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]));
+    state.activeDrawing().losatProgram.value = 'blastp';
+    const helpersBeforePair = workerMessages.length;
+    [0, 1].forEach((index) => workerHelperResponses.push({ ok: true, result: {
+      fasta: `>G1_p${index}\nMK\n`, record_id: 'G1', record_length: 9, protein_count: 1, protein_map: {},
+      protein_set_hash: `set-${index}`, record_analysis_id: `G1-${index}`, record_instance_key: `card-${index + 1}`,
+      runtime_binding_hash: `rt-${index}`, display_binding_hash: `dp-${index}`, identity_manifest: null
+    } }));
+    assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      losatProgram: 'blastp', blastpMode: 'pairwise'
+    }))).status, 'error');
+    const pairExtractions = workerMessages.slice(helpersBeforePair)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta');
+    assert.equal(pairExtractions.length, 2);
+    for (const { payload } of pairExtractions) {
+      assert.equal(payload.format, 'gff');
+      assert.deepEqual((payload.files || []).map(({ role }) => role).filter((role) => role !== 'visibility'), []);
+      assert.deepEqual(payload.recordSource,
+        { kind: 'gffFasta', gffResourceId: 'record-1-gff3', fastaResourceId: 'record-1-fasta' });
+      assert.deepEqual(payload.resourceManifest.map(({ resourceId, kind, cacheToken }) => [resourceId, kind, cacheToken]), [
+        ['record-1-gff3', 'gff3', pairTokens['record-1-gff3']],
+        ['record-1-fasta', 'fasta', pairTokens['record-1-fasta']]
+      ]);
+      assert.deepEqual(payload.stagedResources, []);
+    }
+    workerHelperResponses.splice(0);
+    state.activeDrawing().losatProgram.value = 'blastn';
+
+    // OV-1681: in GFF3 input `#N` counts the records the GFF3 names (Python's load_gff_fasta), not every FASTA
+    // entry, so the LOSAT FASTA of `#1` and `#2` is the drawn G1 and G2, not the entry X the GFF3 does not name.
+    const namedGff = new AuditFile([
+      '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\nG2\t.\tCDS\t1\t9\t.\t+\t0\tID=c2\n'
+    ], 'named.gff');
+    const extraFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n'], 'extra.fasta');
+    state.linearSeqs.forEach((seq, index) => Object.assign(seq, {
+      gff: namedGff, fasta: extraFasta, region_record_id: `#${index + 1}`
+    }));
+    let searched = [];
+    globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      searched = [...options.sequences.values()];
+      return jobs.map((job) => ({ cacheKey: job.cacheKey, text: '' }));
+    };
+    const namedResult = result('gff-named.svg', 'gff-named');
+    workerResponses.push(response(namedResult, validCatalog(namedResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
+    // The automatic record (an empty selector) is the first record the GFF3 names too: a FASTA file whose first
+    // entry X has no GFF3 feature draws G1, so LOSAT searches G1 (OV-1681).
+    const g1Gff = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'g1-only.gff');
+    const xFirstFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n'], 'x-first.fasta');
+    Object.assign(state.linearSeqs[0], { gff: g1Gff, fasta: xFirstFasta, region_record_id: '' });
+    const autoResult = result('gff-auto.svg', 'gff-auto');
+    workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
+    state.lInputType.value = 'gb';
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];
@@ -2180,6 +2672,185 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     } else {
       globalThis.__GBDRAW_TEST_HOOKS__ = previousTestHooks;
     }
+    if (previousLosatExecutor === undefined) {
+      delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+    } else {
+      globalThis.__GBDRAW_LOSAT_EXECUTOR__ = previousLosatExecutor;
+    }
+  }
+});
+
+test('the Circular ring subject database, its raw cache key and the ring rows equal the CLI ones (D-25, D-28)', async () => {
+  // The Python oracle plans the CLI request that draws what each Web state below draws (records OFF, a single
+  // presentation, a crop, GFF3 with an unnamed FASTA entry, a byte order mark) and returns the subject FASTA its
+  // ring search reads, the raw cache key, the ring rows the CLI keeps for the same search output, and the Worker
+  // helper's reply for a file the browser reader declines.
+  const oracleOptions = {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: /** @type {const} */ ('utf8'),
+    maxBuffer: 16 * 1024 * 1024
+  };
+  const oracle = spawnSync(process.env.PYTHON || 'python', ['tests/web/circular-ring-subject-oracle.py'], oracleOptions);
+  assert.equal(oracle.status, 0, `Python ring subject oracle failed:\n${oracle.stderr}`);
+  const { query, cases } = JSON.parse(oracle.stdout);
+  const webStates = {
+    'records not drawn': { selector: '', multi: true, off: ['#2'], region: [null, null] },
+    'single presentation': { selector: '#2', multi: false, off: [], region: [null, null] },
+    crop: { selector: '#2', multi: false, off: [], region: [11, 50] },
+    'gff3 with an unnamed fasta entry': { selector: '', multi: false, off: [], region: [null, null] },
+    'byte order mark': { selector: '#1', multi: false, off: [], region: [null, null] }
+  };
+  assert.deepEqual(cases.map(({ name }) => name), Object.keys(webStates));
+
+  const queryFile = new AuditFile([query], 'ring-query.fasta');
+  installShownDrawing('circular');
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'ring-subject';
+  drawing.form.show_depth = false;
+  drawing.adv.circular_track_slots_enabled = false;
+  drawing.adv.circular_track_slots = [];
+  Object.assign(drawing.circularConservation, {
+    enabled: true, source: 'losat', losat_program: 'blastn', subject_gencode: 1, reference: 'auto', labels: ''
+  });
+  drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, {
+    sourceKey: `${queryFile.name}|${queryFile.size}|1|0`, fileName: queryFile.name, sourceIndex: 0,
+    label: 'query', color: '#4e79a7', losat_gencode: 1
+  });
+  drawing.annotationSets.splice(0);
+  Object.assign(state.files, {
+    c_depth: null, c_conservation_blasts: [], c_conservation_fastas: [queryFile],
+    c_conservation_sequence_sources: []
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    recordDisplayRows: { value: [] },
+    serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    getCommittedCanonicalSession: () => null,
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  /** @type {{ subject: string, cacheKeys: string[] } | null} */
+  let searched = null;
+  let searchOutput = '';
+  const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+    const subjectKey = [...options.sequences.keys()].find((key) => key.startsWith('circular-subject:'));
+    searched = { subject: options.sequences.get(subjectKey), cacheKeys: jobs.map(({ cacheKey }) => cacheKey) };
+    return jobs.map(({ cacheKey }) => ({ cacheKey, text: searchOutput }));
+  };
+  // The Worker's ring table conversion runs the Python helper on the request and the resources the page staged.
+  const ringTableConversion = {
+    then(resolve, reject) {
+      try {
+        const converted = spawnSync(process.env.PYTHON || 'python', ['tests/web/circular-ring-subject-oracle.py', '--convert'], {
+          ...oracleOptions, input: JSON.stringify(ringTableConversionInput())
+        });
+        assert.equal(converted.status, 0, `Python ring table conversion failed:\n${converted.stderr}`);
+        resolve({ ok: true, result: JSON.parse(converted.stdout) });
+      } catch (error) {
+        reject(error);
+      }
+    }
+  };
+  // The ring query is read once, by the Python reader, for every case.
+  workerHelperResponses.push({
+    ok: true, result: { fasta: query, format: 'fasta', recordLabel: null, recordIds: ['QUERY1'] }
+  });
+  try {
+    for (const [index, testCase] of cases.entries()) {
+      const webState = webStates[testCase.name];
+      const files = Object.fromEntries(Object.entries(testCase.files).map(([role, data]) => [
+        role, new AuditFile([Buffer.from(data, 'base64')], `ring-subject-${index}-${role}`)
+      ]));
+      const gff = Boolean(files.fasta);
+      state.cInputType.value = gff ? 'gff' : 'gb';
+      Object.assign(state.files, {
+        c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
+      });
+      state.circularRecordList.value = testCase.recordList.map(({ id, length }, recordIndex) => ({
+        selector: `#${recordIndex + 1}`, record_id: id, record_length: length
+      }));
+      Object.assign(state.circularRecordDiscovery, {
+        status: 'ready', error: '', inputType: gff ? 'gff' : 'gb',
+        primaryFile: files.source, pairedFile: gff ? files.fasta : null
+      });
+      Object.assign(drawing.form, {
+        circular_record_selector: webState.selector, multi_record_canvas: webState.multi,
+        circular_region_start: webState.region[0], circular_region_end: webState.region[1]
+      });
+      drawing.recordsOff.splice(0, drawing.recordsOff.length, ...webState.off);
+      state.losatCache.value = new Map();
+      state.losatDerivedCache.value = new Map();
+      // The page reads the file with its own reader, or, for a byte order mark, through the Worker helper.
+      if (testCase.name === 'byte order mark') {
+        workerHelperResponses.push({ ok: true, result: testCase.helperReply });
+      }
+      workerHelperResponses.push(ringTableConversion);
+      searched = null;
+      searchOutput = testCase.rawRows;
+      const messagesBefore = workerMessages.length;
+      const caseResult = result(`ring-subject-${index}.svg`, `ring-subject-${index}`);
+      workerResponses.push(response(caseResult, validCatalog(caseResult.name)));
+      assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, `${testCase.name}: ${JSON.stringify(state.errorLog.value)}`);
+      assert.equal(workerHelperResponses.length, 0, testCase.name);
+      assert.equal(searched?.subject, testCase.cliSubjectFasta, testCase.name);
+      assert.deepEqual(searched?.cacheKeys, [testCase.cliCacheKey], testCase.name);
+      // One conversion per Generate; the request renders (and a Session saves) the CLI's ring rows, and the raw
+      // LOSAT cache keeps the search output.
+      const caseMessages = workerMessages.slice(messagesBefore);
+      assert.deepEqual(caseMessages.filter(({ type, operation }) => type === 'helper'
+        && operation === 'convertRingTablesToSearchFrame').map(({ payload }) => payload.resourceIds),
+      [['conservation-resolved-blast-1']], testCase.name);
+      const run = caseMessages.findLast(({ type }) => type === 'run').payload;
+      const ring = run.resourceManifest.find(({ resourceId }) => resourceId === 'conservation-resolved-blast-1');
+      assert.equal(Buffer.from(stagedBytesByToken().get(ring.cacheToken)).toString('utf8'), testCase.cliRingRows, testCase.name);
+      assert.deepEqual([...state.losatCache.value.values()].map(({ text }) => text), [testCase.rawRows], testCase.name);
+      if (testCase.name !== 'crop') continue;
+      /** @param {string} name */
+      const generateAgain = async (name) => {
+        const before = workerMessages.length;
+        const again = result(`${name}.svg`, name);
+        workerResponses.push(response(again, validCatalog(again.name)));
+        assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, `${name}: ${JSON.stringify(state.errorLog.value)}`);
+        const messages = workerMessages.slice(before);
+        const ringToken = messages.findLast(({ type }) => type === 'run').payload.resourceManifest
+          .find(({ resourceId }) => resourceId === 'conservation-resolved-blast-1').cacheToken;
+        return {
+          conversions: messages.filter(({ type, operation }) => type === 'helper'
+            && operation === 'convertRingTablesToSearchFrame').length,
+          helpers: messages.filter(({ type }) => type === 'helper').length,
+          rows: Buffer.from(stagedBytesByToken().get(ringToken)).toString('utf8')
+        };
+      };
+      // An identical Generate sends only `run`: the page holds the converted rows of this search and frame.
+      assert.deepEqual(await generateAgain('ring-subject-crop-again'), { conversions: 0, helpers: 0, rows: testCase.cliRingRows });
+      // A new crop is a new frame: Python converts the held search output again, without a new search.
+      drawing.form.circular_region_start = 21;
+      workerHelperResponses.push(ringTableConversion);
+      searched = null;
+      const newCrop = await generateAgain('ring-subject-new-crop');
+      assert.equal(newCrop.conversions, 1);
+      assert.equal(newCrop.helpers, 1);
+      assert.equal(searched, null);
+      assert.match(newCrop.rows, /^QUERY1\tSUBB\.1\t99\.0\t20\t0\t0\t1\t20\t1\t20\t/);
+      assert.equal(workerHelperResponses.length, 0);
+    }
+  } finally {
+    workerHelperResponses.splice(0);
+    drawing.recordsOff.splice(0);
+    Object.assign(drawing.form, {
+      circular_record_selector: '', multi_record_canvas: false, circular_region_start: null, circular_region_end: null
+    });
+    drawing.circularConservation.enabled = false;
+    state.files.c_conservation_fastas = [];
     if (previousLosatExecutor === undefined) {
       delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     } else {
@@ -2198,7 +2869,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const dormantUpload = new AuditInactiveFile(['unused upload'], 'dormant-upload.tsv');
   const staleCanonical = new AuditInactiveFile(['unused canonical'], 'stale-canonical.tsv');
 
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.lInputType.value = 'gb';
   state.activeDrawing().form.prefix = 'linear-none';
   state.activeDrawing().form.show_depth = true;
@@ -2379,6 +3050,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => {
       annotationValidationCalls += 1;
@@ -2402,14 +3074,18 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const linearResult = result('linear-none.svg', 'linear-none');
   workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
-  // Observe the existing internal helper staging boundary. Run Info deliberately
-  // withholds annotation Source recipes because TSV cannot preserve inheritance.
+  // OV-1589: nothing reads a staged copy of the annotation table; a Source
+  // recipe writes its own from the request.
   const stagedAnnotationTables = [];
+  const stagedColorTables = [];
   const NativeMap = globalThis.Map;
   globalThis.Map = class extends NativeMap {
     set(key, value) {
       if (key === '/web_annotations.tsv' && typeof value?.data === 'string') {
         stagedAnnotationTables.push(value.data);
+      }
+      if ((key === '/combined_d.tsv' || key === '/combined_t.tsv') && typeof value?.data === 'string') {
+        stagedColorTables.push(key);
       }
       return super.set(key, value);
     }
@@ -2430,11 +3106,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   }
 
   const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
-  assert.ok(stagedAnnotationTables.length > 0, 'Generate stages the annotation helper');
-  for (const text of stagedAnnotationTables) {
-    assert.equal(text, encodeAnnotationTable(state.activeDrawing().annotationSets));
-    assert.equal(parseAnnotationTable(text)[0].annotations[0].style.fill, null);
-  }
+  // OV-1573: once, and no color table copies: Run Info builds those from the request resources.
+  assert.deepEqual(stagedAnnotationTables, [], 'Generate stages no annotation table copy');
+  assert.deepEqual(stagedColorTables, []);
+  // An inherited annotation fill has no lossless TSV form, so Run Info offers no Source recipe here.
+  assert.match(state.lastRunInfo.value.sourceRecipe.unavailableReason, /canonical annotation semantics/);
   const payload = workerRunMessages.at(-1).payload;
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);
@@ -2747,6 +3423,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
       results: structuredClone(generationResponse.results),
@@ -2815,7 +3492,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
 test('two Linear Generates from one state draw a Depth row at the same height', async () => {
   const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.lInputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'row-height';
@@ -2895,7 +3572,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
 // Depth color of series 1 (OV-1510).
 test('Circular Generate gives a Depth series without settings its default color', async () => {
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'circular-series';
@@ -2931,6 +3608,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
     ),

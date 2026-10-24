@@ -4,7 +4,8 @@
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
-import { parseLabelOverrideTsv, replaceBulkLabelEdits, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { replaceBulkLabelEdits } from '../../services/drawing/label-tables.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
@@ -24,7 +25,7 @@ import {
   ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
-import { joinSentences, t, tm, tn } from '../../utils/i18n.js';
+import { joinSentences, msg, t, tm, tn } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -163,37 +164,40 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
 // table of reasons, as the sentence the Label Not Shown dialog renders and the
-// few words of the popup note. The reason is read as `string` (it is ''
+// popup note sentence that names it. The reason is read as `string` (it is ''
 // when none applies), so a lookup is `undefined` for what the table lacks.
-/** @type {Readonly<Record<string, { sentence: string, cause: string } | undefined>>} */
+// The texts are marked with `msg` and shown with `tm` (OV-1679).
+/** @type {Readonly<Record<string, { sentence: string, note: string } | undefined>>} */
 export const LABEL_ABSENCE_REASONS = Object.freeze({
-  hidden: { sentence: ' The feature is hidden.', cause: 'the feature is hidden' },
-  underlay: { sentence: ' Labels are not drawn for features drawn as "Underlay".', cause: 'drawn as Underlay' },
+  hidden: { sentence: msg('The feature is hidden.'), note: msg('No label shown (the feature is hidden).') },
+  underlay: { sentence: msg('Labels are not drawn for features drawn as "Underlay".'), note: msg('No label shown (drawn as Underlay).') },
   scope_none: {
-    sentence: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
-    cause: 'Show Labels = None'
+    sentence: msg('Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.'),
+    note: msg('No label shown (Show Labels = None).')
   },
   scope_first: {
-    sentence: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
-    cause: 'Show Labels = First Record Only'
+    sentence: msg('"Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".'),
+    note: msg('No label shown (Show Labels = First Record Only).')
   },
   scope_orthogroup_top: {
-    sentence: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
-    cause: 'Show Labels = Top Similarity Group Record'
+    sentence: msg('"Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".'),
+    note: msg('No label shown (Show Labels = Top Similarity Group Record).')
   },
-  whitelist: { sentence: ' A label whitelist is set, and labels are drawn only for the features it lists.', cause: 'not in the label whitelist' },
+  whitelist: {
+    sentence: msg('A label whitelist is set, and labels are drawn only for the features it lists.'),
+    note: msg('No label shown (not in the label whitelist).')
+  },
   blacklist: {
-    sentence: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
-    cause: 'matches the label blacklist'
+    sentence: msg('A label blacklist is set, and a label whose text contains one of its keywords is not drawn.'),
+    note: msg('No label shown (matches the label blacklist).')
   },
   embedded_only: {
-    sentence: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.',
-    cause: 'does not fit; Label Rendering = Embedded Only'
+    sentence: msg('With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'),
+    note: msg('No label shown (does not fit; Label Rendering = Embedded Only).')
   }
 });
-const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
 // No reason found: the Show Labels scope and the label filters decide the rest.
-const LABEL_ABSENCE_UNKNOWN = ' The current Show Labels and label filter settings draw none.';
+const LABEL_ABSENCE_UNKNOWN = msg('The current Show Labels and label filter settings draw none.');
 
 // The label display scope and filters of a render request that leave a feature
 // with Default label visibility unlabeled: '' or a LABEL_ABSENCE_REASONS key.
@@ -648,7 +652,6 @@ export const createFeatureLabelActions = ({
 }) => {
   const {
     mode,
-    generatedMode,
     results,
     selectedResultIndex,
     svgContainer,
@@ -668,13 +671,14 @@ export const createFeatureLabelActions = ({
   // The label edits of the identity-keyed draft: Label visibility, label text,
   // and the label's source text (design Q4); Feature visibility stays. The
   // bulk label edits become `bulk`.
+  /** @type {readonly ('labelVisibility' | 'labelText' | 'labelSourceText')[]} */
   const LABEL_FIELDS = Object.freeze(['labelVisibility', 'labelText', 'labelSourceText']);
   /** @param {DrawingState} drawing @param {Record<string, string>} [bulk] */
   const clearOverrides = (drawing, bulk = {}) => {
     Object.values(drawing.featureOverrides).forEach((row) => {
-      updateFeatureOverride(drawing.featureOverrides, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
+      updateFeatureOverride(drawing.slices.featureEdits, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
     });
-    replaceBulkLabelEdits(drawing, bulk);
+    replaceBulkLabelEdits(drawing.slices.labelTables, bulk);
   };
 
   // A mounted label names its feature by rendered ID; the displayed Result's
@@ -976,9 +980,6 @@ export const createFeatureLabelActions = ({
     reuseCurrentBinding = false
   } = {}) => {
     const drawing = state.activeDrawing();
-    // The retained Result can outlive its active mode. Keep its label intent
-    // dormant until its own mode can project and reconcile those identities.
-    if (generatedMode.value !== mode.value) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -1099,7 +1100,6 @@ export const createFeatureLabelActions = ({
   // request.
   const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false, labels = false } = {}) => {
     const drawing = state.activeDrawing();
-    if (generatedMode.value !== mode.value) return false;
     if (labels) return reconcileLabelOverrides({ reflow, rerender });
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
@@ -1121,7 +1121,7 @@ export const createFeatureLabelActions = ({
   /** @type {WeakSet<DrawingState>} */
   const redrawOwed = new WeakSet();
   const requestAutomaticRerender = () => {
-    if (generatedMode.value !== mode.value || !svgContainer.value?.querySelector?.('svg')) return false;
+    if (!svgContainer.value?.querySelector?.('svg')) return false;
     redrawOwed.add(state.activeDrawing());
     queueLabelReflow(true);
     return true;
@@ -1178,7 +1178,7 @@ export const createFeatureLabelActions = ({
   const setLabelVisibilityOverride = (drawing, feature, modeRaw) => {
     const nextMode = normalizeVisibilityMode(modeRaw);
     const previousMode = normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility);
-    updateFeatureOverride(drawing.featureOverrides, feature, { labelVisibility: nextMode === 'default' ? null : nextMode });
+    updateFeatureOverride(drawing.slices.featureEdits, feature, { labelVisibility: nextMode === 'default' ? null : nextMode });
     if (featureIdentityKeyOf(clickedFeature.value?.feat) === featureIdentityKeyOf(feature)) {
       clickedFeature.value.labelVisibility = nextMode;
     }
@@ -1199,9 +1199,9 @@ export const createFeatureLabelActions = ({
     const nextText = String(labelTextRaw ?? '');
     const sourceText = String(sourceTextRaw ?? '').trim();
     if (nextText === String(baselineTextRaw ?? '')) {
-      return updateFeatureOverride(drawing.featureOverrides, feature, { labelText: null, labelSourceText: null });
+      return updateFeatureOverride(drawing.slices.featureEdits, feature, { labelText: null, labelSourceText: null });
     }
-    return updateFeatureOverride(drawing.featureOverrides, feature, {
+    return updateFeatureOverride(drawing.slices.featureEdits, feature, {
       labelText: normalizeFeatureOverrideLabelText(nextText),
       ...(sourceText ? { labelSourceText: sourceText } : {})
     });
@@ -1411,7 +1411,7 @@ export const createFeatureLabelActions = ({
     return Object.fromEntries(LABEL_FIELDS.map((field) => [field, row?.[field] ?? null]));
   };
   /** @param {DrawingState} drawing @param {LabelFeature | null} feature @param {Record<string, string | null>} captured */
-  const restoreFeatureLabelIntent = (drawing, feature, captured) => updateFeatureOverride(drawing.featureOverrides, feature, captured);
+  const restoreFeatureLabelIntent = (drawing, feature, captured) => updateFeatureOverride(drawing.slices.featureEdits, feature, captured);
 
   // Whether the label reflow that this Apply queued drew the feature's label;
   // null when no reflow replaced the Result (it was skipped or failed, or a
@@ -1490,22 +1490,24 @@ export const createFeatureLabelActions = ({
     const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     // A hidden feature's label is hidden with it (F-3).
     if (clicked.labelKey && blocker !== 'hidden') return '';
-    let next = '';
+    /** @type {string[]} */
+    const next = [];
     if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
-      next = ` On applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
+      next.push(blocker === 'hidden' ? t('On applies when the feature is shown.') : t('On applies when the label can be drawn.'));
     } else if (!blocker && draft === 'default') {
-      next = ' Choose On to show it.';
+      next.push(t('Choose On to show it.'));
     } else if (!blocker) {
       return '';
     }
-    const cause = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.cause;
-    return `No label shown${cause ? ` (${cause})` : ''}.${next}`;
+    const note = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.note;
+    return joinSentences(note ? tm(note) : t('No label shown.'), ...next);
   });
 
   // The Label Not Shown dialog: the same reason sentence as the popup note.
-  const hiddenLabelTextMessage = computed(() => (
-    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence || LABEL_ABSENCE_UNKNOWN}`
-    + ' The edited text will not appear unless you show this label.'
+  const hiddenLabelTextMessage = computed(() => joinSentences(
+    t('This feature has no label in the current Result.'),
+    tm(LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence ?? LABEL_ABSENCE_UNKNOWN),
+    t('The edited text will not appear unless you show this label.')
   ));
 
   // A label list edit: one line of text, or an empty text, which hides the
@@ -1513,7 +1515,7 @@ export const createFeatureLabelActions = ({
   /** @param {DrawingState} drawing @param {LabelFeature | null} feature @param {unknown} text @param {string} sourceText */
   const applyLabelTextEdit = (drawing, feature, text, sourceText) => {
     const labelText = normalizeFeatureOverrideLabelText(String(text ?? ''));
-    return updateFeatureOverride(drawing.featureOverrides, feature, labelText
+    return updateFeatureOverride(drawing.slices.featureEdits, feature, labelText
       ? { labelText, labelSourceText: sourceText || null }
       : { labelText: null, labelVisibility: 'off', labelSourceText: sourceText || null });
   };
@@ -1562,7 +1564,7 @@ export const createFeatureLabelActions = ({
       const bulk = { ...drawing.labelTextBulkOverrides };
       if (hasUntrackableMatch || matchedCount === 0) bulk[sourceText] = newText;
       else delete bulk[sourceText];
-      replaceBulkLabelEdits(drawing, bulk);
+      replaceBulkLabelEdits(drawing.slices.labelTables, bulk);
     } else if (choice === 'single' && targetKey) {
       const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
       if (targetEl) {
@@ -1762,7 +1764,7 @@ export const createFeatureLabelActions = ({
         if (!matchedRow.isGlobalLabelRule) {
           applyLabelTextEdit(drawing, entry.feature, matchedRow.labelText, entry.sourceText);
         } else if (tracked) {
-          updateFeatureOverride(drawing.featureOverrides, entry.feature, { labelSourceText: entry.sourceText || null });
+          updateFeatureOverride(drawing.slices.featureEdits, entry.feature, { labelSourceText: entry.sourceText || null });
         }
       });
 

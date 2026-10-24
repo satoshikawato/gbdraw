@@ -5,22 +5,50 @@
 // key is a generated artifact, a project input or cache, an app setting or
 // catalog, transient, or the drawing store. Each diagram mode has its own
 // drawing (PR-1, Session 46 `modes`).
+import { drawingIdOfMode } from '../../../gbdraw/web/js/services/drawing-view.js';
+import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from '../../../gbdraw/web/js/services/drawing/group-names.js';
+import { ANNOTATION_SETS_SLICE } from '../../../gbdraw/web/js/services/drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from '../../../gbdraw/web/js/services/drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE } from '../../../gbdraw/web/js/services/drawing/color-rules.js';
+import { PALETTE_SLICE } from '../../../gbdraw/web/js/services/drawing/palette.js';
+import { LABEL_TABLES_SLICE } from '../../../gbdraw/web/js/services/drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from '../../../gbdraw/web/js/services/drawing/feature-edits.js';
+import { PAINT_SLICE } from '../../../gbdraw/web/js/services/drawing/paint.js';
+import { SETTINGS_SLICE } from '../../../gbdraw/web/js/services/drawing/settings.js';
 
-export const DRAWING_DRAFT_KEYS = Object.freeze([
-  'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
-  'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts', 'recordsOff',
-  'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked'
+// The slices of a drawing (gbdraw/web/js/services/drawing/), by the name of
+// their handle in `drawing.slices`: the editor slices, which alone write their
+// members, and the settings, which their controls write (plan-r2 §13 item 3).
+export const DRAWING_SLICES = Object.freeze({
+  visibilityRules: VISIBILITY_RULES_SLICE, colorRules: COLOR_RULES_SLICE, palette: PALETTE_SLICE, labelTables: LABEL_TABLES_SLICE,
+  annotationSets: ANNOTATION_SETS_SLICE,
+  groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE, featureEdits: FEATURE_EDITS_SLICE, paint: PAINT_SLICE,
+  settings: SETTINGS_SLICE
+});
+
+// The calls of a slice module that only read or build a value: each slice's
+// `capture`, under the name its module exports the slice by, and the exports
+// listed. Given a handle, each changes neither drawing (the M6 table in
+// tests/web/per-mode-drawings.test.mjs, which also fails on an export it does
+// not list), so a call of one is no write of its caller (R2,
+// tests/web/feature-visibility-rule-writers.test.mjs). Any other call that
+// receives a handle writes.
+// A registered design-rule allowlist (tools/web-design-rule-guards.json, R2,
+// kind `set`): a new entry is an authority-only change.
+export const SLICE_READERS = Object.freeze([
+  'CANVAS_SLICE.capture', 'GROUP_NAMES_SLICE.capture', 'ANNOTATION_SETS_SLICE.capture', 'VISIBILITY_RULES_SLICE.capture',
+  'COLOR_RULES_SLICE.capture', 'PALETTE_SLICE.capture', 'LABEL_TABLES_SLICE.capture', 'FEATURE_EDITS_SLICE.capture',
+  'PAINT_SLICE.capture', 'SETTINGS_SLICE.capture',
+  'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
+  'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
 
-export const DRAWING_EDITOR_KEYS = Object.freeze([
-  'featureOverrides', 'featurePlacementOverrides', 'featureColorOverrides', 'featureStrokeOverrides',
-  'featureVisibilityManualRules', 'labelTextBulkOverrides', 'canonicalLabelOverrideRows', 'legendEntries',
-  'deletedLegendEntries', 'dormantLegendEntries', 'legendColorOverrides', 'legendStrokeOverrides', 'addedLegendCaptions',
-  'fileLegendCaptions', 'manualSpecificRules', 'manualPriorityRules', 'fileImports', 'filterMode', 'manualBlacklist',
-  'manualWhitelist', 'selectedPalette', 'currentColors', 'pendingPaletteName', 'pendingPaletteColors',
-  'annotationSets', 'orthogroupNameOverrides', 'orthogroupDescriptionOverrides', 'orthogroupDormantOverrides',
-  'canvasPadding'
-]);
+// The members of a drawing, as its slices name them: the settings (the draft
+// keys) and the editor slices' members, in the order the drawing spreads them.
+export const DRAWING_DRAFT_KEYS = SETTINGS_SLICE.members;
+export const DRAWING_EDITOR_KEYS = Object.freeze(Object.entries(DRAWING_SLICES)
+  .filter(([name]) => name !== 'settings').flatMap(([, slice]) => slice.members));
 
 // Computed from the members above (and project inputs); each drawing derives its own.
 export const DRAWING_DERIVED_KEYS = Object.freeze([
@@ -28,7 +56,16 @@ export const DRAWING_DERIVED_KEYS = Object.freeze([
   'hasActiveLinearLosatIntent', 'hasActiveLinearUploadIntent', 'featureVisibilityRules', 'hasPendingPaletteDraft'
 ]);
 
-export const DRAWING_KEYS = Object.freeze([...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS, ...DRAWING_DERIVED_KEYS]);
+// The handles of the drawing's slices, which a slice's writers take.
+export const DRAWING_HANDLE_KEYS = Object.freeze(['slices']);
+
+// A drawing's identity, constant: its key in `state.drawings` and its mode.
+// They hold no settings or edits, so the drawing keys leave them out.
+export const DRAWING_IDENTITY_KEYS = Object.freeze(['id', 'mode']);
+
+export const DRAWING_KEYS = Object.freeze([
+  ...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS, ...DRAWING_DERIVED_KEYS, ...DRAWING_HANDLE_KEYS
+]);
 
 // What a Generate produces and shows: the Results and their catalog, run facts,
 // generated Legend inventory and colors, and the user's offsets on the Result.
@@ -50,11 +87,12 @@ export const PROJECT_KEYS = Object.freeze([
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 
-// App settings and catalogs outside any drawing, and the shown mode. LOSAT
-// execution and the rich feature popup are app settings (Session
-// `ui.losatExecution`, `ui.richFeaturePopup`).
+// App settings and catalogs outside any drawing, and the shown drawing: its ID
+// (`activeDrawingId`, which `installShownDrawing` writes) and its mode (`mode`,
+// read from the drawing). LOSAT execution and the rich feature popup are app
+// settings (Session `ui.losatExecution`, `ui.richFeaturePopup`).
 export const UI_KEYS = Object.freeze([
-  'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
+  'activeDrawingId', 'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
   'paletteNames', 'specificRulePresets', 'featureKeys', 'defaultColorKeys', 'losatExecution', 'richFeaturePopup'
 ]);
 
@@ -65,7 +103,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed', 'sessionResourceDiscoveryDeferred',
   'sessionImportRollbackInProgress', 'failedGeneratePreservedResult', 'generationFailureRecovery',
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',
-  'isPanning', 'panStart', 'canvasPan', 'canvasContainerRef', 'suppressCircularMultiRecordDefaults',
+  'isPanning', 'panStart', 'canvasPan', 'canvasContainerRef',
   'selectedAnnotation', 'losatThreadingStatus', 'selectedOrthogroupAlignmentFeature', 'selectedOrthogroupId',
   'orthogroupSearch', 'orthogroupSortMode', 'showRightDrawer', 'rightDrawerTab', 'linearReorderNotice', 'linearFoldedSources',
   'newSpecRule', 'specificRuleQualifierSuggestions', 'selectedSpecificPreset', 'specificRulePresetLoading',
@@ -96,26 +134,77 @@ export const TRANSIENT_KEYS = Object.freeze([
 ]);
 
 // The drawing store itself.
-export const STORE_KEYS = Object.freeze(['drawings', 'activeDrawing']);
+export const STORE_KEYS = Object.freeze(['drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing']);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
-export const drawingOf = (fixture) => Object.freeze(Object.fromEntries(
+export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
   DRAWING_KEYS.filter((key) => Object.hasOwn(fixture, key)).map((key) => [key, fixture[key]])
-));
+)));
+
+// A fixture drawing's slice handles (`drawing.slices`), over the members the
+// fixture holds: a writer writes the fixture's own objects. A handle is made
+// when it is first read, so a fixture without Vue makes none it does not use.
+// Not enumerable, so a test that clones or serializes the fixture sees only
+// its members; a drawing that has handles keeps them.
+const withSliceHandles = (drawing) => {
+  if (!drawing || typeof drawing !== 'object' || 'slices' in drawing || Object.isFrozen(drawing)) return drawing;
+  const handles = {};
+  const slices = {};
+  for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
+    Object.defineProperty(slices, name, {
+      enumerable: true,
+      get: () => {
+        if (!handles[name]) {
+          const members = Object.fromEntries(slice.members.filter((key) => key in drawing).map((key) => [key, drawing[key]]));
+          handles[name] = slice.create(members).handle;
+        }
+        return handles[name];
+      }
+    });
+  }
+  return Object.defineProperty(drawing, 'slices', { value: Object.freeze(slices), configurable: true });
+};
+
+// The drawing of a diagram mode in a `state`-shaped value (the real state or a
+// fixture from `withDrawings` / `withModeDrawings`): the drawing whose ID the
+// mode names.
+export const modeDrawing = (state, mode) => state.drawingOf(drawingIdOfMode(mode));
+
+// The drawing store as state.js builds it: the drawings by ID in creation
+// order, read through `drawingList`, `drawingOf`, and `drawingOfMode`. A fake
+// `state` spreads it.
+export const drawingStore = (circular, linear) => {
+  const drawings = new Map([[drawingIdOfMode('circular'), circular], [drawingIdOfMode('linear'), linear]]);
+  const drawingOf = (id) => {
+    if (!drawings.has(id)) throw new Error(`Unknown drawing ${id}`);
+    return drawings.get(id);
+  };
+  return {
+    drawingList: () => [...drawings.values()],
+    drawingOf,
+    drawingOfMode: (mode) => drawingOf(drawingIdOfMode(mode))
+  };
+};
+
+// The store's members as non-enumerable properties of a fixture.
+const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(drawingStore(circular, linear))
+  .map(([key, value]) => [key, { value, configurable: true }]));
 
 // The fixture with the drawing store that services and owners read
-// (`state.drawings`, `state.activeDrawing()`): the fixture is the drawing of
-// both modes, so a member the test replaces later is read. A test of per-mode
-// behavior uses `withModeDrawings`. The store is not enumerable, so a test that
-// clones or serializes the fixture sees only its members.
-export const withDrawings = (fixture) => Object.defineProperties(fixture, {
-  drawings: { value: Object.freeze({ circular: fixture, linear: fixture }), configurable: true },
+// (`state.drawingOf`, `state.drawingList()`, `state.activeDrawing()`): the
+// fixture is the drawing of both modes, so a member the test replaces later is
+// read. A test of per-mode behavior uses `withModeDrawings`. The store is not
+// enumerable, so a test that clones or serializes the fixture sees only its
+// members.
+export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
+  ...storeProperties(fixture, fixture),
+  ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 
 // The fixture with one drawing per mode, as in state.js: `activeDrawing()`
 // follows `fixture.mode.value`.
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
-  drawings: { value: Object.freeze({ circular, linear }), configurable: true },
+  ...storeProperties(withSliceHandles(circular), withSliceHandles(linear)),
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });

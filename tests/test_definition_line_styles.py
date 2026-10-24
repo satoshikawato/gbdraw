@@ -386,14 +386,10 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
         calls.append((str(text), float(font_size), str(font_style)))
         return float(font_size) * len(str(text)), float(font_size)
 
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
-        fake_bbox,
-    )
-    monkeypatch.setattr(
-        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
-        fake_bbox,
-    )
+    # Plain and mixed lines both measure in gbdraw.core.text.measure_mixed_text_line.
+    for module in ("gbdraw.core.text",):
+        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", fake_bbox)
+        monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", fake_bbox)
 
     definition_group = DefinitionGroup(
         _record("BBBB"),

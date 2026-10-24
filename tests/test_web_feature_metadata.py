@@ -96,11 +96,11 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
 ) -> None:
-    from gbdraw.diagrams.linear import assemble
+    from gbdraw.io import comparisons
 
     marker = tmp_path / "keep.svg"
     marker.write_text("<svg />", encoding="utf-8")
-    original_loader = assemble.read_comparison_table
+    original_loader = comparisons.read_comparison_table
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
 
     payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
@@ -108,7 +108,7 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     assert payload["error"]["code"] == "RESOURCE_INVALID"
     assert payload["error"]["stage"] == "resource-staging"
     assert set(payload["error"]) == {"code", "operation", "stage", "context"}
-    assert assemble.read_comparison_table is original_loader
+    assert comparisons.read_comparison_table is original_loader
     assert marker.exists()
 
 
@@ -122,11 +122,13 @@ def test_canonical_request_wrapper_returns_svg_pieces_and_segment_bytes(
     original_renderer = python_helpers_namespace["render_staged_canonical_web_request"]
     held: list[object] = []
     held_segments: list[object] = []
+    retentions: list[object] = []
     sent_revision, held_revision = "a" * 64, "b" * 64
 
     def renderer(*_args: object, **kwargs: object) -> dict[str, object]:
         held.append(kwargs["_held_feature_catalog_revision"])
         held_segments.append(kwargs["_held_segments"])
+        retentions.append(kwargs["_prepared_input_retention"])
         unchanged = kwargs["_held_feature_catalog_revision"] == "e:1"
         pieces = [
             {"kind": "raw", "text": "<defs />"},
@@ -155,11 +157,18 @@ def test_canonical_request_wrapper_returns_svg_pieces_and_segment_bytes(
         malformed = wrapper(  # type: ignore[operator]
             "{}", "{}", str(tmp_path / "render"), False, None, None, json.dumps([1])
         )
+        retained = wrapper(  # type: ignore[operator]
+            "{}", "{}", str(tmp_path / "render"), False, "{}", None, None,
+            json.dumps({"drawing": "linear", "resourceTokens": [held_revision]}),
+        )
     finally:
         python_helpers_namespace["render_staged_canonical_web_request"] = original_renderer
 
-    assert held == [None, None, "e:1"]
-    assert held_segments == [frozenset(), frozenset(), frozenset({held_revision})]
+    assert held == [None, None, "e:1", None]
+    # A4b: the drawing and the retained tokens reach the staged render.
+    assert retentions == [None, None, None, {"drawing": "linear", "resourceTokens": [held_revision]}]
+    assert "error" not in retained
+    assert held_segments == [frozenset(), frozenset(), frozenset({held_revision}), frozenset()]
     children = "<text>µ</text>".encode()
     assert sent == {
         "results": [{

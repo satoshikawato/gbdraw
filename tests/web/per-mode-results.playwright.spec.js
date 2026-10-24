@@ -15,36 +15,23 @@ const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-tra
 
 test.describe.configure({ retries: 0 });
 
-// History is last in, first out, so an artifact handle or checkpoint restore
-// finds the mode it was captured in. A mismatch is counted
-// (`artifactRestoreModeMismatchCount`) and must stay 0 on every page.
-const trackModeMismatches = (target) => target.addInitScript(() => {
-  window.__E1_MODE_MISMATCHES__ = 0;
+// The phases of the Results presented for display, on every page.
+const trackReadiness = (target) => target.addInitScript(() => {
   window.__E1_READINESS__ = [];
   window.__GBDRAW_TEST_HOOKS__ = {
     ...(window.__GBDRAW_TEST_HOOKS__ || {}),
-    onStructuralMetric: (metric) => {
-      if (metric.name === 'artifactRestoreModeMismatchCount') window.__E1_MODE_MISMATCHES__ += metric.value;
-    },
-    // The phases of the Results presented for display.
     onSessionLifecycleEvent: (event) => {
       if (event.name === 'preview.readiness-expectation-registered') window.__E1_READINESS__.push(event.phase);
     }
   };
 });
-const expectNoModeMismatch = async (target) => {
-  expect(await target.evaluate(() => window.__E1_MODE_MISMATCHES__), 'artifactRestoreModeMismatchCount').toBe(0);
-};
-test.beforeEach(({ page }) => trackModeMismatches(page));
-test.afterEach(async ({ page }) => {
-  if (!page.isClosed()) await expectNoModeMismatch(page);
-});
+test.beforeEach(({ page }) => trackReadiness(page));
 // A page in a fresh browser context, as a reader opening the saved file.
 const freshPage = async (browser) => {
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`, acceptDownloads: true
   });
-  await trackModeMismatches(context);
+  await trackReadiness(context);
   return context.newPage();
 };
 
@@ -378,7 +365,9 @@ test('an added row deleted in its mode stays deleted and never reaches the other
   await expectShownAsGenerated(page, CIRCULAR_ROWS, 'the next Circular Generate');
 });
 
-test('Undo and Redo walk a Generate in each mode across the switch between them', async ({ page }) => {
+// PD-OI-090: each drawing has its own History, so Undo and Redo walk the
+// shown drawing's Generate and never switch the drawing.
+test('Undo and Redo walk the Generate of the shown drawing only', async ({ page }) => {
   test.setTimeout(240_000);
   await openBothSources(page);
   await generate(page);
@@ -391,14 +380,16 @@ test('Undo and Redo walk a Generate in each mode across the switch between them'
 
   await history(page, 'undo');
   await expectEmptyPreview(page, 'linear');
-  await history(page, 'undo');
-  expect(await shown(page)).toMatchObject({ mode: 'circular', identity: g1.identity, mounted: true });
-  await history(page, 'redo');
-  await expectEmptyPreview(page, 'linear');
   await history(page, 'redo');
   expect(await shown(page)).toMatchObject({ mode: 'linear', identity: g2.identity, mounted: true });
   await showMode(page, 'circular');
   expect(await shown(page)).toMatchObject({ mode: 'circular', identity: g1.identity, mounted: true });
+  await history(page, 'undo');
+  await expectEmptyPreview(page, 'circular');
+  await history(page, 'redo');
+  expect(await shown(page)).toMatchObject({ mode: 'circular', identity: g1.identity, mounted: true });
+  await showMode(page, 'linear');
+  expect(await shown(page)).toMatchObject({ mode: 'linear', identity: g2.identity, mounted: true });
 });
 
 test('a failed Linear Generate keeps both Results', async ({ page }) => {
@@ -426,7 +417,7 @@ test('the mode switch waits for Generate (OIPC-C07)', async ({ page }) => {
     const run = app.runAnalysis();
     await window.Vue.nextTick();
     const button = [...document.querySelectorAll('button')].find((element) => element.textContent.trim() === 'Linear');
-    const outcome = { processing: app.processing, disabled: button.disabled, result: app.setDiagramMode('linear') };
+    const outcome = { processing: app.processing, disabled: button.disabled, result: app.selectDrawing('linear') };
     await run;
     return outcome;
   });
@@ -470,7 +461,6 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
       .toEqual(await drawing(page, saved.otherModeResult.results[0].content));
     expect(await drawing(fresh, resaved.otherModeResult.results[0].content))
       .toEqual(await drawing(page, saved.results[0].content));
-    await expectNoModeMismatch(fresh);
   } finally {
     await fresh.context().close();
   }
@@ -497,7 +487,6 @@ test('a Session with one Result opens on that Result\'s mode', async ({ page, br
     expect(await drawing(fresh, loaded.content)).toEqual(await drawing(page, circular.content));
     await showMode(fresh, 'linear');
     await expectEmptyPreview(fresh, 'linear');
-    await expectNoModeMismatch(fresh);
   } finally {
     await fresh.context().close();
   }
@@ -539,7 +528,6 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
     const restored = await shown(fresh);
     expect(restored).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
     expect(await drawing(fresh, restored.content)).toEqual(await drawing(page, linear.content));
-    await expectNoModeMismatch(fresh);
   } finally {
     await fresh.context().close();
   }
@@ -627,7 +615,6 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
     expect(await alignment(fresh)).toEqual(aligned);
     await generate(fresh);
     expect(await alignment(fresh), 'Linear Generate keeps the alignment').toEqual(aligned);
-    await expectNoModeMismatch(fresh);
   } finally {
     await fresh.context().close();
   }
@@ -691,12 +678,8 @@ test('a CLI re-saved Session opens on its shown mode with each Result in its own
   const linear = await holds('switch to Linear');
   expect(linear).toMatchObject({ mode: 'linear', count: 1, mounted: true });
   expect(await drawing(page, linear.content)).toEqual(await drawing(page, session.results[0].content));
-  await history(page, 'undo');
-  expect((await holds('Undo of the switch')).identity).toBe(circular.identity);
-  await history(page, 'redo');
-  expect((await holds('Redo of the switch')).identity).toBe(linear.identity);
   await showMode(page, 'circular');
-  await holds('switch back');
+  expect((await holds('switch back')).identity).toBe(circular.identity);
   const resaved = await save(page, info.outputPath('web-resaved.gbdraw-session.json.gz'));
   expect(resaved.ui.mode).toBe('circular');
   expect(resaved.renderRequest.mode).toBe('circular');
@@ -729,7 +712,6 @@ test('a Session opened on its other Result set generates the Legend it shows', a
     await expectShownAsGenerated(fresh, rows, 'the opened Result');
     await generate(fresh);
     await expectShownAsGenerated(fresh, rows, 'its next Generate');
-    await expectNoModeMismatch(fresh);
   } finally {
     await fresh.context().close();
   }
@@ -796,7 +778,7 @@ test('the mode switch waits for Undo and Redo', async ({ page }) => {
     const outcome = {
       pending: history.restoring.value || Boolean(history.traversalPending?.()),
       disabled: button.disabled,
-      result: app.setDiagramMode('linear')
+      result: app.selectDrawing('linear')
     };
     await run;
     return outcome;
@@ -807,9 +789,9 @@ test('the mode switch waits for Undo and Redo', async ({ page }) => {
   await expectEmptyPreview(page, 'circular');
 });
 
-// REVIEW-2 P-a: an Undo or Redo of a mode switch waits for a label rerender,
-// as the mode buttons do.
-test('an Undo of a mode switch waits for a label rerender', async ({ page }) => {
+// REVIEW-2 P-a, PD-OI-090: no History step switches the drawing now, so the
+// switch itself is what waits for a label rerender (OIPC-C07).
+test('a drawing switch waits for a label rerender', async ({ page }) => {
   test.setTimeout(300_000);
   await bothResults(page);
   await showMode(page, 'circular');
@@ -825,17 +807,12 @@ test('an Undo of a mode switch waits for a label rerender', async ({ page }) => 
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     const rerendering = state.labelReflowProcessing.value;
-    const undo = await owner.undo();
-    // OV-1339: the Undo button is disabled while its step waits.
-    await window.Vue.nextTick();
-    const undoButtonDisabled = document.querySelector('button[aria-label="Undo"]').disabled;
-    return { rerendering, undo, undoButtonDisabled, mode: state.mode.value };
+    const switched = app.selectDrawing('linear');
+    return { rerendering, switched: switched?.status ?? switched, mode: state.mode.value };
   });
-  expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, undoButtonDisabled: true, mode: 'circular' });
+  expect(attempt).toEqual({ rerendering: true, switched: 'busy', mode: 'circular' });
   await settleLive(page);
-  // The button comes back when the rerender ends, with no other History change.
-  await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await settleLive(page);
+  await showMode(page, 'linear');
   expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
 });
 
@@ -1012,7 +989,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     const failure = await evaluateWithRetainedPromise(fresh, async () => {
       const name = 'tobacco-chloroplast.gbdraw-session.json';
       const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-      const { importSession } = await import('/gbdraw/web/js/services/config.js');
+      const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
       const result = await importSession({ target: { files: [file], value: 'selected' } }, {
         beforePreviewMount: () => { throw new Error('forced rollback'); }
       });
@@ -1022,7 +999,6 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await settleLive(fresh);
     await check(fresh, 'rollback of a failed Load');
     expect(await shown(fresh)).toMatchObject({ mode: before.mode, identity: before.identity });
-    await expectNoModeMismatch(fresh);
   } finally {
     await fresh.context().close();
   }

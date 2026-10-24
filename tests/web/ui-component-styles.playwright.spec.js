@@ -65,7 +65,7 @@ const stackWithEveryRowKind = async (page, mode) => {
     const app = window.__GBDRAW_APP__;
     const file = (text, name) => new File([text], name, { type: 'text/plain' });
     if (mode === 'linear') {
-      app.mode = 'linear';
+      app.selectDrawing('linear');
       app.lInputType = 'gb';
       app.setLinearSeqPrimaryFile(0, 'gb', file(genbank, 'HmmtDNA.gbk'));
       app.setLinearDepthFile(app.linearSeqs[0], 0, file(depthTsv, 'sample.depth.tsv'));

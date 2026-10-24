@@ -28,7 +28,22 @@ the same source-file databases as the web app and write the same raw-cache
 keys, so a Session saved from either reuses its LOSAT results in the other.
 For Circular similarity rings they run LOSATN or TLOSATX: each comparison
 genome (`--conservation_sequence`, one file per ring) is the query and the
-displayed records are the subject database, as in the web app. A comparison
+subject database is the whole reference file, as in the web app: every record
+of the file that has a sequence, uncropped and on the file's strand, also
+records that are not drawn (for GFF3 input, every entry of the FASTA file,
+also one the GFF3 file does not name). A record without a sequence (a CON
+record) is left out. Turning records off, drawing one record of the file, or
+a crop does not change ring E-values, and the subject gets the web app's
+raw-cache key. With several reference files, each file is searched whole, in
+input order; records passed to the Python API in memory are searched as
+given. The search reports positions on the whole reference file; gbdraw puts
+each row in the search frame of the record it draws (the record after its
+crop, on its source strand, 1-based), the frame of every ring table, and leaves
+out rows of records that are not drawn or wholly outside a crop. The web app
+converts the rows with the same Python code before Generate renders them. The
+ring tables of `--losat_output_dir`, `conservation.tsv`, and a Session hold
+these rows; the raw LOSAT cache and **Save Raw LOSAT TSV** keep the whole-file
+search output. A comparison
 FASTA with ID-only headers and 60-column uppercase lines, like the tutorial
 files, gets the web app's raw-cache key; other FASTA layouts and GenBank or
 DDBJ files give the same rows under a different key. Precomputed rings read
@@ -184,7 +199,10 @@ Inspect warnings and the raw search rows before relaxing thresholds.
 
 ## Raw results and cache identity
 
-**Save Raw LOSAT TSV** and `--losat_output_dir` preserve raw search rows.
+**Save Raw LOSAT TSV** and the Linear `--losat_output_dir` preserve raw search
+rows. For Circular rings, the raw rows are the search output on the whole
+reference file, and the ring tables are in the search frame of the drawn
+records.
 Generated protein results replace session-only runtime handles with stable
 percent-encoded protein or feature aliases. Export fails if a handle cannot be
 resolved safely. An uploaded comparison table is not rewritten.

@@ -229,7 +229,10 @@ const WRITES = [
   /\b(?:form|adv)\[[^\]]+\]\s*=(?!=)/g,
   /(?:replaceReactiveObject|replacePlainObject|Object\.assign)\(\s*(?:(?:state|drawing)\.)?(?:form|adv)\b/g,
   // The merge of stored settings into a drawing (`form` and `adv` included).
-  /\binstallStoredSettings\(\s*(?:state|drawing)\b/g
+  /\binstallStoredSettings\(\s*(?:state|drawing)\b/g,
+  // The settings slice (services/drawing/settings.js): Reset Settings, and an
+  // install that gives `form` or `adv`, replace the whole member.
+  /\bSETTINGS_SLICE\.(?:reset\(|install\([^;]*?\b(?:form|adv)\s*:)/g
 ];
 const DECLARATION = /^\s*(?:export\s+)?(?:const|let|function|async\s+function)\s+([A-Za-z_$][\w$]*)/;
 // The nearest declaration that encloses a line, by indentation.

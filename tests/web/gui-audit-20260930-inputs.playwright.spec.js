@@ -25,7 +25,7 @@ const openLinear = async (page) => {
   await openFresh(page);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false });
   });
   await settle(page);
@@ -324,6 +324,88 @@ test('each record of a multi-record Linear file keeps its own organism', async (
   expect(await linearState()).toEqual(before);
   await generateAndWaitForResult(page);
   await expectOwnOrganisms();
+});
+
+// OV-1701: a Session stores a record's resolved name. An inferred name must
+// come back as the inferred default, not as a typed value that Reset clears.
+const ONE_ORGANISM = JSON.parse(readFileSync('tests/fixtures/record_metadata_inference_cases.json', 'utf8'))
+  .discovery.find(({ name }) => name === 'ACCESSION only, no VERSION line');
+const ONE_ORGANISM_TEXT = ONE_ORGANISM.expected.records[0].inferredDefinition.replace(/<\/?i>/g, '');
+const ONE_ORGANISM_ID = ONE_ORGANISM.expected.records[0].recordId;
+const HEPA_GALLERY_SESSION = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz';
+
+// Save, then load the Session in a new browser context, as a reader does: it shares no page or storage with
+// the upload.
+const saveAndReopenSession = async (page) => {
+  const downloaded = page.waitForEvent('download');
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'names'; });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  const sessionPath = await (await downloaded).path();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending, null, { timeout: 120_000 });
+  const reopened = await (await page.context().browser().newContext()).newPage();
+  await openFresh(reopened);
+  await loadSessionFile(reopened, sessionPath);
+  return reopened;
+};
+const loadSessionFile = async (page, sessionPath) => {
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 180_000 });
+  await settle(page);
+};
+const resetSettings = async (page) => {
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
+  await settle(page);
+};
+const uploadOneOrganism = async (page) => {
+  await openLinear(page);
+  await uploadLinear(page, 0, ONE_ORGANISM.files.source.name, vectorText(ONE_ORGANISM.files.source));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0]?.inferred_definition || ''))
+    .not.toBe('');
+};
+
+test('an inferred Linear record name survives Save, Load and Reset Settings (OV-1701)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await uploadOneOrganism(page);
+  await generateAndWaitForResult(page);
+  expect((await recordDefinitions(page))[ONE_ORGANISM_ID]).toContain(ONE_ORGANISM_TEXT);
+  const reopened = await saveAndReopenSession(page);
+  await resetSettings(reopened);
+  await generateAndWaitForResult(reopened);
+  expect((await recordDefinitions(reopened))[ONE_ORGANISM_ID]).toContain(ONE_ORGANISM_TEXT);
+});
+
+test('a typed Linear record name survives Save and Load, and Reset Settings returns the inferred name (OV-1701)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await uploadOneOrganism(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[0].definition = 'Typed organism'; });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  const reopened = await saveAndReopenSession(page);
+  await generateAndWaitForResult(reopened);
+  expect(await reopened.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].definition)).toBe('Typed organism');
+  expect((await recordDefinitions(reopened))[ONE_ORGANISM_ID]).toContain('Typed organism');
+  await resetSettings(reopened);
+  expect(await reopened.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].definition)).toBe('');
+  await generateAndWaitForResult(reopened);
+  const shown = (await recordDefinitions(reopened))[ONE_ORGANISM_ID];
+  expect(shown).toContain(ONE_ORGANISM_TEXT);
+  expect(shown).not.toContain('Typed organism');
+});
+
+test('the Hepatoplasmataceae Gallery Session draws its record names with and without Reset Settings (OV-1701)', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openFresh(page);
+  await loadSessionFile(page, HEPA_GALLERY_SESSION);
+  const names = async () => Object.values(await recordDefinitions(page)).map((text) => text.split(' / ')[0]);
+  await generateAndWaitForResult(page);
+  const loaded = await names();
+  expect(loaded).toHaveLength(5);
+  expect(loaded[0]).toBe('Ca. Tyloplasma litorale Fukuoka2020');
+  await resetSettings(page);
+  await generateAndWaitForResult(page);
+  expect((await names()).slice(0, 5)).toEqual(loaded);
 });
 
 test('Save before the first Generate with an empty Linear card explains the missing input', async ({ page }) => {

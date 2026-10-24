@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
+import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 if (!globalThis.crypto?.subtle) {
   Object.defineProperty(globalThis, 'crypto', {
@@ -29,20 +31,20 @@ globalThis.document = {
   })
 };
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   adoptCanonicalRenderArtifacts,
-  exportSession,
+  installShownDrawing,
   validateSessionLosatArtifacts
-} = await import(
-  '../../gbdraw/web/js/services/config.js'
-);
+} = sessionConfig;
 const { buildCanonicalRenderRequest } = await import(
   '../../gbdraw/web/js/services/session-request.js'
 );
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession } = callerSession(sessionConfig, state);
 
 let inputReads = 0;
-state.mode.value = 'circular';
+installShownDrawing('circular');
 state.cInputType.value = 'gb';
 state.files.c_gb = {
   name: 'legacy.gbk',
@@ -331,7 +333,7 @@ assert.ok(downloadedBlob instanceof Blob);
     key: JSON.stringify(['circular', `#${index + 1}`]), scope: 'circular', sourceUid: 'circular',
     selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular'
   }));
-  const drafts = state.drawings.circular.recordDisplayDrafts;
+  const drafts = modeDrawing(state, 'circular').recordDisplayDrafts;
   drafts.splice(0, drafts.length, draft('NC_004603.1', 1000), draft('NC_004605.1', 2000));
   URL.createObjectURL = () => 'blob:ov325-session';
   try {

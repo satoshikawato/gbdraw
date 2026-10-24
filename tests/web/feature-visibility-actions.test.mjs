@@ -11,6 +11,9 @@ import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 const ref = (value) => ({ value });
 // The live projection reads Python's rule matches (R4) and the committed
@@ -335,7 +338,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   assert.equal(manualRules.length, 1);
   assert.equal(await productActions.projectFeatureVisibility(), true);
   assert.deepEqual(reconciled.at(-1), hidden);
-  setFeatureVisibilityOverride(overrides, nd1Case, 'on');
+  setFeatureVisibilityOverride(editsOf(overrides), nd1Case, 'on');
   await productActions.projectFeatureVisibility();
   assert.equal(reconciled.at(-1)['nd1-case'], 'on', 'a per-feature override takes precedence');
   clear(overrides);
@@ -491,7 +494,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   ports.applyFeatureVisibilityToLabels = (options) => follows.push(options);
   const featureOf = (id) => resultCatalogFeatures(portState).biological
     .find((feature) => feature.biological_feature_id === id);
-  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
+  setFeatureVisibilityOverride(editsOf(overrides), featureOf('B'), 'off');
 
   assert.equal(await owner.projectFeatureVisibility({ rerender: true }), false);
   assert.deepEqual(follows, [], 'nothing to follow when the Result draws what Generate draws');
@@ -502,25 +505,25 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   follows.length = 0;
 
   // OV-35: a Result display (or a History step) that hides A hides its label.
-  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  setFeatureVisibilityOverride(editsOf(overrides), featureOf('A'), 'off');
   assert.equal(await owner.projectFeatureVisibility(), true);
   assert.deepEqual(mounted, { 'svg-A': 'off' });
   assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: false }], 'the label follows the feature');
 
   // B is shown, which the Result does not draw.
-  setFeatureVisibilityOverride(overrides, featureOf('A'), 'default');
-  setFeatureVisibilityOverride(overrides, featureOf('B'), 'on');
+  setFeatureVisibilityOverride(editsOf(overrides), featureOf('A'), 'default');
+  setFeatureVisibilityOverride(editsOf(overrides), featureOf('B'), 'on');
   await owner.projectFeatureVisibility();
   assert.deepEqual(follows.at(-1), { reflow: false, rerender: false, labels: false }, 'a Result display does not rerender');
   await owner.projectFeatureVisibility({ rerender: true });
   assert.deepEqual(follows.at(-1), { reflow: false, rerender: true, labels: false }, 'a History step rerenders to draw B');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
   assert.deepEqual(follows.at(-1), { reflow: true, rerender: true, labels: false }, 'a loaded table also places the labels');
-  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
+  setFeatureVisibilityOverride(editsOf(overrides), featureOf('B'), 'off');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
   assert.deepEqual(follows.at(-1), { reflow: true, rerender: false, labels: false });
 
-  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  setFeatureVisibilityOverride(editsOf(overrides), featureOf('A'), 'off');
   const projectionsBefore = projections;
   const followCount = follows.length;
   const [waiting, latest] = await Promise.all([

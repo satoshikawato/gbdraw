@@ -62,7 +62,7 @@ export const collectFeatureQualifierNames = (features = []) => {
 /**
  * The presets, then the other qualifier names of the features and the rules, sorted.
  * @param {Iterable<string>} featureQualifierNames from `collectFeatureQualifierNames`
- * @param {({ qual?: unknown } | null | undefined)[] | null} [rules]
+ * @param {readonly ({ qual?: unknown } | null | undefined)[] | null} [rules]
  * @returns {string[]}
  */
 export const specificColorQualifierSuggestions = (featureQualifierNames, rules = []) => {

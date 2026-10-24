@@ -7,6 +7,9 @@ import {
   listFeatureRows,
   setFeatureVisibilityOverride
 } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 // R-5 (Owner decision 2026-10-05): the Features list and Search features list
 // the displayed Result's biological features that are of a selected type, have
@@ -66,9 +69,9 @@ const featureOf = (catalogFeatures, id) => catalogFeatures.biological.find((feat
 test('the list holds the selected types, the drawn features, and features with their own visibility', () => {
   const featureOverrides = {};
   const { catalogFeatures } = listOf(0);
-  setFeatureVisibilityOverride(featureOverrides, featureOf(catalogFeatures, 'B'), 'off');
+  setFeatureVisibilityOverride(editsOf(featureOverrides), featureOf(catalogFeatures, 'B'), 'off');
   // J was turned On and then Off: it stays listed so it can be turned On again.
-  setFeatureVisibilityOverride(featureOverrides, featureOf(catalogFeatures, 'J'), 'off');
+  setFeatureVisibilityOverride(editsOf(featureOverrides), featureOf(catalogFeatures, 'J'), 'off');
   // A rule hides K; its match is unknown until Python evaluates it, so K reads
   // as Python drew it (not drawn).
   const rules = [{ recordId: '*', featureType: 'CDS', qualifier: 'hash', value: '^x$', action: 'off' }];
@@ -84,7 +87,7 @@ test('the list holds the selected types, the drawn features, and features with t
 test('a per-feature On lists and draws a feature of an unselected type', () => {
   const featureOverrides = {};
   const { catalogFeatures } = listOf(0);
-  setFeatureVisibilityOverride(featureOverrides, featureOf(catalogFeatures, 'G'), 'on');
+  setFeatureVisibilityOverride(editsOf(featureOverrides), featureOf(catalogFeatures, 'G'), 'on');
   const { rows } = listOf(0, featureOverrides);
   assert.deepEqual(rows.find(([id]) => id === 'G'), ['G', true, false]);
 });

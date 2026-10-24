@@ -12,10 +12,10 @@ const failNextNativeRender = (page) => page.evaluate(() => {
       request.diagramOptions.colors.colorTable = { resourceId: 's03-error-colors', representation: 'canonicalTsv' };
       message = { ...message, payload: { ...message.payload, request,
         resourceManifest: [...message.payload.resourceManifest, { resourceId: 's03-error-colors',
-          cacheToken: 'render-resource-999999', name: 'PRIVATE_FILE_SENTINEL.tsv', kind: 'canonical-tsv',
+          cacheToken: '9'.repeat(64), name: 'PRIVATE_FILE_SENTINEL.tsv', kind: 'canonical-tsv',
           type: 'text/tab-separated-values', size: bytes.byteLength, lastModified: 0 }],
         stagedResources: [...message.payload.stagedResources, { resourceId: 's03-error-colors',
-          cacheToken: 'render-resource-999999', bytes: bytes.buffer }] } };
+          cacheToken: '9'.repeat(64), bytes: bytes.buffer }] } };
     }
     return send.call(this, message, ...args);
   };

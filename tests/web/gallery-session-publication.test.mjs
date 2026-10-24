@@ -538,6 +538,32 @@ assert.rejects(
   }
 }
 
+// A Session the Web app saves keeps each File card's own state in
+// `webFiles.bindings.linearSeqs`: a record's typed name apart from the name
+// inferred from its file. Publication keeps those rows, so Load and Reset
+// Settings read the names as after that Save (OV-1701); the imported table
+// files stay unpublished (OV-367).
+{
+  const source = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
+  const saved = structuredClone(source);
+  const cardRows = saved.renderRequest.records.map((record, index) => ({
+    uid: record.recordKey,
+    gb: { resourceId: record.source.resourceId, name: `BGC-${index + 1}.gbk`, type: 'text/plain', lastModified: 0 },
+    gff: null, fasta: null, depth: null, losat_gencode: 1,
+    // The first record's name is typed over a different inferred name; the others draw their inferred name.
+    definition: index === 0 ? record.presentation.label : '', record_subtitle: record.presentation.subtitle || '',
+    file_definition: '', file_subtitle: '',
+    inferred_definition: index === 0 ? 'Inferred name' : record.presentation.label,
+    region_record_id: '', region_start: null, region_end: null,
+    region_reverse: Boolean(record.presentation.reverseComplement)
+  }));
+  saved.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs: cardRows,
+    d_color: { resourceId: 'record-1-genbank', name: 'imported-colors.tsv', type: 'text/plain', lastModified: 0 } };
+  const { session, equivalence } = await prepareGallerySessionForPublication(saved);
+  assert.deepEqual(equivalence.differences, []);
+  assert.deepEqual(session.webFiles.bindings, { schema: 2, c_gb: null, linearSeqs: cardRows });
+}
+
 // A Session the CLI writes publishes as the Gallery entry of its command: a
 // Circular batch request with one output per record (OV-267), the resolved
 // default colors and the editor tables the CLI stores beside the files it read

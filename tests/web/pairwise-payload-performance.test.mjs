@@ -17,6 +17,11 @@ const modulePaths = [
   'gbdraw/web/js/services/match-sequences.js',
   'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',
+  'gbdraw/web/js/services/drawing/feature-edits.js',
+  'gbdraw/web/js/services/drawing/paint.js',
+  'gbdraw/web/js/services/drawing/slice-handle.js',
+  'gbdraw/web/js/services/json-clone.js',
+  'gbdraw/web/js/utils/reactivity.js',
   'gbdraw/web/js/utils/download-names.js',
   'gbdraw/web/js/services/record-source-coordinates.js',
   'gbdraw/web/js/services/genbank-header.js',
@@ -48,6 +53,14 @@ for (const relativePath of modulePaths) {
     : await readFile(new URL(relativePath, repoRoot), 'utf8');
   await writeFile(target, source, 'utf8');
 }
+// match-sequences.js reads restored Session files through record-discovery.js, which this test does not use.
+await writeFile(join(tempRoot, 'gbdraw/web/js/services/record-discovery.js'), [
+  "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };",
+  'export const gffFastaReaderSelector = unused;',
+  'export const readAllSequenceRecords = unused;',
+  'export const readComparisonSequenceRecords = unused;',
+  ''
+].join('\n'), 'utf8');
 
 const popupPath = join(tempRoot, 'gbdraw/web/js/app/pairwise-match-popup.js');
 const instrumentedPopupPath = join(
@@ -817,7 +830,9 @@ const EXACT_BASELINES = {
       blockId: 'block_0024',
       orthogroupIds: 'og_34;og_35;og_36;og_37;og_38;og_39;og_40;og_41;og_42;og_43;og_44;og_45;og_46;og_47;og_48'
     },
-    digest: '6bcc7390b4602122c56454375e266b39ca110e35979534995577dc2991743aee',
+    // The Gallery Session uploads the pinned NZ_CP006932.1 revision (tutorial-data), whose WP_025208444.1 product
+    // is "GGDEF domain-containing protein"; the earlier Session's copy read "DHH family phosphoesterase".
+    digest: '9cc7b51bcafa7ef0aea841508ed9695714899ba689a1a528334224e8ecd3cf08',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'collinear' },
       { id: 'Identity', label: 'Identity', value: '43.9684414414' },

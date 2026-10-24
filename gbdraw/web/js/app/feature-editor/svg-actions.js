@@ -24,7 +24,8 @@ import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fast
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
-import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
@@ -566,7 +567,7 @@ export const createFeatureSvgActions = ({
    */
   const buildClickedFeaturePayload = (drawing, feat, featureElement = null, renderedSvgId = undefined) => {
     const defaultLabel = getFeatureCaption(feat);
-    const existingOverride = getFeatureOverride(drawing.featureColorOverrides, feat);
+    const existingOverride = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feat));
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = formatFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
@@ -937,7 +938,7 @@ export const createFeatureSvgActions = ({
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
     if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {
-      /** @type {import('../../state.js').LegendEntry[]} */
+      /** @type {import('../../services/drawing/paint.js').LegendEntry[]} */
       const entries = state.activeDrawing().legendEntries.value || [];
       const { key } = item;
       const entry = entries.find((row) => legendEntryKey(row) === key || String(row.caption) === key);
@@ -1845,6 +1846,11 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           return;
         }
+        // A pan is not a click: Chrome sends the click of a drag to the svg,
+        // the element that holds both the press and the release, so a press
+        // that moved opens, selects, and clears nothing, whatever lies under
+        // the release.
+        if (!isClickAtPress(handlerState.pressPoint, e)) return;
         const selectableFeatureEl = featureSelection?.getSelectableFeatureTarget?.(e, svg) || null;
         const modifierSelection = Boolean(e.ctrlKey || e.metaKey);
         if (modifierSelection || e.shiftKey) {
@@ -1933,12 +1939,11 @@ export const createFeatureSvgActions = ({
       // beside the click, inside the Result's canvas and clear of the clicked
       // item, as a click on a Legend row shows its popup: it takes the place of
       // an open popup, and a feature selection stays. Nothing opens while
-      // Layout edit is on (a press drags there), while a review holds the
-      // popups, or when the press moved: a pan of the figure ends in a click
-      // on the element it began on.
+      // Layout edit is on (a press drags there) or while a review holds the
+      // popups; `handleClick` has already dropped a press that moved.
       /** @param {MouseEvent} e */
       const openDrawnElementSettings = (e) => {
-        if (state.layoutRepositionMode?.value || previewPopupsHeld() || !isClickAtPress(handlerState.pressPoint, e)) return false;
+        if (state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
         const section = drawnElementSection(e.target);
         const canvas = /** @type {Element | null} */ (state.canvasContainerRef?.value);
         if (!section || !canvas) return false;

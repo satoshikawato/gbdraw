@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from copy import deepcopy
-from collections.abc import Iterable, Mapping as MappingABC, Sequence as SequenceABC
+from collections.abc import Collection, Iterable, Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import asdict, fields, is_dataclass, replace
 from functools import lru_cache
 from numbers import Integral, Real
@@ -178,6 +178,31 @@ def with_config_overrides(
         overridden,
         labels=replace(overridden.labels, filtering=config.labels.filtering),
     )
+
+
+def with_fit_row_overrides(
+    config: GbdrawConfig,
+    overrides: Mapping[str, object] | None,
+    *,
+    set_paths: Collection[str] = (),
+) -> GbdrawConfig:
+    """``config`` with a label-fit row's settings, as drawing again with them draws.
+
+    A row sets the Circular definition font alone. Drawing again keeps an interval the user set, while
+    ``with_config_overrides`` would derive one from the new font, so the interval goes into the overrides when
+    the user's overrides set it (``set_paths``, the paths of ``config_overrides``) or when it does not follow the
+    current font (``circular_definition_interval_for_font``), as in a config built with it. An interval in a
+    built config that equals the value the font derives cannot be told apart and follows the new font.
+    """
+
+    if not overrides or _CIRCULAR_DEFINITION_FONT not in overrides or _CIRCULAR_DEFINITION_INTERVAL in overrides:
+        return with_config_overrides(config, overrides)
+    definition = config.objects.definition.circular
+    if _CIRCULAR_DEFINITION_INTERVAL not in set_paths and definition.interval == circular_definition_interval_for_font(
+        definition.font_size
+    ):
+        return with_config_overrides(config, overrides)
+    return with_config_overrides(config, {**overrides, _CIRCULAR_DEFINITION_INTERVAL: definition.interval})
 
 
 def _literal_value_matches(value: object, candidate: object) -> bool:
@@ -499,4 +524,5 @@ __all__ = [
     "modify_config_dict",
     "validate_config_overrides",
     "with_config_overrides",
+    "with_fit_row_overrides",
 ]

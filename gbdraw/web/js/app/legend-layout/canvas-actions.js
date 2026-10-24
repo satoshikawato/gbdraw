@@ -1,9 +1,10 @@
 // @ts-check
 import {
-  applyCanvasPaddingToSvg,
+  applyCanvasToSvg,
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
+import { CANVAS_SLICE, setCanvasPaddingSide as setDrawingCanvasPaddingSide } from '../../services/drawing/canvas.js';
 
 /**
  * @typedef {object} LegendCanvasActionsOptions
@@ -31,14 +32,16 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   // One canvas padding applies to every Result (D-09, PD-OI-064): Generate
   // applies it before the candidate is published, and a displayed Result
   // receives the current value. Applying the same padding twice is a no-op.
+  // Showing a Result or editing the padding places no item, so the Result
+  // keeps the canvas it was saved with (PD-OI-052).
   const applyCanvasPadding = () => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     const svg = currentSvg();
     if (!svg) return false;
-    bindCompositionMetadata(svg);
-    if (!applyCanvasPaddingToSvg(svg, drawing.canvasPadding)) return false;
+    const binding = bindCompositionMetadata(svg);
+    if (!applyCanvasToSvg(svg, drawing.canvasPadding, { binding, refit: false })) return false;
     return Boolean(commitActiveResultEdit?.('canvas-padding'));
   };
 
@@ -46,10 +49,19 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.canvasPadding.top = 0;
-    drawing.canvasPadding.right = 0;
-    drawing.canvasPadding.bottom = 0;
-    drawing.canvasPadding.left = 0;
+    CANVAS_SLICE.reset(drawing.slices.canvas);
+    return applyCanvasPadding();
+  };
+
+  // A padding field's edit applies to the displayed Result at once.
+  /**
+   * @param {'top' | 'right' | 'bottom' | 'left'} side
+   * @param {unknown} value
+   */
+  const setCanvasPaddingSide = (side, value) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    setDrawingCanvasPaddingSide(state.activeDrawing().slices.canvas, side, value);
     return applyCanvasPadding();
   };
 
@@ -105,6 +117,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   return {
     applyCanvasPadding,
     captureBaseConfig,
-    resetCanvasPadding
+    resetCanvasPadding,
+    setCanvasPaddingSide
   };
 };

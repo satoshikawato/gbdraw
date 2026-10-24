@@ -634,3 +634,44 @@ test('a Circular row is cropped, and loses Display start, where Generate crops i
   form.circular_region_end = '';
   assert.deepEqual(cropped(), [false], 'emptied fields name no region');
 });
+
+// A2 W5 (R10): the drafts of a replaced source go in the transition that
+// replaced it (`changeRecordSources`), not in a watcher of the sources.
+const sourceControls = () => {
+  /** @type {Function[]} */
+  const callbacks = [];
+  const draft = (sourceUid) => ({ sourceUid, selector: '#1', recordId: sourceUid, topologyOverride: 'linear',
+    startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
+  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')] };
+  const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')] };
+  const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
+    files: { c_gb: new Blob(['c']) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
+    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: new Blob([uid]), region_record_id: '', region_reverse: false })) },
+  { circular, linear });
+  const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
+    watch: (_source, callback) => { callbacks.push(callback); }, linearRecordsFor: () => [],
+    linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '', runUndoable: (_label, fn) => fn(),
+    getCommittedRequest: () => null, getCommittedSession: () => null });
+  const uids = (drawing) => drawing.recordDisplayDrafts.map(({ sourceUid }) => sourceUid);
+  return { state, controls, callbacks, circular, linear, uids };
+};
+
+test('no watcher of the record sources drops drafts (A2 W5)', () => {
+  const { state, callbacks, circular, linear, uids } = sourceControls();
+  const tuple = (uid, source) => ({ scope: 'linear', sourceUid: uid, source, paired: null });
+  const previous = [tuple('record-1', state.linearSeqs[0].gb), tuple('record-2', state.linearSeqs[1].gb)];
+  const current = [tuple('record-1', new Blob(['x'])), previous[1]];
+  callbacks.forEach((callback) => callback(current, previous));
+  assert.deepEqual(uids(linear), ['record-1', 'record-2']);
+  assert.deepEqual(uids(circular), ['circular']);
+});
+
+test('a replaced Linear source drops its own drafts only, in its transition (A2 W5)', () => {
+  const { state, controls, circular, linear, uids } = sourceControls();
+  controls.changeRecordSources(() => { state.linearSeqs[0].gb = new Blob(['x']); });
+  assert.deepEqual(uids(linear), ['record-2']);
+  assert.deepEqual(uids(circular), ['circular']);
+  controls.changeRecordSources(() => { state.cInputType.value = 'gff'; });
+  assert.deepEqual(uids(circular), [], 'the input type switch replaced the Circular source');
+  assert.deepEqual(uids(linear), ['record-2']);
+});

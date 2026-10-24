@@ -7,12 +7,14 @@ import math
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import Dict, List, Mapping, Optional, TypedDict, Union
 
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 
 from gbdraw.core.fonts import FontFace, FontWeight, load_font, resolve_font_face
+from gbdraw.core.numeric import compensated_sum
 from gbdraw.svg.elements import Text
 
 logger = logging.getLogger(__name__)
@@ -556,6 +558,39 @@ def calculate_svg_bbox_dimensions(
     return estimated_width, f_size
 
 
+def measure_mixed_text_line(
+    parts: Iterable[tuple[str, str]],
+    font_family: str,
+    font_size: float,
+    dpi: int,
+    *,
+    font_weight: FontWeight = "normal",
+    layout_height: bool = False,
+) -> tuple[float, float]:
+    """Width and height of one text line drawn as styled tspans.
+
+    ``parts`` are ``(text, font_style)`` pairs in drawing order. The width is
+    the painted SVG width of the parts added up
+    (``calculate_svg_bbox_dimensions``, italic parts measured italic). The
+    height is the tallest part's painted height or, with ``layout_height``,
+    its ``calculate_bbox_dimensions`` height, which the Linear definition
+    column's line pitch is built on. No parts measure ``(0.0, 0.0)``.
+    """
+    widths: list[float] = []
+    heights: list[float] = []
+    for text, font_style in parts:
+        width, height = calculate_svg_bbox_dimensions(
+            text, font_family, font_size, dpi, font_weight=font_weight, font_style=font_style
+        )
+        if layout_height:
+            _, height = calculate_bbox_dimensions(
+                text, font_family, font_size, dpi, font_weight=font_weight, font_style=font_style
+            )
+        widths.append(float(width))
+        heights.append(float(height))
+    return compensated_sum(widths), max(heights, default=0.0)
+
+
 @dataclass(frozen=True)
 class TextInk:
     """Where a text's letters are painted, in em, from the start of its advance on the alphabetic baseline.
@@ -803,6 +838,7 @@ __all__ = [
     "font_pair_kerning_table",
     "get_font_vertical_metrics",
     "get_text_bbox_size_pixels",
+    "measure_mixed_text_line",
     "measurement_font_file",
     "parse_mixed_content_text",
     "text_ink",

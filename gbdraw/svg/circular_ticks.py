@@ -433,6 +433,50 @@ def resolve_circular_tick_label_geometry(
     )
 
 
+TickMark = tuple[tuple[float, float], tuple[float, float]]
+
+
+def circular_tick_marks(
+    radius: float,
+    total_len: int,
+    size: str,
+    ticks: list,
+    track_type: str,
+    strandedness: bool,
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
+    length_reference_radius_px: float | None = None,
+    record_transform: RecordDisplayTransform | None = None,
+    *,
+    length_threshold: int,
+) -> list[TickMark]:
+    """The tick marks as drawn: each from its point nearer the centre to its point farther out."""
+
+    if str(tick_side or "legacy").strip().lower() in {"none", ""}:
+        return []
+    prox_radius, dist_radius = get_circular_tick_path_radius_bounds(
+        center_radius_px=radius,
+        total_len=total_len,
+        size=size,
+        track_type=track_type,
+        strandedness=strandedness,
+        tick_side=tick_side,
+        tick_length_px=tick_length_px,
+        length_reference_radius_px=length_reference_radius_px,
+        length_threshold=length_threshold,
+    )
+    marks: list[TickMark] = []
+    for tick in ticks:
+        if record_transform is not None and record_transform.start_coordinate is not None:
+            tick = record_transform.source_base_to_display_index(tick or 1)
+        prox_x: float = prox_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
+        prox_y: float = prox_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
+        dist_x: float = dist_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
+        dist_y: float = dist_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
+        marks.append(((prox_x, prox_y), (dist_x, dist_y)))
+    return marks
+
+
 def generate_circular_tick_paths(
     radius: float,
     total_len: int,
@@ -452,26 +496,19 @@ def generate_circular_tick_paths(
     Generates SVG path descriptions for tick marks on a circular canvas.
     """
     tick_paths_list: list[Path] = []
-    if str(tick_side or "legacy").strip().lower() in {"none", ""}:
-        return []
-    prox_radius, dist_radius = get_circular_tick_path_radius_bounds(
-        center_radius_px=radius,
-        total_len=total_len,
-        size=size,
-        track_type=track_type,
-        strandedness=strandedness,
+    for (prox_x, prox_y), (dist_x, dist_y) in circular_tick_marks(
+        radius,
+        total_len,
+        size,
+        ticks,
+        track_type,
+        strandedness,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
+        record_transform=record_transform,
         length_threshold=length_threshold,
-    )
-    for tick in ticks:
-        if record_transform is not None and record_transform.start_coordinate is not None:
-            tick = record_transform.source_base_to_display_index(tick or 1)
-        prox_x: float = prox_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
-        prox_y: float = prox_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
-        dist_x: float = dist_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
-        dist_y: float = dist_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
+    ):
         tick_path_desc: str = "M " + str(prox_x) + "," + str(prox_y) + " L" + str(dist_x) + "," + str(dist_y) + " z"
         tick_path = Path(d=tick_path_desc, stroke="gray", stroke_width=tick_width)
         tick_paths_list.append(tick_path)
@@ -521,6 +558,58 @@ def _tick_label_path_range(
     return float(tick) - half_length, float(tick) + half_length, "50%"
 
 
+def circular_tick_labels(
+    radius: float,
+    total_len: int,
+    size: str,
+    ticks: list,
+    font_size: float,
+    font_family: str,
+    track_type: str,
+    strandedness: bool,
+    dpi: int,
+    label_side: str = "legacy",
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
+    tick_width: float = 0.0,
+    length_reference_radius_px: float | None = None,
+    record_transform: RecordDisplayTransform | None = None,
+    tick_interval: int | None = None,
+    *,
+    length_threshold: int,
+) -> list[tuple[str, float, CircularTickLabelGeometry]]:
+    """The tick labels as drawn: each one's text, its display position, and its geometry."""
+
+    normalized_side = str(label_side or "legacy").strip().lower()
+    if normalized_side in {"none", ""}:
+        return []
+    labels: list[tuple[str, float, CircularTickLabelGeometry]] = []
+    for tick in ticks:
+        label_text = _format_tick_label_text(tick, total_len, tick_interval)
+        if record_transform is not None and record_transform.start_coordinate is not None:
+            tick = record_transform.source_base_to_display_index(tick)
+        geometry = resolve_circular_tick_label_geometry(
+            center_radius_px=radius,
+            total_len=total_len,
+            size=size,
+            tick=tick,
+            label_text=label_text,
+            font_size=font_size,
+            font_family=font_family,
+            track_type=track_type,
+            strandedness=strandedness,
+            dpi=dpi,
+            label_side=label_side,
+            tick_side=tick_side,
+            tick_length_px=tick_length_px,
+            tick_width=tick_width,
+            length_reference_radius_px=length_reference_radius_px,
+            length_threshold=length_threshold,
+        )
+        labels.append((label_text, tick, geometry))
+    return labels
+
+
 def generate_circular_tick_labels(
     radius: float,
     total_len: int,
@@ -547,33 +636,28 @@ def generate_circular_tick_labels(
     length_threshold: int,
 ) -> list[Text]:
     tick_label_paths_list: list[Text] = []
-    normalized_side = str(label_side or "legacy").strip().lower()
-    if normalized_side in {"none", ""}:
-        return []
-    for label_index, tick in enumerate(ticks):
-        label_text = _format_tick_label_text(tick, total_len, tick_interval)
-        if record_transform is not None and record_transform.start_coordinate is not None:
-            tick = record_transform.source_base_to_display_index(tick)
-        angle = 360.0 * (tick / total_len)
-
-        geometry = resolve_circular_tick_label_geometry(
-            center_radius_px=radius,
-            total_len=total_len,
-            size=size,
-            tick=tick,
-            label_text=label_text,
-            font_size=font_size,
-            font_family=font_family,
-            track_type=track_type,
-            strandedness=strandedness,
-            dpi=dpi,
+    for label_index, (label_text, tick, geometry) in enumerate(
+        circular_tick_labels(
+            radius,
+            total_len,
+            size,
+            ticks,
+            font_size,
+            font_family,
+            track_type,
+            strandedness,
+            dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
             tick_width=tick_width,
             length_reference_radius_px=length_reference_radius_px,
+            record_transform=record_transform,
+            tick_interval=tick_interval,
             length_threshold=length_threshold,
         )
+    ):
+        angle = 360.0 * (tick / total_len)
         path_radius = geometry.path_radius_px
         label_as_feature_length = total_len * 1.5 * geometry.bbox_width_px / (2 * math.pi * max(1.0, path_radius))
         reverse_path = 90 <= angle < 270
@@ -663,6 +747,9 @@ def generate_circular_tick_labels(
 
 __all__ = [
     "CircularTickLabelGeometry",
+    "TickMark",
+    "circular_tick_labels",
+    "circular_tick_marks",
     "get_circular_tick_intervals",
     "get_circular_tick_label_radius_bounds",
     "get_circular_tick_path_radius_bounds",

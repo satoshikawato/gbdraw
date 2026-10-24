@@ -12,6 +12,180 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
+
+- Patch release of 0.14.0. Session files are unchanged (Session version 48).
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.1.md). Publication
+  dates are recorded in
+  [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
+- Gallery: the HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018
+  tutorials start from the Web defaults and generate after each change, with a
+  preview of every stage; each now lists every setting the Gallery figure needs
+  (Multi-Record Canvas off, outline colors, `rep_origin`, label spacing).
+- Gallery: like the other Gallery tutorials, hepatoplasmataceae_collinear now
+  generates after each step (defaults, LOSATP collinear blocks, identity
+  colors, layout), and its figure and Session now come from a fresh upload, so
+  they show the organism name lines a reader's own upload shows. The card
+  command of a Gallery figure saved in the Web app now declares the record
+  names (`--record_label`, `--record_subtitle`) and the axis colour
+  (`--axis_stroke_color`) that its Session draws, so the command draws the
+  Gallery figure; the BGC0000708-BGC0000713 command lacked its gray axis
+  (OV-1703, #1334).
+- Gallery: a published Session made in the Web app keeps the File card rows
+  that Save writes, so Load restores an inferred record name as inferred and
+  **Reset Settings** no longer clears it (OV-1701, #1334).
+- Web app: work repeated on unchanged inputs was removed (redundant-work audit).
+  - **Generate Diagram** encodes a newly added file in milliseconds instead of
+    about 0.5 s per 12 MB, **Save Session** no longer re-reads or re-hashes the
+    input files, and returning to Linear no longer reads every File card again
+    (#1293).
+  - **Align** and the feature-edit helpers reuse the inputs the last Generate
+    parsed: on the hepatoplasmataceae Gallery Session the Align helper takes
+    about 0.5 s instead of about 10 s, and it builds two layouts instead of
+    three. Comparison tables are read once, and font subsets are made once per
+    set of characters (#1294, #1297, #1298).
+  - A blastp threshold change filters the kept hits again instead of parsing
+    every raw protein table, and the protein manifest and raw tables are
+    checked once; a file with several File cards is parsed once (#1295).
+  - Generate no longer stages tables that nothing reads, and the blastp protein
+    extraction reads the GenBank records the Worker already holds instead of
+    receiving and parsing the file again (#1296, #1299).
+  - The Generate after a failed one (for example after the Label fit choice)
+    reuses the sources the failed Generate already parsed: about 2.9 s instead
+    of 4.0 s on a 5.5 Mb GenBank file (#1301).
+  - LOSAT hashes each record's FASTA once per file (#1302, #1304), and the
+    first blastp Generate after an upload sends and parses each new file once
+    for all File cards and the diagram: about 4.4-5.1 s instead of 7.6-8.0 s
+    for six cards of a 17.5 MB GenBank file (#1307).
+- Web app: Circular **Generate Diagram** with similarity rings reads each ring
+  file and the reference sequence once per file, not on every Generate, so a
+  repeat Generate no longer waits on "Preparing sequence comparisons for the
+  circular diagram" (#1291).
+- Changed: the command line and the Python API search the whole reference file
+  for Circular similarity rings (`--losat losatn` / `tlosatx`), as the web app
+  does: every record with a sequence, uncropped, also records that are not
+  drawn, and every FASTA entry in GFF3 mode. Ring E-values (and so the E-value
+  filter) and LOSAT raw-cache keys change for runs that draw some records of
+  a file, one record of it, or a crop; they now equal the web app's, so a
+  Session saved from the command line opened in the web app reuses its ring
+  LOSAT results. The ring rows stay in the search frame of the drawn record,
+  so `--losat_output_dir`, `conservation.tsv`, and Sessions hold the same
+  frame as before; the raw-cache entries keep the whole-file search output
+  (#1314).
+- Fixed: Circular similarity rings (PD-OI-073, #1323).
+  - Every ring table (an uploaded table, `--conservation_table`, the ring
+    tables of a Session) is read in the search frame of the drawn record: the
+    record after its crop, on its source strand, 1-based. On a
+    reverse-complemented record the hits are drawn at their place; they were
+    drawn mirrored. A row outside the drawn record is skipped with a warning.
+  - In the web app, ring LOSAT hits on a cropped record are drawn at their
+    place: Generate converts the whole-file search rows to the search frame
+    with the same Python code as the command line, and a Session stores the
+    converted rows. A Session saved by 0.14.0 with a crop and ring LOSAT
+    still holds unconverted rows: its ring draws as in 0.14.0 on a forward
+    crop, and at another unconverted place on a reverse-complemented crop,
+    until the next Generate, which reuses the raw LOSAT cache and converts
+    the rows. Without a crop its rows are already in the search frame, so a
+    reverse-complemented record now draws them at their place.
+  - The web app's message for a ring LOSAT input error says to use the
+    reference file as the subject.
+- Fixed: LOSAT, the Circular conservation database, and restored match
+  sequences now read the same records as the drawing when a GenBank file holds
+  a record without a sequence, a file starts with a UTF-8 byte order mark, or a
+  GFF3 `#N` selector names a record (#1302, #1304, #1307).
+- Fixed: a Circular legend at a corner (`upper_left`, `upper_right`,
+  `lower_left`, `lower_right`) on a Multi-Record Canvas, which the web app
+  uses by default, was drawn over the records; it now clears them and the
+  canvas grows as on a single-record canvas (OV-1600, #1292).
+- Fixed: diagram layout collisions (#1316, #1317).
+  - A top or bottom plot title is drawn outside a corner legend that was
+    moved above or below the diagram, in the drawing and in the web app's
+    live preview; it was drawn through the legend rows.
+  - A one-gradient legend block (for example "Pairwise match identity") is as
+    wide as its title, with the bar centred under it, in Linear legends and in
+    top or bottom Circular legends; a title wider than the bar was cut off at
+    the canvas edge or ran out of the legend.
+  - A Linear plot title's box is the drawn width and height of its text,
+    italic parts included; a title wider than the records reached the canvas
+    edge.
+  - A Circular corner legend that cannot sit beside the circle no longer moves
+    feature labels.
+- Fixed: a record drawn from another start (`--display_start_coordinate`, a
+  records table start, or the web app's **Rotate record using this feature**) shows
+  its length in the definition, like a record without a start, for example
+  `16,569 bp`, in Circular and Linear; it showed the wrapped source spans, for
+  example `[3,307..16,569], [1..3,306] bp` (OV-1694, #1327). Rulers and ticks keep
+  their source coordinates.
+- Fixed: adding a plot title to a single-record Circular figure no longer moves
+  the GC content, GC skew, and tick rings. The layout reserves the center
+  definition the figure draws without the title, so the figure keeps its
+  untitled layout and the tick labels no longer run together. In 0.14.0 the
+  shorter definition let the rings jump to the preset's lanes. Figures without
+  a plot title are unchanged (OV-1710, #1329).
+- Fixed: a Circular custom track stack that adds an inside row the preset does
+  not have (an AT skew row, an inside annotation slot) packs its rows from the
+  feature ring toward the center again, as in 0.13.0, and takes its Auto
+  widths from the full definition the record draws alone. In 0.14.0 it
+  moved to the preset's lanes whenever the center definition left room, so a
+  Multi-Record Canvas, where each record draws its record summary, moved the GC
+  content, skew, and tick rings and could run the tick labels together. The
+  default stack, a stack with only the preset's rows (comparison rings and
+  depth series count as the preset's), and the Gallery figures are
+  unchanged; the H-CLI-02, H-CLI-09, and H-CLI-10 recipe figures are
+  regenerated (OV-1711, #1336).
+- Added: when the center definition text of a Circular record touches what an
+  inner track draws (GC content or GC skew, a feature block, or the axis
+  circle), gbdraw warns through the label-fit warning and offers a smaller
+  `--definition_font_size` that fits; the web app's label-fit notice offers it
+  under **Choose a fix**. The figure is drawn as before (OV-1606, #1328).
+- Fixed: in the web app, a legend or plot title that you moved stays inside the
+  canvas: the canvas grows to hold it with the usual 16 px edge margin, and
+  **Reset Layout** returns the automatic canvas (OV-1631, OV-1642, #1319).
+- Fixed: a Circular **Inner gap** or **Outer gap** typed as `1px` is stored as
+  `1`, so Save and a fresh Load agree (OV-1656, #1326).
+- Changed: the web app keeps one Undo/Redo History per drawing, plus a project
+  stream (#1313).
+  - A mode switch (Circular or Linear) shows the other drawing, writes
+    nothing, and records no step. Undo and Redo walk the shown drawing's steps.
+  - Reset settings, and edits to the Session title, Auto Reflow, PNG DPI,
+    Instant Preview, the LOSAT execution, or the input drafts, are project
+    steps that either drawing can undo. Reset settings is one step: one Undo
+    restores both drawings.
+  - Reset settings also gives the multi-record layout a new drawing's
+    defaults, derives the Circular comparison rings again from the kept files,
+    and resets a hidden drawing's applied palette and alignment Reset receipt
+    with it.
+  - Each drawing keeps 30 Undo steps and the project stream keeps 30 more,
+    under one shared memory budget (0.14.0 kept 30 in all).
+  - Instant Preview **On** applies every drawing's queued palette in one step.
+  - A drawing switch waits while a color rule table edit is being matched
+    (OV-1100).
+  - In **Canvas padding**, an empty or partial entry keeps the side until you
+    leave the field, then becomes 0.
+  - The five auxiliary file cards (Priority File, Whitelist File, Blacklist
+    File, Default colors file, Specific rules file) behave as in 0.14.0:
+    **Remove** takes the file's rows out of both drawings and one Undo brings
+    them back. Such a change is a project step.
+  - Switching between Circular and Linear no longer re-sends or re-parses the
+    inputs: on the `vibrio-harveyi-group-collinear` Gallery Session the bytes
+    sent to the Worker over four Generates fall by 42 %.
+- Fixed: with the drawing change above (#1313), a Legend offset that nothing
+  names is released with its Result (OV-110), a reflow lands in its own
+  Result's drawing (OV-111), and OV-1162 to OV-1165, OV-1169, and OV-1201.
+- Fixed: the compact Result Preview layout and the width of **Reset zoom**
+  apply in every UI language; they applied only in English (OV-1535, #1290).
+- Fixed: the Run info tab, the feature popup's label note, the Label Not Shown
+  dialog, and the Choose records dialog show the UI language in every language other
+  than English (#1312). The Run info text that Generate builds stays English.
+- Fixed: panning the Result from blank space and releasing over a feature or a
+  pairwise match no longer opens that popup (OV-1537, #1308).
+- Web app: a record name inferred from a *Candidatus* organism now reads
+  `<i>Ca.</i> Tyloplasma litorale Fukuoka2020`: the abbreviation in italics
+  and the name upright, as nomenclature requires. It read `Candidatus
+  <i>Tyloplasma litorale</i> Fukuoka2020` (OV-1720, #1334).
+- Documentation: the Vibrio harveyi group collinear tutorial says that the
+  Linear ruler keeps each record's own coordinates (#1303).
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.

@@ -11,9 +11,14 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import LinearMultiRecordOptions
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.api.diagram import (
+    assemble_circular_diagram_from_record,
+    assemble_linear_diagram_from_records,
+)
+from gbdraw.core.text import calculate_svg_bbox_dimensions
 from gbdraw.layout.composition import LegendPlacement, TitlePlacement
 from gbdraw.layout.spatial import Aabb, union_aabbs
+from gbdraw.render.groups.linear.plot_title import plot_title_content
 
 
 _TRANSLATE_RE = re.compile(
@@ -268,3 +273,97 @@ def test_linear_multi_row_track_metadata_uses_final_primary_translation() -> Non
         assert sum(y_value for _x_value, y_value in translations) == pytest.approx(
             record_payload["axisYpx"]
         )
+
+
+@pytest.mark.parametrize(
+    ("title", "parts"),
+    [
+        ("Audit plot title", [("Audit plot title", "normal")]),
+        (
+            "<i>Escherichia coli</i> O157:H7 str. Sakai",
+            [("Escherichia coli", "italic"), (" O157:H7 str. Sakai", "normal")],
+        ),
+    ],
+)
+def test_linear_plot_title_box_is_its_painted_width(title: str, parts: list[tuple[str, str]]) -> None:
+    """OV-1608: the title's composition box is the painted width of its styled parts."""
+    family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+    content = plot_title_content(title, font_family=family, font_size=32.0, dpi=96)
+    sizes = [
+        calculate_svg_bbox_dimensions(text, family, 32.0, 96, font_style=style)
+        for text, style in parts
+    ]
+    width = sum(size[0] for size in sizes)
+    height = max(size[1] for size in sizes)
+    assert content.local_bounds.width == pytest.approx(width)
+    assert content.local_bounds.height == pytest.approx(height)
+    assert content.local_bounds.min_x == pytest.approx(-0.5 * width)
+    assert content.local_bounds.min_y == pytest.approx(-0.5 * height)
+
+
+def _length_bar_canvas_bounds(root: ET.Element, local: dict[str, float]) -> Aabb:
+    """The scale's bounds on the canvas: its metadata bounds at its leading translate."""
+    group = next(
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g" and element.attrib.get("id") == "length_bar"
+    )
+    assert group.attrib["data-gbdraw-composition-role"] == "primary"
+    leading_x, leading_y = _translations(group)[0]
+    return Aabb(
+        local["x"] + leading_x,
+        local["y"] + leading_y,
+        local["x"] + local["width"] + leading_x,
+        local["y"] + local["height"] + leading_y,
+    )
+
+
+# PD-OI-052 scenario revision 2 (Owner, 2026-10-23): the composition metadata
+# records the Linear scale's bounds, so the Web canvas can grow for a moved
+# scale as it does for the Legend and the title.
+@pytest.mark.linear
+@pytest.mark.parametrize("positions", (None, ("#1@1", "#2@2")))
+def test_linear_metadata_records_the_scale_bounds(positions: tuple[str, ...] | None) -> None:
+    # One record, and two records in two rows of a Multi-Record Canvas.
+    records = [_record("record_a"), _record("record_b", length=800)][: 1 if positions is None else 2]
+    drawing = assemble_linear_diagram_from_records(
+        records,
+        cfg=_config(),
+        selected_features_set=["CDS"],
+        legend="right",
+        **({} if positions is None else {"layout": LinearMultiRecordOptions(multi_record_positions=positions)}),
+    )
+    root = ET.fromstring(drawing.tostring())
+    metadata = json.loads(root.attrib["data-gbdraw-composition"])
+    local = metadata["lengthBar"]["localBounds"]
+    assert set(metadata["lengthBar"]) == {"localBounds"}
+    assert local["width"] > 0.0 and local["height"] > 0.0
+    scale = _length_bar_canvas_bounds(root, local)
+    primary = metadata["primary"]["finalBounds"]
+    # The scale is painted inside the primary bounds, as its lowest item.
+    assert scale.min_x >= primary["x"] - 1e-9
+    assert scale.max_x <= primary["x"] + primary["width"] + 1e-9
+    assert scale.min_y >= primary["y"] - 1e-9
+    assert scale.max_y == pytest.approx(primary["y"] + primary["height"], abs=1e-9)
+
+
+@pytest.mark.linear
+def test_linear_metadata_has_no_scale_bounds_without_a_drawn_scale() -> None:
+    hidden = assemble_linear_diagram_from_records(
+        [_record()],
+        cfg=apply_config_overrides(_config(), {"objects.scale.show": False}),
+        selected_features_set=["CDS"],
+    )
+    multi_record = assemble_linear_diagram_from_records(
+        [_record("record_a"), _record("record_b", length=800)],
+        cfg=_config(track_layout="above"),
+        selected_features_set=["CDS"],
+        # Two records in one row draw no scale.
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
+    )
+    circular = assemble_circular_diagram_from_record(
+        _record(), cfg=apply_config_overrides(None, None), legend="right"
+    )
+    for drawing in (hidden, multi_record, circular):
+        root = ET.fromstring(drawing.tostring())
+        assert "lengthBar" not in json.loads(root.attrib["data-gbdraw-composition"])

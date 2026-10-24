@@ -3,6 +3,7 @@
 // record list with a region does not dereference null.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -16,7 +17,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { serializeActiveRenderFiles } = await import('../../gbdraw/web/js/services/config.js');
+const { serializeActiveRenderFiles, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildCanonicalRenderRequest, compareCanonicalRenderRequests, decodeCanonicalResourceText,
   projectCanonicalSessionRequest
@@ -29,11 +30,11 @@ const bytes = new TextEncoder().encode('LOCUS c.gb\n//\n');
 const genbank = {
   name: 'c.gb', type: 'text/plain', size: bytes.byteLength, lastModified: 1, arrayBuffer: async () => bytes.slice().buffer
 };
-const drawing = state.drawings.circular;
+const drawing = modeDrawing(state, 'circular');
 
 // Every case starts from one Circular GenBank file and its own form values.
 const circularState = (form) => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.files.c_gb = genbank;
   state.circularRecordList.value = [];

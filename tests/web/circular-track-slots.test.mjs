@@ -23,6 +23,8 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempRoot, 'services', 'drawing-view.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(
@@ -463,6 +465,23 @@ const gcRows = (state) => state.adv.circular_track_slots
   .filter((slot) => slot.renderer === 'dinucleotide_content')
   .map((slot) => ({ id: slot.id, enabled: slot.enabled, marked: '_suppressed_by_global' in slot.params }));
 
+// A2 W4: turning a non-empty custom stack on adds the managed comparison ring
+// rows in that call (no watcher follows the toggle).
+test('turning the custom stack on adds the managed comparison ring rows', () => {
+  const state = createState({
+    conservationEnabled: true,
+    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
+  });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  editor.setCircularTrackSlotsEnabled(false);
+  assert.equal(state.adv.circular_track_slots.some((slot) => slot.renderer === 'sequence_conservation'), false);
+
+  editor.setCircularTrackSlotsEnabled(true);
+
+  assert.deepEqual(state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation')
+    .map((slot) => slot.params.fileName), ['pair.tsv']);
+});
+
 // TR-06: Hide GC Content owns the visibility of its rows whether or not the
 // custom stack is in use.
 test('un-hiding GC while the custom stack is off restores the row the hide disabled', () => {
@@ -604,4 +623,22 @@ test('Circular editor shows a row issue in the UI language (D-51)', async () => 
   } finally {
     await setUiLocale('en');
   }
+});
+
+test('OV-1656: the Circular gap writer stores one text, so `1px` is `1` before Save and after Load', () => {
+  const state = createState();
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const slot = state.adv.circular_track_slots[0];
+  for (const field of /** @type {const} */ (['inner_gap_px', 'outer_gap_px'])) {
+    editor.updateCircularTrackSlotGap(slot, field, ' 1px ');
+    assert.strictEqual(slot[field], '1', field);
+    editor.updateCircularTrackSlotGap(slot, field, '2.5 PX');
+    assert.strictEqual(slot[field], '2.5', field);
+    editor.updateCircularTrackSlotGap(slot, field, '10em');
+    assert.strictEqual(slot[field], '10em', 'an invalid draft stays visible');
+    editor.updateCircularTrackSlotGap(slot, field, '');
+    assert.strictEqual(slot[field], null, 'blank is Auto');
+  }
+  editor.updateCircularTrackSlotGap(slot, 'width', '3px');
+  assert.notEqual(slot.width, '3', 'only the gap fields');
 });

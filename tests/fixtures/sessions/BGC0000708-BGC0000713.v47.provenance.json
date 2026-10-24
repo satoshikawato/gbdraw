@@ -48,12 +48,12 @@
   "requestSchema": 9,
   "replay": {
     "svg": "BGC0000708-BGC0000713.v47.replay.svg",
-    "code": "771235bee with the Linear row gap between above_feature labels and the definition gap from the scalar axis labels of fix/linear-label-row-gaps",
+    "code": "fix/moved-scale-canvas-growth, from the commit that recorded the Linear scale bounds in the composition metadata (fix/layout-collision-audit before)",
     "command": "python -c 'from gbdraw.cli import main; main()' linear --session BGC0000708-BGC0000713.v47.gbdraw-session.json.gz -o BGC0000708-BGC0000713.v47.replay -f svg",
-    "sha256": "e14428e90a2a55d9b7ceed60f0addd9bd5b99a165c47543986edc4571305e475",
+    "sha256": "9b5cccc21e73920b22fdaf337ab29df963d17e650032df17db924885e5b452ad",
     "mainReplaySha256": "0243daa566ac01c917e73662c16d3c23c21152c3929655bef2aa410c6a6a2f9f",
     "mainReplayEqualsBaseReplay": false,
-    "differenceFromMainReplay": "record row offsets and one feature label (Linear label packing), then 24 white label boxes and one wider leader (label boxes; the label text is unchanged), then float last bits (one owner of the Linear record placement), then one turned above_feature label (livO) 0.38 px further from its axis and the rows below it (the row gap between above_feature labels); the comparison bands are the same",
+    "differenceFromMainReplay": "record row offsets and one feature label (Linear label packing), then 24 white label boxes and one wider leader (label boxes; the label text is unchanged), then float last bits (one owner of the Linear record placement), then one turned above_feature label (livO) 0.38 px further from its axis and the rows below it (the row gap between above_feature labels), then the Legend block of the \"Pairwise match identity\" gradient as wide as its title with the bar centred under it, the Legend 7 px further left and 14 px wider, and the plot title box as wide as its painted text, 10 px shorter, which moves the canvas height and the title up, then the composition metadata gains the Linear scale bounds (lengthBar), which paint nothing; the comparison bands are the same",
     "storedResultEqualsMainReplay": true
   },
   "reversedRecordItemsInV": {

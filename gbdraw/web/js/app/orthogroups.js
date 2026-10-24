@@ -19,6 +19,7 @@ import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { clearDormantGroupNames, clearGroupRename, setGroupDescription, setGroupName } from '../services/drawing/group-names.js';
 import {
   ORTHOGROUP_ID_KEYS,
   RECORD_INDEX_KEYS,
@@ -325,7 +326,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * reactive objects.
  * @typedef {object} OrthogroupEditorState
  * @property {{ value: OrthogroupGroup[] }} orthogroups
- * @property {{ linear: OrthogroupEditorDrawing }} drawings Similarity groups are the Linear drawing's (registry: `config.webEdits`, linear only).
+ * @property {(mode: 'linear') => OrthogroupEditorDrawing} drawingOfMode Similarity groups are the Linear drawing's (registry: `config.webEdits`, linear only).
  * @property {{ value: string }} selectedOrthogroupId
  * @property {{ value: string }} orthogroupSearch
  * @property {{ value: string }} orthogroupSortMode
@@ -339,12 +340,10 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * @property {() => { status: string, reason: string } | null} [sessionOperationAvailability]
  */
 
+/** @import { GroupNamesSlice, GroupNamesView } from '../services/drawing/group-names.js' */
 /**
- * The group names of a drawing (`DrawingState` of state.js); reactive objects.
- * @typedef {object} OrthogroupEditorDrawing
- * @property {Record<string, string>} orthogroupNameOverrides
- * @property {Record<string, string>} orthogroupDescriptionOverrides
- * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ * The group names of a drawing (`DrawingState` of state.js), and the handle their writers take.
+ * @typedef {GroupNamesView & { readonly slices: { readonly groupNames: GroupNamesSlice } }} OrthogroupEditorDrawing
  */
 
 /**
@@ -511,7 +510,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
 
   /** @param {GroupOrId} groupOrId */
   const resolveOrthogroupName = (groupOrId) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
@@ -521,7 +520,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
 
   /** @param {GroupOrId} groupOrId */
   const resolveOrthogroupDescription = (groupOrId) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
@@ -539,7 +538,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   // put into the field).
   /** @param {GroupOrId} groupOrId */
   const orthogroupDescriptionFieldText = (groupOrId) => (
-    ownEntry(state.drawings.linear.orthogroupDescriptionOverrides, renameKey(groupOrId)) || ''
+    ownEntry(state.drawingOfMode('linear').orthogroupDescriptionOverrides, renameKey(groupOrId)) || ''
   );
 
   /** @param {GroupOrId} groupOrId */
@@ -556,7 +555,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   // typing a description does not rebuild the list rows.
   /** @type {{ readonly value: Set<string> }} */
   const renamedOrthogroupIds = computed(() => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     return new Set([
       ...Object.keys(drawing.orthogroupNameOverrides), ...Object.keys(drawing.orthogroupDescriptionOverrides)
     ]);
@@ -883,7 +882,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
 
   /** @param {unknown} orthogroupId @param {unknown} value */
   const setOrthogroupNameOverride = (orthogroupId, value) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -891,17 +890,12 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const group = getOrthogroupById(id);
     if (!group) return;
     const normalized = normalizeText(value);
-    const base = normalizeText(group?.name);
-    if (!normalized || normalized === base) {
-      delete drawing.orthogroupNameOverrides[id];
-      return;
-    }
-    drawing.orthogroupNameOverrides[id] = normalized;
+    setGroupName(drawing.slices.groupNames, id, normalized === normalizeText(group?.name) ? '' : normalized);
   };
 
   /** @param {unknown} orthogroupId @param {unknown} value */
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -909,33 +903,27 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const group = getOrthogroupById(id);
     if (!group) return;
     const normalized = normalizeText(value);
-    const base = normalizeText(group?.description);
-    if (!normalized || normalized === base) {
-      delete drawing.orthogroupDescriptionOverrides[id];
-      return;
-    }
-    drawing.orthogroupDescriptionOverrides[id] = normalized;
+    setGroupDescription(drawing.slices.groupNames, id, normalized === normalizeText(group?.description) ? '' : normalized);
   };
 
   /** @param {unknown} [orthogroupId] */
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
-    delete drawing.orthogroupNameOverrides[id];
-    delete drawing.orthogroupDescriptionOverrides[id];
+    clearGroupRename(drawing.slices.groupNames, id);
   };
 
   // Dormant names are listed and cleared here (D-21).
-  const orthogroupDormantNames = computed(() => Object.values(state.drawings.linear.orthogroupDormantOverrides || {})
+  const orthogroupDormantNames = computed(() => Object.values(state.drawingOfMode('linear').orthogroupDormantOverrides || {})
     .map((entry) => normalizeText(entry?.name) || normalizeText(entry?.description)).filter(Boolean));
   const clearOrthogroupDormantOverrides = () => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOfMode('linear');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    Object.keys(drawing.orthogroupDormantOverrides || {}).forEach((key) => delete drawing.orthogroupDormantOverrides[key]);
+    clearDormantGroupNames(drawing.slices.groupNames);
   };
 
   const clearOrthogroupHighlight = () => {

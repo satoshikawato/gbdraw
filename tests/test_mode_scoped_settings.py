@@ -85,7 +85,7 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
     assert MODE_SCOPED_SETTINGS_REVISION == 5
     with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
         table = list(csv.DictReader(handle, delimiter="\t"))
-    assert len(table) == 282
+    assert len(table) == 280
     rows = set()
     for row in table:
         if row["migrate"] == "-":

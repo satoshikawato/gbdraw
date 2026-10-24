@@ -24,21 +24,62 @@ test('base64 preserves every byte and padding across chunk boundaries', () => {
   }
 });
 
-test('base64 bounds the temporary binary string while keeping the full resource', () => {
-  const originalBtoa = globalThis.btoa;
-  let maximumInput = 0;
+const randomBytes = (size, seed) => {
+  let state = seed >>> 0;
+  return Uint8Array.from({ length: size }, () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state >>> 24;
+  });
+};
+const ENCODER_SIZES = [0, 1, 2, 3, 4, 5, 24575, 24576, 24577, 65535, 65536, 65537, 1048577];
+
+const withoutNativeToBase64 = (fn) => {
+  const native = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'toBase64');
+  if (native) Object.defineProperty(Uint8Array.prototype, 'toBase64', { ...native, value: undefined });
+  try { return fn(); } finally {
+    if (native) Object.defineProperty(Uint8Array.prototype, 'toBase64', native);
+  }
+};
+
+test('base64 encoding uses the native encoder when the engine has one', () => {
+  const native = Uint8Array.prototype.toBase64;
   let calls = 0;
-  globalThis.btoa = value => {
-    maximumInput = Math.max(maximumInput, value.length);
+  Uint8Array.prototype.toBase64 = function (...options) {
     calls += 1;
-    return originalBtoa(value);
+    return typeof native === 'function'
+      ? native.apply(this, options)
+      : Buffer.from(this).toString('base64');
   };
+  let encoded;
+  try { encoded = bytesToBase64(randomBytes(70000, 7)); }
+  finally {
+    if (native) Uint8Array.prototype.toBase64 = native;
+    else delete Uint8Array.prototype.toBase64;
+  }
+  assert.equal(calls, 1);
+  assert.equal(encoded, Buffer.from(randomBytes(70000, 7)).toString('base64'));
+});
+
+test('the native and portable base64 encoders give identical text', () => {
+  for (const size of ENCODER_SIZES) {
+    const bytes = randomBytes(size, size + 1);
+    const expected = Buffer.from(bytes).toString('base64');
+    assert.equal(bytesToBase64(bytes), expected, `native size ${size}`);
+    assert.equal(withoutNativeToBase64(() => bytesToBase64(bytes)), expected, `portable size ${size}`);
+    assert.equal(withoutNativeToBase64(() => bytesToBase64(bytes.buffer)), expected, `portable buffer ${size}`);
+  }
+});
+
+test('the portable base64 encoder builds no binary string', () => {
+  const originalBtoa = globalThis.btoa;
+  let calls = 0;
+  globalThis.btoa = (value) => { calls += 1; return originalBtoa(value); };
   const bytes = new Uint8Array(8 * 1024 * 1024 + 2).fill(255);
   let encoded;
-  try { encoded = bytesToBase64(bytes); } finally { globalThis.btoa = originalBtoa; }
+  try { encoded = withoutNativeToBase64(() => bytesToBase64(bytes)); }
+  finally { globalThis.btoa = originalBtoa; }
   assert.equal(encoded, Buffer.from(bytes).toString('base64'));
-  assert(maximumInput <= 32768, 'Encoding must not materialize a full-resource binary string');
-  assert(calls > 1);
+  assert.equal(calls, 0);
 });
 
 test('text base64 retains native UTF-8 semantics for Unicode and lone surrogates', () => {
@@ -86,4 +127,24 @@ test('adopted-resource decoding preserves atob behavior on older engines', async
     if (nativeSet) Object.defineProperty(Uint8Array.prototype, 'setFromBase64', nativeSet);
     globalThis.atob = originalAtob;
   }
+});
+
+// OV-1566: `sha256Hex` is the one SHA-256-to-hex owner of the Web modules; the
+// font identity, the Worker's artifact and font identities, and the Pyodide
+// snapshot key call it instead of hex-encoding their own digests.
+test('sha256Hex is the only Web module that hex-encodes a SHA-256 digest', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const webRoot = join(process.cwd(), 'gbdraw/web/js');
+  const files = (await readdir(webRoot, { recursive: true })).filter((path) => path.endsWith('.js'));
+  const digesting = [];
+  for (const path of files) {
+    if ((await readFile(join(webRoot, path), 'utf8')).includes('subtle.digest(')) digesting.push(path);
+  }
+  assert.deepEqual(digesting.sort(), ['services/byte-utils.js']);
+  const { createHash } = await import('node:crypto');
+  const bytes = Uint8Array.from({ length: 300 }, (_, index) => index % 256);
+  const expected = createHash('sha256').update(bytes.subarray(7, 200)).digest('hex');
+  // A view of part of a buffer digests its own bytes, as the Worker's font and artifact readers pass them.
+  assert.equal(await codec.sha256Hex(bytes.subarray(7, 200)), expected);
+  assert.equal(await codec.sha256Hex(bytes.slice(7, 200).buffer), expected);
 });

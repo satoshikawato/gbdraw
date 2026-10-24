@@ -29,6 +29,7 @@ from gbdraw.labels.linear import (
     linear_label_fit,
 )
 from gbdraw.layout.spatial import Aabb
+from tests.utils.label_fit_warnings import assert_no_label_warning
 from gbdraw.labels.circular_fit import (
     CircularLabelLayout,
     CircularLabelPlacement,
@@ -413,7 +414,10 @@ def test_outer_levers_do_not_move_inner_labels() -> None:
         check_circular_label_fit(layouts, verify)
 
     rows = {row.kind: row for row in raised.value.report.rows}
-    assert list(rows) == [kind for kind in circular_fit_module.ROW_KINDS if kind != "separate_features"]
+    # Nothing was drawn, so the definition row is not offered (D-12).
+    assert list(rows) == [
+        kind for kind in circular_fit_module.ROW_KINDS if kind not in {"separate_features", "smaller_definition_font"}
+    ]
     assert rows["labels_out"].status == "found"
     # The outer levers do not move embedded labels either (OV-725).
     assert rows["outward_vertical"].reason == "Does not move inner, embedded, or radial labels"
@@ -858,9 +862,10 @@ def _drawn_label_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, args: l
         return original(canvas, *capture_args, **kwargs)
 
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", capture)
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", LabelLeadersCrossWarning)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", LabelLeadersCrossWarning)
         circular_main([*args, "-o", str(tmp_path / "out"), "-f", "svg"])
+    assert_no_label_warning(caught)
     keys = ("start_x", "start_y", "middle_x", "middle_y", "leader_start_x", "leader_start_y")
     rows = [[label["label_text"], *(round(float(label.get(key, 0.0)), 4) for key in keys)] for label in drawn[-1]]
     return len(rows), hashlib.sha256(json.dumps(rows).encode()).hexdigest()

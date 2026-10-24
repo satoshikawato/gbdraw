@@ -75,7 +75,7 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
     format_linear_tick_label,
 )
-from ...io.comparisons import filter_comparison_dataframe, read_comparison_table
+from ...io.comparisons import filter_comparison_dataframe, read_comparison_resource
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
@@ -650,13 +650,11 @@ def _read_comparison_files(
 ) -> tuple[DataFrame, ...]:
     """Read each comparison file of the request and log the thresholds that will filter it.
 
-    A file the request staged as a resource gives its table that resource's
-    identity, so the ``comparison_rows`` stage that filters it can be reused.
-    This runs outside that stage, so every request logs what it reads.
+    A file the request staged as a resource is parsed once per resource and
+    gives its table that resource's identity, so the ``comparison_rows`` stage
+    that filters it can be reused. This runs outside that stage, so every
+    request logs what it reads.
     """
-
-    # gbdraw.api imports this module, so its prepared-input owner is imported here.
-    from gbdraw.api.prepared import register_prepared_resource_value
 
     if not blast_files:
         return ()
@@ -670,9 +668,7 @@ def _read_comparison_files(
     tables: list[DataFrame] = []
     for comparison_file in blast_files:
         logger.info("INFO: Loading {}".format(comparison_file))
-        tables.append(
-            register_prepared_resource_value(read_comparison_table(comparison_file), comparison_file)
-        )
+        tables.append(read_comparison_resource(comparison_file))
     logger.info("INFO:             ... finished loading comparison file(s)")
     return tuple(tables)
 
@@ -1781,9 +1777,7 @@ def _collect_linear_primary_bounds(
     render_context: LinearRecordRenderContext,
     cfg: GbdrawConfig,
     multi_record_enabled: bool,
-    length_bar_group: GroupContent | None,
-    length_bar_offset_x: float,
-    length_bar_offset_y: float,
+    length_bar_bounds: Aabb | None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Aabb:
     """Collect one authoritative plot-space box without inspecting rendered SVG."""
@@ -1926,13 +1920,8 @@ def _collect_linear_primary_bounds(
             )
         )
 
-    if length_bar_group is not None and _content_bounds(length_bar_group).width > 0.0:
-        bounds.append(
-            _content_bounds(length_bar_group).translated(
-                horizontal_offset + float(length_bar_offset_x),
-                float(length_bar_offset_y),
-            )
-        )
+    if length_bar_bounds is not None:
+        bounds.append(length_bar_bounds)
     primary_bounds = union_aabbs(bounds)
     if primary_bounds is None or primary_bounds.width <= 0.0 or primary_bounds.height <= 0.0:
         raise RuntimeError("linear assembly produced no primary painted bounds")
@@ -2355,7 +2344,6 @@ def assemble_linear_diagram(
         canvas_config,
         cfg=cfg,
         line_kinds_by_record=local_definition_line_kinds,
-        record_transforms=record_transforms,
         record_presentations=presentations,
     )
     row_definition_width = 0.0
@@ -2371,7 +2359,6 @@ def assemble_linear_diagram(
             canvas_config,
             cfg=cfg,
             line_kinds_by_record=list(row_definition_line_kinds),
-            record_transforms=record_transforms,
             record_presentations=presentations,
         )
     record_depth_data: list[list[DepthTrackData]] = (
@@ -3243,7 +3230,6 @@ def assemble_linear_diagram(
                 row_line_kinds=row_definition_line_kinds[record_index],
                 record_index=record_index,
                 record_count=total_records,
-                record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                 record_presentation=presentations[record_index],
                 definition_column_left=definition_column_left,
                 record_key=str(record_keys[record_index]),
@@ -3254,6 +3240,16 @@ def assemble_linear_diagram(
         element
         for element in getattr(canvas, "elements", [])[primary_target_start:]
         if isinstance(element, Group)
+    )
+    # The scale's painted bounds where `add_length_bar_on_linear_canvas` drew
+    # it: one value for the primary bounds and the composition metadata.
+    length_bar_bounds = (
+        _content_bounds(length_bar_group).translated(
+            float(canvas_config.horizontal_offset) + float(length_bar_offset_x),
+            float(length_bar_offset_y),
+        )
+        if length_bar_group is not None and _content_bounds(length_bar_group).width > 0.0
+        else None
     )
     source_primary_bounds = _collect_linear_primary_bounds(
         records=records,
@@ -3273,9 +3269,7 @@ def assemble_linear_diagram(
         render_context=render_context,
         cfg=cfg,
         multi_record_enabled=multi_record_enabled,
-        length_bar_group=length_bar_group,
-        length_bar_offset_x=length_bar_offset_x,
-        length_bar_offset_y=length_bar_offset_y,
+        length_bar_bounds=length_bar_bounds,
         record_transforms=record_transforms,
     )
 
@@ -3349,6 +3343,7 @@ def assemble_linear_diagram(
         ),
         title_target=title_target,
         title_side=title_placement,
+        length_bar_local_bounds=length_bar_bounds,
     )
 
     primary_placement = composition_plan.placement_for("primary")

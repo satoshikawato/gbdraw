@@ -23,7 +23,7 @@ const positiveRow = (value, fallback = 1) => {
 };
 
 /**
- * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {readonly LayoutSequence[] | null | undefined} sequences
  * @param {LayoutEntry[] | null | undefined} [entries]
  * @returns {LinearRecordRow[]}
  */
@@ -49,7 +49,7 @@ export const reconcileLinearRecordLayout = (sequences, entries = []) => {
 };
 
 /**
- * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {readonly LayoutSequence[] | null | undefined} sequences
  * @param {LayoutEntry[] | null | undefined} [entries]
  * @param {{ enabled?: boolean }} [options]
  * @returns {{ uid: string, row: number }[]}
@@ -68,7 +68,7 @@ export const resolveEffectiveLinearRecordRows = (
 );
 
 /**
- * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {readonly LayoutSequence[] | null | undefined} sequences
  * @param {LayoutEntry[] | null | undefined} [entries]
  * @param {{ enabled?: boolean }} [options]
  */
@@ -150,7 +150,7 @@ export const planLinearSourceRowMove = ({
 };
 
 /**
- * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {readonly LayoutSequence[] | null | undefined} sequences
  * @param {LayoutEntry[] | null | undefined} entries
  * @returns {string[]}
  */

@@ -15,17 +15,15 @@ from ....config.models.objects import ObjectsDefinitionLinearConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.numeric import compensated_sum
 from ....core.text import (
-    calculate_bbox_dimensions,
-    calculate_svg_bbox_dimensions,
     create_text_element,
+    measure_mixed_text_line,
     parse_mixed_content_text,
 )
+from ....layout.record_labels import record_length_label
 from ....layout.spatial import Aabb, union_aabbs
 from ...group_content import DefinitionMeasurement
 from ....svg.ids import definition_group_svg_id
-from ....layout.record_labels import display_coordinate_label
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
@@ -91,10 +89,8 @@ class DefinitionGroup:
         record_index: int = 0,
         record_count: int = 1,
         definition_part: str = "main",
-        record_transform: RecordDisplayTransform | None = None,
         record_presentation: RecordPresentation | None = None,
     ) -> None:
-        self.record_transform = record_transform
         self.record_presentation = record_presentation
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
@@ -228,12 +224,10 @@ class DefinitionGroup:
         self.accession_label = self.track_id
 
         self.record_length: int = len(self.record.seq)
-        if self.record_transform is not None and self.record_transform.start_coordinate is not None:
-            self.length_label = display_coordinate_label(self.record_transform)
-        elif self._is_region_applied():
+        if self._is_region_applied():
             self.length_label = self._format_coordinate_span()
         else:
-            self.length_label = "{:,} bp".format(self.record_length)
+            self.length_label = record_length_label(self.record_length)
 
     def _measure_text(
         self,
@@ -243,23 +237,14 @@ class DefinitionGroup:
         font_style: str = "normal",
     ) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for styled text."""
-        _, height = calculate_bbox_dimensions(
-            text,
+        return measure_mixed_text_line(
+            [(text, font_style)],
             style.font_family,
             style.font_size,
             self.dpi,
             font_weight=style.font_weight,
-            font_style=font_style,
+            layout_height=True,
         )
-        width, _ = calculate_svg_bbox_dimensions(
-            text,
-            style.font_family,
-            style.font_size,
-            self.dpi,
-            font_weight=style.font_weight,
-            font_style=font_style,
-        )
-        return width, height
 
     def _measure_line(self, kind: str, text: str) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for a definition line."""
@@ -277,20 +262,18 @@ class DefinitionGroup:
     ) -> tuple[float, float]:
         """Measure mixed regular/italic definition content as rendered tspans."""
         style = self._style_for_line(kind)
-        total_width = 0.0
-        max_height = 0.0
-        for part in parts:
-            part_text = part.get("text")
-            if part_text is None:
-                continue
-            width, height = self._measure_text(
-                str(part_text),
-                style=style,
-                font_style="italic" if part.get("italic") else "normal",
-            )
-            total_width += width
-            max_height = max(max_height, height)
-
+        total_width, max_height = measure_mixed_text_line(
+            (
+                (str(part_text), "italic" if part.get("italic") else "normal")
+                for part in parts
+                if (part_text := part.get("text")) is not None
+            ),
+            style.font_family,
+            style.font_size,
+            self.dpi,
+            font_weight=style.font_weight,
+            layout_height=True,
+        )
         if max_height == 0.0 and plain_text:
             _, max_height = self._measure_line(kind, plain_text)
         return total_width, max_height

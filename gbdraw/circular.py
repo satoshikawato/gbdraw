@@ -342,9 +342,9 @@ def _get_args(
         help=(
             'Build the similarity rings with LOSAT: losatn compares nucleotide '
             'sequences (LOSAT blastn) and tlosatx their translations (LOSAT tblastx). '
-            'Each --conservation_sequence genome is the query and the displayed '
-            'records are the subject. Cannot be combined with --conservation_blast '
-            '(default: no LOSAT search).'
+            'Each --conservation_sequence genome is the query and every record of '
+            'the reference file (uncropped, also records not drawn) is the subject. '
+            'Cannot be combined with --conservation_blast (default: no LOSAT search).'
         ),
     )
     parser.add_argument(
@@ -361,7 +361,7 @@ def _get_args(
         metavar='CODE',
         type=parse_positive_int,
         default=None,
-        help='TLOSATX genetic code of the displayed (reference) records with --losat tlosatx (default: 1).',
+        help='TLOSATX genetic code of the reference file with --losat tlosatx (default: 1).',
     )
     parser.add_argument(
         '--conservation_losat_gencode',
@@ -403,8 +403,9 @@ def _get_args(
         metavar='DIR',
         default=None,
         help=(
-            'Write the raw LOSAT evidence to DIR; requires --losat. One TSV per ring '
-            'and conservation.tsv, which --conservation_table accepts unchanged.'
+            'Write the ring tables of the LOSAT search to DIR; requires --losat. One TSV per ring, '
+            'in the search frame of the drawn records, and conservation.tsv, which '
+            '--conservation_table accepts unchanged.'
         ),
     )
     _add_comparison_filter_args(parser)
@@ -887,7 +888,7 @@ def _cli_ring_error(exc: ValidationError, args: argparse.Namespace) -> Validatio
         )
     elif flag == "--conservation_reference":
         message = (
-            "--losat uses the displayed records as the subject; "
+            "--losat uses the reference file as the subject; "
             "--conservation_reference must be auto or subject."
         )
     else:
@@ -908,7 +909,7 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
 
 
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
-    """Per-ring raw TSVs and a ``--conservation_table`` manifest (design 3.7)."""
+    """Per-ring tables in the search frame and a ``--conservation_table`` manifest (design 3.7)."""
 
     # A Circular run result always carries its Circular request.
     request = cast(
@@ -918,7 +919,7 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
     rings = tuple(getattr(options, "conservation_search_results", None) or ())
     if not rings:
         raise ValidationError(
-            "LOSAT output requested, but no raw ring evidence was produced.",
+            "LOSAT output requested, but no ring table was produced.",
             diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
         )
     sequences = tuple(options.conservation_sequence_files or ())

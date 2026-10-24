@@ -131,7 +131,7 @@ for (const kind of ['color', 'label']) {
 }
 const cleanupOnlyProxy = () => '{}';
 cleanupOnlyProxy.destroy = () => { throw new Error(sentinel); };
-assert.throws(() => callJsonHelper({ globals: { get: () => cleanupOnlyProxy } }, 'measure_legend_text_json', []),
+assert.throws(() => callJsonHelper({ globals: { get: () => cleanupOnlyProxy } }, 'evaluate_rules_json', []),
   (error) => error.code === 'CLEANUP_FAILED' && error.stage === 'cleanup');
 const primary = { ...source, secondary: [] };
 assert.equal(resolveGenerationCleanupOutcome({ result: { error: primary }, destroyError: new Error(sentinel) }).error, primary);

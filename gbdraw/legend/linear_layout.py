@@ -5,7 +5,7 @@ from typing import Literal, Mapping
 
 from ..core.text import calculate_bbox_dimensions
 from .circular_layout import min_gradient_label_text
-from .metrics import legend_line_height, legend_text_x_offset
+from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
 from .table import LegendRowKey, as_legend_table
 
 
@@ -194,12 +194,13 @@ def _build_gradient_layout(
         )
 
     key, properties = gradient_entries[0]
-    title_height = calculate_bbox_dimensions(
+    title_width, title_height = calculate_bbox_dimensions(
         drawn_names[key].drawn,
         font_family,
         font_size,
         dpi,
-    )[1]
+    )
+    width, bar_x = single_gradient_block_x(bar_width, title_width)
     bar_y = title_height + (color_rect_size / 2.0)
     scale_label_y = bar_y + (color_rect_size / 2.0) + 2.0
     scale_label_height = max(
@@ -219,20 +220,20 @@ def _build_gradient_layout(
     entry = LinearGradientEntryLayout(
         key=key,
         properties=properties,
-        title_x=bar_width / 2.0,
+        title_x=width / 2.0,
         title_y=0.0,
-        bar_x=0.0,
+        bar_x=bar_x,
         bar_y=bar_y,
     )
     return LinearGradientLegendLayout(
         compact=False,
         entries=(entry,),
-        width=bar_width,
+        width=width,
         height=scale_label_y + scale_label_height,
         bar_width=bar_width,
         min_label_text=min_label_text,
-        min_label_x=0.0,
-        max_label_x=bar_width,
+        min_label_x=bar_x,
+        max_label_x=bar_x + bar_width,
         scale_label_y=scale_label_y,
     )
 

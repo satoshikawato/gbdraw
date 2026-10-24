@@ -143,7 +143,7 @@ test('Linear Use custom stack asks before dropping a Linear lane, and Circular S
     // the Linear Separate Strands and lane placement as they are.
     const linearDraft = () => page.evaluate(async (overrideKey) => {
       const { state } = await import('./js/state.js');
-      const drawing = state.drawings.linear;
+      const drawing = state.drawingOf('linear');
       return { separate: drawing.form.separate_strands,
         row: drawing.featurePlacementOverrides[overrideKey]?.placement?.side || null };
     }, key);

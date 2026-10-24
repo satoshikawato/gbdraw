@@ -44,4 +44,22 @@ def legend_text_x_offset(color_rect_size: float) -> float:
     return LEGEND_TEXT_OFFSET_RATIO * legend_swatch_size(color_rect_size)
 
 
-__all__ = ["LEGEND_SWATCH_SIZE_PATH", "legend_line_height", "legend_swatch_size", "legend_text_x_offset"]
+def single_gradient_block_x(bar_width: float, title_width: float) -> tuple[float, float]:
+    """The width of a one-gradient Legend block and the x of its bar.
+
+    The title is centred over the bar and may be wider than it; the block is
+    then as wide as the title and the bar is centred under it, so the whole
+    block starts at x=0 (OV-1261 Circular, OV-1640 Linear).
+    """
+
+    width = max(float(bar_width), float(title_width))
+    return width, (width - float(bar_width)) / 2.0
+
+
+__all__ = [
+    "LEGEND_SWATCH_SIZE_PATH",
+    "legend_line_height",
+    "legend_swatch_size",
+    "legend_text_x_offset",
+    "single_gradient_block_x",
+]

@@ -1679,7 +1679,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
     try {
-      await downloadInteractiveSVG(captureSvgExport(state, { interactive: true }));
+      await downloadInteractiveSVG(captureSvgExport(state, state.drawingOfMode(state.generatedMode.value), { interactive: true }));
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
       const metadata = doc.querySelector('#gbdraw-interactive-feature-metadata');

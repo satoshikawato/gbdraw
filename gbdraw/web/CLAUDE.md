@@ -61,9 +61,16 @@ request, runs the whole render path, and writes a complete SVG document; it
 writes it as ordered pieces: the root start tag, each top-level element, and
 the end tag. A placed group is its start tag, its children text, and that
 text's revision (its sha256). Joined in order, the pieces are the document. The
-Generate rebuilds every part whose inputs changed. Publish cache fills only
-after the full render succeeds, and release them with the Worker; never reuse
-a final reply.
+Generate rebuilds every part whose inputs changed. A Generate publishes the
+decoded resources and parsed sources it built (they depend only on the
+resource bytes and their key) when it ends, also when its render fails, unless
+the request changed them; it publishes resolved records and render-stage
+results only after the full render succeeds. The blastp protein extraction
+helper and the Circular ring search-frame helper
+(`convertRingTablesToSearchFrame`) also publish, when they end, the decoded
+resources and parsed sources they built for the files they staged, unless they
+changed them; any other helper lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
+reply.
 
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page
@@ -117,15 +124,16 @@ in the same change.
 | The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`, and `drawingOfMode` until B; R15) |
 | The slices of a drawing's editor edits and settings, their only writers, and their install, capture, and reset for Session Load, History, and Reset | `js/services/drawing/` (R15) |
 | Typed Vue reactivity for drawing members (`ref`, `reactive`, `computed`) | `js/utils/reactivity.js` (R14) |
-| Registry of what a mode's Session slice holds | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
-| Session 46 mode slices and the split of a Session 27–44 draft into them | `js/services/mode-scoped-migration.js` (Python twin: `split_draft_into_modes` in `gbdraw/session_io.py`) |
+| Registry of what a drawing holds in a Session, by mode | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
+| Session 46 mode slices and the split of a Session 27–44 draft into them; once the Session format holds a list of drawings, Python alone converts a Session 27–44, once at Load | `js/services/mode-scoped-migration.js` until then (Python: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | When each setting reaches the Result: the application class and note of every settings control (R1) | `js/services/setting-application.js` (`SETTING_APPLICATION`; `SettingNote` in `js/components.js` renders the note) |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
-| Historical Gallery session migration | `js/services/gallery-session-migration.js` |
+| Historical Gallery session migration; its Session 27–44 conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/gallery-session-migration.js` until then |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
-| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes | `js/services/feature-edit-migration.js` (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
+| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes; this conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/feature-edit-migration.js` until then (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
+| Check of scoped Feature placements in the current writer's config (`validateScopedFeaturePlacements`; not a migration, so it stays when the migrations go) | `js/services/feature-edit-migration.js` (imported by `services/session-active-config-contract.js`) |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | Load's reading of saved color and stroke edits (a Legend row's `colorOverrides` and `strokeOverrides`, a feature's stroke overrides) for Session Load and the Session 46 Legend reading | `js/services/style-overrides.js` (Python: `_legend_color_overrides`, `_stroke_override_map`, `_stroke_width` in `gbdraw/session_io.py`) |
@@ -316,11 +324,13 @@ change through `showEditorIntent` (R3):
   feature fill, a Legend row fill that rules draw, and the Legend rows, names,
   and colors the rules draw;
 - a Change Scope choice;
-- the Specific rules file card Remove for a drawing that is not shown, which
+- until each drawing binds its own auxiliary file cards, the Specific rules file card Remove for a drawing that is not shown, which
   calls `moveLegendRecords` (`takeBackFileRulesOfHiddenDrawing` in
   `app/feature-editor/rule-actions.js`);
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
-  of Legend rows;
+  of Legend rows (a rename of a row that no rule or feature names writes the
+  row's name in the step the Legend name input or the popup's rename action
+  holds open, its own `rename` route);
 - an edit of another owner that retires the paint edits of what it removed,
   in that edit's step: track data that no longer names a Legend row, a drawn
   Depth, GC content, or GC skew track that the draft hides or shows again (its
@@ -337,13 +347,15 @@ calls the paint slice's writers; a new caller, or a caller that moves to
 another route, is an authority-only change.
 
 Guards: `tests/web/feature-visibility-rule-writers.test.mjs`
-(`PAINT_INTENT_WRITERS`: each function that writes the paint intent, directly
-or by calling a slice function with the paint or visibility-rules slice
-handle, by its name, by module, with its route; a slice reader is one only by
+(`PAINT_INTENT_WRITERS`: each function that writes the paint intent, directly,
+by calling a slice function with the paint or visibility-rules slice handle,
+or by calling a writer it imports from that slice's module whatever handle it
+passes, by its name, by module, with its route; a slice reader is one only by
 the `SLICE_READERS` list in `tests/web/helpers/drawing-state.mjs`, which the
 isolation table in `tests/web/per-mode-drawings.test.mjs` proves changes no
-drawing; a write through an alias, such as a row read from the list or a
-handle held under another name, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
+drawing, and a new reader is an authority-only change; a write through a row
+read from the list, a slice writer handed on as a value, one reached through another
+module's re-export, and `p.SLICE.method(` on a namespace import are not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
 `tests/web/feature-label-visual-unit.test.mjs`;
@@ -397,31 +409,47 @@ baseline (R13): lowering an entry is optional, and adding or raising one is an
 authority-only change.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
-parity case compares a live path with Python's Generate from the same draft; a
-case that compares one Web path with another through the same executor is not
-kept. A change to a live-edit path is done when the case for its edit kind in
+parity case or a step of the random walk compares a live path with Python's
+Generate from the same draft; a case that compares one Web path with another
+through the same executor is not kept. The pull-request random walk
+(`tests/web/live-generate-random-walk.playwright.spec.js`, over
+`tests/web/helpers/live-random-walk.mjs`) draws every edit kind of its list on
+every run, with a fixed seed, and after each step checks that the Result equals
+a fresh Generate and that the drawing the step did not edit keeps its slices.
+A change to a live-edit path is done when the walk passes, and, for a path or
+an editor state the walk does not draw, when the case for its edit kind in
 `tests/web/live-generate-parity.playwright.spec.js` passes with the popup
 opened and not, and with Auto Reflow on and off when the path reads it
-(`queueLabelReflow` without `force`). Each path that shows the editor intent
-(a live edit, Undo, Redo, a Result display, a drawing switch, Reset Settings,
-Session Load, and the automatic rerender) has rows in the spec's work
-allowlist (`WORK_ALLOWLIST`), each pinning the compile stages a case runs, the
-Worker requests it sends, and its compile count. A difference the Result may show
-until Generate is listed with its decision in
-`tests/web/contracts/live-generate-parity-allowed.json`; adding or changing an
-entry is an authority-only change. A mismatch the matrix
-finds is a bug: the case stays `test.fail` with its finding id until the fix
-makes it pass.
+(`queueLabelReflow` without `force`). A matrix case leaves that spec only
+when the walk draws its kind in the states the case pinned, which the walk
+spec asserts. Each path that shows the editor intent (a live edit, Undo, Redo,
+a Result display, a drawing switch, Reset Settings, Session Load, and the
+automatic rerender) has rows in the work allowlist (`WORK_ALLOWLIST` in
+`tests/web/helpers/live-work-allowlist.mjs`), each pinning the compile stages
+the path runs, the Worker requests it sends, and its compile count; the work
+guard in the parity spec runs the rows, and the walk names the step kind that
+draws each row's path, or none. A difference the Result may show until
+Generate is listed with its decision in
+`tests/web/contracts/live-generate-parity-allowed.json`, which the cases and
+the walk read; adding or changing an entry is an authority-only change. A
+mismatch a case or the walk finds is a bug: it stays an expected failure with
+its finding id until the fix makes it pass.
 
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/feature-visibility-actions.test.mjs`,
 `tests/web/feature-color-actions.test.mjs`,
-`tests/web/live-generate-parity.playwright.spec.js` (the matrix of edit kinds
-and editor states) with `tests/web/live-generate-parity-legend.playwright.spec.js`
-and `tests/web/live-generate-parity-track-data.playwright.spec.js` (Legend edits,
-track-data changes, and drawing switches): a live edit equals the next Generate;
-and the `projection-shapes` baseline in
+`tests/web/live-generate-random-walk.playwright.spec.js` with
+`tests/web/helpers/live-random-walk.mjs` (every edit kind of the walk on every
+run, a step kind for each work allowlist row, and each matrix case the walk
+replaced drawn in that case's states),
+`tests/web/live-generate-parity.playwright.spec.js` (the work guard over
+`tests/web/helpers/live-work-allowlist.mjs`, the matrix cases the walk does not
+replace, and named regression cases) with
+`tests/web/live-generate-parity-legend.playwright.spec.js` and
+`tests/web/live-generate-parity-track-data.playwright.spec.js` (named
+regression cases of Legend edits, track-data changes, and drawing switches): a
+live edit equals the next Generate; and the `projection-shapes` baseline in
 `tests/web/owner-graph-baseline.test.mjs`.
 
 ### R4: A fast path matches the canonical reader or declines
@@ -443,7 +471,11 @@ special case, when the paths disagree.
 Comparison evidence uses three frames: F, the search frame (the selected and
 cropped record on its source strand, which is the LOSAT output); V, the display
 frame (F with the effective reverse complement applied); and Src, input-file
-coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F. Every comparison
+coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F, except for Circular
+similarity rings: their LOSAT database is the whole reference file (uncropped),
+so their raw rows and **Save Raw LOSAT TSV** are that search's output in Src,
+and the Python owner `ring_rows_in_search_frame` converts them to F before they
+become ring tables. Every comparison
 table is read in F, and only the Python planner projects orientation to V.
 Human-readable coordinates (popups, FASTA headers) lead with Src. The Linear
 orientation owner is the File card's `region_reverse`, written by
@@ -582,7 +614,12 @@ bindings at the end of a record discovery and a drawing switch
 (`rebindAnnotationRecords` in `app/app-setup.js`). An auxiliary table import
 (default colors, color table, qualifier priority, whitelist, blacklist) is a
 transition of its file input (`importAuxiliaryTable` in `app/watchers.js`)
-that writes the drawing it resolved, through that drawing's slices.
+that writes through the slices of each drawing it changes. Until each drawing
+binds its own auxiliary file cards, a card's file is shared by every drawing:
+choosing, replacing, or removing it takes the earlier file's rows out of every
+drawing, and the new file's rows go into the shown drawing. Once each drawing binds its own
+auxiliary file cards, a card shows the shown drawing's file, a file chosen in it goes into the
+shown drawing, and its Remove changes only that drawing's rows (PD-OI-090).
 
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
 Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
@@ -601,20 +638,31 @@ or Reset Settings).
   composition root creates. A transaction, `undo`, `redo`, and availability go
   to the shown drawing's History; a step closes in the History that opened it,
   also after a drawing switch. Undo and Redo walk only the shown drawing's
-  steps and the project steps, and never switch or change another drawing
+  steps and the project steps, one step per operation, and never undo a step of
+  another drawing; the Undo or Redo of a drawing's step never switches the shown drawing
   (PD-OI-090, OIC-030): Undo takes the newer top step of the two, Redo the
   older. A new project step clears every Redo; a new drawing step clears its
   own and the project's.
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
-  with it where they are still as it left them. A project step is an operation
-  on every drawing (Reset Settings, which resets all drawings, in one step) or
-  a step that changes only Session-level values (the Session title, Auto
-  Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
-  Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
+  with it where they are still as it left them. A project step is one of:
+  an operation on the drawing list (adding, duplicating, renaming, moving, or
+  deleting a drawing); Reset all drawings (until the Reset dialog offers Reset
+  this drawing, Reset Settings resets all drawings); until each drawing binds
+  its own auxiliary file cards, a card's import, Remove, and Retry (R10); once
+  a genome input file can be replaced for every drawing that uses it, that
+  replacement (PD-OI-090); or a step that changes only Session-level values
+  (the Session title, Auto Reflow, PNG DPI, Instant Preview, the LOSAT
+  execution and threads, the Feature panel tab, and the drafts; R15-23
+  Q-DR-8). Such a step records only
   the Session-level changes made since it opened. A Session-level change made
   outside any step marks nothing unsaved and rides with the next step; the
-  drawing switch's own transient reset is no change.
+  drawing switch's own transient reset is no change. Each operation is one step. Reset
+  this drawing is one step of the shown drawing, Reset all drawings is the only step that
+  resets more than the shown drawing, and the Reset dialog's Cancel records nothing
+  (OIC-030). Deleting a drawing that has a Result or edits asks first, and the last
+  drawing cannot be deleted. A new drawing, a Duplicate included, starts with an empty
+  History (PD-OI-090).
 - Turning Instant Preview on is one project step with a part for each
   drawing: it applies every drawing's queued palette, and its Undo brings each
   queue back (R15-23 Q-DR-5, OV-1160). Turning it off changes only the flag.
@@ -639,10 +687,13 @@ or Reset Settings).
   and a file picker opened by another button record the same one step
   (`app/history-inputs.js`).
 - A file input whose change ends with asynchronous work is
-  `data-history-managed` and owns one `runUndoable` step that commits after
-  that work: a `file-uploader` `afterChange` import, and **Add Seq**
+  `data-history-managed` and owns one step that commits after that work: a
+  `file-uploader` `afterChange` import, and **Add Seq**
   (`addCircularConservationComparisonFile`), whose step holds the ring record
-  label read by the Python reader.
+  label read by the Python reader. Add Seq is a step of its drawing
+  (`runUndoable`); an auxiliary file card's import and its Retry are one
+  project step (`runProjectStep`) while the card's file is shared by every
+  drawing (R10); once each drawing binds its own cards, they are steps of the shown drawing.
 - An undoable action started while another action still runs on the open step
   applies at once and names that step (`runUndoable`); nothing waits. What an
   action writes after another caller committed its step is a step of its own
@@ -661,8 +712,7 @@ or Reset Settings).
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`) of the shown drawing's History, busy while an artifact replacement or checkpoint is
   open or an action owns the open intent. Undo and Redo, and their enabled state, also read one check of the
-  step they would take, the top of their stack (`topStepAvailability`): an Undo or Redo of a mode switch is
-  busy while the mode buttons are.
+  step they would take, the top of their stack (`topStepAvailability`).
 - A drawing's History intent holds, by reference (`buildIntentFilesData` in
   `services/history-snapshot.js`), the file bindings of the input slots its
   drawing uses and the auxiliary table files its own steps imported, the BLAST
@@ -698,6 +748,14 @@ Guards:
   state, and last-in-first-out Undo; each changed control adds exactly one step.
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a drawing round trip that records no step, and Undo while Generate runs.
+- `tests/web/history-per-drawing.test.mjs`: Undo and Redo walk the shown
+  drawing's steps and the project steps and never change the other drawing (a
+  hash of each drawing per step); a switch settles the departing drawing's open
+  step in that drawing and records none; Reset Settings, an Instant Preview
+  step are one project step each, and while a card's file is shared by every
+  drawing (R10) so is a card import's Retry; a Session-level
+  edit is a project step; the project step limit and the slot port of a
+  drawing that is not shown.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
   drags on one batch Result while another Result is displayed (B17), a
   Result switch after a legend sort that records no step (B18), Undo and Redo
@@ -767,11 +825,11 @@ is a leaf: like every leaf its modules import only leaves.
   the creation, or register the port after both owners exist. A closure at any
   depth counts, and so does a late-bound function variable that the root
   reassigns after the owner exists.
-- `state.<name> = <function>` outside `state.js` is a backdoor: a value an owner
-  needs from a higher layer arrives as a port or on an existing data path
-  (Result metadata, the admitted catalog).
-- `state` is frozen: no module adds or replaces a `state` member. A drawing's
-  slice members are written only by their slice module (R15).
+- `state` is frozen (`Object.freeze` in `state.js`): no module adds or
+  replaces a `state` member, so a value an owner needs from a higher layer
+  arrives as a port or on an existing data path (Result metadata, the admitted
+  catalog), never as a function assigned into `state`. A drawing's slice
+  members are written only by their slice module (R15).
 - A heavy derived value (`rulePreparation`) is triggered from one place per
   flow: the composition root's projection, the Generate compiler, or the owner
   of its input. An owner that only reads the result awaits `pending` rather
@@ -795,7 +853,7 @@ an entry is optional (the test names what may be lowered). Adding or raising an
 entry is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
-closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
+closures `owner-graph.forward-closure.v2`, whole-object ports,
 projection call shapes, heavy derived trigger sites
 `heavy-derived.trigger-site.v2`, identity read from a display value
 `owner-graph.identity-from-display.v1` (a join on a fill or stroke, and a join
@@ -818,10 +876,13 @@ a record, ask the Owner before implementing it.
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
 the baseline with a count no higher than recorded, per detector, and no module
 imports from a higher layer),
-`tests/web/owner-graph-detectors.test.mjs` (the detectors), and
+`tests/web/owner-graph-detectors.test.mjs` (the detectors),
 `tests/web/owner-graph-replay.test.mjs` (the detectors report the couplings
 that past merges introduced; it reads the revision history and runs in the
-`web-change-budget` job).
+`web-change-budget` job), `tests/web/drawing-context.test.mjs` (`state` is
+frozen; tsc refuses a write to a member, R14), and
+`tests/web/drawing-slices.test.mjs` (a slice module imports only leaves and
+other slice modules).
 
 ### R14: Typed boundaries
 
@@ -896,11 +957,14 @@ nothing else.
 
 ### R15: Drawing context and mode-scoped settings
 
-A project has one or more drawings, held by ID in `state.drawings`
-(`createDrawingState` in `state.js`). `state.activeDrawingId` names the shown
+A project has one or more drawings, held by ID in the drawing store of
+`state.js`, a `ReadonlyMap` that `createDrawingState` fills and only
+`state.drawingList()`, `state.drawingOf(id)`, and, until the Session format holds
+a list of drawings, `state.drawingOfMode(mode)` read. `state.activeDrawingId` names the shown
 drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
-is given when it is created and never changes, and its `mode` is fixed at
-creation (PD-OI-090). A drawing holds its settings (`form`, `adv`, the LOSAT
+comes from the kind it is created as (`circular`, `linear`, `linear-2`, …) and never
+changes, and its `mode` is fixed at creation; once the Session format holds a list of
+drawings, several drawings can have one mode (PD-OI-090). A drawing holds its settings (`form`, `adv`, the LOSAT
 search fields, the comparison plan, record display, the layout slot), its
 editor edits (per-feature edits and placements, colors and color rules, label
 tables and filters, Legend edits, annotation sets, canvas padding), and the
@@ -923,7 +987,9 @@ one drawing never reaches another (PD-OI-090).
 - Settings stay written by their controls and owner transitions (R7, R10).
   Only their install, capture, and reset go through the settings slice.
 
-- `state` keeps only what every drawing shares: the input files, the LOSAT
+- `state` keeps only what every drawing shares: the input files (once the Session format
+  holds a list of drawings, only their content: each drawing binds the files, records, and
+  regions it draws), the LOSAT
   caches, the LOSAT execution and thread settings, app settings (Auto Reflow,
   PNG DPI, palette Instant Preview), the Session title, the shown drawing's
   Result and artifacts (the artifacts of each drawing that is not shown wait
@@ -964,25 +1030,45 @@ one drawing never reaches another (PD-OI-090).
   the drawings `circular` and `linear` (read through `state.drawingList()`,
   `state.drawingOf(id)`, and `state.drawingOfMode(mode)`), and Save writes them as
   `modes.circular` and `modes.linear`.
+- Once the Session format holds a list of drawings (Session 49), a new Session starts with
+  one Circular drawing. Save Session writes, as one document, every drawing that has a
+  file, a changed setting, an edit, or a Result, the drawing that is shown, and only the
+  files a saved drawing uses. Load installs every drawing or changes nothing, shows each
+  saved Result without Generate, and shows the drawing that was shown at Save (PD-OI-090).
 - A Session 46 saves each drawing as `modes.circular` and `modes.linear`.
   `gbdraw/web_support/mode_scoped_settings.py` is the one registry of what a
   slice holds (domain, path, modes, row key, migration token);
   `tools/generate_mode_scoped_settings.py` writes it into
   `js/mode-scoped-settings.generated.js`, which is never edited by hand. Load
-  rebuilds each drawing from the projection of that mode's committed request,
-  then the slice's stored values, then the mode's defaults.
-  `services/mode-scoped-migration.js` splits a Session 27–44 draft into the two
-  slices, and `split_draft_into_modes` in `gbdraw/session_io.py` is its Python
-  twin. A Session 45 is not read.
+  rebuilds each drawing from the projection of its committed request,
+  then its stored values, then its mode's defaults.
+  Until the Session format holds a list of drawings, `services/mode-scoped-migration.js`
+  splits a Session 27–44 draft into the two slices, and `split_draft_into_modes` in
+  `gbdraw/session_io.py` is its Python twin; then Python alone converts a Session 27–44,
+  once at Load. Once the Session format holds a list of drawings, a Session 46, 47, or 48
+  moves to the list without Python, and Load makes the drawing of a mode that has no
+  Result only when the Session shows that mode was used
+  (its input files, a Save while it was shown, or a setting that differs from the default
+  and from the other mode's). A Session 45 is not read.
 
-Guards: `tests/web/drawing-context.test.mjs` (the key classes, one drawing per
-mode, no drawing key read from `state`, no `activeDrawing` identifier in
-`services/`, and Generate resolving it once); `tests/web/per-mode-drawings.test.mjs` (no
+Guards: `tests/web/drawing-context.test.mjs` (the key classes, the drawings that
+hold the drawing keys, no drawing key read from `state`, no `activeDrawing` identifier in
+`services/`, and Generate resolving it once);
+`tests/web/drawing-slices.test.mjs` (each member in exactly one slice, no
+module or template binding writing a slice member outside its slice,
+`install(capture(x))` giving back `x` also after `reset`, and
+`installShownDrawing` the one writer of `activeDrawingId`);
+`tests/web/drawing-of-mode-cap.test.mjs` (the `drawingOfMode` calls within
+`DRAWING_OF_MODE_CAP`, which may only fall, and only `ID_BY_MODE_OWNERS`
+naming a drawing ID by a mode; raising the cap or adding an owner is an
+authority-only change);
+`tests/web/per-mode-drawings.test.mjs` (no
 shared member object, and each mode's request carries its own drawing's
-values); `tests/web/mode-scoped-session.test.mjs` (the Session 46 round trip,
-and a Session 45 or a field outside the registry rejected);
+values); `tests/web/mode-scoped-session.test.mjs` (Save and Load of each drawing in
+the current format, a Session 46 read into its drawings, and a Session 45 or a field
+outside the registry rejected);
 `tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
-(the JavaScript and Python splits agree on shared vectors);
+(the Web Load of a Session 27–44 and Python's split agree on shared vectors);
 `tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
 equal to its Python source); and
 `tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,
@@ -1021,7 +1107,7 @@ state and the persisted/rendered model. It owns:
 - explicit track-slot projection;
 - per-feature edit and Feature placement rows (`diagramOptions.featureOverrides`
   and `featurePlacements`, built by `services/feature-placement.js`);
-- the layout-preference slot that a committed request sets in its mode's
+- the layout-preference slot that a committed request sets in its
   drawing (`modes.<mode>.ui.layoutPreferences` in a Session 46).
 
 `services/config.js` coordinates user-facing save and load actions. It must not
@@ -1031,7 +1117,8 @@ write retired fields into new sessions.
 
 `services/session-active-config-contract.js` is the DOM-free current writer
 contract used by normal restore and Gallery publication. Historical Gallery
-migration stays in `services/gallery-session-migration.js`; it does not clean up
+migration stays in `services/gallery-session-migration.js` until the Session format holds a
+list of drawings, then Python alone converts a Session 27–44, once at Load; it does not clean up
 current sessions. `services/gallery-session-publication.js` may align an admitted
 Gallery draft with its committed render intent, but ordinary import keeps its
 saved Result and active draft separate.
@@ -1054,6 +1141,11 @@ version-by-version history.
   target per item.
 - Linear renders one ordered multi-record layout. Record groups and explicit
   comparison pairs affect topology and must survive session round trips.
+- A region drawing, made with + New drawing from a feature, a whole record, or coordinates,
+  draws the region of the same record of the same file in source coordinates, 1-based and
+  inclusive; regions of several records make one Linear drawing with one region per record.
+  A region that crosses the origin of a circular record is refused with the reason. The
+  source drawing does not change (PD-OI-090).
 
 The preview and download layers consume render results; they must not infer a
 different grouping from the number of uploaded files.

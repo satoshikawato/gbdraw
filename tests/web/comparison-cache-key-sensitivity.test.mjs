@@ -100,7 +100,7 @@ test('a source batch searches a different database when a record of it changes (
   const hashText = async (text) => createHash('sha256').update(text).digest('hex');
   const contexts = async (uids, specs, fastaFor) => (await prepareLosatSourceBatches({
     sequences: uids.map((uid) => ({ uid, gb: sources[uid[0]], gff: null, fasta: null })), specs,
-    getEntry: async (index) => ({ fasta: fastaFor(index) }), buildArgs: () => ['--task', 'blastn'], hashText, protein: false
+    getEntry: async (index) => ({ fasta: fastaFor(index) }), getDigest: async (index) => hashText(fastaFor(index)), buildArgs: () => ['--task', 'blastn'], hashText, protein: false
   })).batches.map(({ scope, searchContext, query, subject }) => [scope, searchContext, query.hash, subject.hash]);
   const plain = (index) => `>r${index}\nACGT\n`;
   const changed = (changedIndex, text) => (index) => `>r${index}\n${index === changedIndex ? text : 'ACGT'}\n`;

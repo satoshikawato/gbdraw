@@ -3,6 +3,7 @@
 
 import math
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle
 
@@ -32,7 +33,7 @@ def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     return circle_desc
 
 
-def generate_circular_gc_content_path_desc(
+def circular_gc_content_line(
     radius: float,
     record_len: int,
     gc_df: DataFrame,
@@ -40,12 +41,12 @@ def generate_circular_gc_content_path_desc(
     norm_factor: float,
     dinucleotide: str,
     record_transform: RecordDisplayTransform | None = None,
-) -> str:
-    """
-    Generates the SVG path description for circular GC content representation using vectorization.
-    """
+) -> tuple[ArrayLike, ArrayLike] | None:
+    """The GC content line the path draws: display positions and their radii; the area lies between it and the
+    circle at ``radius * norm_factor``."""
+
     if gc_df.empty or record_len <= 0:
-        return ""
+        return None
 
     norm_radius: float = radius * norm_factor
 
@@ -68,6 +69,27 @@ def generate_circular_gc_content_path_desc(
     elif len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         radius_of_coordinate = np.append(radius_of_coordinate, radius_of_coordinate[0])
+    return positions, radius_of_coordinate
+
+
+def generate_circular_gc_content_path_desc(
+    radius: float,
+    record_len: int,
+    gc_df: DataFrame,
+    track_width: float,
+    norm_factor: float,
+    dinucleotide: str,
+    record_transform: RecordDisplayTransform | None = None,
+) -> str:
+    """
+    Generates the SVG path description for circular GC content representation using vectorization.
+    """
+    line = circular_gc_content_line(
+        radius, record_len, gc_df, track_width, norm_factor, dinucleotide, record_transform
+    )
+    if line is None:
+        return ""
+    positions, radius_of_coordinate = line
 
     angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90)
 
@@ -87,7 +109,7 @@ def generate_circular_gc_content_path_desc(
     return gc_desc
 
 
-def generate_circular_gc_skew_path_desc(
+def circular_gc_skew_line(
     radius: float,
     df: DataFrame,
     total_len: int,
@@ -95,9 +117,12 @@ def generate_circular_gc_skew_path_desc(
     norm_factor: float,
     dinucleotide: str,
     record_transform: RecordDisplayTransform | None = None,
-) -> str:
+) -> tuple[ArrayLike, ArrayLike] | None:
+    """The skew line the path draws: display positions and their radii; the areas lie between it and the circle
+    at ``radius * norm_factor``."""
+
     if df.empty or total_len <= 0:
-        return ""
+        return None
     norm_radius: float = radius * norm_factor
 
     column: str = f"{dinucleotide} skew"
@@ -115,6 +140,22 @@ def generate_circular_gc_skew_path_desc(
         segments = project_scalar_samples(positions, radius_of_coordinate, record_transform)
         positions = np.array([p.position for segment in segments for p in segment.points])
         radius_of_coordinate = np.array([p.value for segment in segments for p in segment.points])
+    return positions, radius_of_coordinate
+
+
+def generate_circular_gc_skew_path_desc(
+    radius: float,
+    df: DataFrame,
+    total_len: int,
+    track_width: float,
+    norm_factor: float,
+    dinucleotide: str,
+    record_transform: RecordDisplayTransform | None = None,
+) -> str:
+    line = circular_gc_skew_line(radius, df, total_len, track_width, norm_factor, dinucleotide, record_transform)
+    if line is None:
+        return ""
+    positions, radius_of_coordinate = line
     angles_rad = np.radians(360.0 * (positions / total_len) - 90)
 
     x_coords = radius_of_coordinate * np.cos(angles_rad)
@@ -133,6 +174,38 @@ def generate_circular_gc_skew_path_desc(
     return skew_desc
 
 
+def circular_scalar_area_line(
+    radius: float,
+    record_len: int,
+    scalar_df: DataFrame,
+    track_width: float,
+    norm_factor: float,
+    *,
+    value_column: str = "value_normalized",
+    position_column: str = "position",
+    close_at_record_len: bool = False,
+    record_transform: RecordDisplayTransform | None = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], float] | None:
+    """The outer line of a scalar area as the path draws it: display positions, their radii, and the baseline
+    radius the area is filled down to."""
+
+    if scalar_df.empty or record_len <= 0 or track_width <= 0:
+        return None
+
+    baseline_radius = max(0.0, (float(radius) * float(norm_factor)) - (0.5 * float(track_width)))
+    values = scalar_df[value_column].to_numpy(dtype=float)
+    values = np.clip(values, 0.0, 1.0)
+    positions = scalar_df[position_column].to_numpy(dtype=float)
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        segments = project_scalar_samples(positions, values, record_transform)
+        positions = np.array([p.position for segment in segments for p in segment.points])
+        values = np.array([p.value for segment in segments for p in segment.points])
+    elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
+        positions = np.append(positions, float(record_len))
+        values = np.append(values, values[0])
+    return positions, baseline_radius + (float(track_width) * values), baseline_radius
+
+
 def generate_circular_scalar_area_path_desc(
     radius: float,
     record_len: int,
@@ -147,21 +220,20 @@ def generate_circular_scalar_area_path_desc(
 ) -> str:
     """Return an annular filled area path for normalized scalar values."""
 
-    if scalar_df.empty or record_len <= 0 or track_width <= 0:
+    line = circular_scalar_area_line(
+        radius,
+        record_len,
+        scalar_df,
+        track_width,
+        norm_factor,
+        value_column=value_column,
+        position_column=position_column,
+        close_at_record_len=close_at_record_len,
+        record_transform=record_transform,
+    )
+    if line is None:
         return ""
-
-    baseline_radius = max(0.0, (float(radius) * float(norm_factor)) - (0.5 * float(track_width)))
-    values = scalar_df[value_column].to_numpy(dtype=float)
-    values = np.clip(values, 0.0, 1.0)
-    positions = scalar_df[position_column].to_numpy(dtype=float)
-    if record_transform is not None and record_transform.start_coordinate is not None:
-        segments = project_scalar_samples(positions, values, record_transform)
-        positions = np.array([p.position for segment in segments for p in segment.points])
-        values = np.array([p.value for segment in segments for p in segment.points])
-    elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
-        positions = np.append(positions, float(record_len))
-        values = np.append(values, values[0])
-    outer_radii = baseline_radius + (float(track_width) * values)
+    positions, outer_radii, baseline_radius = line
     angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
 
     outer_x = outer_radii * np.cos(angles_rad)

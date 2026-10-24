@@ -10,6 +10,9 @@ import {
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 // R4: tests/test_web_rule_matching.py runs the same cases through
 // gbdraw/features/visibility.py::should_render_feature, which Generate uses.
@@ -50,7 +53,7 @@ test('resolveFeatureDrawn answers every shared case as should_render_feature doe
   assert.equal(await preparationFor(state).prepareDrawn(), true);
   DRAWN.cases.forEach((vector, index) => {
     const featureOverrides = {};
-    if (vector.override) setFeatureVisibilityOverride(featureOverrides, features[index], vector.override);
+    if (vector.override) setFeatureVisibilityOverride(editsOf(featureOverrides), features[index], vector.override);
     const context = featureDrawnContext({
       featureOverrides,
       featureVisibilityManualRules: vector.visibilityRules || [],
@@ -73,9 +76,9 @@ test('resolveFeatureDrawn is unknown until Python has matched the rule it reache
   };
   assert.equal(resolveFeatureDrawn(feature, contextFor(state)), null);
   // An override decides before any rule, so it needs no match.
-  setFeatureVisibilityOverride(state.featureOverrides, feature, 'on');
+  setFeatureVisibilityOverride(editsOf(state.featureOverrides), feature, 'on');
   assert.equal(resolveFeatureDrawn(feature, contextFor(state)), true);
-  setFeatureVisibilityOverride(state.featureOverrides, feature, 'default');
+  setFeatureVisibilityOverride(editsOf(state.featureOverrides), feature, 'default');
   let calls = 0;
   const preparation = preparationFor(state, async (payload) => { calls += 1; return evaluatePythonRules(payload); });
   assert.equal(await preparation.prepareDrawn(), true);

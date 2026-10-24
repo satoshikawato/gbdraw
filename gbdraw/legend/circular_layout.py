@@ -9,7 +9,7 @@ from typing import Mapping, cast
 
 from ..core.text import calculate_bbox_dimensions
 from ..core.numeric import compensated_sum
-from .metrics import legend_line_height, legend_text_x_offset
+from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
 from .table import DrawnLegendName, LegendRowKey, as_legend_table
 
 
@@ -144,8 +144,9 @@ def _gradient_reserved_width(
         return 0.0
     width = GRADIENT_BAR_WIDTH_RATIO * float(color_rect_size)
     if len(gradient_entries) > 1:
-        width += max(entry.text_width for entry in gradient_entries) + float(x_margin)
-    return width
+        return width + (max(entry.text_width for entry in gradient_entries) + float(x_margin))
+    # One gradient reserves its block, title included (OV-1611).
+    return single_gradient_block_x(width, gradient_entries[0].text_width)[0]
 
 
 def _build_gradient_layout(
@@ -221,10 +222,7 @@ def _build_gradient_layout(
         + float(label_height)
         + (row_height * SINGLE_GRADIENT_TRAILING_GAP_RATIO)
     )
-    # The centered title can be wider than the bar; center the bar under it so
-    # that the whole block starts at x=0 and fits the reserved width.
-    width = max(bar_width, float(title_width))
-    bar_x = (width - bar_width) / 2.0
+    width, bar_x = single_gradient_block_x(bar_width, float(title_width))
     single_entry = CircularSingleGradientEntryLayout(
         key=entry.key,
         properties=entry.properties,
@@ -451,8 +449,9 @@ def build_circular_legend_layout(
         content_bottom = feature_height
         if gradient_layout is not None:
             gradient_y = max(0.0, (feature_height - float(gradient_layout.height)) / 2.0)
+            # Without feature rows the gradient block is the whole Legend (OV-1612).
             gradient_x = max(
-                feature_width + x_margin,
+                feature_width + x_margin if solid_entries else 0.0,
                 width - float(gradient_layout.width),
             )
             content_bottom = max(

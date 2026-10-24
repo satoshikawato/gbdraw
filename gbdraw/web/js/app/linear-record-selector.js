@@ -255,10 +255,8 @@ export const createLinearRecordSelector = ({
     if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
 
-    if (state.mode.value !== 'linear') {
-      Object.keys(selectorStateByUid).forEach((uid) => delete selectorStateByUid[uid]);
-      return;
-    }
+    // An inactive Linear source keeps its records, as an inactive Circular one does.
+    if (state.mode.value !== 'linear') return;
 
     const inputType = state.lInputType.value;
     /** @type {{ uid: string, primaryFile: FileLike, pairedFile: FileLike | null }[]} */

@@ -151,23 +151,20 @@ export const settingApplicationText = (application) => tm(TEXT[application]);
 export const settingApplicationSentence = (id) => (rowOf(id).application === 'generate' ? t('Changes apply on Generate.') : '');
 
 /**
- * The request paths of the live setting rows that a History step changed:
- * its change paths, `modes.<mode>.`-prefixed as a step records them or
- * already relative to the drawing as a restore passes them. A change path and
- * a row's draft path match when one is a prefix of the other, so a step that
- * replaced a whole object names every live field under it; a path whose
- * projected value equals the committed one applies nothing.
+ * The request paths of the live setting rows that a History step of the shown
+ * drawing changed: its change paths, relative to the drawing (each drawing has
+ * its own History, PD-OI-090). A change path and a row's draft path match when
+ * one is a prefix of the other, so a step that replaced a whole object names
+ * every live field under it; a path whose projected value equals the committed
+ * one applies nothing.
  * @param {readonly { path?: readonly (string | number)[] }[] | null | undefined} changes
- * @param {'circular' | 'linear'} mode The drawing whose fields count.
  * @returns {string[]}
  */
-export const liveSettingRequestPaths = (changes, mode) => {
+export const liveSettingRequestPaths = (changes) => {
   /** @type {Set<string>} */
   const paths = new Set();
   for (const change of Array.isArray(changes) ? changes : []) {
-    const raw = Array.isArray(change?.path) ? change.path.map(String) : [];
-    if (raw[0] === 'modes' && raw.length > 1 && raw[1] !== mode) continue;
-    const path = raw[0] === 'modes' ? raw.slice(2) : raw;
+    const path = Array.isArray(change?.path) ? change.path.map(String) : [];
     for (const row of SETTING_APPLICATION) {
       Object.entries(row.requestPaths || {}).forEach(([draftPath, requestPath]) => {
         const keys = draftPath.split('.');

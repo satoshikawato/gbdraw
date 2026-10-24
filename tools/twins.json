@@ -857,6 +857,21 @@
       "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
     },
     {
+      "id": "concern:circular-ring-subject-database",
+      "concern": "Circular similarity ring subject database (every record of the reference file that has a sequence, uncropped, as LOSAT FASTA text and its hash)",
+      "pythonOwner": [
+        "gbdraw/comparisons/circular_losat.py:ring_subject_records",
+        "gbdraw/comparisons/circular_losat.py:ring_subject_fasta"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/run-analysis.js:readAllLosatFasta"
+      ],
+      "vector": null,
+      "reason": "The Web builds the ring database in the browser and hashes it for the LOSAT cache key (its reader declines to the Worker helper read_all_sequence_records, which calls the Python reader); the CLI and Python API build it in Python. tests/web/run-analysis-simple-path.test.mjs runs both sides on the same files through tests/web/circular-ring-subject-oracle.py.",
+      "retireWhen": "the Web builds the ring database through the Python owner (Worker) instead of its own copy",
+      "source": "PR #1314 review B4 (OV-1682, Owner decision D-25)"
+    },
+    {
       "id": "concern:css-color-names",
       "concern": "CSS color names",
       "pythonOwner": [

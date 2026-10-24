@@ -20,10 +20,8 @@
  */
 
 /**
- * What the export capture reads of the app state: the refs it unwraps and each mode's drawing.
+ * What the export capture reads of the app state: the refs it unwraps.
  * @typedef {object} SvgExportState
- * @property {Record<'circular' | 'linear', SvgExportDrawing>} drawings
- * @property {ExportRef<string>} [generatedMode]
  * @property {ExportRef<number | string>} selectedResultIndex
  * @property {ExportRef<ReadonlyArray<{ name?: string } | undefined> | null>} results
  * @property {ExportRef<Element | null>} svgContainer
@@ -202,13 +200,14 @@ const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
 };
 
 // Capture the selected Result before any lazy export modules or libraries load.
-// Its popup settings and edits are those of the Result's mode: that mode's drawing.
+// Its popup settings and edits are those of the drawing the Result belongs to,
+// which the caller resolves (`displayedArtifactDrawing`).
 /**
  * @param {SvgExportState} state
+ * @param {SvgExportDrawing} drawing
  * @param {{ interactive?: boolean }} [options]
  */
-export const captureSvgExport = (state, { interactive = false } = {}) => {
-  const drawing = state.drawings[state.generatedMode?.value === 'linear' ? 'linear' : 'circular'];
+export const captureSvgExport = (state, drawing, { interactive = false } = {}) => {
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
   return {

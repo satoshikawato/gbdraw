@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
@@ -233,6 +234,17 @@ def _source_to_local_index(
     return (source - coord_base) * coord_step
 
 
+def _record_source_start(record: SeqRecord) -> int:
+    """The 1-based source position of a record's first base on its source strand.
+
+    It is where the record's search frame starts (PD-OI-073): the crop start of
+    a cropped record, also after a reverse complement, and 1 for a whole record.
+    """
+
+    coord_base, coord_step = _read_coord_map(record)
+    return coord_base if coord_step == 1 else coord_base - len(record.seq) + 1
+
+
 def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
@@ -313,30 +325,39 @@ _NON_ORGANISM_NAMES = frozenset(
 )
 
 
+_CANDIDATUS_PREFIX = re.compile(r"(?:candidatus|ca\.)\s+", re.IGNORECASE)
+
+
 def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
-    """Format organism and strain into publication-style HTML (e.g. <i>Genus species</i> strain)."""
+    """Format organism and strain into publication-style HTML.
+
+    ``<i>Genus species</i> strain``; a Candidatus taxon is
+    ``<i>Ca.</i> Genus species strain``.
+    """
     organism = str(metadata.organism or "").strip()
     strain = str(metadata.strain or "").strip()
 
-    candidatus = False
-    clean_org = organism
-    if clean_org.lower().startswith("candidatus "):
-        candidatus = True
-        clean_org = clean_org[11:].strip()
+    # "Candidatus" or an already abbreviated "Ca.", then any whitespace.
+    prefix = _CANDIDATUS_PREFIX.match(organism)
+    candidatus = prefix is not None
+    clean_org = organism[prefix.end():].strip() if prefix else organism
 
     if not clean_org or clean_org.lower() in _NON_ORGANISM_NAMES:
         return strain
 
     words = clean_org.split()
-    cand_prefix = "Candidatus " if candidatus else ""
+    # A Candidatus name is set upright after an italic "Ca." (OV-1720); any
+    # other genus or binomial is italic.
+    italic = (lambda name: name) if candidatus else (lambda name: f"<i>{name}</i>")
+    cand_prefix = "<i>Ca.</i> " if candidatus else ""
     if len(words) >= 2:
-        binom = f"<i>{' '.join(words[:2])}</i>"
+        binom = italic(" ".join(words[:2]))
         rest = " ".join(words[2:])
         if strain and strain.lower() not in rest.lower():
             rest = f"{rest} {strain}".strip()
         return f"{cand_prefix}{binom} {rest}".strip()
     if words:
-        base = f"{cand_prefix}<i>{words[0]}</i>"
+        base = f"{cand_prefix}{italic(words[0])}"
         return f"{base} {strain}".strip() if strain else base
     return strain
 

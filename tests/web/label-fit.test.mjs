@@ -2,6 +2,7 @@
 // dialog that shows the rows (LP-D43, LP-D45, LP-D48, OD-F14).
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 import { t } from '../../gbdraw/web/js/utils/i18n.js';
 
@@ -146,7 +147,7 @@ test('a Result\'s report names that Result by index and name', () => {
 });
 
 test('a row\'s config paths become the draft fields the request mapping projects back', () => {
-  const { adv } = state.drawings.circular;
+  const { adv } = modeDrawing(state, 'circular');
   const draft = (values) => draftFieldsForConfigValues(values, 'circular', adv);
   assert.deepEqual(draft({ [Y_OFFSET]: 1.15 }), { form: {}, adv: { outer_label_y_offset: 1.15 } });
   assert.deepEqual(draft({ 'labels.font_size.short': 12, 'labels.font_size.long': 12 }),
@@ -158,7 +159,9 @@ test('a row\'s config paths become the draft fields the request mapping projects
     { form: {}, adv: { circular_label_placement: 'radial' } });
   // "Separate overlapping features" (LP-D52) switches the mode's Resolve Overlaps control on.
   assert.deepEqual(draft({ 'canvas.resolve_overlaps': true }), { form: {}, adv: { resolve_overlaps: true } });
-  assert.deepEqual(draftFieldsForConfigValues({ 'canvas.resolve_overlaps': true }, 'linear', state.drawings.linear.adv),
+  // "Smaller definition font" (D-12) sets Record Labels > Default font size.
+  assert.deepEqual(draft({ 'objects.definition.circular.font_size': 16.5 }), { form: {}, adv: { def_font_size: 16.5 } });
+  assert.deepEqual(draftFieldsForConfigValues({ 'canvas.resolve_overlaps': true }, 'linear', modeDrawing(state, 'linear').adv),
     { form: {}, adv: { resolve_overlaps: true } });
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
   assert.throws(() => draftFieldsForConfigValues({ 'labels.unknown': 1 }, 'circular', adv), unknown);
@@ -176,11 +179,11 @@ test('a row may write exactly the config paths Python\'s rows send, in the mode 
   const sample = { [separate]: true, 'labels.circular.scope': 'outer', 'labels.circular.placement': 'radial' };
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
   // Circular rows: every path Python names; Linear rows: separate overlapping features only.
-  applyLabelFitValues(state.drawings.circular, Object.fromEntries(fontSizes.map((path) => [path, 12])), 'circular');
+  applyLabelFitValues(modeDrawing(state, 'circular'), Object.fromEntries(fontSizes.map((path) => [path, 12])), 'circular');
   for (const [path] of Object.values(single)) {
-    applyLabelFitValues(state.drawings.circular, { [path]: sample[path] ?? 1.1 }, 'circular');
+    applyLabelFitValues(modeDrawing(state, 'circular'), { [path]: sample[path] ?? 1.1 }, 'circular');
   }
-  applyLabelFitValues(state.drawings.linear, { [separate]: true }, 'linear');
+  applyLabelFitValues(modeDrawing(state, 'linear'), { [separate]: true }, 'linear');
   // Label settings no row sends are not row writes.
   for (const [values, mode] of [
     [{ 'labels.unified_adjustment.inner_labels.x_radius_offset': 1.1 }, 'circular'],
@@ -188,7 +191,7 @@ test('a row may write exactly the config paths Python\'s rows send, in the mode 
     [{ 'labels.spacing.linear': 0.5 }, 'linear'],
     [{ 'labels.linear.scope': 'out' }, 'linear']
   ]) {
-    assert.throws(() => applyLabelFitValues(state.drawings[mode], values, mode), unknown, JSON.stringify(values));
+    assert.throws(() => applyLabelFitValues(modeDrawing(state, mode), values, mode), unknown, JSON.stringify(values));
   }
 });
 

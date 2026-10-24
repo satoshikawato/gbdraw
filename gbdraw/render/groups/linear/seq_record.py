@@ -8,7 +8,7 @@ from gbdraw.svg.elements import Group, Line, Rect, Text
 
 from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
-from ....core.record_metadata import _read_coord_map
+from ....core.record_metadata import _read_coord_map, _record_source_start
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.label_backing import feature_label_box, label_halo, underline_casing
 from ...drawers.linear.labels import LabelDrawer
@@ -429,7 +429,7 @@ class SeqRecordGroup:
         # match popups and FASTA headers report source coordinates through it.
         source_base, source_step = _read_coord_map(self.gb_record)
         if record_length and (source_base, source_step) != (1, 1):
-            source_low = source_base if source_step == 1 else source_base - record_length + 1
+            source_low = _record_source_start(self.gb_record)
             record_group.attribs["data-gbdraw-record-source-start"] = str(source_low)
             record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)

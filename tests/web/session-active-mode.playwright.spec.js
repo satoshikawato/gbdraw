@@ -263,7 +263,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
     // profile value, each in its own drawing.
     const axisColors = await fresh.evaluate(async () => {
       const { state: live } = await import('./js/state.js');
-      return { circular: live.drawings.circular.adv.axis_stroke_color, linear: live.drawings.linear.adv.axis_stroke_color };
+      return { circular: live.drawingOf('circular').adv.axis_stroke_color, linear: live.drawingOf('linear').adv.axis_stroke_color };
     });
     for (const mode of ['circular', 'linear']) {
       expect(axisColors[mode]).toBe(mode === settings.ui.mode
@@ -286,7 +286,7 @@ test('failed import after draft application restores the prior mode, profiles, s
   const failure = await evaluateWithRetainedPromise(page, async () => {
     const name = 'tobacco-chloroplast.gbdraw-session.json';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-    const { importSession } = await import('./js/services/config.js');
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       // A Gallery Session loads without a dialog; one would cancel the Load.
       confirmLoadRepairs: async () => false,

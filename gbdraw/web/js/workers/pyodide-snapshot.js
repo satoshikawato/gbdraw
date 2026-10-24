@@ -25,6 +25,7 @@
 // This module runs no Python and loads no runtime; the Worker and
 // tools/build_pyodide_snapshot.mjs do that and pass the runtime in.
 
+import { sha256Hex } from '../services/byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /**
@@ -212,8 +213,7 @@ export const pyodideSnapshotKey = async ({ localWheels, gbdrawWheel, helperFile 
   const bytes = new Uint8Array(parts.reduce((sum, [, part]) => sum + part.length, header.length));
   bytes.set(header);
   parts.reduce((offset, [, part]) => { bytes.set(part, offset); return offset + part.length; }, header.length);
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
-  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(bytes);
 };
 
 /**

@@ -5,8 +5,11 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
-import { readFileText } from './file-content-cache.js';
-import { genbankHeaderIds } from './genbank-header.js';
+import {
+  gffFastaReaderSelector,
+  readAllSequenceRecords,
+  readComparisonSequenceRecords
+} from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
 import { t } from '../utils/i18n.js';
 
@@ -80,8 +83,8 @@ import { t } from '../utils/i18n.js';
  */
 
 /**
- * A parsed record of a sequence file.
- * @typedef {{ recordId: string, header: string, aliases: string[], sequence: string }} InputSequenceRecord
+ * A record of a sequence file, in file order (`ParsedSequenceRecord`): `sequence` is null for a record without one.
+ * @typedef {{ recordId: string, aliases: readonly string[], sequence: string | null }} InputSequenceRecord
  */
 
 /**
@@ -1058,64 +1061,6 @@ export const buildMatchSequenceBundle = (
   };
 };
 
-/** @param {unknown} value */
-export const parseSequenceRecords = (value) => {
-  const input = String(value ?? '');
-  /** @type {{ recordId: string, header: string, parts: string[], sequence: string }[]} */
-  const records = [];
-  // Assigned in the forEach callback, which tsc does not follow, so the initializer carries the declared type.
-  let current = /** @type {{ recordId: string, header: string, parts: string[] } | null} */ (null);
-  input.split(/\r?\n/).forEach((line) => {
-    if (line.startsWith('>')) {
-      if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
-      const header = line.slice(1).trim();
-      current = { recordId: header.split(/\s+/)[0] || `record_${records.length + 1}`, header, parts: [] };
-    } else if (current && line.trim()) {
-      current.parts.push(line.replace(/\s+/g, ''));
-    }
-  });
-  if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
-  return records.filter((record) => record.sequence);
-};
-
-/**
- * @param {unknown} value
- * @returns {InputSequenceRecord[]}
- */
-const parseGenbankSequenceRecords = (value) => {
-  /** @type {InputSequenceRecord[]} */
-  const records = [];
-  String(value ?? '').split(/^\/\/\s*$/m).forEach((chunk) => {
-    const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    const header = originMatch ? genbankHeaderIds(chunk) : null;
-    if (!header || !originMatch) return;
-    const { recordId, version, accession, locus } = header;
-    const sequence = normalizedSequence(originMatch[1].replace(/[^A-Za-z]/g, ''));
-    if (!sequence) return;
-    records.push({
-      recordId,
-      header: recordId,
-      aliases: Array.from(new Set([recordId, version, accession, locus].filter(Boolean))),
-      sequence
-    });
-  });
-  return records;
-};
-
-/**
- * @param {string} fileText
- * @param {unknown} inputType
- * @returns {InputSequenceRecord[]}
- */
-const parseInputSequenceRecords = (fileText, inputType) => (
-  text(inputType).toLowerCase() === 'gb'
-    ? parseGenbankSequenceRecords(fileText)
-    : parseSequenceRecords(fileText).map((record) => ({
-        ...record,
-        aliases: Array.from(new Set([record.recordId, record.header].filter(Boolean)))
-      }))
-);
-
 /**
  * @param {readonly InputSequenceRecord[]} records
  * @param {unknown} selectorValue
@@ -1140,7 +1085,7 @@ const selectInputSequenceRecord = (records, selectorValue) => {
  * @param {{ region_start?: unknown, region_end?: unknown, region_reverse?: unknown } | null | undefined} sequenceState
  */
 const materializeLinearSequenceRecord = (record, sequenceState) => {
-  if (!record) return null;
+  if (!record?.sequence) return null;
   let sequence = normalizedSequence(record.sequence);
   let reverse = Boolean(sequenceState?.region_reverse);
   // The region Generate draws: an end past the record end is drawn to it.
@@ -1157,12 +1102,35 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 };
 
 /**
+ * A Linear record file's or the Circular reference's records as the CLI loader reads them, once per File (OV-1680):
+ * the browser reader's, or the Worker's for a file that reader declines (one that starts with a UTF-8 byte order
+ * mark), so `#N` and the first record name the records the drawing reads (OV-1599).
  * @param {FileLike | null | undefined} file
  * @param {unknown} inputType
+ * @returns {Promise<InputSequenceRecord[]>}
  */
 const readInputSequenceRecords = async (file, inputType) => {
   if (!file) return [];
-  return parseInputSequenceRecords(await readFileText(file), inputType);
+  const fmt = text(inputType).toLowerCase() === 'gb' ? 'genbank' : 'fasta';
+  return (await readAllSequenceRecords(file, fmt))
+    .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
+};
+
+/**
+ * A comparison genome's records as the ring search read them (`readComparisonSequenceRecords`, once per File): the
+ * browser's for a FASTA file it reads exactly, the comparison reader's for the others. A file that cannot be read
+ * gives no sources, and the other sources stay.
+ * @param {FileLike | null} file null for a comparison file that was never supplied.
+ * @returns {Promise<InputSequenceRecord[]>}
+ */
+const readComparisonRecords = async (file) => {
+  if (!file) return [];
+  try {
+    return (await readComparisonSequenceRecords(file))
+      .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
+  } catch {
+    return [];
+  }
 };
 
 /**
@@ -1198,7 +1166,9 @@ export const buildRestoredMatchSequenceSources = async ({
       const sequenceState = linearSeqs[recordIndex] || {};
       const file = inputType === 'gb' ? sequenceState.gb : sequenceState.fasta;
       const records = await readInputSequenceRecords(file, inputType);
-      const selected = selectInputSequenceRecord(records, sequenceState.region_record_id);
+      const selector = text(sequenceState.region_record_id);
+      const selected = selectInputSequenceRecord(records, inputType === 'gb' ? selector
+        : await gffFastaReaderSelector({ gffFile: sequenceState.gff, fastaFile: file, selector }));
       const record = materializeLinearSequenceRecord(selected, sequenceState);
       if (!record?.sequence) continue;
       sources.push({
@@ -1217,6 +1187,7 @@ export const buildRestoredMatchSequenceSources = async ({
   const referenceFile = circularInputType === 'gb' ? files?.c_gb : files?.c_fasta;
   const referenceRecords = await readInputSequenceRecords(referenceFile, circularInputType);
   referenceRecords.forEach((record, recordIndex) => {
+    if (!record.sequence) return;
     sources.push({
       key: `circular:record:${recordIndex}`,
       recordId: record.recordId,
@@ -1232,11 +1203,9 @@ export const buildRestoredMatchSequenceSources = async ({
     circularConservation
   });
   for (const { sourceIndex: displayIndex, file } of comparisonSourceAvailability) {
-    const records = await readInputSequenceRecords(
-      file,
-      'fasta'
-    );
+    const records = await readComparisonRecords(file);
     records.forEach((record) => {
+      if (!record.sequence) return;
       sources.push({
         key: `homology:comparison:${displayIndex}:${record.recordId}`,
         recordId: record.recordId,

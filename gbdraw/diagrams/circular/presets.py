@@ -469,6 +469,7 @@ def circular_track_slots_from_preset_order(
                 renderer_has_blank_unmatched_duplicates[renderer] = True
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
+    adds_inside_row = False
 
     for slot in slots:
         renderer = _normalized_renderer(slot.renderer)
@@ -505,15 +506,23 @@ def circular_track_slots_from_preset_order(
             context=context,
         )
         layout_slots.append(overlaid)
-        if (
-            prefers_numeric_auto_group
-            and str(overlaid.side or "inside").strip().lower() == "inside"
-        ):
+        inside = str(overlaid.side or "inside").strip().lower() == "inside"
+        if prefers_numeric_auto_group and inside:
             preferred_ids.add(str(overlaid.id))
+        adds_inside_row = adds_inside_row or (
+            slot.enabled
+            and inside
+            and geometry_slot is None
+            and renderer not in {"features", "ticks", "depth", "sequence_conservation"}
+        )
 
+    # Only the preset's own stack keeps the preset lanes. A stack with an inside row the preset does not have
+    # packs every row from the feature track toward the center, as in 0.13.0, so a smaller center definition
+    # cannot switch it to the lanes (OV-1711). Rows that follow the inputs, depth series and comparison rings,
+    # count as the preset's.
     return CircularPresetRadialPlan(
         slots=tuple(layout_slots),
-        preferred_anchor_slot_ids=frozenset(preferred_ids),
+        preferred_anchor_slot_ids=frozenset() if adds_inside_row else frozenset(preferred_ids),
     )
 
 

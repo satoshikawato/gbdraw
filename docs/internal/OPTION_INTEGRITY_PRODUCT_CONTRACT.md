@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `80`
+- Contract revision: `86`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2802,6 +2802,227 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that show the new label are in the same pull request,
     and the Review is `REQUIRED`.
+- Revision 81 change: `PD-OI-090` is replaced for scenario revision `5`
+  (concern `session.project-drawings`; the outcome
+  `A / PROJECT-WITH-DRAWINGS` is kept), and `OIC-030` is amended to match.
+  They come from four replies of the Product Decision Owner `satoshikawato`
+  of `2026-10-23` (campaign `multi-drawing-project-20261007`, `OWNER-DECISIONS`
+  R16-2 to R16-5), given to questions the session asked because the choices
+  are the Product Decision Owner's.
+  Each question is quoted with its options, and each reply as written. The
+  parenthesized text after an option is that option's description.
+  - PQ-1 (R16-2): 「PQ-1（DRAWINGS-B）: drawing の追加・複製・削除を Undo/Redo したとき、どの drawing を表示しますか？ 表示中の drawing を削除したときも同じ方式です。」
+    Options: 「操作前後の drawing (Recommended)」（Undo では操作の前に表示していた drawing、Redo では操作の後の drawing を表示します。表示中の drawing を削除したときは次のタブ、なければ前のタブを表示します。Undo で何が戻ったかが見え、Undo→Redo で元の表示に戻ります。）/「表示中を維持」.
+    Reply: 「操作前後の drawing (Recommended)」.
+  - PQ-2 (R16-3): 「PQ-2: 削除した drawing を Undo で戻したとき、その drawing の Undo 履歴も戻りますか？」
+    Options: 「履歴も戻す (Recommended)」（設定・編集・Result・History のすべてを、削除しなかったかのように戻します。共有のバイト上限の中で保持し、その step が上限で消えた時点で Undo できなくなります。Contract の「Undo で戻せる」に最も近い形です。）/「履歴は空」.
+    Reply: 「履歴も戻す (Recommended)」.
+  - PQ-3 (R16-4): 「PQ-3: 5 つの補助ファイルカード（Default colors、Specific rules、Blacklist、Whitelist、Priority）で、他の drawing も使うファイルを置き換えるとき、「この drawing だけ / このファイルを使うすべての drawing」を選ばせますか？」
+    Options: 「選ばせない (Recommended)」（カードは表示中の drawing だけを変えます。カードの行は drawing ごとの設定であり、R16-1 で決めた「B2 でカードの Undo を drawing ごとに戻す」とも一致します。）/「選ばせる」.
+    Reply: 「選ばせない (Recommended)」.
+  - PQ-4 (R16-5): 「PQ-4: ゲノムの入力ファイルを「このファイルを使うすべての drawing」で置き換える操作は、History でどう扱いますか？ Contract の project の操作の一覧にこの操作はまだありません。」
+    Options: 「project の 1 step (Recommended)」（どの drawing からでも 1 回の Undo で、変わったすべての drawing が戻ります。Reset all drawings と同じ形です。Contract の〔Undo と削除〕にこの操作を加える改訂（Owner の receipt）が要ります。）/「各 drawing に 1 step」/「表示中の 1 step」.
+    Reply: 「project の 1 step (Recommended)」.
+  - Receipt changes in `PD-OI-090`. In 〔Undo と削除〕, 「Reset all drawings と、drawing によらず 1 つの値」 reads
+    「Reset all drawings、入力ファイルを「このファイルを使うすべての drawing」で置き換える操作と、drawing によらず 1 つの値」,
+    and 「Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。」 reads
+    「Result か編集のある drawing の削除は確認し、Undo で戻せる。削除の Undo は、その drawing を設定、編集、Result、History ごと削除の前のとおりに戻す。drawing の追加、複製、削除の Undo は、その操作の前に表示していた drawing を表示し、Redo は操作の後に表示していた drawing を表示する。表示中の drawing を削除すると次のタブの drawing を、次のタブがなければ前のタブの drawing を表示する。最後の 1 つの drawing は削除できない。」.
+    In 〔入力ファイル〕, the sentence 「どの drawing も使わなくなったファイルは保存しない。」 is preceded by
+    「Default colors、Specific rules、Blacklist、Whitelist、Priority の 5 つのファイルは、読み込み、置き換え、削除のどれでも表示中の drawing だけを変え、この選択は出さない。」.
+    Every other term of scenario revision `4` is unchanged. The decision date
+    of the receipt is the date of these replies, `2026-10-23`.
+  - Receipt approval: the Owner read the receipt text above and the `OIC-030`
+    wording and replied (`2026-10-23`, `OWNER-DECISIONS` R16-6): 「承認」.
+    It approves the text as recorded.
+  - The replies give no rationale, preserved or retired effect, or accepted
+    risk, and the receipt adds none.
+  - Not changed: renaming and reordering a drawing leave the shown drawing
+    as it is under Undo and Redo, and a drawing switch is still not an Undo
+    step. The interim behavior of the auxiliary file cards until DRAWINGS-B
+    is outside the Contract.
+  - New receipt SHA-256: `PD-OI-090`
+    `49b20e1e6f9e40bffd56a58fb07f132db5349f94de0f984dc1265191a037a01d`.
+  - `OIC-030` reads 「replacing an input file for every drawing that uses it, 」
+    after 「Reset all drawings, 」 in its list of project steps, and adds after
+    「newest first, one step per operation;」 the obligations
+    「the Undo of a drawing add, duplicate, or delete shows the drawing that was shown before it, and its Redo the drawing shown after it; deleting the shown drawing shows the next tab's drawing, else the previous tab's; the Undo of a delete restores that drawing with its settings, edits, Result, and History; the Default colors, Specific rules, Blacklist, Whitelist, and Priority files change only the shown drawing;」.
+  - No other record is amended or retired.
+  - This change is Contract-only: the Contract is the only changed path, and
+    the Review is `REQUIRED`. The runtime that implements it follows in
+    DRAWINGS-B (B2, B4), which cites this authority on its base.
+- Revision 82 change: `PD-OI-090` is replaced for scenario revision `6`
+  (concern `session.project-drawings`; the outcome
+  `A / PROJECT-WITH-DRAWINGS` is kept), and `OIC-030` is amended to match.
+  They come from two replies of the Product Decision Owner `satoshikawato`
+  of `2026-10-23` (campaign `multi-drawing-project-20261007`, `OWNER-DECISIONS`
+  R16-8 and R16-9), given to questions the session asked because the choices
+  are the Product Decision Owner's (the Owner had not invited questions).
+  Each question is quoted with its options, and each reply as written. The
+  parenthesized text after an option is that option's description.
+  - PQ-B1 (R16-8): 「PQ-B1（DRAWINGS-B）: Save のとき表示中の drawing が空（ファイル、変えた設定、編集、Result のどれもない）なら、どうしますか？ Contract の「どれもない drawing は保存しない」と「保存したときに表示していた drawing を開く」がこの場合にぶつかります。」
+    Options: 「保存しない (Recommended)」（空の drawing は保存しません。Load では、保存した drawing のうち次のタブのもの、なければ前のタブのものを開きます（R16-2 と同じ規則）。保存できる drawing が 1 つもないときだけ、表示中の drawing を保存します（Session は少なくとも 1 つの drawing を持つため）。）/「常に保存」（表示中の drawing は空でも保存し、Load でその空の drawing を開きます。それ以外の空の drawing は保存しません。）.
+    Reply: 「保存しない (Recommended)」.
+  - PQ-B1 record (R16-9): 「PQ-B1 の答えを Contract（PD-OI-090〔Save と Load〕）に 1 文として記録しますか？」
+    Options: 「Contract に記録 (Recommended)」（C4 と同じ手順で、Contract だけの小さな PR を作ります。文面は事前にお見せします。Contract の 2 文の食い違いが残らず、B の実装の根拠が Contract になります。）/「決定記録のみ」（キャンペーンの決定記録と B の PR 本文にだけ書きます。Contract の 2 文はこの場合を言わないまま残ります。）.
+    Reply: 「Contract に記録 (Recommended)」.
+  - Receipt changes in `PD-OI-090`. In 〔Save と Load〕, the sentence
+    「Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。」 is followed by
+    「表示していた drawing がファイル、設定の変更、編集、Result のどれもなく保存されなかったときは、保存した drawing のうち、その次のタブの drawing を、次のタブがなければ前のタブの drawing を開く。保存する drawing が 1 つもないときは、表示していた drawing を保存する。」.
+    Every other term of scenario revision `5` is unchanged. The decision date
+    of the receipt is the date of these replies, `2026-10-23`.
+  - Receipt approval: the Owner read the receipt text above and the `OIC-030`
+    wording and replied (`2026-10-23`, `OWNER-DECISIONS` R16-10): 「承認」.
+    It approves the text as recorded.
+  - The replies give no rationale, preserved or retired effect, or accepted
+    risk, and the receipt adds none.
+  - New receipt SHA-256: `PD-OI-090`
+    `7a9e27a919e496b8f5d51fdcf8084166d7c01ca9e056829d32f79f620a930138`.
+  - `OIC-030` reads 「Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown, or, when the shown drawing had no file, changed setting, edit, or Result and was not saved, the saved drawing of the next tab, else of the previous tab; when no drawing qualifies, Save writes the shown drawing;」
+    where it read 「Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown;」.
+  - No other record is amended or retired.
+  - This change is Contract-only: the Contract is the only changed path, and
+    the Review is `REQUIRED`. The runtime that implements it follows in
+    DRAWINGS-B (B2d), which cites this authority on its base.
+- Revision 83 change: `PD-OI-052` gains scenario revision `2`
+  (concern `web.composition-decoration-continuity`; the outcome
+  `A2 / CARRY-DELTAS-AND-GROW-CANVAS`). It comes from five replies of the
+  Product Decision Owner `satoshikawato` of `2026-10-23` in the Claude Code
+  session of the layout collision audit, given to questions the session
+  asked because the choices are the Product Decision Owner's. Each reply is
+  quoted as written.
+  - Reply 1. The session asked whether a legend or title the user moved may
+    leave the canvas after a position change (A keep, as documented; B drop
+    the item's manual offset on a position change; C keep the offset but
+    clamp it inside the canvas). The Owner replied:
+    「キャンバスを適宜拡張などするのが好ましい。」
+  - Reply 2. After the session said the merge waits for the answers to the
+    next two questions, the Owner wrote: 「質問して」
+  - Reply 3. The session asked whether `PD-OI-052` may be revised with the
+    draft receipt (`A2 / CARRY-DELTAS-AND-GROW-CANVAS`, shown in full),
+    because scenario revision `1` accepts clipping and says to adjust with
+    padding or Reset instead of an automatic clamp. The Owner selected
+    「承認 (Recommended)」.
+  - Reply 4. The session asked whether the Linear scale also grows the canvas
+    when moved. The Owner selected 「A 記録して広げる (Recommended)」, whose
+    option read: 「scale の大きさを composition metadata に記録し、凡例・題と同じように広げる。新しい metadata 項目なので、Q4 の Must preserve に「composition metadata に Linear scale の大きさを加えることだけ認める」を足す。参照図の再生成が必要で、別の PR にする。」
+  - Receipt approval: the session showed the receipt recorded in `PD-OI-052`
+    in full with its SHA-256 and the note that the only change from the
+    draft of Reply 3 is the Reply 4 sentence appended to Must preserve. The
+    Owner selected 「承認します」. It approves the text as recorded.
+  - The receipt and JSON in `PD-OI-052` reproduce the confirmed fields
+    without translation or additional terms. The scenario revision `1`
+    receipt and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-052` scenario revision `2`
+    `789e12651883910b67d2cbd9aa6837167d38b59ee24343db6bea0aa69850f160`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that grow the canvas for a moved legend or plot title
+    are in the same pull request, and the Review is `REQUIRED`. The remaining
+    dependent runtime, the Linear scale bounds in composition metadata,
+    follows in a later pull request.
+- Revision 84 change: `PD-OI-097` gains scenario revision `17`
+  (concern `product.circular-outer-label-fit`; it adds `DEF-TRACK-WARN`).
+  When the centre definition text of a Circular record touches what an inner
+  track draws, the figure is drawn as before and the label-fit warning names
+  the overlap and offers a smaller definition font. It comes from six replies
+  of the Product Decision Owner `satoshikawato` of `2026-10-23` in the Claude
+  Code session of the layout collision audit (`OV-1606`), given to questions
+  the session asked because the choices are the Product Decision Owner's.
+  Each reply is quoted as written.
+  - Reply 1. The session reported that in the Circular default figure of
+    AP027131 the corners of the centre definition text touch the innermost
+    track (GC skew) by 6 to 8 px, and asked whether to keep it (A), make the
+    tracks room (B), or make the definition fit (C). The Owner replied:
+    「好ましくない。」
+  - Reply 2. After prototype images of three fixes (tracks make room;
+    definition wraps or shrinks; wrap first, then tracks):
+    「Q1（定義文の角が GC skew に触れる件）はそのままにしょう。」
+  - Reply 3. The Owner then asked:
+    「てかDefinitionのフォントを自動で小さくするのはダメなの？あるいはGenerate前に「被りそうだけどどうしますか」みたいなポップアップ出すとか。」
+    The session offered: 1 shrink the definition font automatically; 2 draw
+    the figure, warn that the definition text overlaps a track, and list
+    settings that fit through the existing label-fit warning (CLI `WARNING:`
+    with rows, Python warning, Web notice with Choose a fix); or both. The
+    Owner replied: 「２」
+  - Reply 4. The session asked when the warning fires: A only when the
+    definition text touches the drawn GC content, GC skew, or feature lines
+    and areas (AP027131 warns; the MjeNMV and EDL933 defaults do not), or B
+    when it enters the band a track takes (six reference figures and EDL933
+    warn; MjeNMV is offered 12 pt). The Owner selected
+    「A 触れたときだけ (Recommended)」.
+  - Reply 5. The session asked the Owner to approve the additions to the
+    scenario revision `16` fields for the A wording (Choice `DEF-TRACK-WARN`;
+    one sentence each appended to the Rationale, the Must preserve, and the
+    Accepted residual risk; Owner `satoshikawato`; Decision date
+    `2026-10-23`). The Owner selected 「承認 (Recommended)」.
+  - Reply 6. The session asked the Owner to approve the full scenario
+    revision `17` receipt with its SHA-256, with the note that the fields
+    other than the four additions, the scenario revision, and the decision
+    date, including the May retire and the Owner, are unchanged from scenario
+    revision `16`. The Owner selected 「承認します」. It approves the text as
+    recorded.
+  - The receipt and JSON in `PD-OI-097` reproduce the approved fields without
+    translation or additional terms. The scenario revision `7` to `16`
+    receipts and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-097` scenario revision `17`
+    `d8a9d51d28ce221348930e2b7a90e0bfbeb783f93311435bee94c4669ac47c55`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that warn on the definition text over a track are in
+    the same pull request, and the Review is `REQUIRED`.
+- Revision 85 change: the `Normative outcome` and `Compatibility` fields in
+  the header of `PD-OI-052` gain one sentence each that states scenario
+  revision `2`, already approved in the Revision 83 entry. This is a wording
+  change that makes the record's header match its scenario revision `2`
+  receipt. No outcome changes, the scenario revision stays `2`, and the
+  scenario revision `1` and `2` receipts and their SHA-256 values are
+  unchanged. It comes from two replies of the Product Decision Owner
+  `satoshikawato` of `2026-10-24` in the Claude Code session that finished
+  the Linear scale bounds. Each reply is quoted as written.
+  - Reply 1. The session's final report said:
+    「PD-OI-052 の見出しの欄(Normative outcome の要約など)は revision 1 の文のままです。直すかどうかは Owner の判断です。」
+    The Owner replied: 「質問して。」
+  - Reply 2. The session asked whether to align the `PD-OI-052` header
+    fields with scenario revision `2` by appending the two sentences below to
+    the Normative outcome and the Compatibility fields, without changing the
+    scenario revision `1` and `2` receipts or any other field, in a
+    Contract-only pull request that the Owner merges (A), or to leave them
+    (B). The Owner selected 「A 2 つの欄に足す (Recommended)」.
+  - Sentence appended to Normative outcome, after 「。」:
+    「scenario revision 2: 動かした legend/title/Linear scale が自動のキャンバスの外に出るときは、置く操作（drop、Generate と再描画、Reset、Undo/Redo）でキャンバスを広げて収める。自動のキャンバスより小さくせず、canvas padding は 1 回だけ加え、Reset Layout で自動のキャンバスに戻す。図全体のドラッグでは広げない。通常の load と保存 Result の表示では Result を変えない。」
+  - Sentence appended to Compatibility, after 「。」:
+    「scenario revision 2: composition metadata に Linear scale の大きさ（lengthBar）を加える。それより前に保存した Result の scale は、次の Generate までキャンバスを広げない。」
+  - No other field or record is amended or retired.
+  - This is a Contract-only change on the authority-only route: no runtime,
+    test, or documentation changes with it, the Review is `REQUIRED`, and the
+    Owner merges it.
+- Revision 86 change: `PD-OI-067` gains scenario revision `3` (concern
+  `web.linear.file-default-definition`; the outcome
+  `B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く`).
+  A record name inferred from a GenBank organism that starts with
+  *Candidatus* (or `Ca.`) is written `<i>Ca.</i>` followed by the name in
+  roman. It comes from three replies of the Product Decision Owner
+  `satoshikawato` of `2026-10-24` in the Claude Code session of the tutorial
+  video campaign (`OV-1720`), given to reports and a question the session
+  relayed because the choices are the Product Decision Owner's. Each reply is
+  quoted as written.
+  - Reply 1. The session reported that an inferred *Candidatus* name such as
+    `Candidatus <i>Tyloplasma litorale</i> Fukuoka2020` sets the word
+    *Candidatus* upright and the genus and species in italics, the reverse of
+    the nomenclature rule. The Owner replied: 「直してください。」
+  - Reply 2. The Owner then wrote: 「あと、CandidatusはCa.に略して」
+  - Reply 3. The session asked the Owner to approve the scenario revision `3`
+    receipt recorded in `PD-OI-067`, shown in full. The Owner replied:
+    「承認」. It approves the text as recorded.
+  - The receipt and JSON in `PD-OI-067` reproduce the approved fields without
+    translation or additional terms. The scenario revision `1` and `2`
+    receipts and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-067` scenario revision `3`
+    `88affcc65dc746deeb51944da38dfd607ef2fffce764fe7137024484a422bca1`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that write the inferred *Candidatus* name as
+    `<i>Ca.</i>` are in the same pull request, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -5004,10 +5225,10 @@ Decision date: 2026-09-27
 ### PD-OI-052: Matched decoration deltas across regeneration
 
 - Concern key: `web.composition-decoration-continuity`
-- Scenario revision: `1`
+- Scenario revision: `2`
 - Status: `ACCEPTED`
-- Selected outcome: `A / CARRY-MATCHED-DECORATION-DELTAS`
-- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate
+- Selected outcome: `A2 / CARRY-DELTAS-AND-GROW-CANVAS`
+- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate。scenario revision 2: 動かした legend/title/Linear scale が自動のキャンバスの外に出るときは、置く操作（drop、Generate と再描画、Reset、Undo/Redo）でキャンバスを広げて収める。自動のキャンバスより小さくせず、canvas padding は 1 回だけ加え、Reset Layout で自動のキャンバスに戻す。図全体のドラッグでは広げない。通常の load と保存 Result の表示では Result を変えない。
 - Discoverability/accessibility / immediate feedback: 通常は自動継承。対応不能の理由・対象・Reset/修正を keyboard/touch から到達可能に表示
 - Canonical state update: Result SVG を差分の正本とし、transaction-local snapshot を candidate に適用。UI refs は同期値。latent/global map なし
 - Undo/Redo: Generate は継承を含む1 replacement。保存 Result を復元し delta を再加算しない
@@ -5018,8 +5239,8 @@ Decision date: 2026-09-27
 - Scientific-output: 装飾位置のみ。recordTranslations/active alignment の record delta を二重加算しない
 - Cache/provenance: 既存 validated identity/digest 使用。raw search/cache key に delta を追加しない。candidate と保存Resultを一致
 - Performance: 非ゼロ対象のみ。候補の既存parse/serialize共用、batch旧SVGは必要分のみ、zero fast path維持
-- Compatibility: writer/readerを維持。照合できない保存図は明示回復
-- Decision source: the complete Choice A outcome and nine-field receipt in
+- Compatibility: writer/readerを維持。照合できない保存図は明示回復。scenario revision 2: composition metadata に Linear scale の大きさ（lengthBar）を加える。それより前に保存した Result の scale は、次の Generate までキャンバスを広げない。
+- Decision source (scenario revision `1`): the complete Choice A outcome and nine-field receipt in
   [DECISION_01_COMPOSITION_CONTINUITY.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_01_COMPOSITION_CONTINUITY.md)
   at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
   `satoshikawato` explicitly approved all three independent recommended A
@@ -5029,11 +5250,19 @@ Decision date: 2026-09-27
   does not supersede another decision. Dependent runtime requires this
   authority merged into its base; this amendment contains no runtime or
   runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `c7668d708ac6cd90b4373df0a685e418f21be7e653e99cbe899b82fba25e5e7d`.
+- Decision source (scenario revision `2`): the Owner replies quoted verbatim
+  in the Revision 83 entry above. The scenario revision `2` receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `789e12651883910b67d2cbd9aa6837167d38b59ee24343db6bea0aa69850f160`.
 - Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-013`, `OIC-014`. These existing obligations and the
   complete selected outcome are jointly required; their citation does not
   claim completed dependent-runtime checks.
+
+Scenario revision `1` receipt, approved by `satoshikawato` on `2026-09-26`:
 
 ```text
 PRODUCT_DECISION
@@ -5059,6 +5288,35 @@ Decision date: 2026-09-26
   "acceptedResidualRisk": "新automatic配置に同じdeltaを加えるので絶対位置は変わり、clipping/overlapが残りうる。自動clampせずpadding/Resetで調整する。対応不能は候補公開前に止まり、明示Reset/設定修正が必要。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
+}
+```
+
+Scenario revision `2` receipt, approved by `satoshikawato` on `2026-10-23`:
+
+```text
+PRODUCT_DECISION
+Concern: web.composition-decoration-continuity
+Scenario revision: 2
+Choice: A2 / CARRY-DELTAS-AND-GROW-CANVAS
+Rationale: 手動で動かした legend/title/Linear scale がキャンバスの外に出て切れたり見えなくなったりしないようにする（Owner 2026-10-23「キャンバスを適宜拡張などするのが好ましい。」）。
+Must preserve: revision 1 の Must preserve のすべて。手動のずれは保つ。自動のキャンバス内に収まるドラッグではキャンバスを変えない。キャンバスは自動のキャンバスより小さくしない。canvas padding は 1 回だけ加える。Reset Layout で自動のキャンバスに戻る。通常の load と保存 Result の表示では Result を変えない。composition metadata に Linear scale の大きさを加えることだけ認める。
+May retire: 手動で動かした項目が自動のキャンバスの外にはみ出して切れる動作だけ。
+Accepted residual risk: 動かした項目と図の内容の重なりは残りうる（自動では避けない）。キャンバスが広がると出力画像も大きくなる。
+Owner: satoshikawato
+Decision date: 2026-10-23
+```
+
+```json
+{
+  "concern": "web.composition-decoration-continuity",
+  "scenarioRevision": 2,
+  "choice": "A2 / CARRY-DELTAS-AND-GROW-CANVAS",
+  "rationale": "手動で動かした legend/title/Linear scale がキャンバスの外に出て切れたり見えなくなったりしないようにする（Owner 2026-10-23「キャンバスを適宜拡張などするのが好ましい。」）。",
+  "mustPreserve": "revision 1 の Must preserve のすべて。手動のずれは保つ。自動のキャンバス内に収まるドラッグではキャンバスを変えない。キャンバスは自動のキャンバスより小さくしない。canvas padding は 1 回だけ加える。Reset Layout で自動のキャンバスに戻る。通常の load と保存 Result の表示では Result を変えない。composition metadata に Linear scale の大きさを加えることだけ認める。",
+  "mayRetire": "手動で動かした項目が自動のキャンバスの外にはみ出して切れる動作だけ。",
+  "acceptedResidualRisk": "動かした項目と図の内容の重なりは残りうる（自動では避けない）。キャンバスが広がると出力画像も大きくなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-23"
 }
 ```
 
@@ -6061,18 +6319,23 @@ Decision date: 2026-10-18
 ### PD-OI-067: Per-record inferred Linear definitions
 
 - Concern key: `web.linear.file-default-definition`
-- Scenario revision: `2`
+- Scenario revision: `3`
 - Supersedes: `PD-OI-067`, scenario revision `1`
   (`B / PER-RECORD-INFERRED-DEFINITION`), only for the names area of the
   card of a File with one record; every scenario-1 term stays in force.
+  Scenario revision `3` supersedes scenario revisions `1` and `2` only for
+  how an inferred name writes a *Candidatus* organism; every other term of
+  both stays in force.
 - Status: `ACCEPTED`
 - Selected outcomes: `B / PER-RECORD-INFERRED-DEFINITION` (scenario revision
   `1`) and
   `B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`
-  (scenario revision `2`)
-- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  (scenario revision `2`) and
+  `B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く`
+  (scenario revision `3`)
+- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts and
   their nine-field JSON representations below, read together, and the Owner
-  selection of `2026-10-12` recorded below them.
+  selection of `2026-10-12` recorded after the scenario revision `2` receipt.
 - Decision source (scenario revision `1`): the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
@@ -6090,6 +6353,13 @@ Decision date: 2026-10-18
   it (static Product Contract co-change).
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `93b14a1df028f81ff573dc9c1a60f312b8160e6a7416fe14d0bce8c85be67ee2`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-10-24`
+  quoted in the Revision 86 entry above. The third receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `88affcc65dc746deeb51944da38dfd607ef2fffce764fe7137024484a422bca1`.
 - Acceptance contracts: `OIC-015`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -6158,6 +6428,36 @@ Revision 41 entry above; not a receipt field):
   question 「A か B か」, whose rule the question gave as
   「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
   In it `dev` is the Web app before this change.
+
+Scenario revision `3` receipt (approved by `satoshikawato` on `2026-10-24`;
+Reply 3 of the Revision 86 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-default-definition
+Scenario revision: 3
+Choice: B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く
+Rationale: 推定した生物名の表記を命名規約に合わせる。GenBank の organism が Candidatus（または Ca.）で始まるとき、推定名は「<i>Ca.</i> Tyloplasma litorale Fukuoka2020」のように Ca. を斜体、名前を立体で書く。
+Must preserve: scenario revision 1 と 2 のすべての項目（定義の優先順位、Reset で推定値に戻ること、Session の往復）。Candidatus 以外の生物名の推定表記（属名と種小名を斜体）。利用者が入力した Definition はそのまま描く。
+May retire: Candidatus を立体で書き、属名と種小名を斜体にする現在の推定表記。
+Accepted residual risk: すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。
+Owner: satoshikawato
+Decision date: 2026-10-24
+```
+
+```json
+{
+  "concern": "web.linear.file-default-definition",
+  "scenarioRevision": 3,
+  "choice": "B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く",
+  "rationale": "推定した生物名の表記を命名規約に合わせる。GenBank の organism が Candidatus（または Ca.）で始まるとき、推定名は「<i>Ca.</i> Tyloplasma litorale Fukuoka2020」のように Ca. を斜体、名前を立体で書く。",
+  "mustPreserve": "scenario revision 1 と 2 のすべての項目（定義の優先順位、Reset で推定値に戻ること、Session の往復）。Candidatus 以外の生物名の推定表記（属名と種小名を斜体）。利用者が入力した Definition はそのまま描く。",
+  "mayRetire": "Candidatus を立体で書き、属名と種小名を斜体にする現在の推定表記。",
+  "acceptedResidualRisk": "すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-24"
+}
+```
 
 ### PD-OI-068: GFF3+FASTA record universe
 
@@ -7224,10 +7524,23 @@ Decision date: 2026-10-11
 ### PD-OI-090: Project with drawings
 
 - Concern key: `session.project-drawings`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-090`, scenario revision `3` (`A / PROJECT-WITH-DRAWINGS`).
-  Scenario revision `4` keeps the outcome and every term of scenario
-  revision `3` except the Session versions of 〔Save と Load〕, 〔以前の Session
+- Scenario revision: `6`
+- Supersedes: `PD-OI-090`, scenario revision `5` (`A / PROJECT-WITH-DRAWINGS`).
+  Scenario revision `6` keeps the outcome and every term of scenario
+  revision `5` except one added sentence in 〔Save と Load〕: when the shown
+  drawing had no file, changed setting, edit, or Result and was not saved,
+  Load opens the saved drawing of the next tab, else of the previous tab, and
+  when no drawing qualifies, Save writes the shown drawing.
+  Scenario revision `5` kept every term of scenario revision `4` except three sentences: in 〔Undo と削除〕 the project
+  operations also include replacing an input file for every drawing that uses
+  it, and the Undo of a drawing add, duplicate, or delete shows the drawing
+  that was shown before it (the Redo the one shown after it, with the next
+  tab's drawing, else the previous tab's, after a delete of the shown
+  drawing), the Undo of a delete restores the drawing with its settings,
+  edits, Result, and History; in 〔入力ファイル〕 the Default colors,
+  Specific rules, Blacklist, Whitelist, and Priority files change only the
+  shown drawing.
+  Scenario revision `4` kept every term of scenario revision `3` except the Session versions of 〔Save と Load〕, 〔以前の Session
   の移行〕, May retire, and Accepted residual risk (the drawings format is
   Session version `49`; `48` is the 0.14.0 format, which moves to it without
   Python), and one added sentence in 〔Save と Load〕: a Session `46` or `47`
@@ -7252,20 +7565,25 @@ Decision date: 2026-10-11
   of the OV-1100 question (Revision 62 entry); for the Undo/Redo of project
   operations, the answers `A` to Q-DR-5 and Q-DR-8 (Revision 63 entry); for
   the Load of a Session `46` or `47` with protein comparison results stored
-  on a reversed record, `B-LOAD` of Q-O2 (Revision 64 entry). The receipt
-  names the record's outcome only.
+  on a reversed record, `B-LOAD` of Q-O2 (Revision 64 entry); for the Undo of
+  drawing list operations and the auxiliary input files, the answers to
+  PQ-1 to PQ-4 (Revision 81 entry); for the Save of an empty shown drawing,
+  PQ-B1 (Revision 82 entry). The receipt names the record's outcome
+  only.
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
 - Decision source: the Owner replies quoted verbatim in the Revision 37 entry
   above, for scenario revision `2` those quoted in the Revision 62 entry
   above, for scenario revision `3` those quoted in the Revision 63 entry
-  above, and for scenario revision `4` those quoted in the Revision 64 entry
+  above, for scenario revision `4` those quoted in the Revision 64 entry
+  above, and for scenario revision `5` those quoted in the Revision 81 entry
+  above, and for scenario revision `6` those quoted in the Revision 82 entry
   above. The Owner approved the receipt text below as written. The receipt
   reproduces its fields without translation or additional terms. Dependent
   runtime requires this authority merged into its base; this record supplies
   no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `dbc29cc437fd62eb2aad80cbbe7872f7ab701896b9a7ccf54609ca5b9c168f81`.
+  `7a9e27a919e496b8f5d51fdcf8084166d7c01ca9e056829d32f79f620a930138`.
 - Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-013`,
   `OIC-027`, `OIC-030`. These obligations and the complete selected outcome
   are jointly required; their citation does not claim completed
@@ -7274,29 +7592,29 @@ Decision date: 2026-10-11
 ```text
 PRODUCT_DECISION
 Concern: session.project-drawings
-Scenario revision: 4
-Supersedes: PD-OI-090, scenario revision 3
+Scenario revision: 6
+Supersedes: PD-OI-090, scenario revision 5
 Choice: A / PROJECT-WITH-DRAWINGS
 Rationale: 1 つの Session（project）に、共有の入力ファイルと複数の drawing（図）を持たせる。PD-OI-086 が Circular と Linear に分けた設定、凡例の編集、History、Result を、drawing ごとに持つ形へ広げる。ある図の編集や Generate が別の図の設定や Result を変えたり失敗させたりしないようにし（OV-80、OV-82、OV-104）、同じ mode の drawing も複数持てるようにして、同じゲノムの全体図と遺伝子クラスターの拡大図のように、同じ入力から複数の図を作れるようにする。Session の形式は Python が定め（読み、検証し、移行し、書く）、Web、CLI、Python API が同じ形式を使う。
-Must preserve: 〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46、47、48 と 49 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 4）。ただし、version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものは、保存された図をすぐに示したうえで、読み込み時に Python が一度だけその結果を探索の座標に移す（PD-OI-044 revision 4）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46、47 と 48（0.14.0 は 48）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。
+Must preserve: 〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。Default colors、Specific rules、Blacklist、Whitelist、Priority の 5 つのファイルは、読み込み、置き換え、削除のどれでも表示中の drawing だけを変え、この選択は出さない。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings、入力ファイルを「このファイルを使うすべての drawing」で置き換える操作と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。削除の Undo は、その drawing を設定、編集、Result、History ごと削除の前のとおりに戻す。drawing の追加、複製、削除の Undo は、その操作の前に表示していた drawing を表示し、Redo は操作の後に表示していた drawing を表示する。表示中の drawing を削除すると次のタブの drawing を、次のタブがなければ前のタブの drawing を表示する。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。表示していた drawing がファイル、設定の変更、編集、Result のどれもなく保存されなかったときは、保存した drawing のうち、その次のタブの drawing を、次のタブがなければ前のタブの drawing を開く。保存する drawing が 1 つもないときは、表示していた drawing を保存する。version 46、47、48 と 49 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 4）。ただし、version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものは、保存された図をすぐに示したうえで、読み込み時に Python が一度だけその結果を探索の座標に移す（PD-OI-044 revision 4）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46、47 と 48（0.14.0 は 48）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。
 May retire: 図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46、47 と 48 の modes と otherModeResult。読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。
 Accepted residual risk: 環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 49）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。
 Owner: satoshikawato
-Decision date: 2026-10-18
+Decision date: 2026-10-23
 ```
 
 ```json
 {
   "concern": "session.project-drawings",
-  "scenarioRevision": 4,
-  "supersedes": "PD-OI-090, scenario revision 3",
+  "scenarioRevision": 6,
+  "supersedes": "PD-OI-090, scenario revision 5",
   "choice": "A / PROJECT-WITH-DRAWINGS",
   "rationale": "1 つの Session（project）に、共有の入力ファイルと複数の drawing（図）を持たせる。PD-OI-086 が Circular と Linear に分けた設定、凡例の編集、History、Result を、drawing ごとに持つ形へ広げる。ある図の編集や Generate が別の図の設定や Result を変えたり失敗させたりしないようにし（OV-80、OV-82、OV-104）、同じ mode の drawing も複数持てるようにして、同じゲノムの全体図と遺伝子クラスターの拡大図のように、同じ入力から複数の図を作れるようにする。Session の形式は Python が定め（読み、検証し、移行し、書く）、Web、CLI、Python API が同じ形式を使う。",
-  "mustPreserve": "〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46、47、48 と 49 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 4）。ただし、version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものは、保存された図をすぐに示したうえで、読み込み時に Python が一度だけその結果を探索の座標に移す（PD-OI-044 revision 4）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46、47 と 48（0.14.0 は 48）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。",
+  "mustPreserve": "〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。色ルールの表（Colors の SPECIFIC RULES）の編集が照合を待っている間も切り替えられず、照合が終わるとその編集はその drawing の History の 1 つの step になる。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。Default colors、Specific rules、Blacklist、Whitelist、Priority の 5 つのファイルは、読み込み、置き換え、削除のどれでも表示中の drawing だけを変え、この選択は出さない。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と project の操作を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。project の操作は、drawing の追加、複製、名前の変更、並べ替え、削除、Reset all drawings、入力ファイルを「このファイルを使うすべての drawing」で置き換える操作と、drawing によらず 1 つの値（Session の title、Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数、編集の入力欄に書きかけた値）だけを変える操作で、どの drawing を表示していても戻せる。drawing の値も一緒に変える操作（色ルールを追加して入力欄の書きかけが消えるなど）は、その drawing の操作として 1 step で戻る。Rich Feature Popup は今までどおり Undo/Redo では変わらない（PD-OI-100）。palette の Instant Preview を On にすると、すべての drawing で反映を待っている palette をその 1 step で反映し、その Undo で待っている状態に戻る。Result か編集のある drawing の削除は確認し、Undo で戻せる。削除の Undo は、その drawing を設定、編集、Result、History ごと削除の前のとおりに戻す。drawing の追加、複製、削除の Undo は、その操作の前に表示していた drawing を表示し、Redo は操作の後に表示していた drawing を表示する。表示中の drawing を削除すると次のタブの drawing を、次のタブがなければ前のタブの drawing を表示する。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。表示していた drawing がファイル、設定の変更、編集、Result のどれもなく保存されなかったときは、保存した drawing のうち、その次のタブの drawing を、次のタブがなければ前のタブの drawing を開く。保存する drawing が 1 つもないときは、表示していた drawing を保存する。version 46、47、48 と 49 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 4）。ただし、version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものは、保存された図をすぐに示したうえで、読み込み時に Python が一度だけその結果を探索の座標に移す（PD-OI-044 revision 4）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46、47 と 48（0.14.0 は 48）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。",
   "mayRetire": "図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46、47 と 48 の modes と otherModeResult。読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。",
   "acceptedResidualRisk": "環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 49）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-18"
+  "decisionDate": "2026-10-23"
 }
 ```
 
@@ -7576,8 +7894,11 @@ Decision date: 2026-10-16
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `16`
-- Supersedes: `PD-OI-097`, scenario revision `15`. Scenario revision `16`
+- Scenario revision: `17`
+- Supersedes: `PD-OI-097`, scenario revision `16`. Scenario revision `17`
+  keeps every outcome of scenario revision `16` and adds `DEF-TRACK-WARN`;
+  Reply 6 of the Revision 84 entry approves its additions to the Rationale,
+  the Must preserve, and the Accepted residual risk. Scenario revision `16`
   keeps every outcome of scenario revision `15` except the rows above the
   first of horizontal `above_feature` labels, and adds `AF-ROW-PITCH`; Reply 64
   of the Revision 77 entry approves its changes to the Rationale, the Must
@@ -7616,10 +7937,10 @@ Decision date: 2026-10-16
   the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
   and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH`
-- Normative outcome: exactly the complete approved scenario revision `16`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN`
+- Normative outcome: exactly the complete approved scenario revision `17`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7` to `15` receipts are kept as they were approved.
+  scenario revision `7` to `16` receipts are kept as they were approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -7706,6 +8027,14 @@ Decision date: 2026-10-16
   Contract co-change); this record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `16`; UTF-8, excluding the final newline):
   `e0fc664c2fc41f544337579f991c1997cd9508d5dbeb345d8f2f7e96e6226d01`.
+- Decision source (scenario revision `17`): the Owner replies of `2026-10-23`
+  quoted verbatim in the Revision 84 entry above; Reply 6 approves the
+  eleventh receipt and JSON below, without translation or additional terms.
+  The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `17`; UTF-8, excluding the final newline):
+  `d8a9d51d28ce221348930e2b7a90e0bfbeb783f93311435bee94c4669ac47c55`.
 
 ```text
 PRODUCT_DECISION
@@ -7992,6 +8321,35 @@ Decision date: 2026-10-21
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-21"
+}
+```
+
+Scenario revision `17` receipt, approved by `satoshikawato` on `2026-10-23` (Reply 6 of the Revision 84 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 17
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。
+Owner: satoshikawato
+Decision date: 2026-10-23
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 17,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-23"
 }
 ```
 
@@ -8628,7 +8986,7 @@ Decision date: 2026-10-22
 | `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 | `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
-| `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo of a step in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; Undo/Redo in any drawing walks the shown drawing's steps and the project steps (drawing add, duplicate, rename, reorder, delete, Reset all drawings, and edits that change only the Session title, Auto Reflow, PNG DPI, palette Instant Preview, LOSAT execution and threads, or input drafts) newest first, one step per operation; an operation that also changes a drawing value is one step of that drawing; turning Instant Preview on applies every drawing's queued palette in that one step; a drawing switch writes no setting and is not an Undo step; a drawing switch is refused while a color rule table edit is being matched, and that edit becomes one History step of its drawing; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46, 47, and 48 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46, 47, 48, or 49 preview-only Load starts no Python Worker, except that a Session 46 or 47 holding protein comparison results stored on a reversed record shows its stored figure first and then starts it once to convert them; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
+| `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo of a step in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; Undo/Redo in any drawing walks the shown drawing's steps and the project steps (drawing add, duplicate, rename, reorder, delete, Reset all drawings, replacing an input file for every drawing that uses it, and edits that change only the Session title, Auto Reflow, PNG DPI, palette Instant Preview, LOSAT execution and threads, or input drafts) newest first, one step per operation; the Undo of a drawing add, duplicate, or delete shows the drawing that was shown before it, and its Redo the drawing shown after it; deleting the shown drawing shows the next tab's drawing, else the previous tab's; the Undo of a delete restores that drawing with its settings, edits, Result, and History; the Default colors, Specific rules, Blacklist, Whitelist, and Priority files change only the shown drawing; an operation that also changes a drawing value is one step of that drawing; turning Instant Preview on applies every drawing's queued palette in that one step; a drawing switch writes no setting and is not an Undo step; a drawing switch is refused while a color rule table edit is being matched, and that edit becomes one History step of its drawing; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown, or, when the shown drawing had no file, changed setting, edit, or Result and was not saved, the saved drawing of the next tab, else of the previous tab; when no drawing qualifies, Save writes the shown drawing; each Session 27-44 fixture and each Session 46, 47, and 48 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46, 47, 48, or 49 preview-only Load starts no Python Worker, except that a Session 46 or 47 holding protein comparison results stored on a reversed record shows its stored figure first and then starts it once to convert them; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
 | `OIC-031` | `PD-OI-099`: a Load of a file with something it cannot fully restore lists it in one dialog before any setting, Result, input file, History, or screen changes, and Cancel changes none of them. Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. A refusal of the Web Load comes before the dialog, never after [Load]. No file the Web loaded before the dialog existed is refused. The receipt's 〔拒否〕 classes are refused; once the interim of its Accepted residual risk ends, they are the only refusals of the Web Load. |
 
 These new acceptance entries are obligations for dependent runtime work, not

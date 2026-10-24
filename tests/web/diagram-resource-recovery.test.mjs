@@ -14,7 +14,7 @@ const workerSource = (await readFile(workerUrl, 'utf8')).replace(
 );
 let workerNumber = 0;
 const loadStagingOwner = () => import(`data:text/javascript;base64,${Buffer.from(
-  `${workerSource}\nexport { stageRenderResources };\n// instance ${++workerNumber}`
+  `${workerSource}\nexport { prepareCanonicalResources, HELPER_OPERATION_SPECS };\n// instance ${++workerNumber}`
 ).toString('base64')}`);
 
 class MemoryFS {
@@ -55,17 +55,37 @@ class StagingWorker {
     this.messages.push(copy);
     if (message.type === 'init') {
       queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true, capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
+    } else if (message.type === 'helper' && message.payload?.resourceManifest) {
+      this.operation = this.stageForHelper(structuredClone(message));
     } else if (['helper', 'feature-extraction'].includes(message.type)) {
       queueMicrotask(() => this.emit({ type: message.type, requestId: message.requestId, ok: false, error: { code: 'HELPER_PROTOCOL', stage: 'request-validation', operation: message.operation || 'feature-extraction' } }));
     } else {
       this.operation = this.run(structuredClone(message));
     }
   }
+  // A helper stages as the Worker's helpers do: it reads the cache and prunes nothing. The blastp
+  // extraction runs the Worker's own operation, whose Python call answers with the text of each file it names.
+  async stageForHelper({ requestId, operation, payload }) {
+    const workspace = `/helper-${requestId}`;
+    const { prepareCanonicalResources, HELPER_OPERATION_SPECS } = await this.owner;
+    if (operation === 'extractCdsProteinFasta') {
+      const text = (path) => (path ? Buffer.from(this.fs.read(path)).toString() : null);
+      const callWebJsonHelper = (_name, source, format, fasta) => JSON.stringify({ source: text(source), format, fasta: text(fasta) });
+      const pyodide = { FS: this.fs, globals: { get: () => callWebJsonHelper } };
+      const result = await HELPER_OPERATION_SPECS[operation].run(pyodide, payload, new Map(), operation, workspace);
+      this.fs.cleanWorkspace(workspace);
+      this.emit({ type: 'helper', requestId, ok: true, result });
+      return;
+    }
+    const paths = await prepareCanonicalResources({ FS: this.fs }, workspace, payload);
+    this.fs.cleanWorkspace(workspace);
+    this.emit({ type: 'helper', requestId, ok: true, result: { staged: Object.keys(paths) } });
+  }
   async run({ requestId, payload }) {
     const workspace = `/request-${requestId}`;
     try {
-      const { stageRenderResources } = await this.owner;
-      const paths = await stageRenderResources({ FS: this.fs }, workspace, payload.resourceManifest, payload.stagedResources, false, requestId);
+      const { prepareCanonicalResources } = await this.owner;
+      const paths = await prepareCanonicalResources({ FS: this.fs }, workspace, payload, { requestId, prune: true });
       const content = Object.fromEntries(Object.entries(paths).map(([id, path]) => [id, Buffer.from(this.fs.read(path)).toString()]));
       this.fs.cleanWorkspace(workspace);
       this.staged?.();
@@ -82,7 +102,8 @@ class StagingWorker {
   latestRun() { return this.messages.filter(m => m.type === 'run').at(-1); }
 }
 globalThis.Worker = StagingWorker;
-const { runDiagramGeneration, runDiagramHelperOperation, runFeatureExtraction, cancelDiagramGeneration, disposeDiagramGenerationWorker } = await import(
+const { runDiagramGeneration, runDiagramHelperOperation, runFeatureExtraction, cancelDiagramGeneration, disposeDiagramGenerationWorker,
+  setDiagramResourceRetainSource } = await import(
   '../../gbdraw/web/js/services/diagram-generation.js'
 );
 const payload = values => ({
@@ -95,7 +116,7 @@ const run = values => runDiagramGeneration(payload(values));
 const transferred = worker => worker.latestRun().payload.stagedResources.map(r => r.resourceId);
 const content = response => JSON.parse(response.results[0].content);
 const current = () => StagingWorker.instances.at(-1);
-test.afterEach(() => { disposeDiagramGenerationWorker(); delete globalThis.__GBDRAW_TEST_HOOKS__; });
+test.afterEach(() => { disposeDiagramGenerationWorker(); setDiagramResourceRetainSource(null); delete globalThis.__GBDRAW_TEST_HOOKS__; });
 
 test('W2/W4/W5: structured Python rejection acknowledges changed bytes, and A recovers once', async () => {
   const a = await run({ source: 'AAAA' });
@@ -227,4 +248,83 @@ test('cancel during response handling cannot republish disposed Worker cache kno
   await Promise.resolve();
   await run({ source: 'A' });
   assert.deepEqual(transferred(current()), []);
+});
+
+// A4 (IN-A): the Worker keeps every committed drawing's resources by content token.
+const cachedTexts = worker => worker.fs.cacheFiles().map(([, bytes]) => Buffer.from(bytes).toString()).sort();
+test('alternating drawings transfer nothing again, and a resource no drawing names is released', async () => {
+  const committed = [];
+  setDiagramResourceRetainSource(() => committed);
+  const circular = payload({ 'circular-source': 'CIRCULAR' });
+  const linear = payload({ 'linear-first': 'LINEAR 1', 'linear-second': 'LINEAR 2' });
+  assert.deepEqual(content(await runDiagramGeneration(circular)), { 'circular-source': 'CIRCULAR' });
+  const worker = current();
+  committed.push(circular);
+  await runDiagramGeneration(linear);
+  assert.deepEqual(transferred(worker), ['linear-first', 'linear-second']);
+  committed.push(linear);
+  assert.deepEqual(content(await runDiagramGeneration(circular)), { 'circular-source': 'CIRCULAR' });
+  assert.deepEqual(transferred(worker), [], 'Circular again reuses its resource');
+  assert.deepEqual(content(await runDiagramGeneration(linear)), { 'linear-first': 'LINEAR 1', 'linear-second': 'LINEAR 2' });
+  assert.deepEqual(transferred(worker), [], 'Linear again reuses its resources');
+  assert.deepEqual(cachedTexts(worker), ['CIRCULAR', 'LINEAR 1', 'LINEAR 2']);
+  committed.splice(0, 1);
+  await runDiagramGeneration(linear);
+  assert.deepEqual(cachedTexts(worker), ['LINEAR 1', 'LINEAR 2'], 'no drawing names the Circular resource');
+  await runDiagramGeneration(circular);
+  assert.deepEqual(transferred(worker), ['circular-source']);
+});
+
+test('equal bytes under two resource IDs travel once and share one cache file', async () => {
+  const response = await run({ first: 'SAME', second: 'SAME' });
+  assert.deepEqual(content(response), { first: 'SAME', second: 'SAME' });
+  const manifest = current().latestRun().payload.resourceManifest;
+  assert.equal(manifest[0].cacheToken, manifest[1].cacheToken);
+  assert.match(manifest[0].cacheToken, /^[0-9a-f]{64}$/);
+  assert.deepEqual(transferred(current()), ['first']);
+  assert.deepEqual(cachedTexts(current()), ['SAME']);
+});
+
+const helperLeavesCaches = async (operation, helperPayload) => {
+  await run({ first: 'A', second: 'B' });
+  const worker = current();
+  const { resources } = payload({ first: 'A' });
+  const reply = await runDiagramHelperOperation(operation, { ...helperPayload, resources });
+  assert.deepEqual(reply.result, { staged: ['first'] });
+  assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
+  assert.deepEqual(content(await run({ first: 'A', second: 'B' })), { first: 'A', second: 'B' });
+  assert.deepEqual(transferred(worker), []);
+  assert.equal(worker.fs.cacheFiles().length, 2);
+};
+
+test('a helper that stages part of the drawing leaves both staging caches to the next Generate (OV-1590)', () => (
+  helperLeavesCaches('readFeatureOverrideTable', { canonicalRequest: payload({ first: 'A' }).request })
+));
+
+test('the blastp extraction stages one record source by its resource id (OV-1555)', async () => {
+  await run({ first: 'A', second: 'B' });
+  const worker = current();
+  const { resources } = payload({ first: 'A' });
+  const reply = await runDiagramHelperOperation('extractCdsProteinFasta', {
+    recordSource: { kind: 'genbank', resourceId: 'first' }, format: 'genbank', resources
+  });
+  assert.deepEqual(reply.result, { source: 'A', format: 'genbank', fasta: null });
+  assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
+  assert.deepEqual(content(await run({ first: 'A', second: 'B' })), { first: 'A', second: 'B' });
+  assert.deepEqual(transferred(worker), []);
+});
+
+// A GFF3 record source names two resources: the Worker passes the GFF3 file as the
+// record source and the FASTA file as its sequences, whichever order they were staged in.
+test('the blastp extraction reads a staged GFF3 and FASTA pair in their roles (OV-1555)', async () => {
+  const resource = (kind, name, text) => ({
+    name, kind, size: Buffer.byteLength(text), encoding: 'base64', data: Buffer.from(text).toString('base64')
+  });
+  const resources = { 'pair-fasta': resource('fasta', 'pair.fasta', '>G1\nATG\n'), 'pair-gff3': resource('gff3', 'pair.gff', '##gff-version 3\n') };
+  const recordSource = { kind: 'gffFasta', gffResourceId: 'pair-gff3', fastaResourceId: 'pair-fasta' };
+  await runDiagramGeneration({ request: { records: [{ source: recordSource }] }, resources });
+  const worker = current();
+  const reply = await runDiagramHelperOperation('extractCdsProteinFasta', { recordSource, format: 'gff', resources });
+  assert.deepEqual(reply.result, { source: '##gff-version 3\n', format: 'gff', fasta: '>G1\nATG\n' });
+  assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
 });

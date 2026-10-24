@@ -236,7 +236,7 @@ test('an edited Legend order compiles to one order operation; the default order 
 
 test('canvas padding reaches every candidate Result once and is idempotent (D-09)', async () => {
   const { installFakeSvgDom } = await import('./fake-svg-dom.mjs');
-  const { applyCanvasPaddingToSvg } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
+  const { applyCanvasToSvg } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
   const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
   installFakeSvgDom();
   const parse = () => new DOMParser().parseFromString('<svg viewBox="0 0 100 50" width="100px" height="50px"></svg>').documentElement;
@@ -252,14 +252,14 @@ test('canvas padding reaches every candidate Result once and is idempotent (D-09
     assert.equal(svg.getAttribute('width'), '260px');
     assert.equal(svg.getAttribute('data-original-view-box'), '0 0 100 50');
   });
-  assert.equal(applyCanvasPaddingToSvg(svgs[0], { right: 150, left: 10 }), false);
+  assert.equal(applyCanvasToSvg(svgs[0], { right: 150, left: 10 }), false);
   assert.equal(svgs[0].getAttribute('viewBox'), '-10 0 260 50');
-  assert.equal(applyCanvasPaddingToSvg(svgs[0], {}), true);
+  assert.equal(applyCanvasToSvg(svgs[0], {}), true);
   assert.equal(svgs[0].getAttribute('viewBox'), '0 0 100 50');
   assert.equal(svgs[0].getAttribute('width'), '100px');
   // Zero padding leaves an unpadded Result byte-identical.
   const plain = parse();
-  assert.equal(applyCanvasPaddingToSvg(plain, {}), false);
+  assert.equal(applyCanvasToSvg(plain, {}), false);
   assert.equal(plain.getAttribute('data-original-view-box'), null);
 });
 

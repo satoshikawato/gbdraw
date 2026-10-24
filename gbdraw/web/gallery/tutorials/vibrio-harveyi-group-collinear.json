@@ -1468,7 +1468,7 @@
       "title": "Generate and check the result",
       "body": "Click Generate Diagram. Generate again reuses the LOSAT results. Check the result:",
       "items": [
-        "Each row starts at its replication initiator, so the ruler counts from dnaA at the left end of chromosome I and from rctB at the left end of chromosome II.",
+        "Each row starts at its replication initiator: dnaA on chromosome I and rctB on chromosome II. The ruler keeps each record's own coordinates, so its labels wrap back to 0 partway along the row.",
         "Red (inverted) blocks join regions within chromosome I or within chromosome II.",
         "Few blocks cross from chromosome I of one species to chromosome II of the other."
       ],

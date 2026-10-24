@@ -1200,7 +1200,9 @@ the figure opens nothing. While **Review alignment** is open, these elements
 open nothing and the preview does not read that line.
 
 Ctrl-click selects features for bulk color, legend name, visibility, and
-stroke edits. Use the visible **Apply** action to make an edit part of the
+stroke edits. A press that moves more than a few pixels before its release,
+such as a pan of the figure, is not a click: wherever it ends, it opens no
+feature or match popup and selects or clears no feature. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the name of another
 entry of a different color or feature type, or of a deleted entry, opens the
 **Legend Name Conflict** dialog with **Merge into "<name>"**, **Keep both**, or
@@ -1434,8 +1436,18 @@ reset or **Reset Layout**, or restore the matching settings, then Generate again
 **Reset Layout** returns moved items, canvas padding, pan, and zoom to their
 defaults; it is unavailable until one of them changed. **Canvas padding** values
 are in pixels.
-An offset near an edge may still clip or overlap another item; adjust canvas
-padding, which Generate keeps, or reset its position. A Linear legend side
+When a moved legend, plot title, or Linear scale would pass the canvas edge, the canvas grows
+to hold it with the usual edge margin. The item keeps its offset, nothing else
+moves, and an export has the grown size. The canvas is fitted when the item is
+placed: when you drop it, change the legend side or title position, Generate,
+or Undo or Redo the move. Loading a Session or showing another Result keeps
+each Result's canvas as it was saved. The canvas is never smaller than the
+automatic canvas, and resetting the item's position or **Reset Layout**
+returns to that canvas. A Linear scale in a Result saved by an earlier gbdraw
+version, which does not record the scale's size, takes no growth until you
+Generate again. A moved item may still overlap
+another item; adjust canvas padding, which Generate keeps, or reset its
+position. A Linear legend side
 change does not move the legend in place, because the generated layout uses
 the renderer's text measurements; Generate applies it. **Undo** and **Redo** traverse supported form and
 editor changes. Each change of a checkbox, radio button, select, or button is one step. This

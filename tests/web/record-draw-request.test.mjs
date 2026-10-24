@@ -3,6 +3,7 @@
 // records and rows, the comparison indexes, the record display rows, and the
 // annotations bound to the OFF record, which wait in the draft.
 import assert from 'node:assert/strict';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -16,7 +17,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { serializeActiveRenderFiles } = await import('../../gbdraw/web/js/services/config.js');
+const { serializeActiveRenderFiles, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 
@@ -26,9 +27,9 @@ const genbank = (name) => {
 };
 const blast = genbank('a-to-c.tsv');
 
-state.mode.value = 'linear';
+installShownDrawing('linear');
 state.lInputType.value = 'gb';
-const drawing = state.drawings.linear;
+const drawing = modeDrawing(state, 'linear');
 state.linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({
   uid, gb: genbank(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',
   record_subtitle: '', file_definition: '', file_subtitle: '', inferred_definition: '', region_record_id: '',

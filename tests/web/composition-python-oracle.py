@@ -139,6 +139,18 @@ def main() -> None:
                 overlay_obstacles=(Aabb(0.0, 0.0, 40.0, 40.0),),
             ),
         ),
+        _case(
+            # The corner Legend grows the canvas upward, onto the title's side.
+            "canvas_growth_title",
+            CompositionRequest(
+                primary=CompositionItem("primary", Aabb(0.0, 0.0, 40.0, 60.0)),
+                legend=CompositionItem("legend", Aabb(0.0, 0.0, 20.0, 20.0)),
+                title=CompositionItem("title", Aabb(0.0, 0.0, 60.0, 10.0)),
+                legend_placement=LegendPlacement.UPPER_LEFT,
+                title_placement=TitlePlacement.TOP,
+                overlay_obstacles=(Aabb(0.0, 0.0, 40.0, 60.0),),
+            ),
+        ),
     ]
     print(json.dumps(cases, allow_nan=False, separators=(",", ":")))
 

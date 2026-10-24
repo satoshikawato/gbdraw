@@ -339,10 +339,8 @@ export const createSvgStyles = ({
   // changes them. The watcher only shows the answer on the Result; the writers
   // retire the Legend rows (R10). A mode switch changes neither drawing, so it
   // applies nothing.
-  /** @type {Array<['circular' | 'linear', DrawingState]>} */ ([
-    ['circular', state.drawings.circular], ['linear', state.drawings.linear]
-  ]).forEach(([drawingMode, drawing]) => watch(
-    () => /** @type {const} */ (['content', 'skew', 'depth']).map((kind) => drawnTrackHidden(kind, drawingMode, drawing)).join(),
+  /** @type {readonly DrawingState[]} */ (state.drawingList()).forEach((drawing) => watch(
+    () => /** @type {const} */ (['content', 'skew', 'depth']).map((kind) => drawnTrackHidden(kind, drawing.mode, drawing)).join(),
     () => {
       if (drawing !== state.activeDrawing()) return;
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;

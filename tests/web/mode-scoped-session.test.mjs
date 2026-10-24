@@ -7,6 +7,8 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -24,10 +26,12 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
-const { SESSION_VERSION, assertActiveModeInputs, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, assertDrawingInputs, installShownDrawing } = sessionConfig;
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 
 const MODES = ['circular', 'linear'];
 const save = async (title) => {
@@ -42,8 +46,8 @@ const load = (session) => importSession({
 }, { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
 const resetDrawings = () => {
   for (const mode of MODES) {
-    Object.assign(state.drawings[mode].form, createDefaultForm());
-    Object.assign(state.drawings[mode].adv, createDefaultAdv(mode));
+    Object.assign(modeDrawing(state, mode).form, createDefaultForm());
+    Object.assign(modeDrawing(state, mode).adv, createDefaultAdv(mode));
   }
 };
 // Every key of a slice, as `container.key` paths.
@@ -56,17 +60,17 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
 test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
   assert.equal(SESSION_VERSION, 48);
   resetDrawings();
-  state.mode.value = 'circular';
-  state.drawings.circular.adv.label_font_size = 13;
-  state.drawings.circular.form.separate_strands = false;
-  state.drawings.circular.adv.gc_content_mode = 'percent';
-  state.drawings.linear.adv.label_font_size = 7;
-  state.drawings.linear.adv.depth_min = 3;
-  state.drawings.linear.form.plot_title = 'Linear only';
+  installShownDrawing('circular');
+  modeDrawing(state, 'circular').adv.label_font_size = 13;
+  modeDrawing(state, 'circular').form.separate_strands = false;
+  modeDrawing(state, 'circular').adv.gc_content_mode = 'percent';
+  modeDrawing(state, 'linear').adv.label_font_size = 7;
+  modeDrawing(state, 'linear').adv.depth_min = 3;
+  modeDrawing(state, 'linear').form.plot_title = 'Linear only';
   // OV-120: a renamed row the last Linear Generate did not draw.
   // A Legend row holds no `showStroke` since OV-157 (view state, #940).
   const waiting = { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf', featureIds: [] };
-  state.drawings.linear.dormantLegendEntries.value = [waiting];
+  modeDrawing(state, 'linear').dormantLegendEntries.value = [waiting];
   const saved = await save('two drawings');
 
   assert.equal(saved.version, SESSION_VERSION);
@@ -98,20 +102,20 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   }
 
   resetDrawings();
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   const loaded = await load(saved);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.equal(state.mode.value, 'circular');
-  assert.equal(state.drawings.circular.adv.label_font_size, 13);
-  assert.equal(state.drawings.circular.form.separate_strands, false);
-  assert.equal(state.drawings.circular.adv.gc_content_mode, 'percent');
-  assert.equal(state.drawings.linear.adv.label_font_size, 7);
-  assert.equal(state.drawings.linear.adv.depth_min, 3);
-  assert.equal(state.drawings.linear.form.plot_title, 'Linear only');
-  assert.notEqual(state.drawings.circular.form.plot_title, 'Linear only');
-  assert.deepEqual(state.drawings.linear.dormantLegendEntries.value, [waiting]);
-  assert.deepEqual(state.drawings.linear.legendEntries.value, []);
-  assert.deepEqual(state.drawings.circular.dormantLegendEntries.value, []);
+  assert.equal(modeDrawing(state, 'circular').adv.label_font_size, 13);
+  assert.equal(modeDrawing(state, 'circular').form.separate_strands, false);
+  assert.equal(modeDrawing(state, 'circular').adv.gc_content_mode, 'percent');
+  assert.equal(modeDrawing(state, 'linear').adv.label_font_size, 7);
+  assert.equal(modeDrawing(state, 'linear').adv.depth_min, 3);
+  assert.equal(modeDrawing(state, 'linear').form.plot_title, 'Linear only');
+  assert.notEqual(modeDrawing(state, 'circular').form.plot_title, 'Linear only');
+  assert.deepEqual(modeDrawing(state, 'linear').dormantLegendEntries.value, [waiting]);
+  assert.deepEqual(modeDrawing(state, 'linear').legendEntries.value, []);
+  assert.deepEqual(modeDrawing(state, 'circular').dormantLegendEntries.value, []);
 
   // A slice may omit any field, and the slice of a mode not shown may be
   // absent: Load fills them with that mode's defaults. (A settings-only
@@ -120,15 +124,15 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   delete partial.modes.circular.config.adv.label_font_size;
   delete partial.modes.linear;
   resetDrawings();
-  state.drawings.linear.dormantLegendEntries.value = [];
-  state.drawings.circular.adv.label_font_size = 99;
-  state.drawings.linear.adv.depth_min = 9;
+  modeDrawing(state, 'linear').dormantLegendEntries.value = [];
+  modeDrawing(state, 'circular').adv.label_font_size = 99;
+  modeDrawing(state, 'linear').adv.depth_min = 9;
   const loadedPartial = await load(partial);
   assert.equal(loadedPartial.status, 'ok', JSON.stringify(loadedPartial.error));
-  assert.equal(state.drawings.circular.adv.label_font_size, createDefaultAdv('circular').label_font_size);
-  assert.equal(state.drawings.circular.form.separate_strands, false);
-  assert.equal(state.drawings.linear.adv.depth_min, createDefaultAdv('linear').depth_min);
-  assert.equal(state.drawings.linear.form.plot_title, '');
+  assert.equal(modeDrawing(state, 'circular').adv.label_font_size, createDefaultAdv('circular').label_font_size);
+  assert.equal(modeDrawing(state, 'circular').form.separate_strands, false);
+  assert.equal(modeDrawing(state, 'linear').adv.depth_min, createDefaultAdv('linear').depth_min);
+  assert.equal(modeDrawing(state, 'linear').form.plot_title, '');
 });
 
 test('a file that is not a gbdraw Session is refused as such before its contents are read', async () => {
@@ -184,7 +188,7 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
 // Python split writes; an unknown name loads as no color, as before.
 test('named Legend and stroke colors load as their CSS hex values (OV-160)', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const saved = await save('named colors');
   const named = structuredClone(saved);
   const legend = named.modes.circular.editorState.legend;
@@ -198,7 +202,7 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
   named.editorState.originalSvgStroke = { color: 'gray', width: 1 };
   const loaded = await load(named);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   assert.deepEqual({ ...drawing.legendColorOverrides }, { CDS: '#fff5ee' });
   assert.deepEqual({ ...drawing.legendStrokeOverrides.CDS },
     { strokeColor: '#000080', strokeWidth: 2, originalStrokeColor: '#808080', originalStrokeWidth: 1 });
@@ -212,7 +216,7 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
   };
   const loadedUnknown = await load(unknown);
   assert.equal(loadedUnknown.status, 'ok', JSON.stringify(loadedUnknown.error));
-  assert.deepEqual({ ...state.drawings.circular.legendStrokeOverrides.CDS }, { strokeWidth: 2, originalStrokeColor: null });
+  assert.deepEqual({ ...modeDrawing(state, 'circular').legendStrokeOverrides.CDS }, { strokeWidth: 2, originalStrokeColor: null });
 });
 
 // D-43 (OV-300): a stored Legend entry whose color lies outside the Default
@@ -229,7 +233,7 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   const kept = [{ caption: 'Y', color: '#FF0000' }, { caption: 'Z', color: '#AABBCC' }];
 
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const current = structuredClone(await save('legend colors'));
   current.modes.circular.editorState.legend.entries = structuredClone(stored);
   current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
@@ -237,8 +241,8 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   loadDialogs.length = 0;
   const loaded = await load(current);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(shownRows(state.drawings.circular), kept);
-  assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
+  assert.deepEqual(shownRows(modeDrawing(state, 'circular')), kept);
+  assert.deepEqual(modeDrawing(state, 'circular').deletedLegendEntries.value, []);
   assert.deepEqual(loadDialogs.map(({ items }) => items),
     [['Legend: entries "X" and "W" (deleted) had a color the app does not accept and were dropped.']]);
   assert.deepEqual(loaded.notices, []);
@@ -264,8 +268,8 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
 // (tests/fixtures/sessions/legend-row-key-vectors.json).
 test('Session 47 keeps the edits of two rows of one name; a Session 46 is read by row key', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
-  const drawing = state.drawings.circular;
+  installShownDrawing('circular');
+  const drawing = modeDrawing(state, 'circular');
   const rows = [
     { caption: 'GC', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] },
     { caption: 'GC', originalCaption: 'GC skew', color: '#5050f0', featureIds: [] }
@@ -314,7 +318,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
 // the Depth track count only when a row holds a Depth file, as for Circular.
 test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
   const first = await save('gallery round trip');
@@ -331,7 +335,7 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
 // "Leader lines cross" notice (PD-OI-097).
 test('Session Load clears the label fit notice of the Result shown before', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
     report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
@@ -346,29 +350,29 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
 // a list of the wrong shape.
 test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
   const uid = state.linearSeqs[0].uid;
-  state.drawings.linear.recordsOff.splice(0, Infinity, uid);
-  state.drawings.circular.recordsOff.splice(0, Infinity, '#2');
+  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, uid);
+  modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   const saved = await save('records off');
   assert.deepEqual(saved.modes.linear.config.recordsOff, [uid]);
   assert.deepEqual(saved.modes.circular.config.recordsOff, ['#2']);
 
-  state.drawings.linear.recordsOff.splice(0);
-  state.drawings.circular.recordsOff.splice(0);
+  modeDrawing(state, 'linear').recordsOff.splice(0);
+  modeDrawing(state, 'circular').recordsOff.splice(0);
   assert.equal((await load(saved)).status, 'ok');
-  assert.deepEqual([...state.drawings.linear.recordsOff], [uid]);
-  assert.deepEqual([...state.drawings.circular.recordsOff], ['#2']);
-  assert.deepEqual(state.drawings.linear.drawnLinearSeqs.value, []);
+  assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], [uid]);
+  assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], ['#2']);
+  assert.deepEqual(modeDrawing(state, 'linear').drawnLinearSeqs.value, []);
 
   const omitted = structuredClone(saved);
   delete omitted.modes.linear.config.recordsOff;
   delete omitted.modes.circular.config.recordsOff;
   assert.equal((await load(omitted)).status, 'ok');
-  assert.deepEqual([...state.drawings.linear.recordsOff], []);
-  assert.deepEqual([...state.drawings.circular.recordsOff], []);
+  assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
+  assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], []);
   // Review F6: with every record ON a Save writes no list, so the Session keeps its bytes.
   const allOn = await save('records on');
   assert.equal('recordsOff' in allOn.modes.linear.config, false);
@@ -380,8 +384,8 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
     const result = await load(session);
     assert.equal(result.status, 'ok', label);
     assert.deepEqual(result.repairs.map(({ code, path }) => `${code}@${path}`), rows, label);
-    assert.deepEqual([...state.drawings.linear.recordsOff], linear, label);
-    assert.deepEqual([...state.drawings.circular.recordsOff], circular, label);
+    assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], linear, label);
+    assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], circular, label);
   };
   await loaded((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
     { linear: [], circular: ['#2'] });
@@ -399,11 +403,11 @@ test('a Session without a mode slice turns every record of that mode ON (record 
   resetDrawings();
   const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
   assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
-  state.drawings.linear.recordsOff.splice(0, Infinity, state.linearSeqs[0].uid);
-  state.drawings.circular.recordsOff.splice(0, Infinity, '#2');
+  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, state.linearSeqs[0].uid);
+  modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
-  assert.deepEqual([...state.drawings.linear.recordsOff], []);
-  assert.deepEqual([...state.drawings.circular.recordsOff], []);
+  assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
+  assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], []);
   await save('circular only, saved again');
 });
 
@@ -411,13 +415,13 @@ test('a Session without a mode slice turns every record of that mode ON (record 
 // drawings (PD-OI-070, PD-OI-091).
 test('Reset Settings keeps the OFF records of both drawings (record selection)', async () => {
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
-  state.drawings.linear.recordsOff.splice(0, Infinity, 'card-b');
-  state.drawings.circular.recordsOff.splice(0, Infinity, '#3');
+  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, 'card-b');
+  modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#3');
   resetSettings(state);
-  assert.deepEqual([...state.drawings.linear.recordsOff], ['card-b']);
-  assert.deepEqual([...state.drawings.circular.recordsOff], ['#3']);
-  state.drawings.linear.recordsOff.splice(0);
-  state.drawings.circular.recordsOff.splice(0);
+  assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], ['card-b']);
+  assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], ['#3']);
+  modeDrawing(state, 'linear').recordsOff.splice(0);
+  modeDrawing(state, 'circular').recordsOff.splice(0);
 });
 
 // R15-21 (OV-1107, OV-1108): Reset Settings removes a loaded Session's saved
@@ -427,13 +431,13 @@ test('Reset Settings removes the saved label table and the dormant Similarity gr
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
   const row = { recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^a$', labelText: 'A' };
   MODES.forEach((mode) => {
-    const drawing = state.drawings[mode];
+    const drawing = modeDrawing(state, mode);
     drawing.canonicalLabelOverrideRows.value = [row];
     drawing.orthogroupDormantOverrides.OG_1 = { name: 'Saved name' };
   });
   resetSettings(state);
   MODES.forEach((mode) => {
-    const drawing = state.drawings[mode];
+    const drawing = modeDrawing(state, mode);
     assert.deepEqual(drawing.canonicalLabelOverrideRows.value, [], `${mode} label table`);
     assert.deepEqual({ ...drawing.orthogroupDormantOverrides }, {}, `${mode} dormant group names`);
   });
@@ -442,14 +446,13 @@ test('Reset Settings removes the saved label table and the dormant Similarity gr
 // Record selection 2.5: a Linear drawing with every card OFF (only a
 // hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
 test('a Linear drawing with no ON record names the fix', () => {
-  const sourceState = {
-    files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }],
-    drawings: { linear: { recordsOff: ['a', 'b'] } }
-  };
-  assert.throws(() => assertActiveModeInputs('linear', sourceState),
+  const sourceState = withModeDrawings({
+    files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }]
+  }, { circular: {}, linear: { recordsOff: ['a', 'b'] } });
+  assert.throws(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState),
     (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
-  sourceState.drawings.linear.recordsOff = ['a'];
-  assert.doesNotThrow(() => assertActiveModeInputs('linear', sourceState));
+  modeDrawing(sourceState, 'linear').recordsOff = ['a'];
+  assert.doesNotThrow(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState));
 });
 
 // OV-1280 (D-19, D-ORIGIN-2): the Web writer's Session 48 after the five file
@@ -462,7 +465,7 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
   resetDrawings();
   const loaded = await load(fixture);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   const plain = (value) => JSON.parse(JSON.stringify(value));
   const read = () => ({
     rules: plain(drawing.manualSpecificRules), priority: plain(drawing.manualPriorityRules),

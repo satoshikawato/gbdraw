@@ -11,6 +11,7 @@ import { register } from 'node:module';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 // R4 has one owner (E-OD22): an R4 vector passes only when `restoresNothing`
 // decided the refusal, not another producer of the same diagnostic.
@@ -30,7 +31,9 @@ installFakeSvgDom();
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { importSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 

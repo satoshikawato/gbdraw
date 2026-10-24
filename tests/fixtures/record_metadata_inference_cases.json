@@ -36,10 +36,34 @@
       "expected": "<i>Streptomyces</i> sp. A"
     },
     {
-      "name": "Candidatus prefix stays upright",
+      "name": "Candidatus is abbreviated to an italic Ca. and the name is upright (OV-1720)",
       "organism": "Candidatus Tyloplasma litorale",
       "strain": "Fukuoka2020",
-      "expected": "Candidatus <i>Tyloplasma litorale</i> Fukuoka2020"
+      "expected": "<i>Ca.</i> Tyloplasma litorale Fukuoka2020"
+    },
+    {
+      "name": "single word Candidatus name stays upright",
+      "organism": "Candidatus Hepatoplasma",
+      "strain": "Av",
+      "expected": "<i>Ca.</i> Hepatoplasma Av"
+    },
+    {
+      "name": "a tab after Candidatus is whitespace",
+      "organism": "Candidatus\tTyloplasma litorale",
+      "strain": "Fukuoka2020",
+      "expected": "<i>Ca.</i> Tyloplasma litorale Fukuoka2020"
+    },
+    {
+      "name": "an organism already abbreviated to Ca. keeps one italic Ca.",
+      "organism": "Ca. Hepatoplasma crinochetorum",
+      "strain": "Av",
+      "expected": "<i>Ca.</i> Hepatoplasma crinochetorum Av"
+    },
+    {
+      "name": "a one-word organism abbreviated to Ca. stays upright",
+      "organism": "Ca. Hepatoplasma",
+      "strain": "Av",
+      "expected": "<i>Ca.</i> Hepatoplasma Av"
     },
     {
       "name": "non-organism falls back to the strain",

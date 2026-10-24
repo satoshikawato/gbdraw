@@ -4,6 +4,7 @@ import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
 import {
+  applyCanvasToSvg,
   applyCompositionUserDeltas,
   compositionUserDeltas,
   resetCompositionUserDeltas
@@ -75,6 +76,7 @@ export const createLegendLayout = ({
     if (!svg) return;
     diagramActions.resetLengthBarPosition();
     const binding = resetCompositionUserDeltas(svg);
+    applyCanvasToSvg(svg, state.activeDrawing().canvasPadding);
     repositionActions.syncStateFromComposition(svg, binding);
     previewRuntime?.commitActiveResultEdit('layout-position-reset');
   };
@@ -98,9 +100,19 @@ export const createLegendLayout = ({
       movedDeltas.set(identity, deltas);
     }
   };
+  // OV-110: the offsets of the Results that `keep` does not name are dropped:
+  // the root keeps those of every drawing's Results and of every Result a
+  // History step names.
+  /** @param {ReadonlySet<string>} keep */
+  const releaseCompositionDeltas = (keep) => {
+    for (const map of [firstSeenDeltas, movedDeltas]) {
+      [...map.keys()].forEach((identity) => { if (!keep.has(identity)) map.delete(identity); });
+    }
+  };
   /** @param {unknown} result */
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
-  const captureCompositionIntent = () => {
+  /** @param {readonly string[]} identities The Results of the drawing whose History captures. */
+  const captureCompositionIntent = (identities) => {
     const runtime = previewRuntime?.getActiveRuntime?.() || null;
     // state is untyped; the container holds our own Result, so this is an SVG or null.
     const svg = /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector?.('svg') || null);
@@ -119,8 +131,7 @@ export const createLegendLayout = ({
     /** @type {Record<string, CompositionRecordDeltas>} */
     const record = {};
     if (movedDeltas.size === 0) return record;
-    state.results.value.forEach((/** @type {unknown} */ result) => {
-      const identity = resultIdentity(result);
+    identities.forEach((identity) => {
       // `has` was just checked.
       if (movedDeltas.has(identity)) record[identity] = /** @type {CompositionRecordDeltas} */ (movedDeltas.get(identity));
     });
@@ -143,6 +154,7 @@ export const createLegendLayout = ({
       if (!deltas || index < 0) return;
       const changed = previewRuntime?.commitResultEdit(index, (svg, { mounted }) => {
         const applied = applyCompositionUserDeltas(svg, deltas);
+        if (applied.changed) applyCanvasToSvg(svg, state.activeDrawing().canvasPadding);
         if (applied.changed && mounted) repositionActions.syncStateFromComposition(svg, applied.binding);
         return applied.changed;
       }, 'layout-composition-reconcile');
@@ -168,6 +180,7 @@ export const createLegendLayout = ({
     ...repositionActions,
     refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,
     captureCompositionIntent,
+    releaseCompositionDeltas,
     reconcileCompositionUserDeltas,
     resetAllPositions,
     setupDiagramDrag: diagramActions.setupDiagramDrag

@@ -150,6 +150,14 @@ def face_embedding(font: TTFont, kind: EmbeddingKind) -> FaceEmbedding:
 def _face_data_url(face: fonts.FontFace, characters: set[str], *, whole: bool) -> str:
     """The face as a ``data:`` URL: a subset of ``characters``, or the whole
     face when its license forbids subsetting."""
+    return _face_data_url_for(face, frozenset() if whole else frozenset(characters), whole)
+
+
+# Keyed like ``_truetype_bytes``: a registered face's identity is its bytes,
+# so an export that draws the same characters again reuses the subset and its
+# base64 text. Bounded, so faces unregistered since are let go.
+@functools.lru_cache(maxsize=16)
+def _face_data_url_for(face: fonts.FontFace, characters: frozenset[str], whole: bool) -> str:
     font = TTFont(io.BytesIO(fonts.face_source_bytes(face)), fontNumber=face.index, recalcTimestamp=False)
     if face.instance:
         font = fonts.named_instance(font, face.instance)
@@ -163,7 +171,7 @@ def _face_data_url(face: fonts.FontFace, characters: set[str], *, whole: bool) -
     return f'url(data:{mime};base64,{encoded}) format("{css_format}")'
 
 
-def _subset(font: TTFont, characters: set[str]) -> None:
+def _subset(font: TTFont, characters: Collection[str]) -> None:
     from fontTools import subset
 
     options = subset.Options()

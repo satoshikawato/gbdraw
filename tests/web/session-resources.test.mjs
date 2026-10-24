@@ -5,7 +5,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { drawingOf } from './helpers/drawing-state.mjs';
+import { fixtureDrawing } from './helpers/drawing-state.mjs';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -191,7 +191,7 @@ const state = {
   }
 };
 
-const built = await buildSessionResources(state, committed, drawingOf(state));
+const built = await buildSessionResources(state, committed, fixtureDrawing(state));
 const bindings = built.webFiles.bindings;
 assert.equal(bindings.schema, 2);
 assert.equal(activeReads, 1, 'one File object used in several roles is read once');
@@ -336,7 +336,7 @@ dormantCommitted.renderRequest.comparisons = [];
 const dormantSaved = await buildSessionResources(
   dormantSaveState,
   dormantCommitted,
-  drawingOf(dormantSaveState)
+  fixtureDrawing(dormantSaveState)
 );
 assert.equal(
   dormantComparisonReads,
@@ -388,7 +388,7 @@ for (const adopted of [false, true]) {
   });
   const state = { files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } };
   const canonical = adopted ? authority.adoptRuntimeCanonicalSession(committed) : committed;
-  const first = await buildSessionResources(state, canonical, drawingOf(state));
+  const first = await buildSessionResources(state, canonical, fixtureDrawing(state));
   const binding = first.webFiles.bindings.c_gb;
   assert.equal(binding.kind, 'composite');
   assert.equal(binding.name, '');
@@ -408,7 +408,7 @@ for (const adopted of [false, true]) {
   const second = await buildSessionResources({ files: { c_gb: loaded } }, authority.adoptRuntimeCanonicalSession(first));
   assert.deepEqual(second.webFiles.bindings.c_gb, binding);
   state.files.c_gb = makeFile('native replacement\n', 'replacement.gb');
-  const replaced = await buildSessionResources(state, canonical, drawingOf(state));
+  const replaced = await buildSessionResources(state, canonical, fixtureDrawing(state));
   assert.equal(replaced.webFiles.bindings.c_gb.kind, undefined);
   assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
   assert.equal(replaced.resources[replaced.webFiles.bindings.c_gb.resourceId].data, base64('native replacement\n'));
@@ -447,7 +447,7 @@ for (const adopted of [false, true]) {
   const recordResource = (built, renderRequest, index) => built.resources[renderRequest.records[index].source.resourceId];
   const text = (descriptor) => Buffer.from(descriptor.data, 'base64').toString();
 
-  const both = await buildSessionResources(noInputs, circular, drawingOf(noInputs), linear);
+  const both = await buildSessionResources(noInputs, circular, fixtureDrawing(noInputs), linear);
   assert.equal(text(recordResource(both, both.renderRequest, 0)), 'CIRCULAR');
   assert.equal(text(recordResource(both, both.otherRenderRequest, 0)), 'LINEAR');
   assert.notEqual(both.renderRequest.records[0].source.resourceId, both.otherRenderRequest.records[0].source.resourceId);
@@ -469,7 +469,7 @@ for (const adopted of [false, true]) {
   const adopted = await buildSessionResources(
     noInputs,
     adoptRuntimeCanonicalSession({ renderRequest: circular.renderRequest, resources: table, webFiles: {} }),
-    drawingOf(noInputs),
+    fixtureDrawing(noInputs),
     adoptRuntimeCanonicalSession({ renderRequest: linearRequest, resources: table, webFiles: {} })
   );
   assert.strictEqual(adopted.renderRequest, circular.renderRequest);
@@ -507,7 +507,7 @@ for (const adopted of [false, true]) {
     webFiles: {}
   };
   const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
-  const built = await buildSessionResources(draft, loadedCircular, drawingOf(draft), freshLinear);
+  const built = await buildSessionResources(draft, loadedCircular, fixtureDrawing(draft), freshLinear);
   const written = Object.values(built.resources).map((descriptor) => Buffer.from(descriptor.data, 'base64').toString()).sort();
   assert.deepEqual(written, ['CIRCULAR', 'NEW LINEAR']);
 }
@@ -540,14 +540,14 @@ for (const adopted of [false, true]) {
     webFiles: { circularInputOriginalName: 'genome.gbk', conservationBlastSource: 'losat-cache' }
   };
   const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
-  const saved = await buildSessionResources(draft, shownLinear, drawingOf(draft), keptCircular);
+  const saved = await buildSessionResources(draft, shownLinear, fixtureDrawing(draft), keptCircular);
   assert.equal(saved.webFiles.circularInputOriginalName, 'genome.gbk');
   assert.equal(saved.webFiles.conservationBlastSource, 'losat-cache');
   assert.deepEqual(saved.webFiles.linearRecordMetadata, shownLinear.webFiles.linearRecordMetadata);
   const loaded = (renderRequest) => adoptRuntimeCanonicalSession({
     renderRequest, resources: saved.resources, webFiles: saved.webFiles
   });
-  const resaved = await buildSessionResources(draft, loaded(saved.renderRequest), drawingOf(draft), loaded(saved.otherRenderRequest));
+  const resaved = await buildSessionResources(draft, loaded(saved.renderRequest), fixtureDrawing(draft), loaded(saved.otherRenderRequest));
   assert.equal(resaved.webFiles.circularInputOriginalName, 'genome.gbk');
   assert.equal(resaved.webFiles.conservationBlastSource, 'losat-cache');
 }
